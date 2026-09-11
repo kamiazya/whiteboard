@@ -18,9 +18,12 @@ export type SpatialSerializeMode = 'strict' | 'extended'
  * JSON.
  */
 export function serializeSpatial(canvas: SpatialCanvas, mode: SpatialSerializeMode): string {
-  const document: JsonCanvasDocument = toJsonCanvas(canvas)
-  if (mode === 'extended') return JSON.stringify(document)
-  const degraded = strictDegrade(document)
+  // `wire`, not `document`: a local by that name shadows the DOM global, and
+  // arch-lint's boundary scan is textual — every mention reads as a DOM access
+  // and fails this shared-layer package.
+  const wire: JsonCanvasDocument = toJsonCanvas(canvas)
+  if (mode === 'extended') return JSON.stringify(wire)
+  const degraded = strictDegrade(wire)
   jsonCanvasDocumentSchema.parse(degraded)
   return JSON.stringify(degraded)
 }

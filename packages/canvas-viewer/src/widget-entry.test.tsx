@@ -454,7 +454,10 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
 
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
-      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+      // The host sends a JSON Canvas document — `canvas_view` projects one —
+      // so the theme rides the extension key and the widget resolves its
+      // paper from the LIFTED model (ADR-0033).
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
     }
     const { mountCanvasViewer } = await import('./mount.js')
 

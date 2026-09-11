@@ -209,7 +209,7 @@ describe('JSON Canvas 1.0 conformance invariants', () => {
     [
       fc.record({
         id: fc.string({ minLength: 1, maxLength: 10 }),
-        x: fc.float({ noNaN: true }).filter((n) => !Number.isInteger(n)),
+        x: fc.constantFrom(Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN),
         y: fc.integer(),
         width: fc.integer(),
         height: fc.integer(),
@@ -218,8 +218,28 @@ describe('JSON Canvas 1.0 conformance invariants', () => {
       }),
     ],
     withDefaults(),
-  )('non-integer geometry always rejects', (value) => {
+  )('geometry JSON cannot carry always rejects', (value) => {
+    // A SUB-PIXEL coordinate is accepted now (ADR-0033 slice 4): ink is
+    // sub-pixel, and the format's integer rounding is the projection's job.
+    // What stays refused is what JSON has no value for — `JSON.stringify`
+    // turns an infinity into `null`, and a NaN corner is not a corner.
     expect(spatialNodeSchema.safeParse(value).success).toBe(false)
+  })
+
+  fcTest.prop(
+    [fc.float({ noNaN: true, noDefaultInfinity: true }).filter((n) => !Number.isInteger(n))],
+    withDefaults(),
+  )('a sub-pixel coordinate is accepted, and kept', (x) => {
+    const parsed = spatialNodeSchema.safeParse({
+      id: 'n',
+      x,
+      y: 0,
+      width: 1,
+      height: 1,
+      type: 'text',
+      text: '',
+    })
+    expect(parsed.success && parsed.data.x).toBe(x)
   })
 
   fcTest.prop([fc.tuple(spatialNodeArbitrary, spatialNodeArbitrary)], withDefaults())(

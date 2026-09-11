@@ -14,6 +14,12 @@ export type FieldProjection =
 
 const NATIVE = { kind: 'native' } as const
 const EXTENSION = { kind: 'extension' } as const
+/**
+ * JSON Canvas 1.0 specifies geometry in integer pixels, so a sub-pixel
+ * coordinate crosses as the nearest whole one. The document still draws in
+ * the right place; what it loses is the precision a pen reports.
+ */
+const ROUNDED = { kind: 'degraded', to: 'the nearest integer pixel' } as const
 
 /**
  * Every field position the model can hold, and what projecting it onto JSON
@@ -36,10 +42,10 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   // JSON Canvas 1.0's own vocabulary.
   'nodes[].id': NATIVE,
   'nodes[].type': NATIVE,
-  'nodes[].x': NATIVE,
-  'nodes[].y': NATIVE,
-  'nodes[].width': NATIVE,
-  'nodes[].height': NATIVE,
+  'nodes[].x': ROUNDED,
+  'nodes[].y': ROUNDED,
+  'nodes[].width': ROUNDED,
+  'nodes[].height': ROUNDED,
   'nodes[].color': NATIVE,
   'nodes[].text': NATIVE,
   'nodes[].file': NATIVE,
@@ -180,11 +186,14 @@ export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
  * document is a valid one, which is what makes the format an import path and
  * not only an export one.
  */
-export function fromJsonCanvas(document: JsonCanvasDocument): SpatialCanvas {
-  const extension = document['x-whiteboard']
+export function fromJsonCanvas(wire: JsonCanvasDocument): SpatialCanvas {
+  // `wire`, not `document`: a parameter by that name shadows the DOM global,
+  // and arch-lint's boundary scan is textual — it reads every mention of it in
+  // this shared-layer file as a DOM access and fails the package.
+  const extension = wire['x-whiteboard']
   return {
-    nodes: document.nodes.map(liftNode),
-    edges: document.edges.map(liftEdge),
+    nodes: wire.nodes.map(liftNode),
+    edges: wire.edges.map(liftEdge),
     ...(extension?.comments !== undefined && { comments: extension.comments }),
     ...(extension?.facets !== undefined && { facets: extension.facets }),
   }
@@ -201,10 +210,10 @@ function liftNode(node: JsonCanvasNode): SpatialNode {
       : undefined
   const shared = {
     id: node.id,
-    x: node.x,
-    y: node.y,
-    width: node.width,
-    height: node.height,
+    x: roundPixel(node.x),
+    y: roundPixel(node.y),
+    width: roundPixel(node.width),
+    height: roundPixel(node.height),
     ...(node.color !== undefined && { color: node.color }),
     ...(embed !== undefined && { embed }),
     ...(extension?.facets !== undefined && { facets: extension.facets }),
@@ -250,10 +259,10 @@ function liftEdge(edge: JsonCanvasEdge): CanvasEdge {
 function projectNode(node: SpatialNode): JsonCanvasNode {
   const shared = {
     id: node.id,
-    x: node.x,
-    y: node.y,
-    width: node.width,
-    height: node.height,
+    x: roundPixel(node.x),
+    y: roundPixel(node.y),
+    width: roundPixel(node.width),
+    height: roundPixel(node.height),
     ...(node.color !== undefined && { color: node.color }),
     ...(nodeExtension(node) !== undefined && { 'x-whiteboard': nodeExtension(node) }),
   }
@@ -295,6 +304,18 @@ function projectEdge(edge: CanvasEdge): JsonCanvasEdge {
     // no content JSON Canvas cannot express.
     ...(edge.facets !== undefined && { 'x-whiteboard': { facets: edge.facets } }),
   }
+}
+
+/**
+ * A model coordinate as JSON Canvas 1.0 states one: the nearest whole pixel.
+ *
+ * `+ 0` rather than `Math.round` alone, because `Math.round(-0.2)` is `-0` and
+ * JSON has no negative zero — `JSON.stringify(-0)` is `"0"`, so emitting one
+ * writes a value the very next parse cannot return. The round-trip property
+ * found it; nothing else would have.
+ */
+function roundPixel(value: number): number {
+  return Math.round(value) + 0
 }
 
 /**

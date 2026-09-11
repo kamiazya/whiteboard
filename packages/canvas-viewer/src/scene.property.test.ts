@@ -14,11 +14,16 @@ import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 describe('scene parse/serialize properties', () => {
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
-    'extended mode round-trip: parse(serialize(x, "extended")) equals x',
+    'extended mode round-trip: parse(serialize(x, "extended")) equals x, once x is expressible',
     (canvas) => {
-      const json = serializeViewerScene(canvas, 'extended')
+      // Extended mode is lossless over what the FORMAT can state, which since
+      // ADR-0033 slice 4 excludes sub-pixel geometry: JSON Canvas 1.0 is
+      // integer pixels and the projection rounds. Putting the canvas through
+      // the projection first is what names that subset.
+      const expressible = fromJsonCanvas(toJsonCanvas(canvas))
+      const json = serializeViewerScene(expressible, 'extended')
       const result = parseViewerScene(json)
-      expect(result).toEqual({ ok: true, value: canvas })
+      expect(result).toEqual({ ok: true, value: expressible })
     },
   )
 

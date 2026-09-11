@@ -13,6 +13,8 @@ import {
   type NodeEmbed,
   nodeIdSchema,
   nodePatchFieldsSchema,
+  nodePositionSchema,
+  nodeSizeSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
   spatialNodeSchema,
@@ -353,10 +355,10 @@ export type CanvasEditInput = z.infer<typeof canvasEditInputSchema>
 export const geometryEntrySchema = z
   .object({
     id: nodeIdSchema,
-    x: z.number().int(),
-    y: z.number().int(),
-    width: z.number().int(),
-    height: z.number().int(),
+    x: nodePositionSchema,
+    y: nodePositionSchema,
+    width: nodeSizeSchema,
+    height: nodeSizeSchema,
   })
   .strict()
 

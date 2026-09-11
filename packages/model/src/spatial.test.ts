@@ -38,10 +38,24 @@ describe('spatialNodeSchema (text)', () => {
     expect(spatialNodeSchema.safeParse({ ...baseGeometry, type: 'text' }).success).toBe(false)
   })
 
-  it('rejects non-integer geometry', () => {
-    expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, x: 1.5, type: 'text', text: 'hi' }).success,
-    ).toBe(false)
+  // ADR-0033 slice 4: geometry is a real number here, because ink is
+  // sub-pixel. JSON Canvas 1.0's integer pixels are the PROJECTION's rounding.
+  it('accepts a sub-pixel coordinate and keeps it', () => {
+    const parsed = spatialNodeSchema.safeParse({
+      ...baseGeometry,
+      x: 1.5,
+      type: 'text',
+      text: 'hi',
+    })
+    expect(parsed.success && parsed.data.x).toBe(1.5)
+  })
+
+  it('rejects geometry JSON cannot carry', () => {
+    for (const x of [Number.POSITIVE_INFINITY, Number.NaN]) {
+      expect(
+        spatialNodeSchema.safeParse({ ...baseGeometry, x, type: 'text', text: 'hi' }).success,
+      ).toBe(false)
+    }
   })
 
   it('rejects negative width and height', () => {

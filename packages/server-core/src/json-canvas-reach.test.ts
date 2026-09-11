@@ -1,6 +1,7 @@
 import {
   type CensusFacet,
   censusSpatialModel,
+  type FieldProjection,
   JSON_CANVAS_PROJECTION,
 } from '@kamiazya/whiteboard-codec'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
@@ -19,7 +20,7 @@ import { describe, expect, it } from 'vitest'
  * the projection LEDGER's answer rather than a prefix test. That is the point
  * of the ledger: one authority on what a position costs an export.
  *
- * Both numbers are pinned so a change to either is read rather than merged.
+ * Every kind is pinned so a change to any of them is read rather than merged.
  * There is no target — a rising outside count is the measurement, not a
  * regression.
  */
@@ -33,15 +34,30 @@ const bundledFacets: readonly CensusFacet[] = bundledFacetRegistry.plugins.flatM
 
 const census = censusSpatialModel(bundledFacets)
 const positions = [...census.paths, ...census.facetBuckets]
-const isNative = (path: string) => JSON_CANVAS_PROJECTION[path]?.kind === 'native'
+const kindOf = (path: string) => JSON_CANVAS_PROJECTION[path]?.kind
+const withKind = (kind: FieldProjection['kind']) =>
+  positions.filter((path) => kindOf(path) === kind)
 
 describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () => {
-  it("states 23 of the model's field positions itself", () => {
-    expect(positions.filter(isNative)).toHaveLength(23)
+  it("states 19 of the model's field positions exactly", () => {
+    expect(withKind('native')).toHaveLength(19)
   })
 
-  it('leaves 14 more to the extension key — 11 named fields and 3 facet buckets', () => {
-    expect(positions.filter((path) => !isNative(path))).toHaveLength(14)
+  it('states 4 more only to the nearest whole pixel — a node box', () => {
+    // The format HAS these fields, so they are not outside it; what it cannot
+    // say is a fraction. Since ADR-0033 slice 4 the model's geometry is real,
+    // so the box is the ledger's first `degraded` entry, and this pin is what
+    // makes a second one a decision rather than a merge.
+    expect([...withKind('degraded')].sort()).toEqual([
+      'nodes[].height',
+      'nodes[].width',
+      'nodes[].x',
+      'nodes[].y',
+    ])
+  })
+
+  it('leaves 14 to the extension key — 11 named fields and 3 facet buckets', () => {
+    expect(withKind('extension')).toHaveLength(14)
     expect(census.facetBuckets).toHaveLength(3)
   })
 
@@ -52,8 +68,8 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
   })
 
   it('so 29 of the 52 positions a document can hold are outside the format', () => {
-    const outside = positions.filter((path) => !isNative(path)).length + census.facet.length
+    const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
     expect(outside).toBe(29)
-    expect(outside + positions.filter(isNative).length).toBe(52)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(52)
   })
 })

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
-import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
+import { integerSchema } from './integer.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
@@ -36,23 +36,38 @@ export const nodeEmbedSchema = z.object({
 
 export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
 
-// JSON Canvas 1.0 geometry is specified in integer pixels.
-const positionFieldSchema = integerSchema
-// Sizes reject negatives. Zero stays valid: JSON Canvas 1.0 does not forbid a
-// degenerate box, and a node collapsed on one axis is a layout concern, not a
-// parse error.
-const sizeFieldSchema = nonnegativeIntegerSchema
+/**
+ * Geometry is a REAL number here, where JSON Canvas 1.0 specifies integer
+ * pixels ([ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md)).
+ *
+ * Ink is sub-pixel by nature — a pen reports fractions of a pixel, and a model
+ * that rounds before it draws has thrown away what the pen measured. The
+ * format's rounding belongs to the PROJECTION, and is codec's ledger's first
+ * `degraded` entry.
+ *
+ * Finite, not merely numeric: `JSON.stringify(Infinity)` is `null` and a NaN
+ * corner is not a corner, so widening to a float is not widening to any number
+ * at all. Sizes still reject negatives; zero stays valid, because a node
+ * collapsed on one axis is a layout concern rather than a parse error.
+ *
+ * Exported because every payload that ECHOES stored geometry has to accept
+ * what the model stores. A read declaring `int` beside a model that holds a
+ * fraction does not reject an input — it makes the tool answer with something
+ * its own `outputSchema` refuses, which the MCP SDK raises as a failed call.
+ */
+export const nodePositionSchema = z.number().finite()
+export const nodeSizeSchema = z.number().finite().nonnegative()
 
 const sharedNodeFieldsSchema = z.object({
   id: nodeIdSchema,
-  x: positionFieldSchema,
-  y: positionFieldSchema,
+  x: nodePositionSchema,
+  y: nodePositionSchema,
   // Described on the stored shape for the reason the edge sides are: every
   // writer's schema derives from it, and a writer that names a size too
   // small for its text gets the size it named, so the description is where
   // it learns what leaving the size out buys.
-  width: sizeFieldSchema.describe('Box width; text wraps at it. Omit it for the default.'),
-  height: sizeFieldSchema.describe(
+  width: nodeSizeSchema.describe('Box width; text wraps at it. Omit it for the default.'),
+  height: nodeSizeSchema.describe(
     'Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs.',
   ),
   color: canvasColorSchema.optional(),

@@ -104,6 +104,14 @@ interface Row {
  * the model and the format are two schema objects now where they used to be
  * one, so zod's JSON-Schema emitter inlines and $refs them differently.
  * `visibleBytes` moved by 9 bytes, which is what says so.
+ *
+ * A second, smaller move came with slice 4: a node's `x`/`y`/`width`/`height`
+ * are `number` in the schema where they were `integer`, so every tool that
+ * carries a node box got a little cheaper to read (-680 wire bytes across the
+ * table, -16 visible on `wb_canvas_edit`). The parameter and undescribed
+ * counts are unchanged, which is what says the surface a model READS is the
+ * same set of fields saying the same things — only what they accept widened,
+ * and it widened towards the model rather than away from it.
  */
 describe('what the tool table costs to read', () => {
   it('scores every registered tool', async () => {
@@ -164,7 +172,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 20520,
+        wireBytes: 20488,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -218,8 +226,8 @@ describe('what the tool table costs to read', () => {
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
       wb_canvas_edit: {
-        visibleBytes: 12977,
-        wireBytes: 34731,
+        visibleBytes: 12961,
+        wireBytes: 34283,
         descriptionWords: 169,
         parameters: 149,
         undescribed: 121,
@@ -228,7 +236,7 @@ describe('what the tool table costs to read', () => {
       },
       wb_canvas_snapshot: {
         visibleBytes: 705,
-        wireBytes: 3935,
+        wireBytes: 3735,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
@@ -419,8 +427,8 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      visibleBytes: 35920,
-      wireBytes: 106490,
+      visibleBytes: 35904,
+      wireBytes: 105810,
       parameters: 271,
       undescribed: 189,
     })

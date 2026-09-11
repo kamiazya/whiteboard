@@ -29,6 +29,7 @@ import {
   PLACEMENT_COLUMNS,
   PLACEMENT_GUTTER_PX,
 } from './canvas-edit.js'
+import { canvasEditOutputSchema } from './canvas-edit-ops.js'
 import { loadDocument } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -2637,6 +2638,36 @@ describe('the node extension on the write side', () => {
     })
     expect(result.success).toBe(false)
     expect(JSON.stringify(result.error?.issues)).toContain('an embed names the document')
+  })
+
+  test('reports a sub-pixel size rather than refusing its own answer', async () => {
+    // Both payloads here echo what is STORED, and the model's geometry is a
+    // real number since ADR-0033 slice 4 — so an output schema still saying
+    // `int` makes the tool answer with something its own contract refuses,
+    // which the MCP SDK raises as a failed call. Rounding belongs to the
+    // JSON Canvas projection, not to a read of the board.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      // No x/y, so the node is auto-placed and lands in `geometry` too.
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'n1', type: 'file', file: 'a.md', width: 120.5, height: 40.25 },
+        },
+      ],
+    })
+
+    const parsed = canvasEditOutputSchema.parse(result)
+    expect(parsed.geometry).toEqual([
+      { id: 'n1', x: expect.any(Number), y: expect.any(Number), width: 120.5, height: 40.25 },
+    ])
+    expect(parsed.snapshot.nodes[0]).toMatchObject({ width: 120.5, height: 40.25 })
   })
 
   test("narrows a flat extension to the model's fields: an embed, or facets alone", () => {

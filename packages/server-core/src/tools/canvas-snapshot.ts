@@ -6,6 +6,8 @@ import {
   canvasCommentSchema,
   documentIdSchema,
   nodeIdSchema,
+  nodePositionSchema,
+  nodeSizeSchema,
   type SpatialCanvas,
   type SpatialNode,
   workspaceIdSchema,
@@ -37,10 +39,10 @@ const canvasSnapshotNodeSchema = z
   .object({
     id: nodeIdSchema,
     type: z.enum(['text', 'file', 'link', 'group']),
-    x: z.number().int(),
-    y: z.number().int(),
-    width: z.number().int(),
-    height: z.number().int(),
+    x: nodePositionSchema,
+    y: nodePositionSchema,
+    width: nodeSizeSchema,
+    height: nodeSizeSchema,
     /** text nodes only, cut to SNAPSHOT_TEXT_MAX_CHARS. */
     text: z.string().optional(),
     textTruncated: z.literal(true).optional(),

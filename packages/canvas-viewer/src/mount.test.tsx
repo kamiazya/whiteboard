@@ -152,7 +152,11 @@ describe('mountCanvasViewer', () => {
         { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 40, text: 'b' },
       ],
       edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+      // What this entry point ACCEPTS is a JSON Canvas document, so a facet
+      // arrives under the format's extension key and `parseViewerScene` lifts
+      // it to the model's `facets` (ADR-0033). Spelling the model here reads
+      // like the theme is simply ignored.
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
     }
 
     const plain = mountCanvasViewer(container, { scene })

@@ -4,7 +4,7 @@ import {
   spatialCanvasArbitrary,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   deleteCanvasComment,
   deleteSpatialEdge,
@@ -23,6 +23,19 @@ function byId<T extends { id: string }>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => a.id.localeCompare(b.id))
 }
 
+/**
+ * `-0` and `0` are the same point, and no serialisation this project crosses
+ * can tell them apart — the Loro record normalises one to the other exactly as
+ * `JSON.stringify` does. The model accepts `-0` because rejecting it would
+ * refuse `Math.round(-0.2)`, which the editor really produces; what is not
+ * true is that it survives a save, and the example below says so directly.
+ */
+const zeroNormalised = <T extends { x?: number; y?: number }>(value: T): T => ({
+  ...value,
+  ...(value.x !== undefined && { x: value.x + 0 }),
+  ...(value.y !== undefined && { y: value.y + 0 }),
+})
+
 describe('loro-bridge properties', () => {
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
     'readSpatialCanvas(writeSpatialCanvas(doc, canvas)) deep-equals canvas up to node/edge order',
@@ -34,7 +47,7 @@ describe('loro-bridge properties', () => {
       const doc = new LoroDoc()
       writeSpatialCanvas(doc, canvas)
       const result = readSpatialCanvas(doc)
-      expect(byId(result.nodes)).toEqual(byId(canvas.nodes))
+      expect(byId(result.nodes)).toEqual(byId(canvas.nodes).map(zeroNormalised))
       expect(byId(result.edges)).toEqual(byId(canvas.edges))
       // The envelope too — routing preferences and the canvas's facets —
       // because this bridge is the path the app saves through, and a JSON
@@ -43,6 +56,19 @@ describe('loro-bridge properties', () => {
       expect(result.facets).toEqual(canvas.facets)
     },
   )
+
+  it('stores a negative-zero coordinate as zero, because the record cannot carry one', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [{ id: 'n1', type: 'text', text: '', x: -0, y: 1.5, width: 0, height: 0 }],
+      edges: [],
+    })
+    const read = readSpatialCanvas(doc)
+    expect(Object.is(read.nodes[0]?.x, 0)).toBe(true)
+    // The sub-pixel coordinate beside it DOES survive: what the record cannot
+    // carry is the sign of a zero, not the fraction (ADR-0033 slice 4).
+    expect(read.nodes[0]?.y).toBe(1.5)
+  })
 
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
     'writeSpatialCanvas is total: never throws on a valid SpatialCanvas',
