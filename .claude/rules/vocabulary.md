@@ -20,6 +20,8 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Browser** / **Daemon** | who KEEPS a workspace — the browser's own storage, or the whiteboard daemon | a claim about network locality; both run on the same machine |
 | **Comment** | the annotation layer's unit (ADR-0024/0025/0026): anchored feedback about a spot or node, floating above content. A **thread** is the anchored unit and comments are its messages | content — never tidied, never part of what the document says. Says nothing about EXPORT, which ADR-0026 decision 1b decides; "annotation layer" in user copy; "History"/"Archived"/"Done" for resolved |
 | **Proposal** | ADR-0029's unit: a batch of anchored CHANGES somebody wants made, each carrying the value it assumed the anchor held. The **change** is what gets decided; the proposal is what arrived together | a branch, a variation, or any point in time — a proposal FOLLOWS the document rather than fixing it |
+| **Stencil** | [ADR-0034](../../docs/contributing/adr/0034-stencil-and-recipe.md)'s reusable ELEMENT: a named appearance (colour, silhouette, badge) plus a default size, applied to one node — "a database", "an EC2 instance". Its library is a DOCUMENT, so a user or a community grows it | a node, a template with slots, or anything about WHERE the node goes — a stencil never carries position or text |
+| **Recipe** | ADR-0034's reusable ARRANGEMENT: the roles, containment and connections a shape of diagram has, expanded into many nodes and edges at once — "a three-tier web app" | coordinates, a layout, or a saved canvas — a recipe declares structure and `layoutSpatialCanvas`/`tidyNodes` decide the geometry |
 
 Two consequences that catch people out:
 
