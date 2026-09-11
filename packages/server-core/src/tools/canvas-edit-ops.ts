@@ -17,8 +17,28 @@ import {
   workspaceIdSchema,
   type XWhiteboard,
 } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
+
+/**
+ * The registered stencil ids, as an ENUM rather than as a namespaced-id
+ * string with the ids listed in prose. Measured on the rung-1 scoreboard,
+ * against the same short description: the enum costs `wb_canvas_edit` 480
+ * visible bytes and the prose listing costs 776, and the enum is the form a
+ * model reads as "these are the values" rather than as a sentence it has to
+ * parse. Dropping the list entirely is cheaper still (356) and leaves no way
+ * to learn the vocabulary at all, which is the one thing this field needs.
+ *
+ * ponytail: read from the BUNDLED registry at module load, so a deployment
+ * that registers its own plugins gets a schema that refuses their stencils
+ * even though `applyStencil` would apply them. Nothing can hit that today —
+ * server-core builds this schema with no access to a per-deployment registry
+ * — and the upgrade path is to build the op schema from the registry the
+ * server is constructed with, which is the same change ADR-0034's
+ * document-backed libraries need anyway.
+ */
+const BUNDLED_STENCIL_IDS = bundledFacetRegistry.assetIds('stencils') as [string, ...string[]]
 
 // Derived from the stored node schemas rather than restated beside them, so
 // a field added to a node type reaches this tool's input for free. Only the
@@ -130,12 +150,54 @@ const exactlyOneTarget = {
   message: 'name exactly one of id, within and all',
 }
 
+/**
+ * A registered STENCIL ([ADR-0034](../../../../docs/contributing/adr/0034-stencil-and-recipe.md)),
+ * naming what a box IS: one field where the alternative is a colour, a
+ * silhouette and a badge written by hand, per box, in a vocabulary invented
+ * per board.
+ *
+ * It sits beside `op` rather than inside `node` deliberately, and the reason
+ * is the one `draftKeysBelongInside` above already learned: a key inside
+ * `node` is part of the node's STORED shape, and this is not — it is an
+ * instruction to expand a vocabulary into that shape. `within` sits here for
+ * the same reason, so a caller reading one op generalises correctly to the
+ * other.
+ */
+const STENCIL_FIELD = z
+  .enum(BUNDLED_STENCIL_IDS)
+  .optional()
+  .describe('What this box IS. Sets colour, silhouette and badge together; an explicit color wins.')
+
+/**
+ * `node.patch`'s fields, with ONE redirect on top of the stored schema:
+ * `stencil` is a real field of the op, one level up.
+ *
+ * It lives here rather than in the handler because the handler never sees
+ * it — `nodePatchFieldsSchema` is `.strict()`, so a stray key is refused at
+ * parse with a bare `Unrecognized key: "stencil"` and the batch is over. A
+ * redirect written past that point reads as working and is unreachable;
+ * this one was, until a probe through the real input schema said so.
+ *
+ * Same measured reason as `draftKeysBelongInside`: a model generalises from
+ * the ops it just used, and a refusal naming the key without naming the
+ * repair costs the whole batch twice.
+ */
+const nodePatchSchema = z
+  .object(nodePatchFieldsSchema.shape, {
+    error: (issue: { code: string; keys?: readonly string[] }) =>
+      issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
+        ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `patch`.'
+        : undefined,
+  })
+  .strict()
+
 const canvasOpSchema = z.discriminatedUnion('op', [
   z
     .object(
       {
         op: z.literal('node.add'),
         node: nodeDraftSchema,
+        stencil: STENCIL_FIELD,
         within: nodeIdSchema
           .nullable()
           .optional()
@@ -147,7 +209,12 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     )
     .strict(),
   z
-    .object({ op: z.literal('node.patch'), ...NODE_TARGET, patch: nodePatchFieldsSchema })
+    .object({
+      op: z.literal('node.patch'),
+      ...NODE_TARGET,
+      patch: nodePatchSchema,
+      stencil: STENCIL_FIELD,
+    })
     .strict()
     .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
   /**

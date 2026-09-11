@@ -179,12 +179,38 @@ fact:
 
 | number | source | what adoption must do |
 |---|---|---|
-| `meanCalls` | the eval lane | DOWN — this is the burden claim, and it is the whole point of a recipe |
+| `meanCalls` | the eval lane | DOWN **for a recipe**. NOT a stencil claim — see the correction below |
 | `deficit` / `constructs` | ADR-0033 | DOWN, from the pinned 22-of-22 |
 | `treatments`, `distance` | ADR-0033 | UP from 1 and 0 — the channel opens |
 | `excess`, `overload` | ADR-0033 | NOT up. A vocabulary applied where the document declares nothing is decoration, and this is where a stencil most plausibly goes wrong |
 | `debtFreePowK` | ADR-0031 §7 | NOT down — appearance must not be bought with defects |
 | composition columns | ADR-0032 | not worse |
+
+**Correction, from the stencil increment's own measurement (2026-09-11).**
+This table first read `meanCalls` DOWN as "the burden claim, and the whole
+point", for both halves. Measured, that is wrong for a stencil and the reason
+is structural rather than a tuning result: `wb_canvas_edit` takes an `ops`
+array, so dressing six boxes was already ONE call and cannot become fewer.
+The errand scoreboard puts the same six boxes at 1253 request bytes by hand
+and 916 with a stencil named — one call either way.
+
+Worse for the argument as originally written: the `stencil` field costs
+`wb_canvas_edit` 480 visible bytes on ADR-0031's rung-1 scoreboard, and those
+are paid on every turn of every conversation with the server attached, while
+the 337 is saved once per errand that dresses anything. **On bytes alone the
+field does not pay for itself.**
+
+So a stencil's case rests on the facet-axis rows below and on `benefit`'s
+`elimination:` column — a board says what its kinds ARE instead of spending a
+scheme invented per drawing, and two boards drawn a week apart say it the same
+way. `meanCalls` remains the recipe's claim, where a structure that today
+costs many ops in one batch could cost one op naming the structure; that half
+is unmeasured and stays a hypothesis.
+
+The general lesson is the one `measured-change` already states, and this ADR
+walked into it anyway: a burden claim aimed at a stopwatch that cannot see the
+burden reports a null that reads as a verdict on the change. The instrument
+has to match the currency, and the currency here was never calls.
 
 Two honest notes on what those numbers can and cannot say. None of them can
 say whether the stencil chosen for a box was the RIGHT one — ADR-0033 fixed

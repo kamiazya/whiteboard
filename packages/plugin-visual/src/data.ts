@@ -19,6 +19,7 @@ import {
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { VISUAL_STENCILS } from './stencils.js'
 import { VISUAL_THEMES } from './themes.js'
 
 /**
@@ -181,6 +182,29 @@ export type VisualThemeFacet = z.infer<typeof visualThemeFacetSchema>
 export const VISUAL_THEME_KEY = 'visual.theme/v0'
 
 /**
+ * `visual.stencil/v0` — which registered STENCIL this node wears
+ * ([ADR-0034](../../../docs/contributing/adr/0034-stencil-and-recipe.md)
+ * decision 5), by id. The payload carries NO appearance: applying a stencil
+ * expands its colour and facets onto the node itself, and this records where
+ * they came from.
+ *
+ * The record is what makes a dressed board legible rather than merely
+ * decorated. ADR-0033 scores the distinctions a drawing SHOWS against the
+ * ones its document DECLARES, and a stencil id is a declaration — so a board
+ * dressed by kind reads as carrying its constructs. Without it the identical
+ * drawing reads as `excess`, and the axis scores a real improvement as a
+ * defect.
+ *
+ * `assetRefs` does the same job it does for a theme: a write naming a
+ * stencil nobody registered is refused, with the registered ids listed.
+ */
+export const visualStencilFacetSchema = z.object({
+  stencil: namespacedIdSchema,
+})
+
+export type VisualStencilFacet = z.infer<typeof visualStencilFacetSchema>
+
+/**
  * The bundled plugin. Deliberately ordinary (ADR-0013 decision 3): it goes
  * through the same registry, validation and ordering as any deployment's
  * added plugins, and a deployment may disable it.
@@ -294,8 +318,20 @@ export const visualPlugin = definePlugin({
       targets: ['node', 'canvas', 'document'],
       schema: visualSymbolFacetSchema,
     }),
+    defineFacet({
+      name: 'stencil',
+      displayName: 'Stencil',
+      version: 'v0',
+      // A node only. A stencil dresses ONE box; a canvas-wide appearance is
+      // what `visual.theme` already is, and the two answer different
+      // questions — a theme says how the whole board is drawn, a stencil
+      // says what one box IS.
+      targets: ['node'],
+      schema: visualStencilFacetSchema,
+      assetRefs: { stencil: 'stencils' },
+    }),
   ],
-  assets: { themes: VISUAL_THEMES },
+  assets: { themes: VISUAL_THEMES, stencils: VISUAL_STENCILS },
 })
 
 export const bundledPlugins = [visualPlugin]
