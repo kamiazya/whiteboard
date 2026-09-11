@@ -35,6 +35,26 @@ import { loadOrCreateDocument } from './document-io.js'
 export const STENCIL_LIBRARY_PATH = 'stencils'
 
 /**
+ * What to answer when the WORKSPACE itself does not exist. Stated by every
+ * caller rather than defaulted, because the two right answers are opposite
+ * and which one is right is a property of the caller, not of looking a
+ * library up.
+ *
+ * - `'deployment'` — hand back the deployment's registry as though the
+ *   workspace simply had no library. For a caller that is ABOUT to refuse
+ *   the same id more specifically: rethrowing from here put
+ *   `WorkspaceNotFoundError` in front of `WorkspaceDocumentNotFoundError`
+ *   on `wb_facet_set`, which is the refusal-names-the-wrong-thing class
+ *   ADR-0031 C11 already paid for once.
+ * - `'refuse'` — let `WorkspaceNotFoundError` through. For a caller whose
+ *   ANSWER is the workspace's vocabulary and which therefore has no better
+ *   refusal to make room for: `wb_facet_list` handed a workspace nobody
+ *   made would otherwise report the deployment's stencils, and "the
+ *   deployment's six" reads as "this workspace defines none".
+ */
+export type UnknownWorkspace = 'deployment' | 'refuse'
+
+/**
  * The registry this workspace's stencils resolve through: the deployment's,
  * plus whatever its library document declares.
  *
@@ -50,26 +70,25 @@ export const STENCIL_LIBRARY_PATH = 'stencils'
 export async function workspaceFacetRegistry(
   deps: ServerDeps,
   workspaceId: string,
+  unknownWorkspace: UnknownWorkspace,
 ): Promise<FacetRegistry> {
   const base = deps.facetRegistry ?? bundledFacetRegistry
-  // A workspace nobody created has no library, and saying so is NOT this
-  // function's job — its caller is about to refuse the write by name, with
-  // the id the caller's own parameter carries. Rethrowing from here put
-  // `WorkspaceNotFoundError` in front of `WorkspaceDocumentNotFoundError`
-  // on `wb_facet_set`, which is the refusal-names-the-wrong-thing class
-  // ADR-0031 C11 already paid for once.
-  const entries = await listOrNone(deps, workspaceId)
+  const entries = await listDocuments(deps, workspaceId, unknownWorkspace)
   const library = entries.find((entry) => entry.path === STENCIL_LIBRARY_PATH)
   if (library === undefined) return base
   const doc = await loadOrCreateDocument(deps, workspaceId, library.documentId)
   return withWorkspaceStencils(base, readStencilLibrary(readFacets(doc)))
 }
 
-async function listOrNone(deps: ServerDeps, workspaceId: string): Promise<DocumentEntry[]> {
+async function listDocuments(
+  deps: ServerDeps,
+  workspaceId: string,
+  unknownWorkspace: UnknownWorkspace,
+): Promise<DocumentEntry[]> {
   try {
     return await deps.documentIndex.listDocuments({ workspaceId })
   } catch (error) {
-    if (isWorkspaceNotFoundError(error)) return []
+    if (unknownWorkspace === 'deployment' && isWorkspaceNotFoundError(error)) return []
     throw error
   }
 }

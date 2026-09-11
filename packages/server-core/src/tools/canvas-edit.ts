@@ -192,7 +192,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
         (op) => 'stencil' in op && (op as { stencil?: string }).stencil !== undefined,
       )
       const facetRegistry = namesAStencil
-        ? await workspaceFacetRegistry(deps, input.workspaceId)
+        ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
         : (deps.facetRegistry ?? bundledFacetRegistry)
       // An omitted mode proposes only a batch every op of which COULD be
       // proposed; see the field's own note for why that line and not

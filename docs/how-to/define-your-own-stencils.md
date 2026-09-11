@@ -33,8 +33,8 @@ distinctions survive a projector, a colour-blind reader and a greyscale print.
 `node.patch` dresses boxes that already exist and takes a selector, so one op can dress every
 box in a group. An explicit `color` beside the stencil wins over the stencil's own.
 
-`wb_facet_list` reports the ids this deployment has, and a refusal here lists them too — so
-there is no list to memorise and none baked into the tool schema.
+`wb_facet_list` reports the ids you may use, and a refusal here lists them too — so there is no
+list to memorise and none baked into the tool schema.
 
 ## Growing the vocabulary
 
@@ -63,6 +63,26 @@ carrying the facet `visual.stencils/v0`.
 That is a `wb_facet_set` call — a library needs no special tool. Its stencils are then
 `workspace.<name>`, so the one above is worn as `"stencil": "workspace.lakehouse"`, beside the
 bundled six.
+
+### Finding what a workspace defines
+
+Pass `workspaceId` to `wb_facet_list` and the answer adds that workspace's own stencils beside
+the deployment's:
+
+```json
+{ "workspaceId": "<your workspace>", "assetKind": "stencils" }
+```
+
+```json
+{ "id": "workspace.lakehouse", "kind": "stencils", "namespace": "workspace",
+  "displayName": "Lakehouse" }
+```
+
+Without `workspaceId` the answer is the deployment's vocabulary alone, and nothing is read from
+the workspace at all — so a caller that only wants to know what the server registered pays
+nothing for libraries it never asked about. A `workspaceId` naming a workspace that does not
+exist is refused rather than answered: the deployment's six coming back would read as "this
+workspace defines none".
 
 Because a library is a document:
 
@@ -103,8 +123,6 @@ Two ways to live with it:
 - **One library per workspace**, at the path `stencils`. The facet is what makes a document a
   library, but nothing can yet ask which documents carry a facet, so the path is the rule
   rather than a default.
-- **`wb_facet_list` reports the deployment's stencils, not the workspace's.** A library's ids
-  work; they are not yet listed. Until that lands, name them from the library document.
 - **A stencil sets appearance only.** A default size is defined in
   [ADR-0034](../contributing/adr/0034-stencil-and-recipe.md) and not implemented.
 

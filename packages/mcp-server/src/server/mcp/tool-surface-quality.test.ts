@@ -283,11 +283,25 @@ describe('what the tool table costs to read', () => {
       //
       // `undescribed` stays 1: the new parameter carries its own
       // `.describe()`, because C3 counts down and never up.
+      //
+      // +274 visible bytes again for `workspaceId` (足場4b), and this row is
+      // the one place the trade is stated. C1 goes UP, which for an addition
+      // is the only direction it can go; what it buys is C5 — an errand step
+      // that had no tool behind it at all. A workspace's stencil library is
+      // CONTENT, so no registry a deployment composes can see it, and the
+      // ids it defines were reachable only by opening the library document
+      // and reading its frontmatter. The how-to shipped that as a stated
+      // limit one increment ago; this retires it.
+      //
+      // The cost is paid ONCE, in the table, and never per stencil: the ids
+      // stay out of every schema for the reason the assets half of this
+      // tool exists (+4838 to `wb_canvas_edit` at 120 stencils). A library
+      // that grows to a hundred adds nothing to what a model reads.
       wb_facet_list: {
-        visibleBytes: 653,
-        wireBytes: 1623,
-        descriptionWords: 46,
-        parameters: 2,
+        visibleBytes: 927,
+        wireBytes: 1897,
+        descriptionWords: 63,
+        parameters: 3,
         undescribed: 1,
         strays: 'refused',
         names: [],
@@ -448,9 +462,12 @@ describe('what the tool table costs to read', () => {
       // node types x the 29 bytes a strict object costs, for a stray key
       // refused instead of silently dropped, less 6 for a `badge` the
       // stencil field's description no longer promises (see wb_canvas_edit).
-      visibleBytes: 36516,
-      wireBytes: 111233,
-      parameters: 276,
+      // +274 for `workspaceId` on wb_facet_list (足場4b): the one parameter
+      // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
+      // once in the table and never per stencil.
+      visibleBytes: 36790,
+      wireBytes: 111507,
+      parameters: 277,
       undescribed: 191,
     })
   })

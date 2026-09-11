@@ -67,6 +67,16 @@ export type VisualStencilsFacet = z.infer<typeof visualStencilsFacetSchema>
  * payload the schema refuses, because a malformed library must not stop a
  * drawing being read — the write path is where a bad library is rejected,
  * loudly, with the author present.
+ *
+ * BY NAME, because there is no other order to be faithful to. A
+ * deployment's assets are answered in registration order — the bundled
+ * vocabulary first, then what the deployment added — and that order is
+ * meaningful. A library has none that survives: the record goes into a
+ * CRDT map and comes back in the map's own order, measured as `ledger`
+ * before `lakehouse` for a document authored the other way round, which is
+ * neither what was written nor anything a reader could predict. Sorting is
+ * what makes two calls agree, which is the same reason `wb_facet_list`
+ * sorts its facets.
  */
 export function readStencilLibrary(
   facets: ExtensionFacets | undefined,
@@ -74,5 +84,8 @@ export function readStencilLibrary(
   const raw = facets?.[VISUAL_STENCILS_KEY]
   if (raw === undefined) return {}
   const parsed = visualStencilsFacetSchema.safeParse(raw)
-  return parsed.success ? parsed.data.stencils : {}
+  if (!parsed.success) return {}
+  return Object.fromEntries(
+    Object.entries(parsed.data.stencils).sort(([left], [right]) => (left < right ? -1 : 1)),
+  )
 }

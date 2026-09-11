@@ -37,6 +37,22 @@ const boardAt = async (wb, path) => {
   return wb.call('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId: entry.documentId })
 }
 
+/**
+ * A node's stored facets, which `wb_canvas_snapshot` does not carry — it
+ * answers geometry and text. The document's own content does, under
+ * `x-whiteboard`, which is also where the drawing score reads them.
+ */
+const nodeFacetsAt = async (wb, ids, path, match) => {
+  const read = await wb.call('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [ids[path]],
+  })
+  const content = read.documents[0]?.content
+  if (content === undefined) return undefined
+  const node = JSON.parse(content).nodes?.find((n) => match(n))
+  return node === undefined ? undefined : (node['x-whiteboard']?.facets ?? {})
+}
+
 const text = (n) => (n.text ?? '').trim()
 const byText = (board, t) => board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
 const strictlyInside = (n, g) =>
@@ -651,6 +667,49 @@ export const TASKS = [
         detail:
           missing.length === 0 ? 'both boards checkpointed' : `missing: ${missing.join(', ')}`,
       }
+    },
+  },
+  {
+    // 足場4b's own question, and the one thing that can refute it: given a
+    // vocabulary THIS WORKSPACE defines and the deployment does not, can an
+    // agent find it and wear it?
+    //
+    // Everything below the LLM lane says yes by construction — every unit
+    // test and the smoke hand the tool a `workspaceId` because the test
+    // wrote it. What none of them can answer is whether a model reaches for
+    // the tool at all when the id it needs is in no schema it reads.
+    //
+    // The prompt names no tool, no parameter and no id. It DOES say the
+    // style belongs to this workspace rather than to the server, because
+    // that is the distinction a person would actually make ("the one we
+    // agreed", not "a blue one") and because without it the ask is
+    // satisfiable by `visual.datastore` — a lakehouse is a kind of store,
+    // so a model reaching for the built-in would not have been wrong and
+    // the task would have measured nothing.
+    //
+    // Graded on the STORED facet rather than on the colour: `visual.gateway`
+    // is also colour 3, so a colour check would pass a board dressed with
+    // the wrong stencil. ADR-0034 records the id on the node for exactly
+    // this reason — what a box IS survives, not only how it looks.
+    name: 'dress a box with a style this workspace defines',
+    boards: ['boards/architecture'],
+    prompt:
+      'On boards/architecture, add a box labelled "Events lake". Our team keeps its own agreed box styles for this workspace on top of whatever the server ships; dress it as the lakehouse one we agreed, rather than a built-in style or a colour you pick. Apply it directly; I am looking at the board.',
+    verify: async (wb, ids) => {
+      const facets = await nodeFacetsAt(wb, ids, 'boards/architecture', (n) =>
+        (n.text ?? '').toLowerCase().includes('events lake'),
+      )
+      if (facets === undefined) {
+        return { ok: false, detail: 'no box labelled "Events lake" on boards/architecture' }
+      }
+      const worn = facets['visual.stencil/v0']?.stencil
+      if (worn === undefined) {
+        return { ok: false, detail: 'the box wears no stencil at all' }
+      }
+      if (worn !== 'workspace.lakehouse') {
+        return { ok: false, detail: `wore ${worn}, not the style this workspace defines` }
+      }
+      return { ok: true, detail: 'wore workspace.lakehouse' }
     },
   },
   {
