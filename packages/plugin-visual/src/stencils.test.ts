@@ -34,19 +34,31 @@ describe('the bundled stencil set', () => {
     expect(bundledFacetRegistry.assetIds('stencils')).toEqual(ids)
   })
 
-  it('gives no two members the same appearance, on at least two channels', () => {
+  it('gives no two members the same appearance, on at least two channels a board DRAWS', () => {
     // ADR-0033's `distance`, asserted on the SET rather than on a drawing:
     // two stencils a reader cannot tell apart are a defect in the vocabulary,
     // and no board using them can be scored out of it. Two channels rather
     // than one because colour alone is the channel most often lost — a
     // projector, a colour-blind reader, a greyscale print.
+    //
+    // Colour and silhouette, and NOT the badge. `plugin-visual` contributes
+    // no node decoration (see `render.ts`), so `visual.symbol/v0` draws
+    // nothing on a canvas; counting it passed a set whose `service` and
+    // `external` a reader of the finished drawing sees as two rectangles
+    // that differ only in colour. Found by rendering a board rather than by
+    // reading one — the badges were simply absent from the image.
+    //
+    // A consequence worth knowing before growing the set: distance >= 2 for
+    // every pair means all colours distinct AND all silhouettes distinct, so
+    // the set's ceiling is min(6 JSON Canvas colours, 6 silhouettes) = SIX.
+    // A seventh stencil needs a new silhouette or a third drawn channel, not
+    // a seventh entry.
     const treatments = ids.map((id) => {
       const stencil = bundledFacetRegistry.stencilAsset(id)
       return {
         id,
         colour: stencil?.color ?? '',
         shape: JSON.stringify(stencil?.facets['visual.shape/v0'] ?? null),
-        badge: JSON.stringify(stencil?.facets['visual.symbol/v0'] ?? null),
       }
     })
     const tooClose: string[] = []
@@ -55,10 +67,7 @@ describe('the bundled stencil set', () => {
         const a = treatments[i]
         const b = treatments[j]
         if (a === undefined || b === undefined) continue
-        const apart =
-          (a.colour === b.colour ? 0 : 1) +
-          (a.shape === b.shape ? 0 : 1) +
-          (a.badge === b.badge ? 0 : 1)
+        const apart = (a.colour === b.colour ? 0 : 1) + (a.shape === b.shape ? 0 : 1)
         if (apart < 2) tooClose.push(`${a.id} vs ${b.id}: ${apart}`)
       }
     }

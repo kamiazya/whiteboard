@@ -653,4 +653,91 @@ export const TASKS = [
       }
     },
   },
+  {
+    // The question ADR-0034 exists to answer, and the only thing that can
+    // REFUTE its premise: asked for a drawing whose boxes are of obviously
+    // different kinds, does a model reach for a reusable vocabulary at all?
+    //
+    // Graded on STRUCTURE alone — the boxes and the arrows — deliberately.
+    // Whether it reached for a stencil, hand-set colours, or drew everything
+    // plain is the DIAGNOSTIC, read off the `facets` columns this board
+    // already reports (ADR-0033 made this lane its scoreboard). Grading the
+    // reach would be grading the path, which this file's header forbids and
+    // which would also make the answer unfalsifiable: a model that
+    // distinguishes kinds some other way has not failed.
+    //
+    // The prompt names no stencil id, no `stencil` field and no tool. It
+    // does use the category words a person would use — database, queue,
+    // service, outside system — and that was weighed rather than assumed: a
+    // prompt that avoided them could not state the ask at all, and both the
+    // vocabulary path and the invent-it-per-board path satisfy them equally,
+    // so they bias toward DOING something rather than toward stencils.
+    name: 'draw a flow whose kinds are told apart at a glance',
+    boards: ['boards/checkout'],
+    prompt:
+      'Create a board at boards/checkout and draw how a checkout request flows: a Shopper hits an API gateway; the gateway calls an Orders service and a Payments service; Orders writes to a Postgres database and publishes to an Events queue; Payments calls Stripe, which is outside our system. Someone glancing at this board should be able to tell those apart without reading every label. Apply it directly; I am looking at the board.',
+    verify: async (wb) => {
+      const board = await boardAt(wb, 'boards/checkout')
+      if (board === undefined) return { ok: false, detail: 'no board at boards/checkout' }
+      const wanted = ['Shopper', 'gateway', 'Orders', 'Payments', 'Postgres', 'Events', 'Stripe']
+      // Matched on a distinctive WORD rather than the whole label: a model
+      // that writes "Orders service" or "Postgres database" has drawn the
+      // right box, and failing it for that would measure transcription.
+      //
+      // One WORD, and the list said `API gateway` until a run proved why
+      // that matters: a model wrapped the label as "API\nGateway" and the
+      // phrase stopped matching, so the lane reported `missing: API gateway`
+      // for a box that was there. The verifier judges WHICH BOXES EXIST; how
+      // well the label fits its box is the drawing score's column
+      // (`textOverflow`), and a gate that conflates the two reports the
+      // wrong finding for the right board.
+      const found = wanted.map((word) =>
+        board.nodes.find(
+          (n) => n.type !== 'group' && text(n).toLowerCase().includes(word.toLowerCase()),
+        ),
+      )
+      const missing = wanted.filter((_, i) => found[i] === undefined)
+      if (missing.length > 0) return { ok: false, detail: `missing: ${missing.join(', ')}` }
+      // One box may not answer for two kinds. `nodes.find()` per word can
+      // return the SAME node twice — "Orders Payments Service" matches both
+      // — and the verdict would then claim seven boxes over six. Six kinds
+      // drawn as six boxes is not the drawing the prompt asked for, whatever
+      // the labels add up to.
+      const shared = wanted.filter((_, i) => found.findIndex((n) => n?.id === found[i]?.id) !== i)
+      if (shared.length > 0) {
+        return { ok: false, detail: `one box answers for two kinds: ${shared.join(', ')}` }
+      }
+      const flows = [
+        ['Shopper', 'gateway'],
+        ['gateway', 'Orders'],
+        ['gateway', 'Payments'],
+        ['Orders', 'Postgres'],
+        ['Orders', 'Events'],
+        ['Payments', 'Stripe'],
+      ]
+      // A flow naming a box `wanted` does not is the verifier's own defect,
+      // and it reported itself as a crash that killed the whole RUN — every
+      // remaining trial with it — when `API gateway` above became `gateway`
+      // and these did not. Answered as a failed task instead, so the lane
+      // survives to report it.
+      const unnamed = [...new Set(flows.flat())].filter((w) => !wanted.includes(w))
+      if (unnamed.length > 0) {
+        return { ok: false, detail: `verifier names boxes it does not want: ${unnamed.join(', ')}` }
+      }
+      const idOf = (word) => found[wanted.indexOf(word)].id
+      // DIRECTED, unlike the shared `linked` helper above. The prompt says a
+      // Shopper hits the gateway and the gateway calls the services, so a
+      // board with the arrows reversed makes a different claim about the
+      // system rather than the same one drawn differently.
+      const linked = (a, b) =>
+        board.edges.some((e) => e.fromNode === idOf(a) && e.toNode === idOf(b))
+      const unlinked = flows.filter(([a, b]) => !linked(a, b)).map(([a, b]) => `${a}->${b}`)
+      if (unlinked.length > 0) return { ok: false, detail: `not connected: ${unlinked.join(', ')}` }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: `${wanted.length} boxes, ${flows.length} flows, no overlap` }
+    },
+  },
 ]

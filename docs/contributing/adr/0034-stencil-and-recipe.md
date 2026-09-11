@@ -220,6 +220,120 @@ reading is also the first population that could make this instrument wrong;
 a non-zero `excess` is to be read as a hypothesis about the drawing AND about
 the column, not as a verdict.
 
+## First reading (2026-09-11): the premise held, and the instrument did not
+
+The table above says what adoption MUST do. This is what it did, on the lane
+task written for exactly this question — *"draw how a checkout request flows
+… someone glancing at this board should be able to tell those apart without
+reading every label"*, naming no stencil id, no `stencil` field and no tool.
+
+Three trials, one model, one task:
+
+| | baseline (ADR-0033) | this reading |
+|---|---|---|
+| `deficit` / `constructs` | 22 / 22 owed | **0 / 6**, all three trials |
+| `treatments` | 1 | **6**, all three trials |
+| `distance` | 0 | **2, 2, 1** |
+| drawing debt | — | none / `textOverflow 2` / `nearMisses 1` |
+| `pass^k` | — | 1 (3/3) |
+| `meanCalls` | — | 9.67 (4, 4, 21) |
+
+**What the model actually did, read off the recorded calls rather than
+inferred.** All three trials opened with `wb_facet_list` asking for
+`stencils`, and the mapping was the obvious one every time (shopper→actor,
+gateway→gateway, the two services→service, Postgres→datastore,
+Events→queue, Stripe→external). So the discovery path the enum was traded
+away for is the path a model takes unprompted, and the vocabulary is reached
+for rather than reinvented — which is the claim this reading was taken to
+test, and it holds.
+
+**The board has no frame and one node kind**, so the frame and kind
+partitions are both single-class and dropped: every one of those 6 constructs
+comes from the stencil RECORD. The half of decision 5 that measured as
+"exactly one case the other partitions cannot reach" is carrying this whole
+reading.
+
+### Three defects this reading found, two of them in the instrument
+
+An earlier version of this section published `distance 2`, `no drawing debt`
+on all three trials and `meanCalls 4.67`. Those numbers were taken with an
+instrument that was wrong, and the corrected ones are above. What the fixing
+cost is worth writing down, because every one of them was invisible to a
+passing test and visible in a rendered board.
+
+**1. The score counted a channel a board does not draw.** `scoreFacets` read
+`visual.symbol/v0` as a third distinction channel. `plugin-visual`
+contributes no node decoration, so a badge draws NOTHING on a canvas — the
+correction, and where a badge IS drawn, is ADR-0033's own dated note. The
+published `distance 2` was therefore partly credited to marks no reader of
+that board could see.
+
+**2. The bundled set collided once the badge stopped counting.** `service`
+(colour 4, rect) and `external` (colour 1, rect, link badge) differed on
+exactly one channel a board draws. `external` now takes the `diamond`
+silhouette — the one the other five leave — and `stencils.test.ts` asserts
+the set on drawn channels only. That also fixes the set's ceiling in writing:
+distance ≥ 2 for every pair means all colours distinct AND all silhouettes
+distinct, so six is the capacity of these two channels, and a seventh stencil
+needs a new silhouette rather than a seventh entry.
+
+**3. `stencil` written inside `node` was silently dropped.** `node.patch`'s
+fields are `.strict()`, so the same mistake one op over is refused by name; a
+node DRAFT strips, so on `node.add` the key was accepted, discarded, and the
+box drawn undressed with nothing said. Trial 3 of the corrected run did
+exactly that on all seven boxes — inside `node` is the likelier guess, since
+every other property of the box goes there — received no error, worked out
+from the render that nothing was dressed, and spent seventeen further calls
+rebuilding the vocabulary by hand with `wb_facet_set` and colour patches.
+That hand-rolled vocabulary is the `distance 1` in the table: it gave a
+silhouette to two of seven boxes and left the rest to colour alone. It is
+also the whole of the `meanCalls` gap — the other two trials cost 4 calls
+each.
+
+The draft is strict now, with the same redirect `node.patch` carries. It
+costs 116 visible bytes on `wb_canvas_edit` (29 per object × four node
+types), re-pinned on the rung-1 scoreboard with that reason.
+
+**A silently dropped key is the worst of the three outcomes.** Refused is
+recoverable and applied is correct; dropped is invisible to the caller and to
+any test that asserts on what was stored. Two of the three defects above
+share that shape, and neither would have been found by reading code — the
+badge one was found by looking at a PNG, and this one by reading what a model
+did after looking at one.
+
+**The lane's own verifier had a fourth, smaller version of the same.** It
+wanted a box matching the phrase `API gateway`; a model that wrapped the
+label as `API\nGateway` was reported as `missing: API gateway` for a box that
+was there. It matches the single word `gateway` now — the verifier judges
+WHICH BOXES EXIST, and how well a label fits its box is the drawing score's
+`textOverflow` column.
+
+Review then found two more of its own, both of which would have passed a
+board the prompt did not ask for: one box could answer for two kinds (a
+`nodes.find()` per word can return the same node twice, so `Orders Payments
+Service` satisfied both and the verdict still claimed seven boxes), and the
+flow check accepted an edge in either direction, so a board with every arrow
+reversed passed. Both are fixed, and `tasks.test.ts` now drives the verifier
+over planted boards — an instrument nothing checked until it had been wrong
+twice.
+
+**Tightening it does not move the numbers above**, and that was checked
+rather than assumed: the three recorded runs carry seven distinct labels and
+draw all six flows in the prompt's direction, so each still passes under the
+stricter rule.
+
+### What this does NOT show
+
+- **One task, one model, three trials.** It says the surface CAN be reached,
+  not that it always is.
+- **The prompt asked for at-a-glance distinguishability.** Whether a model
+  reaches for the vocabulary on a drawing task that does NOT ask is a
+  separate question, and this reading cannot answer it.
+- It says nothing about whether the stencil chosen was the RIGHT one — the
+  limit ADR-0033 fixed for its own columns, inherited here.
+- **The `distance 1` trial was taken BEFORE the strict draft landed**, so the
+  reading does not show what that fix is worth. The next reading does.
+
 ## Amendment (2026-09-11): the two SCOPES, and what a workspace library is
 
 Decision 4 said a library is "a DOCUMENT in a workspace" and left a fork

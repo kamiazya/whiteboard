@@ -49,10 +49,21 @@ const SYMBOL_KEY = 'visual.symbol/v0'
  * Keyed by BARE name; the registry composes `visual.<name>`, as it does for
  * themes and icons.
  *
- * Every pair differs on at least TWO channels, asserted in this module's
- * test rather than trusted: colour is the channel most often lost — a
- * projector, a colour-blind reader, a greyscale print — so a set that leans
- * on it alone is one a real reader may receive as uniform.
+ * Every pair differs on at least TWO channels A BOARD DRAWS — colour and
+ * silhouette — asserted in this module's test rather than trusted: colour is
+ * the channel most often lost (a projector, a colour-blind reader, a
+ * greyscale print), so a set that leans on it alone is one a real reader may
+ * receive as uniform.
+ *
+ * The badge is NOT one of those two, though two members carry one. This
+ * package contributes no node decoration (`render.ts`), so `visual.symbol`
+ * draws nothing on a canvas — it reaches the minimap, the favicon and a file
+ * row, where a node is too small to read. Counting it shipped `service` and
+ * `external` as two rectangles a reader tells apart by colour alone.
+ *
+ * That leaves the set at the CEILING of what those two channels hold: six
+ * distinct colours by six distinct silhouettes. A seventh stencil needs a
+ * new silhouette or a third drawn channel, not a seventh entry.
  */
 export const VISUAL_STENCILS: Readonly<Record<string, StencilAssetInput>> = {
   /** Anything that holds state and is read back: a database, a bucket, a cache. */
@@ -92,6 +103,14 @@ export const VISUAL_STENCILS: Readonly<Record<string, StencilAssetInput>> = {
   external: {
     displayName: 'External',
     color: '1',
-    facets: { [SYMBOL_KEY]: { kind: 'icon', name: 'link' } },
+    // The diamond by elimination — it is the silhouette the other five
+    // leave, and the set needs all six distinct. It reads acceptably here
+    // because this vocabulary has no decision construct for a flowchart
+    // reader to confuse it with: nothing else in an architecture drawing is
+    // a diamond, which is what "not ours" wants to say.
+    facets: {
+      [SHAPE_KEY]: { kind: 'diamond' },
+      [SYMBOL_KEY]: { kind: 'icon', name: 'link' },
+    },
   },
 }

@@ -16,8 +16,8 @@ the other half of what a drawing says.
 
 A drawing distinguishes things in two ways. It can put them in different
 PLACES, which both existing axes read. Or it can give them a different
-APPEARANCE — a colour, a silhouette, a badge — which says two things differ
-in KIND rather than in position, and which nothing here measures at all.
+APPEARANCE — a colour, a silhouette — which says two things differ in KIND
+rather than in position, and which nothing here measures at all.
 
 ADR-0032 named this gap in its own words and reserved C4 (`contrast`) as the
 seam: `treatments` counts the visual treatments a scene ends up with,
@@ -48,11 +48,29 @@ distinctions the document DECLARES.
 Both halves are small, closed and worth naming, because the columns below
 are meaningless without them.
 
-**The channels that can say "these differ in kind"** are exactly three, all
-per-node: `node.color` (JSON Canvas), `visual.shape/v0` (the silhouette —
-ellipse, diamond, hexagon, parallelogram, cylinder; absent means rect) and
-`visual.symbol/v0` (a badge: a named icon or one grapheme). A node's
-TREATMENT is that triple.
+**The channels that can say "these differ in kind"** are TWO, both per-node:
+`node.color` (JSON Canvas) and `visual.shape/v0` (the silhouette — ellipse,
+diamond, hexagon, parallelogram, cylinder; absent means rect). A node's
+TREATMENT is that pair.
+
+> **Correction (2026-09-11).** This said THREE, counting `visual.symbol/v0`
+> (a badge: a named icon or one grapheme), and the first implementation
+> counted it. It draws NOTHING on a board: `plugin-visual` contributes no
+> node decoration — the badge was deliberately removed once the small
+> surfaces the symbol was designed for existed (the tab's favicon, a file
+> row, the canvas overview), because on a node at full size it repeated what
+> the node's own label already said. The only thing that draws a node's
+> symbol today is the minimap.
+>
+> So the score was crediting a distinction no reader of the canvas can see —
+> an instrument-validity error, not a scoring preference, and it made every
+> `distance` reading it produced suspect upward. Found by rendering a board a
+> model had drawn and noticing two stencils' badges were simply absent:
+> invisible in the SVG text, invisible to every test, obvious in the image.
+>
+> A badge is still a real channel SOMEWHERE. If the minimap is ever scored,
+> it is scored by an instrument that knows what the minimap draws; borrowing
+> this one would make the same mistake in the other direction.
 
 Three of `visual`'s facets are deliberately NOT in it. `visual.text/v0` is
 placement rather than kind. `visual.theme/v0` and `visual.edges/v0` are
@@ -78,8 +96,8 @@ propose both:
 
 - **Structural role from the edge graph** (source, sink, hub) is INFERRED,
   not declared. ADR-0032's `contrast` already reads it and is reported-only
-  partly for that reason. A drawing that gives its hubs no badge has not
-  contradicted anything the document says.
+  partly for that reason. A drawing that gives its hubs no treatment of
+  their own has not contradicted anything the document says.
 - **OKF `tags`** are multi-valued, so they are not a partition, and forcing
   them into one is a modelling decision this ADR has no evidence for. Named
   as an omission rather than left out silently; a later version that finds
@@ -97,8 +115,8 @@ partition whose nodes all wear the default treatment, so the drawing says
 nothing about a distinction the document states. This is the column the
 corpus reading above predicts will dominate.
 
-**V2 — OVERLOAD: one treatment carrying two constructs.** The same colour,
-silhouette or badge worn by two WHOLE classes and nothing else — the
+**V2 — OVERLOAD: one treatment carrying two constructs.** The same colour or
+silhouette worn by two WHOLE classes and nothing else — the
 ambiguity case. A reader who has learnt that the blue boxes are one thing is
 then wrong about half of them.
 
@@ -119,8 +137,8 @@ Moody's two terms mean, and testing them independently was the bug.
 
 **V4 — DISCRIMINABILITY: how far apart the treatments in use are.** Moody's
 visual distance: the number of visual variables two symbols differ on, and
-by how much. With three channels the count is 0-3, and 0 IS overload, which
-is the check that these two columns agree. Beside it, the redundant-encoding
+by how much. With the two channels a board draws the count is 0-2, and 0 IS
+overload, which is the check that these two columns agree. Beside it, the redundant-encoding
 literature is specific and worth encoding: colour and shape together measure
 BETTER than either alone, most clearly at 5-8 categories, and the two
 interact so a pairing is not free (CatPAW, CHI 2026; the icon colour/shape/
