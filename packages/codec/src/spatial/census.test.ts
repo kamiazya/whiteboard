@@ -52,9 +52,9 @@ describe('censusSpatialModel', () => {
 
   it('leaves the facet buckets unexpanded when no plugin is supplied', () => {
     expect(census.facetBuckets).toEqual([
-      'edges[].x-whiteboard.facets',
-      'nodes[].x-whiteboard.facets',
-      'x-whiteboard.facets',
+      'edges[].x-whiteboard.facets/*',
+      'nodes[].x-whiteboard.facets/*',
+      'x-whiteboard.facets/*',
     ])
     expect(census.facet).toEqual([])
   })

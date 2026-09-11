@@ -1,4 +1,5 @@
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { JsonCanvasDocument } from './projection.js'
 
 /**
  * Strict JSON Canvas 1.0 has no room for the `x-whiteboard` extension.
@@ -26,7 +27,7 @@ function degradeEdge(edge: CanvasEdge): CanvasEdge {
  * spelled out here because "the object literal happens not to mention it" is
  * not a contract anyone can rely on.
  */
-export function strictDegrade(canvas: SpatialCanvas): SpatialCanvas {
+export function strictDegrade(canvas: JsonCanvasDocument): JsonCanvasDocument {
   return {
     nodes: canvas.nodes.map(degradeNode),
     edges: canvas.edges.map(degradeEdge),

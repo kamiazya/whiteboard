@@ -1,6 +1,6 @@
 # ADR-0033: The document model is native; JSON Canvas and OKF are projections
 
-**Status:** Proposed — awaiting a human gate. Nothing is implemented. Re-points [ADR-0009](0009-mcp-tool-naming.md)'s lossy-projection rule at the STORED model rather than at output alone, and stands on the census landed in `packages/codec/src/spatial/census.ts`.
+**Status:** Accepted — design of record (human gate, 2026-09-11). Landing in dimension-sliced increments; slice 1 (the projection seam) first. Re-points [ADR-0009](0009-mcp-tool-naming.md)'s lossy-projection rule at the STORED model rather than at output alone, and stands on the census landed in `packages/codec/src/spatial/census.ts`.
 
 ## Context
 

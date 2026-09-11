@@ -20,6 +20,11 @@ paths:
   `resolveReferencesForExport` (export) (`references/`).
 - `CodecParseResult<T>`/`CodecParseError` — the total-parser error contract every parser here
   returns instead of throwing (`errors.ts`).
+- The JSON Canvas PROJECTION ([ADR-0033](../../docs/contributing/adr/0033-model-and-format.md)):
+  the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
+  `JSON_CANVAS_PROJECTION` ledger and the `jsonCanvasLoss()` table it derives
+  (`spatial/projection.ts`), plus `censusSpatialModel` — how far the format reaches into the
+  model, counted from the schemas (`spatial/census.ts`).
 
 ## What does NOT belong here
 
@@ -93,6 +98,22 @@ rather than in a string, so joining its runs yields `tightenthis`.
   the standing example (`normalizeOkfVerified` in model).
 - Strict JSON Canvas degradation is ONE uniform rule: drop the entire `x-whiteboard` key from every
   node. No per-kind special casing. Extended mode is lossless (round-trip property).
+- **A document becomes a JSON Canvas document in ONE place.** `serializeSpatial` and
+  `parseSpatial` both go through `spatial/projection.ts`, so `JSON_CANVAS_PROJECTION` is the
+  single account of what crossing costs. Adding a model field means adding its ledger entry —
+  `native` / `extension` / `degraded(to)` / `dropped(why)`, the last two owing a real reason.
+  The ledger is held from three sides, and each side catches something the others do not:
+  the four directions of `.claude/rules/coverage-ledger.md` against the census's own path list
+  (a missing entry, a stale one); a comparison against what `strictDegrade` REALLY drops, so a
+  declaration is never merely a claim; and `toJsonCanvas` building its result field by field
+  rather than by spread, so a field nobody projected fails the round-trip property instead of
+  riding along. Mutation-checked: dropping `subpath` from the projection fails 3 tests, and
+  calling one `extension` entry `native` fails the behaviour comparison.
+- **`jsonCanvasDocumentSchema` is an ALIAS of the model's schema today, and that is the debt,
+  not a claim.** ADR-0033 slices the model away from the format one dimension at a time; a
+  second hand-written copy of a schema meant to be identical would drift in comments and buy
+  nothing the round-trip property does not already prove. The moment the model holds a field
+  the format cannot (slice 2), this becomes this package's own declaration.
 - The extension contract — `x-whiteboard` is the only non-standard key ever emitted, foreign keys
   on an imported document are stripped and never re-emitted — is pinned by
   `spatial/extension-contract.property.test.ts`; its machine-readable half is

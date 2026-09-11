@@ -62,7 +62,7 @@ export interface SpatialModelCensus {
   readonly standard: readonly string[]
   /** Leaf paths reachable only under `x-whiteboard`, facet buckets excluded. */
   readonly extension: readonly string[]
-  /** The facet buckets, which the format can only say are present. */
+  /** The facet buckets (`…/*`), which the format can only say are present. */
   readonly facetBuckets: readonly string[]
   /** Leaf paths inside those buckets, for the facets supplied. */
   readonly facet: readonly string[]
@@ -92,7 +92,9 @@ export function censusSpatialModel(facets: readonly CensusFacet[]): SpatialModel
     if (!path.includes(EXTENSION_KEY)) {
       standard.push(path)
     } else if (path.endsWith('.facets/*')) {
-      facetBuckets.push(path.slice(0, -'/*'.length))
+      // The `/*` stays on: it is the same notation the value walker and the
+      // projection ledger use, and it is what marks the bucket unbounded.
+      facetBuckets.push(path)
     } else {
       extension.push(path)
     }

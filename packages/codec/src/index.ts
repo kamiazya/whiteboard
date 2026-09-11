@@ -35,5 +35,14 @@ export type { CensusFacet, SpatialModelCensus } from './spatial/census.js'
 export { censusSpatialModel, jsonSchemaLeafPaths } from './spatial/census.js'
 export { strictDegrade } from './spatial/degrade.js'
 export { parseSpatial } from './spatial/parse.js'
+export type { FieldProjection, JsonCanvasDocument, LossEntry } from './spatial/projection.js'
+export {
+  fromJsonCanvas,
+  JSON_CANVAS_PROJECTION,
+  jsonCanvasDocumentSchema,
+  jsonCanvasLoss,
+  toJsonCanvas,
+  valueLeafPaths,
+} from './spatial/projection.js'
 export type { SpatialSerializeMode } from './spatial/serialize.js'
 export { serializeSpatial } from './spatial/serialize.js'

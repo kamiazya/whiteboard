@@ -1,19 +1,25 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { strictDegrade } from './degrade.js'
+import { type JsonCanvasDocument, jsonCanvasDocumentSchema, toJsonCanvas } from './projection.js'
 
 export type SpatialSerializeMode = 'strict' | 'extended'
 
 /**
- * `extended` mode is a lossless serialization of the model as-is (round-trip
- * property in serialize.property.test.ts). `strict` mode applies
- * {@link strictDegrade} first and re-validates the result against
- * `spatialCanvasSchema` — a degraded document must still be a valid JSON
- * Canvas 1.0 document, not merely "close enough" JSON.
+ * Write a document as JSON Canvas. Both modes go through
+ * {@link toJsonCanvas} first, so the projection is the only place a document
+ * becomes a JSON Canvas document and `JSON_CANVAS_PROJECTION` is the only
+ * account of what that costs.
+ *
+ * `extended` is lossless over what the extension key can hold (round-trip
+ * property in serialize.property.test.ts). `strict` applies
+ * {@link strictDegrade} and re-validates against the wire schema — a degraded
+ * document must still BE a JSON Canvas 1.0 document, not merely close enough
+ * JSON.
  */
 export function serializeSpatial(canvas: SpatialCanvas, mode: SpatialSerializeMode): string {
-  if (mode === 'extended') return JSON.stringify(canvas)
-  const degraded = strictDegrade(canvas)
-  spatialCanvasSchema.parse(degraded)
+  const document: JsonCanvasDocument = toJsonCanvas(canvas)
+  if (mode === 'extended') return JSON.stringify(document)
+  const degraded = strictDegrade(document)
+  jsonCanvasDocumentSchema.parse(degraded)
   return JSON.stringify(degraded)
 }
