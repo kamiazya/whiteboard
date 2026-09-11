@@ -454,7 +454,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
 
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
-      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
     }
     const { mountCanvasViewer } = await import('./mount.js')
 
@@ -483,7 +483,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       'https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf'
     const sketchScene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
-      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+      facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
 
     function stubFetch() {

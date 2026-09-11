@@ -100,8 +100,17 @@ rather than in a string, so joining its runs yields `tightenthis`.
   node. No per-kind special casing. Extended mode is lossless (round-trip property).
 - **A document becomes a JSON Canvas document in ONE place.** `serializeSpatial` and
   `parseSpatial` both go through `spatial/projection.ts`, so `JSON_CANVAS_PROJECTION` is the
-  single account of what crossing costs. Adding a model field means adding its ledger entry —
+  single account of what crossing costs. The projection RELOCATES rather than copies now: the
+  canvas's `comments` and `facets`, a node's `embed` and `facets` and an edge's `facets` become
+  the extension key on the way out, and the node's two independent fields fold back into the
+  format's single union arm. One canonicalisation goes with it — an extension object with
+  nothing in it is not emitted, because absence says the same thing — and it is pinned by
+  example rather than left to the round-trip property. Adding a model field means adding its ledger entry —
   `native` / `extension` / `degraded(to)` / `dropped(why)`, the last two owing a real reason.
+  The ledger is the ONLY thing that classifies a field now. `censusSpatialModel` used to split
+  its answer by whether a path was spelled under `x-whiteboard`, which worked only while the
+  model WAS the format; it enumerates and no longer judges.
+
   The ledger is held from three sides, and each side catches something the others do not:
   the four directions of `.claude/rules/coverage-ledger.md` against the census's own path list
   (a missing entry, a stale one); a comparison against what `strictDegrade` REALLY drops, so a
@@ -129,14 +138,21 @@ rather than in a string, so joining its runs yields `tightenthis`.
   than whatever order the caller's object carried. Nothing pins key order, and the artifact it
   changes is the JSON embedded in an exported PNG's `iTXt` chunk — stated here because it is a
   real change to a persisted artifact that no test would have reported.
-- **`spatial/json-canvas.ts` is this package's own declaration of the wire shape**, no longer an
-  alias of the model's. It was LIFTED from the model rather than written beside it, and
-  `json-canvas.test.ts` is what makes that a relocation instead of a fork: the two generate an
-  identical JSON Schema (structural, total) and accept the same documents with the same parsed
-  value (behavioural, since refinements — unique ids, an edge whose endpoints exist — are
-  invisible to JSON Schema). **Both checks are DELETED, never weakened, when the model gains its
-  first field the format cannot hold**; the round-trip property carries the claim from then on,
-  and an equivalence test kept alive past that point is the fork it exists to rule out.
+- **`spatial/json-canvas.ts` is this package's own declaration of the wire shape**, and the
+  home of the extension contract: `x-whiteboard` is the ONLY non-standard key an emitted
+  document may carry, at three sites and no more. The published artifact
+  (`json-schema.ts` -> `docs/reference/x-whiteboard.schema.json`, a vitest file snapshot;
+  regenerate with `pnpm vitest run --project codec-node json-schema -u`) is generated from it,
+  and `extension-contract.property.test.ts` enforces it. Extending what lives INSIDE
+  `x-whiteboard` means regenerating the artifact in the same increment.
+- The wire schemas are NOT `.strict()` and the model's are. A JSON Canvas document another tool
+  wrote may legitimately carry vendor keys; the internal model must refuse a key it does not
+  name. Both directions of that asymmetry are deliberate — see `.claude/rules/package-model.md`.
+- The equivalence tests that proved the wire declaration a faithful LIFT of the model (an
+  identical generated JSON Schema, and the same parsed value for every document) were deleted
+  when the model diverged, exactly as the file said they would be. Keeping them past that point
+  would have asserted the fork they existed to rule out; the round-trip property carries the
+  claim now.
 - The extension contract — `x-whiteboard` is the only non-standard key ever emitted, foreign keys
   on an imported document are stripped and never re-emitted — is pinned by
   `spatial/extension-contract.property.test.ts`; its machine-readable half is

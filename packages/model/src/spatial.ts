@@ -14,56 +14,27 @@ export const canvasColorSchema = z.union([
 export type CanvasColor = z.infer<typeof canvasColorSchema>
 
 /**
- * `x-whiteboard` is a namespaced extension carried on spatial nodes for the
- * one thing JSON Canvas 1.0 has no room for: a node that renders another
- * canvas inline. Its absence is always valid — a strict JSON Canvas 1.0
- * document parses unchanged.
+ * What a node, an edge or the canvas may attach beyond its own fields: a
+ * namespaced, versioned, schema'd payload bucket ([ADR-0013](../../../docs/contributing/adr/0013-facet-system.md)).
  *
- * The extension is deliberately NOT a general escape hatch for new visual
- * primitives. A capability JSON Canvas cannot express is expressed through
- * an existing node type (a diagram becomes a `file` node pointing at an
- * image) rather than through a variant only this project can read.
+ * It is an ordinary field of the model at each of the three sites. It used to
+ * ride inside the JSON Canvas extension key, which is where it still travels
+ * on the WIRE — packing it back there is `codec`'s projection, and
+ * [ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md) is why
+ * the model no longer spells the format's key itself.
  */
+const facetsFieldSchema = extensionFacetsSchema.optional().catch(undefined)
+
 /**
- * A facets-only `x-whiteboard`: the payload bucket and nothing else. What
- * an EDGE carries (ADR-0013 decision 5's edge slot), and the node variant
- * without an embed. `.strict()`, so a broken embed on a node fails this arm
- * too rather than being silently stripped down to its facets.
+ * The document a node shows inline — the one piece of content JSON Canvas 1.0
+ * cannot express, and the reason its extension key exists at all.
  */
-export const facetsOnlyExtensionSchema = z
-  .object({
-    facets: extensionFacetsSchema.optional().catch(undefined),
-  })
-  .strict()
+export const nodeEmbedSchema = z.object({
+  documentId: documentIdSchema,
+  versionRef: z.string().min(1).optional(),
+})
 
-export const xWhiteboardSchema = z.union([
-  z.object({
-    kind: z.literal('embed'),
-    /**
-     * The DOCUMENT this node embeds. Written into exported JSON Canvas files
-     * and published as `docs/reference/x-whiteboard.schema.json`, so this is a
-     * format contract and not only a name: a document stored with the previous
-     * spelling loses its embed on read. Renamed anyway at 0.0.x with no users,
-     * because a format that says `canvasId` for a document id teaches the wrong
-     * model to everyone who reads the published schema.
-     */
-    documentId: documentIdSchema,
-    versionRef: z.string().min(1).optional(),
-    facets: extensionFacetsSchema.optional().catch(undefined),
-  }),
-  /**
-   * Node-target facets without an embed (ADR-0013 decision 5): payload only,
-   * so the node-level content-only rule holds. Strict, so a broken embed
-   * (`kind` present, `documentId` missing/invalid) fails this variant too
-   * instead of being silently stripped down to its facets — the outer
-   * `.catch(undefined)` then drops the extension whole. The facets bucket
-   * carries its own catch for the same reason the canvas-level one does: a
-   * bad key costs the bucket, not its siblings.
-   */
-  facetsOnlyExtensionSchema,
-])
-
-export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
+export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
 
 // JSON Canvas 1.0 geometry is specified in integer pixels.
 const positionFieldSchema = integerSchema
@@ -85,36 +56,46 @@ const sharedNodeFieldsSchema = z.object({
     'Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs.',
   ),
   color: canvasColorSchema.optional(),
-  // `.catch` rather than a reject: an unrecognised extension payload — a
-  // variant this project has dropped, or one a future version writes — must
-  // not make the whole canvas unreadable. The node survives; only the
-  // extension is lost, which is the same outcome a strict JSON Canvas
-  // consumer already gets.
-  'x-whiteboard': xWhiteboardSchema.optional().catch(undefined),
+  /**
+   * The document this node shows inline. Independent of `facets` now: the
+   * format's extension key made them two arms of a union, so a node could
+   * carry an embed WITH facets or facets alone, and the model inherited a
+   * choice the format's shape forced rather than one anything needed.
+   */
+  embed: nodeEmbedSchema.optional(),
+  facets: facetsFieldSchema,
 })
 
-const textNodeSchema = sharedNodeFieldsSchema.extend({
-  type: z.literal('text'),
-  text: z.string(),
-})
+const textNodeSchema = sharedNodeFieldsSchema
+  .extend({
+    type: z.literal('text'),
+    text: z.string(),
+  })
+  .strict()
 
-const fileNodeSchema = sharedNodeFieldsSchema.extend({
-  type: z.literal('file'),
-  file: z.string(),
-  subpath: z.string().startsWith('#').optional(),
-})
+const fileNodeSchema = sharedNodeFieldsSchema
+  .extend({
+    type: z.literal('file'),
+    file: z.string(),
+    subpath: z.string().startsWith('#').optional(),
+  })
+  .strict()
 
-const linkNodeSchema = sharedNodeFieldsSchema.extend({
-  type: z.literal('link'),
-  url: z.url(),
-})
+const linkNodeSchema = sharedNodeFieldsSchema
+  .extend({
+    type: z.literal('link'),
+    url: z.url(),
+  })
+  .strict()
 
-const groupNodeSchema = sharedNodeFieldsSchema.extend({
-  type: z.literal('group'),
-  label: z.string().optional(),
-  background: z.string().optional(),
-  backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
-})
+const groupNodeSchema = sharedNodeFieldsSchema
+  .extend({
+    type: z.literal('group'),
+    label: z.string().optional(),
+    background: z.string().optional(),
+    backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
+  })
+  .strict()
 
 export const spatialNodeSchema = z.discriminatedUnion('type', [
   textNodeSchema,
@@ -125,36 +106,33 @@ export const spatialNodeSchema = z.discriminatedUnion('type', [
 
 export type SpatialNode = z.infer<typeof spatialNodeSchema>
 
-export const canvasEdgeSchema = z.object({
-  id: nodeIdSchema,
-  fromNode: nodeIdSchema,
-  toNode: nodeIdSchema,
-  // Described here, on the stored shape, because every writer's schema is
-  // derived from it: the description says what leaving a side out buys,
-  // since a router that honours a pinned side draws whatever the pin makes
-  // it draw.
-  fromSide: z
-    .enum(['top', 'right', 'bottom', 'left'])
-    .optional()
-    .describe(
-      'The side the edge leaves from. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.',
-    ),
-  toSide: z
-    .enum(['top', 'right', 'bottom', 'left'])
-    .optional()
-    .describe('The side the edge arrives at. Omit it for the same reason as fromSide.'),
-  fromEnd: z.enum(['none', 'arrow']).optional(),
-  toEnd: z.enum(['none', 'arrow']).optional(),
-  color: canvasColorSchema.optional(),
-  label: z.string().optional(),
-  /**
-   * Edge-target facets (ADR-0013 decision 5's edge slot): payload only —
-   * an edge has no content JSON Canvas cannot express, so unlike a node's
-   * key this one never carries an embed. Same escape hatch as the other two
-   * sites: an unreadable extension costs the extension, never the edge.
-   */
-  'x-whiteboard': facetsOnlyExtensionSchema.optional().catch(undefined),
-})
+export const canvasEdgeSchema = z
+  .object({
+    id: nodeIdSchema,
+    fromNode: nodeIdSchema,
+    toNode: nodeIdSchema,
+    // Described here, on the stored shape, because every writer's schema is
+    // derived from it: the description says what leaving a side out buys,
+    // since a router that honours a pinned side draws whatever the pin makes
+    // it draw.
+    fromSide: z
+      .enum(['top', 'right', 'bottom', 'left'])
+      .optional()
+      .describe(
+        'The side the edge leaves from. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.',
+      ),
+    toSide: z
+      .enum(['top', 'right', 'bottom', 'left'])
+      .optional()
+      .describe('The side the edge arrives at. Omit it for the same reason as fromSide.'),
+    fromEnd: z.enum(['none', 'arrow']).optional(),
+    toEnd: z.enum(['none', 'arrow']).optional(),
+    color: canvasColorSchema.optional(),
+    label: z.string().optional(),
+    /** Edge-target facets (ADR-0013 decision 5's edge slot). */
+    facets: facetsFieldSchema,
+  })
+  .strict()
 
 export type CanvasEdge = z.infer<typeof canvasEdgeSchema>
 
@@ -259,64 +237,39 @@ export const canvasCommentDraftSchema = canvasCommentFieldsSchema
 
 export type CanvasCommentDraft = z.infer<typeof canvasCommentDraftSchema>
 
-/**
- * `x-whiteboard` at the CANVAS level — separate from the node-level key of the
- * same name, and holding preferences and annotations rather than content.
- *
- * This is not the general escape hatch the node-level key was narrowed away
- * from being. What lives here describes how to DRAW things JSON Canvas already
- * models (canvas-target facets such as `visual.edges/v0` and `visual.theme/v0`)
- * and the conversation about them (comments); a consumer that drops it still
- * renders every edge, just with its own routing. Nothing that changes what the
- * document MEANS belongs here.
- *
- * The pre-facet `edgeRouting` preference is RETIRED without a compatibility
- * read (0.0.x, no users): a document still carrying it loses that key on
- * parse and draws with its theme's default, exactly as one that never set it.
- */
-export const canvasExtensionSchema = z.object({
-  /**
-   * The comment annotation layer (ADR-0024). Lives under the canvas-level
-   * extension because a strict JSON Canvas consumer that drops the key still
-   * holds the complete CONTENT — what it loses is the conversation about it,
-   * which is exactly what an annotation is. The bucket carries its own catch
-   * for the same reason `facets` does: a malformed comment costs the
-   * comments, not the preferences beside them.
-   *
-   * NOTE the storage shape differs from this file shape: the Loro bridge
-   * stores each comment under its own key in a dedicated `comments` map
-   * (per-comment CRDT merge, so two peers commenting concurrently both
-   * survive), never inside the canvas envelope value — see loro-adapter's
-   * `writeSpatialCanvas`.
-   */
-  comments: z.array(canvasCommentSchema).optional().catch(undefined),
-  /**
-   * Canvas-target facets (ADR-0013 decision 5): the spatial counterpart of a
-   * markdown document's `facets` bucket, carrying `{namespace}.{name}/v{n}`
-   * keyed payloads. Every rendering preference the envelope carries is one of
-   * these — the engine's resolvers own precedence between a facet, a theme's
-   * default and the built-in.
-   *
-   * `.catch(undefined)` on the BUCKET, not the whole extension: facets is a
-   * record schema that rejects on any malformed key, and without its own
-   * catch one bad key would take the sibling comments down with it. A bad
-   * bucket costs the bucket; the comments and the canvas survive.
-   */
-  facets: extensionFacetsSchema.optional().catch(undefined),
-})
-
-export type CanvasExtension = z.infer<typeof canvasExtensionSchema>
-
 export const spatialCanvasSchema = z
   .object({
     // JSON Canvas 1.0 declares both top-level arrays optional; a bare `{}`
     // is a valid (empty) canvas.
+    // Both arrays default to empty: an empty board is a board.
     nodes: z.array(spatialNodeSchema).default([]),
     edges: z.array(canvasEdgeSchema).default([]),
-    // `.catch` for the same reason the node-level key uses it: a preference
-    // written by another version must cost the preference, never the canvas.
-    'x-whiteboard': canvasExtensionSchema.optional().catch(undefined),
+    /**
+     * The comment annotation layer (ADR-0024).
+     *
+     * NOTE the STORAGE shape differs from this one: the Loro bridge keeps each
+     * comment under its own key in a dedicated plane (per-comment CRDT merge,
+     * so two peers commenting concurrently both survive) and projects them
+     * back here — see loro-adapter's `readSpatialCanvas`.
+     *
+     * `.catch(undefined)` per BUCKET rather than over the canvas: a malformed
+     * comment must cost the comments, not the facets beside them, and neither
+     * may cost the board.
+     */
+    comments: z.array(canvasCommentSchema).optional().catch(undefined),
+    /** Canvas-target facets (ADR-0013 decision 5). */
+    facets: facetsFieldSchema,
   })
+  /**
+   * Strict at all three sites, which the format's own schema is NOT and must
+   * not be — a JSON Canvas document another tool wrote may carry vendor keys,
+   * and refusing it would be wrong. This is the INTERNAL model: a key it does
+   * not name is a defect, and a plain `z.object` strips one in silence. That
+   * silence is what ADR-0033's migration had to survive, since every reader
+   * that still spelled the format's extension key would otherwise have parsed
+   * cleanly and lost what it was reading.
+   */
+  .strict()
   .superRefine((value, ctx) => {
     const duplicateNodeId = findDuplicateId(value.nodes.map((node) => node.id))
     if (duplicateNodeId !== undefined) {

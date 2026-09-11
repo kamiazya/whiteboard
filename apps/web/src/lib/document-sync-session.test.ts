@@ -766,14 +766,14 @@ describe('createDocumentSyncSession', () => {
     }
     const next = applyCommand(session.getCanvas(), command)
     // Optimistic: the reducer already shows a pin on the node.
-    expect(next['x-whiteboard']?.comments).toEqual([
+    expect(next.comments).toEqual([
       { id: 't-passage', x: 150, y: 200, targetNodeId: 'n1', text: 'right word?' },
     ])
     session.onChange(next, command)
     await vi.advanceTimersByTimeAsync(300)
 
     expect(session.getAnnotations()[0]?.anchor).toEqual(command.thread.anchor)
-    expect(session.getCanvas()['x-whiteboard']?.comments?.[0]).toMatchObject({
+    expect(session.getCanvas().comments?.[0]).toMatchObject({
       id: 't-passage',
       targetNodeId: 'n1',
     })
@@ -1286,7 +1286,7 @@ describe('createDocumentSyncSession', () => {
     backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
 
     const localComment: CanvasComment = { id: 'local-c', x: 1, y: 1, text: 'local note' }
-    const next: SpatialCanvas = { ...emptyCanvas(), 'x-whiteboard': { comments: [localComment] } }
+    const next: SpatialCanvas = { ...emptyCanvas(), comments: [localComment] }
     const command: EditorCommand = { kind: 'create-comment', comment: localComment }
     session.onChange(next, command)
     await vi.advanceTimersByTimeAsync(300)
@@ -1299,7 +1299,7 @@ describe('createDocumentSyncSession', () => {
     merged.import(snapshotBytes)
     merged.import(remoteDoc.export({ mode: 'update' }))
     for (const bytes of backend._ctrl.pushLocalUpdateCalls) merged.import(bytes)
-    const comments = readSpatialCanvas(merged)['x-whiteboard']?.comments ?? []
+    const comments = readSpatialCanvas(merged).comments ?? []
     expect(comments.map((c) => c.id).sort()).toEqual(['local-c', 'remote-c'])
   })
 
@@ -1328,7 +1328,7 @@ describe('createDocumentSyncSession', () => {
     const doc = new LoroDoc()
     doc.import(snapshotBytes)
     doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
+    const comments = readSpatialCanvas(doc).comments ?? []
     expect(comments).toEqual([{ ...comment, resolved: true }])
   })
 
@@ -1339,7 +1339,7 @@ describe('createDocumentSyncSession', () => {
     const other: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'stays' }
     const initial: SpatialCanvas = {
       ...emptyCanvas(),
-      'x-whiteboard': { comments: [comment, other] },
+      comments: [comment, other],
     }
     session.connect()
     const snapshotBytes = makeSnapshot(initial)
@@ -1362,7 +1362,7 @@ describe('createDocumentSyncSession', () => {
     const doc = new LoroDoc()
     doc.import(snapshotBytes)
     doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
+    const comments = readSpatialCanvas(doc).comments ?? []
     expect(comments.find((c) => c.id === 'c-1')).toEqual({
       ...comment,
       x: 120,
@@ -1395,7 +1395,7 @@ describe('createDocumentSyncSession', () => {
     }
     const next: SpatialCanvas = {
       ...applyCommand(twoNodeCanvas(), { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
-      'x-whiteboard': { comments: [localComment] },
+      comments: [localComment],
     }
     session.onChange(next, batch)
     await vi.advanceTimersByTimeAsync(300)
@@ -1407,7 +1407,7 @@ describe('createDocumentSyncSession', () => {
     merged.import(remoteDoc.export({ mode: 'update' }))
     merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
     const result = readSpatialCanvas(merged)
-    const comments = result['x-whiteboard']?.comments ?? []
+    const comments = result.comments ?? []
     expect(comments.map((c) => c.id).sort()).toEqual(['local-c', 'remote-c'])
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
@@ -1420,7 +1420,7 @@ describe('createDocumentSyncSession', () => {
     const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
     const initial: SpatialCanvas = {
       ...twoNodeCanvas(),
-      'x-whiteboard': { comments: [toMove, toEdit] },
+      comments: [toMove, toEdit],
     }
     const snapshotBytes = makeSnapshot(initial)
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -1450,7 +1450,7 @@ describe('createDocumentSyncSession', () => {
     merged.import(remoteDoc.export({ mode: 'update' }))
     merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
     const result = readSpatialCanvas(merged)
-    const comments = result['x-whiteboard']?.comments ?? []
+    const comments = result.comments ?? []
     expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
     expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ x: 120, y: -30 })
     expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ resolved: true })
@@ -1465,7 +1465,7 @@ describe('createDocumentSyncSession', () => {
     const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
     const initial: SpatialCanvas = {
       ...twoNodeCanvas(),
-      'x-whiteboard': { comments: [toResolve, toEdit] },
+      comments: [toResolve, toEdit],
     }
     const snapshotBytes = makeSnapshot(initial)
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -1488,12 +1488,10 @@ describe('createDocumentSyncSession', () => {
     }
     const next: SpatialCanvas = {
       ...applyCommand(initial, { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
-      'x-whiteboard': {
-        comments: [
-          { ...toResolve, resolved: true },
-          { ...toEdit, x: 60, y: 61 },
-        ],
-      },
+      comments: [
+        { ...toResolve, resolved: true },
+        { ...toEdit, x: 60, y: 61 },
+      ],
     }
     session.onChange(next, batch)
     await vi.advanceTimersByTimeAsync(300)
@@ -1505,7 +1503,7 @@ describe('createDocumentSyncSession', () => {
     merged.import(remoteDoc.export({ mode: 'update' }))
     merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
     const result = readSpatialCanvas(merged)
-    const comments = result['x-whiteboard']?.comments ?? []
+    const comments = result.comments ?? []
     expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
     expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ resolved: true })
     expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ x: 60, y: 61 })
@@ -2069,7 +2067,7 @@ describe('createDocumentSyncSession', () => {
         for (const bytes of backend._ctrl.pushLocalUpdateCalls) replay.import(bytes)
         const stored = readSpatialCanvas(replay)
 
-        expect(stored['x-whiteboard']).toEqual(canvas['x-whiteboard'])
+        expect(stored.facets).toEqual(canvas.facets)
         const byId = <T extends { id: string }>(list: readonly T[]) =>
           [...list].sort((a, b) => a.id.localeCompare(b.id))
         expect(byId(stored.nodes)).toEqual(byId(canvas.nodes))

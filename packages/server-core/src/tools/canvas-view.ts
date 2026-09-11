@@ -3,7 +3,7 @@ import {
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
 } from '@kamiazya/whiteboard-canvas-render'
-import { jsonCanvasDocumentSchema } from '@kamiazya/whiteboard-codec'
+import { jsonCanvasDocumentSchema, toJsonCanvas } from '@kamiazya/whiteboard-codec'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
@@ -136,7 +136,12 @@ export function createCanvasViewTool(deps: ServerDeps) {
       return {
         workspaceId: input.workspaceId,
         documentId: input.documentId,
-        scene: canvas,
+        // Projected, because the tool's published output schema is the WIRE
+        // shape and a client reading it may be another tool entirely. Before
+        // ADR-0033 this was the same object; now the model carries `comments`,
+        // `facets` and `embed` as its own fields and the format carries them
+        // under its extension key.
+        scene: toJsonCanvas(canvas),
         threads: readAnnotations(doc),
         ...(input.style === undefined ? {} : { style: input.style }),
         ...(themeFont === undefined ? {} : { themeFont }),
@@ -160,7 +165,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
                   ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
                   ...(loaded.name !== undefined ? { name: loaded.name } : {}),
                   ...(loaded.body !== undefined ? { body: loaded.body } : {}),
-                  ...(loaded.canvas !== undefined ? { canvas: loaded.canvas } : {}),
+                  ...(loaded.canvas !== undefined ? { canvas: toJsonCanvas(loaded.canvas) } : {}),
                 },
               ],
             ]

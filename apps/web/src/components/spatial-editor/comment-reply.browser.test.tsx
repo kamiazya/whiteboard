@@ -52,7 +52,7 @@ const OTHER_THREAD: CommentThread = {
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': { comments: [FREE, OTHER] },
+  comments: [FREE, OTHER],
 }
 
 function makeHost(threads: readonly CommentThread[] = [THREAD]) {
@@ -147,7 +147,7 @@ it('the card commits a reply from its own box', async () => {
   expect(reply).toMatchObject({ kind: 'reply-to-thread', threadId: 'thread-free' })
   expect(reply?.kind === 'reply-to-thread' ? reply.message.body : undefined).toBe('on it')
   // The opening message is untouched — a reply appends beside it.
-  expect(latest.canvas['x-whiteboard']?.comments?.[0]?.text).toBe('free note')
+  expect(latest.canvas.comments?.[0]?.text).toBe('free note')
 })
 
 it('Resolve sits on the card itself, not only in a menu', async () => {

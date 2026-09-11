@@ -21,17 +21,19 @@
 
 import type { FacetRegistry, FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import { facetsArbitrary } from '@kamiazya/whiteboard-facet-engine/testing'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { fc } from './fast-check.js'
 
 export function facetsArb(
   registry: FacetRegistry,
   target: FacetTarget,
-): fc.Arbitrary<
-  | Pick<NonNullable<SpatialNode['x-whiteboard'] & SpatialCanvas['x-whiteboard']>, 'facets'>
-  | undefined
-> {
+): fc.Arbitrary<SpatialCanvas['facets']> {
+  // The bare record, not a `{ facets }` wrapper: since ADR-0033 `facets` is a
+  // field of a node, an edge and the canvas alike, so a wrapper would only be
+  // unwrapped again at every call site — and a wrapper spread into the field
+  // it wraps produces a bucket whose keys fail the facet key grammar, which
+  // `.catch(undefined)` then drops in silence.
   return facetsArbitrary(registry, target).map((facets) =>
-    Object.keys(facets).length === 0 ? undefined : { facets },
+    Object.keys(facets).length === 0 ? undefined : facets,
   )
 }

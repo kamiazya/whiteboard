@@ -214,7 +214,7 @@ const THEME_KEY = 'visual.theme/v0'
 const neonCanvas: SpatialCanvas = {
   nodes: [textNode('a', 0, 0, BODY)],
   edges: [],
-  'x-whiteboard': { facets: { [THEME_KEY]: { theme: 'visual.neon' } } },
+  facets: { [THEME_KEY]: { theme: 'visual.neon' } },
 }
 
 function bodyFills(scene: { nodes: readonly unknown[] }): string[] {

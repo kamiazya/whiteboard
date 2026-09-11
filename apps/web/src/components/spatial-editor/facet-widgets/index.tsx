@@ -213,7 +213,7 @@ function canvasFacetRow(key: string, label: string): CanvasSettingsWidget {
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">{label}</span>
         <Editor
-          value={canvas['x-whiteboard']?.facets?.[key]}
+          value={canvas.facets?.[key]}
           write={(payload) => run({ kind: 'set-canvas-facet', key, payload })}
         />
       </div>
@@ -233,7 +233,7 @@ function derivedCanvasFacetRow(key: string, title: string): CanvasSettingsWidget
     <DerivedFacetForm
       facetKey={key}
       title={title}
-      stored={canvas['x-whiteboard']?.facets?.[key]}
+      stored={canvas.facets?.[key]}
       registry={facetRegistry}
       onWrite={(facetKey, payload) => run({ kind: 'set-canvas-facet', key: facetKey, payload })}
     />

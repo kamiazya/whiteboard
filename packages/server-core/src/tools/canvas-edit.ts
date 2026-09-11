@@ -233,7 +233,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
       // write through to the doc's sidecar map as they were applied.
       let nodes: SpatialNode[] = [...canvas.nodes]
       let edges: CanvasEdge[] = [...canvas.edges]
-      let comments: CanvasComment[] = [...(canvas['x-whiteboard']?.comments ?? [])]
+      let comments: CanvasComment[] = [...(canvas.comments ?? [])]
       const nodeLocks = new Set(readNodeLocks(doc))
       const edgeLocks = new Set(readEdgeLocks(doc))
       const touchedNodes = new Set<string>()
@@ -500,29 +500,33 @@ export function createCanvasEditTool(deps: ServerDeps) {
         const node = nodeAt(id)
         if (node === undefined) fail(index, opName, `node "${id}" is not on the canvas`)
         const parsed = spatialNodeSchema.safeParse({ ...node, ...patch })
-        if (!parsed.success) fail(index, opName, issues(parsed.error))
-        const updated = parsed.data
-        // The per-type node schemas are non-strict on purpose — JSON
-        // Canvas 1.0 lets a document carry another tool's extension keys,
-        // and refusing them would make those documents unreadable. The
-        // cost is that a patch key the TARGET's type does not have is
-        // stripped by the re-parse above rather than rejected, so the
-        // write would report success over a document it did not change.
-        // `label` on a text node is the case that exists today: it is on
-        // the patch allowlist because a group has one.
-        //
-        // Caught here rather than by narrowing the allowlist per type,
-        // because one check covers every key and every type — including
-        // whichever content field a later increment allows.
-        const dropped = Object.keys(patch).filter((key) => !(key in updated))
-        if (dropped.length > 0) {
-          fail(
-            index,
-            opName,
-            `a ${updated.type} node has no ${dropped.join(', ')} — the patch would have been ` +
-              'accepted and silently dropped, so it is refused instead',
+        if (!parsed.success) {
+          // A patch key the TARGET's type does not have. `label` on a text
+          // node is the case that exists today: it is on the patch allowlist
+          // because a GROUP has one, so the key is known to the union and
+          // wrong for this member.
+          //
+          // Before ADR-0033 the node schemas were non-strict, the re-parse
+          // stripped such a key, and this was a hand-written diff of the keys
+          // that survived. Strictness detects it exhaustively now — but it
+          // reports "Unrecognized key", which names the key and NOT the type,
+          // and a caller told only `label` is invalid is left guessing which
+          // of its nodes was wrong. So strictness is the detector and the
+          // message is still written here.
+          const unknown = parsed.error.issues.flatMap((issue) =>
+            issue.code === 'unrecognized_keys' ? issue.keys : [],
           )
+          if (unknown.length > 0) {
+            fail(
+              index,
+              opName,
+              `a ${node.type} node has no ${unknown.join(', ')} — the patch would have been ` +
+                'accepted and silently dropped, so it is refused instead',
+            )
+          }
+          fail(index, opName, issues(parsed.error))
         }
+        const updated = parsed.data
         if (
           measure !== undefined &&
           (patch.text !== undefined || patch.width !== undefined || patch.height !== undefined)
@@ -569,7 +573,17 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 : placeInside(index, op.op, group, [{ width, height }])[0]
             if (at === undefined) fail(index, op.op, 'no placement')
 
-            const parsed = spatialNodeSchema.safeParse({ ...draft, id, ...at, width, height })
+            // The draft's extension arrives under the published input key and
+            // spreads out as the model's own fields — see WRITE_EXTENSION.
+            const { 'x-whiteboard': extension, ...rest } = draft
+            const parsed = spatialNodeSchema.safeParse({
+              ...rest,
+              ...extension,
+              id,
+              ...at,
+              width,
+              height,
+            })
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
             if (draft.height !== undefined && measure !== undefined) {
               assertTextFits(index, op.op, parsed.data, measure)
@@ -946,19 +960,15 @@ export function createCanvasEditTool(deps: ServerDeps) {
         }
       })
 
-      // The batch writes back the WHOLE canvas, so the canvas-level extension
-      // — rendering preferences and every comment the batch did not touch —
-      // must ride along, or the save deletes them (writeSpatialCanvas resyncs
-      // by omission).
-      const { comments: _stored, ...extensionRest } = canvas['x-whiteboard'] ?? {}
-      const keptExtension = {
-        ...extensionRest,
-        ...(comments.length > 0 ? { comments } : {}),
+      // The batch writes back the WHOLE canvas, so the canvas's own facets —
+      // and every comment the batch did not touch — must ride along, or the
+      // save deletes them (writeSpatialCanvas resyncs by omission).
+      const candidate: SpatialCanvas = {
+        nodes,
+        edges,
+        ...(canvas.facets !== undefined && { facets: canvas.facets }),
+        ...(comments.length > 0 && { comments }),
       }
-      const hasExtension = Object.values(keptExtension).some((value) => value !== undefined)
-      const candidate: SpatialCanvas = hasExtension
-        ? { nodes, edges, 'x-whiteboard': keptExtension }
-        : { nodes, edges }
       const parsed = spatialCanvasSchema.safeParse(candidate)
       if (!parsed.success) {
         throw new CanvasEditError(

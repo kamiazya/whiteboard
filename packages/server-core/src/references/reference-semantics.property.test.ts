@@ -474,7 +474,10 @@ describe('reference semantics under command sequences', () => {
                       id: nodeId,
                       type: 'file',
                       file: 'embed-placeholder',
-                      'x-whiteboard': { kind: 'embed', documentId: targetId },
+                      // `execute` takes the schema's OUTPUT type, and the input's
+                      // flat write shape has already been narrowed to the model's
+                      // field by then.
+                      'x-whiteboard': { embed: { documentId: targetId } },
                     },
                   },
                 ],
@@ -589,8 +592,7 @@ describe('reference semantics under command sequences', () => {
             const plainFiles = canvas.nodes
               .filter((node) => {
                 if (node.type !== 'file') return false
-                const ext = node['x-whiteboard']
-                return !(ext !== undefined && 'kind' in ext && ext.kind === 'embed')
+                return node.embed === undefined
               })
               .map((node) => (node.type === 'file' ? node.file : ''))
             expect(plainFiles.sort(), `file refs of ${doc.path}`).toEqual([...doc.fileRefs].sort())

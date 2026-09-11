@@ -13,12 +13,7 @@ import {
   mdastPhrasingContentSchema,
   mdastRootSchema,
 } from './mdast/index.js'
-import {
-  canvasEdgeSchema,
-  spatialCanvasSchema,
-  spatialNodeSchema,
-  xWhiteboardSchema,
-} from './spatial.js'
+import { canvasEdgeSchema, spatialCanvasSchema, spatialNodeSchema } from './spatial.js'
 import {
   canonicalUlidArbitrary,
   canvasEdgeArbitrary,
@@ -32,7 +27,6 @@ import {
   mdastRootArbitrary,
   spatialNodeArbitrary,
   workspaceSegmentArbitrary,
-  xWhiteboardArbitrary,
 } from './test-utils/arbitraries.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
@@ -59,10 +53,6 @@ describe('arbitrary-conformance: every generator agrees with its schema', () => 
 
   fcTest.prop([canvasEdgeArbitrary], withDefaults())('canvasEdgeSchema', (value) => {
     expect(canvasEdgeSchema.safeParse(value).success).toBe(true)
-  })
-
-  fcTest.prop([xWhiteboardArbitrary], withDefaults())('xWhiteboardSchema', (value) => {
-    expect(xWhiteboardSchema.safeParse(value).success).toBe(true)
   })
 
   fcTest.prop([markdownCanvasArbitrary], withDefaults())('markdownDocumentSchema', (value) => {

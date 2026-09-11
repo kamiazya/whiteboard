@@ -13,7 +13,7 @@ import {
 import { serializeSpatial } from './serialize.js'
 
 const census = censusSpatialModel([])
-const modelPaths = [...census.standard, ...census.extension, ...census.facetBuckets].sort()
+const modelPaths = [...census.paths, ...census.facetBuckets].sort()
 
 /**
  * The ledger's four directions. `.claude/rules/coverage-ledger.md` owns the
@@ -84,10 +84,26 @@ describe('the projection round-trips over the expressible subset', () => {
     },
   )
 
-  it('builds its result field by field, so an unprojected model field is caught', () => {
+  it('occupies exactly the same positions after a round trip — none lost, none invented', () => {
     const canvas = fullyPopulatedCanvas()
-    expect(toJsonCanvas(canvas)).not.toBe(canvas)
-    expect(valueLeafPaths(toJsonCanvas(canvas))).toEqual(valueLeafPaths(canvas))
+    // The projection RELOCATES: `comments` becomes `x-whiteboard.comments`, a
+    // node's `embed` becomes the extension's embed arm. So the wire document's
+    // positions are deliberately not the model's, and what has to hold is that
+    // the trip back lands on the same set.
+    expect(valueLeafPaths(toJsonCanvas(canvas))).not.toEqual(valueLeafPaths(canvas))
+    expect(valueLeafPaths(fromJsonCanvas(toJsonCanvas(canvas)))).toEqual(valueLeafPaths(canvas))
+  })
+
+  it('drops an extension object with nothing in it rather than emitting it', () => {
+    // A canonicalisation, not a loss: `x-whiteboard: {}` says what its absence
+    // says. It is the one place the wire trip normalises instead of preserving,
+    // so it is pinned by example rather than left to the property above.
+    const bare = toJsonCanvas({ nodes: [], edges: [] })
+    expect(bare).not.toHaveProperty('x-whiteboard')
+    expect(fromJsonCanvas({ nodes: [], edges: [], 'x-whiteboard': {} })).toEqual({
+      nodes: [],
+      edges: [],
+    })
   })
 })
 
@@ -104,12 +120,8 @@ function fullyPopulatedCanvas() {
         height: 10,
         text: 'a',
         color: '1' as const,
-        'x-whiteboard': {
-          kind: 'embed' as const,
-          documentId: '01M231FG6BGKKWW4BAA6Z1C945',
-          versionRef: 'v1',
-          facets: { 'visual.shape/v0': { kind: 'rect' } },
-        },
+        embed: { documentId: '01M231FG6BGKKWW4BAA6Z1C945', versionRef: 'v1' },
+        facets: { 'visual.shape/v0': { kind: 'rect' } },
       },
       {
         id: 'n2',
@@ -145,24 +157,22 @@ function fullyPopulatedCanvas() {
         toEnd: 'arrow' as const,
         color: '2' as const,
         label: 'l',
-        'x-whiteboard': { facets: { 'visual.path/v0': { waypoints: [{ x: 1, y: 1 }] } } },
+        facets: { 'visual.path/v0': { waypoints: [{ x: 1, y: 1 }] } },
       },
     ],
-    'x-whiteboard': {
-      comments: [
-        {
-          id: 'c1',
-          x: 0,
-          y: 0,
-          text: 't',
-          author: 'human:a',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          targetNodeId: 'n1',
-          resolved: false,
-        },
-        { id: 'c2', x: 1, y: 1, text: 'u', targetEdgeId: 'e1' },
-      ],
-      facets: { 'visual.theme/v0': { theme: 'sketch' } },
-    },
+    comments: [
+      {
+        id: 'c1',
+        x: 0,
+        y: 0,
+        text: 't',
+        author: 'human:a',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        targetNodeId: 'n1',
+        resolved: false,
+      },
+      { id: 'c2', x: 1, y: 1, text: 'u', targetEdgeId: 'e1' },
+    ],
+    facets: { 'visual.theme/v0': { theme: 'sketch' } },
   }
 }

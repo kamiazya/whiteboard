@@ -6,7 +6,7 @@
  * locally (unique node ids, edges referencing only generated node ids).
  */
 
-import { strictDegrade } from '@kamiazya/whiteboard-codec'
+import { fromJsonCanvas, strictDegrade, toJsonCanvas } from '@kamiazya/whiteboard-codec'
 import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { parseViewerScene, serializeViewerScene } from './scene.js'
@@ -23,11 +23,19 @@ describe('scene parse/serialize properties', () => {
   )
 
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
-    'strict mode round-trip: parse(serialize(x, "strict")) equals strictDegrade(x)',
+    'strict mode round-trip: parse(serialize(x, "strict")) equals the degraded PROJECTION of x',
     (canvas) => {
+      // Degradation is a wire-level rule, so the expectation is the canvas
+      // projected onto JSON Canvas, degraded there, and lifted back — not the
+      // model degraded in place. Since ADR-0033 those are different documents:
+      // the projection is where `facets`, `comments` and `embed` become the
+      // extension key that strict mode then drops.
       const json = serializeViewerScene(canvas, 'strict')
       const result = parseViewerScene(json)
-      expect(result).toEqual({ ok: true, value: strictDegrade(canvas) })
+      expect(result).toEqual({
+        ok: true,
+        value: fromJsonCanvas(strictDegrade(toJsonCanvas(canvas))),
+      })
     },
   )
 

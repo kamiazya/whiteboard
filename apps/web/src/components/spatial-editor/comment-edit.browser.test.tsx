@@ -45,7 +45,7 @@ const THREAD: CommentThread = {
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': { comments: [FREE] },
+  comments: [FREE],
 }
 
 function makeHost() {
@@ -135,9 +135,7 @@ it('rewrites the opening message the same way, saying it is the one the canvas d
   // `opening` is what tells the canvas to repaint the pin's own text; the
   // flat comment carries the first message and only the first.
   expect(messageEdits(latest.commands)[0]).toMatchObject({ opening: true })
-  await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.comments?.[0]?.text).toBe('free note revised'),
-  )
+  await vi.waitFor(() => expect(latest.canvas.comments?.[0]?.text).toBe('free note revised'))
 })
 
 it('Escape abandons the edit and keeps the stored text, without shutting the card', async () => {
@@ -161,7 +159,7 @@ it('Escape abandons the edit and keeps the stored text, without shutting the car
   )
   expect(page.getByTestId('comment-card').query()).not.toBeNull()
   expect(messageEdits(latest.commands)).toHaveLength(0)
-  expect(latest.canvas['x-whiteboard']?.comments?.[0]?.text).toBe('free note')
+  expect(latest.canvas.comments?.[0]?.text).toBe('free note')
 })
 
 it('offers no second way to edit from the comment context menu', async () => {

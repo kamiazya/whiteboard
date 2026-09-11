@@ -14,7 +14,7 @@ const themed = (theme: string): SpatialCanvas => ({
     { id: 'b', type: 'text', x: 300, y: 200, width: 160, height: 60, text: 'b' },
   ],
   edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme } } },
+  facets: { 'visual.theme/v0': { theme } },
 })
 
 describe('export style', () => {

@@ -205,7 +205,7 @@ export function projectCanvasSnapshot(
     documentId,
     nodes: projected.map((entry) => entry.node),
     edges,
-    comments: canvas['x-whiteboard']?.comments ?? [],
+    comments: canvas.comments ?? [],
     nodeCount: canvas.nodes.length,
     edgeCount: canvas.edges.length,
     truncated:

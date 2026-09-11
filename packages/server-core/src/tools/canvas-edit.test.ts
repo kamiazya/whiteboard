@@ -2400,10 +2400,9 @@ describe('node.patch and a node type that does not have the key', () => {
 
   test("refuses a key the target node's type does not have, rather than dropping it", async () => {
     // `label` is on the patch allowlist because a GROUP has one. A text node
-    // does not, and the per-type schemas are non-strict, so the merge's
-    // re-parse strips the key and the write reports success over a document
-    // it did not change. Named, because a silent no-op is the one failure a
-    // caller cannot see.
+    // does not, so the merge's re-parse refuses it and the write must say
+    // which key and which type — a silent no-op is the one failure a caller
+    // cannot see.
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedCanvas(store, { nodes: [TEXT_NODE], edges: [] })
@@ -2640,17 +2639,19 @@ describe('the node extension on the write side', () => {
     expect(JSON.stringify(result.error?.issues)).toContain('an embed names the document')
   })
 
-  test('narrows a flat extension to the stored shape: an embed, or facets alone', () => {
+  test("narrows a flat extension to the model's fields: an embed, or facets alone", () => {
     const parse = (extension: Record<string, unknown>) =>
       canvasEditInputSchema.parse({
         workspaceId: 'ws',
         documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
         ops: [{ op: 'node.add', node: { type: 'text', text: 'x', 'x-whiteboard': extension } }],
       }).ops[0]
+    // In comes the FORMAT's union arm, under the published input key; out come
+    // the MODEL's two independent fields (ADR-0033). The key stays because it
+    // is what a model reads in `tools/list`; moving it is a tool-surface change.
     const embed = parse({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' })
     expect(embed.op === 'node.add' && embed.node['x-whiteboard']).toEqual({
-      kind: 'embed',
-      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
+      embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' },
     })
     const facets = parse({ facets: { 'example.kanban/v1': { status: 'todo' } } })
     expect(facets.op === 'node.add' && facets.node['x-whiteboard']).toEqual({

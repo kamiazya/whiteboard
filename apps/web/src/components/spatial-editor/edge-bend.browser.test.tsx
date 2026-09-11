@@ -24,9 +24,7 @@ const board = (waypoints?: readonly { x: number; y: number }[]): SpatialCanvas =
       id: 'e1',
       fromNode: 'a',
       toNode: 'b',
-      ...(waypoints === undefined
-        ? {}
-        : { 'x-whiteboard': { facets: { [VISUAL_PATH_KEY]: { waypoints } } } }),
+      ...(waypoints === undefined ? {} : { facets: { [VISUAL_PATH_KEY]: { waypoints } } }),
     },
   ],
 })
@@ -52,7 +50,7 @@ function makeHost(start: SpatialCanvas) {
 
 const storedBends = (canvas: SpatialCanvas) =>
   (
-    canvas.edges[0]?.['x-whiteboard']?.facets?.[VISUAL_PATH_KEY] as
+    canvas.edges[0]?.facets?.[VISUAL_PATH_KEY] as
       | { waypoints?: readonly { x: number; y: number }[] }
       | undefined
   )?.waypoints

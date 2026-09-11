@@ -83,11 +83,9 @@ it('the quoted words are highlighted on the canvas itself, and a press on them o
   // corner) rides the canvas, the thread itself arrives beside it.
   const { Host } = makeHost([thread], {
     ...start,
-    'x-whiteboard': {
-      comments: [
-        { id: 't1', x: NODE.x + NODE.width, y: NODE.y, text: 'which plan?', targetNodeId: 'n1' },
-      ],
-    },
+    comments: [
+      { id: 't1', x: NODE.x + NODE.width, y: NODE.y, text: 'which plan?', targetNodeId: 'n1' },
+    ],
   })
   const { container } = render(<Host />)
   const root = rootOf(container)
@@ -152,7 +150,7 @@ it('a right-click inside the node editor opens the editing catalog, Comment incl
   // On the canvas: the thread's projection is a comment ON the node, so the
   // layer pins it at the node's corner without waiting for the channel.
   await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.comments?.[0]).toMatchObject({
+    expect(latest.canvas.comments?.[0]).toMatchObject({
       id: 't-passage',
       targetNodeId: 'n1',
       x: NODE.x + NODE.width,

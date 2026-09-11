@@ -70,7 +70,7 @@ const canvas: SpatialCanvas = {
     { id: 'e2', fromNode: 'b', toNode: 'c' },
     { id: 'e3', fromNode: 'a', toNode: 'c' },
   ],
-  'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+  facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
 } as SpatialCanvas
 
 const layoutInWorker = (request: LayoutRequest) =>

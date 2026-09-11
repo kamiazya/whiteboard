@@ -40,9 +40,7 @@ describe('loro-bridge properties', () => {
       // because this bridge is the path the app saves through, and a JSON
       // round-trip is no evidence a field persists here. Comments are
       // projected from the threads plane and compared in their own tests.
-      const { comments: _written, ...envelope } = canvas['x-whiteboard'] ?? {}
-      const { comments: _read, ...readBack } = result['x-whiteboard'] ?? {}
-      expect(readBack).toEqual(envelope)
+      expect(result.facets).toEqual(canvas.facets)
     },
   )
 
@@ -102,7 +100,7 @@ describe('comment concurrency properties (ADR-0024)', () => {
       peer.import(baseUpdate)
 
       const idsOn = (doc: LoroDoc) =>
-        (readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []).map((c) => c.id).sort()
+        (readSpatialCanvas(doc).comments ?? []).map((c) => c.id).sort()
       const expected = [commentA.id, commentB.id].sort()
       expect(idsOn(base)).toEqual(expected)
       expect(idsOn(peer)).toEqual(expected)
@@ -140,7 +138,7 @@ describe('comment concurrency properties (ADR-0024)', () => {
       peer.import(baseUpdate)
 
       const check = (doc: LoroDoc) => {
-        const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
+        const comments = readSpatialCanvas(doc).comments ?? []
         expect(comments.find((c) => c.id === commentA.id)?.resolved).toBe(true)
         expect(comments.some((c) => c.id === commentB.id)).toBe(true)
       }
@@ -180,7 +178,7 @@ describe('withSpatialBatch equivalence property', () => {
     'one batch ≡ sequential helpers on state, and at most one undo step',
     async (canvas, opSpecs) => {
       const ops: BatchOp[] = opSpecs
-      const comments = canvas['x-whiteboard']?.comments ?? []
+      const comments = canvas.comments ?? []
       const apply = {
         writeNode: (index: number) => canvas.nodes[index % Math.max(1, canvas.nodes.length)],
         deleteNode: (index: number) => canvas.nodes[index % Math.max(1, canvas.nodes.length)]?.id,
@@ -240,9 +238,7 @@ describe('withSpatialBatch equivalence property', () => {
         return {
           nodes: [...value.nodes].sort((a, b) => a.id.localeCompare(b.id)),
           edges: [...value.edges].sort((a, b) => a.id.localeCompare(b.id)),
-          comments: [...(value['x-whiteboard']?.comments ?? [])].sort((a, b) =>
-            a.id.localeCompare(b.id),
-          ),
+          comments: [...(value.comments ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
         }
       }
       expect(stateOf(batched)).toEqual(stateOf(sequential))

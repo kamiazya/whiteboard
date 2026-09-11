@@ -42,7 +42,7 @@ export async function seededServer(): Promise<ReturnType<typeof createServer>> {
         { id: 'g1', type: 'group', x: -20, y: 200, width: 640, height: 200, label: 'later' },
       ],
       edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
-      'x-whiteboard': { comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }] },
+      comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }],
     })
   })
   await seedDoc(store, SEEDED_MARKDOWN_ID, (doc) => {

@@ -25,7 +25,7 @@ const TEXT = 'xxxx xxxx xxxx'
 const sketched: SpatialCanvas = {
   nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 200, text: TEXT }],
   edges: [],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+  facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
 }
 
 const lines = (svg: string): string[] =>

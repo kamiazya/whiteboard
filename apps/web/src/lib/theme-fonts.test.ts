@@ -128,7 +128,7 @@ describe('theme fonts', () => {
     const sketched = {
       nodes: [],
       edges: [],
-      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+      facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
     const plain = { nodes: [], edges: [] }
     expect(mod.themeFamilyFor(sketched, undefined)).toBe('Yomogi')
@@ -149,7 +149,7 @@ describe('theme fonts', () => {
     const sketched = {
       nodes: [],
       edges: [],
-      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+      facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
     hasLoadedFace.mockReturnValue(false)
     expect(mod.editingFontFamilyFor(sketched, undefined)).toBe('Roboto')

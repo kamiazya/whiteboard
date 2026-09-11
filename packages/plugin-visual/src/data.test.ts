@@ -24,10 +24,10 @@ import {
 
 const registry = createFacetRegistry(bundledPlugins)
 
-const canvasWith = (extension: SpatialCanvas['x-whiteboard']): SpatialCanvas => ({
+const canvasWith = (facets: SpatialCanvas['facets']): SpatialCanvas => ({
   nodes: [],
   edges: [],
-  'x-whiteboard': extension,
+  facets,
 })
 
 describe('visualPlugin', () => {
@@ -57,19 +57,17 @@ describe('visualPlugin', () => {
 
 describe('resolveCanvasEdgeStyle', () => {
   it('reads the visual.edges facet when present', () => {
-    const canvas = canvasWith({
-      facets: { [VISUAL_EDGES_KEY]: { routing: 'curved', lineJumps: 'arc' } },
-    })
+    const canvas = canvasWith({ [VISUAL_EDGES_KEY]: { routing: 'curved', lineJumps: 'arc' } })
     expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({ style: 'curved', lineJumps: 'arc' })
   })
 
   it('a facet that says only routing means default line jumps: one register, replace semantics', () => {
-    const canvas = canvasWith({ facets: { [VISUAL_EDGES_KEY]: { routing: 'curved' } } })
+    const canvas = canvasWith({ [VISUAL_EDGES_KEY]: { routing: 'curved' } })
     expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({ style: 'curved' })
   })
 
   it('an unresolvable facet payload answers empty, never a guess', () => {
-    const canvas = canvasWith({ facets: { [VISUAL_EDGES_KEY]: { routing: 'spiral' } } })
+    const canvas = canvasWith({ [VISUAL_EDGES_KEY]: { routing: 'spiral' } })
     expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({})
   })
 
@@ -94,7 +92,7 @@ describe('resolveCanvasEdgeDefaults / resolveEffectiveCanvasEdgeStyle', () => {
   const themed = (theme: string, facets: Record<string, unknown> = {}): SpatialCanvas => ({
     nodes: [],
     edges: [],
-    'x-whiteboard': { facets: { 'visual.theme/v0': { theme }, ...facets } },
+    facets: { 'visual.theme/v0': { theme }, ...facets },
   })
 
   it('a canvas with no theme defaults to straight routing and no jumps', () => {
@@ -150,7 +148,7 @@ describe('visual.shape/v0', () => {
 })
 
 describe('resolveNodeShape', () => {
-  const nodeWith = (extension: SpatialCanvas['nodes'][number]['x-whiteboard']) =>
+  const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
     ({
       id: 'n1',
       type: 'text',
@@ -159,37 +157,35 @@ describe('resolveNodeShape', () => {
       y: 0,
       width: 10,
       height: 10,
-      'x-whiteboard': extension,
+      facets,
     }) as SpatialCanvas['nodes'][number]
 
   it('answers the facet silhouette kind', () => {
-    expect(
-      resolveNodeShape(
-        nodeWith({ facets: { [VISUAL_SHAPE_KEY]: { kind: 'cylinder' } } }),
-        registry,
-      ),
-    ).toBe('cylinder')
+    expect(resolveNodeShape(nodeWith({ [VISUAL_SHAPE_KEY]: { kind: 'cylinder' } }), registry)).toBe(
+      'cylinder',
+    )
   })
 
   it('answers undefined without the facet (absent = the historic rect)', () => {
     expect(resolveNodeShape(nodeWith(undefined), registry)).toBeUndefined()
-    expect(resolveNodeShape(nodeWith({ facets: {} }), registry)).toBeUndefined()
+    expect(resolveNodeShape(nodeWith({}), registry)).toBeUndefined()
   })
 
   it('answers undefined for an unresolvable payload (drop-not-fail)', () => {
     expect(
-      resolveNodeShape(nodeWith({ facets: { [VISUAL_SHAPE_KEY]: { kind: 'star' } } }), registry),
+      resolveNodeShape(nodeWith({ [VISUAL_SHAPE_KEY]: { kind: 'star' } }), registry),
     ).toBeUndefined()
   })
 
   it('reads the facet beside an embed', () => {
     expect(
+      // Beside an EMBED, which is an independent field now rather than the
+      // other arm of the format's union.
       resolveNodeShape(
-        nodeWith({
-          kind: 'embed',
-          documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
-          facets: { [VISUAL_SHAPE_KEY]: { kind: 'diamond' } },
-        }),
+        {
+          ...nodeWith({ [VISUAL_SHAPE_KEY]: { kind: 'diamond' } }),
+          embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+        },
         registry,
       ),
     ).toBe('diamond')
@@ -197,7 +193,7 @@ describe('resolveNodeShape', () => {
 })
 
 describe('visual.symbol/v0', () => {
-  const nodeWith = (extension: SpatialCanvas['nodes'][number]['x-whiteboard']) =>
+  const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
     ({
       id: 'n1',
       type: 'text',
@@ -206,7 +202,7 @@ describe('visual.symbol/v0', () => {
       width: 10,
       height: 10,
       text: '',
-      ...(extension === undefined ? {} : { 'x-whiteboard': extension }),
+      ...(facets === undefined ? {} : { facets }),
     }) as SpatialCanvas['nodes'][number]
 
   it('registers on all three targets: a node, a canvas, and a document', () => {
@@ -250,31 +246,28 @@ describe('visual.symbol/v0', () => {
   it('resolveNodeSymbol answers the stored symbol, undefined when absent or unresolvable', () => {
     expect(
       resolveNodeSymbol(
-        nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { kind: 'icon', name: 'star' } } }),
+        nodeWith({ [VISUAL_SYMBOL_KEY]: { kind: 'icon', name: 'star' } }),
         registry,
       ),
     ).toEqual({ kind: 'icon', name: 'star' })
     expect(
-      resolveNodeSymbol(
-        nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '⚠️' } } }),
-        registry,
-      ),
+      resolveNodeSymbol(nodeWith({ [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '⚠️' } }), registry),
     ).toEqual({ kind: 'emoji', char: '⚠️' })
     expect(resolveNodeSymbol(nodeWith(undefined), registry)).toBeUndefined()
     expect(
-      resolveNodeSymbol(nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { bogus: true } } }), registry),
+      resolveNodeSymbol(nodeWith({ [VISUAL_SYMBOL_KEY]: { bogus: true } }), registry),
     ).toBeUndefined()
   })
 
   it('resolveCanvasSymbol reads the canvas-level bucket, the way the edges facet does', () => {
     expect(
       resolveCanvasSymbol(
-        canvasWith({ facets: { [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '📌' } } }),
+        canvasWith({ [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '📌' } }),
         registry,
       ),
     ).toEqual({ kind: 'emoji', char: '📌' })
     expect(resolveCanvasSymbol(canvasWith(undefined), registry)).toBeUndefined()
-    expect(resolveCanvasSymbol(canvasWith({ facets: {} }), registry)).toBeUndefined()
+    expect(resolveCanvasSymbol(canvasWith({}), registry)).toBeUndefined()
   })
 
   it('resolveDocumentSymbol reads an OKF frontmatter facets bucket', () => {
@@ -300,7 +293,7 @@ describe('visual.symbol/v0', () => {
 })
 
 describe('visual.text/v0', () => {
-  const nodeWith = (extension: SpatialCanvas['nodes'][number]['x-whiteboard']) =>
+  const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
     ({
       id: 'n1',
       type: 'text',
@@ -309,7 +302,7 @@ describe('visual.text/v0', () => {
       width: 10,
       height: 10,
       text: '',
-      ...(extension === undefined ? {} : { 'x-whiteboard': extension }),
+      ...(facets === undefined ? {} : { facets }),
     }) as SpatialCanvas['nodes'][number]
 
   it('registers node-targeted, under the fixed key, declaring its own band', () => {
@@ -325,25 +318,16 @@ describe('visual.text/v0', () => {
 
   it('resolveNodeTextAlign answers the stored choice, else undefined', () => {
     expect(
-      resolveNodeTextAlign(
-        nodeWith({ facets: { [VISUAL_TEXT_KEY]: { align: 'center' } } }),
-        registry,
-      ),
+      resolveNodeTextAlign(nodeWith({ [VISUAL_TEXT_KEY]: { align: 'center' } }), registry),
     ).toBe('center')
     expect(
-      resolveNodeTextAlign(
-        nodeWith({ facets: { [VISUAL_TEXT_KEY]: { align: 'start' } } }),
-        registry,
-      ),
+      resolveNodeTextAlign(nodeWith({ [VISUAL_TEXT_KEY]: { align: 'start' } }), registry),
     ).toBe('start')
     // Absent means "however this node would place text anyway" — the facet
     // OVERRIDES a default, it does not restate one.
     expect(resolveNodeTextAlign(nodeWith(undefined), registry)).toBeUndefined()
     expect(
-      resolveNodeTextAlign(
-        nodeWith({ facets: { [VISUAL_TEXT_KEY]: { align: 'middle' } } }),
-        registry,
-      ),
+      resolveNodeTextAlign(nodeWith({ [VISUAL_TEXT_KEY]: { align: 'middle' } }), registry),
     ).toBeUndefined()
   })
 })
@@ -364,18 +348,12 @@ describe('visual.theme/v0', () => {
 
   it('resolveCanvasTheme reads the facet and answers undefined without one', () => {
     expect(
-      resolveCanvasTheme(
-        canvasWith({ facets: { [VISUAL_THEME_KEY]: { theme: 'visual.neon' } } }),
-        registry,
-      ),
+      resolveCanvasTheme(canvasWith({ [VISUAL_THEME_KEY]: { theme: 'visual.neon' } }), registry),
     ).toBe('visual.neon')
     expect(resolveCanvasTheme(canvasWith(undefined), registry)).toBeUndefined()
     // A stored id from elsewhere is data: resolved, and left to the renderer to degrade.
     expect(
-      resolveCanvasTheme(
-        canvasWith({ facets: { [VISUAL_THEME_KEY]: { theme: 'infra.aws' } } }),
-        registry,
-      ),
+      resolveCanvasTheme(canvasWith({ [VISUAL_THEME_KEY]: { theme: 'infra.aws' } }), registry),
     ).toBe('infra.aws')
   })
 

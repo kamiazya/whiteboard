@@ -63,7 +63,7 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // The picker that used to be a context-menu band is here instead.
   expect(panel.querySelector('[aria-label="Emoji ⭐"]')).not.toBeNull()
 
-  expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']).toEqual({
+  expect(latest.canvas.nodes[0]?.facets?.['visual.shape/v0']).toEqual({
     kind: 'hexagon',
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()

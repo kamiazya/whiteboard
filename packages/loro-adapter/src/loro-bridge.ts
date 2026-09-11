@@ -3,7 +3,6 @@ import {
   type CanvasComment,
   type CanvasEdge,
   canvasEdgeSchema,
-  canvasExtensionSchema,
   type DocumentKind,
   documentKindSchema,
   type ExtensionFacets,
@@ -40,7 +39,56 @@ const EDGES_KEY = 'edges'
  * the whole of what it needs.
  */
 const CANVAS_KEY = 'canvas'
-const EXTENSION_FIELD = 'x-whiteboard'
+/** The canvas's own facets, one key of the canvas map so its LWW is per-key. */
+const FACETS_FIELD = 'facets'
+/**
+ * The key a canvas's facets, and a node's or edge's facets and embed, were
+ * stored under before [ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md):
+ * the FORMAT's extension key, because the model was the format.
+ *
+ * Spelled as it stood, the way a migration's own text always is. It is only
+ * ever READ — `liftLegacyExtension` below converts it on the way out, and
+ * every write from here on uses the model's own field names, so a record
+ * converges the first time anything writes to it.
+ */
+const LEGACY_EXTENSION_FIELD = 'x-whiteboard'
+
+/**
+ * Convert a stored node or edge written under the old key into the model's
+ * shape. A no-op for anything already in it.
+ *
+ * Load-bearing rather than tidy: the model is `.strict()` now, so a stored
+ * node still carrying the old key FAILS its schema, and `readSpatialCanvas`
+ * drops what fails to parse — the node would vanish, not merely lose a field.
+ */
+function liftLegacyExtension(raw: unknown): unknown {
+  if (raw === null || typeof raw !== 'object') return raw
+  const { [LEGACY_EXTENSION_FIELD]: legacy, ...rest } = raw as Record<string, unknown>
+  if (legacy === null || typeof legacy !== 'object') return raw
+  const extension = legacy as Record<string, unknown>
+  const lifted: Record<string, unknown> = { ...rest }
+  if (extension.facets !== undefined) lifted.facets = extension.facets
+  if (extension.kind === 'embed' && typeof extension.documentId === 'string') {
+    lifted.embed = {
+      documentId: extension.documentId,
+      ...(typeof extension.versionRef === 'string' && { versionRef: extension.versionRef }),
+    }
+  }
+  return lifted
+}
+
+/** The canvas's facets, from this version's key or the one before it. */
+function readCanvasFacets(doc: DocumentContainers): ExtensionFacets | undefined {
+  const canvasMap = doc.getMap(CANVAS_KEY)
+  const current = extensionFacetsSchema.safeParse(canvasMap.get(FACETS_FIELD))
+  if (current.success) return current.data
+  const legacy = canvasMap.get(LEGACY_EXTENSION_FIELD)
+  if (legacy === null || typeof legacy !== 'object') return undefined
+  // Parsed, not trusted: the stored value came from another version or peer,
+  // and an unreadable payload costs the preference, never the canvas.
+  const lifted = extensionFacetsSchema.safeParse((legacy as Record<string, unknown>).facets)
+  return lifted.success ? lifted.data : undefined
+}
 const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,
@@ -104,7 +152,8 @@ function nodeToFields(node: SpatialNode): Fields {
     height: node.height,
   }
   if (node.color !== undefined) fields.color = node.color
-  if (node['x-whiteboard'] !== undefined) fields['x-whiteboard'] = node['x-whiteboard']
+  if (node.embed !== undefined) fields.embed = node.embed
+  if (node.facets !== undefined) fields.facets = node.facets
 
   switch (node.type) {
     case 'text':
@@ -138,7 +187,7 @@ function edgeToFields(edge: CanvasEdge): Fields {
   if (edge.toEnd !== undefined) fields.toEnd = edge.toEnd
   if (edge.color !== undefined) fields.color = edge.color
   if (edge.label !== undefined) fields.label = edge.label
-  if (edge['x-whiteboard'] !== undefined) fields['x-whiteboard'] = edge['x-whiteboard']
+  if (edge.facets !== undefined) fields.facets = edge.facets
   return fields
 }
 
@@ -186,11 +235,19 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
   // turned off. Comments are split OUT of the envelope value first — see
   // COMMENTS_KEY for why they must not ride the whole-value LWW write.
   const canvasMap = doc.getMap(CANVAS_KEY)
-  const { comments, ...envelope } = canvas[EXTENSION_FIELD] ?? {}
-  if (Object.values(envelope).every((value) => value === undefined)) {
-    canvasMap.delete(EXTENSION_FIELD)
-  } else {
-    canvasMap.set(EXTENSION_FIELD, envelope)
+  const { comments } = canvas
+  if (canvas.facets !== undefined) canvasMap.set(FACETS_FIELD, canvas.facets)
+  // Deleted only when there is something to delete. A canvas that returned to
+  // the default must stop rendering a preference the author turned off, but a
+  // canvas that never had one should not pay an oplog op per save for it —
+  // measured on the growth scoreboard, which is the only thing that says so.
+  else if (canvasMap.get(FACETS_FIELD) !== undefined) canvasMap.delete(FACETS_FIELD)
+  // A write converges the record — but only when there is something to
+  // converge. An unconditional delete is one oplog op per save forever, on
+  // every document that never had the old key: measured at +10000 bytes on
+  // the growth scoreboard, which is what caught it.
+  if (canvasMap.get(LEGACY_EXTENSION_FIELD) !== undefined) {
+    canvasMap.delete(LEGACY_EXTENSION_FIELD)
   }
 
   // Before the incoming set is applied, so a legacy entry the resync omits is
@@ -254,7 +311,7 @@ function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean
   nodesMap.delete(nodeId)
   dropLockInto(doc, NODE_LOCKS_KEY, nodeId)
   for (const edgeId of edgesMap.keys()) {
-    const raw = edgesMap.get(edgeId)
+    const raw = liftLegacyExtension(edgesMap.get(edgeId))
     const parsed = canvasEdgeSchema.safeParse(raw)
     if (parsed.success && (parsed.data.fromNode === nodeId || parsed.data.toNode === nodeId)) {
       edgesMap.delete(edgeId)
@@ -421,10 +478,8 @@ export function reconcileSpatialCanvas(
     }
     for (const id of prevEdges.keys()) if (!nextEdgeIds.has(id)) writer.deleteEdge(id)
 
-    const prevComments = new Map(
-      (prev[EXTENSION_FIELD]?.comments ?? []).map((comment) => [comment.id, comment]),
-    )
-    const nextComments = next[EXTENSION_FIELD]?.comments ?? []
+    const prevComments = new Map((prev.comments ?? []).map((comment) => [comment.id, comment]))
+    const nextComments = next.comments ?? []
     const nextCommentIds = new Set(nextComments.map((comment) => comment.id))
     for (const comment of nextComments) {
       const before = prevComments.get(comment.id)
@@ -435,17 +490,13 @@ export function reconcileSpatialCanvas(
     }
   })
 
-  const envelopeOf = (canvas: SpatialCanvas): Record<string, unknown> => {
-    const { comments: _comments, ...envelope } = canvas[EXTENSION_FIELD] ?? {}
-    return envelope
-  }
-  const nextEnvelope = envelopeOf(next)
-  if (!same(envelopeOf(prev), nextEnvelope)) {
+  const nextFacets = next.facets
+  if (!same(prev.facets, nextFacets)) {
     const canvasMap = doc.getMap(CANVAS_KEY)
-    if (Object.values(nextEnvelope).every((value) => value === undefined)) {
-      canvasMap.delete(EXTENSION_FIELD)
+    if (nextFacets === undefined) {
+      canvasMap.delete(FACETS_FIELD)
     } else {
-      canvasMap.set(EXTENSION_FIELD, nextEnvelope)
+      canvasMap.set(FACETS_FIELD, nextFacets)
     }
     doc.commit()
   }
@@ -573,29 +624,19 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
 
   const nodes: SpatialNode[] = []
   for (const nodeId of nodesMap.keys()) {
-    const raw = nodesMap.get(nodeId)
+    const raw = liftLegacyExtension(nodesMap.get(nodeId))
     const parsed = spatialNodeSchema.safeParse(raw)
     if (parsed.success) nodes.push(parsed.data)
   }
 
   const edges: CanvasEdge[] = []
   for (const edgeId of edgesMap.keys()) {
-    const raw = edgesMap.get(edgeId)
+    const raw = liftLegacyExtension(edgesMap.get(edgeId))
     const parsed = canvasEdgeSchema.safeParse(raw)
     if (parsed.success) edges.push(parsed.data)
   }
 
-  // Parsed, not trusted: the stored value came from another version or peer,
-  // and model's own rule for this key is that an unreadable payload
-  // costs the preference, never the canvas. Any `comments` a buggy writer
-  // left INSIDE the envelope are discarded here — the comments map below is
-  // the single source of that field.
-  const parsedEnvelope = canvasExtensionSchema.safeParse(
-    doc.getMap(CANVAS_KEY).get(EXTENSION_FIELD),
-  )
-  const { comments: _strayComments, ...envelope } = parsedEnvelope.success
-    ? parsedEnvelope.data
-    : {}
+  const facets = readCanvasFacets(doc)
 
   // The annotation layer is document-level and format-agnostic, so reading it
   // is not this reader's job — `readAnnotations` answers it for a markdown
@@ -605,12 +646,11 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   // on that node, which needs the node's corner to stand at.
   const comments = readCanvasComments(doc, (id) => nodes.find((node) => node.id === id))
 
-  const hasEnvelope = Object.values(envelope).some((value) => value !== undefined)
-  if (!hasEnvelope && comments.length === 0) return { nodes, edges }
   return {
     nodes,
     edges,
-    [EXTENSION_FIELD]: comments.length > 0 ? { ...envelope, comments } : envelope,
+    ...(facets !== undefined && { facets }),
+    ...(comments.length > 0 && { comments }),
   }
 }
 

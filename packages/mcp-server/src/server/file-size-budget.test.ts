@@ -147,7 +147,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // same reason — the thread it becomes is one every reader would drop.
   // +1: an edge's `x-whiteboard` facets bucket crosses the bridge the way a
   // node's already did, so a per-edge facet survives a round trip.
-  'packages/loro-adapter/src/loro-bridge.ts': 961,
+  'packages/loro-adapter/src/loro-bridge.ts': 1003,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most

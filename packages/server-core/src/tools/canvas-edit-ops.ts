@@ -7,15 +7,16 @@ import {
   canvasCommentDraftSchema,
   canvasEdgeSchema,
   documentIdSchema,
+  type ExtensionFacets,
   edgePatchFieldsSchema,
   extensionFacetsSchema,
+  type NodeEmbed,
   nodeIdSchema,
   nodePatchFieldsSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
   spatialNodeSchema,
   workspaceIdSchema,
-  type XWhiteboard,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
@@ -27,7 +28,23 @@ import { canvasSnapshotSchema } from './canvas-snapshot.js'
 // required because there is no sensible default for a link with no url.
 const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
 const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
-const [textOption, fileOption, linkOption, groupOption] = spatialNodeSchema.options
+const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
+/**
+ * The model's two extension fields are omitted from the derived options and
+ * reached through `WRITE_EXTENSION` below instead.
+ *
+ * Deriving from the stored schemas means a field added to a node type arrives
+ * here for free — which is the point, and wrong for exactly these two: the
+ * tool already publishes a way to write them, and a second one is two
+ * spellings of one thing on a table a model reads every turn. Measured when
+ * ADR-0033 moved them onto the node: 14 new parameters across the four node
+ * types, every one of them undescribed.
+ */
+const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
+const textOption = textNode.omit(STORED_EXTENSION_FIELDS)
+const fileOption = fileNode.omit(STORED_EXTENSION_FIELDS)
+const linkOption = linkNode.omit(STORED_EXTENSION_FIELDS)
+const groupOption = groupNode.omit(STORED_EXTENSION_FIELDS)
 
 /**
  * The node extension as a WRITER declares it: one flat object instead of
@@ -52,17 +69,25 @@ const nodeExtensionWriteSchema = z
   .refine((value) => (value.kind === 'embed') === (value.documentId !== undefined), {
     message: 'an embed names the document it embeds: kind "embed" and documentId go together',
   })
-  .transform((value): XWhiteboard => {
-    if (value.kind === 'embed' && value.documentId !== undefined) {
-      return {
-        kind: 'embed',
-        documentId: value.documentId,
-        ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
-        ...(value.facets === undefined ? {} : { facets: value.facets }),
-      }
-    }
-    return value.facets === undefined ? {} : { facets: value.facets }
-  })
+  /**
+   * Out comes the MODEL's two fields, not the format's union arm.
+   *
+   * The tool's INPUT key stays `x-whiteboard` — it is published in
+   * `tools/list`, a model reads it every turn, and moving it is a tool-surface
+   * change with its own gate (ADR-0031). What ADR-0033 changed is the far
+   * side: a node carries `embed` and `facets` independently now, and the
+   * transform is where the union arm becomes them.
+   */
+  .transform((value): { embed?: NodeEmbed; facets?: ExtensionFacets } => ({
+    ...(value.kind === 'embed' &&
+      value.documentId !== undefined && {
+        embed: {
+          documentId: value.documentId,
+          ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
+        },
+      }),
+    ...(value.facets === undefined ? {} : { facets: value.facets }),
+  }))
 const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
 
 const nodeDraftSchema = z.discriminatedUnion('type', [

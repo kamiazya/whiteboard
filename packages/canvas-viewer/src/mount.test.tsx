@@ -152,7 +152,7 @@ describe('mountCanvasViewer', () => {
         { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 40, text: 'b' },
       ],
       edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
     }
 
     const plain = mountCanvasViewer(container, { scene })

@@ -41,10 +41,8 @@ import {
   type CanvasEdge,
   canvasCommentSchema,
   canvasEdgeSchema,
-  canvasExtensionSchema,
   type SpatialCanvas,
   spatialNodeSchema,
-  xWhiteboardSchema,
 } from '../spatial.js'
 import { okfActorSchema } from '../trust.js'
 import { fc } from './fast-check.js'
@@ -181,10 +179,6 @@ const sharedOverrides: SchemaArbitraryOptions['override'] = (_path, schema) => {
   if (sameSchema(schema, okfActorSchema)) return okfActorArbitrary
   return undefined
 }
-
-export const xWhiteboardArbitrary = arbitraryForSchema(xWhiteboardSchema, {
-  override: sharedOverrides,
-})
 
 export const spatialNodeArbitrary = arbitraryForSchema(spatialNodeSchema, {
   override: sharedOverrides,
@@ -337,20 +331,6 @@ export const commentThreadArbitrary = arbitraryForSchema(commentThreadSchema, {
 })
 
 /**
- * The canvas-level extension: routing preferences, comments and the
- * canvas's facets, each independently present. Comments get unique ids for
- * the same reason a thread's messages do.
- */
-const canvasExtensionArbitrary = arbitraryForSchema(canvasExtensionSchema, {
-  override: (path, schema) => {
-    if (path === '$.comments') {
-      return fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id })
-    }
-    return sharedOverrides?.(path, schema)
-  },
-})
-
-/**
  * A SpatialCanvas that is valid by construction.
  *
  * The two invariants `spatialCanvasSchema` enforces — unique node ids, and
@@ -391,8 +371,19 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
   .chain(
     (canvas): fc.Arbitrary<SpatialCanvas> =>
       fc
-        .option(canvasExtensionArbitrary, { nil: undefined })
-        .map((extension) =>
-          extension === undefined ? canvas : { ...canvas, 'x-whiteboard': extension },
-        ),
+        .tuple(
+          // Comments get unique ids for the same reason a thread's messages
+          // do: the id is any non-empty string, drawn short, so collisions are
+          // rare enough to pass hundreds of runs and fail on someone else's seed.
+          fc.option(
+            fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id }),
+            { nil: undefined },
+          ),
+          fc.option(extensionFacetsArbitrary, { nil: undefined }),
+        )
+        .map(([comments, facets]) => ({
+          ...canvas,
+          ...(comments !== undefined && { comments }),
+          ...(facets !== undefined && { facets }),
+        })),
   )

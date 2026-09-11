@@ -94,7 +94,5 @@ it('an edge’s menu opens a comment about the edge, pinned on its line', async 
   // The stored point is below the line; where the pin is DRAWN (on the
   // line) is canvas-render's contract, pinned in its comments.test.ts. What
   // the editor owns is that the comment names the edge, above.
-  await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.comments?.[0]).toMatchObject({ targetEdgeId: 'e1' }),
-  )
+  await vi.waitFor(() => expect(latest.canvas.comments?.[0]).toMatchObject({ targetEdgeId: 'e1' }))
 })

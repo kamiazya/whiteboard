@@ -154,17 +154,14 @@ describe('loro-bridge', () => {
     const doc = makeDoc()
     const node: SpatialNode = {
       ...TEXT_NODE,
-      'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+      embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
     }
     const canvas: SpatialCanvas = { nodes: [node], edges: [] }
 
     writeSpatialCanvas(doc, canvas)
     const result = readSpatialCanvas(doc)
 
-    expect(result.nodes[0]['x-whiteboard']).toEqual({
-      kind: 'embed',
-      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
-    })
+    expect(result.nodes[0].embed).toEqual({ documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' })
   })
 
   test('overwrites existing canvas data', () => {
@@ -918,11 +915,11 @@ describe('canvas-level extension', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     })
 
-    expect(readSpatialCanvas(doc)['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    expect(readSpatialCanvas(doc).facets).toEqual({
+      'visual.edges/v0': { routing: 'orthogonal' },
     })
   })
 
@@ -940,7 +937,7 @@ describe('canvas-level extension', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     })
     writeSpatialCanvas(doc, { nodes: [], edges: [] })
 
@@ -952,18 +949,18 @@ describe('canvas-level extension', () => {
     writeSpatialCanvas(a, {
       nodes: [TEXT_NODE],
       edges: [],
-      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     })
     const b = makeDoc()
     b.import(a.export({ mode: 'snapshot' }))
     writeSpatialCanvas(b, {
       nodes: [{ ...TEXT_NODE, x: 999 }],
       edges: [],
-      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     })
     a.import(b.export({ mode: 'snapshot' }))
 
-    expect(readSpatialCanvas(a)['x-whiteboard']?.facets?.['visual.edges/v0']).toEqual({
+    expect(readSpatialCanvas(a).facets?.['visual.edges/v0']).toEqual({
       routing: 'orthogonal',
     })
   })
@@ -997,16 +994,14 @@ describe('canvas comments bridge', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': {
-        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-        comments: [COMMENT, OTHER],
-      },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+      comments: [COMMENT, OTHER],
     })
 
     const result = readSpatialCanvas(doc)
-    expect(result['x-whiteboard']?.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
-    expect((result['x-whiteboard']?.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
-    expect(result['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
+    expect(result.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
+    expect((result.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+    expect(result.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
   })
 
   test('stores each comment under its own key, never inside the envelope value', () => {
@@ -1014,17 +1009,17 @@ describe('canvas comments bridge', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': {
-        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-        comments: [COMMENT],
-      },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+      comments: [COMMENT],
     })
 
-    // The envelope stays whole-value LWW and must not carry the comments —
-    // that is what would reintroduce the concurrent-loss this layout removes.
-    expect(doc.getMap('canvas').get('x-whiteboard')).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    // The canvas's facets are their own key — per-key LWW rather than one
+    // envelope value — and must not carry the comments, which is what would
+    // reintroduce the concurrent-loss this layout removes.
+    expect(doc.getMap('canvas').get('facets')).toEqual({
+      'visual.edges/v0': { routing: 'orthogonal' },
     })
+    expect(doc.getMap('canvas').get('x-whiteboard')).toBeUndefined()
     // In the threads plane (ADR-0026), keyed per thread — the legacy
     // `comments` map is not written any more.
     expect(doc.getMap('threads').keys()).toEqual(['c1'])
@@ -1041,7 +1036,7 @@ describe('canvas comments bridge', () => {
     writeCanvasComment(peer, OTHER)
     base.import(peer.export({ mode: 'snapshot' }))
 
-    const merged = readSpatialCanvas(base)['x-whiteboard']?.comments ?? []
+    const merged = readSpatialCanvas(base).comments ?? []
     expect(merged.map((c) => c.id).sort()).toEqual(['c1', 'c2'])
   })
 
@@ -1050,26 +1045,26 @@ describe('canvas comments bridge', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { comments: [COMMENT, OTHER] },
+      comments: [COMMENT, OTHER],
     })
-    writeSpatialCanvas(doc, { nodes: [], edges: [], 'x-whiteboard': { comments: [OTHER] } })
+    writeSpatialCanvas(doc, { nodes: [], edges: [], comments: [OTHER] })
 
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([OTHER])
+    expect(readSpatialCanvas(doc).comments).toEqual([OTHER])
   })
 
   test('writeCanvasComment leaves every other comment untouched; delete removes exactly one', () => {
     const doc = makeDoc()
-    writeSpatialCanvas(doc, { nodes: [], edges: [], 'x-whiteboard': { comments: [COMMENT] } })
+    writeSpatialCanvas(doc, { nodes: [], edges: [], comments: [COMMENT] })
 
     writeCanvasComment(doc, OTHER)
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toHaveLength(2)
+    expect(readSpatialCanvas(doc).comments).toHaveLength(2)
 
     deleteCanvasComment(doc, 'c1')
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([OTHER])
+    expect(readSpatialCanvas(doc).comments).toEqual([OTHER])
 
     // Absent id: a no-op, no commit — matching the bridge convention.
     deleteCanvasComment(doc, 'never-existed')
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([OTHER])
+    expect(readSpatialCanvas(doc).comments).toEqual([OTHER])
   })
 
   test('a corrupt stored comment is dropped on read, never the whole layer', () => {
@@ -1081,7 +1076,7 @@ describe('canvas comments bridge', () => {
     doc.getMap('threads').set('bad', { nope: true })
     doc.commit()
 
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([COMMENT])
+    expect(readSpatialCanvas(doc).comments).toEqual([COMMENT])
   })
 
   test('refuses a non-finite anchor loudly, matching the node geometry guard', () => {
@@ -1098,7 +1093,7 @@ describe('canvas comments bridge', () => {
     expect(() =>
       writeCanvasComment(doc, { ...COMMENT, targetNodeId: 'n1', targetEdgeId: 'e1' }),
     ).toThrow(TypeError)
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []).toEqual([])
+    expect(readSpatialCanvas(doc).comments ?? []).toEqual([])
   })
 
   test('the non-finite-anchor refusal also propagates through withSpatialBatch, and the batch commits NOTHING (no undo step)', () => {
@@ -1123,7 +1118,7 @@ describe('canvas comments bridge', () => {
     expect(undoManager.canUndo()).toBe(false)
     expect(
       readSpatialCanvas(doc)
-        ['x-whiteboard']?.comments?.map((c) => c.id)
+        .comments?.map((c) => c.id)
         .sort(),
     ).toEqual(['c1', 'c2'])
     // The session-layer fallback converges exactly as it does for a
@@ -1136,7 +1131,7 @@ describe('canvas comments bridge', () => {
   test('comments alone produce an extension; no comments and no envelope produce none', () => {
     const doc = makeDoc()
     writeCanvasComment(doc, COMMENT)
-    expect(readSpatialCanvas(doc)['x-whiteboard']).toEqual({ comments: [COMMENT] })
+    expect(readSpatialCanvas(doc).comments).toEqual([COMMENT])
 
     deleteCanvasComment(doc, 'c1')
     expect(readSpatialCanvas(doc)).not.toHaveProperty('x-whiteboard')
@@ -1174,7 +1169,7 @@ describe('canvas comments bridge', () => {
       expect(undoManager.canUndo()).toBe(false)
       withSpatialBatch(b, (w) => w.deleteComment('never-existed'))
       expect(undoManager.canUndo()).toBe(false)
-      expect(readSpatialCanvas(b)['x-whiteboard']?.comments).toEqual([OTHER])
+      expect(readSpatialCanvas(b).comments).toEqual([OTHER])
     })
 
     test('one batch of a comment write + a node write is exactly one undo step', () => {
@@ -1188,12 +1183,12 @@ describe('canvas comments bridge', () => {
       })
       expect(
         readSpatialCanvas(doc)
-          ['x-whiteboard']?.comments?.map((c) => c.id)
+          .comments?.map((c) => c.id)
           .sort(),
       ).toEqual(['c1', 'c2'])
       expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toContain(TEXT_NODE.id)
       undoManager.undo()
-      expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([COMMENT])
+      expect(readSpatialCanvas(doc).comments).toEqual([COMMENT])
       expect(readSpatialCanvas(doc).nodes).toEqual([])
       expect(undoManager.canUndo()).toBe(false)
     })
@@ -1226,23 +1221,21 @@ describe('reconcileSpatialCanvas', () => {
     writeSpatialCanvas(doc, {
       nodes: [A, B],
       edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
-      'x-whiteboard': { comments: [{ id: 'c1', x: 1, y: 1, text: 'keep' }] },
+      comments: [{ id: 'c1', x: 1, y: 1, text: 'keep' }],
     })
     const prev = readSpatialCanvas(doc)
     reconcileSpatialCanvas(doc, prev, {
       nodes: [A, B],
       edges: [{ id: 'e2', fromNode: 'b', toNode: 'a' }],
-      'x-whiteboard': {
-        comments: [
-          { id: 'c1', x: 1, y: 1, text: 'keep' },
-          { id: 'c2', x: 2, y: 2, text: 'new' },
-        ],
-      },
+      comments: [
+        { id: 'c1', x: 1, y: 1, text: 'keep' },
+        { id: 'c2', x: 2, y: 2, text: 'new' },
+      ],
     })
 
     const after = readSpatialCanvas(doc)
     expect(after.edges.map((e) => e.id)).toEqual(['e2'])
-    expect((after['x-whiteboard']?.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+    expect((after.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
   })
 
   test('an unchanged canvas writes nothing at all', () => {
@@ -1274,16 +1267,14 @@ describe("an edge's facets bucket", () => {
           id: 'e1',
           fromNode: 'a',
           toNode: 'b',
-          'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+          facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
         },
         { id: 'e2', fromNode: 'b', toNode: 'a' },
       ],
     })
 
     const read = readSpatialCanvas(doc)
-    expect(read.edges[0]?.['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-    })
+    expect(read.edges[0]?.facets).toEqual({ 'visual.edges/v0': { routing: 'orthogonal' } })
     expect(read.edges[1]).not.toHaveProperty('x-whiteboard')
   })
 })

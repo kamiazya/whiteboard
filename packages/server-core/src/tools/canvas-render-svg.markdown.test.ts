@@ -60,9 +60,7 @@ async function seedWorkspace(store: FakeDocumentStore, noteBody: string, boardTh
         { id: 'out', type: 'text', x: 900, y: 900, width: 200, height: 60, text: 'OTHER-NODE' },
       ],
       edges: [],
-      ...(boardTheme === undefined
-        ? {}
-        : { 'x-whiteboard': { facets: { 'visual.theme/v0': { theme: boardTheme } } } }),
+      ...(boardTheme === undefined ? {} : { facets: { 'visual.theme/v0': { theme: boardTheme } } }),
     })
   })
 }

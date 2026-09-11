@@ -425,7 +425,7 @@ function writeCommandTarget(
     case 'set-comment-resolved':
     case 'move-comment': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
-      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
+      const comment = next.comments?.find((c) => c.id === id)
       if (!comment) return false
       writeCanvasComment(doc, comment)
       return true
@@ -553,10 +553,10 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boole
     case 'create-edge':
       return next.edges.some((e) => e.id === command.edge.id)
     case 'create-comment':
-      return next['x-whiteboard']?.comments?.some((c) => c.id === command.comment.id) ?? false
+      return next.comments?.some((c) => c.id === command.comment.id) ?? false
     case 'set-comment-resolved':
     case 'move-comment':
-      return next['x-whiteboard']?.comments?.some((c) => c.id === command.id) ?? false
+      return next.comments?.some((c) => c.id === command.id) ?? false
     case 'delete-node':
     case 'delete-edge':
       // Deletes are no-ops for absent ids — always writable.
@@ -598,7 +598,7 @@ function writeSubCommand(
     case 'set-comment-resolved':
     case 'move-comment': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
-      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
+      const comment = next.comments?.find((c) => c.id === id)
       if (comment) writer.writeComment(comment)
       return
     }

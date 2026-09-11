@@ -29,7 +29,7 @@ const board = (facets: Record<string, unknown> | undefined): SpatialCanvas => ({
       id: 'e',
       fromNode: 'a',
       toNode: 'b',
-      ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+      ...(facets === undefined ? {} : { facets }),
     },
   ],
 })

@@ -44,7 +44,7 @@ const canvasOf = (facets?: Record<string, unknown>): SpatialCanvas => ({
       width: 200,
       height: 120,
       text: 'n1',
-      ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+      ...(facets === undefined ? {} : { facets }),
     },
   ],
   edges: [],

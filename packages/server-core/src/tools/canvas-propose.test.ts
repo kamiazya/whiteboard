@@ -383,7 +383,7 @@ describe('elements whose fields hold objects', () => {
         width: 100,
         height: 40,
         text: 'A',
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' } } },
+        facets: { 'visual.shape/v0': { kind: 'hexagon' } },
       },
       { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
     ],
@@ -392,7 +392,7 @@ describe('elements whose fields hold objects', () => {
         id: 'e',
         fromNode: 'a',
         toNode: 'b',
-        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
     ],
   }
@@ -426,18 +426,18 @@ describe('elements whose fields hold objects', () => {
         {
           op: 'edge.patch',
           id: 'e',
-          patch: { 'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } } },
+          patch: { facets: { 'visual.edges/v0': { routing: 'curved' } } },
         },
       ],
     })
 
     const change = result.proposed?.changes[0]
     expect(change?.id).toBe('edge:e')
-    expect(change?.op === 'edge.patch' && change.patch['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'curved' } },
+    expect(change?.op === 'edge.patch' && change.patch.facets).toEqual({
+      'visual.edges/v0': { routing: 'curved' },
     })
-    expect(change?.op === 'edge.patch' && change.assumed['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    expect(change?.op === 'edge.patch' && change.assumed.facets).toEqual({
+      'visual.edges/v0': { routing: 'orthogonal' },
     })
   })
 })

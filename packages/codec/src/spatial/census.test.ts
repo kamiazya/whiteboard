@@ -38,24 +38,21 @@ describe('jsonSchemaLeafPaths', () => {
 describe('censusSpatialModel', () => {
   const census = censusSpatialModel([])
 
-  it('puts JSON Canvas 1.0 fields on the standard side', () => {
-    expect(census.standard).toContain('nodes[].x')
-    expect(census.standard).toContain('edges[].fromNode')
-    expect(census.standard).not.toContain('nodes[].x-whiteboard.kind')
+  it('names every field position the model can hold', () => {
+    expect(census.paths).toContain('nodes[].x')
+    expect(census.paths).toContain('edges[].fromNode')
+    expect(census.paths).toContain('comments[].text')
+    expect(census.paths).toContain('nodes[].embed.documentId')
   })
 
-  it('puts everything under x-whiteboard on the extension side', () => {
-    expect(census.extension).toContain('x-whiteboard.comments[].text')
-    expect(census.extension).toContain('nodes[].x-whiteboard.documentId')
-    expect(census.extension.every((path) => path.includes('x-whiteboard'))).toBe(true)
+  it("does not classify — what a position costs an export is the ledger's answer", () => {
+    // It used to split its answer by whether a path was spelled under
+    // `x-whiteboard`, which only worked while the model WAS the format.
+    expect(census.paths.some((path) => path.includes('x-whiteboard'))).toBe(false)
   })
 
   it('leaves the facet buckets unexpanded when no plugin is supplied', () => {
-    expect(census.facetBuckets).toEqual([
-      'edges[].x-whiteboard.facets/*',
-      'nodes[].x-whiteboard.facets/*',
-      'x-whiteboard.facets/*',
-    ])
+    expect(census.facetBuckets).toEqual(['edges[].facets/*', 'facets/*', 'nodes[].facets/*'])
     expect(census.facet).toEqual([])
   })
 
@@ -63,6 +60,6 @@ describe('censusSpatialModel', () => {
     const expanded = censusSpatialModel([
       { key: 'demo.pin/v0', targets: ['node', 'document'], schema: z.object({ at: z.number() }) },
     ])
-    expect(expanded.facet).toEqual(['nodes[].x-whiteboard.facets["demo.pin/v0"].at'])
+    expect(expanded.facet).toEqual(['nodes[].facets["demo.pin/v0"].at'])
   })
 })

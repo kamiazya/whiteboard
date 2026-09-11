@@ -74,7 +74,7 @@ describe('buildMinimapNodes', () => {
         width: 100,
         height: 50,
         text: 'hi',
-        'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } } },
+        facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
       },
     ])
     const boxes = indexNodeBoxes({ nodes: n, edges: [] })

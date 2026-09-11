@@ -16,7 +16,7 @@ import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 const edgesFacetOf = (canvas: SpatialCanvas) =>
-  canvas['x-whiteboard']?.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
+  canvas.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
 
 afterEach(cleanup)
 

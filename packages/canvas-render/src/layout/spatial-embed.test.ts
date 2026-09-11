@@ -151,9 +151,7 @@ describe('file-node inline embeds', () => {
         { id: 'h', fromNode: 'a', toNode: 'b' },
         { id: 'v', fromNode: 'c', toNode: 'd' },
       ],
-      'x-whiteboard': {
-        facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
-      },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
     }
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
@@ -432,7 +430,7 @@ describe('shape facets inside an embedded canvas', () => {
         width: 400,
         height: 200,
         text: '',
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' } } },
+        facets: { 'visual.shape/v0': { kind: 'hexagon' } },
       },
     ],
     edges: [],
@@ -465,7 +463,7 @@ describe('shape facets inside an embedded canvas', () => {
           width: 100,
           height: 100,
           text: '',
-          'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'diamond' } } },
+          facets: { 'visual.shape/v0': { kind: 'diamond' } },
         },
       ],
       edges: [],

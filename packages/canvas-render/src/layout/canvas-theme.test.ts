@@ -68,14 +68,14 @@ const DEMO: RenderContribution = {
   namespace: 'demo',
   shapes: { triangle: TRIANGLE, square: { outline: () => null } },
   readShape: (node) => {
-    const stored = node['x-whiteboard']?.facets?.['demo.shape/v0']
+    const stored = node.facets?.['demo.shape/v0']
     return typeof stored === 'object' && stored !== null
       ? (stored as { kind?: string }).kind
       : undefined
   },
   themes: { chalk: CHALK },
   readTheme: (canvas) => {
-    const stored = canvas['x-whiteboard']?.facets?.[THEME_KEY]
+    const stored = canvas.facets?.[THEME_KEY]
     return typeof stored === 'object' && stored !== null
       ? (stored as { theme?: string }).theme
       : undefined
@@ -98,7 +98,7 @@ const themed = (
 ): SpatialCanvas => ({
   nodes,
   edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-  ...(theme === undefined ? {} : { 'x-whiteboard': { facets: { [THEME_KEY]: { theme } } } }),
+  ...(theme === undefined ? {} : { facets: { [THEME_KEY]: { theme } } }),
 })
 
 const TWO_NODES: SpatialCanvas['nodes'] = [
@@ -172,11 +172,9 @@ describe('theme defaults: the theme is a default, an explicit facet wins', () =>
   it('edgeRouting: an explicit visual.edges facet beats the theme default', () => {
     const canvas: SpatialCanvas = {
       ...themed('demo.chalk'),
-      'x-whiteboard': {
-        facets: {
-          [THEME_KEY]: { theme: 'demo.chalk' },
-          'visual.edges/v0': { routing: 'straight' },
-        },
+      facets: {
+        [THEME_KEY]: { theme: 'demo.chalk' },
+        'visual.edges/v0': { routing: 'straight' },
       },
     }
     const scene = layoutSpatialCanvas(canvas, baseOptions({ style: 'document' }))
@@ -192,7 +190,7 @@ describe('theme defaults: the theme is a default, an explicit facet wins', () =>
     const nodes: SpatialCanvas['nodes'] = [
       {
         ...TWO_NODES[0]!,
-        'x-whiteboard': { facets: { 'demo.shape/v0': { kind: 'square' } } },
+        facets: { 'demo.shape/v0': { kind: 'square' } },
       },
       TWO_NODES[1]!,
     ]
@@ -250,12 +248,12 @@ describe('embedded canvases', () => {
   const host = (): SpatialCanvas => ({
     nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 300, height: 220, file: 'child' }],
     edges: [],
-    'x-whiteboard': { facets: { [THEME_KEY]: { theme: 'demo.chalk' } } },
+    facets: { [THEME_KEY]: { theme: 'demo.chalk' } },
   })
   const child = (theme: string | undefined): SpatialCanvas => ({
     nodes: [{ id: 'c1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'c' }],
     edges: [],
-    ...(theme === undefined ? {} : { 'x-whiteboard': { facets: { [THEME_KEY]: { theme } } } }),
+    ...(theme === undefined ? {} : { facets: { [THEME_KEY]: { theme } } }),
   })
   const PLAIN: ThemeTokens = { ...SAMPLE_THEME_TOKENS, defaults: {} }
   const contributions: RenderContribution[] = [

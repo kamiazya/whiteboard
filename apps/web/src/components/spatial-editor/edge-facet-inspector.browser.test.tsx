@@ -27,7 +27,7 @@ const initial: SpatialCanvas = {
 }
 
 const edgeFacetOf = (canvas: SpatialCanvas, id: string) =>
-  canvas.edges.find((edge) => edge.id === id)?.['x-whiteboard']?.facets?.['visual.edges/v0'] as
+  canvas.edges.find((edge) => edge.id === id)?.facets?.['visual.edges/v0'] as
     | VisualEdgesFacet
     | undefined
 

@@ -159,7 +159,7 @@ it('recomputes line jumps live while the drag is in flight', async () => {
       { id: 'e1', fromNode: 'a', toNode: 'b' },
       { id: 'e2', fromNode: 'c', toNode: 'd' },
     ],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+    facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
   }
   const { Host } = makeHost(crossing)
   const { container } = render(<Host />)
@@ -259,7 +259,7 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
       { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
       { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
     ],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   const { Host } = makeHost(crossing)
   const { container } = render(<Host />)
@@ -404,14 +404,14 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
         width: 200,
         height: 200,
         text: 'Hub',
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'diamond' } } },
+        facets: { 'visual.shape/v0': { kind: 'diamond' } },
       },
     ],
     edges: [
       { id: 'e-a', fromNode: 'a', toNode: 'hub' },
       { id: 'e-c', fromNode: 'c', toNode: 'hub' },
     ],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   const { Host } = makeHost(shaped)
   const { container } = render(<Host />)
@@ -441,7 +441,7 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
 it('a themed board keeps its look while a node is carried: ghost and backdrop alike', async () => {
   const neon: SpatialCanvas = {
     ...start,
-    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+    facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
   }
   const { Host } = makeHost(neon)
   const { container } = render(<Host />)

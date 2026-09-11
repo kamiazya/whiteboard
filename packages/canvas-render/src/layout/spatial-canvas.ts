@@ -1934,7 +1934,7 @@ function composeComments(
   options: ResolvedLayoutOptions,
   edgePathOf: EdgePathLookup,
 ): readonly SceneNode[] {
-  const comments = options.comments ?? canvas['x-whiteboard']?.comments
+  const comments = options.comments ?? canvas.comments
   if (comments === undefined || comments.length === 0) return []
 
   const chrome = options.appearance.resolveComment?.()

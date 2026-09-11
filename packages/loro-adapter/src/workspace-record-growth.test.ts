@@ -97,21 +97,31 @@ describe('workspace-record growth scoreboard', () => {
   it('pins oplog growth per edit and the shallow reclaim', () => {
     const n = build(10, 100)
     // The delta LOG price of an edit — what accumulates between compactions.
-    expect(n.updateBytes).toBe(178660)
+    //
+    // 178660 -> 156960 (-12%) when ADR-0033 moved the canvas's facets to a key
+    // of their own. The saving is not the move: it is that the write path used
+    // to emit a DELETE for the canvas envelope on every save, including the
+    // overwhelming majority of saves on boards that never had one. ~22B per
+    // edit, forever, for a key that was not there. This scoreboard is the only
+    // thing that said so — nothing else in the suite can see an op that costs
+    // bytes and changes no state.
+    expect(n.updateBytes).toBe(156960)
     // The stored-snapshot price of the same history — Loro's snapshot
-    // encoding compresses it to ~8B/edit.
-    expect(n.fullBytes).toBe(11699)
+    // encoding compresses it to ~8B/edit. 11699 -> 11040 for the same reason
+    // the delta log shrank: 1000 fewer no-op deletes in the history.
+    expect(n.fullBytes).toBe(11040)
     // The reclaim: a shallow cut at the current frontier collapses the whole
     // edit history. It is no longer byte-IDENTICAL to the create-time record:
     // since the comments container (ADR-0024) joined the pre-attached set, a
     // container that has never been written encodes leaner in a shallow
-    // snapshot than at create time (measured 3456 vs 3481, and the gap grows
+    // snapshot than at create time (measured 3317 vs 3481, and the gap grows
     // with each such container — 9B when comments was the only one, 27B once
-    // threads joined), so the cut is pinned exactly AND bounded by the
+    // threads joined, 164B once ADR-0033 stopped writing a canvas envelope
+    // key on a board that has no facets), so the cut is pinned exactly AND bounded by the
     // create-time size — the reclaim story ("compaction takes back everything
     // the edits added") is the invariant, byte identity was only its
     // strongest available form.
-    expect(n.shallowBytes).toBe(3456)
+    expect(n.shallowBytes).toBe(3317)
     expect(n.shallowBytes).toBeLessThanOrEqual(build(10, 0).afterCreateBytes)
   })
 })

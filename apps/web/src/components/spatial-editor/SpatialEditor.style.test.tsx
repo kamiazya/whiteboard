@@ -19,7 +19,7 @@ const neon: SpatialCanvas = {
     { id: 'b', type: 'text', x: 300, y: 200, width: 120, height: 60, text: 'b' },
   ],
   edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
 }
 
 const content = (root: HTMLElement) =>

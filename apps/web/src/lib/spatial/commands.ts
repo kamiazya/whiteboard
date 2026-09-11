@@ -499,24 +499,19 @@ function withEdgeStyle(
 }
 
 /**
- * Write one facet into the canvas envelope, or remove it with `undefined`.
+ * Write one facet onto the canvas, or remove it with `undefined`.
  *
  * The canonical-emptiness rule lives here and nowhere else: an empty facets
- * bucket disappears, and an empty `x-whiteboard` disappears with it — so a
- * canvas that chose a setting and reverted serializes identically to one
- * that never touched it. Two writers deciding that separately is how a
- * reverted canvas comes to carry a redundant extension forever.
+ * bucket disappears, so a canvas that chose a setting and reverted serializes
+ * identically to one that never touched it. Two writers deciding that
+ * separately is how a reverted canvas comes to carry a redundant field
+ * forever.
  */
 function withCanvasFacet(canvas: SpatialCanvas, key: string, payload: unknown): SpatialCanvas {
-  const { 'x-whiteboard': extension, ...rest } = canvas
-  const { facets, ...others } = extension ?? {}
+  const { facets, ...rest } = canvas
   const { [key]: _previous, ...otherFacets } = facets ?? {}
   const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-  const nextExtension = {
-    ...others,
-    ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
-  }
-  return Object.keys(nextExtension).length === 0 ? rest : { ...rest, 'x-whiteboard': nextExtension }
+  return Object.keys(nextFacets).length === 0 ? rest : { ...rest, facets: nextFacets }
 }
 
 function setEdgeRouting(canvas: SpatialCanvas, style: EdgeRoutingStyle): SpatialCanvas {
@@ -545,17 +540,14 @@ function setNodeFacet(
     ...canvas,
     nodes: canvas.nodes.map((node) => {
       if (node.id !== id) return node
-      const { facets, ...extensionRest } = node['x-whiteboard'] ?? {}
+      const { facets, ...rest } = node
       const { [key]: _previous, ...otherFacets } = facets ?? {}
       const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-      const nextExtension = {
-        ...extensionRest,
-        ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
-      }
-      const { 'x-whiteboard': _extension, ...rest } = node
-      return Object.keys(nextExtension).length === 0
+      // The node's `embed` is untouched: independent fields now, where the
+      // format's extension made them two arms of one union.
+      return Object.keys(nextFacets).length === 0
         ? (rest as typeof node)
-        : ({ ...rest, 'x-whiteboard': nextExtension } as typeof node)
+        : ({ ...rest, facets: nextFacets } as typeof node)
     }),
   }
 }
@@ -578,12 +570,10 @@ function setEdgeFacet(
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      const { [key]: _previous, ...otherFacets } = edge['x-whiteboard']?.facets ?? {}
+      const { facets, ...rest } = edge
+      const { [key]: _previous, ...otherFacets } = facets ?? {}
       const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-      const { 'x-whiteboard': _extension, ...rest } = edge
-      return Object.keys(nextFacets).length === 0
-        ? rest
-        : { ...rest, 'x-whiteboard': { facets: nextFacets } }
+      return Object.keys(nextFacets).length === 0 ? rest : { ...rest, facets: nextFacets }
     }),
   }
 }
@@ -732,15 +722,10 @@ function withComments(
   canvas: SpatialCanvas,
   update: (comments: readonly CanvasComment[]) => CanvasComment[] | undefined,
 ): SpatialCanvas {
-  const { 'x-whiteboard': extension, ...rest } = canvas
-  const nextComments = update(extension?.comments ?? [])
+  const { comments, ...rest } = canvas
+  const nextComments = update(comments ?? [])
   if (nextComments === undefined) return canvas
-  const { comments: _previous, ...otherExtension } = extension ?? {}
-  const nextExtension = {
-    ...otherExtension,
-    ...(nextComments.length > 0 ? { comments: nextComments } : {}),
-  }
-  return Object.keys(nextExtension).length === 0 ? rest : { ...rest, 'x-whiteboard': nextExtension }
+  return nextComments.length > 0 ? { ...rest, comments: nextComments } : rest
 }
 
 function createComment(canvas: SpatialCanvas, comment: CanvasComment): SpatialCanvas {

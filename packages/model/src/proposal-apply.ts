@@ -57,8 +57,8 @@ export function applyCanvasChange(
       // the edges that would dangle with it, the way the editor's own delete
       // does. Silently leaving them would make the adopted board unsavable.
       return {
+        ...canvas,
         nodes: canvas.nodes.filter((node) => node.id !== change.nodeId),
-        ...(canvas['x-whiteboard'] === undefined ? {} : { 'x-whiteboard': canvas['x-whiteboard'] }),
         edges: canvas.edges.filter(
           (edge) => edge.fromNode !== change.nodeId && edge.toNode !== change.nodeId,
         ),
@@ -145,8 +145,9 @@ function sameElement(
     const left = a[field]
     const right = b[field]
     if (Object.is(left, right)) continue
-    // One level of structure, for a node's `x-whiteboard` embed. Deeper than
-    // that a JSON comparison is the honest tool, and no element goes deeper.
+    // One level of structure, for a node's `embed` and its facets bucket.
+    // Deeper than that a JSON comparison is the honest tool, and no element
+    // goes deeper.
     if (JSON.stringify(left) !== JSON.stringify(right)) return false
   }
   return true

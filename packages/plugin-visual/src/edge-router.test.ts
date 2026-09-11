@@ -8,9 +8,7 @@ const edgeWith = (waypoints: unknown): CanvasEdge => ({
   id: 'e',
   fromNode: 'a',
   toNode: 'b',
-  ...(waypoints === undefined
-    ? {}
-    : { 'x-whiteboard': { facets: { [VISUAL_PATH_KEY]: { waypoints } } } }),
+  ...(waypoints === undefined ? {} : { facets: { [VISUAL_PATH_KEY]: { waypoints } } }),
 })
 
 const request = (edge: CanvasEdge, anchors?: EdgeRouteRequest['anchors']): EdgeRouteRequest => ({

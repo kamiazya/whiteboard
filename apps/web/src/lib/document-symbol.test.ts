@@ -6,7 +6,7 @@ import { resolveOpenDocumentSymbol } from './document-symbol.js'
 const PIN = { kind: 'emoji', char: '📌' } as const
 
 function markedCanvas(): SpatialCanvas {
-  return { nodes: [], edges: [], 'x-whiteboard': { facets: { 'visual.symbol/v0': PIN } } }
+  return { nodes: [], edges: [], facets: { 'visual.symbol/v0': PIN } }
 }
 
 describe('resolveOpenDocumentSymbol', () => {

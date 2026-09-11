@@ -27,14 +27,36 @@ paths:
 - mdast schemas follow the mdast spec content-model hierarchy (flow / phrasing / list / table / row content). Do not widen a parent's `children` back to the flat node union.
 - IDs: document ID = canonical ULID (first char `[0-7]`); node ID = nanoid (charset deliberately unenforced — documented looseness).
 - Workspace identity (ADR-0019) is three layers, not one: canonical workspace ID = a bare ULID, the same canonical-ULID shape as document ID (no `ws_` prefix — symmetric with `documentIdSchema`, distinct Zod schemas are the confusion guard); segment = the URL-safe, per-keeper-unique, renameable handle, which must NOT itself be ULID-shaped (a 26-char Crockford base32 string with a leading `[0-7]`, checked case-insensitively) because workspace URLs resolve segment-first with canonical-id fallback in one position; displayName = free text, no uniqueness, no identity duties. `workspaceIdSchema` (the pre-ADR-0019 single-string shape) is untouched — it describes the legacy live data both keepers still hold, and re-keying onto the three-layer shape is a later migration-driven slice.
-- JSON Canvas geometry is integer, with no extension carve-out: `x-whiteboard` carries no geometry of its own.
-- There are three `x-whiteboard` sites, and the line between them is what keeps the node-level one from growing back:
-  - **On a NODE** it is the canvas-embed extension only — CONTENT that JSON Canvas cannot express. Do NOT grow it into a general home for visual primitives JSON Canvas lacks (the `freehand`/`shape` variants were removed for exactly that reason); express those through an existing node type instead.
-  - **On an EDGE** it is the edge-target `facets` bucket and nothing else (ADR-0013 decision 5's edge slot, opened 2026-09-10). Never an embed: an edge has no content JSON Canvas cannot express. `edgePatchFieldsSchema` is DERIVED from `canvasEdgeSchema`, so the field reached `edge.patch` for free — and reaching the proposal diff for free is what exposed its identity comparison (`Object.is` on two deep-equal objects from two different parses); that diff now compares structurally.
-  - **On the CANVAS** it holds rendering PREFERENCES for things JSON Canvas already models — as canvas-target FACETS in its `facets` bucket (`visual.edges/v0` for routing and line jumps, `visual.theme/v0`) — plus the comment annotation layer. A consumer that drops it still renders every edge, just with its own routing. Nothing that changes what the document MEANS belongs here. The pre-facet `edgeRouting` field was retired outright (2026-09-10, no compatibility read): a document still carrying it loses that key on parse.
-- Both are the documented exception to the reject-not-drop rule above — an unrecognised payload is silently dropped (`.catch(undefined)`) so a document written by another version still parses. The reject-not-drop contract governs what others must honour; these keys are our own escape hatch, and the document survives either way.
+- JSON Canvas geometry is integer here too, and the model carries no geometry the format cannot
+  state. That is a fact about the shipped model, not a constraint the model is under — widening
+  it is [ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 4.
+- **This package no longer spells `x-whiteboard` anywhere.** ADR-0033 moved the interchange
+  format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
+  format's extension key is three ordinary fields:
+  - `comments` and `facets` on the canvas,
+  - `embed` and `facets` on a node — INDEPENDENT fields, where the format makes them two arms of
+    one union; a node carrying both was spelled as the embed arm with facets inside it, and
+    every writer that wanted to change one had to preserve the other by hand,
+  - `facets` on an edge (ADR-0013 decision 5's edge slot). `edgePatchFieldsSchema` is DERIVED
+    from `canvasEdgeSchema`, so the field reaches `edge.patch` for free — and reaching the
+    proposal diff for free is what exposed its identity comparison (`Object.is` on two deep-equal
+    objects from two different parses); that diff now compares structurally.
+- **The node, edge and canvas schemas are `.strict()`, and the WIRE schemas in codec are not.**
+  The asymmetry is the whole point. A JSON Canvas document another tool wrote may legitimately
+  carry vendor keys, so refusing it would be wrong; this is the INTERNAL model, where a key it
+  does not name is a defect. A plain `z.object` STRIPS an unknown key and returns success, which
+  during ADR-0033's migration would have meant every reader still spelling the old key parsing
+  cleanly and losing what it read. Measured: without the storage lift that goes with it, a node
+  written under the old key does not lose a field — it VANISHES, because `readSpatialCanvas`
+  drops what fails to parse (`loro-adapter`'s `legacy-extension.test.ts`).
+- Strictness has one cost worth knowing: a schema error names the KEY and not the node's type,
+  so a caller told only that `label` is invalid is left guessing which of its nodes was wrong.
+  `canvas-edit`'s patch path therefore uses strictness as the DETECTOR and still writes the
+  message itself.
 - A preference meant to be overridable at a finer scope (an edge overriding the canvas's routing style) declares its vocabulary ONCE — `edgeRoutingStyleSchema` / `lineJumpsSchema`, with `edgeRoutingSchema` as the RESOLVED shape a resolver hands the layout — and the override reuses it rather than restating the shape. The stored shape is always the facet.
-- **`x-whiteboard` is the ONLY extension key** an emitted document may carry — never add a second non-standard field at any level. The contract is published as a generated JSON Schema (`json-schema.ts` → `docs/reference/x-whiteboard.schema.json`, a vitest file snapshot held in sync by `json-schema.test.ts`; regenerate with `pnpm vitest run --project model-node json-schema -u`) and enforced by codec's `extension-contract.property.test.ts` (foreign keys stripped on parse, emission stays within JSON Canvas 1.0 + `x-whiteboard`). Extending what lives INSIDE `x-whiteboard` means regenerating the artifact in the same increment.
+- The extension contract — `x-whiteboard` is the ONLY non-standard key an emitted document may
+  carry — is now `packages/codec`'s to keep, along with the generated
+  `docs/reference/x-whiteboard.schema.json`. See `.claude/rules/package-codec.md`.
 
 - **OKF's own vocabulary is modelled in `trust.ts`**, and it is deliberately looser than the spec's
   prose reads. `okfActorSchema` validates a non-blank single-line string, NOT §7's three bullets —

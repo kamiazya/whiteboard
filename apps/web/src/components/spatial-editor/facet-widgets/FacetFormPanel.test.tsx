@@ -65,7 +65,7 @@ const node = (facets?: Record<string, unknown>): SpatialNode => ({
   width: 100,
   height: 60,
   text: '',
-  ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+  ...(facets === undefined ? {} : { facets }),
 })
 
 describe('FacetFormPanel', () => {
@@ -464,7 +464,7 @@ describe('the panel retargeted at an edge', () => {
     id: 'e1',
     fromNode: 'a',
     toNode: 'b',
-    ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+    ...(facets === undefined ? {} : { facets }),
   })
 
   it("lists the EDGE-target facets, not the node's", () => {

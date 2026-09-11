@@ -82,6 +82,29 @@ interface Row {
   names: readonly string[]
 }
 
+/**
+ * One row moved with ADR-0033 and it is worth naming, because a pinned number
+ * that shifts silently is the thing this board exists to prevent.
+ *
+ * `wb_canvas_edit` lost two parameters: an edge's facets are written as
+ * `facets` now rather than `x-whiteboard.facets` — one level shallower, and
+ * one fewer key named after an interchange format on a table a model reads
+ * every turn. It followed rather than being chosen: the edge patch IS the
+ * stored proposal patch (ADR-0029), so the tool's input and the storage are
+ * one schema, and keeping the old spelling on the input alone would mean a
+ * wrapper pair that exists only to preserve it.
+ *
+ * The NODE side still spells `x-whiteboard`, because its input is deliberately
+ * NOT the stored shape — a flat write schema that refuses a `kind: "embed"`
+ * naming no document, by name. Converging the two is the follow-up ADR-0033
+ * names, and it goes through ADR-0031's criteria as a tool-surface change of
+ * its own rather than riding along inside a refactor.
+ *
+ * The wire-byte drops (~4KB across the table) are not a surface change at all:
+ * the model and the format are two schema objects now where they used to be
+ * one, so zod's JSON-Schema emitter inlines and $refs them differently.
+ * `visibleBytes` moved by 9 bytes, which is what says so.
+ */
 describe('what the tool table costs to read', () => {
   it('scores every registered tool', async () => {
     const { client, tools } = await connect()
@@ -90,6 +113,10 @@ describe('what the tool table costs to read', () => {
     const rows: Record<string, Row> = {}
     for (const tool of [...tools].sort((a, b) => a.name.localeCompare(b.name))) {
       const coverage = parameterCoverage(tool.inputSchema)
+      if (process.env.DUMP_PATHS !== undefined && tool.name === 'wb_canvas_edit') {
+        // eslint-disable-next-line
+        require('node:fs').writeFileSync(process.env.DUMP_PATHS, coverage.undescribed.join('\n'))
+      }
       // An unknown key beside nothing else: a refusal that names it has
       // read it; one that lists only the missing fields has dropped it.
       const stray = await client.callTool({ name: tool.name, arguments: { zz_stray: true } })
@@ -137,7 +164,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 22556,
+        wireBytes: 20520,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -191,11 +218,11 @@ describe('what the tool table costs to read', () => {
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
       wb_canvas_edit: {
-        visibleBytes: 12986,
-        wireBytes: 36776,
+        visibleBytes: 12977,
+        wireBytes: 34731,
         descriptionWords: 169,
-        parameters: 151,
-        undescribed: 123,
+        parameters: 149,
+        undescribed: 121,
         strays: 'refused',
         names: [],
       },
@@ -392,10 +419,10 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      visibleBytes: 35929,
-      wireBytes: 110571,
-      parameters: 273,
-      undescribed: 191,
+      visibleBytes: 35920,
+      wireBytes: 106490,
+      parameters: 271,
+      undescribed: 189,
     })
   })
 

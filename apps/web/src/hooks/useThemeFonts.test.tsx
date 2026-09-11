@@ -15,7 +15,7 @@ const { useThemeFaceFor } = await import('./useThemeFonts.js')
 const sketched: SpatialCanvas = {
   nodes: [],
   edges: [],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+  facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
 }
 
 afterEach(() => loadThemeFontFromSource.mockClear())

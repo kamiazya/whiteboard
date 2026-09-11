@@ -1,10 +1,5 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type {
-  JsonCanvasDocument,
-  JsonCanvasEdge,
-  JsonCanvasNode,
-  XWhiteboard,
-} from './json-canvas.js'
+import type { JsonCanvasDocument, JsonCanvasEdge, JsonCanvasNode } from './json-canvas.js'
 
 /** What a field position costs when a document is projected onto JSON Canvas. */
 export type FieldProjection =
@@ -22,7 +17,8 @@ const EXTENSION = { kind: 'extension' } as const
 
 /**
  * Every field position the model can hold, and what projecting it onto JSON
- * Canvas costs.
+ * Canvas costs. The model no longer spells the format's key anywhere, so this
+ * table is the ONLY place that says which side of the line a field is on.
  *
  * This is the rung that replaces the one the format used to supply. While the
  * model IS the format, a field cannot be added without the format accepting
@@ -64,28 +60,27 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
 
   // An embedded document: the one piece of CONTENT the format cannot hold, so
   // a strict reader sees the node and not what it shows.
-  'nodes[].x-whiteboard.kind': EXTENSION,
-  'nodes[].x-whiteboard.documentId': EXTENSION,
-  'nodes[].x-whiteboard.versionRef': EXTENSION,
+  'nodes[].embed.documentId': EXTENSION,
+  'nodes[].embed.versionRef': EXTENSION,
 
   // The annotation layer (ADR-0024). A strict reader keeps the whole content
   // and loses the conversation about it, which is what an annotation is.
-  'x-whiteboard.comments[].id': EXTENSION,
-  'x-whiteboard.comments[].x': EXTENSION,
-  'x-whiteboard.comments[].y': EXTENSION,
-  'x-whiteboard.comments[].text': EXTENSION,
-  'x-whiteboard.comments[].author': EXTENSION,
-  'x-whiteboard.comments[].createdAt': EXTENSION,
-  'x-whiteboard.comments[].targetNodeId': EXTENSION,
-  'x-whiteboard.comments[].targetEdgeId': EXTENSION,
-  'x-whiteboard.comments[].resolved': EXTENSION,
+  'comments[].id': EXTENSION,
+  'comments[].x': EXTENSION,
+  'comments[].y': EXTENSION,
+  'comments[].text': EXTENSION,
+  'comments[].author': EXTENSION,
+  'comments[].createdAt': EXTENSION,
+  'comments[].targetNodeId': EXTENSION,
+  'comments[].targetEdgeId': EXTENSION,
+  'comments[].resolved': EXTENSION,
 
   // The facet buckets (ADR-0013). Counted as buckets rather than descended:
   // the format can say one is present and nothing about what is in it, and a
   // plugin's payloads are not this table's to enumerate.
-  'x-whiteboard.facets/*': EXTENSION,
-  'nodes[].x-whiteboard.facets/*': EXTENSION,
-  'edges[].x-whiteboard.facets/*': EXTENSION,
+  'facets/*': EXTENSION,
+  'nodes[].facets/*': EXTENSION,
+  'edges[].facets/*': EXTENSION,
 }
 
 export interface LossEntry {
@@ -165,16 +160,18 @@ function walkValue(value: unknown, path: string, out: string[]): void {
  * exactly that.
  */
 export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
-  const extension = canvas['x-whiteboard']
+  const extension = {
+    ...(canvas.comments !== undefined && { comments: canvas.comments }),
+    ...(canvas.facets !== undefined && { facets: canvas.facets }),
+  }
   return {
     nodes: canvas.nodes.map(projectNode),
     edges: canvas.edges.map(projectEdge),
-    ...(extension !== undefined && {
-      'x-whiteboard': {
-        ...(extension.comments !== undefined && { comments: extension.comments }),
-        ...(extension.facets !== undefined && { facets: extension.facets }),
-      },
-    }),
+    // An extension object with nothing in it is not emitted. That is a
+    // canonicalisation, not a loss — `x-whiteboard: {}` says exactly what its
+    // absence says — and it is the one place the wire round-trip normalises
+    // rather than preserves, pinned by its own example below the property.
+    ...(Object.keys(extension).length > 0 && { 'x-whiteboard': extension }),
   }
 }
 
@@ -184,9 +181,70 @@ export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
  * not only an export one.
  */
 export function fromJsonCanvas(document: JsonCanvasDocument): SpatialCanvas {
-  // The two shapes are the same today, so the lift is the projection run
-  // backwards. It gains a body as the model diverges.
-  return toJsonCanvas(document)
+  const extension = document['x-whiteboard']
+  return {
+    nodes: document.nodes.map(liftNode),
+    edges: document.edges.map(liftEdge),
+    ...(extension?.comments !== undefined && { comments: extension.comments }),
+    ...(extension?.facets !== undefined && { facets: extension.facets }),
+  }
+}
+
+function liftNode(node: JsonCanvasNode): SpatialNode {
+  const extension = node['x-whiteboard']
+  const embed =
+    extension !== undefined && 'kind' in extension
+      ? {
+          documentId: extension.documentId,
+          ...(extension.versionRef !== undefined && { versionRef: extension.versionRef }),
+        }
+      : undefined
+  const shared = {
+    id: node.id,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    ...(node.color !== undefined && { color: node.color }),
+    ...(embed !== undefined && { embed }),
+    ...(extension?.facets !== undefined && { facets: extension.facets }),
+  }
+  switch (node.type) {
+    case 'text':
+      return { ...shared, type: 'text', text: node.text }
+    case 'file':
+      return {
+        ...shared,
+        type: 'file',
+        file: node.file,
+        ...(node.subpath !== undefined && { subpath: node.subpath }),
+      }
+    case 'link':
+      return { ...shared, type: 'link', url: node.url }
+    case 'group':
+      return {
+        ...shared,
+        type: 'group',
+        ...(node.label !== undefined && { label: node.label }),
+        ...(node.background !== undefined && { background: node.background }),
+        ...(node.backgroundStyle !== undefined && { backgroundStyle: node.backgroundStyle }),
+      }
+  }
+}
+
+function liftEdge(edge: JsonCanvasEdge): CanvasEdge {
+  return {
+    id: edge.id,
+    fromNode: edge.fromNode,
+    toNode: edge.toNode,
+    ...(edge.fromSide !== undefined && { fromSide: edge.fromSide }),
+    ...(edge.toSide !== undefined && { toSide: edge.toSide }),
+    ...(edge.fromEnd !== undefined && { fromEnd: edge.fromEnd }),
+    ...(edge.toEnd !== undefined && { toEnd: edge.toEnd }),
+    ...(edge.color !== undefined && { color: edge.color }),
+    ...(edge.label !== undefined && { label: edge.label }),
+    ...(edge['x-whiteboard']?.facets !== undefined && { facets: edge['x-whiteboard'].facets }),
+  }
 }
 
 function projectNode(node: SpatialNode): JsonCanvasNode {
@@ -197,9 +255,7 @@ function projectNode(node: SpatialNode): JsonCanvasNode {
     width: node.width,
     height: node.height,
     ...(node.color !== undefined && { color: node.color }),
-    ...(node['x-whiteboard'] !== undefined && {
-      'x-whiteboard': projectNodeExtension(node['x-whiteboard']),
-    }),
+    ...(nodeExtension(node) !== undefined && { 'x-whiteboard': nodeExtension(node) }),
   }
   switch (node.type) {
     case 'text':
@@ -235,27 +291,29 @@ function projectEdge(edge: CanvasEdge): JsonCanvasEdge {
     ...(edge.toEnd !== undefined && { toEnd: edge.toEnd }),
     ...(edge.color !== undefined && { color: edge.color }),
     ...(edge.label !== undefined && { label: edge.label }),
-    ...(edge['x-whiteboard'] !== undefined && {
-      // An edge's extension is the facets-only arm and nothing else: an edge
-      // has no content JSON Canvas cannot express.
-      'x-whiteboard': {
-        ...(edge['x-whiteboard'].facets !== undefined && {
-          facets: edge['x-whiteboard'].facets,
-        }),
-      },
-    }),
+    // An edge's extension is the facets-only arm and nothing else: an edge has
+    // no content JSON Canvas cannot express.
+    ...(edge.facets !== undefined && { 'x-whiteboard': { facets: edge.facets } }),
   }
 }
 
-/** The two arms of a node's extension: an embedded document, or facets alone. */
-function projectNodeExtension(extension: XWhiteboard): XWhiteboard {
-  if ('kind' in extension) {
+/**
+ * A node's extension, or nothing when the node has neither half.
+ *
+ * The format makes an embed and a facets bucket two ARMS of a union, so a node
+ * carrying both is spelled as the embed arm with facets inside it. The model
+ * has no such constraint — the arms were the format's shape, not a choice
+ * anything needed — so the two independent fields fold back into one arm here.
+ */
+function nodeExtension(node: SpatialNode): JsonCanvasNode['x-whiteboard'] {
+  if (node.embed !== undefined) {
     return {
-      kind: extension.kind,
-      documentId: extension.documentId,
-      ...(extension.versionRef !== undefined && { versionRef: extension.versionRef }),
-      ...(extension.facets !== undefined && { facets: extension.facets }),
+      kind: 'embed',
+      documentId: node.embed.documentId,
+      ...(node.embed.versionRef !== undefined && { versionRef: node.embed.versionRef }),
+      ...(node.facets !== undefined && { facets: node.facets }),
     }
   }
-  return { ...(extension.facets !== undefined && { facets: extension.facets }) }
+  if (node.facets !== undefined) return { facets: node.facets }
+  return undefined
 }

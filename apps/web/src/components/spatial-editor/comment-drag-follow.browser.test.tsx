@@ -16,19 +16,17 @@ afterEach(cleanup)
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': {
-    comments: [
-      {
-        id: 'c-node',
-        x: 300,
-        y: 100,
-        text: 'anchored note',
-        createdAt: '2026-09-02T00:00:00.000Z',
-        targetNodeId: 'n1',
-      },
-      { id: 'c-free', x: 600, y: 450, text: 'free note', createdAt: '2026-09-02T00:00:00.000Z' },
-    ],
-  },
+  comments: [
+    {
+      id: 'c-node',
+      x: 300,
+      y: 100,
+      text: 'anchored note',
+      createdAt: '2026-09-02T00:00:00.000Z',
+      targetNodeId: 'n1',
+    },
+    { id: 'c-free', x: 600, y: 450, text: 'free note', createdAt: '2026-09-02T00:00:00.000Z' },
+  ],
 }
 
 function Host() {

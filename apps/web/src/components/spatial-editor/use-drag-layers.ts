@@ -34,9 +34,10 @@ import {
   canReuseCarriedSides,
   carriedByGesture,
   carriedSideCacheKey,
-  commentExtensionFor,
+  commentsFor,
   frozenSidesOf,
   ghostCommentObstacles,
+  layerCanvas,
   liveNodesFor,
 } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
@@ -150,27 +151,20 @@ export function useDragLayers({
     // The carried nodes' own comments ride the ghost too (see
     // commentExtensionFor): they are drawn at the node's corner, and the
     // corner is what is moving.
-    const ghostComments = commentExtensionFor(canvas, carried, true)
+    const ghostComments = commentsFor(canvas, carried, true)
     // A riding comment's bubble is placed against what the COMMITTED scene
     // placed it against — the bystander nodes and the bubbles staying
     // behind — so at the press it sits exactly where it was drawn. Rendered
     // alone it would re-place in an empty canvas and jump quadrant.
     const ghostObstacles = ghostCommentObstacles(canvas, gestureCommitted.scene, carried)
-    const rendered = renderCanvasToSvg(
-      {
-        nodes,
-        edges: [],
-        ...(ghostComments === undefined ? {} : { 'x-whiteboard': ghostComments }),
-      },
-      {
-        measure: resolvedMeasure,
-        theme,
-        style,
-        ...fileSeamOptions,
-        showResolved,
-        commentObstacles: ghostObstacles,
-      },
-    )
+    const rendered = renderCanvasToSvg(layerCanvas(canvas, nodes, ghostComments), {
+      measure: resolvedMeasure,
+      theme,
+      style,
+      ...fileSeamOptions,
+      showResolved,
+      commentObstacles: ghostObstacles,
+    })
     return {
       svg: rendered.svg,
       originX: gestureState.startX - rendered.bounds.x,
@@ -221,12 +215,14 @@ export function useDragLayers({
   const dragStatic = useMemo(() => {
     if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
     const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
-    const baseComments = commentExtensionFor(canvas, carried, false)
+    const baseComments = commentsFor(canvas, carried, false)
     const base: SpatialCanvas = {
       ...canvas,
-      nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
-      edges: [],
-      ...(baseComments === undefined ? {} : { 'x-whiteboard': baseComments }),
+      ...layerCanvas(
+        canvas,
+        canvas.nodes.filter((n) => !carried.has(n.id)),
+        baseComments,
+      ),
     }
     const rendered = renderCanvasToSvg(base, {
       measure: resolvedMeasure,
@@ -445,21 +441,14 @@ export function useDragLayers({
     if (resized === undefined) return undefined
     // The resized node's comments re-anchor to its LIVE corner each frame,
     // for the same reason the move ghost carries them.
-    const liveComments = commentExtensionFor(canvas, dragStatic.carried, true)
-    const rendered = renderCanvasToSvg(
-      {
-        nodes: [resized],
-        edges: [],
-        ...(liveComments === undefined ? {} : { 'x-whiteboard': liveComments }),
-      },
-      {
-        measure: dragStatic.measure,
-        theme,
-        style,
-        ...fileSeamOptions,
-        showResolved,
-      },
-    )
+    const liveComments = commentsFor(canvas, dragStatic.carried, true)
+    const rendered = renderCanvasToSvg(layerCanvas(canvas, [resized], liveComments), {
+      measure: dragStatic.measure,
+      theme,
+      style,
+      ...fileSeamOptions,
+      showResolved,
+    })
     return { svg: rendered.svg, bounds: rendered.bounds }
   }, [gestureState, dragPreview, dragStatic, canvas, theme, style, fileSeamOptions])
 

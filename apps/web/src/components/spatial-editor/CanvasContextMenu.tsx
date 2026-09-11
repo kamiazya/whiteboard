@@ -223,9 +223,7 @@ export function CanvasContextMenu({
   const comment =
     contextMenu.commentId === undefined
       ? undefined
-      : canvasRef.current['x-whiteboard']?.comments?.find(
-          (entry) => entry.id === contextMenu.commentId,
-        )
+      : canvasRef.current.comments?.find((entry) => entry.id === contextMenu.commentId)
 
   const activeEditor = contextMenu.editor ?? null
   // The catalog took the caret's focus for its rows; closing gives it back,

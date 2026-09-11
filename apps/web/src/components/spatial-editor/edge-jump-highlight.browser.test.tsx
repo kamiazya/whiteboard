@@ -20,7 +20,7 @@ const doc: SpatialCanvas = {
     { id: 'h', fromNode: 'a', toNode: 'b' },
     { id: 'v', fromNode: 'c', toNode: 'd' },
   ],
-  'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } } },
+  facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
 }
 
 function press(el: HTMLElement, type: string, x: number, y: number) {

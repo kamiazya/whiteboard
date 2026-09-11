@@ -4,8 +4,6 @@ import { z as zod } from 'zod'
 
 type JsonSchemaNode = Record<string, unknown>
 
-const EXTENSION_KEY = 'x-whiteboard'
-
 function walk(node: JsonSchemaNode, path: string, out: string[]): void {
   const branches = (node.anyOf ?? node.oneOf ?? node.allOf) as JsonSchemaNode[] | undefined
   if (Array.isArray(branches)) {
@@ -58,11 +56,9 @@ export interface CensusFacet {
 }
 
 export interface SpatialModelCensus {
-  /** Leaf paths JSON Canvas 1.0 defines itself. These survive `strictDegrade`. */
-  readonly standard: readonly string[]
-  /** Leaf paths reachable only under `x-whiteboard`, facet buckets excluded. */
-  readonly extension: readonly string[]
-  /** The facet buckets (`…/*`), which the format can only say are present. */
+  /** Every leaf field position the model can hold, facet buckets excluded. */
+  readonly paths: readonly string[]
+  /** The facet buckets (`…/*`), which a format can only say are present. */
   readonly facetBuckets: readonly string[]
   /** Leaf paths inside those buckets, for the facets supplied. */
   readonly facet: readonly string[]
@@ -70,34 +66,34 @@ export interface SpatialModelCensus {
 
 /** Where in a spatial document a facet target attaches, if anywhere. */
 const SITE_PREFIX: Record<string, string> = {
-  canvas: `${EXTENSION_KEY}.facets`,
-  node: `nodes[].${EXTENSION_KEY}.facets`,
-  edge: `edges[].${EXTENSION_KEY}.facets`,
+  canvas: 'facets',
+  node: 'nodes[].facets',
+  edge: 'edges[].facets',
 }
 
 /**
- * How much of the whiteboard's spatial model JSON Canvas 1.0 states, and how
- * much of it lives in the one extension key the format leaves room for.
+ * Every field position the whiteboard's spatial model can hold.
  *
  * Total rather than sampled: it reads the schemas, so no choice of corpus can
  * flatter or damn the answer. What it cannot see is the only thing it does not
  * claim — a facet nobody passed in, which is the point of `facetBuckets`.
+ *
+ * It does NOT classify. It used to split its answer by whether a path was
+ * spelled under `x-whiteboard`, which worked only while the model WAS the
+ * format — the very thing
+ * [ADR-0033](../../../../docs/contributing/adr/0033-model-and-format.md) ends.
+ * What a position costs an export is now the projection ledger's answer, and
+ * keeping a second one here would be two authorities on one question.
  */
 export function censusSpatialModel(facets: readonly CensusFacet[]): SpatialModelCensus {
   const all = jsonSchemaLeafPaths(spatialCanvasSchema)
   const facetBuckets: string[] = []
-  const extension: string[] = []
-  const standard: string[] = []
+  const paths: string[] = []
   for (const path of all) {
-    if (!path.includes(EXTENSION_KEY)) {
-      standard.push(path)
-    } else if (path.endsWith('.facets/*')) {
-      // The `/*` stays on: it is the same notation the value walker and the
-      // projection ledger use, and it is what marks the bucket unbounded.
-      facetBuckets.push(path)
-    } else {
-      extension.push(path)
-    }
+    // The `/*` stays on: it is the same notation the value walker and the
+    // projection ledger use, and it is what marks the bucket unbounded.
+    if (path.endsWith('facets/*')) facetBuckets.push(path)
+    else paths.push(path)
   }
   const facet = facets.flatMap((definition) =>
     definition.targets.flatMap((target) => {
@@ -108,5 +104,5 @@ export function censusSpatialModel(facets: readonly CensusFacet[]): SpatialModel
       )
     }),
   )
-  return { standard, extension, facetBuckets, facet: [...new Set(facet)].sort() }
+  return { paths, facetBuckets, facet: [...new Set(facet)].sort() }
 }

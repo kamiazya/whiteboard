@@ -33,7 +33,7 @@ import { z } from 'zod'
  * an embed. `.strict()`, so a broken embed on a node fails this arm too rather
  * than being silently stripped down to its facets.
  */
-const facetsOnlyExtensionSchema = z
+export const facetsOnlyExtensionSchema = z
   .object({
     facets: extensionFacetsSchema.optional().catch(undefined),
   })
@@ -43,7 +43,7 @@ const facetsOnlyExtensionSchema = z
  * `x-whiteboard` on a NODE. Two arms: an embedded document — the one piece of
  * content JSON Canvas 1.0 cannot express — or node-target facets alone.
  */
-const xWhiteboardSchema = z.union([
+export const xWhiteboardSchema = z.union([
   z.object({
     kind: z.literal('embed'),
     /**
@@ -112,7 +112,7 @@ const groupNodeSchema = sharedNodeFieldsSchema.extend({
 })
 
 /** The four node types JSON Canvas 1.0 defines, and no fifth. */
-const jsonCanvasNodeSchema = z.discriminatedUnion('type', [
+export const jsonCanvasNodeSchema = z.discriminatedUnion('type', [
   textNodeSchema,
   fileNodeSchema,
   linkNodeSchema,
@@ -161,7 +161,7 @@ export type JsonCanvasEdge = z.infer<typeof jsonCanvasEdgeSchema>
  * `.catch(undefined)` on each BUCKET, not on the whole extension: a malformed
  * comment must cost the comments, not the preferences beside them.
  */
-const canvasExtensionSchema = z.object({
+export const canvasExtensionSchema = z.object({
   comments: z.array(canvasCommentSchema).optional().catch(undefined),
   facets: extensionFacetsSchema.optional().catch(undefined),
 })

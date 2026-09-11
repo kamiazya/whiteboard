@@ -75,7 +75,7 @@ it('the edit overlay is typed in the theme family once its face is held, like th
 
   const sketched: SpatialCanvas = {
     ...start,
-    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
   }
   const { container } = render(<Host initial={sketched} />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement

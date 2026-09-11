@@ -64,13 +64,11 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
     if (!styled) return node
     return {
       ...node,
-      'x-whiteboard': {
-        facets: {
-          'visual.shape/v0': { kind: SHAPES[i % SHAPES.length] },
-          'visual.symbol/v0':
-            i % 2 === 0 ? { kind: 'icon', name: 'star' } : { kind: 'emoji', char: '⭐' },
-          'visual.text/v0': { placement: ALIGNS[i % ALIGNS.length] },
-        },
+      facets: {
+        'visual.shape/v0': { kind: SHAPES[i % SHAPES.length] },
+        'visual.symbol/v0':
+          i % 2 === 0 ? { kind: 'icon', name: 'star' } : { kind: 'emoji', char: '⭐' },
+        'visual.text/v0': { placement: ALIGNS[i % ALIGNS.length] },
       },
     }
   })

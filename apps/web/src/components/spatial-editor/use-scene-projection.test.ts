@@ -15,7 +15,7 @@ import { useSceneProjection } from './use-scene-projection.js'
 const neon: SpatialCanvas = {
   nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a', color: '1' }],
   edges: [],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
 }
 
 function projection(canvas: SpatialCanvas, style: SpatialRenderStyle) {

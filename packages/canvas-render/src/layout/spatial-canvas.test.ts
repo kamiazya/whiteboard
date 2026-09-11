@@ -178,7 +178,7 @@ describe('layoutSpatialCanvas', () => {
     const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
     const shaped = {
       ...node,
-      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' as const } } },
+      facets: { 'visual.shape/v0': { kind: 'hexagon' as const } },
     }
     const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
     const chrome = scene.nodes.find(
@@ -200,7 +200,7 @@ describe('layoutSpatialCanvas', () => {
       const bbox = { x: 0, y: 0, w: 200, h: 100 }
       const shaped = {
         ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'inset me' }),
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind } } },
+        facets: { 'visual.shape/v0': { kind } },
       }
       const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
       const content = scene.nodes.filter((n) => n.kind !== 'shape' && 'bbox' in n)
@@ -231,7 +231,7 @@ describe('layoutSpatialCanvas', () => {
     // exact top-aligned placement — byte-stable for every existing canvas.
     const shaped = {
       ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
-      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'ellipse' as const } } },
+      facets: { 'visual.shape/v0': { kind: 'ellipse' as const } },
     }
     const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
     const block = scene.nodes.find((n) => n.kind === 'paragraph')
@@ -254,14 +254,14 @@ describe('layoutSpatialCanvas', () => {
   it('a visual.symbol facet draws nothing on the node itself', () => {
     const iconNode = {
       ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'a' }),
-      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
+      facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } },
     }
     const scene = layoutSpatialCanvas(canvas([iconNode]), baseOptions())
     expect(scene.nodes.find((n) => n.kind === 'icon')).toBeUndefined()
 
     const emojiNode = {
       ...textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'b' }),
-      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji' as const, char: '✅' } } },
+      facets: { 'visual.symbol/v0': { kind: 'emoji' as const, char: '✅' } },
     }
     const emojiScene = layoutSpatialCanvas(canvas([emojiNode]), baseOptions())
     expect(emojiScene.nodes.find((n) => n.kind === 'glyph')).toBeUndefined()
@@ -271,7 +271,7 @@ describe('layoutSpatialCanvas', () => {
     // A plain RECT asked to centre: the default would top-align it.
     const centredRect = {
       ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
-      'x-whiteboard': { facets: { 'visual.text/v0': { align: 'center' as const } } },
+      facets: { 'visual.text/v0': { align: 'center' as const } },
     }
     const rectScene = layoutSpatialCanvas(canvas([centredRect]), baseOptions())
     const rectBlock = rectScene.nodes.find((n) => n.kind === 'paragraph')
@@ -281,11 +281,9 @@ describe('layoutSpatialCanvas', () => {
     // A SHAPED node asked to start: the default would centre it.
     const toppedShape = {
       ...textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
-      'x-whiteboard': {
-        facets: {
-          'visual.shape/v0': { kind: 'ellipse' as const },
-          'visual.text/v0': { align: 'start' as const },
-        },
+      facets: {
+        'visual.shape/v0': { kind: 'ellipse' as const },
+        'visual.text/v0': { align: 'start' as const },
       },
     }
     const shapeScene = layoutSpatialCanvas(canvas([toppedShape]), baseOptions())
@@ -298,7 +296,7 @@ describe('layoutSpatialCanvas', () => {
     const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
     const shaped = {
       ...node,
-      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' as const } } },
+      facets: { 'visual.shape/v0': { kind: 'hexagon' as const } },
     }
     const scene = layoutSpatialCanvas(
       canvas([shaped]),
@@ -320,7 +318,7 @@ describe('layoutSpatialCanvas', () => {
     const scene = layoutSpatialCanvas(
       {
         ...canvas([a, b], [edge]),
-        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
       baseOptions(),
     )
@@ -350,12 +348,12 @@ describe('layoutSpatialCanvas', () => {
               id: 'bent',
               fromNode: 'a',
               toNode: 'b',
-              'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+              facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
             },
             { id: 'plain', fromNode: 'b', toNode: 'c' },
           ],
         ),
-        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'straight' } } },
+        facets: { 'visual.edges/v0': { routing: 'straight' } },
       },
       baseOptions(),
     )
@@ -399,7 +397,7 @@ describe('layoutSpatialCanvas', () => {
         crossing[0] as CanvasEdge,
         {
           ...(crossing[1] as CanvasEdge),
-          'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+          facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
         },
       ]),
     ).toEqual([
@@ -419,7 +417,7 @@ describe('layoutSpatialCanvas', () => {
     const scene = layoutSpatialCanvas(
       {
         ...canvas([a, b], [edge]),
-        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
       baseOptions(),
     )
@@ -816,7 +814,7 @@ describe('edge routing style from the canvas', () => {
   it('bends the edge when the canvas asks for orthogonal', () => {
     const path = edgePathOf({
       ...canvas(twoNodes, link),
-      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     })
     expect(path.length).toBeGreaterThan(2)
   })
@@ -911,7 +909,7 @@ describe('layoutSpatialEdges', () => {
         { id: 'e1', fromNode: 'a', toNode: 'b', label: 'across' },
         { id: 'e2', fromNode: 'c', toNode: 'd' },
       ],
-      'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+      facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
     }
     const options = baseOptions()
     const full = layoutSpatialCanvas(canvas, options).nodes
@@ -931,7 +929,7 @@ describe('layoutSpatialEdges', () => {
         { id: 'b', type: 'text', x: 300, y: 120, width: 100, height: 40, text: 'b' },
       ],
       edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'across' }],
-      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+      facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
     const options = baseOptions({ style: 'document' })
     const full = layoutSpatialCanvas(canvas, options).nodes

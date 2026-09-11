@@ -22,7 +22,7 @@ const canvas: SpatialCanvas = {
     { id: 'e1', fromNode: 'a', toNode: 'b' },
     { id: 'e2', fromNode: 'b', toNode: 'c' },
   ],
-  'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+  facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
 } as SpatialCanvas
 
 const options: SpatialLayoutOptions = { measure, parseBody, appearance }

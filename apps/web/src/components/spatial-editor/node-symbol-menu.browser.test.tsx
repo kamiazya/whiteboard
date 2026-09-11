@@ -22,7 +22,7 @@ const initial: SpatialCanvas = {
 }
 
 const symbolOf = (canvas: SpatialCanvas) =>
-  canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.symbol/v0'] as VisualSymbolFacet | undefined
+  canvas.nodes[0]?.facets?.['visual.symbol/v0'] as VisualSymbolFacet | undefined
 
 function makeHost() {
   const latest: { canvas: SpatialCanvas } = { canvas: initial }

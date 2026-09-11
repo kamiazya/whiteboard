@@ -86,7 +86,7 @@ export function resolveEdgeWaypoints(
   edge: CanvasEdge,
   registry: FacetRegistry = bundledFacetRegistry,
 ): readonly { readonly x: number; readonly y: number }[] {
-  const stored = edge['x-whiteboard']?.facets?.[VISUAL_PATH_KEY]
+  const stored = edge.facets?.[VISUAL_PATH_KEY]
   if (stored === undefined) return []
   const resolution = registry.resolveFacetPayload(VISUAL_PATH_KEY, stored)
   if (resolution.kind !== 'resolved') return []
@@ -325,8 +325,7 @@ export function resolveCanvasEdgeStyle(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): EdgeRouting {
-  const extension = canvas['x-whiteboard']
-  const stored = extension?.facets?.[VISUAL_EDGES_KEY]
+  const stored = canvas.facets?.[VISUAL_EDGES_KEY]
   if (stored !== undefined) {
     const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
     if (resolution.kind === 'resolved') {
@@ -411,7 +410,7 @@ export function resolveEdgeOwnStyle(
   edge: CanvasEdge,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualEdgesFacet {
-  const stored = edge['x-whiteboard']?.facets?.[VISUAL_EDGES_KEY]
+  const stored = edge.facets?.[VISUAL_EDGES_KEY]
   if (stored === undefined) return {}
   const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
   if (resolution.kind !== 'resolved') return {}
@@ -429,7 +428,7 @@ export function resolveCanvasTheme(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): string | undefined {
-  const stored = canvas['x-whiteboard']?.facets?.[VISUAL_THEME_KEY]
+  const stored = canvas.facets?.[VISUAL_THEME_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_THEME_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined
@@ -445,7 +444,7 @@ export function resolveNodeShape(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualShapeFacet['kind'] | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_SHAPE_KEY]
+  const stored = node.facets?.[VISUAL_SHAPE_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_SHAPE_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined
@@ -479,7 +478,7 @@ export function resolveNodeSymbol(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  return readSymbol(node['x-whiteboard']?.facets, registry)
+  return readSymbol(node.facets, registry)
 }
 
 /** The symbol a SPATIAL document wears, stored on its canvas envelope. */
@@ -487,7 +486,7 @@ export function resolveCanvasSymbol(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  return readSymbol(canvas['x-whiteboard']?.facets, registry)
+  return readSymbol(canvas.facets, registry)
 }
 
 /**
@@ -511,7 +510,7 @@ export function resolveNodeTextAlign(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualTextFacet['align'] | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_TEXT_KEY]
+  const stored = node.facets?.[VISUAL_TEXT_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_TEXT_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined

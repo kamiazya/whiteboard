@@ -21,9 +21,7 @@ const board = (waypoints?: readonly { x: number; y: number }[]): SpatialCanvas =
       id: 'e',
       fromNode: 'a',
       toNode: 'b',
-      ...(waypoints === undefined
-        ? {}
-        : { 'x-whiteboard': { facets: { [VISUAL_PATH_KEY]: { waypoints } } } }),
+      ...(waypoints === undefined ? {} : { facets: { [VISUAL_PATH_KEY]: { waypoints } } }),
     },
   ],
 })

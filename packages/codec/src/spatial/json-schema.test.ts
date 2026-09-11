@@ -1,15 +1,18 @@
 // The committed schema under docs/reference/ is the published artifact of the
 // extension contract; this file-snapshot test holds it byte-equal to what the
 // Zod schemas generate (CI fails on drift). Regenerate deliberately with:
-//   pnpm vitest run --project model-node json-schema -u
+//   pnpm vitest run --project codec-node json-schema -u
+
+import { EXTENSION_FACET_KEY_PATTERN } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { EXTENSION_FACET_KEY_PATTERN } from './facets.js'
 import { xWhiteboardJsonSchema } from './json-schema.js'
 
 describe('x-whiteboard JSON Schema artifact', () => {
-  it('docs/reference/x-whiteboard.schema.json matches the model schemas', async () => {
+  it('docs/reference/x-whiteboard.schema.json matches the wire schemas', async () => {
     const generated = `${JSON.stringify(xWhiteboardJsonSchema(), null, 2)}\n`
-    await expect(generated).toMatchFileSnapshot('../../../docs/reference/x-whiteboard.schema.json')
+    await expect(generated).toMatchFileSnapshot(
+      '../../../../docs/reference/x-whiteboard.schema.json',
+    )
   })
 
   it('describes all three extension sites as draft 2020-12 definitions', () => {
