@@ -290,7 +290,13 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // it — every board in the corpus, the hand-drawn references included, spends
 // one treatment and owes all 22 constructs. A reader who does not know that
 // will read the scoreboard's zeroes as health.
-const CANVAS_RENDER_BUDGET = 131
+//
+// 132 for the STENCIL partition (ADR-0034), and specifically for the one
+// measured case it buys that frames and kinds cannot reach. Without that
+// paragraph a later reader sees a third partition with no stated reason and
+// either trusts it or deletes it; the measurement is what makes it either
+// defensible or removable.
+const CANVAS_RENDER_BUDGET = 132
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

@@ -26,17 +26,32 @@
  * distinction is `excess`, and one appearance carrying two is `overload`.
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { resolveNodeShape, resolveNodeSymbol } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  resolveNodeShape,
+  resolveNodeStencil,
+  resolveNodeSymbol,
+} from '@kamiazya/whiteboard-plugin-visual'
 
 export interface FacetScore {
   /**
    * What the document DECLARES: the partitions of its boxes it states, and
    * the classes (Moody's CONSTRUCTS) across them.
    *
-   * Two sources are read — a frame's membership, and a node's kind. A third
-   * is declared by ADR-0033 and deliberately not computed here: a file
-   * node's referenced OKF `type` needs the reference bundle a composition
-   * root supplies, which this function does not receive.
+   * Three sources are read — a frame's membership, a node's kind, and the
+   * STENCIL a node records wearing ([ADR-0034](../../../../docs/contributing/adr/0034-stencil-and-recipe.md)
+   * decision 5). A fourth is declared by ADR-0033 and deliberately not
+   * computed here: a file node's referenced OKF `type` needs the reference
+   * bundle a composition root supplies, which this function does not
+   * receive.
+   *
+   * The stencil source is what makes a dressed board legible rather than
+   * merely decorated, and measured, it buys EXACTLY ONE case — the one the
+   * others cannot reach. A board whose frames each hold one kind is already
+   * carried by frame membership; a board with no frame declares nothing
+   * either way. What only the record can see is an appearance that CUTS the
+   * frames — one datastore inside each of two frames — which by geometry
+   * alone is `excess`, a distinction the reader looks for and does not find.
+   * Naming the stencil is the document saying that distinction is real.
    *
    * A board that declares nothing — no frame, one kind — leaves every column
    * below silent. That is the blind spot, pinned rather than hidden, exactly
@@ -152,6 +167,12 @@ function declaredPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]
   }
   const byKind = new Map<string, string>(boxes.map((b) => [b.id, b.type]))
   out.push(byKind)
+  // A box wearing no stencil is its own class (''), exactly as a box in no
+  // frame is: "undressed" is a thing the board says about it, not an absence
+  // to be excluded — dropping those boxes would let a half-dressed board
+  // read as fully carried.
+  const byStencil = new Map<string, string>(boxes.map((b) => [b.id, resolveNodeStencil(b) ?? '']))
+  out.push(byStencil)
   return out.filter((p) => new Set(p.values()).size >= 2)
 }
 

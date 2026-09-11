@@ -29,6 +29,7 @@ import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { CanvasEditError } from './canvas-edit-error.js'
 import {
   type CanvasEditInput,
   type CanvasEditOutput,
@@ -46,6 +47,7 @@ import {
   placeWithin,
   type Rect,
 } from './canvas-edit-placement.js'
+import { dressWithStencil } from './canvas-edit-stencil.js'
 import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
@@ -100,25 +102,6 @@ function assertTextFits(index: number, opName: string, node: SpatialNode, measur
       opName,
       `its text needs ${needs}px of height at width ${node.width}; name at least that, or omit height and the box is sized to fit`,
     )
-  }
-}
-
-/**
- * Thrown when one op in a batch cannot apply. Nothing is written — the
- * whole batch is refused.
- *
- * `opIndex` is in the MESSAGE as well as on the class because only
- * `.message` survives the MCP error path, and a model repairing a rejected
- * batch needs to know WHICH op it got wrong.
- */
-class CanvasEditError extends Error {
-  constructor(
-    readonly opIndex: number,
-    readonly op: string,
-    detail: string,
-  ) {
-    super(`ops[${opIndex}] (${op}) could not be applied: ${detail}. Nothing was written.`)
-    this.name = 'CanvasEditError'
   }
 }
 
@@ -588,7 +571,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 growToHold(index, op.op, group, [parsed.data])
               }
             }
-            nodes = [...nodes, parsed.data]
+            nodes = [...nodes, dressWithStencil(index, op.op, parsed.data, op.stencil, draft.color)]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
             if (!positioned && group === undefined && draft.type === 'group') {
@@ -607,6 +590,16 @@ export function createCanvasEditTool(deps: ServerDeps) {
               }
             }
             for (const id of ids) patchNode(index, op.op, id, op.patch)
+            // After the patch, so an explicit `color` in the same op still
+            // wins: a caller naming both has said the more specific thing.
+            if (op.stencil !== undefined) {
+              const stencil = op.stencil
+              nodes = nodes.map((node) =>
+                ids.includes(node.id)
+                  ? dressWithStencil(index, op.op, node, stencil, op.patch.color)
+                  : node,
+              )
+            }
             return
           }
 

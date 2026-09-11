@@ -190,11 +190,24 @@ describe('what the tool table costs to read', () => {
       // +107 for `within` accepting null (models write it to say "no group",
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
+      // +480 visible bytes and +2 parameters for ADR-0034's `stencil`, one
+      // on `node.add` and one on `node.patch`. C1 going UP is the cost this
+      // row exists to make visible, so the trade is stated rather than
+      // implied: the ids are a `z.enum` and the prose is one line, which
+      // measured 480 against 776 for the same ids listed in prose and 356
+      // for a description that lists none — and the third is cheapest
+      // precisely because it leaves no way to learn the vocabulary.
+      //
+      // C13 does NOT pay for it. The errand scoreboard says dressing six
+      // boxes is one call either way and 337 request bytes cheaper, which
+      // is a saving per errand against a cost per turn. What the field buys
+      // is on ADR-0033's axis, not this one: a board that declares what its
+      // kinds are instead of spending a scheme invented per drawing.
       wb_canvas_edit: {
-        visibleBytes: 12986,
-        wireBytes: 36776,
+        visibleBytes: 13466,
+        wireBytes: 37256,
         descriptionWords: 169,
-        parameters: 151,
+        parameters: 153,
         undescribed: 123,
         strays: 'refused',
         names: [],
@@ -392,9 +405,11 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      visibleBytes: 35929,
-      wireBytes: 110571,
-      parameters: 273,
+      // +480 for `stencil` on node.add and node.patch (see wb_canvas_edit),
+      // where the choice between its three shapes is measured.
+      visibleBytes: 36409,
+      wireBytes: 111051,
+      parameters: 275,
       undescribed: 191,
     })
   })

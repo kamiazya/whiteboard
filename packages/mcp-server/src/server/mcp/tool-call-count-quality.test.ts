@@ -212,6 +212,17 @@ describe('what an errand costs in tool calls', () => {
       // (see tool-surface-quality). Response 2,060 is unchanged — the
       // placed boxes and the grown group, reported under `geometry`;
       // before growth, this same call at width 700 was refused whole.
+      // ADR-0034's stencil field. One call either way — `wb_canvas_edit`
+      // batches, so this was never several — and 916 request bytes against
+      // 1253 for the same six boxes dressed by hand. The corpus entry
+      // carries both numbers and the reason that saving is NOT the case for
+      // the field: 480 visible bytes on rung 1 are paid every turn, and 337
+      // is saved per errand.
+      'dress six boxes as six kinds': {
+        calls: 1,
+        requestBytes: 916,
+        responseBytes: 2086,
+      },
       'make a group hold exactly three boxes': {
         calls: 1,
         requestBytes: 549,

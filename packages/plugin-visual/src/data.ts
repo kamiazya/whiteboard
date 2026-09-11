@@ -27,6 +27,7 @@ import { z } from 'zod'
 import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
 import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
+import { VISUAL_STENCILS } from './stencils.js'
 import { VISUAL_THEMES } from './themes.js'
 
 /**
@@ -187,6 +188,29 @@ export const visualThemeFacetSchema = z.object({
 export type VisualThemeFacet = z.infer<typeof visualThemeFacetSchema>
 
 export const VISUAL_THEME_KEY = 'visual.theme/v0'
+
+/**
+ * `visual.stencil/v0` — which registered STENCIL this node wears
+ * ([ADR-0034](../../../docs/contributing/adr/0034-stencil-and-recipe.md)
+ * decision 5), by id. The payload carries NO appearance: applying a stencil
+ * expands its colour and facets onto the node itself, and this records where
+ * they came from.
+ *
+ * The record is what makes a dressed board legible rather than merely
+ * decorated. ADR-0033 scores the distinctions a drawing SHOWS against the
+ * ones its document DECLARES, and a stencil id is a declaration — so a board
+ * dressed by kind reads as carrying its constructs. Without it the identical
+ * drawing reads as `excess`, and the axis scores a real improvement as a
+ * defect.
+ *
+ * `assetRefs` does the same job it does for a theme: a write naming a
+ * stencil nobody registered is refused, with the registered ids listed.
+ */
+export const visualStencilFacetSchema = z.object({
+  stencil: namespacedIdSchema,
+})
+
+export type VisualStencilFacet = z.infer<typeof visualStencilFacetSchema>
 
 /**
  * The vendored geometry as registered assets, keyed by bare name — the
@@ -448,13 +472,55 @@ export const visualPlugin = definePlugin({
       // inside the vocabulary.
       editor: { picker: { options: SYMBOL_PICKER_OPTIONS } },
     }),
+    defineFacet({
+      name: 'stencil',
+      displayName: 'Stencil',
+      version: 'v0',
+      // A node only. A stencil dresses ONE box; a canvas-wide appearance is
+      // what `visual.theme` already is, and the two answer different
+      // questions — a theme says how the whole board is drawn, a stencil
+      // says what one box IS.
+      targets: ['node'],
+      schema: visualStencilFacetSchema,
+      assetRefs: { stencil: 'stencils' },
+      // A PICKER, declared, rather than the text box the derived form would
+      // give a regex-validated string. Caught by `facet-panel.browser.test`
+      // the first time this facet shipped without it: the panel offered a
+      // free-entry field and a Save button for a value that must name a
+      // registered asset, so the one id a user could type by hand was a
+      // wrong one. `visual.theme` had the same shape and the same answer.
+      //
+      // The OPTIONS are written out rather than read from the registry,
+      // which is the same ponytail the tool-surface enum carries: a
+      // deployment registering its own stencils gets a picker that does not
+      // list them, though the schema still accepts them and `applyStencil`
+      // still applies them. A registry-fed picker is the upgrade, and it is
+      // the same change ADR-0034's document-backed libraries need.
+      editor: {
+        fields: {
+          stencil: {
+            widget: 'segmented',
+            label: 'Stencil',
+            options: [
+              { value: null, label: 'None' },
+              { value: 'visual.datastore', label: 'Datastore' },
+              { value: 'visual.service', label: 'Service' },
+              { value: 'visual.gateway', label: 'Gateway' },
+              { value: 'visual.queue', label: 'Queue' },
+              { value: 'visual.actor', label: 'Actor' },
+              { value: 'visual.external', label: 'External' },
+            ],
+          },
+        },
+      },
+    }),
   ],
   // The vendored set, registered as ADR-0013 decision 3 assets so a
   // declared picker — and any other realm holding the registry — can draw
   // it from data. The kind existed and no plugin used it; the symbol
   // picker is its first customer, and the reason the escape hatch is no
   // longer needed.
-  assets: { themes: VISUAL_THEMES, icons: VISUAL_ASSET_ICONS },
+  assets: { themes: VISUAL_THEMES, icons: VISUAL_ASSET_ICONS, stencils: VISUAL_STENCILS },
 })
 
 export const bundledPlugins = [visualPlugin]

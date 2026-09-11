@@ -5,6 +5,7 @@ import {
   type FacetEditorSpec,
   type FacetForm,
 } from './form.js'
+import { type StencilAsset, type StencilAssetInput, stencilAssetSchema } from './stencil.js'
 import {
   type IconAsset,
   iconAssetSchema,
@@ -74,7 +75,7 @@ export interface FacetDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> {
   readonly assetRefs?: Readonly<Record<string, AssetKind>>
 }
 
-export type AssetKind = 'themes' | 'icons'
+export type AssetKind = 'themes' | 'icons' | 'stencils'
 
 /**
  * What a plugin registers beside its facets (ADR-0013 decision 3's assets
@@ -85,6 +86,7 @@ export type AssetKind = 'themes' | 'icons'
 export interface FacetPluginAssets {
   readonly themes?: Readonly<Record<string, ThemeTokensInput>>
   readonly icons?: Readonly<Record<string, IconAsset>>
+  readonly stencils?: Readonly<Record<string, StencilAssetInput>>
 }
 
 export interface FacetPlugin {
@@ -163,6 +165,19 @@ export function definePlugin(plugin: FacetPlugin): FacetPlugin {
       )
     }
   }
+  // Only the stencil's own SHAPE is checked here. What each of its facet
+  // payloads means belongs to the plugin that registered that facet, which
+  // may not be this one and is not knowable until every plugin is present —
+  // so that half runs in `createFacetRegistry`.
+  for (const [name, stencil] of Object.entries(plugin.assets?.stencils ?? {})) {
+    assertAssetName(plugin.id, name)
+    const result = stencilAssetSchema.safeParse(stencil)
+    if (!result.success) {
+      throw new Error(
+        `plugin "${plugin.id}" stencil asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
+      )
+    }
+  }
   return plugin
 }
 
@@ -219,6 +234,7 @@ export interface FacetRegistry {
   readonly assetIds: (kind: AssetKind) => readonly string[]
   readonly themeAsset: (id: string) => ThemeTokens | undefined
   readonly iconAsset: (id: string) => IconAsset | undefined
+  readonly stencilAsset: (id: string) => StencilAsset | undefined
   /**
    * The editor form for a facet — its `editor` spec refined by what its
    * schema derives — or `unsupported` for a key nothing registers.
@@ -286,6 +302,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   // every render asks the same question of the same tables.
   const themes = new Map<string, ThemeTokens>()
   const icons = new Map<string, IconAsset>()
+  const stencils = new Map<string, StencilAsset>()
   for (const plugin of plugins) {
     for (const [name, tokens] of Object.entries(plugin.assets?.themes ?? {})) {
       // The PARSED tokens, never the plugin's own object: the schema fills
@@ -295,9 +312,38 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     for (const [name, icon] of Object.entries(plugin.assets?.icons ?? {})) {
       icons.set(`${plugin.id}.${name}`, icon)
     }
+    for (const [name, stencil] of Object.entries(plugin.assets?.stencils ?? {})) {
+      stencils.set(`${plugin.id}.${name}`, stencilAssetSchema.parse(stencil))
+    }
+  }
+  // The half `definePlugin` could not do: a stencil's facet payloads judged
+  // by the plugins that own those facets, now that every plugin is present.
+  // A stencil is a vocabulary shipped once and applied to many nodes, so an
+  // invalid payload here is not one bad write — it is every write that names
+  // this stencil, in a deployment, refused one at a time with the author
+  // nowhere near. Loud at build is the only place it is cheap.
+  for (const [id, stencil] of stencils) {
+    for (const [key, payload] of Object.entries(stencil.facets)) {
+      const parsed = parseKey(key)
+      const definition = parsed === null ? undefined : definitionOf(parsed.namespace, parsed.name)
+      if (parsed === null || definition === undefined) {
+        throw new Error(`stencil asset "${id}" names facet "${key}", which no plugin registered`)
+      }
+      if (parsed.version !== definition.version) {
+        throw new Error(
+          `stencil asset "${id}" names facet "${key}", which is not the current version — use "${currentKey(parsed.namespace, definition)}"`,
+        )
+      }
+      const result = definition.schema.safeParse(payload)
+      if (!result.success) {
+        throw new Error(
+          `stencil asset "${id}" payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
+        )
+      }
+    }
   }
   const tableOf = (kind: AssetKind): ReadonlyMap<string, unknown> =>
-    kind === 'themes' ? themes : icons
+    kind === 'themes' ? themes : kind === 'icons' ? icons : stencils
 
   /**
    * After the schema has accepted the payload: every ref field that carries
@@ -331,6 +377,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     },
     themeAsset: (id) => themes.get(id),
     iconAsset: (id) => icons.get(id),
+    stencilAsset: (id) => stencils.get(id),
     targetsOf(key) {
       const parsed = parseKey(key)
       if (parsed === null) return undefined
