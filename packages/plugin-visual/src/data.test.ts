@@ -318,9 +318,12 @@ describe('visual.text/v0', () => {
     const definition = registry.plugins
       .flatMap((plugin) => plugin.facets)
       .find((facet) => facet.name === 'text')
-    // Declared, not hand-written — the tier-2 path, like visual.shape.
-    expect(definition?.editor?.fields.align?.widget).toBe('segmented')
-    expect(definition?.editor?.fields.align?.quick).toBe(true)
+    // Declared, not hand-written — the same path visual.shape takes.
+    expect(definition?.editor?.picker?.options.map((option) => option.payload)).toEqual([
+      null,
+      { align: 'start' },
+      { align: 'center' },
+    ])
   })
 
   it('resolveNodeTextAlign answers the stored choice, else undefined', () => {
@@ -379,9 +382,13 @@ describe('visual.theme/v0', () => {
     ).toBe('infra.aws')
   })
 
-  it('declares a segmented picker whose null segment is the bundled look', () => {
+  it('declares a picker whose null option is the bundled look', () => {
     const facet = visualPlugin.facets.find((f) => f.name === 'theme')
-    const options = facet?.editor?.fields.theme?.options ?? []
-    expect(options.map((o) => o.value)).toEqual([null, 'visual.sketch', 'visual.neon'])
+    const options = facet?.editor?.picker?.options ?? []
+    expect(options.map((o) => o.payload)).toEqual([
+      null,
+      { theme: 'visual.sketch' },
+      { theme: 'visual.neon' },
+    ])
   })
 })

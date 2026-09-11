@@ -834,9 +834,6 @@ importers:
       '@kamiazya/whiteboard-scene':
         specifier: workspace:*
         version: link:../scene
-      lucide-react:
-        specifier: ^1.28.0
-        version: 1.28.0(react@19.2.5)
       react:
         specifier: 'catalog:'
         version: 19.2.5

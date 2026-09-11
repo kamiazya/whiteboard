@@ -10,28 +10,49 @@
  * that belongs beside the editor is a member here, not a fifth boolean.
  *
  * Every member is the same kind of thing — information ABOUT the open
- * document, read or written beside it: its frontmatter (`properties`, a
- * markdown document only), its conversations, the changes somebody wants
- * made to it (`proposals`, ADR-0029), the documents that link to it
- * (`connections`, a daemon keeper only), its history.
+ * document, read or written beside it: its own attributes (`properties` for
+ * a markdown document's frontmatter, `display` for a spatial one's canvas
+ * facets), its conversations, the changes somebody wants made to it
+ * (`proposals`, ADR-0029), the documents that link to it (`connections`, a
+ * daemon keeper only), its history.
+ *
+ * `display` joined last, and from OUTSIDE: it was a popover hung off the ⋯
+ * kebab, which is the shape this union exists to end. Radix dismisses a
+ * popover on an outside click or Escape — a phone has neither a keyboard
+ * nor, at 424px of panel against a 390px screen, much outside to press. It
+ * was also the very panel the phone screenshot below caught open beside two
+ * sheets, so the surface that motivated one slot was the one still outside
+ * it.
  */
-export type InspectorKind = 'properties' | 'comments' | 'proposals' | 'connections' | 'history'
+export type InspectorKind =
+  | 'properties'
+  | 'display'
+  | 'comments'
+  | 'proposals'
+  | 'connections'
+  | 'history'
 
 /**
- * The order the four read IN — the header's segment, left to right.
+ * The order they read IN — the header's segment, left to right.
  *
  * Declared here rather than left to the render site because it is the one
  * thing a document KIND must not decide: before the segment existed, a
  * canvas drew `comments, kebab, history` and a note drew `properties,
  * comments, kebab`, each row assembled from whichever file happened to own
  * the opener. `inspector-order.test.ts` holds it to exactly the members of
- * `InspectorKind`, so a fifth panel takes a place here rather than landing
+ * `InspectorKind`, so a new panel takes a place here rather than landing
  * wherever its component is mounted.
  *
  * Properties first: ADR-0006 puts an object's properties ahead of its
- * verbs, and the rest run outward from the document — its own frontmatter,
+ * verbs, and the rest run outward from the document — its own attributes,
  * the talk about it, the changes proposed to it, what points at it, what it
  * was.
+ *
+ * `display` sits in that same leading place rather than after it, because
+ * it is `properties` for the other document KIND — a spatial document has
+ * no frontmatter and a markdown one has no canvas, so the two are never
+ * offered together. Both kinds therefore open with the member that is
+ * about the document itself, and the segment reads the same either way.
  *
  * `proposals` sits beside `comments` rather than beside `history` because
  * both are what somebody put ON this document through ADR-0026's annotation
@@ -41,6 +62,7 @@ export type InspectorKind = 'properties' | 'comments' | 'proposals' | 'connectio
  */
 export const INSPECTOR_ORDER = [
   'properties',
+  'display',
   'comments',
   'proposals',
   'connections',
@@ -54,6 +76,7 @@ export const INSPECTOR_ORDER = [
  */
 export const INSPECTOR_CHROME = {
   properties: { label: 'Properties', testId: 'properties-panel' },
+  display: { label: 'Display', testId: 'display-panel' },
   comments: { label: 'Comments', testId: 'comments-rail' },
   proposals: { label: 'Proposals', testId: 'proposals-panel' },
   connections: { label: 'Connections', testId: 'connections-panel' },

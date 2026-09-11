@@ -10,6 +10,23 @@ paths:
 - **The primitives a plugin builds its settings UI from**, and the glyph
   vocabulary rendered (`glyphIcon`): the engine owns what may be *said*, this
   package owns how it *looks*.
+- **`FacetOptionGroup` / `FacetOption` — the ONE drawing of "pick one of N".**
+  Not a suggestion: it is `createFacetWriter`'s bargain applied to rendering.
+  A plugin chooses what its options are and their order; it does not choose
+  what a selected option looks like. There were six spellings of this control
+  before it, four of them in one panel, because every surface that needed one
+  drew it again in a file that could not see the last. Real radios, visually
+  hidden — the arrow-key behaviour comes free with the element, and the
+  `aria-pressed` button rows never had it.
+
+  Two LAYOUTS, declared by the plugin per row and drawn here: `cards` is a
+  picture over its word in a bordered cell (a short vocabulary whose names
+  carry meaning), `chips` is the picture alone with the word as its
+  accessible name and `title` (a palette where the count makes labels
+  impossible). Two ARIA SHELLS is a separate axis — `group` for a panel,
+  `menu` for a menu row, which ignores the layout because a grid of cells
+  inside a menu is not a menu. Neither axis is a style choice: one says what
+  question the row asks, the other says what container it stands in.
 - **`createFacetWriter`** — the one path a facet editor's value takes to
   storage. It goes through `validateFacetWrite`, so a plugin's own component
   cannot store what `wb_facet_set` would refuse. This is the guarantee half
@@ -48,9 +65,18 @@ so the component is legible even where no theme is defined.
 
 ## Dependency rules
 
-- Runtime deps: `canvas-render` (the vendored icon geometry the
-  badge picker draws from — so a picker can never offer a name the canvas
-  would drop), `facet-engine`, `react`, `lucide-react`.
+- Runtime deps: `facet-engine`, `react`, `lucide-react`. Icon geometry now
+  reaches a picker as REGISTERED ASSET DATA through the registry
+  (`glyphIcon`'s `asset` arm over `registry.iconAsset`), so this package
+  needs no dependency on whoever vendored it — and the same bytes reach the
+  canvas renderer and a DOM-free export, which a component never could.
+  The `theme` arm is the same road for a LOOK: registered geometry inked
+  the way a registered theme inks it (`ink`, `glow`), so a theme option
+  shows the look rather than one flat stroke beside a word. It reads no
+  palette on purpose — a theme carries both mode halves and the canvas
+  surface follows the UI, so a swatch would have to know which mode the
+  panel is in to pick honestly. `currentColor` leaves exactly the
+  difference the option is choosing.
 - Forbidden: `node:*`, `inversify`, `loro-crdt`, `react-dom`. DOM globals are
   exempted like `canvas-viewer`'s — a React UI package's normal job.
 
@@ -60,3 +86,9 @@ so the component is legible even where no theme is defined.
 - The write barrier is tested by feeding it a payload the facet REFUSES
   (`visual.symbol`'s single-grapheme `char`) and asserting nothing reaches
   storage. Mutation-check it: remove the validation and it must go red.
+- A declared picker has a SECOND net above that one, and it is the reason
+  the vocabulary beat the escape hatch: every option's payload is parsed by
+  the facet's own schema at `defineFacet` time
+  (`facet-engine/src/picker.test.ts`), so a typo in one of twelve options
+  stops the plugin instead of shipping as a choice that silently does
+  nothing.

@@ -102,12 +102,20 @@ it('an edge inspector write routes that edge, and its neighbour keeps the board 
 
   const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
   expect(panel).not.toBeNull()
-  // A choice control applies on change — the derived form keeps Save for
-  // the fields you type into, so this row is one interaction, as the board's
-  // own routing row already is.
-  const routing = panel.querySelector('[aria-label="Edges Routing"]') as HTMLSelectElement
-  expect(routing).not.toBeNull()
-  fireEvent.change(routing, { target: { value: 'orthogonal' } })
+  // The row `visual.edges/v0` DECLARES — a card per routing, glyph over
+  // word, the same control the board's own Display panel draws. It was a
+  // derived `<select>` until the facet declared an editor, and the picture
+  // is the point: this is the one surface where a person compares routings.
+  // A pick applies on change, as the board's row does; the derived form
+  // keeps Save only for the fields you type into.
+  const routing = panel.querySelector(
+    'input[type="radio"][aria-label="Orthogonal"]',
+  ) as HTMLInputElement
+  expect(
+    routing,
+    `edge panel controls: ${[...panel.querySelectorAll('input,select')].map((el) => el.getAttribute('aria-label'))}`,
+  ).not.toBeNull()
+  fireEvent.click(routing)
 
   expect(edgeFacetOf(latest.canvas, 'ab')).toEqual({ routing: 'orthogonal' })
   expect(edgeFacetOf(latest.canvas, 'cb')).toBeUndefined()

@@ -204,6 +204,55 @@ Registered definitions are also exposed over MCP so agents can construct
 valid payloads; the MCP Apps widget stays read-only until the standing
 "should the widget mutate documents at all" question is settled.
 
+**2026-09-10, amended.** The paragraph above described two tiers and no
+plugin code. What shipped was three, and the third ran a plugin's React
+component in the composition root's own tree — `plugin-visual`'s symbol
+editor, mounted by `apps/web`. This records what is true and what is
+decided, because a design record that cannot describe its implementation
+cannot be used to decide the next thing.
+
+**What went wrong, and it was not the escape hatch.** The declarable
+vocabulary was too thin to say what one facet needed. Glyphs were seven
+silhouettes the core enumerated, and a control wrote ONE FIELD — while
+`visual.symbol` offers twelve choices spanning both arms of a union, six of
+them the plugin's own vendored geometry. Neither half was expressible, so
+the facet took the only door left. The escape hatch then had no styling
+contract, because a workspace package cannot use the app's utility classes
+(Tailwind's content detection stops at the app, silently), so its component
+drew the control by hand. Measured downstream: six spellings of "pick one
+of N" across the app, four of them inside a single settings panel, and one
+row that offered "no theme" twice.
+
+So the ladder is repaired at the vocabulary, not at the hatch:
+
+- **A facet-level `picker`** — one control writing whole PAYLOADS, with
+  `payload: null` as the option that removes the facet. Arms stop
+  mattering, and absence stops needing a second control beside the first.
+  Every payload is parsed by the facet's own schema at `defineFacet` time,
+  which a hand-written component never was: its options were checked only
+  at the write boundary, so a typo shipped and read to a person as a choice
+  that silently did nothing.
+- **Glyphs closed in FORM, open in CONTENT** — `shape` (the enumerated
+  silhouettes), `char` (one character or emoji), `asset` (a registered icon
+  by id). A plugin still cannot ship an image or a component; it is no
+  longer limited to seven shapes. Icon geometry travels as DATA through
+  decision 3's `assets` layer, which is why it reaches every realm holding
+  the registry — the picker, the canvas renderer, an export with no DOM.
+  A component could only ever have drawn in one.
+- **Primitives, not conventions, for the look.** `facet-ui` exports
+  `FacetOptionGroup` / `FacetOption`, and they are the one drawing of a
+  selection. This is `createFacetWriter`'s bargain applied to rendering: a
+  plugin chooses what its options ARE and what order they come in, and does
+  not choose what a selected option looks like, any more than it chooses
+  what a valid payload is.
+
+`component` survives as a real extension point with no bundled user — the
+same deliberate shape as `RenderContribution.decorations` after the node
+badge went. It is the contract with every plugin, not a convenience for
+this one. Reaching for it stays the exception, and the reason is now
+recorded rather than implied: what pushed the last user through it was the
+vocabulary, so a next user is evidence the vocabulary is short again.
+
 ## This increment
 
 This ADR lands together with decision 2's mechanical half only: the key

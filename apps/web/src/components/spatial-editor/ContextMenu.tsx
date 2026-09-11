@@ -19,6 +19,8 @@
  * discrete pointerdown loses the focus fight with mousedown's default
  * action, while click fires after those defaults.
  */
+
+import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
 import { cn } from '../../lib/utils.js'
@@ -334,33 +336,27 @@ export function ContextMenu({
               not merely ugly — it cannot be tapped. The set grows with every
               contributing facet and the sheet is only as wide as the phone,
               so the row wraps rather than trusting it to fit. */}
-          <span className="flex flex-wrap items-center justify-end gap-0.5">
+          {/* The SAME drawing every other selection in the app uses
+              (`facet-ui`'s option group), in its MENU shell: inside a menu
+              a radio input is the wrong element and would break the menu's
+              keyboard model, so the shell puts `role="menuitemradio"` on a
+              button. One look, two ARIA shells chosen by container — not
+              two idioms. What a selected option looks like is the
+              primitive's, here as everywhere. */}
+          <FacetOptionGroup label={item.label} shell="menu">
             {item.options.map((option) => (
-              <button
+              <FacetOption
                 key={option.label}
-                type="button"
-                role="menuitemradio"
-                aria-checked={option.selected}
-                aria-label={option.ariaLabel ?? option.label}
-                className={cn(
-                  'flex h-7 min-w-7 items-center justify-center rounded px-1 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-                  option.selected
-                    ? 'bg-accent font-medium text-foreground'
-                    : 'text-muted-foreground',
-                )}
+                shell="menu"
+                name={item.label}
+                label={option.ariaLabel ?? option.label}
+                selected={option.selected}
                 // Applies immediately and keeps the menu open: option rows
                 // are property pickers, and closing per pick would force a
                 // reopen for every adjustment.
-                onClick={option.onSelect}
-              >
-                {option.icon !== undefined ? (
-                  <span aria-hidden="true" className="[&>svg]:size-3.5">
-                    {option.icon}
-                  </span>
-                ) : (
-                  option.label
-                )}
-              </button>
+                onSelect={option.onSelect}
+                {...(option.icon === undefined ? {} : { glyph: option.icon })}
+              />
             ))}
             {item.customColor !== undefined && (
               <button
@@ -388,7 +384,7 @@ export function ContextMenu({
                 />
               </button>
             )}
-          </span>
+          </FacetOptionGroup>
         </fieldset>
         {item.customColor !== undefined && openCustomColor === item.label && (
           <CustomColorPanel value={item.customColor.value} onPick={item.customColor.onPick} />

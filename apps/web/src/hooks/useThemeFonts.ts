@@ -1,4 +1,3 @@
-import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useSyncExternalStore } from 'react'
 import {
@@ -19,17 +18,18 @@ export function useThemeFontsGeneration(): number {
 }
 
 /**
- * Asks for the family the canvas draws in under this look, from the
- * catalogue source, the first time a surface needs it — the daemon pass
- * (`useDaemonThemeFonts`) may already hold it, in which case this is a
- * no-op. Keyed on the FAMILY rather than the canvas, so an edit to the
- * board never re-asks; the loader itself refuses a held or in-flight one.
+ * Asks for the family the canvas draws in, from the catalogue source, the
+ * first time a surface needs it — the daemon pass (`useDaemonThemeFonts`)
+ * may already hold it, in which case this is a no-op. Keyed on the FAMILY
+ * rather than the canvas, so an edit to the board never re-asks; the loader
+ * itself refuses a held or in-flight one.
+ *
+ * Always the DOCUMENT look. The editor draws a canvas in the theme it
+ * names, and no UI overrides that any more; ADR-0030 decision 6's argument
+ * survives a layer down, where a headless caller still asks for `'clean'`.
  */
-export function useThemeFaceFor(
-  canvas: SpatialCanvas,
-  style: SpatialRenderStyle | undefined,
-): void {
-  const family = themeFamilyFor(canvas, style)
+export function useThemeFaceFor(canvas: SpatialCanvas): void {
+  const family = themeFamilyFor(canvas, 'document')
   useEffect(() => {
     if (family === undefined) return
     void loadThemeFontFromSource(family)
@@ -37,16 +37,13 @@ export function useThemeFaceFor(
 }
 
 /**
- * The family the in-place text editors type in under this look, re-read
- * when a face lands so a draft opened before the fetch finishes still
- * switches hands with the scene.
+ * The family the in-place text editors type in, re-read when a face lands
+ * so a draft opened before the fetch finishes still switches hands with
+ * the scene. The document look, for the reason above.
  */
-export function useEditingFontFamily(
-  canvas: SpatialCanvas,
-  style: SpatialRenderStyle | undefined,
-): string {
+export function useEditingFontFamily(canvas: SpatialCanvas): string {
   // Read for its change, not its value: the family below depends on which
   // faces are held, which the generation is the one signal of.
   useThemeFontsGeneration()
-  return editingFontFamilyFor(canvas, style)
+  return editingFontFamilyFor(canvas, 'document')
 }
