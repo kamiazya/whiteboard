@@ -1,4 +1,5 @@
-import { type Kysely, type Migration, sql } from 'kysely'
+import { type Kysely, sql } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // ADR-0009 calls the container a Document, and `docRefKey` now spells its
 // `docKey` accordingly. The prefix stopped being an in-memory map key when the

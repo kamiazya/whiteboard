@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // Add versions.workspaceScoped: 1 when the row's frontiers point into the
 // WORKSPACE document's oplog (durable across restarts), 0 for rows written

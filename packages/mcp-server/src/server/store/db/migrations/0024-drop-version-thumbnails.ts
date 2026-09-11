@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 import { getDataDir } from '../../../config.js'
 import { getLogger } from '../../../log.js'
 import { readDirSafe } from './0011-import-fs-blobs.js'
