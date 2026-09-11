@@ -121,10 +121,24 @@ Three things about it that a reader will otherwise re-decide:
   five hardcoded emoji this catalog replaced would otherwise have been drawn
   twice.
 
-The subgroup travels as search KEYWORDS rather than a heading, because
-Unicode files a rocket under `travel-air` and "travel" is a word somebody
-types. Names are English only; a Japanese index would be CLDR annotations,
-a second file and roughly double the bytes, and is not shipped.
+The subgroup travels as search KEYWORDS rather than a heading, and the
+measurement says it earns the bytes: `transport` goes from 0 matches to 85,
+`animal` 0 to 131, `sport` 3 to 156, `weather` 0 to 47.
+
+**What it does NOT buy is the word on the category chip.** `travel` matched
+nothing — the rocket is named "rocket" and filed under `transport-air`,
+while the band a person can see it in is "Travel & Places". That is fixed in
+the SEARCH rather than in the data (`facet-ui`'s `haystack` folds in the
+band's label), because it is true of any catalog and costs no bytes here.
+An earlier comment in this file claimed the subgroup was `travel-air` and
+that "travel" therefore worked; it was written from memory and the data
+refutes it.
+
+Names are English only. CLDR carries a Japanese index — measured at full
+coverage of all 1914 and +123KB raw / +35KB gzipped with keywords, or
++31KB / +11KB for the display names alone — and it is not shipped, because
+which locales a picker indexes is a product decision rather than a data
+one.
 
 ## Vendored icons
 

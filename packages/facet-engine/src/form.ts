@@ -85,9 +85,10 @@ export interface FacetPickerOption {
    * has, so there is nothing there to find.
    *
    * It exists because the authoritative name of a thing is often not the
-   * word somebody types for it — Unicode calls a rocket "rocket" and files
-   * it under `travel-air`, and a person looking for one may well type
-   * "launch" or "space".
+   * word somebody types for it. Measured over `plugin-visual`'s 1914 rows,
+   * carrying Unicode's own subgroup beside each name is what makes
+   * `transport` find 85 rows instead of 0, `animal` 131 instead of 0,
+   * `sport` 156 instead of 3 and `weather` 47 instead of 0.
    */
   readonly keywords?: readonly string[]
 }

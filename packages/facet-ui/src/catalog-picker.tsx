@@ -128,10 +128,16 @@ export function clearFacetCatalogRecents(): void {
  * The CHARACTER is in there too, which is not redundant: pasting an emoji
  * into the search box is how somebody asks "is this one already here", and
  * matching only names answers no to a question whose answer is yes.
+ *
+ * So is the BAND's name, and that one was found by measuring rather than by
+ * reading: `travel` matched nothing at all, because the rocket is named
+ * "rocket" and filed under `transport-air` while the category a person can
+ * see it in is called "Travel & Places". Searching for the word printed on
+ * the control that holds a thing is not an exotic query.
  */
-function haystack(option: FacetPickerOption): string {
+function haystack(option: FacetPickerOption, band: string): string {
   const char = option.glyph?.kind === 'char' ? option.glyph.value : ''
-  return `${option.label} ${(option.keywords ?? []).join(' ')} ${char}`.toLowerCase()
+  return `${band} ${option.label} ${(option.keywords ?? []).join(' ')} ${char}`.toLowerCase()
 }
 
 /**
@@ -139,8 +145,8 @@ function haystack(option: FacetPickerOption): string {
  * "grinning face" the way a person types it, which a prefix match on the
  * whole label does not.
  */
-function matches(option: FacetPickerOption, terms: readonly string[]): boolean {
-  const text = haystack(option)
+function matches(option: FacetPickerOption, terms: readonly string[], band: string): boolean {
+  const text = haystack(option, band)
   return terms.every((term) => text.includes(term))
 }
 
@@ -199,7 +205,7 @@ export function FacetCatalogPicker({
     const hits: FacetPickerOption[] = []
     for (const section of sections) {
       for (const option of section.options) {
-        if (matches(option, terms)) hits.push(option)
+        if (matches(option, terms, section.label)) hits.push(option)
       }
     }
     return hits

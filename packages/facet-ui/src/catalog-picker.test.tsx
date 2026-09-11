@@ -41,7 +41,7 @@ const SECTIONS = [
     label: 'Smileys',
     options: [row('😀', 'grinning face', 'smiling'), row('🔥', 'fire', 'hot flame')],
   },
-  { label: 'Travel', options: [row('🚀', 'rocket', 'travel space')] },
+  { label: 'Travel & Places', options: [row('🚀', 'rocket', 'transport air')] },
 ]
 
 const registry = createFacetRegistry([
@@ -117,7 +117,7 @@ describe('a catalog picker offers more than the definition listed', () => {
   it('shows another category without leaving the first one on screen', async () => {
     mount()
     await loaded()
-    fireEvent.click(screen.getByRole('radio', { name: 'Travel' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Travel & Places' }))
     expect(screen.getByRole('radio', { name: 'rocket' })).toBeTruthy()
     expect(screen.queryByRole('radio', { name: 'grinning face' })).toBeNull()
   })
@@ -130,7 +130,7 @@ describe('a catalog picker offers more than the definition listed', () => {
   it('keeps categories out of the group the value is chosen in', async () => {
     mount({ kind: 'emoji', char: '🔥' })
     await loaded()
-    const category = screen.getByRole('radio', { name: 'Travel' }) as HTMLInputElement
+    const category = screen.getByRole('radio', { name: 'Travel & Places' }) as HTMLInputElement
     const cell = screen.getByRole('radio', { name: 'fire' }) as HTMLInputElement
     expect(category.name).not.toBe(cell.name)
   })
@@ -167,6 +167,20 @@ describe('search finds a row by any of the words it carries', () => {
     await loaded()
     fireEvent.change(search(), { target: { value: 'face grin' } })
     expect(screen.getByRole('radio', { name: 'grinning face' })).toBeTruthy()
+  })
+
+  /**
+   * The word on the CATEGORY chip, which is the one a person can actually
+   * see. Found by measuring the real catalog: `travel` matched nothing,
+   * because Unicode names the rocket "rocket" and files it under
+   * `transport-air` while the band it lives in reads "Travel & Places".
+   */
+  it('matches the name of the band an option lives in', async () => {
+    mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: 'travel' } })
+    expect(screen.getByRole('radio', { name: 'rocket' })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: 'fire' })).toBeNull()
   })
 
   it('says so rather than showing an empty band when nothing matches', async () => {
