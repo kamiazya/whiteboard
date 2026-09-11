@@ -249,10 +249,18 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
               label: 'Clients',
               x: 0,
               y: 600,
-              // Too narrow for three default-size boxes in a row on purpose:
+              // Too narrow for three auto-sized boxes in a row on purpose:
               // the third wraps and the group grows to hold it, which is
               // the path a model without geometry actually takes.
-              width: 700,
+              //
+              // Sized against the BOARD's box width, not a constant. A node
+              // added without one takes the width its board already uses,
+              // and this harness seeds a 120-wide box — at the 700 this said
+              // while the default was a flat 260, all three fitted in one
+              // row, the group never grew, and the errand measured a
+              // cheaper payload than the one it exists to price. It still
+              // passed; only the exact pin caught it.
+              width: 300,
               height: 300,
             },
           },
