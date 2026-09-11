@@ -76,6 +76,24 @@ type Fields = Record<string, unknown>
  * there" — which is exactly the asymmetry `proposedChangeSchema` allows and
  * the opposite one it refuses.
  */
+/**
+ * Whether two field values are the same VALUE, not the same object.
+ *
+ * The diff's two sides come from different places — one read from storage,
+ * one rebuilt by the ops — so a field holding an object (`x-whiteboard`, a
+ * facets bucket) arrives as two deep-equal objects that are not identical.
+ * Compared by identity, every element carrying one reads as changed, and
+ * the proposal fills with no-op changes whose `patch` equals their `assumed`
+ * on elements nobody named. A JSON comparison is the honest tool at this
+ * depth — the same call `proposal-apply.ts` makes, for the same reason.
+ */
+function sameFieldValue(before: unknown, after: unknown): boolean {
+  if (Object.is(before, after)) return true
+  if (typeof before !== 'object' || typeof after !== 'object') return false
+  if (before === null || after === null) return false
+  return JSON.stringify(before) === JSON.stringify(after)
+}
+
 function patchBetween(
   before: Fields,
   after: Fields,
@@ -85,13 +103,15 @@ function patchBetween(
   const patch: Fields = {}
   const assumed: Fields = {}
   for (const field of patchFields) {
-    if (Object.is(before[field], after[field])) continue
+    if (sameFieldValue(before[field], after[field])) continue
     patch[field] = after[field]
     if (before[field] !== undefined) assumed[field] = before[field]
   }
   for (const field of new Set([...Object.keys(before), ...Object.keys(after)])) {
     if (field === 'id' || patchFields.includes(field)) continue
-    if (!Object.is(before[field], after[field])) throw new UnrepresentableChangeError(id, field)
+    if (!sameFieldValue(before[field], after[field])) {
+      throw new UnrepresentableChangeError(id, field)
+    }
   }
   return Object.keys(patch).length === 0 ? undefined : { patch, assumed }
 }

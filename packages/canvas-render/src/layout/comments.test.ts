@@ -6,14 +6,14 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import { describe, expect, it } from 'vitest'
 import type {
   BoundingBox,
   ResolvedEdgeNode,
   SceneNode,
   ShapeSceneNode,
   TextRunNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'

@@ -77,6 +77,19 @@ export const paletteTokensSchema = z.object({
     edge: hexColorSchema,
     bubbleFill: hexColorSchema,
   }),
+  /**
+   * The ONE neutral a markdown body's furniture is drawn in — the code
+   * panel, the inline-code backdrop, the blockquote rail, a table's rules,
+   * a thematic break, a task checkbox. Optional: a theme that says nothing
+   * keeps the renderer's bundled neutral, so an asset written before this
+   * field draws exactly as it did.
+   *
+   * One colour rather than a set, because the renderer already draws all of
+   * it as one neutral at three opacities (canvas-render's `MarkdownTheme`),
+   * and it is FURNITURE — held to a visibility floor against the surface,
+   * never to the text floor the prose in front of it owes.
+   */
+  markdownChrome: hexColorSchema.optional(),
 })
 
 export type PaletteTokens = z.infer<typeof paletteTokensSchema>
@@ -104,12 +117,18 @@ export const themeTokensSchema = z.object({
   /** How outlines and edges are inked: crisp geometry, or seeded jitter. */
   ink: z.enum(['clean', 'sketch']),
   /**
+   * The line weight of document chrome and edges, in px. Absent means the
+   * renderer's default hairline. A pencil is heavier than a hairline, and a
+   * glow blooms from the paint it has — the same number serves both.
+   */
+  strokeWidthPx: z.number().positive().optional(),
+  /**
    * A font FAMILY name and nothing more. Whether a face exists on a surface
    * is ADR-0011's provider question; a missing face degrades to the bundled
    * family and says so.
    */
   fontFamily: z.string().min(1).optional(),
-  /** A soft halo on strokes, symbols and text, in the element's own colour. */
+  /** A soft halo on node chrome, edges and symbols, in the element's own colour. */
   glow: z.object({ radiusPx: z.number().positive() }).optional(),
   /** Both modes, always: the canvas surface follows the UI, never the theme. */
   palette: z.object({

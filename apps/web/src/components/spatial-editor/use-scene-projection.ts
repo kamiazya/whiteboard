@@ -1,16 +1,14 @@
 // The post-scene derived memos, extracted from SpatialEditor: everything
 // projected off the COMMITTED scene once useWorkerScene has produced it —
 // the keyed patch surface, edge hit-test paths, comment chrome boxes, the
-// selection's own boxes, and the minimap overview. Called immediately after
-// useWorkerScene, since every input here is that hook's output (plus boxes,
-// canvas, theme, selectedId, extraIds, all already available by then).
+// selection's own boxes, the minimap overview, and the palette the scene was
+// drawn in, which every chrome the editor floats over it is painted from.
+// Called immediately after useWorkerScene, since every input here is that
+// hook's output (plus boxes, canvas, theme, style, selectedId, extraIds, all
+// already available by then).
 
-import type { BoundingBox, Scene } from '@kamiazya/whiteboard-canvas-render'
-import {
-  flattenDrawnEdgePath,
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, Scene, SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
+import { flattenDrawnEdgePath, resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { type NodeBox, unionBox } from '../../lib/spatial/geometry.js'
@@ -24,6 +22,8 @@ export interface SceneProjectionInputs {
   readonly boxes: readonly NodeBox[]
   readonly canvas: SpatialCanvas
   readonly theme: ResolvedTheme
+  /** The look this session draws in (ADR-0030 decision 6); absent is `'document'`. */
+  readonly style?: SpatialRenderStyle
   readonly selectedId: string | null
   readonly extraIds: ReadonlySet<string>
 }
@@ -46,6 +46,7 @@ export function useSceneProjection({
   boxes,
   canvas,
   theme,
+  style,
   selectedId,
   extraIds,
 }: SceneProjectionInputs) {
@@ -159,18 +160,29 @@ export function useSceneProjection({
     [selectionMembers],
   )
   /**
-   * Node boxes for the overview, with each authored colour resolved to the
-   * accent the scene already uses for it. A preset key resolves through the
-   * current mode's palette; a hex passes through; an unstyled node carries
-   * no colour and the overview falls back to its muted default.
+   * The palette this board is DRAWN in, under the mode and the session's
+   * look — the same lookup the layout resolves the scene's own colour
+   * through, so a chrome the editor paints from it can never disagree with
+   * the ink underneath it (ADR-0030).
    */
-  const minimapNodes = useMemo(() => {
-    const palette = theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
-    return buildMinimapNodes(canvas.nodes, boxes, palette)
-  }, [boxes, canvas, theme])
+  const palette = useMemo(
+    () => resolveCanvasPalette(canvas, theme, { style }),
+    [canvas, theme, style],
+  )
+  /**
+   * Node boxes for the overview, with each authored colour resolved to the
+   * accent the scene already uses for it. A preset key resolves through that
+   * palette; a hex passes through; an unstyled node carries no colour and the
+   * overview falls back to its muted default.
+   */
+  const minimapNodes = useMemo(
+    () => buildMinimapNodes(canvas.nodes, boxes, palette),
+    [boxes, canvas, palette],
+  )
 
   return {
     keyed,
+    palette,
     edgePaths,
     commentChromeBoxes,
     proposalChromeBoxes,

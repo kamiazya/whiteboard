@@ -77,13 +77,26 @@ section forbids.
 ## The `x-whiteboard` extension contract
 
 Extended JSON Canvas output is standard JSON Canvas 1.0 plus **exactly one**
-extension key, `x-whiteboard`, allowed at two sites:
+extension key, `x-whiteboard`, allowed at three sites:
 
-- **Document root** — rendering preferences for things JSON Canvas already
-  models (currently `edgeRouting.style` and `edgeRouting.lineJumps`). A
-  consumer that drops it still renders every edge, just with its own routing.
+- **Document root** — canvas-target facets (`facets`, keyed
+  `{namespace}.{name}/v{n}`: `visual.edges/v0` for edge routing and line
+  jumps, `visual.theme/v0` for the theme) and the comment annotation layer
+  (`comments`). Rendering preferences for things JSON Canvas already models,
+  so a consumer that drops it still renders every edge, just with its own
+  routing.
 - **A node** — the canvas-embed extension (`kind: "embed"` plus a canvas
-  reference), the one piece of content JSON Canvas 1.0 cannot express.
+  reference), the one piece of content JSON Canvas 1.0 cannot express, and
+  node-target facets in the same `facets` bucket.
+- **An edge** — edge-target facets (`facets`) and nothing else: an edge has
+  no content JSON Canvas cannot express, so this site never carries an
+  embed. `visual.edges/v0` here overrides the board's routing for that one
+  edge, field by field, and `visual.path/v0` carries the bends the line is
+  drawn through (`waypoints`, canvas coordinates, in order — dragged on the
+  canvas, or written by an agent through `wb_facet_set`'s `edgeId`). A
+  consumer that drops the extension draws the same edge with its own
+  routing — bends are the clearest case of a rendering preference JSON
+  Canvas does not model.
 
 No other non-standard field is ever emitted, at any level. Foreign keys on an
 imported document (another tool's vendor fields) are stripped on parse and
@@ -146,10 +159,18 @@ for a theme's jittered geometry or glow unasked, and a `wb_canvas_snapshot` layo
 never moves because a theme did. A theme id nothing registered draws clean and is reported as a
 degradation, never an error.
 
+A themed render also comes back on that theme's **paper**: the background is the theme
+palette's surface for the mode asked for (`theme: "dark"` on a neon canvas gives `#030711`),
+so an export is the board a person drawing on it sees rather than the theme's strokes on the
+bundled sheet. A `clean` render keeps the bundled white or near-black surface, and an explicit
+`background` in the request wins over both.
+
 A theme's font family is declared in the SVG only where the daemon can measure it — the
 vendored face or an installed one — and otherwise the bundled family is declared, so the face
 named and the coordinates measured always agree. `unresolvedFamilies` reports nothing in that
-case, because nothing is missing from the page.
+case, because nothing is missing from the page. The daemon reads its fonts directory when it
+warms the renderer, so a face installed while it is running is measured and declared from its
+next start.
 
 ## Web app exports
 

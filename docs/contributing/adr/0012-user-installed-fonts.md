@@ -194,3 +194,15 @@ every export ignored it. That is the divergence, not a step toward fixing it.
 
 **Bundle a font picker's worth of fonts.** ADR-0011 measured this: the published
 `dist` is 5.2 MB and one CJK face is 18.6 MB. A picker implies many.
+
+**2026-09-10:** "never by the widget", in the 2026-09-09 note above, is
+revised: the MCP Apps widget now fetches a theme's family itself, on the same
+terms the browser does — triggered by a canvas being DRAWN in that theme,
+from the same pinned catalogue origin, with the URL built from a catalogue
+entry by code rather than taken from input. It arrives in `canvas_view`'s
+result as a family and a URL (never bytes, which would put megabytes through
+the model's context on every view), and the widget re-checks the origin
+against its own constant before requesting anything: a payload field is not
+authority to fetch. The daemon's install API still takes an id, and nothing
+about the daemon's own rendering changes. ADR-0011's 2026-09-10 note carries
+the reasoning and what bounds it.

@@ -1,6 +1,6 @@
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
-import type { Scene } from './scene-graph.js'
 
 describe('sceneBounds', () => {
   it('returns the documented fallback for an empty scene', () => {

@@ -31,9 +31,12 @@ const canvasWith = (extension: SpatialCanvas['x-whiteboard']): SpatialCanvas => 
 })
 
 describe('visualPlugin', () => {
-  it('registers visual.edges/v0 as a canvas-target facet', () => {
+  it('registers visual.edges/v0 at both scopes: the board, and one edge', () => {
+    // One facet, not two: the same question asked of a board and of one
+    // edge (ADR-0013 decision 1's growth rule, the reading that widened
+    // visual.symbol). The key stays v0 — `targets` is not payload.
     expect(VISUAL_EDGES_KEY).toBe('visual.edges/v0')
-    expect(registry.targetsOf(VISUAL_EDGES_KEY)).toEqual(['canvas'])
+    expect(registry.targetsOf(VISUAL_EDGES_KEY)).toEqual(['canvas', 'edge'])
   })
 
   it('every bundled facet key satisfies the model key grammar', () => {
@@ -60,31 +63,26 @@ describe('resolveCanvasEdgeStyle', () => {
     expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({ style: 'curved', lineJumps: 'arc' })
   })
 
-  it('falls back to the legacy edgeRouting preference when the facet is absent', () => {
-    const canvas = canvasWith({ edgeRouting: { style: 'orthogonal', lineJumps: 'arc' } })
-    expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({
-      style: 'orthogonal',
-      lineJumps: 'arc',
-    })
-  })
-
-  it('the facet takes whole-value precedence over the legacy preference', () => {
-    // Whole-value, not per-field: the facet is one register (replace
-    // semantics), so a facet that says only `routing` means "and default
-    // line jumps", never "merge with whatever the legacy key held".
-    const canvas = canvasWith({
-      edgeRouting: { style: 'orthogonal', lineJumps: 'arc' },
-      facets: { [VISUAL_EDGES_KEY]: { routing: 'curved' } },
-    })
+  it('a facet that says only routing means default line jumps: one register, replace semantics', () => {
+    const canvas = canvasWith({ facets: { [VISUAL_EDGES_KEY]: { routing: 'curved' } } })
     expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({ style: 'curved' })
   })
 
-  it('an unresolvable facet payload falls back to the legacy preference', () => {
-    const canvas = canvasWith({
-      edgeRouting: { style: 'orthogonal' },
-      facets: { [VISUAL_EDGES_KEY]: { routing: 'spiral' } },
-    })
-    expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({ style: 'orthogonal' })
+  it('an unresolvable facet payload answers empty, never a guess', () => {
+    const canvas = canvasWith({ facets: { [VISUAL_EDGES_KEY]: { routing: 'spiral' } } })
+    expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({})
+  })
+
+  // Retired without a compatibility read: the model strips the key on parse,
+  // and this resolver never looks for it either — so a value smuggled past
+  // the parser (an in-memory object, an older peer) is not honoured.
+  it('ignores the retired edgeRouting preference outright', () => {
+    const canvas = {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal', lineJumps: 'arc' } },
+    } as unknown as SpatialCanvas
+    expect(resolveCanvasEdgeStyle(canvas, registry)).toEqual({})
   })
 
   it('answers an empty style for a canvas with neither', () => {

@@ -6,11 +6,6 @@ import type {
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
-import { LineBreaker } from 'css-line-break'
-import { selectCanvasFragment } from '../../canvas-fragment.js'
-import type { FontDescriptor, MeasureText } from '../../measure.js'
-import { clampAdvance } from '../../measure.js'
-import { type ReferenceSeams, withReferenceSeams } from '../../references/seams.js'
 import type {
   Appearance,
   BlockquoteNode,
@@ -33,7 +28,12 @@ import type {
   TextRunNode,
   ThematicBreakNode,
   UnresolvedReferenceNode,
-} from '../../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { LineBreaker } from 'css-line-break'
+import { selectCanvasFragment } from '../../canvas-fragment.js'
+import type { FontDescriptor, MeasureText } from '../../measure.js'
+import { clampAdvance } from '../../measure.js'
+import { type ReferenceSeams, withReferenceSeams } from '../../references/seams.js'
 import { escapeXmlText } from '../../svg/format.js'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'

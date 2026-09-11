@@ -69,11 +69,11 @@ describe('wb_facet_list', () => {
   })
 
   test('publishes only the targets the engine actually accepts', async () => {
-    // ADR-0013 reserves `workspace` and `edge`; advertising them would
-    // promise a write no registry can take.
+    // ADR-0013 reserves `workspace`; advertising it would promise a write
+    // no registry can take. `edge` is implemented and carries visual.edges.
     const result = await tool().execute({})
     const targets = new Set(result.facets.flatMap((facet) => facet.targets))
-    expect([...targets].sort()).toEqual(['canvas', 'document', 'node'])
+    expect([...targets].sort()).toEqual(['canvas', 'document', 'edge', 'node'])
   })
 
   test('a schema JSON Schema cannot express degrades to no schema, and still validates OVER THE WIRE', async () => {

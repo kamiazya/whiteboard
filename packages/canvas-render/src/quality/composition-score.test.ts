@@ -9,10 +9,10 @@
 // ADR-0032 fixes what these columns may be read to mean: the composition a
 // drawing hands its reader, never that it was understood.
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
-import type { Scene } from '../scene-graph.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type CompositionScore, scoreComposition } from './composition-score.js'
 

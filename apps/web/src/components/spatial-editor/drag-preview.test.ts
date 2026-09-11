@@ -114,7 +114,10 @@ describe('computeDragPreview — connecting', () => {
   it('follows the flattened curve under the curved routing style', () => {
     const curvedConnect = {
       ...connect,
-      canvas: { ...connect.canvas, 'x-whiteboard': { edgeRouting: { style: 'curved' as const } } },
+      canvas: {
+        ...connect.canvas,
+        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' as const } } },
+      },
     }
     const state = connectingState()
     // A pointer below-right forces a bend; curved routing rounds it.

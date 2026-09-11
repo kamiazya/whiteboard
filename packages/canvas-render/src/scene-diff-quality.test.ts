@@ -1,8 +1,8 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Scene, ShapeId } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneEntryKeys } from './scene-entry-keys.js'
-import type { Scene, ShapeId } from './scene-graph.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
 import { createSpatialTheme } from './theme/spatial-theme.js'
 

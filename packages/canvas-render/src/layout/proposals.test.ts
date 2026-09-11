@@ -4,8 +4,13 @@
 // what it would do. Composed after nodes and edges, like the comment layer,
 // so it paints above content on every surface with no per-surface wiring.
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type {
+  ResolvedEdgeNode,
+  SceneNode,
+  ShapeSceneNode,
+  TextRunNode,
+} from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { ResolvedEdgeNode, SceneNode, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'

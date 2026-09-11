@@ -30,6 +30,7 @@
  * hold that edit.
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { resolveEdgeWaypoints, VISUAL_PATH_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
@@ -88,6 +89,24 @@ interface EditTextSnapshot {
   readonly createdForEdit?: boolean
 }
 
+/**
+ * A bend being dragged on one edge.
+ *
+ * `waypoints` is the list the gesture ENDS with, minus the drag — the
+ * overlay hands it over already carrying a point the edge does not have
+ * when a ghost handle on a straight run is what was pressed, so adding a
+ * bend and moving one are the same gesture and this machine knows only the
+ * second. Whether a point is worth inserting is geometry the overlay has
+ * and the reducer does not.
+ */
+interface BendSnapshot {
+  readonly kind: 'bending'
+  readonly edgeId: string
+  readonly index: number
+  readonly startPoint: Point
+  readonly waypoints: readonly Point[]
+}
+
 interface IdleSnapshot {
   readonly kind: 'idle'
 }
@@ -98,6 +117,7 @@ export type GestureState =
   | ResizeSnapshot
   | ConnectSnapshot
   | EditTextSnapshot
+  | BendSnapshot
 
 export function createIdleState(): GestureState {
   return { kind: 'idle' }
@@ -115,6 +135,30 @@ export type GestureEvent =
       readonly members?: readonly ResizeMember[]
     }
   | { readonly type: 'pointerdown-connect'; readonly nodeId: string }
+  | {
+      readonly type: 'pointerdown-bend'
+      readonly edgeId: string
+      /** Which point of `waypoints` the pointer is dragging. */
+      readonly index: number
+      /** The list the edge ends with, before the drag is applied. */
+      readonly waypoints: readonly Point[]
+      readonly point: Point
+    }
+  /** Take one bend back out. No drag, so it is not a pointer gesture. */
+  | { readonly type: 'remove-bend'; readonly edgeId: string; readonly index: number }
+  /**
+   * Nudge one bend — the keyboard's version of the drag, the same way the
+   * resize handles answer arrow keys. It reads the edge's STORED list
+   * rather than being handed one, because a keyboard never adds a point: it
+   * can only move a bend that is already there to be focused.
+   */
+  | {
+      readonly type: 'move-bend'
+      readonly edgeId: string
+      readonly index: number
+      readonly dx: number
+      readonly dy: number
+    }
   | { readonly type: 'pointerdown-empty' }
   | { readonly type: 'dblclick-empty'; readonly point: Point }
   | { readonly type: 'delete-selection'; readonly nodeId: string }
@@ -161,6 +205,12 @@ function findNode(canvas: SpatialCanvas, id: string) {
 }
 
 /** Whether the gesture's target(s) are still present, with matching type, in `canvas`. */
+/** The bends an edge stores today, through the plugin that owns them. */
+function storedWaypoints(canvas: SpatialCanvas, edgeId: string): readonly Point[] {
+  const edge = canvas.edges.find((candidate) => candidate.id === edgeId)
+  return edge === undefined ? [] : resolveEdgeWaypoints(edge)
+}
+
 function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean {
   switch (state.kind) {
     case 'idle':
@@ -172,6 +222,8 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
       return findNode(canvas, state.fromNodeId) !== undefined
     case 'editing-text':
       return findNode(canvas, state.nodeId)?.type === 'text'
+    case 'bending':
+      return canvas.edges.some((edge) => edge.id === state.edgeId)
   }
 }
 
@@ -260,6 +312,42 @@ function reducePointerUpMoving(
     state: { kind: 'idle' },
     commands: [{ kind: 'move-node', id: state.nodeId, x: state.startX + dx, y: state.startY + dy }],
   }
+}
+
+/**
+ * The bend list an edge should carry, as a `set-edge-facet` command — or
+ * the facet REMOVED when nothing is left, since an edge with no facet
+ * inherits the board's routing again and an empty list is a payload the
+ * facet's own schema refuses.
+ */
+function bendCommand(edgeId: string, waypoints: readonly Point[]): EditorCommand {
+  return {
+    kind: 'set-edge-facet',
+    id: edgeId,
+    key: VISUAL_PATH_KEY,
+    payload: waypoints.length === 0 ? undefined : { waypoints: [...waypoints] },
+  }
+}
+
+function reducePointerUpBending(
+  state: BendSnapshot,
+  event: Extract<GestureEvent, { type: 'pointerup' }>,
+): GestureResult {
+  const dx = event.point.x - state.startPoint.x
+  const dy = event.point.y - state.startPoint.y
+  // A press that never moved stores nothing: on a ghost handle that would
+  // leave a bend where the line already ran, which is a point a person did
+  // not ask for and then has to find and remove.
+  if (dx === 0 && dy === 0) return idle
+  const moved = state.waypoints.map((point, at) =>
+    at === state.index
+      ? // Whole units, the way a node position is rounded — a canvas whose
+        // coordinates are integers everywhere else should not grow
+        // sub-pixel ones here.
+        { x: Math.round(point.x + dx), y: Math.round(point.y + dy) }
+      : point,
+  )
+  return { state: { kind: 'idle' }, commands: [bendCommand(state.edgeId, moved)] }
 }
 
 function reducePointerUpResizing(
@@ -446,6 +534,51 @@ export function reduceGesture(
         state,
         stateOnly({ kind: 'connecting', fromNodeId: event.nodeId }),
       )
+    case 'pointerdown-bend': {
+      if (!canvas.edges.some((edge) => edge.id === event.edgeId)) return idle
+      if (event.waypoints[event.index] === undefined) return idle
+      return withPendingTextCommit(
+        state,
+        stateOnly({
+          kind: 'bending',
+          edgeId: event.edgeId,
+          index: event.index,
+          startPoint: event.point,
+          waypoints: event.waypoints,
+        }),
+      )
+    }
+    case 'move-bend': {
+      const stored = storedWaypoints(canvas, event.edgeId)
+      const point = stored[event.index]
+      if (point === undefined || (event.dx === 0 && event.dy === 0)) return idle
+      return {
+        state: { kind: 'idle' },
+        commands: [
+          bendCommand(
+            event.edgeId,
+            stored.map((current, at) =>
+              at === event.index
+                ? { x: Math.round(current.x + event.dx), y: Math.round(current.y + event.dy) }
+                : current,
+            ),
+          ),
+        ],
+      }
+    }
+    case 'remove-bend': {
+      const stored = storedWaypoints(canvas, event.edgeId)
+      if (stored[event.index] === undefined) return idle
+      return {
+        state: { kind: 'idle' },
+        commands: [
+          bendCommand(
+            event.edgeId,
+            stored.filter((_point, at) => at !== event.index),
+          ),
+        ],
+      }
+    }
     case 'start-text-edit':
       // Opening an editor SOMEWHERE ELSE leaves the current one, so it
       // commits like every other way out (see the policy at the top of this
@@ -492,6 +625,8 @@ export function reduceGesture(
           return reducePointerUpResizing(state, event)
         case 'connecting':
           return reducePointerUpConnecting(state, event, createId)
+        case 'bending':
+          return reducePointerUpBending(state, event)
         case 'editing-text':
           // A double-press opens the editor on the SECOND pointerdown; that
           // press's own pointerup arrives afterwards and must not tear the

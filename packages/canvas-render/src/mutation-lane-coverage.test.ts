@@ -92,6 +92,10 @@ describe('the mutation lane covers what it says it covers', () => {
     // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
     // `glow.test.ts`'s bounds assertion, which fails on any other reach.
     //
+    // 62 since `scene-graph.ts` LEFT this package for `@kamiazya/whiteboard-
+    // scene`. Nothing about the lane changed: the file was types only, so it
+    // was never mutable and never in it — a module count moving without the
+    // mutated set moving is what an extraction of pure types looks like.
     // 64 since `quality/drawing-score.ts`, outside the lane: an instrument,
     // calibrated by examples that plant one defect each and read exactly one
     // — the shape a mutation run would report as unsurprising survivors —
@@ -112,6 +116,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // mutated (the apart threshold, the shared-line minimum, the gap's
     // axis), and the first survived, which is how the tie case came to be
     // pinned.
+    //
+    // Still 67 with `layout/contributed-router.ts`, which arrived in the same
+    // increment that moved `scene-graph.ts` out: one module in, one out.
+    // The router is outside the lane, because every
+    // branch it has is a way of DECLINING — no contribution claims the edge,
+    // the name is one nobody registered, the router answers `null`, the path
+    // is under two points, an endpoint is missing — and each falls back to
+    // the built-in, which `contributed-router.test.ts` pins by name. A
+    // survivor there would say a fallback is unobserved, and the fallbacks
+    // are the whole module.
     // 68 and 13 since `tidy-units.ts`, split out of `tidy.ts` when that file
     // passed the 800-line budget and covered for the same reason `tidy.ts`
     // is: the split moved `buildUnits` — where `tidy.ts`'s own survivors had

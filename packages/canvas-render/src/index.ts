@@ -1,3 +1,34 @@
+export type {
+  Appearance,
+  BlockquoteNode,
+  BoundingBox,
+  CodeBlockNode,
+  Dimensions,
+  EmbedPlaceholderNode,
+  EmbedResolvedNode,
+  GlyphSceneNode,
+  GroupSceneNode,
+  HeadingBlockNode,
+  IconSceneNode,
+  LinkProvenance,
+  ListBlockNode,
+  ListItemNode,
+  ParagraphBlockNode,
+  RawHtmlNode,
+  ResolvedEdgeNode,
+  Scene,
+  SceneInk,
+  SceneNode,
+  ShapeId,
+  ShapeSceneNode,
+  SvgFragmentNode,
+  TableBlockNode,
+  TableCellSceneNode,
+  TableRowSceneNode,
+  TextRunNode,
+  ThematicBreakNode,
+  UnresolvedReferenceNode,
+} from '@kamiazya/whiteboard-scene'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
@@ -75,6 +106,7 @@ export {
   naturalNodeContentSize,
   paintOrderOf,
   resolveCanvasPalette,
+  resolveCanvasThemeFontFamily,
   resolveShapeTable,
   resolveThemeTable,
   spatialRenderStyleSchema,
@@ -112,37 +144,6 @@ export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
 export { sceneEntryKeys } from './scene-entry-keys.js'
-export type {
-  Appearance,
-  BlockquoteNode,
-  BoundingBox,
-  CodeBlockNode,
-  Dimensions,
-  EmbedPlaceholderNode,
-  EmbedResolvedNode,
-  GlyphSceneNode,
-  GroupSceneNode,
-  HeadingBlockNode,
-  IconSceneNode,
-  LinkProvenance,
-  ListBlockNode,
-  ListItemNode,
-  ParagraphBlockNode,
-  RawHtmlNode,
-  ResolvedEdgeNode,
-  Scene,
-  SceneInk,
-  SceneNode,
-  ShapeId,
-  ShapeSceneNode,
-  SvgFragmentNode,
-  TableBlockNode,
-  TableCellSceneNode,
-  TableRowSceneNode,
-  TextRunNode,
-  ThematicBreakNode,
-  UnresolvedReferenceNode,
-} from './scene-graph.js'
 export type { IconTable, SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
 export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'

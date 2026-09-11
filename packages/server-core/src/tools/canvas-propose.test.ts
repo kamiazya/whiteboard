@@ -365,3 +365,79 @@ describe('the default mode (ADR-0029 decision 7)', () => {
     ).rejects.toThrow(/cannot carry this verb/)
   })
 })
+
+// The diff compares a canvas read from storage against one rebuilt by the
+// ops, so an object-valued field arrives as two deep-equal objects that are
+// not the SAME object. Compared by identity, every element carrying one
+// looks changed — a no-op change whose `patch` equals its `assumed`, on an
+// element nobody named. Found by the MCP smoke on the first board whose
+// edge carried a facet.
+describe('elements whose fields hold objects', () => {
+  const withFacets: SpatialCanvas = {
+    nodes: [
+      {
+        id: 'a',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 40,
+        text: 'A',
+        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' } } },
+      },
+      { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
+    ],
+    edges: [
+      {
+        id: 'e',
+        fromNode: 'a',
+        toNode: 'b',
+        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      },
+    ],
+  }
+
+  test('are not proposed as changed when nothing about them moved', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, withFacets)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      ops: [{ op: 'node.patch', id: 'b', patch: { x: 900 } }],
+    })
+
+    // Exactly the change that was asked for, on exactly the element named.
+    expect(result.proposed?.changes.map((change) => change.id)).toEqual(['node:b'])
+  })
+
+  test('are still proposed when the object itself differs', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, withFacets)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      ops: [
+        {
+          op: 'edge.patch',
+          id: 'e',
+          patch: { 'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } } },
+        },
+      ],
+    })
+
+    const change = result.proposed?.changes[0]
+    expect(change?.id).toBe('edge:e')
+    expect(change?.op === 'edge.patch' && change.patch['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'curved' } },
+    })
+    expect(change?.op === 'edge.patch' && change.assumed['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    })
+  })
+})

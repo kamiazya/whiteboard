@@ -1,4 +1,8 @@
 import {
+  constantRatioMeasureText,
+  SPATIAL_THEME_FONT_FAMILY,
+} from '@kamiazya/whiteboard-canvas-render'
+import {
   writeDocumentKind,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -155,12 +159,15 @@ describe('wb_scene_render measurer injection', () => {
     const measured: string[] = []
     const tool = createCanvasRenderSvgTool({
       ...makeDeps(store),
-      measure: async () => (text, font) => {
-        measured.push(text)
-        // Deliberately unlike the constant-ratio fallback, so a scene laid
-        // out with the fallback instead cannot produce this width.
-        return { advanceWidth: text.length * font.sizePx * 3, ascent: 1, descent: 1, lineGap: 0 }
-      },
+      textMeasurer: async () => ({
+        measure: (text, font) => {
+          measured.push(text)
+          // Deliberately unlike the constant-ratio fallback, so a scene laid
+          // out with the fallback instead cannot produce this width.
+          return { advanceWidth: text.length * font.sizePx * 3, ascent: 1, descent: 1, lineGap: 0 }
+        },
+        measurableFamilies: new Set([SPATIAL_THEME_FONT_FAMILY]),
+      }),
     })
 
     const result = await tool.execute({
@@ -229,5 +236,66 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
     const base = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }
     expect(canvasRenderSvgInputSchema.parse(base).style).toBe('clean')
     expect(canvasRenderSvgInputSchema.safeParse({ ...base, style: 'sketch' }).success).toBe(false)
+  })
+})
+
+describe('wb_scene_render declares a theme family only where the measurer holds it', () => {
+  // The sketch theme names Yomogi. Whether that family is DECLARED in the SVG
+  // is the measurer's answer, never a second list: a family declared from one
+  // list and measured from another moves every wrapped line.
+  async function sketchStore() {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'a body' }],
+        edges: [],
+        'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+      })
+    })
+    return store
+  }
+
+  function depsMeasuring(store: FakeDocumentStore, ...families: string[]): ServerDeps {
+    return {
+      ...makeDeps(store),
+      textMeasurer: async () => ({
+        measure: constantRatioMeasureText,
+        measurableFamilies: new Set([SPATIAL_THEME_FONT_FAMILY, ...families]),
+      }),
+    }
+  }
+
+  test('an installed family the theme names is declared', async () => {
+    const tool = createCanvasRenderSvgTool(depsMeasuring(await sketchStore(), 'Yomogi'))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'document',
+    })
+    expect(result.svg).toContain('font-family="Yomogi"')
+  })
+
+  test('a family the measurer cannot answer for degrades to the bundled one', async () => {
+    const tool = createCanvasRenderSvgTool(depsMeasuring(await sketchStore()))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'document',
+    })
+    expect(result.svg).not.toContain('Yomogi')
+    expect(result.svg).toContain(`font-family="${SPATIAL_THEME_FONT_FAMILY}"`)
+  })
+
+  test('with no measurer supplied, only the bundled family is ever declared', async () => {
+    const tool = createCanvasRenderSvgTool(makeDeps(await sketchStore()))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'document',
+    })
+    expect(result.svg).not.toContain('Yomogi')
   })
 })

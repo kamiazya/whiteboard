@@ -6,8 +6,8 @@
 // contrast tests that guard the rest of it.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { Scene, TextRunNode } from '../../scene-graph.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'

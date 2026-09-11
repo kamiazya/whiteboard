@@ -12,6 +12,7 @@ import {
   SPATIAL_THEME_FONT_FAMILY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import { hasLoadedFace } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import {
   parseMarkdownBlockLines,
   parseMarkdownBody,
@@ -202,7 +203,18 @@ function layoutScene(
         measure,
         maxWidth,
         canvasAppearance: createEditorAppearance(theme ?? 'light'),
+        // A human surface draws the document (ADR-0030 decision 6), so a
+        // board embedded in a note is pencilled or glowing here exactly as
+        // it is on the canvas — the same default the spatial surfaces take.
+        style: 'document',
         fontFamily: SPATIAL_THEME_FONT_FAMILY,
+        // The markdown itself is measured and declared in the bundled
+        // family — no theme names one for a note's own prose. A board
+        // EMBEDDED in it does, and the family it declares must be the
+        // family this realm measured: the theme's only where a face for it
+        // is held, exactly as `editorLayoutBase` answers for the canvas
+        // surfaces (ADR-0011's invariant).
+        fontAvailable: hasLoadedFace,
         // A page, not an object. This pane runs to a readable measure, where the
         // node scale — cut so a heading cannot eat a third of a 280px box —
         // reads timid. Set on `layoutScene` rather than at the preview's own

@@ -1,5 +1,5 @@
+import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
-import type { BoundingBox, Scene } from './scene-graph.js'
 
 /**
  * `sceneDigest`'s output is the ONLY Zod-schematized surface in this

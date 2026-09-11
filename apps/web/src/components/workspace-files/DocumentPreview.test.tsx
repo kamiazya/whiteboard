@@ -3,6 +3,29 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { DocumentPreview } from './DocumentPreview.js'
 
+// The tab's face set, as the pane reads it. Hoisted because the pane
+// imports the hook at collection time.
+const fonts = vi.hoisted(() => {
+  let generation = 0
+  const subscribers = new Set<() => void>()
+  return {
+    subscribe: (callback: () => void) => {
+      subscribers.add(callback)
+      return () => subscribers.delete(callback)
+    },
+    generation: () => generation,
+    land: () => {
+      generation += 1
+      for (const callback of subscribers) callback()
+    },
+  }
+})
+vi.mock('../../lib/theme-fonts.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/theme-fonts.js')>()),
+  subscribeThemeFonts: fonts.subscribe,
+  themeFontsGeneration: fonts.generation,
+}))
+
 afterEach(cleanup)
 
 const doc: WorkspaceDocumentEntry = {
@@ -233,5 +256,30 @@ describe('kind row and action icons', () => {
     expect(iconIn('Open')).toContain('lucide-external-link')
     expect(iconIn('Duplicate')).toContain('lucide-copy-plus')
     expect(iconIn('Delete')).toContain('lucide-trash-2')
+  })
+})
+
+describe('a theme face landing in this tab', () => {
+  // The pane and the row beside it draw one picture, so the pane follows a
+  // landing face for the same reason the row does: a themed board is drawn
+  // in the bundled family until this tab holds the theme's face.
+  it('draws the document again', async () => {
+    const svgIn = (family: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><text font-family="${family}">hi</text></svg>`
+    const loadRender = vi
+      .fn(async () => drawn)
+      .mockResolvedValueOnce({ ...drawn, svg: svgIn('Roboto') })
+      .mockResolvedValueOnce({ ...drawn, svg: svgIn('Yomogi') })
+    render(<DocumentPreview document={doc} loadRender={loadRender} />)
+
+    await act(async () => {})
+    expect(screen.getByTestId('preview-render').innerHTML).toContain('font-family="Roboto"')
+
+    await act(async () => {
+      fonts.land()
+    })
+
+    expect(screen.getByTestId('preview-render').innerHTML).toContain('font-family="Yomogi"')
+    expect(loadRender).toHaveBeenCalledTimes(2)
   })
 })

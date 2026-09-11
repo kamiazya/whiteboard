@@ -1,8 +1,4 @@
-import {
-  constantRatioMeasureText,
-  sceneDigest,
-  sceneDigestSchema,
-} from '@kamiazya/whiteboard-canvas-render'
+import { sceneDigest, sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
 import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type CanvasEdge,
@@ -17,6 +13,7 @@ import {
 import { z } from 'zod'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
+import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
@@ -266,7 +263,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
       // a different model than the one that draws the picture would make the
       // claim about nothing.
       const { nodes: laidOut, ...relations } = sceneDigest(
-        composeCanvasScene(canvas, (await deps.measure?.()) ?? constantRatioMeasureText),
+        composeCanvasScene(canvas, (await resolveTextMeasurer(deps)).measure),
       )
       // The one fact the node list above cannot restate. Matched by id, so a
       // node past `SNAPSHOT_MAX_NODES` simply never gets asked about.

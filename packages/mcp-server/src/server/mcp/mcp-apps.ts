@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { FONT_SOURCE_ORIGIN } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { EXTENSION_ID, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { WHITEBOARD_ROOT } from '../config.js'
@@ -32,9 +33,32 @@ const WIDGET_HTML_PATH = resolve(WHITEBOARD_ROOT, 'dist/widget/canvas-viewer.htm
 let activeWidgetHtmlPath = WIDGET_HTML_PATH
 let cachedWidgetHtml: string | undefined
 
+// The widget's ONE exception to its zero-network rule (ADR-0011's
+// 2026-09-10 note): the origin the font catalogue is served from, so a
+// themed canvas can be drawn in the family its theme names instead of the
+// bundled one. A host enforces its iframe CSP from this declaration, so
+// omitting it makes the fetch fail with nothing to read — the widget keeps
+// the bundled family and says nothing. Both directives, because the
+// response is fetched (`connect-src`) and then used as a font
+// (`font-src`, which `resourceDomains` covers).
+//
+// It is the same origin the daemon's own font installer is pinned to
+// (daemon-client's FONT_SOURCE_ORIGIN), imported rather than restated: two
+// spellings of "the one host this product will fetch a font from" is one
+// more than can be kept in step.
+//
+// Shaped as ext-apps' `McpUiResourceCsp`, but NOT annotated with it: that
+// interface lives behind the package's `./types` re-export, which resolves
+// to nothing under this package's NodeNext build (verified — every type
+// from it, not only this one). `mcp-apps.test.ts` pins the shape instead.
+const WIDGET_CSP = {
+  resourceDomains: [FONT_SOURCE_ORIGIN],
+  connectDomains: [FONT_SOURCE_ORIGIN],
+} as const
+
 // Reads and caches the widget HTML at module scope. A per-request McpServer
 // (the HTTP /mcp handler constructs one per request) must not re-read this
-// ~8.5 MB file from disk on every resources/read call, and the read is
+// 1.9 MB file from disk on every resources/read call, and the read is
 // async so the first request never blocks the event loop on it. Only a
 // successful read is cached — a missing file stays retryable (e.g. a build
 // finishing after the daemon started).
@@ -85,7 +109,7 @@ export function registerMcpAppsExtension(server: McpServer): void {
     {
       title: 'Whiteboard canvas view',
       description:
-        'Read-only interactive Excalidraw canvas view rendered inline in the chat. Pan/zoom/select a scene snapshot; no daemon credentials are ever passed into the widget.',
+        'Read-only interactive canvas view rendered inline in the chat. Pan/zoom/select a scene snapshot; no daemon credentials are ever passed into the widget.',
       mimeType: RESOURCE_MIME_TYPE,
     },
     async () => ({
@@ -94,6 +118,7 @@ export function registerMcpAppsExtension(server: McpServer): void {
           uri: CANVAS_VIEW_RESOURCE_URI,
           mimeType: RESOURCE_MIME_TYPE,
           text: await readWidgetHtml(),
+          _meta: { ui: { csp: WIDGET_CSP } },
         },
       ],
     }),

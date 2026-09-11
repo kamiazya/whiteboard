@@ -3,8 +3,8 @@
 // document that names `visual.sketch` or `visual.neon` draws that way
 // wherever a caller asks for the document's style.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'

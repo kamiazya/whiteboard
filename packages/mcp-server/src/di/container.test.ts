@@ -42,8 +42,12 @@ describe('resolveServerDeps', () => {
   it('supplies the real opentype measurer, not the constant-ratio fallback', async () => {
     const deps = resolveServerDeps(createContainer())
 
-    const measure = await deps.measure?.()
+    const measurer = await deps.textMeasurer?.()
+    const measure = measurer?.measure
     expect(measure).toBeDefined()
+    // The families ride with the measurer: what wb_scene_render may declare
+    // is what this measurer holds a face for, the bundled family at least.
+    expect(measurer?.measurableFamilies.has(EXPORT_FONT_FAMILY)).toBe(true)
     const font = {
       family: EXPORT_FONT_FAMILY,
       fallbackChain: [],

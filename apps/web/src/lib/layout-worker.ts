@@ -28,7 +28,6 @@ import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-
 // `document` on evaluation, and a worker has none — importing it throws
 // `document is not defined` before a single message is handled.
 
-import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
 import {
   ensureViewerFontLoaded,
   registerFontBytes,
@@ -36,9 +35,9 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
-import { createSpatialContentCache } from './content-cache'
 import { outlineFromSpatial } from './document-outline.js'
 import { resolveRectColor } from './favicon.js'
+import { createContentCacheStore } from './layout-content-caches.js'
 import {
   FONT_DEGRADED,
   type LayoutRequest,
@@ -54,24 +53,12 @@ import {
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
-import type { ResolvedTheme } from './theme.js'
 
 const measure = createBrowserMeasureText()
 
-// One content cache per theme, kept while the reference wire is the one
-// it was filled under. Sound because this worker REFUSES to lay out until
-// its font face is loaded (the FONT_DEGRADED gate below), so `measure`
-// behaves identically for every request it ever serves — theme and what a
-// text node's body can embed are the only remaining cache axes, and the
-// second is compared by its bytes: a different wire is a different cache.
-const contentCaches = new Map<ResolvedTheme, { key: string; cache: SpatialContentCache }>()
-function contentCacheFor(theme: ResolvedTheme, wireKey: string): SpatialContentCache {
-  const existing = contentCaches.get(theme)
-  if (existing !== undefined && existing.key === wireKey) return existing.cache
-  const cache = createSpatialContentCache()
-  contentCaches.set(theme, { key: wireKey, cache })
-  return cache
-}
+// One store for this worker's whole life; its axes and why they are the
+// ones that matter are `layout-content-caches.ts`.
+const contentCacheFor = createContentCacheStore()
 
 /**
  * Decodes a stored snapshot into a canvas, INSIDE the worker.
@@ -333,6 +320,11 @@ self.onmessage = async (
     const references =
       request.references === undefined ? undefined : referenceSeamsFromWire(request.references)
     const expanded = new Set(request.expandedFileIds ?? [])
+    // What this realm could not measure. Reported back rather than acted on
+    // here: only the asking thread can fetch a face and register it in every
+    // realm at once, and a list surface's thread never decodes the canvas,
+    // so this is where the family a board's theme names first becomes known.
+    const fontsMissing = new Set<string>()
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
@@ -344,11 +336,20 @@ self.onmessage = async (
         missing: missingRefs,
       }),
       expandFileNode: references === undefined ? undefined : (node) => expanded.has(node.id),
-      contentCache: contentCacheFor(request.theme, JSON.stringify(request.references ?? null)),
+      contentCache: contentCacheFor({
+        theme: request.theme,
+        // The look the request asks for is part of what its bodies ARE: a
+        // theme changes their ink even where it changes no metric.
+        ...(request.style === undefined ? {} : { style: request.style }),
+        wireKey: JSON.stringify(request.references ?? null),
+      }),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       showResolved: request.showResolved,
       threads: request.threads,
       proposals: request.proposals,
+      onDegrade: (event) => {
+        if (event.kind === 'font-missing') fontsMissing.add(event.family)
+      },
     })
     const response: LayoutResponse = {
       type: 'laid-out',
@@ -357,6 +358,7 @@ self.onmessage = async (
       bounds,
       scene,
       anchors,
+      ...(fontsMissing.size === 0 ? {} : { fontsMissing: [...fontsMissing] }),
     }
     self.postMessage(response)
     // The whole reply, `scene` and `anchors` included: they are not optional

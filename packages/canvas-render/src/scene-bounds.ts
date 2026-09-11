@@ -1,6 +1,3 @@
-import { edgeArrowPolygons } from './edge-arrows.js'
-import { glowReachPx } from './layout/ink/glow.js'
-import { SKETCH_INK_REACH_PX } from './layout/ink/sketch.js'
 import type {
   BoundingBox,
   ListItemNode,
@@ -9,7 +6,10 @@ import type {
   SceneNode,
   TableCellSceneNode,
   TableRowSceneNode,
-} from './scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { edgeArrowPolygons } from './edge-arrows.js'
+import { glowReachPx } from './layout/ink/glow.js'
+import { SKETCH_INK_REACH_PX } from './layout/ink/sketch.js'
 
 /**
  * Nodes reachable while walking the scene tree. `ListItemNode`,

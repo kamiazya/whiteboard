@@ -55,9 +55,10 @@ export function useEditSessionState({ canvas, selectedId }: EditSessionStateInpu
   const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
   const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
   const [canvasPicker, setDocumentPicker] = useState<DocumentPickerState | null>(null)
-  // The inspector is open or shut; WHICH node it edits follows the
-  // selection. Pinning it to the node the menu was opened on made it a
-  // dialog you had to close before you could look at anything else.
+  // The inspector is open or shut; WHICH object it edits follows the
+  // selection — a node or an edge, since both carry facets. Pinning it to
+  // the object the menu was opened on made it a dialog you had to close
+  // before you could look at anything else.
   const [facetPanelOpen, setFacetPanelOpen] = useState(false)
   // Deselecting CLOSES it, rather than leaving it standing with nothing to
   // edit. It is the same act that dismisses the context menu, and on touch
@@ -70,7 +71,7 @@ export function useEditSessionState({ canvas, selectedId }: EditSessionStateInpu
   // rendering null and leaving it true) is what keeps a later re-open an
   // ordinary open — the earlier version of this returned null and stranded
   // the flag, which only a new selection could get out of.
-  if (facetPanelOpen && selectedId === null) setFacetPanelOpen(false)
+  if (facetPanelOpen && selectedId === null && selectedEdgeId === null) setFacetPanelOpen(false)
 
   return {
     showResolvedComments,

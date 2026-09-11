@@ -321,3 +321,19 @@ export function proposalAt(
   }
   return undefined
 }
+
+/**
+ * A pointer event's position relative to the editor root, which is the
+ * space `screenToCanvas` reads.
+ *
+ * Here rather than in the editor because an overlay that takes its own
+ * press needs the same mapping, and two of them is how the pointer and the
+ * geometry come to disagree about where a press landed.
+ */
+export function clientPointToRootLocal(
+  event: { readonly clientX: number; readonly clientY: number },
+  root: HTMLElement,
+): Point {
+  const rect = root.getBoundingClientRect()
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+}

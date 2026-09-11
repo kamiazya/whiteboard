@@ -68,7 +68,11 @@ export interface MarkdownTheme {
   readonly thematicBreakHeightPx: number
   readonly borderWidthPx: number
   readonly cornerRadiusPx: number
-  /** The one neutral every piece of chrome is drawn in. */
+  /**
+   * The one neutral every piece of chrome is drawn in. A themed canvas
+   * supplies its own here (the palette's `markdownChrome`), so a body's
+   * furniture belongs to the same theme as the box around it.
+   */
   readonly chromeColor: string
   /** Filled panel behind code (block and inline). */
   readonly panelOpacity: number
@@ -92,6 +96,9 @@ export const MARKDOWN_THEME_NODE: MarkdownTheme = Object.freeze({
   listIndentPx: 22,
   listMarkerGapPx: 8,
   listItemGapPx: 4,
+  // ponytail: one system mono stack for every theme — a theme's own mono
+  // family needs a FACE on every surface (ADR-0011/0012), and the export
+  // measurer would otherwise declare a family it did not measure.
   monoFontFamily:
     'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
   codeFontScale: 0.85,

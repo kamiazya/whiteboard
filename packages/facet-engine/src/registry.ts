@@ -22,7 +22,7 @@ import {
 const SEGMENT_PATTERN = /^[a-z][a-z0-9-]*$/
 const VERSION_PATTERN = /^v[0-9]+$/
 
-export type FacetTarget = 'document' | 'canvas' | 'node'
+export type FacetTarget = 'document' | 'canvas' | 'node' | 'edge'
 
 export interface FacetCompatEntry {
   /** The RETAINED schema of that older version — kept so old payloads still parse. */

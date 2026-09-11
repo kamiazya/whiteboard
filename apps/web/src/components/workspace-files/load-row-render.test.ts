@@ -1,7 +1,26 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { createRowRenderLoader, type RowRenderDeps } from './load-row-render.js'
+
+// Hoisted, because the loader imports both of these modules at collection
+// time — a plain `const` would still be in its temporal dead zone when the
+// mock factory runs.
+const fonts = vi.hoisted(() => ({
+  loadThemeFontFromSource: vi.fn(async (_family: string) => true),
+  facesKey: { value: '' },
+}))
+vi.mock('../../lib/theme-fonts.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/theme-fonts.js')>()),
+  loadThemeFontFromSource: (family: string) => fonts.loadThemeFontFromSource(family),
+  themeFacesKey: () => fonts.facesKey.value,
+}))
+
+const pool = vi.hoisted(() => ({ run: vi.fn() }))
+vi.mock('../../lib/layout-worker-pool.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/layout-worker-pool.js')>()),
+  sharedLayoutWorkerPool: () => pool,
+}))
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>'
 const BOUNDS = { x: 0, y: 0, w: 640, h: 200 }
@@ -224,5 +243,79 @@ describe('createRowRenderLoader', () => {
       contentDigest: 'bbbbbbbbbbbbbbbb',
     })
     expect(d.renderMarkdown).toHaveBeenCalledTimes(2)
+  })
+})
+
+// A list surface holds only the stored bytes, so the WORKER is the first
+// realm to know which family a board's theme names. It reports the one it
+// could not measure, and the fetch happens back here, on the thread that
+// owns the face set — the same face the editor asks for, through the same
+// in-flight map.
+describe('the theme face a row needs', () => {
+  beforeEach(() => {
+    pool.run.mockReset()
+    fonts.loadThemeFontFromSource.mockClear()
+    fonts.facesKey.value = ''
+  })
+
+  const board = { documentId: 'd9', path: 'board', kind: 'spatial' as const }
+
+  it('asks for the family the worker could not measure', async () => {
+    pool.run.mockResolvedValue({
+      type: 'laid-out',
+      id: 1,
+      svg: SVG,
+      bounds: BOUNDS,
+      fontsMissing: ['Yomogi'],
+    })
+
+    await createRowRenderLoader({
+      source: fakeFilesSource(),
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+    })(board)
+
+    expect(fonts.loadThemeFontFromSource).toHaveBeenCalledTimes(1)
+    expect(fonts.loadThemeFontFromSource).toHaveBeenCalledWith('Yomogi')
+  })
+
+  // The fetch is on USE: a folder of boards that name no theme costs no
+  // font request at all, which is what keeps this off the startup path.
+  it('asks for nothing when the worker measured everything the board wanted', async () => {
+    pool.run.mockResolvedValue({ type: 'laid-out', id: 1, svg: SVG, bounds: BOUNDS })
+
+    await createRowRenderLoader({
+      source: fakeFilesSource(),
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+    })(board)
+
+    expect(fonts.loadThemeFontFromSource).not.toHaveBeenCalled()
+  })
+
+  // The picture a row holds was drawn with whatever faces this realm could
+  // measure at the time, so the faces are part of what identifies it.
+  // Without the axis the memo — and the worker's own store behind it —
+  // keeps answering with the bundled-family picture for the life of the tab.
+  it('draws a spatial row again once a face has landed, and leaves a markdown row alone', async () => {
+    const broker = createInTabRenderBroker()
+    const stamped = { contentDigest: 'c0ffee0000000009' }
+    const note = { documentId: 'n9', path: 'n', kind: 'markdown' as const, ...stamped }
+    const themed = { ...board, ...stamped }
+
+    const before = deps({ broker })
+    await createRowRenderLoader(before)(note)
+    await createRowRenderLoader(before)(themed)
+
+    fonts.facesKey.value = 'Yomogi'
+    const after = deps({ broker })
+    await createRowRenderLoader(after)(note)
+    await createRowRenderLoader(after)(themed)
+
+    expect(after.renderSpatial).toHaveBeenCalledTimes(1)
+    // Markdown is measured in the bundled family whatever a theme names, so
+    // its picture survives a face landing — the same asymmetry the theme
+    // axis already has.
+    expect(after.renderMarkdown).not.toHaveBeenCalled()
   })
 })

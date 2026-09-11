@@ -108,7 +108,7 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
   expandedFileIds:
     'view only: the LOD gate deciding which file nodes render an inline miniature at this zoom',
   facetPanelOpen:
-    'view only: open or shut. WHICH node the inspector edits follows the selection, deliberately',
+    'view only: open or shut. WHICH object the inspector edits — a node or an edge — follows the selection, deliberately',
   rootSize: 'view only: the measured size of the editor root, an input to layout',
   shellWidth: 'view only: the measured width the inspector reserves',
 }

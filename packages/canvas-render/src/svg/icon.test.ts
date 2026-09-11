@@ -1,5 +1,5 @@
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { Scene } from '../scene-graph.js'
 import { renderSceneToSvg } from './backend.js'
 
 const icon = (name: string, x = 0): Scene['nodes'][number] => ({

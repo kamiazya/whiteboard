@@ -18,9 +18,9 @@
  * to wrap.
  */
 import type { CommentThread, TextQuoteSelector } from '@kamiazya/whiteboard-model'
+import type { Appearance, SceneNode, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
-import type { Appearance, SceneNode, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { runFontOf } from './nodes/mdast-blocks.js'
 
 /** A thread about a passage of a node's text, as the layout needs it. */

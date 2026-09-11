@@ -3,7 +3,7 @@
 // Pure segment-pair intersection over already-routed polylines — no
 // knowledge of styles; rounded corners re-use the same points because
 // 'curved' travels the orthogonal waypoints.
-import type { EdgeJumpPoint, ResolvedEdgeNode } from '../../scene-graph.js'
+import type { EdgeJumpPoint, ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 
 type Point = { readonly x: number; readonly y: number }
 

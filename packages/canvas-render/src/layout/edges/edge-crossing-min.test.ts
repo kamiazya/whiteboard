@@ -117,7 +117,7 @@ describe('edgeSideOverrides through layoutSpatialEdges', () => {
         { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
         { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
       ],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' as const } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' as const } } },
     }
     const frozen = new Map([
       ['e-orange', { fromSide: 'left' as const, toSide: 'bottom' as const }],

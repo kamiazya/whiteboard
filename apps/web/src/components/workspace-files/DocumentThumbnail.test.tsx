@@ -2,6 +2,29 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
 
+// The tab's face set, as the component reads it. Hoisted because the
+// component imports the hook at collection time.
+const fonts = vi.hoisted(() => {
+  let generation = 0
+  const subscribers = new Set<() => void>()
+  return {
+    subscribe: (callback: () => void) => {
+      subscribers.add(callback)
+      return () => subscribers.delete(callback)
+    },
+    generation: () => generation,
+    land: () => {
+      generation += 1
+      for (const callback of subscribers) callback()
+    },
+  }
+})
+vi.mock('../../lib/theme-fonts.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/theme-fonts.js')>()),
+  subscribeThemeFonts: fonts.subscribe,
+  themeFontsGeneration: fonts.generation,
+}))
+
 afterEach(cleanup)
 
 const doc = { documentId: 'c1', path: 'a/b', name: 'Diagram', kind: 'spatial' as const }
@@ -9,6 +32,9 @@ const drawn = {
   svg: '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="10" height="10"/></svg>',
   bounds: { x: 0, y: 0, w: 400, h: 300 },
 }
+
+const svgIn = (family: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><text font-family="${family}">hi</text></svg>`
 
 function installObserver() {
   const instances: { fire: () => void }[] = []
@@ -105,5 +131,32 @@ describe('DocumentThumbnail', () => {
       <DocumentThumbnail document={doc} loadRender={async () => drawn} />,
     )
     expect(getByTestId('document-thumbnail').getAttribute('aria-hidden')).toBe('true')
+  })
+
+  // The row is a picture of the document, so it has to become the picture
+  // the editor draws — a board that names a theme is drawn in the bundled
+  // family until this tab holds that theme's face, and must be drawn again
+  // once it does. Nothing else notices: the render is already on screen.
+  it('draws the row again once a theme face lands in this tab', async () => {
+    const observers = installObserver()
+    const loadRender = vi
+      .fn(async () => drawn)
+      .mockResolvedValueOnce({ ...drawn, svg: svgIn('Roboto') })
+      .mockResolvedValueOnce({ ...drawn, svg: svgIn('Yomogi') })
+    const { getByTestId } = render(<DocumentThumbnail document={doc} loadRender={loadRender} />)
+
+    await act(async () => {
+      observers[0]?.fire()
+    })
+    expect(getByTestId('document-thumbnail').innerHTML).toContain('font-family="Roboto"')
+
+    await act(async () => {
+      fonts.land()
+    })
+
+    await waitFor(() => {
+      expect(getByTestId('document-thumbnail').innerHTML).toContain('font-family="Yomogi"')
+    })
+    expect(loadRender).toHaveBeenCalledTimes(2)
   })
 })

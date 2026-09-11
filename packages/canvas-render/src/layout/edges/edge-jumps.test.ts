@@ -1,11 +1,11 @@
-// Line jumps (x-whiteboard.edgeRouting.lineJumps): where one edge crosses
+// Line jumps (the `visual.edges/v0` facet's `lineJumps`): where one edge crosses
 // another, the LATER edge (document order — the one painted on top) hops
 // over the earlier one with a small arc, so crossing lines stay readable.
 // Canvas-wide today; the per-edge override slot reuses the same resolution.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { ResolvedEdgeNode } from '../../scene-graph.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
@@ -35,7 +35,9 @@ const cross = (lineJumps?: 'none' | 'arc'): SpatialCanvas => ({
     { id: 'e1', fromNode: 'a', toNode: 'b' },
     { id: 'e2', fromNode: 'c', toNode: 'd' },
   ],
-  ...(lineJumps !== undefined ? { 'x-whiteboard': { edgeRouting: { lineJumps } } } : {}),
+  ...(lineJumps !== undefined
+    ? { 'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps } } } }
+    : {}),
 })
 
 const options = () => ({
@@ -83,7 +85,7 @@ describe('line jumps', () => {
         { id: 'v2', fromNode: 'c2', toNode: 'd2' },
         { id: 'h', fromNode: 'a', toNode: 'b' },
       ],
-      'x-whiteboard': { edgeRouting: { lineJumps: 'arc' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
     }
     const scene = layoutSpatialCanvas(tight, options())
     const jumps = edgeById(scene.nodes, 'h')?.jumps
@@ -104,7 +106,7 @@ describe('line jumps', () => {
         { id: 'f1', fromNode: 'hub', toNode: 'p' },
         { id: 'f2', fromNode: 'hub', toNode: 'q' },
       ],
-      'x-whiteboard': { edgeRouting: { lineJumps: 'arc' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
     }
     const scene = layoutSpatialCanvas(fan, options())
     expect(edgeById(scene.nodes, 'f2')?.jumps).toBeUndefined()

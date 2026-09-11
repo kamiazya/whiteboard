@@ -11,9 +11,10 @@
 // box whose right edge lands exactly on a grid line must not claim the cell
 // beyond it, which in the implementation is `ceil(...) - 1` and here is
 // `x + w > cellX`.
+
+import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest } from './scene-digest.js'
-import type { BoundingBox, Scene } from './scene-graph.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const GRID = 20

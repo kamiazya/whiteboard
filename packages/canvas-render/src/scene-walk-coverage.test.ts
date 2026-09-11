@@ -17,10 +17,7 @@
  * has rather than asking a walker which one applies — an oracle built out of
  * the switches under test would share their blind spot.
  */
-import { expect, it } from 'vitest'
-import { scaleScene } from './layout/scale-scene.js'
-import { translateScene } from './layout/translate-scene.js'
-import { sceneBounds } from './scene-bounds.js'
+
 import type {
   ListItemNode,
   Scene,
@@ -28,7 +25,11 @@ import type {
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
-} from './scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { expect, it } from 'vitest'
+import { scaleScene } from './layout/scale-scene.js'
+import { translateScene } from './layout/translate-scene.js'
+import { sceneBounds } from './scene-bounds.js'
 
 type WalkableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
 
