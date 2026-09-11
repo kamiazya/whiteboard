@@ -64,6 +64,12 @@ describe('themeTokensSchema', () => {
     expect(themeTokensSchema.safeParse(namespaced).success).toBe(true)
   })
 
+  it('accepts an optional line weight and rejects a non-positive one', () => {
+    const base = themeTokensSchema.parse(SAMPLE_THEME_TOKENS)
+    expect(themeTokensSchema.parse({ ...base, strokeWidthPx: 1.4 }).strokeWidthPx).toBe(1.4)
+    expect(themeTokensSchema.safeParse({ ...base, strokeWidthPx: 0 }).success).toBe(false)
+  })
+
   it('rejects a glow without a positive radius', () => {
     expect(
       themeTokensSchema.safeParse({ ...SAMPLE_THEME_TOKENS, glow: { radiusPx: 0 } }).success,

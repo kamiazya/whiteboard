@@ -2,8 +2,9 @@
 // SECOND surface drawing the same comment gets the bubble's answer rather
 // than the document's — the failure this exists to prevent is silent, since
 // document typography on a comment looks like a design choice.
+
+import type { SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import {
   MARKDOWN_THEME_COMPACT,

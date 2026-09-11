@@ -30,7 +30,7 @@
  * uncrowded one.
  */
 
-import type { BoundingBox } from '../scene-graph.js'
+import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 
 /** Gap (px) from the anchor point to the bubble's nearest corner. */
 export const COMMENT_BUBBLE_OFFSET_PX = 14

@@ -21,7 +21,7 @@
  * bubble have no id of their own to be marked by.
  */
 
-import type { Scene, SceneNode } from './scene-graph.js'
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 
 export interface SceneEntry {
   readonly key: string

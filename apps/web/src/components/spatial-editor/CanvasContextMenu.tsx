@@ -269,6 +269,8 @@ export function CanvasContextMenu({
                 setEdgeLabelEditId,
                 setSelectedEdgeId,
                 onToggleEdgeLock,
+                facetRegistry,
+                setFacetPanelOpen,
               })
             : node === undefined
               ? canvasMenuItems({

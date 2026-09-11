@@ -1,10 +1,4 @@
 import { type LucideIconElement, VISUAL_ICONS } from '@kamiazya/whiteboard-plugin-visual'
-import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
-import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
-import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
-import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
-import type { ShapeTable } from '../layout/nodes/node-outline.js'
-import { sceneBounds } from '../scene-bounds.js'
 import type {
   BoundingBox,
   CodeBlockNode,
@@ -14,7 +8,13 @@ import type {
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
+import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
+import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
+import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
+import type { ShapeTable } from '../layout/nodes/node-outline.js'
+import { sceneBounds } from '../scene-bounds.js'
 import { collectDefs } from './defs.js'
 import type { SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'

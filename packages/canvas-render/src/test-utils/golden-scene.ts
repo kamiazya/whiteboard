@@ -1,4 +1,4 @@
-import type { Scene } from '../scene-graph.js'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import type { SvgDocumentOptions } from '../svg/backend.js'
 
 /**

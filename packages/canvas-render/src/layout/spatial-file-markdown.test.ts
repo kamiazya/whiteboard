@@ -5,8 +5,13 @@
 // canvas or an image the caller already resolved.
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type {
+  EmbedResolvedNode,
+  ImageSceneNode,
+  SceneNode,
+  TextRunNode,
+} from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { EmbedResolvedNode, ImageSceneNode, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import {

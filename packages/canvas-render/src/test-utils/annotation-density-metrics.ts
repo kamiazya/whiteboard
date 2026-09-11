@@ -1,4 +1,4 @@
-import type { BoundingBox, Scene, SceneNode, ShapeSceneNode } from '../scene-graph.js'
+import type { BoundingBox, Scene, SceneNode, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 
 /**
  * The annotation-density scoreboard's independent oracle, for both

@@ -39,11 +39,17 @@
  * Baseline filenames are platform/browser-suffixed (`-chromium-linux`) by
  * Vitest itself. CI runs linux chromium, so a baseline regenerated on a
  * non-linux machine is not CI-valid — regenerate on linux, or in CI.
- * `toMatchScreenshot` FAILS rather than auto-creating when a baseline is
- * missing, so a forgotten PNG commit is loud, not silently green.
+ * A missing baseline is CREATED and the test still FAILS ("a new one was
+ * created. Review it before running tests again"), so a forgotten PNG
+ * commit is loud rather than silently green — and the review step is the
+ * eyeballing above, not a second run.
  */
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { computeEdgeJumps } from '../layout/edges/edge-jumps.js'
-import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
+import { layoutSpatialCanvas, resolveCanvasPalette } from '../layout/spatial-canvas.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
+import { createFakeMeasure } from './fake-measure.js'
 
 const EDGE_APPEARANCE = { stroke: '#1f2933', strokeWidth: 2 } as const
 
@@ -196,4 +202,91 @@ export function buildIconSetScene(): Scene {
       appearance: { stroke: '#1f2933' },
     })),
   }
+}
+
+/**
+ * The one canvas both LOOK goldens are built from — a colour-preset text
+ * node inside a group frame, an uncoloured one, an ellipse silhouette, and
+ * three edges of which two cross. It exists because the rest of this file
+ * pins CRISP geometry only: a change to sketch ink or to neon's glow moved
+ * no committed pixel, so the whole look layer had no instrument.
+ *
+ * Text-free like every other fixture here, and for a harder reason than the
+ * human decision that made the rest so: a baseline is compared at zero
+ * mismatched pixels across machines whose installed FONTS differ (CI paints
+ * with the system Google Chrome on a runner carrying neither this
+ * container's font set nor the themes' own faces), so a rendered glyph is
+ * the one thing in a scene that cannot be reproduced. Bodies are therefore
+ * laid out through an empty parse.
+ */
+const LOOK_CANVAS: SpatialCanvas = {
+  nodes: [
+    { id: 'frame', type: 'group', x: 0, y: 0, width: 260, height: 200 },
+    { id: 'preset', type: 'text', x: 40, y: 60, width: 160, height: 80, text: '', color: '5' },
+    { id: 'plain', type: 'text', x: 400, y: 60, width: 160, height: 80, text: '' },
+    { id: 'sink', type: 'text', x: 40, y: 320, width: 160, height: 80, text: '' },
+    {
+      id: 'oval',
+      type: 'text',
+      x: 400,
+      y: 320,
+      width: 160,
+      height: 80,
+      text: '',
+      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'ellipse' } } },
+    },
+  ],
+  edges: [
+    { id: 'across', fromNode: 'preset', toNode: 'plain', toEnd: 'arrow' },
+    // The two diagonals of the four content nodes, so one hops the other.
+    { id: 'falling', fromNode: 'preset', toNode: 'oval', fromSide: 'bottom', toSide: 'top' },
+    { id: 'rising', fromNode: 'sink', toNode: 'plain', fromSide: 'top', toSide: 'bottom' },
+  ],
+  // Jump arcs are off unless a canvas asks for them, and a hop is one of the
+  // shapes the crisp lane already pins — so the look goldens see it too.
+  // `style` is left unsaid so each theme's own routing default still decides.
+  'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+}
+
+/** A look golden: the scene plus the theme's own paper, since a halo on the
+ *  wrong ground says nothing about how bright it is. */
+export interface LookScene {
+  readonly scene: Scene
+  readonly background: string
+}
+
+function buildLookScene(theme: string, mode: 'light' | 'dark'): LookScene {
+  const canvas: SpatialCanvas = {
+    ...LOOK_CANVAS,
+    'x-whiteboard': {
+      facets: { ...LOOK_CANVAS['x-whiteboard']?.facets, 'visual.theme/v0': { theme } },
+    },
+  }
+  return {
+    scene: layoutSpatialCanvas(canvas, {
+      measure: createFakeMeasure(),
+      // Text-free by construction — see LOOK_CANVAS.
+      parseBody: () => ({ type: 'root', children: [] }),
+      appearance: createSpatialTheme({ mode }),
+      // The bundled themes reach the canvas through the DEFAULT render
+      // contributions; `document` is what honours the facet at all.
+      style: 'document',
+    }),
+    // Read from the theme rather than restated as a hex here: a paper colour
+    // written twice is the drift class this package already names, and the
+    // second copy is the one nothing would have caught.
+    background: resolveCanvasPalette(canvas, mode).surface,
+  }
+}
+
+/** `visual.sketch` on its own paper: jittered two-pass outlines, a hatched
+ *  preset node, a dashed group frame, straight routing. */
+export function buildSketchLookScene(): LookScene {
+  return buildLookScene('visual.sketch', 'light')
+}
+
+/** `visual.neon` on its own deep ground: crisp geometry under a halo of each
+ *  element's own paint, orthogonal routing. */
+export function buildNeonLookScene(): LookScene {
+  return buildLookScene('visual.neon', 'dark')
 }

@@ -123,6 +123,112 @@ describe('canvas_view tool', () => {
     ])
   })
 
+  describe('themeFont', () => {
+    // The widget draws in a bundled family unless it can measure the one a
+    // theme names. It has no catalogue and no daemon URL, so the only place
+    // that question can be answered is here — and only the ANSWER travels,
+    // never the 4 MB behind it.
+    const catalogue = (family: string) =>
+      family === 'Yomogi'
+        ? {
+            family,
+            url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf',
+          }
+        : undefined
+
+    async function seedThemed(store: FakeDocumentStore, theme: string) {
+      await seedWorkspace(store)
+      await seedDoc(store, DOCUMENT_ID, (doc) => {
+        writeSpatialCanvas(doc, {
+          nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+          edges: [],
+          'x-whiteboard': { facets: { 'visual.theme/v0': { theme } } },
+        })
+      })
+    }
+
+    test('names the family the resolved theme wants, and where the catalogue keeps it', async () => {
+      const store = new FakeDocumentStore()
+      await seedThemed(store, 'visual.sketch')
+      const tool = createCanvasViewTool(
+        makeTestDeps({
+          documentStore: store,
+          documentIndex: store.documentIndex,
+          themeFontSource: catalogue,
+        }),
+      )
+
+      const result = await tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        style: 'document',
+      })
+
+      expect(canvasViewOutputSchema.parse(result).themeFont).toEqual({
+        family: 'Yomogi',
+        url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf',
+      })
+    })
+
+    test('says nothing under the bundled look, which draws in the bundled family', async () => {
+      const store = new FakeDocumentStore()
+      await seedThemed(store, 'visual.sketch')
+      const tool = createCanvasViewTool(
+        makeTestDeps({
+          documentStore: store,
+          documentIndex: store.documentIndex,
+          themeFontSource: catalogue,
+        }),
+      )
+
+      expect(
+        (await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })).themeFont,
+      ).toBeUndefined()
+    })
+
+    test('says nothing when the theme names the bundled family, or when nobody supplied a catalogue', async () => {
+      const store = new FakeDocumentStore()
+      // neon declares no family of its own.
+      await seedThemed(store, 'visual.neon')
+      const withCatalogue = createCanvasViewTool(
+        makeTestDeps({
+          documentStore: store,
+          documentIndex: store.documentIndex,
+          themeFontSource: catalogue,
+        }),
+      )
+      expect(
+        (
+          await withCatalogue.execute({
+            workspaceId: WORKSPACE_ID,
+            documentId: DOCUMENT_ID,
+            style: 'document',
+          })
+        ).themeFont,
+      ).toBeUndefined()
+
+      // A composition root that wires no catalogue is a valid server; the
+      // widget simply keeps the bundled family.
+      const sketchStore = new FakeDocumentStore()
+      await seedThemed(sketchStore, 'visual.sketch')
+      const withoutCatalogue = createCanvasViewTool(
+        makeTestDeps({
+          documentStore: sketchStore,
+          documentIndex: sketchStore.documentIndex,
+        }),
+      )
+      expect(
+        (
+          await withoutCatalogue.execute({
+            workspaceId: WORKSPACE_ID,
+            documentId: DOCUMENT_ID,
+            style: 'document',
+          })
+        ).themeFont,
+      ).toBeUndefined()
+    })
+  })
+
   test('carries the referenced markdown document as its name and raw body', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store)

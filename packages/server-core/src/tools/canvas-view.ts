@@ -1,4 +1,8 @@
-import { referenceTargets, spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
+import {
+  referenceTargets,
+  resolveCanvasThemeFontFamily,
+  spatialRenderStyleSchema,
+} from '@kamiazya/whiteboard-canvas-render'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
@@ -10,6 +14,7 @@ import { z } from 'zod'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
+import { themeFontSchema } from '../theme-font.js'
 import { loadDocument } from './document-io.js'
 
 /**
@@ -80,6 +85,18 @@ export const canvasViewOutputSchema = z
     references: z.record(z.string(), canvasViewReferenceSchema),
     /** The caller's `style`, echoed so the widget draws the look that was asked for. */
     style: spatialRenderStyleSchema.optional(),
+    /**
+     * The family the resolved theme names, and where the catalogue keeps it.
+     * Present only when the style resolves to a theme that names a family
+     * AND this server was wired with a catalogue that knows it — so a widget
+     * receiving nothing here keeps the bundled family, which is what it did
+     * before this field existed.
+     *
+     * The widget is the only consumer, and it re-checks the URL's origin
+     * against its own pinned constant before requesting anything: a payload
+     * field is not authority to fetch.
+     */
+    themeFont: themeFontSchema.optional(),
   })
   .strict()
 export type CanvasViewOutput = z.infer<typeof canvasViewOutputSchema>
@@ -110,12 +127,19 @@ export function createCanvasViewTool(deps: ServerDeps) {
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
       const { graph } = await loadReferenceGraph(deps, input.workspaceId, { canvases: [canvas] })
+      // Resolved from the style the CALLER asked for, not from the document's
+      // facet alone: a canvas naming a theme drawn under the bundled look
+      // has nothing to fetch, and a `style` naming a theme the document does
+      // not carry does.
+      const family = resolveCanvasThemeFontFamily(canvas, { style: input.style })
+      const themeFont = family === undefined ? undefined : deps.themeFontSource?.(family)
       return {
         workspaceId: input.workspaceId,
         documentId: input.documentId,
         scene: canvas,
         threads: readAnnotations(doc),
         ...(input.style === undefined ? {} : { style: input.style }),
+        ...(themeFont === undefined ? {} : { themeFont }),
         // Everything THIS canvas names, through the one definition of a
         // reference rather than a node-kind filter: its file nodes AND what
         // its text nodes embed or link. Seeded without `loaded`, so it stops

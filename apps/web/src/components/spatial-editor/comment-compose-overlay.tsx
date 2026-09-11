@@ -6,14 +6,11 @@ import {
   COMMENT_BUBBLE_RADIUS_PX,
   commentAnchor,
   placeCommentBubble,
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
+  type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { Point } from '../../lib/spatial/viewport.js'
-import type { ResolvedTheme } from '../../lib/theme.js'
 import type { CommentComposeState } from './CanvasContextMenu.js'
 import { defaultCreateId, type reduceGesture } from './gestures.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
@@ -49,11 +46,11 @@ function commentDraftBox(
  * drop-shadow filter (dy 1, blur ~3px at 30% black) that lifts the
  * settled chrome off the canvas plane.
  */
-export function commentComposeStyle(theme: ResolvedTheme): React.CSSProperties {
-  const { bubble } = (theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE).comment
+export function commentComposeStyle(palette: SpatialPalette): React.CSSProperties {
+  const { bubble } = palette.comment
   return {
     background: bubble.fill,
-    color: editorTextFill(theme),
+    color: palette.labelFill,
     border: `1px solid ${bubble.stroke}`,
     borderRadius: COMMENT_BUBBLE_RADIUS_PX,
     padding: COMMENT_BUBBLE_PADDING_PX,
@@ -99,7 +96,7 @@ export function CommentComposeOverlay({
   obstacles,
   createId,
   zoom,
-  theme,
+  palette,
   applyResult,
   onClose,
 }: {
@@ -110,7 +107,8 @@ export function CommentComposeOverlay({
   readonly obstacles: readonly BoundingBox[]
   readonly createId?: () => string
   readonly zoom: number
-  readonly theme: ResolvedTheme
+  /** The palette the board is drawn in, so the draft wears its comment chrome. */
+  readonly palette: SpatialPalette
   readonly applyResult: (result: ReturnType<typeof reduceGesture>) => void
   readonly onClose: () => void
 }) {
@@ -137,7 +135,7 @@ export function CommentComposeOverlay({
       )}
       initialText=""
       testId="comment-compose"
-      style={commentComposeStyle(theme)}
+      style={commentComposeStyle(palette)}
       onCommit={(draft) => {
         const text = draft.trim()
         if (text.length > 0 && compose.threadAnchor !== undefined) {

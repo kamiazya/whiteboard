@@ -5,7 +5,7 @@
  * (`file-size-budget.test.ts`) and this is a self-contained piece of
  * geometry: a theme, a state and a baseline in, two rects out.
  */
-import type { Appearance, ShapeSceneNode } from '../../scene-graph.js'
+import type { Appearance, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import type { MarkdownTheme } from '../../theme/markdown-theme.js'
 
 /** Body text's line box, the vertical space a marker centres itself in. */

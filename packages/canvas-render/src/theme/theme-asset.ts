@@ -11,6 +11,7 @@ import type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
 } from '../layout/nodes/spatial-appearance.js'
+import { MARKDOWN_THEME_NODE, type MarkdownTheme } from './markdown-theme.js'
 import type { SpatialPalette } from './spatial-palette.js'
 import { createSpatialTheme, type SpatialThemeMode } from './spatial-theme.js'
 
@@ -45,7 +46,28 @@ export function paletteFromTokens(tokens: PaletteTokens): SpatialPalette {
       bubble: { fill: tokens.comment.bubble.fill, stroke: tokens.comment.bubble.stroke },
     },
     proposal: { edge: tokens.proposal.edge, bubbleFill: tokens.proposal.bubbleFill },
+    // Spread rather than assigned: the bundled palettes declare none, and a
+    // present-but-undefined key would make the two shapes differ by a key.
+    ...(tokens.markdownChrome === undefined ? {} : { markdownChrome: tokens.markdownChrome }),
   }
+}
+
+/**
+ * The markdown metrics a body inside a THEMED canvas is laid out with: the
+ * node theme, with the theme's own neutral where its palette names one.
+ *
+ * A body is two-thirds furniture — the code panel, the blockquote rail, the
+ * checkbox — and without this the prose took the theme while the furniture
+ * around it stayed the bundled slate on every board.
+ */
+export function markdownTheme(
+  tokens: ThemeTokens | undefined,
+  mode: SpatialThemeMode | undefined,
+): MarkdownTheme {
+  const chrome = tokens?.palette[mode ?? 'light'].markdownChrome
+  return chrome === undefined
+    ? MARKDOWN_THEME_NODE
+    : { ...MARKDOWN_THEME_NODE, chromeColor: chrome }
 }
 
 export interface ThemedAppearanceOptions {
@@ -81,10 +103,16 @@ export function createThemedAppearance(
 
   const base = createSpatialTheme({ mode, palette: paletteFromTokens(tokens.palette[mode]) })
   const frame = tokens.defaults.groupFrame
-  // The halo rides every document appearance the theme resolves — node
-  // chrome, edges, labels — in the element's own paint; comment and
+  // The halo rides node chrome and edges in the element's own paint. Not a
+  // label: a 12px glyph blurred at three deviations thickens into a smudge,
+  // and the label already sits on its halo pill. Not a group frame: the
+  // largest and least informative thing on the board to bloom. Comment and
   // proposal chrome come from the base resolver untouched.
   const glow = tokens.glow === undefined ? {} : { glow: { radiusPx: tokens.glow.radiusPx } }
+  // The theme's line weight reaches node chrome and edges — never a label,
+  // which is filled text — and a group frame's own width, when the theme
+  // declares one, wins over it below.
+  const weight = tokens.strokeWidthPx === undefined ? {} : { strokeWidth: tokens.strokeWidthPx }
   const resolveNode = (node: SpatialNode): SpatialNodeAppearance => {
     const resolved = base.resolveNode(node)
     const framed =
@@ -96,7 +124,8 @@ export function createThemedAppearance(
             ...(frame.strokeWidth === undefined ? {} : { strokeWidth: frame.strokeWidth }),
           }
         : {}
-    return { ...resolved, appearance: { ...resolved.appearance, ...framed, ...glow } }
+    const halo = node.type === 'group' ? {} : glow
+    return { ...resolved, appearance: { ...resolved.appearance, ...weight, ...framed, ...halo } }
   }
   const themed: SpatialAppearanceResolver = Object.freeze({
     ...base,
@@ -104,9 +133,9 @@ export function createThemedAppearance(
     resolveNode,
     resolveEdge: (edge: CanvasEdge) => {
       const resolved = base.resolveEdge(edge)
-      return resolved === undefined ? undefined : { ...resolved, ...glow }
+      return resolved === undefined ? undefined : { ...resolved, ...weight, ...glow }
     },
-    resolveLabel: () => ({ ...base.resolveLabel(), fontFamily, ...glow }),
+    resolveLabel: () => ({ ...base.resolveLabel(), fontFamily }),
   })
   perTokens.set(key, themed)
   return themed

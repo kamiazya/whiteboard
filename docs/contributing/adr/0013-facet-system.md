@@ -110,7 +110,7 @@ vocabulary has two dimensions:
 
 - **Container targets** (format-agnostic): `document`; `workspace` reserved.
 - **Content-structure targets** (contributed by a format): the spatial
-  format contributes `canvas` and `node`; `edge` reserved. A future format
+  format contributes `canvas`, `node` and `edge`. A future format
   contributes its own structure targets. `document` and `canvas` are
   different concepts and must not be conflated — one is the workspace unit,
   the other is the spatial format's surface.
@@ -124,6 +124,9 @@ vocabulary has two dimensions:
 - `canvas` → the JSON Canvas root `x-whiteboard.facets` object.
 - `node` → the node's `x-whiteboard.facets` object (payload only, so the
   node-level content-only rule holds).
+- `edge` → the edge's `x-whiteboard.facets` object. Payload only and never
+  an embed: unlike a node, an edge carries no content JSON Canvas cannot
+  express, so the site is the bucket and nothing else.
 
 The canvas-level `x-whiteboard` rule is amended from "rendering preferences
 only" to also carry the `facets` bucket; the existing rendering preferences
@@ -243,6 +246,27 @@ asset is refused at the write boundary (decision 6's fourth layer), and
 contribution point through the derived form alone. Views, slots and
 per-kind resolved-value types stay unbuilt; [ADR-0030](0030-render-theme.md)
 records the constraints that keep this a prefix.
+
+**2026-09-10:** the `edge` target is open, and decision 5's third slot with
+it. Two increments landed together. The pre-facet canvas-level
+`x-whiteboard.edgeRouting` preference — the last of the "existing rendering
+preferences" this decision promised to re-model — was RETIRED outright with
+no compatibility read (0.0.x, no users), so `visual.edges/v0` is the only
+place a board's routing lives. Then `visual.edges/v0` widened from
+`targets: ['canvas']` to `['canvas', 'edge']`, on decision 1's growth rule
+and the same reading that widened `visual.symbol`: "how is this drawn" asked
+of a board and of one edge is one facet, not two. The key stays `v0` for the
+reason that one did — `targets` declares where a payload may attach and is
+not itself payload.
+
+Precedence between the two scopes is FIELD BY FIELD, deliberately unlike the
+replace-whole-payload rule WITHIN one scope: an edge saying only `routing`
+is narrowing that one field, not declaring that the board's line jumps stop
+applying to it. Decision 9's rule bit as written — a routing row hand-added
+to the edge context menu would have been the linear extension the governance
+line forbids — so the increment added the `inspector.edge` contribution
+point (a core increment, as that decision says) and the tier-1 vessel now
+takes a node or an edge as its subject.
 
 ## Consequences
 

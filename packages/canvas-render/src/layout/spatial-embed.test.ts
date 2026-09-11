@@ -3,13 +3,13 @@
 // expansion policy, with the depth cap and path-local cycle handling this
 // package's embed contract already promises.
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { describe, expect, it } from 'vitest'
 import type {
   EmbedResolvedNode,
   HeadingBlockNode,
   ParagraphBlockNode,
   ShapeSceneNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import {
@@ -80,7 +80,7 @@ describe('file-node inline embeds', () => {
     // The reference label sits OUTSIDE, above the frame (container
     // convention), leaving the whole padded box to the miniature.
     const label = scene.nodes.find(
-      (n): n is import('../scene-graph.js').TextRunNode => n.kind === 'textRun',
+      (n): n is import('@kamiazya/whiteboard-scene').TextRunNode => n.kind === 'textRun',
     )
     expect(label !== undefined && label.bbox.y + label.bbox.h <= 100).toBe(true)
   })
@@ -151,14 +151,16 @@ describe('file-node inline embeds', () => {
         { id: 'h', fromNode: 'a', toNode: 'b' },
         { id: 'v', fromNode: 'c', toNode: 'd' },
       ],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal', lineJumps: 'arc' } },
+      'x-whiteboard': {
+        facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
+      },
     }
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
       baseOptions({ resolveReference: () => ({ canvas: crossing }), expandFileNode: () => true }),
     )
     const edges = (embedOf(scene)?.children ?? []).filter(
-      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+      (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode => n.kind === 'edge',
     )
     const jumps = edges.flatMap((edge) => edge.jumps ?? [])
     expect(jumps.length).toBeGreaterThan(0)

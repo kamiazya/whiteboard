@@ -16,7 +16,7 @@
 // non-default geometry passes `SpatialLayoutOptions.geometry` explicitly at
 // the call site, never through this resolver.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { Appearance } from '../../scene-graph.js'
+import type { Appearance } from '@kamiazya/whiteboard-scene'
 import type { SpatialSyntaxPalette } from '../../theme/spatial-palette.js'
 
 /** What a resolver decided for one spatial node's chrome. */

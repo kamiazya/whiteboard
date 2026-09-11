@@ -126,21 +126,41 @@ the drag layers alike. Absent means `'document'` on both threads.
 
 Three consequences, each with its guard:
 
-- **The render key gains no axis.** The theme is a canvas facet, so a
-  document's content digest already changes when its theme does, and the
-  registered assets are part of the build id. The session override reaches
-  the editor alone — never the list surfaces — so no keyed surface draws a
-  document in two looks, which is what would need an axis.
+- **The render key gains no axis, and the two LAYOUT caches do.** The theme
+  is a canvas facet, so a document's content digest already changes when its
+  theme does, and the registered assets are part of the build id. The session
+  override reaches the editor alone — never the list surfaces — so no keyed
+  surface draws a document in two looks, which is what would need an axis on
+  `render-key.ts`. The caches the override DOES reach are the other answer to
+  the same question: the layout worker's body-memo store
+  (`lib/layout-content-caches.ts`) is keyed on the UI mode AND the request's
+  `style` — absent normalised to `'document'`, the default both threads take
+  — and canvas-render's own text-node body key carries the resolved theme id.
+  Without them a `'clean'` request and a `'document'` one of the same node
+  shared an entry, and whichever was laid out first answered the other, so
+  toggling **Draw as** could serve a body painted in the other look's ink. An
+  un-themed canvas keys identically under every style, so nothing else's
+  cache churns.
 - **The paper is the palette's surface for the UI mode**, painted by
   `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
   The bundled palette's surface IS the page background in both modes, so an
   unthemed canvas is byte-identical to before; neon gets its night.
   `SpatialEditor.test.tsx` pins both.
-- **Colour swatches preview the palette the canvas is drawn in.**
-  `colorRow` takes a `SpatialPalette` rather than a mode, and
-  `CanvasContextMenu` resolves it once with `resolveCanvasPalette` — a
+- **The editor's own chrome is painted from the palette the board is drawn
+  in, and takes it as a `SpatialPalette` rather than a mode.** The colour
+  swatches (`colorRow`, resolved once by `CanvasContextMenu`), the minimap's
+  preset boxes, the comment compose bubble, the proposal card, and the
+  in-place drafts (node body, edge label, group label) all read the one
+  `resolveCanvasPalette(canvas, theme, { style })` lookup — the SESSION's
+  style, so **Draw as: clean** takes the chrome back to the bundled look with
+  the scene. `useSceneProjection` resolves it beside the scene it projects and
+  hands it out; the editor threads it down. Passing a mode instead is how a
+  neon board came to show bundled tints in its overview and type its drafts in
+  the bundled ink over the theme's night. `resolveCanvasPalette` is a
   canvas-render export, so the point-owning surfaces still name no facet
-  domain (`facet-wiring-guard.test.ts`).
+  domain (`facet-wiring-guard.test.ts`). Pinned by
+  `use-scene-projection.test.ts`, `comment-compose-style.test.ts`,
+  `editor-chrome-palette.test.tsx` and `SpatialEditor.style.test.tsx`.
 
 The Theme row in the Display panel is `derivedCanvasFacetRow` in
 `facet-widgets/index.tsx`: `facet-ui`'s `DerivedFacetForm` over the plugin's
@@ -181,6 +201,36 @@ face lands three ways at once, and each is a seam the next change must keep:
   the face is held, the bundled one otherwise — never the theme's wish, or
   the draft moves on commit. Comment and proposal chrome stay bundled, as
   the layout keeps them crisp.
+
+**The LIST surfaces ask through the worker, because they never decode the
+canvas.** A row hands stored bytes to the layout worker (`load-row-render.ts`),
+so the asking thread cannot read the theme the board names — the worker is the
+first realm that knows. It collects canvas-render's `font-missing`
+degradations and reports them as `laid-out.fontsMissing`; the loader then asks
+`loadThemeFontFromSource` for each, on the thread that owns the face set, and
+the three seams above carry it from there. The fetch stays on USE: a folder of
+boards naming no theme reports nothing and fetches nothing. `DocumentThumbnail`
+and `DocumentPreview` each read `useThemeFontsGeneration` for its CHANGE, which
+is what makes the row that paid for the fetch the row that is drawn again.
+
+**The render key gains a `fonts` axis, and the paragraph above about it gaining
+none is about STYLE.** That argument holds because the session override reaches
+the editor alone, so no keyed surface draws a document in two looks. Faces are
+the opposite: EVERY surface draws the bundled family before one lands and the
+theme's after, and a list surface only asks for the face once it has drawn the
+board once — so without the axis the memo, and the worker's own store behind
+it, answer that second ask with the first picture, on disk past the end of the
+tab. The axis is `themeFacesKey()`, the whole held set rather than this
+document's own family, because a key is built before the canvas is decoded. It
+is null for markdown and for every outline, for the reason the theme axis is:
+neither is measured in a family a theme names. The cost is one redraw of the
+rows on screen per family that lands, once, at background priority.
+
+The markdown PREVIEW pane's own prose is bundled-family too — no theme names a
+family for a note — but a board EMBEDDED in it does, so `render-preview.ts`
+passes `fontAvailable: hasLoadedFace` into `layoutMdastBlocks`, which forwards
+it to the embedded canvas's layout. Without it that miniature declared the
+bundled family while the same board on the canvas declared the theme's.
 
 The PNG export carries a held face the same way it carries the vendored
 one (`withViewerFontEmbedded(svg, themeFacesNamedBy(svg))`), and only the

@@ -1,5 +1,5 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { ResolvedEdgeNode } from '../../scene-graph.js'
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { diagonalInkThrough } from './diagonal-ink.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
@@ -745,6 +745,17 @@ const FULL_OPT_MAX_EDGES = 40
 const TRIAL_BUDGET_EDGES = 16
 
 /**
+ * How ONE edge is routed. A function rather than a value because the answer
+ * is per edge (an edge's own `visual.edges/v0` facet narrows the canvas's),
+ * and every internal pass here already holds the edge when it needs to ask.
+ *
+ * The route cache is unaffected: `routeCacheKey` starts with `edge.id`, an
+ * edge's style cannot change within one `assignEdgeAnchors` call, so no two
+ * entries with the same key were ever routed under different styles.
+ */
+export type EdgeStyleOf = (edge: CanvasEdge) => EdgeRoutingStyle
+
+/**
  * The route cache's key: an edge plus every field of the anchor pair that
  * `routeEdge` reads. Exported so the completeness of that list is pinned by
  * a test rather than by a reader remembering to check it.
@@ -820,7 +831,7 @@ function sideCandidatesFor(
 function createConfigScore(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
-  style: EdgeRoutingStyle,
+  styleOf: EdgeStyleOf,
   initial: ReadonlyMap<string, SidePair>,
   align: boolean,
   pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
@@ -858,7 +869,7 @@ function createConfigScore(
   // key already seen by the other run of their own region, while a
   // per-search cache caught only 567 of them.
   // Sound because everything the key omits is fixed across those two runs —
-  // `nodes` and `style` are passed down unchanged, an edge is the SAME
+  // `nodes` and `styleOf` are passed down unchanged, an edge is the SAME
   // object in both, and its obstacle list is derived from those two. What
   // is left is the anchor pair, and `routeCacheKey` covers it field by
   // field (`route-cache-key.test.ts` pins that, one case per field, because
@@ -874,7 +885,7 @@ function createConfigScore(
     const key = routeCacheKey(edge, a)
     const hit = cache.get(key)
     if (hit !== undefined) return hit
-    const path = routeEdge(nodes, edge, style, a, othersFor[i]).path
+    const path = routeEdge(nodes, edge, styleOf(edge), a, othersFor[i]).path
     cache.set(key, path)
     return path
   }
@@ -1069,7 +1080,7 @@ function createConfigScore(
 function optimizeSideChoices(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
-  style: EdgeRoutingStyle,
+  styleOf: EdgeStyleOf,
   initial: ReadonlyMap<string, SidePair>,
   // Edges whose sides are held fixed: candidates are only tried for the
   // rest. The live-drag overlay locks resting edges (stability) while the
@@ -1097,7 +1108,7 @@ function optimizeSideChoices(
   routeCache?: Map<string, readonly Point[]>,
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
-  const score = createConfigScore(nodes, edges, style, initial, align, pins, routeCache, byId)
+  const score = createConfigScore(nodes, edges, styleOf, initial, align, pins, routeCache, byId)
   const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
   // The realized-bends tier is deliberately ABSENT from the short-circuit
   // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
@@ -1182,7 +1193,7 @@ function anchorsWithoutCoincidentEnds(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
   sides: ReadonlyMap<string, SidePair>,
-  style: EdgeRoutingStyle,
+  styleOf: EdgeStyleOf,
   align: boolean,
   pins?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, EdgeAnchorPair> {
@@ -1238,7 +1249,7 @@ function anchorsWithoutCoincidentEnds(
       trial.set(edge.id, sided)
       const trialAnchors = computeAnchorsFor(ctx, trial, align, pins)
       if (coincides(trialAnchors, edge.id)) continue
-      const { path } = routeEdge(nodes, edge, style, trialAnchors.get(edge.id))
+      const { path } = routeEdge(nodes, edge, styleOf(edge), trialAnchors.get(edge.id))
       // The arrowhead is drawn ON the final segment; a shorter one paints an
       // arrow with no line under it. Re-siding is choosing this route from
       // scratch, so it can decline the ones that arrive with no runway.
@@ -1302,7 +1313,7 @@ function anchorsWithoutCoincidentEnds(
 function optimizeAcrossRegions(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
-  style: EdgeRoutingStyle,
+  styleOf: EdgeStyleOf,
   initial: ReadonlyMap<string, SidePair>,
   locked?: ReadonlySet<string>,
   pins?: ReadonlyMap<string, EdgeAnchorOverride>,
@@ -1323,14 +1334,23 @@ function optimizeAcrossRegions(
     const unaligned = optimizeSideChoices(
       nodes,
       regionEdges,
-      style,
+      styleOf,
       seed,
       locked,
       false,
       undefined,
       routeCache,
     )
-    return optimizeSideChoices(nodes, regionEdges, style, unaligned, locked, true, pins, routeCache)
+    return optimizeSideChoices(
+      nodes,
+      regionEdges,
+      styleOf,
+      unaligned,
+      locked,
+      true,
+      pins,
+      routeCache,
+    )
   }
 
   if (edges.length <= CROSSING_OPT_MAX_EDGES) return bothRuns(edges, initial)
@@ -1405,7 +1425,10 @@ function optimizeAcrossRegions(
 export function assignEdgeAnchors(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
-  style: EdgeRoutingStyle = 'straight',
+  // One style for the whole set, or an answer per edge. Both, because both
+  // are real: a caller with a canvas-wide setting has nothing to look up,
+  // and one honouring per-edge overrides cannot say it in a single value.
+  style: EdgeRoutingStyle | EdgeStyleOf = 'straight',
   // FROZEN side choices for the listed edges: route STABILITY over
   // optimality mid-gesture. Edges ABSENT from a provided map still run the
   // optimizer against the locked rest, so a live overlay's carried edges
@@ -1414,6 +1437,7 @@ export function assignEdgeAnchors(
   // Sides settle again on the next committed render.
   sideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, EdgeAnchorPair> {
+  const styleOf: EdgeStyleOf = typeof style === 'function' ? style : () => style
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
   if (sideOverrides !== undefined) {
     const merged = new Map(sides)
@@ -1439,16 +1463,16 @@ export function assignEdgeAnchors(
     // canvas past the gate drags exactly as fast as it does today and picks
     // up its regional repair on drop.
     if (edges.length >= 1 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
-      liveSides = optimizeAcrossRegions(nodes, edges, style, merged, locked, sideOverrides)
+      liveSides = optimizeAcrossRegions(nodes, edges, styleOf, merged, locked, sideOverrides)
     }
-    return anchorsWithoutCoincidentEnds(nodes, edges, liveSides, style, true, sideOverrides)
+    return anchorsWithoutCoincidentEnds(nodes, edges, liveSides, styleOf, true, sideOverrides)
   }
   // A lone edge can be its own problem (a named pair routed through its own
   // box); a clean one short-circuits after one scoring sweep.
   if (edges.length >= 1) {
-    sides = optimizeAcrossRegions(nodes, edges, style, sides)
+    sides = optimizeAcrossRegions(nodes, edges, styleOf, sides)
   }
-  return anchorsWithoutCoincidentEnds(nodes, edges, sides, style, true)
+  return anchorsWithoutCoincidentEnds(nodes, edges, sides, styleOf, true)
 }
 
 /** An arrowhead's own length: a final segment shorter than this paints an

@@ -918,11 +918,11 @@ describe('canvas-level extension', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
     })
 
     expect(readSpatialCanvas(doc)['x-whiteboard']).toEqual({
-      edgeRouting: { style: 'orthogonal' },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     })
   })
 
@@ -940,7 +940,7 @@ describe('canvas-level extension', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
     })
     writeSpatialCanvas(doc, { nodes: [], edges: [] })
 
@@ -952,18 +952,20 @@ describe('canvas-level extension', () => {
     writeSpatialCanvas(a, {
       nodes: [TEXT_NODE],
       edges: [],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
     })
     const b = makeDoc()
     b.import(a.export({ mode: 'snapshot' }))
     writeSpatialCanvas(b, {
       nodes: [{ ...TEXT_NODE, x: 999 }],
       edges: [],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
     })
     a.import(b.export({ mode: 'snapshot' }))
 
-    expect(readSpatialCanvas(a)['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+    expect(readSpatialCanvas(a)['x-whiteboard']?.facets?.['visual.edges/v0']).toEqual({
+      routing: 'orthogonal',
+    })
   })
 })
 
@@ -995,11 +997,14 @@ describe('canvas comments bridge', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+      'x-whiteboard': {
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+        comments: [COMMENT, OTHER],
+      },
     })
 
     const result = readSpatialCanvas(doc)
-    expect(result['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(result['x-whiteboard']?.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
     expect((result['x-whiteboard']?.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
     expect(result['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
   })
@@ -1009,13 +1014,16 @@ describe('canvas comments bridge', () => {
     writeSpatialCanvas(doc, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT] },
+      'x-whiteboard': {
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+        comments: [COMMENT],
+      },
     })
 
     // The envelope stays whole-value LWW and must not carry the comments —
     // that is what would reintroduce the concurrent-loss this layout removes.
     expect(doc.getMap('canvas').get('x-whiteboard')).toEqual({
-      edgeRouting: { style: 'orthogonal' },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     })
     // In the threads plane (ADR-0026), keyed per thread — the legacy
     // `comments` map is not written any more.
@@ -1246,5 +1254,36 @@ describe('reconcileSpatialCanvas', () => {
     reconcileSpatialCanvas(doc, prev, prev)
     doc.commit()
     expect(Array.from(doc.oplogVersion().encode())).toEqual(Array.from(before))
+  })
+})
+
+// The third `x-whiteboard` site (ADR-0013's edge slot). Edges are stored one
+// per key like nodes, so an edge's bucket has to survive the field mapping in
+// both directions — the node bucket did and the edge one did not, silently,
+// because nothing read it back.
+describe("an edge's facets bucket", () => {
+  test('round-trips through the Loro bridge, and a sibling edge keeps none', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
+      ],
+      edges: [
+        {
+          id: 'e1',
+          fromNode: 'a',
+          toNode: 'b',
+          'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+        },
+        { id: 'e2', fromNode: 'b', toNode: 'a' },
+      ],
+    })
+
+    const read = readSpatialCanvas(doc)
+    expect(read.edges[0]?.['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    })
+    expect(read.edges[1]).not.toHaveProperty('x-whiteboard')
   })
 })

@@ -66,17 +66,28 @@ export async function resolveExportFontFaces(
   }
 }
 
-// @types/opentype.js's `FontNames` interface still models the pre-locale-
-// grouping shape (flat `fontFamily`/`fullName`/... keys). The installed
-// opentype.js runtime nests every name record under a locale-source key
-// (`windows`/`mac`) instead, so the type and the runtime disagree here —
-// read through an `unknown` cast rather than widening the public `Font`
-// import type.
-interface OpentypeLocalizedNames {
-  readonly windows?: { readonly fontFamily?: { readonly en?: string } }
-}
-
-/** The font's English family name as recorded in its `name` table, if present. */
+/**
+ * The font's English family name as recorded in its `name` table, if present.
+ *
+ * The name lives under a PLATFORM record, and which one a face carries is not
+ * fixed — the vendored Roboto has `windows` and nothing else, while
+ * `@types/opentype.js` still models the pre-locale-grouping shape and
+ * advertises a flat `names.fontFamily` that is undefined there. All three
+ * shapes are read, and the English entry preferred, because that is what a
+ * `font-family` declaration is written against. Reading only the typed path
+ * returned no family for any face at all, which is a silence rather than an
+ * error: every family question then answers "no".
+ *
+ * Read through an `unknown` cast rather than by widening the public `Font`
+ * import type, since the disagreement is with the vendor typings.
+ */
 export function readFontFamilyName(font: OpentypeFont): string | undefined {
-  return (font.names as unknown as OpentypeLocalizedNames).windows?.fontFamily?.en
+  const names = font.names as unknown as Record<string, Record<string, unknown> | undefined>
+  for (const record of [names.windows, names.macintosh, names]) {
+    const family = record?.fontFamily as Record<string, string> | string | undefined
+    const name =
+      typeof family === 'string' ? family : (family?.en ?? Object.values(family ?? {})[0])
+    if (typeof name === 'string' && name !== '') return name
+  }
+  return undefined
 }

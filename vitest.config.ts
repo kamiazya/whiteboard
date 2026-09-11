@@ -19,6 +19,7 @@ export default defineConfig({
       'packages/server-core/vitest.node.config.ts',
       'packages/workspace-index/vitest.node.config.ts',
       'packages/history/vitest.node.config.ts',
+      'packages/scene/vitest.node.config.ts',
       'packages/canvas-render/vitest.node.config.ts',
       'packages/canvas-render/vitest.browser.config.ts',
       'packages/canvas-viewer/vitest.node.config.ts',

@@ -4,9 +4,9 @@
 // semantic box.
 import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../scene-digest.js'
-import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { seedFromId } from './seed.js'
@@ -58,6 +58,21 @@ describe('sketch ink assignment', () => {
     expect(edges(scene).find((e) => e.id === 'e')?.ink).toEqual({
       style: 'sketch',
       seed: seedFromId('e'),
+    })
+  })
+
+  it('a coloured group frame is inked but never hatched — a container is not a filled box', () => {
+    const framed: SpatialCanvas = {
+      ...canvas,
+      nodes: [
+        { id: 'g', type: 'group', x: -20, y: -20, width: 400, height: 300, label: 'G', color: '2' },
+        ...canvas.nodes,
+      ],
+    }
+    const scene = layoutSpatialCanvas(framed, options({ style: 'demo.pencil' }))
+    expect(shapes(scene).find((s) => s.id === 'g')?.ink).toEqual({
+      style: 'sketch',
+      seed: seedFromId('g'),
     })
   })
 

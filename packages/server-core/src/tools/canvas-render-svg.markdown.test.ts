@@ -2,6 +2,11 @@
 // web preview already draws: a canvas behind `![[path]]` as a miniature, a
 // `#fragment` narrowing either kind to the heading or group it names, and a
 // `fragment` input that renders one part of a document on its own.
+
+import {
+  constantRatioMeasureText,
+  SPATIAL_THEME_FONT_FAMILY,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   writeDocumentKind,
   writeMarkdownBody,
@@ -27,7 +32,7 @@ function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
  * through the board's own text — kept simple: the note has two sections and
  * a board embed; the board has a labelled group and a node outside it.
  */
-async function seedWorkspace(store: FakeDocumentStore, noteBody: string) {
+async function seedWorkspace(store: FakeDocumentStore, noteBody: string, boardTheme?: string) {
   store.documentIndex.seed({
     workspaceId: WORKSPACE_ID,
     path: 'notes/plan',
@@ -55,6 +60,9 @@ async function seedWorkspace(store: FakeDocumentStore, noteBody: string) {
         { id: 'out', type: 'text', x: 900, y: 900, width: 200, height: 60, text: 'OTHER-NODE' },
       ],
       edges: [],
+      ...(boardTheme === undefined
+        ? {}
+        : { 'x-whiteboard': { facets: { 'visual.theme/v0': { theme: boardTheme } } } }),
     })
   })
 }
@@ -199,5 +207,75 @@ describe('wb_scene_render `fragment` on a spatial document', () => {
         fragment: 'Nowhere',
       }),
     ).rejects.toThrow(/Nowhere/)
+  })
+})
+
+describe('wb_scene_render style on a markdown document (ADR-0030 decisions 5-6)', () => {
+  const EMBEDS_BOARD = 'intro\n\n![[boards/roadmap]]\n'
+
+  async function neonBoardStore() {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, EMBEDS_BOARD, 'visual.neon')
+    return store
+  }
+
+  test("style: 'document' draws the theme the EMBEDDED board names", async () => {
+    // A markdown host carries no theme of its own, so the embed's own facet
+    // is the only one there is to read (ADR-0030 decision 5).
+    const tool = createCanvasRenderSvgTool(makeDeps(await neonBoardStore()))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      embedReferences: true,
+      style: 'document',
+    })
+
+    expect(result.svg).toContain('LAUNCH-NODE')
+    expect(result.svg).toContain('filterUnits="userSpaceOnUse"')
+  })
+
+  test('the default stays clean, so an agent never pays for a theme unasked', async () => {
+    const tool = createCanvasRenderSvgTool(makeDeps(await neonBoardStore()))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      embedReferences: true,
+      style: 'clean',
+    })
+
+    expect(result.svg).toContain('LAUNCH-NODE')
+    expect(result.svg).not.toContain('filterUnits="userSpaceOnUse"')
+  })
+
+  test("an embedded board's theme family is declared where the daemon can measure it", async () => {
+    // The same answer the board gets on its own: a note embedding a sketch
+    // board declares Yomogi exactly when the measurer holds that face, and
+    // the bundled family otherwise — never one for the board and the other
+    // for the note that embeds it.
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, EMBEDS_BOARD, 'visual.sketch')
+    const measuring = (families: readonly string[]): ServerDeps => ({
+      ...makeDeps(store),
+      textMeasurer: async () => ({
+        measure: constantRatioMeasureText,
+        measurableFamilies: new Set([SPATIAL_THEME_FONT_FAMILY, ...families]),
+      }),
+    })
+    const input = {
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      embedReferences: true,
+      style: 'document' as const,
+    }
+
+    const held = await createCanvasRenderSvgTool(measuring(['Yomogi'])).execute(input)
+    expect(held.svg).toContain('LAUNCH-NODE')
+    expect(held.svg).toContain('font-family="Yomogi"')
+
+    const missing = await createCanvasRenderSvgTool(measuring([])).execute(input)
+    expect(missing.svg).toContain('LAUNCH-NODE')
+    expect(missing.svg).not.toContain('Yomogi')
   })
 })

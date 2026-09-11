@@ -61,6 +61,18 @@ describe('bundled theme assets', () => {
           }
         })
 
+        it('names a markdown chrome that is visible without competing with the prose', () => {
+          // Furniture, not text: a code panel, a quote rail and a checkbox
+          // are what prose sits IN, and they are painted at 12-35% opacity
+          // over the surface — so this is a visibility floor (2:1), not the
+          // 4.5:1 the words in front of them owe. A theme that named the
+          // label colour here would draw a body that is all frame.
+          const chrome = palette.markdownChrome
+          expect(chrome, 'every bundled theme paints a body in its own hand').toBeDefined()
+          expect(contrast(chrome ?? '#000000', palette.surface)).toBeGreaterThanOrEqual(2)
+          expect(contrast(chrome ?? '#000000', palette.labelFill)).toBeGreaterThanOrEqual(1.5)
+        })
+
         it('comment and proposal chrome keep their text legible and their accents visible', () => {
           expect(contrast(palette.labelFill, palette.comment.bubble.fill)).toBeGreaterThanOrEqual(
             4.5,
@@ -86,5 +98,34 @@ describe('bundled theme assets', () => {
     expect(VISUAL_THEMES.sketch.fontFamily).toBeDefined()
     expect(VISUAL_THEMES.neon.ink).toBe('clean')
     expect(VISUAL_THEMES.neon.glow?.radiusPx).toBeGreaterThan(0)
+  })
+})
+
+describe('neon', () => {
+  const chroma = (hex: string): number => {
+    const c = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16))
+    return Math.max(...c) - Math.min(...c)
+  }
+
+  it('lights an unpainted board: the default strokes carry hue, since a grey halo reads as a smudge', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const palette = VISUAL_THEMES.neon.palette[mode]
+      for (const [kind, style] of Object.entries(palette.node)) {
+        if (kind === 'group') continue
+        expect(chroma(style.stroke), `${mode} ${kind}`).toBeGreaterThanOrEqual(80)
+      }
+      expect(chroma(palette.edgeStroke), `${mode} edge`).toBeGreaterThanOrEqual(80)
+    }
+  })
+
+  it('tells the node kinds apart by stroke in both halves, as the bundled palette does by fill', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const { text, file, link } = VISUAL_THEMES.neon.palette[mode].node
+      expect(new Set([text.stroke, file.stroke, link.stroke]).size).toBe(3)
+    }
+  })
+
+  it('declares a line weight the halo can bloom from', () => {
+    expect(VISUAL_THEMES.neon.strokeWidthPx).toBeGreaterThanOrEqual(1.5)
   })
 })

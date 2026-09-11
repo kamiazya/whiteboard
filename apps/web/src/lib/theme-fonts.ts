@@ -66,6 +66,23 @@ export function loadedThemeFaces(): readonly ThemeFace[] {
   return [...faces].map(([family, bytes]) => ({ family, bytes }))
 }
 
+/**
+ * The faces this realm holds, as ONE value a render key can carry — sorted,
+ * so the same set is always the same string, and empty while none has
+ * landed.
+ *
+ * A picture of a themed board was drawn with whatever faces were measurable
+ * at the time, so this is part of what identifies it. Unlike the session's
+ * look override, it reaches every surface: a row, a preview pane and the
+ * editor all draw the bundled family before a face lands and the theme's
+ * after, so a key without this axis answers a later ask with the earlier
+ * picture — from the memo, and from the worker's own store behind it, for
+ * as long as the file lives.
+ */
+export function themeFacesKey(): string {
+  return [...faces.keys()].sort().join(',')
+}
+
 /** Bumps once per face that landed; a scene keyed on it lays out again. */
 export function themeFontsGeneration(): number {
   return generation

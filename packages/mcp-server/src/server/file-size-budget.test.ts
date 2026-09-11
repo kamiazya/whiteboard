@@ -101,7 +101,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a canvas that chose a setting and reverted serializes like one that
   // never touched it. `withEdgeStyle` now delegates to it rather than
   // repeating that rule, which is why the arm costs less than it reads.
-  'apps/web/src/lib/spatial/commands.ts': 995,
+  // +34 for the edge target: `set-edge-facet` writes a plugin-owned payload
+  // to ONE edge, the twin of `set-node-facet`, and the bends a connection
+  // stores ride it.
+  'apps/web/src/lib/spatial/commands.ts': 1029,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -142,7 +145,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +8: `commentToFields` refuses a comment naming both a node and an edge,
   // the same loud refusal it already gives a non-finite anchor and for the
   // same reason — the thread it becomes is one every reader would drop.
-  'packages/loro-adapter/src/loro-bridge.ts': 960,
+  // +1: an edge's `x-whiteboard` facets bucket crosses the bridge the way a
+  // node's already did, so a per-edge facet survives a round trip.
+  'packages/loro-adapter/src/loro-bridge.ts': 961,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -317,12 +322,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +17 more for `paintOrderOf`, groups behind what they hold whatever the
   // stored order says. +4 for `annotates`, the link from a label's run back
   // to the edge or container it names, set where each label is placed.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2406,
+  // +26 for the per-edge routing fold and the contributed router's call
+  // site. The router's own resolution is `layout/contributed-router.ts`;
+  // what stays here is the composer asking for it and falling back.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2432,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
   // pass's side over the edge's own, and a lone edge reaches the search.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2090,
+  // +24 for the per-edge style resolver threaded through the anchor pass:
+  // side choice reads the whole edge set, so one edge overriding the board's
+  // routing has to be visible to it rather than applied afterwards.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2114,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
@@ -348,7 +359,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // scene, its drag layers and its overlays, and the paper it paints is the
   // palette's surface. Threading is this file's job; there is nothing here
   // to move.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2753,
+  // +32 NET for the bend affordance and the edge inspector, over blocks that
+  // started at 53 and more. What came out: the handles are
+  // `EdgeBendHandles.tsx`, their wiring to the gesture machine is
+  // `EdgeBendLayer.tsx`, and `clientPointToRootLocal` moved to
+  // `lib/spatial/viewport.ts` — an overlay taking its own press needs the
+  // same client-to-root mapping, and two of them is how the pointer and the
+  // geometry come to disagree about where a press landed.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2785,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

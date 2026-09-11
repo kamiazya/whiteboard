@@ -33,8 +33,8 @@ import type {
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
+import type { Scene, SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { Scene, SceneNode, TextRunNode } from '../../scene-graph.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'

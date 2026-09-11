@@ -6,16 +6,18 @@
 // pixels instead. Fixtures and the deliberate-regeneration flow live in
 // ../test-utils/pixel-golden-scenes.ts.
 
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { afterEach, describe, expect, it } from 'vitest'
 import { page } from 'vitest/browser'
-import type { Scene } from '../scene-graph.js'
 import {
   buildArrowheadsScene,
   buildIconSetScene,
   buildJumpHopScene,
+  buildNeonLookScene,
   buildNodeOutlinesScene,
   buildRoundedCornersScene,
   buildRoundedRectScene,
+  buildSketchLookScene,
 } from '../test-utils/pixel-golden-scenes.js'
 import { renderSceneToSvg } from './backend.js'
 
@@ -31,10 +33,10 @@ const ENVELOPE_BACKGROUND = '#ffffff'
  * element, so the locator's screenshot is cropped tightly to the drawn
  * content rather than the full fixed viewport.
  */
-function mountScene(scene: Scene, testId: string): void {
+function mountScene(scene: Scene, testId: string, background = ENVELOPE_BACKGROUND): void {
   const markup = renderSceneToSvg(scene, {
     padding: ENVELOPE_PADDING_PX,
-    background: ENVELOPE_BACKGROUND,
+    background,
   })
   const container = document.createElement('div')
   container.innerHTML = markup
@@ -78,5 +80,21 @@ describe('pixel-level golden regression (real browser)', () => {
   it('icon-set: every vendored lucide glyph draws as itself', async () => {
     mountScene(buildIconSetScene(), 'icon-set')
     await expect.element(page.getByTestId('icon-set')).toMatchScreenshot('icon-set')
+  })
+
+  // The two LOOK goldens. Everything above pins CRISP geometry, so an edit to
+  // sketch's jitter or neon's blur moved no committed pixel and the whole
+  // look layer was judged by nothing. Each draws the SAME canvas on the
+  // theme's own paper, since a halo on the wrong ground says nothing.
+  it('sketch look: jittered outlines, a hatched preset node, a dashed frame', async () => {
+    const { scene, background } = buildSketchLookScene()
+    mountScene(scene, 'sketch-look', background)
+    await expect.element(page.getByTestId('sketch-look')).toMatchScreenshot('sketch-look')
+  })
+
+  it('neon look: a halo of each element’s own paint over crisp geometry', async () => {
+    const { scene, background } = buildNeonLookScene()
+    mountScene(scene, 'neon-look', background)
+    await expect.element(page.getByTestId('neon-look')).toMatchScreenshot('neon-look')
   })
 })

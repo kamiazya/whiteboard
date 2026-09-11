@@ -4,11 +4,11 @@
 // twice, and moving the geometry moves the ink with it — no positional
 // input reaches the randomness.
 import { test } from '@fast-check/vitest'
+import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import type { BoundingBox } from '../../scene-graph.js'
 import { BUILT_IN_SHAPES, nodeOutline } from '../nodes/node-outline.js'
-import { SKETCH_INK_REACH_PX, sketchEdge, sketchShape } from './sketch.js'
+import { SKETCH_INK_REACH_PX, SKETCH_PASSES, sketchEdge, sketchShape } from './sketch.js'
 
 /** Every number pair in a path's `d`: end AND control points, which bound a quadratic. */
 function pointsOf(d: string): { x: number; y: number }[] {
@@ -160,6 +160,30 @@ describe('sketchEdge', () => {
     expect(arrowed.strokes.length).toBe(bare.strokes.length + 2)
   })
 
+  it('a jump hop survives into the ink — the pencil goes over the crossing, not through it', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    ]
+    const ink = sketchEdge(pts, 5, { arrows: [], jumps: [{ segment: 0, x: 100, y: 0 }] })
+    // The hop bulges to the left of travel — upward, for a rightward run —
+    // by the jump radius, and a stroke that resampled every 24px kept none
+    // of its points, so the line crossed flat.
+    const highest = Math.min(...ink.strokes.flatMap(pointsOf).map((p) => p.y))
+    expect(highest).toBeLessThan(-3)
+  })
+
+  it('a bend closer than the anchor step to its neighbour is still turned, not cut diagonally', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: 100 },
+    ]
+    const ink = sketchEdge(pts, 6, { arrows: [] })
+    const nearCorner = ink.strokes.flatMap(pointsOf).some((p) => Math.hypot(p.x - 20, p.y - 0) < 3)
+    expect(nearCorner).toBe(true)
+  })
+
   it('a rounded path is inked along the rounded corners it is drawn with', () => {
     const pts = [
       { x: 0, y: 0 },
@@ -172,6 +196,84 @@ describe('sketchEdge', () => {
     // No rounded stroke passes through the square corner itself.
     for (const p of rounded.strokes.flatMap(pointsOf)) {
       expect(Math.hypot(p.x - 100, p.y - 0)).toBeGreaterThan(3)
+    }
+  })
+})
+
+describe('what reads as a hand rather than a tremor', () => {
+  const rect = (w: number, h: number): BoundingBox => ({ x: 0, y: 0, w, h })
+  /** How far each quadratic's control point sits off its own chord. */
+  function bowsOf(d: string): number[] {
+    const out: number[] = []
+    const re = /M (-?[\d.]+) (-?[\d.]+)|Q (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)/g
+    let from: { x: number; y: number } | undefined
+    for (const m of d.matchAll(re)) {
+      if (m[1] !== undefined) {
+        from = { x: Number(m[1]), y: Number(m[2]) }
+        continue
+      }
+      const c = { x: Number(m[3]), y: Number(m[4]) }
+      const to = { x: Number(m[5]), y: Number(m[6]) }
+      if (from === undefined) continue
+      const dx = to.x - from.x
+      const dy = to.y - from.y
+      const len = Math.hypot(dx, dy)
+      out.push(len === 0 ? 0 : Math.abs((c.x - from.x) * dy - (c.y - from.y) * dx) / len)
+      from = to
+    }
+    return out
+  }
+
+  it('a long side bows more than a short one — the amplitude follows the length, as a hand does', () => {
+    const seeds = [1, 2, 3, 4, 5, 6, 7, 8]
+    const mean = (w: number) =>
+      seeds.reduce((sum, s) => {
+        const bows = bowsOf(sketchShape(null, rect(w, w), s).strokes[0]!)
+        return sum + Math.max(...bows)
+      }, 0) / seeds.length
+    expect(mean(600)).toBeGreaterThan(mean(60) * 2)
+  })
+
+  it('a closed outline is one continuous sub-path per pass, so its corners meet', () => {
+    const ink = sketchShape(null, rect(120, 80), 9)
+    expect(ink.strokes).toHaveLength(SKETCH_PASSES)
+    for (const d of ink.strokes) expect(d.match(/M /g)).toHaveLength(1)
+    const ellipse = sketchShape(nodeOutline('visual.ellipse', rect(120, 80)), rect(120, 80), 9)
+    for (const d of ellipse.strokes) expect(d.match(/M /g)).toHaveLength(1)
+  })
+
+  it("the hatch angle and gap are the node's own, drawn near a base rather than ruled identically on every box", () => {
+    const b = rect(200, 120)
+    const angleOf = (d: string): number => {
+      const [from, , to] = pointsOf(d)
+      return (Math.atan2(to!.y - from!.y, to!.x - from!.x) * 180) / Math.PI
+    }
+    const angles = Array.from({ length: 20 }, (_, i) => {
+      const ink = sketchShape(null, b, i + 1, { hatch: true })
+      return angleOf(ink.hatch![Math.floor(ink.hatch!.length / 2)]!)
+    })
+    // Every hand hatches at roughly the same slant, but no two boxes at exactly the same one.
+    for (const a of angles) expect(Math.abs(a - -41)).toBeLessThan(14)
+    expect(new Set(angles.map((a) => Math.round(a))).size).toBeGreaterThan(3)
+    const gaps = Array.from(
+      { length: 6 },
+      (_, i) => sketchShape(null, b, i + 1, { hatch: true }).hatch!.length,
+    )
+    expect(new Set(gaps).size).toBeGreaterThan(1)
+  })
+
+  it('a straight-sided outline closes PAST its start — the overshoot a pen leaves at the last corner', () => {
+    const b = rect(120, 80)
+    for (const s of [1, 2, 3]) {
+      for (const d of sketchShape(null, b, s).strokes) {
+        const pts = pointsOf(d)
+        const first = pts[0]!
+        const last = pts[pts.length - 1]!
+        // The last side runs up the left edge toward the top-left corner, so
+        // overshooting it means ending ABOVE the start, not merely near it.
+        expect(first.y - last.y).toBeGreaterThan(1)
+        expect(Math.abs(last.x - first.x)).toBeLessThan(SKETCH_INK_REACH_PX)
+      }
     }
   })
 })

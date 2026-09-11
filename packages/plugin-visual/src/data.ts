@@ -6,6 +6,7 @@ import {
   namespacedIdSchema,
 } from '@kamiazya/whiteboard-facet-engine'
 import type {
+  CanvasEdge,
   EdgeRoutingStyle,
   ExtensionFacets,
   LineJumps,
@@ -14,16 +15,17 @@ import type {
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
+  integerSchema,
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { VISUAL_THEMES } from './themes.js'
 
 /**
- * `visual.edges/v0` — how this canvas's edges are drawn. The facet-shaped
- * successor of the legacy canvas-level `x-whiteboard.edgeRouting`
- * preference; both answer the same question, so this is one facet with two
- * fields, not two facets. `v0`: unstable, payload may still change shape.
+ * `visual.edges/v0` — how this canvas's edges are drawn: the routing and
+ * whether crossings jump. One facet with two fields, not two facets, since
+ * both answer the same question. `v0`: unstable, payload may still change
+ * shape.
  */
 export const visualEdgesFacetSchema = z.object({
   routing: edgeRoutingStyleSchema.optional(),
@@ -33,6 +35,65 @@ export const visualEdgesFacetSchema = z.object({
 export type VisualEdgesFacet = z.infer<typeof visualEdgesFacetSchema>
 
 export const VISUAL_EDGES_KEY = 'visual.edges/v0'
+
+/**
+ * A ceiling rather than an unbounded list: every bend is drawn on every
+ * frame of a drag, and a document is written by agents as well as people. It
+ * is deliberately far above what a person places by hand — what it stops is
+ * a generated payload nobody meant.
+ */
+const MAX_WAYPOINTS = 64
+
+/**
+ * `visual.path/v0` — where an edge BENDS, in canvas coordinates.
+ *
+ * A separate facet from `visual.edges/v0` rather than a field on it, because
+ * the two answer different questions: `edges` picks between routings that
+ * COMPUTE a path, and this one supplies the path. An edge carrying bends is
+ * not choosing a routing at all — which is why the plugin draws it with a
+ * router of its own rather than by widening the routing vocabulary.
+ *
+ * JSON Canvas has no waypoint, so this is exactly the kind of concept that
+ * belongs on the facet side: nothing is lost when the document is read by a
+ * reader that does not know this plugin — the edge draws with the built-in
+ * routing again.
+ *
+ * The derived editor cannot express a list of points, so this facet answers
+ * `unsupported` there. That is the honest signal ADR-0013's form layer is
+ * built to give: bends want a drag affordance, not a form.
+ */
+export const visualPathFacetSchema = z.object({
+  // Integers, the way every other coordinate in the model is stored: the
+  // drag rounds before it writes, and a fractional anchor is the class that
+  // survives one session and vanishes on the next reload.
+  waypoints: z
+    .array(z.object({ x: integerSchema, y: integerSchema }))
+    .min(1)
+    .max(MAX_WAYPOINTS),
+})
+
+export type VisualPathFacet = z.infer<typeof visualPathFacetSchema>
+
+export const VISUAL_PATH_KEY = 'visual.path/v0'
+
+/**
+ * The bends this edge stores, or none — its own facet and nothing else, the
+ * way `resolveEdgeOwnStyle` reads the routing. A payload the schema refuses
+ * answers with none, so a malformed write draws the built-in route rather
+ * than half a path.
+ */
+export function resolveEdgeWaypoints(
+  edge: CanvasEdge,
+  registry: FacetRegistry = bundledFacetRegistry,
+): readonly { readonly x: number; readonly y: number }[] {
+  const stored = edge['x-whiteboard']?.facets?.[VISUAL_PATH_KEY]
+  if (stored === undefined) return []
+  const resolution = registry.resolveFacetPayload(VISUAL_PATH_KEY, stored)
+  if (resolution.kind !== 'resolved') return []
+  // Re-parse rather than cast: the registry resolved through this very
+  // schema, so this cannot fail — but it keeps the type honest.
+  return visualPathFacetSchema.parse(resolution.value).waypoints
+}
 
 /**
  * `visual.shape/v0` — what silhouette this node draws. The vocabulary
@@ -132,8 +193,24 @@ export const visualPlugin = definePlugin({
       name: 'edges',
       displayName: 'Edges',
       version: 'v0',
-      targets: ['canvas'],
+      // Both scopes, one facet: the question ("how is this drawn") is the
+      // same asked of a canvas and of one edge, and ADR-0013 decision 1's
+      // growth rule says that is one facet, not two. `visual.symbol` was
+      // widened the same way. The key stays `v0`: `targets` declares where a
+      // payload may attach and is not itself payload, so no stored value
+      // changes meaning and there is no migration to write.
+      targets: ['canvas', 'edge'],
       schema: visualEdgesFacetSchema,
+    }),
+    defineFacet({
+      name: 'path',
+      displayName: 'Bends',
+      version: 'v0',
+      // Edges only: a bend is a property of ONE line. The canvas-wide
+      // question ("how are edges drawn here") is `visual.edges`, and a
+      // board-wide list of points would mean nothing.
+      targets: ['edge'],
+      schema: visualPathFacetSchema,
     }),
     defineFacet({
       name: 'shape',
@@ -239,11 +316,10 @@ export type EdgeRouting = z.infer<typeof edgeRoutingSchema>
 
 /**
  * The one read path for "how do I route this canvas's edges": the
- * `visual.edges/v0` facet when it resolves, else the legacy
- * `x-whiteboard.edgeRouting` preference. Whole-value precedence, not
- * per-field merge — a facet is one register (replace semantics), so a facet
- * that says only `routing` means "and default line jumps", never "merge
- * with whatever the legacy key held".
+ * `visual.edges/v0` facet when it resolves, else nothing — the defaults are
+ * `resolveCanvasEdgeDefaults`'s. A facet is one register (replace
+ * semantics), so a facet that says only `routing` means "and default line
+ * jumps".
  */
 export function resolveCanvasEdgeStyle(
   canvas: SpatialCanvas,
@@ -263,7 +339,7 @@ export function resolveCanvasEdgeStyle(
       }
     }
   }
-  return extension?.edgeRouting ?? {}
+  return {}
 }
 
 /**
@@ -300,6 +376,46 @@ export function resolveEffectiveCanvasEdgeStyle(
     style: explicit.style ?? defaults.style,
     lineJumps: explicit.lineJumps ?? defaults.lineJumps,
   }
+}
+
+/**
+ * How ONE edge is drawn: its own `visual.edges/v0` facet field by field over
+ * the canvas's answer, over the theme's default, over the built-in.
+ *
+ * Field by field rather than whole-value, and deliberately unlike the
+ * canvas-vs-nothing case: the two payloads are at DIFFERENT scopes, so an
+ * edge saying only `routing` is narrowing that one field, not declaring that
+ * the board's line jumps do not apply to it. Whole-value replacement is the
+ * rule WITHIN one scope, where a facet is one register.
+ */
+export function resolveEdgeStyle(
+  canvas: SpatialCanvas,
+  edge: CanvasEdge,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const own = resolveEdgeOwnStyle(edge, registry)
+  const canvasWide = resolveEffectiveCanvasEdgeStyle(canvas, registry)
+  return {
+    style: own.routing ?? canvasWide.style,
+    lineJumps: own.lineJumps ?? canvasWide.lineJumps,
+  }
+}
+
+/**
+ * What an edge says about ITSELF, with no canvas or theme filled in — the
+ * stored facet and nothing else. Separate from `resolveEdgeStyle` because an
+ * editor showing "inherited unless overridden" needs to know which fields
+ * the edge actually holds, and a resolved value cannot say.
+ */
+export function resolveEdgeOwnStyle(
+  edge: CanvasEdge,
+  registry: FacetRegistry = bundledFacetRegistry,
+): VisualEdgesFacet {
+  const stored = edge['x-whiteboard']?.facets?.[VISUAL_EDGES_KEY]
+  if (stored === undefined) return {}
+  const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
+  if (resolution.kind !== 'resolved') return {}
+  return visualEdgesFacetSchema.parse(resolution.value)
 }
 
 /**

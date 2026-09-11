@@ -1,4 +1,8 @@
 import {
+  fontCatalogueEntryByFamily,
+  fontDownloadUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
+import {
   type BlobStore,
   type DocumentIndex,
   type DocumentStore,
@@ -7,7 +11,7 @@ import {
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { Container, type ContainerModule } from 'inversify'
-import { createOpentypeMeasureText } from '../server/export/measure-text.js'
+import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
 import { documentTeardown } from '../server/store/document-store.js'
 import { documentWritten } from '../server/store/document-written.js'
@@ -67,7 +71,20 @@ export function resolveServerDeps(container: Container): ServerDeps {
     // canvas — uses opentype.js, and the two disagree on where every wrapped
     // line lands. Memoized inside the measurer, so this reference costs
     // nothing until a render actually asks for it.
-    measure: createOpentypeMeasureText,
+    // The export's own measurer, families included, so wb_scene_render
+    // declares a theme's family exactly where the PNG export would: from the
+    // faces this daemon can measure, never from a second list.
+    textMeasurer: createExportTextMeasurer,
+    // Where a family a theme names can be downloaded. The catalogue is the
+    // daemon's — the same one the font installer takes an id from — and
+    // server-core cannot import it (daemon-client depends on server-core, so
+    // the edge would close a cycle), so the composition root passes it in.
+    // Only the ANSWER travels onward: `canvas_view` puts a family and a URL
+    // in its result, never bytes.
+    themeFontSource: (family) => {
+      const entry = fontCatalogueEntryByFamily(family)
+      return entry === undefined ? undefined : { family: entry.family, url: fontDownloadUrl(entry) }
+    },
     // clientNotifier is deliberately NOT wired here. It is a bridge onto
     // this package's own WebSocket routes, and importing those from the di
     // graph closes a value cycle (di -> canvas-client-notifier -> ws.ts ->

@@ -5,7 +5,7 @@ import type {
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
 
 /**
  * The text-wrapping scoreboard's independent oracle.

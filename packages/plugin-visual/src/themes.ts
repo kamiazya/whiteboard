@@ -45,6 +45,9 @@ const SKETCH_LIGHT: PaletteTokens = {
     bubble: { fill: '#ffffff', stroke: '#d97706' },
   },
   proposal: { edge: '#4f46e5', bubbleFill: '#ffffff' },
+  // A warm pencil grey: the furniture in a body is drawn in the same hand
+  // as the boxes around it, not in the bundled cool slate.
+  markdownChrome: '#8a8378',
 }
 
 const SKETCH_DARK: PaletteTokens = {
@@ -73,6 +76,9 @@ const SKETCH_DARK: PaletteTokens = {
     bubble: { fill: '#262626', stroke: '#fbbf24' },
   },
   proposal: { edge: '#818cf8', bubbleFill: '#262626' },
+  // Chalk dust rather than paper: the same warm neutral, lifted to read on
+  // the board.
+  markdownChrome: '#8f8a80',
 }
 
 /**
@@ -89,6 +95,10 @@ const SKETCH_DARK: PaletteTokens = {
  */
 export const VISUAL_THEME_SKETCH: ThemeTokens = {
   ink: 'sketch',
+  // A pencil line, not a hairline: the two passes are painted at this
+  // weight and a lighter second one, and a 1px stroke doubled read as a
+  // ruled line drawn twice.
+  strokeWidthPx: 1.4,
   fontFamily: 'Yomogi',
   palette: { light: SKETCH_LIGHT, dark: SKETCH_DARK },
   defaults: {
@@ -104,13 +114,18 @@ export const VISUAL_THEME_SKETCH: ThemeTokens = {
 // ---- neon: bright strokes with a halo, on a deep ground or a pale one ------
 
 const NEON_DARK: PaletteTokens = {
+  // Tailwind 300 strokes per kind — sky, violet, emerald — because the
+  // halo repeats the stroke colour and a grey one read as a smudge: an
+  // unpainted board was the one thing on the theme that did not glow. The
+  // kinds tell apart by hue rather than by fill, which stays near-black so
+  // the glow is the brightest thing on the node.
   node: {
-    text: { fill: '#0b1220', stroke: '#a5b4c7' },
-    file: { fill: '#0b1220', stroke: '#a5b4c7' },
-    link: { fill: '#0b1220', stroke: '#a5b4c7' },
+    text: { fill: '#0b1220', stroke: '#7dd3fc' },
+    file: { fill: '#100d24', stroke: '#a78bfa' },
+    link: { fill: '#0a1a1c', stroke: '#6ee7b7' },
     group: { fill: 'none', stroke: '#64748b' },
   },
-  edgeStroke: '#7890ad',
+  edgeStroke: '#38bdf8',
   labelFill: '#f5fbff',
   surface: '#030711',
   cornerRadiusPx: 6,
@@ -132,16 +147,23 @@ const NEON_DARK: PaletteTokens = {
     bubble: { fill: '#0f172a', stroke: '#fbbf24' },
   },
   proposal: { edge: '#a5b4fc', bubbleFill: '#0f172a' },
+  // Slate, deliberately NOT one of the theme's lit hues: a code panel and a
+  // quote rail are furniture, and a board whose every rule glows leaves the
+  // strokes nothing to be brighter than.
+  markdownChrome: '#475569',
 }
 
 const NEON_LIGHT: PaletteTokens = {
+  // The same three hues at 600 over faint tints, and a sky edge: on a pale
+  // ground the halo is a highlighter, so the stroke under it has to carry
+  // the colour itself.
   node: {
     text: { fill: '#ffffff', stroke: '#0284c7' },
-    file: { fill: '#ffffff', stroke: '#0284c7' },
-    link: { fill: '#ffffff', stroke: '#0284c7' },
+    file: { fill: '#f5f3ff', stroke: '#7c3aed' },
+    link: { fill: '#ecfdf5', stroke: '#059669' },
     group: { fill: 'none', stroke: '#64748b' },
   },
-  edgeStroke: '#64748b',
+  edgeStroke: '#0284c7',
   labelFill: '#0f172a',
   surface: '#f8fafc',
   cornerRadiusPx: 6,
@@ -161,6 +183,8 @@ const NEON_LIGHT: PaletteTokens = {
     bubble: { fill: '#ffffff', stroke: '#d97706' },
   },
   proposal: { edge: '#4f46e5', bubbleFill: '#ffffff' },
+  // The same slate at the light end: furniture on a pale ground.
+  markdownChrome: '#94a3b8',
 }
 
 /**
@@ -169,6 +193,10 @@ const NEON_LIGHT: PaletteTokens = {
  */
 export const VISUAL_THEME_NEON: ThemeTokens = {
   ink: 'clean',
+  // The halo is the element's own paint blurred, so a hairline has almost
+  // nothing to bloom from: at 1px the peak of the blur is a quarter of the
+  // stroke's opacity.
+  strokeWidthPx: 1.8,
   glow: { radiusPx: 6 },
   palette: { light: NEON_LIGHT, dark: NEON_DARK },
   defaults: { edgeRouting: 'orthogonal' },

@@ -26,6 +26,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
+import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import {
@@ -266,7 +267,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               op.patch.height !== undefined)),
       )
       const measure: MeasureText | undefined = wantsFit
-        ? ((await deps.measure?.()) ?? constantRatioMeasureText)
+        ? (await resolveTextMeasurer(deps)).measure
         : undefined
 
       const nodeAt = (id: string) => nodes.find((node) => node.id === id)

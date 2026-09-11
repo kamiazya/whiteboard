@@ -21,8 +21,8 @@
 // (export gaining a dark chrome variant), not a convergence one, and is
 // out of this slice's scope.
 import type { CanvasColor, CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Appearance } from '@kamiazya/whiteboard-scene'
 import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
-import type { Appearance } from '../scene-graph.js'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
 import {
   SPATIAL_DARK_PALETTE,

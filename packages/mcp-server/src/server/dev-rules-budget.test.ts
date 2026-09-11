@@ -99,7 +99,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // under the boundary, so 294 of the 295 characters this row added are
   // charged to a step it did not take — a coarse instrument bills the whole
   // bucket to whoever crosses it.
-  '.claude/rules/architecture-map.md': 16,
+  // 17 for the cycle paragraph's rewrite: KNOWN_PACKAGE_CYCLES went empty
+  // when `packages/scene` took the renderer/plugin contract, and the
+  // paragraph now records what the entry WAS plus a correction — the
+  // extraction's commit gave a reason ("a router returns a scene node") the
+  // router contract then did not need. A reader who trusts a wrong reason
+  // extracts the wrong thing next time, so the correction is the rule's own
+  // business rather than only the commit's.
+  '.claude/rules/architecture-map.md': 17,
   // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
   // It belongs here rather than in a skill because it changes what a session
   // must do when it shards a job: nothing, where before it had to ask a human
@@ -261,7 +268,13 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // all, and the fact that a guessed ceiling of 4 shipped and CI's stress
 // lane found the board needing 5. A ceiling with no measurement beside it
 // is the next session's guess as well.
-const CANVAS_RENDER_BUDGET = 121
+// 123 since a contribution may supply the edge ALGORITHM: what crosses the
+// seam (a route, never a scene node) and why, that the side pass runs first
+// so sides are a router's input, the four ways it falls back, and the
+// measured reason selection is a reader rather than a widened payload —
+// with the half of that measurement that the schema-drawn generator has
+// since retired, said plainly so the surviving half stays readable.
+const CANVAS_RENDER_BUDGET = 127
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

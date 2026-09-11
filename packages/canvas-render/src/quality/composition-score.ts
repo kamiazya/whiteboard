@@ -25,7 +25,7 @@
  * weight).
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { Scene } from '../scene-graph.js'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 
 export interface CompositionScore {
   /**

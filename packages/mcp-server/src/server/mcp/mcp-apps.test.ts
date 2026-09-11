@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { FONT_SOURCE_ORIGIN } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // The widget HTML fixture lives in a per-test temp dir, injected via
 // resetWidgetHtmlCacheForTests — never the real WIDGET_HTML_PATH, whose
@@ -71,7 +72,27 @@ describe('registerMcpAppsExtension', () => {
       uri: CANVAS_VIEW_RESOURCE_URI,
       mimeType: RESOURCE_MIME_TYPE,
       text: '<html><body>widget</body></html>',
+      _meta: { ui: { csp: expect.any(Object) } },
     })
+  })
+
+  it('declares the font catalogue origin, and nothing else, as the widget CSP', async () => {
+    // The widget's one exception to zero network (ADR-0011's 2026-09-10
+    // note): a theme's family, from the catalogue origin the daemon's own
+    // installer is pinned to. A host enforces CSP from this declaration, so
+    // an absent one means the fetch is refused and the widget silently keeps
+    // the bundled family — the failure with no error message.
+    writeFileSync(fixtureHtmlPath, '<html><body>widget</body></html>', 'utf-8')
+    const server = fakeServer()
+    registerMcpAppsExtension(server)
+    const readCallback = server.registerResource.mock.calls[0][3]
+    const result = await readCallback()
+
+    expect(result.contents[0]._meta.ui.csp).toEqual({
+      resourceDomains: [FONT_SOURCE_ORIGIN],
+      connectDomains: [FONT_SOURCE_ORIGIN],
+    })
+    expect(FONT_SOURCE_ORIGIN).toBe('https://raw.githubusercontent.com')
   })
 
   it('throws a generic error (never the absolute install path) when the widget HTML is missing', async () => {

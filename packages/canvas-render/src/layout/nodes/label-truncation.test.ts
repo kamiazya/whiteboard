@@ -1,6 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { TextRunNode } from '../../scene-graph.js'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'

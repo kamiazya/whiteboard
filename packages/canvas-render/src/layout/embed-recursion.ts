@@ -1,4 +1,4 @@
-import type { EmbedPlaceholderNode, EmbedResolvedNode } from '../scene-graph.js'
+import type { EmbedPlaceholderNode, EmbedResolvedNode } from '@kamiazya/whiteboard-scene'
 
 /**
  * Minimal, internal/versioned input seam for embed recursion. Consumed

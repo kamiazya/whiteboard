@@ -15,27 +15,22 @@
  * plugin marks a node, and `contributed-decoration.test.ts` exercises it —
  * with no bundled implementation today.
  *
- * The scene-node vocabulary is imported TYPE-ONLY. `canvas-render` depends on
- * this package at runtime (it supplies these as its default), so a runtime
- * import back would close a cycle; a type import is erased and closes
- * nothing.
- *
- * ponytail: the honest fix is a package below both holding the scene
- * vocabulary, since it is a contract between the renderer and every plugin
- * rather than the renderer's private type. Worth extracting when a second
- * plugin needs it; today it would move ~420 lines to serve one caller.
+ * The contract comes from `@kamiazya/whiteboard-scene`, which sits BELOW
+ * both this package and the renderer. It used to come from the renderer
+ * itself, type-only, because a runtime import back would have closed a
+ * package cycle — a property no manifest could see and only a hand-written
+ * guard could check. With the contract in its own package there is no cycle
+ * to hold open, and no guard to keep honest.
  */
-import type {
-  BoundingBox,
-  RenderContribution,
-  ShapeContribution,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, RenderContribution, ShapeContribution } from '@kamiazya/whiteboard-scene'
 import {
   resolveCanvasTheme,
+  resolveEdgeWaypoints,
   resolveNodeShape,
   resolveNodeTextAlign,
   VISUAL_SHAPE_KEY,
 } from './data.js'
+import { WAYPOINT_ROUTER, waypointRouter } from './edge-router.js'
 import { VISUAL_THEMES } from './themes.js'
 
 /**
@@ -161,4 +156,12 @@ export const visualRenderContribution: RenderContribution = {
   // table and the registry's cannot disagree about what `visual.sketch` is.
   themes: VISUAL_THEMES,
   readTheme: resolveCanvasTheme,
+  // The ALGORITHM, not only the geometry it draws with. An edge storing
+  // bends is not choosing between the renderer's computed routings — none of
+  // them can honour a point somebody placed — so the plugin that owns the
+  // bends owns the routing too.
+  routers: { [WAYPOINT_ROUTER]: waypointRouter },
+  // Claimed only when there is something to draw, so the overwhelmingly
+  // common edge costs one property lookup and goes straight to the built-in.
+  readRouting: (edge) => (resolveEdgeWaypoints(edge).length > 0 ? WAYPOINT_ROUTER : undefined),
 }

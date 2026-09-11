@@ -7,9 +7,9 @@
 // (the defect this file exists to pin). Labels already hold this invariant
 // via `resolveLabel()`; this covers the markdown body path.
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { Scene, SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../../measure.js'
-import type { Scene, SceneNode, TextRunNode } from '../../scene-graph.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'

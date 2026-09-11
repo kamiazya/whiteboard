@@ -4,7 +4,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '../theme/spatial-palette.js'
-import { resolveCanvasPalette } from './spatial-canvas.js'
+import { resolveCanvasPalette, resolveCanvasThemeFontFamily } from './spatial-canvas.js'
 
 const canvasIn = (theme: string | undefined): SpatialCanvas => ({
   nodes: [],
@@ -42,5 +42,30 @@ describe('resolveCanvasPalette', () => {
 
   it('a theme nothing registered falls back to the bundled palette, like the layout does', () => {
     expect(resolveCanvasPalette(canvasIn('nobody.home'), 'light')).toBe(SPATIAL_LIGHT_PALETTE)
+  })
+})
+
+describe('resolveCanvasThemeFontFamily', () => {
+  it('answers the family the theme a style resolves to names, and nothing when it names none', () => {
+    expect(resolveCanvasThemeFontFamily(canvasIn('visual.sketch'), { style: 'document' })).toBe(
+      'Yomogi',
+    )
+    // neon draws in the bundled family, so there is nothing to fetch.
+    expect(
+      resolveCanvasThemeFontFamily(canvasIn('visual.neon'), { style: 'document' }),
+    ).toBeUndefined()
+    expect(resolveCanvasThemeFontFamily(canvasIn(undefined), { style: 'visual.sketch' })).toBe(
+      'Yomogi',
+    )
+  })
+
+  it('absent style is clean, unlike resolveCanvasPalette: a caller must ASK for the document look', () => {
+    // The two differ deliberately. A palette is asked for by an editor that
+    // is already drawing the document; this is asked by a tool echoing a
+    // caller's `style`, where absent means the bundled look.
+    expect(resolveCanvasThemeFontFamily(canvasIn('visual.sketch'))).toBeUndefined()
+    expect(
+      resolveCanvasThemeFontFamily(canvasIn('visual.sketch'), { style: 'clean' }),
+    ).toBeUndefined()
   })
 })

@@ -13,8 +13,9 @@
 // The numbers are pinned EXACTLY, not as ceilings: an improvement has to be
 // as loud as a regression, because the point is that someone says why it
 // moved. This is not a golden to regenerate.
+
+import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { BoundingBox } from '../scene-graph.js'
 import {
   ANNOTATION_DENSITY_CORPUS,
   type AnnotationDensityCase,

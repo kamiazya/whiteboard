@@ -303,6 +303,8 @@ const COMMAND_COVERAGE = {
   'set-line-jumps': 'not modelled: a canvas-wide preference, not per-element state',
   'set-node-color': 'not modelled: node inspector, single-field write',
   'set-node-facet': 'not modelled: facet panel, a plugin-owned payload with its own tests',
+  'set-edge-facet':
+    'not modelled: the edge twin of set-node-facet — a plugin-owned payload written to one edge, covered by commands.test.ts',
   'set-canvas-facet':
     'not modelled: the canvas-envelope twin of set-node-facet — a plugin-owned payload written to the envelope rather than to per-element state, covered by commands.test.ts',
   'set-node-file': 'not modelled: file picker dialog, single-field write',
@@ -328,7 +330,10 @@ const COMMAND_COVERAGE = {
     'not modelled: applyCommand is the IDENTITY for it — a reply writes the threads plane beside the canvas, so this model, whose subject is what a command does to a canvas, has nothing to observe. Its write path is document-sync-session.test.ts and its gestures are comment-reply.browser.test.tsx',
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>
 
-/** Every event the gesture state machine accepts. All of them are driven. */
+/**
+ * Every event the gesture state machine accepts. All but the two bend arms
+ * are driven; those say why below.
+ */
 const GESTURE_EVENT_COVERAGE = {
   pointerdown: 'covered',
   'pointerdown-handle': 'covered',
@@ -344,6 +349,12 @@ const GESTURE_EVENT_COVERAGE = {
   'update-text-edit': 'covered',
   'commit-text-edit': 'covered',
   'cancel-text-edit': 'covered',
+  'pointerdown-bend':
+    'not modelled: its only command is set-edge-facet, which this model already declares unmodelled — a plugin-owned payload it cannot observe. The gesture arithmetic is edge-bend-gesture.test.ts and the flow is edge-bend.browser.test.tsx',
+  'remove-bend':
+    'not modelled: the same set-edge-facet write with one point dropped, and no gesture or selection state to model; edge-bend-gesture.test.ts pins both the last-bend and the keep-the-rest cases',
+  'move-bend':
+    'not modelled: the keyboard twin of the bend drag — one set-edge-facet write with one point moved, no gesture state; edge-bend-gesture.test.ts pins it and edge-bend.browser.test.tsx drives the arrow keys',
 } satisfies Record<GestureEvent['type'], SurfaceCoverage>
 
 /**

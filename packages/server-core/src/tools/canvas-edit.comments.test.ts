@@ -207,7 +207,7 @@ describe('wb_canvas_edit comment ops', () => {
       nodes: [NODE],
       edges: [],
       'x-whiteboard': {
-        edgeRouting: { style: 'orthogonal' },
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
         comments: [{ id: 'c1', x: 9, y: 9, text: 'still here after the batch' }],
       },
     })
@@ -221,7 +221,7 @@ describe('wb_canvas_edit comment ops', () => {
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(canvas['x-whiteboard']?.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
     expect(canvas['x-whiteboard']?.comments).toEqual([
       { id: 'c1', x: 9, y: 9, text: 'still here after the batch' },
     ])

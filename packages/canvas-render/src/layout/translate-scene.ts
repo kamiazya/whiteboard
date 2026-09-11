@@ -25,7 +25,7 @@ import type {
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
 
 type TranslatableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
 

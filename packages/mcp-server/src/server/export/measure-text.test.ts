@@ -1,8 +1,19 @@
+import { mkdtempSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { FontDescriptor, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { captureLogsForTests } from '../log.js'
-import { resolveExportFontFaces } from './export-font.js'
-import { _resetExportMeasureTextCacheForTests, createOpentypeMeasureText } from './measure-text.js'
+import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
+import { installedFontDir } from './installed-fonts.js'
+import {
+  _resetExportMeasureTextCacheForTests,
+  createExportTextMeasurer,
+  createOpentypeMeasureText,
+} from './measure-text.js'
 
 const NO_FACES = { regular: null, bold: null, italic: null, boldItalic: null }
 
@@ -227,5 +238,63 @@ describe('a code point the vendored face does not carry', () => {
     const measure = await createOpentypeMeasureText()
     const whole = measure('API漢字', font).advanceWidth
     expect(whole).toBeCloseTo(measure('API', font).advanceWidth + 32)
+  })
+})
+
+// A theme names a font family (ADR-0030), the export declares it only where
+// it can measure it, and an installed face (ADR-0012) is what makes that
+// true. The declared family and the measured face are ONE decision: a
+// measurer that dispatches on weight/style alone returns the vendored face's
+// advances for every family, so the SVG's wrap positions would be computed
+// for a face resvg is not painting with.
+describe('a descriptor naming an installed family', () => {
+  const INSTALLED_FAMILY = 'WhiteboardTestFont'
+  const TEXT = 'xxxx xxxx'
+
+  const descriptor = (family: string): FontDescriptor => ({
+    family,
+    fallbackChain: [],
+    weight: 400,
+    style: 'normal',
+    sizePx: 16,
+  })
+
+  beforeEach(async () => {
+    // The parsed faces are cached per process, so the cache has to be dropped
+    // around a data directory this test is about to change.
+    _resetExportMeasureTextCacheForTests()
+    setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-measure-family-')))
+    await mkdir(installedFontDir(), { recursive: true })
+    await writeFile(join(installedFontDir(), 'covered.ttf'), syntheticFont(TEXT))
+  })
+
+  afterEach(() => {
+    _resetExportMeasureTextCacheForTests()
+    resetDataDirForTests()
+  })
+
+  it('is measured with that face, not with the vendored one', async () => {
+    const measure = await createOpentypeMeasureText()
+    const installed = measure(TEXT, descriptor(INSTALLED_FAMILY)).advanceWidth
+    const bundled = measure(TEXT, descriptor(EXPORT_FONT_FAMILY)).advanceWidth
+    // The synthetic face is a full em per glyph; Roboto is nothing like it.
+    expect(installed).toBeCloseTo(TEXT.length * 16)
+    expect(installed).not.toBeCloseTo(bundled)
+  })
+
+  it('answers the family question from the faces it actually holds', async () => {
+    const measurer = await createExportTextMeasurer()
+    expect(measurer.measurableFamilies.has(INSTALLED_FAMILY)).toBe(true)
+    // The bundled family is always answerable: it is what the layout falls
+    // back to declaring when a theme's family is not.
+    expect(measurer.measurableFamilies.has(EXPORT_FONT_FAMILY)).toBe(true)
+    expect(measurer.measurableFamilies.has('Nothing Installed')).toBe(false)
+  })
+
+  it('keeps the weight/style dispatch for the bundled family, which has four faces', async () => {
+    const measure = await createOpentypeMeasureText()
+    const regular = measure(TEXT, descriptor(EXPORT_FONT_FAMILY))
+    const bold = measure(TEXT, { ...descriptor(EXPORT_FONT_FAMILY), weight: 700 })
+    expect(bold.advanceWidth).toBeGreaterThan(regular.advanceWidth)
   })
 })

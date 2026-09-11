@@ -123,7 +123,7 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 17988,
+        wireBytes: 18105,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -137,7 +137,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 21900,
+        wireBytes: 22556,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -191,11 +191,11 @@ describe('what the tool table costs to read', () => {
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
       wb_canvas_edit: {
-        visibleBytes: 12658,
-        wireBytes: 35792,
+        visibleBytes: 12986,
+        wireBytes: 36776,
         descriptionWords: 169,
-        parameters: 147,
-        undescribed: 119,
+        parameters: 151,
+        undescribed: 123,
         strays: 'refused',
         names: [],
       },
@@ -242,8 +242,8 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_facet_list: {
-        visibleBytes: 422,
-        wireBytes: 1096,
+        visibleBytes: 429,
+        wireBytes: 1110,
         descriptionWords: 30,
         parameters: 1,
         undescribed: 1,
@@ -257,10 +257,10 @@ describe('what the tool table costs to read', () => {
       // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
       // errors over three trials before, 2 calls and 0 after.
       wb_facet_set: {
-        visibleBytes: 2176,
-        wireBytes: 2995,
-        descriptionWords: 108,
-        parameters: 8,
+        visibleBytes: 2421,
+        wireBytes: 3240,
+        descriptionWords: 118,
+        parameters: 9,
         undescribed: 1,
         strays: 'refused',
         names: ['wb_facet_list'],
@@ -275,8 +275,8 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_scene_render: {
-        visibleBytes: 2189,
-        wireBytes: 2536,
+        visibleBytes: 2221,
+        wireBytes: 2568,
         descriptionWords: 51,
         parameters: 5,
         undescribed: 2,
@@ -392,10 +392,10 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      visibleBytes: 35317,
-      wireBytes: 108523,
-      parameters: 268,
-      undescribed: 187,
+      visibleBytes: 35929,
+      wireBytes: 110571,
+      parameters: 273,
+      undescribed: 191,
     })
   })
 

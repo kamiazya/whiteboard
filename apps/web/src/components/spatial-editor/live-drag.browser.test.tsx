@@ -159,7 +159,7 @@ it('recomputes line jumps live while the drag is in flight', async () => {
       { id: 'e1', fromNode: 'a', toNode: 'b' },
       { id: 'e2', fromNode: 'c', toNode: 'd' },
     ],
-    'x-whiteboard': { edgeRouting: { lineJumps: 'arc' } },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
   }
   const { Host } = makeHost(crossing)
   const { container } = render(<Host />)
@@ -259,7 +259,7 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
       { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
       { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
     ],
-    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
   }
   const { Host } = makeHost(crossing)
   const { container } = render(<Host />)
@@ -411,7 +411,7 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
       { id: 'e-a', fromNode: 'a', toNode: 'hub' },
       { id: 'e-c', fromNode: 'c', toNode: 'hub' },
     ],
-    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
   }
   const { Host } = makeHost(shaped)
   const { container } = render(<Host />)

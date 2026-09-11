@@ -1,7 +1,7 @@
+import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { SKETCH_INK_REACH_PX } from '../layout/ink/sketch.js'
 import { sceneBounds } from '../scene-bounds.js'
-import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
 import { isWellFormedXmlFragment } from '../test-utils/xml-well-formed.js'
 import { renderSceneToSvg } from './backend.js'
 
@@ -40,12 +40,29 @@ describe('sketch ink in the SVG backend', () => {
     expect(svg).not.toMatch(/<rect [^>]*stroke=/)
   })
 
-  it('a hatched fill draws hatch lines in the stroke colour and no solid fill', () => {
+  it('the second pass is lighter than the first, so the doubled line reads as a pencil going over', () => {
+    const svg = renderSceneToSvg({ nodes: [inkedRect] })
+    const paths = svg.match(/<path [^>]*>/g) ?? []
+    expect(paths).toHaveLength(2)
+    expect(paths[0]).not.toContain('stroke-opacity')
+    expect(paths[1]).toMatch(/stroke-opacity="0\.\d+"/)
+    const edgeSvg = renderSceneToSvg({ nodes: [inkedEdge] })
+    const edgePaths = edgeSvg.match(/<path [^>]*>/g) ?? []
+    expect(edgePaths[1]).toMatch(/stroke-opacity="0\.\d+"/)
+    // The arrowhead wings are single strokes and stay at full strength.
+    expect(edgePaths[2]).not.toContain('stroke-opacity')
+  })
+
+  it('a hatched fill keeps its tint beneath hatch lines in the stroke colour', () => {
     const svg = renderSceneToSvg({
       nodes: [{ ...inkedRect, ink: { style: 'sketch', seed: 42, fill: 'hatch' } }],
     })
-    expect(svg).not.toMatch(/<rect /)
+    // The tint stays under the lines — a label sits on a coloured surface,
+    // not on bare accent strokes — and the underlay carries no stroke.
+    expect(svg).toMatch(/<rect [^>]*fill="#ffffff"/)
+    expect(svg).not.toMatch(/<rect [^>]*stroke=/)
     expect(svg.match(/<path /g)!.length).toBeGreaterThan(4)
+    expect(svg.indexOf('<rect ')).toBeLessThan(svg.indexOf('<path '))
   })
 
   it('an inked edge is stroke paths with an inked arrowhead and no marker', () => {

@@ -1,6 +1,6 @@
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest, sceneDigestSchema } from './scene-digest.js'
-import type { Scene } from './scene-graph.js'
 
 function scene(...boxes: { x: number; y: number; w: number; h: number }[]): Scene {
   return {

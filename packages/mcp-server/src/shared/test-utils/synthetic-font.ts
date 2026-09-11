@@ -1,7 +1,7 @@
 import { opentypeApi } from '../opentype.js'
 
 /**
- * A minimal real font covering exactly `covered`, as bytes.
+ * A minimal real font covering exactly the code points of `covered`, as bytes.
  *
  * Font tests need a glyph the vendored Latin face does not have. Reading one
  * off the machine is not an option: no CI job installs a CJK font, so a test
@@ -21,6 +21,20 @@ export function syntheticFont(covered: string, familyName = 'WhiteboardTestFont'
   square.lineTo(800, 0)
   square.close()
 
+  // A full em per glyph, which no real Latin face gives every character —
+  // so a measurement taken with this face is distinguishable from one taken
+  // with the vendored Roboto, which is how "which face measured this?" is
+  // observable at all.
+  const glyphs = [...covered].map(
+    (char, index) =>
+      new opentypeApi.Glyph({
+        name: `covered${index}`,
+        unicode: char.codePointAt(0),
+        advanceWidth: 1000,
+        path: square,
+      }),
+  )
+
   const font = new opentypeApi.Font({
     familyName,
     styleName: 'Regular',
@@ -35,12 +49,7 @@ export function syntheticFont(covered: string, familyName = 'WhiteboardTestFont'
         advanceWidth: 1000,
         path: new opentypeApi.Path(),
       }),
-      new opentypeApi.Glyph({
-        name: 'covered',
-        unicode: covered.codePointAt(0),
-        advanceWidth: 1000,
-        path: square,
-      }),
+      ...glyphs,
     ],
   })
 

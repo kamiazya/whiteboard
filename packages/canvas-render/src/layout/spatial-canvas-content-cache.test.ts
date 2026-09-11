@@ -208,3 +208,71 @@ describe('layoutSpatialCanvas content cache (PBT)', () => {
     },
   )
 })
+
+const THEME_KEY = 'visual.theme/v0'
+
+const neonCanvas: SpatialCanvas = {
+  nodes: [textNode('a', 0, 0, BODY)],
+  edges: [],
+  'x-whiteboard': { facets: { [THEME_KEY]: { theme: 'visual.neon' } } },
+}
+
+function bodyFills(scene: { nodes: readonly unknown[] }): string[] {
+  const fills: string[] = []
+  const walk = (nodes: readonly unknown[]): void => {
+    for (const node of nodes as readonly Record<string, unknown>[]) {
+      if (node.kind === 'textRun') {
+        const appearance = node.appearance as { fill?: string } | undefined
+        if (appearance?.fill !== undefined) fills.push(appearance.fill)
+      }
+      for (const key of ['nodes', 'runs']) {
+        const children = node[key]
+        if (Array.isArray(children)) walk(children as readonly unknown[])
+      }
+    }
+  }
+  walk(scene.nodes)
+  return fills
+}
+
+describe('layoutSpatialCanvas content cache, across looks', () => {
+  it('a clean body never answers a themed one: the key carries the theme', () => {
+    const cache = mapCache()
+    const measure = createFakeMeasure()
+    layoutSpatialCanvas(neonCanvas, options({ contentCache: cache, style: 'clean' }, measure))
+    const themed = layoutSpatialCanvas(
+      neonCanvas,
+      options({ contentCache: cache, style: 'document' }, measure),
+    )
+    // visual.neon's light labelFill; the bundled light palette paints #404040.
+    expect(bodyFills(themed)).toContain('#0f172a')
+    expect(bodyFills(themed)).not.toContain('#404040')
+  })
+
+  it('two looks of one canvas keep separate entries, and each look still hits its own', () => {
+    const cache = mapCache()
+    const measure = createFakeMeasure()
+    layoutSpatialCanvas(neonCanvas, options({ contentCache: cache, style: 'clean' }, measure))
+    layoutSpatialCanvas(neonCanvas, options({ contentCache: cache, style: 'document' }, measure))
+    expect(cache.store.size).toBe(2)
+
+    const warm = countingMeasure()
+    layoutSpatialCanvas(neonCanvas, options({ contentCache: cache, style: 'clean' }, warm.measure))
+    layoutSpatialCanvas(
+      neonCanvas,
+      options({ contentCache: cache, style: 'document' }, warm.measure),
+    )
+    expect(warm.calls()).toBe(0)
+  })
+
+  it('an un-themed canvas keys the same under every style, so nothing else re-lays out', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode('a', 0, 0, BODY)], edges: [] }
+    const cache = mapCache()
+    layoutSpatialCanvas(canvas, options({ contentCache: cache, style: 'clean' }))
+    const warm = countingMeasure()
+    layoutSpatialCanvas(canvas, options({ contentCache: cache, style: 'document' }, warm.measure))
+    layoutSpatialCanvas(canvas, options({ contentCache: cache }, warm.measure))
+    expect(warm.calls()).toBe(0)
+    expect(cache.store.size).toBe(1)
+  })
+})

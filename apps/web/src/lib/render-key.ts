@@ -67,6 +67,24 @@ export const renderKeySchema = z.object({
    * reason a markdown row survives a theme toggle: one entry serves both.
    */
   theme: z.enum(['light', 'dark']).nullable(),
+  /**
+   * Which theme faces this realm could MEASURE when the picture was drawn
+   * (`themeFacesKey`), and NULL for markdown — whose body is measured in
+   * the bundled family whatever a theme names, so one entry serves a tab
+   * before and after a face lands.
+   *
+   * The other axis a spatial picture cannot do without. A board that names
+   * a theme is drawn in the bundled family until this tab holds that
+   * theme's face and in the theme's family after, and a list surface asks
+   * for the face only once it has drawn the board once — so without this
+   * the memo, and the worker's store behind it, would answer that second
+   * ask with the first picture. It is deliberately the whole held set
+   * rather than this document's own family: a key is built before the
+   * canvas is decoded, and the thread that builds it does not know which
+   * family the board wants. The cost is one redraw of the rows on screen
+   * per family that lands, once, at background priority.
+   */
+  fonts: z.string().nullable(),
 })
 
 export type RenderKey = z.infer<typeof renderKeySchema>
@@ -97,8 +115,20 @@ export interface RenderKeySubject {
   readonly state?: string
 }
 
-/** The key for the SVG a surface draws at size — the expensive family. */
-export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): RenderKey {
+/**
+ * The key for the SVG a surface draws at size — the expensive family.
+ *
+ * `fonts` is the caller's answer to "which theme faces could this realm
+ * measure", `themeFacesKey()` for every surface that has one. Passed in
+ * rather than read here, so this module stays the declared value type it
+ * says it is and a test can key a picture without a face set.
+ */
+export function renderKeyOf(
+  subject: RenderKeySubject,
+  theme: ResolvedTheme,
+  fonts: string,
+): RenderKey {
+  const spatial = subject.kind === 'spatial'
   return {
     buildId: RENDERER_BUILD_ID,
     pipeline: 'svg',
@@ -107,7 +137,10 @@ export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): Re
     version: subject.state ?? null,
     // Baked into a spatial SVG's own bytes; a markdown one takes its ink
     // from page CSS, so one entry serves both themes.
-    theme: subject.kind === 'spatial' ? theme : null,
+    theme: spatial ? theme : null,
+    // Same asymmetry, same reason: only a spatial picture can be drawn in a
+    // family a theme names.
+    fonts: spatial ? fonts : null,
   }
 }
 
@@ -129,6 +162,11 @@ export function outlineKeyOf(subject: RenderKeySubject): RenderKey {
     kind: subject.kind,
     version: subject.state ?? null,
     theme: null,
+    // Nor a font axis, for the same kind of reason: a spatial outline is a
+    // map over boxes the document already declares, and a markdown one is
+    // measured in the bundled family. Neither changes when a theme's face
+    // lands, so an axis would only double the entries.
+    fonts: null,
   }
 }
 
@@ -204,7 +242,14 @@ const EXTENSION: Readonly<Record<BrokeredPipeline, string>> = {
 
 export function renderKeyPath(key: RenderKey): string {
   const version = key.version ?? ''
-  const leaf = key.theme === null ? segment(version) : `${segment(version)}-${key.theme}`
+  // Every axis that is set, in one leaf. The font set is encoded like any
+  // other opaque value: it is a comma-joined list of family names, and a
+  // family may hold a separator.
+  const leaf = [
+    segment(version),
+    ...(key.theme === null ? [] : [key.theme]),
+    ...(key.fonts === null ? [] : [segment(key.fonts)]),
+  ].join('-')
   // The pipeline sits under the build id and above the kind, so a sweep can
   // drop one family the way it can already drop one build: a directory.
   return `${segment(key.buildId)}/${key.pipeline}/${key.kind}/${segment(key.documentId)}/${leaf}.${EXTENSION[key.pipeline]}`

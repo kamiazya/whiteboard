@@ -990,18 +990,45 @@ the table alone.
     only where `fontAvailable` says a face exists, else the bundled family
     plus a `font-missing` report — the declared family must be the measured
     one), and DEFAULTS an explicit facet always beats: `edgeRouting` where
-    `visual.edges` is silent, `nodeShape` where a node's own facet is silent
-    (never a group, which is a frame), `groupFrame` on group chrome. An
+    no `visual.edges` speaks, `nodeShape` where a node's own facet is silent
+    (never a group, which is a frame), `groupFrame` on group chrome.
+    A body's FURNITURE is themed with its prose: the palette's optional
+    `markdownChrome` becomes the `MarkdownTheme`'s `chromeColor` for every
+    body `mdastOptionsFor` composes (`markdownTheme` in `theme-asset.ts`), so
+    a code panel, an inline-code backdrop, a blockquote rail, a table's rules
+    and a task checkbox belong to the theme rather than to one bundled slate
+    — a palette naming none keeps `#818b98`, which is what leaves every
+    un-themed board byte-identical. A comment or proposal body is NOT themed
+    by it: `layoutCommentBody` sets the theme its density picks, and that
+    chrome stays chrome. A mono FAMILY is deliberately not a token — a family
+    needs a face on every surface (ADR-0011/0012) and the declared family
+    must be the measured one, so it is its own slice, recorded as a
+    `ponytail:` on `markdown-theme.ts`'s stack. An
     unknown id draws clean and reports `unknown-theme`; nothing throws.
     `createThemedAppearance` is memoized per (tokens, mode, family) so a
     themed canvas keeps the frozen-singleton property the editor's `useMemo`
     relies on. The content cache key carries the label family, because two
-    themes on one cache must not hand each other the other's wrapped lines.
+    themes on one cache must not hand each other the other's wrapped lines —
+    AND the resolved theme id, because the family alone does not identify a
+    theme: `visual.neon` names no `fontFamily`, so a clean render and a neon
+    one of the same text node measured to the same key while their `textFill`
+    and syntax colours differ, and the first drawn answered the second. The id
+    is the honest axis since the palette follows from it; a canvas that
+    resolves to no theme keys as it always did under every style, so an
+    un-themed cache does not churn. `apps/web`'s worker keeps the same axis on
+    the CACHE it picks (`lib/layout-content-caches.ts`), one per (mode, style,
+    reference wire).
     `naturalNodeContentSize` goes through the same resolution; a caller
     sizing a node under a theme passes the theme id as `style`, since a
     single-node canvas carries no facet to read. So does
     `layoutSpatialEdges` — it shipped without it, and a drag drew every
     edge crisp and straight over a pencilled, curved committed render.
+    A canvas embedded in a MARKDOWN body resolves the same way, through
+    `layoutMdastBlocks`'s (`layout/markdown-body.ts`) own `style` — a
+    markdown host carries no theme, so `'document'` means the embed's own,
+    and the library default stays `'clean'` so every headless caller's bytes
+    are unchanged. It shipped without that, and the same board was pencilled
+    on the canvas and crisp inside a `![[board]]` in a note.
     `resolveCanvasPalette(canvas, mode)` is the same lookup for a chrome
     that PREVIEWS paint rather than painting — the editor's paper and its
     colour swatches — so a picker and the render read one table; it answers
@@ -1028,6 +1055,29 @@ the table alone.
     marks. Ink amplitude is in canvas units and is NOT scaled by
     `scaleScene`, the same class as arrowheads: a miniature's pencil line is
     relatively bolder, by design.
+    Three things make it read as a hand rather than a tremor, each pinned
+    by a test that a constant reverts: a side's bow is PROPORTIONAL to its
+    length (rough.js's rule, capped at `BOW_MAX_PX`) — an absolute 2.4px bow
+    left a 600px frame ruler-straight while a 60px chip wobbled; each pass
+    is ONE continuous sub-path whose vertices are displaced once and shared
+    by the sides meeting there, closing `OVERSHOOT_PX` past its start, where
+    four independently shaken sides left every corner an open gap; and the
+    backend paints the second pass at `SECOND_PASS_OPACITY`, since two
+    full-strength hairlines read as a ruled line drawn twice. The weight
+    itself is the theme's `strokeWidthPx` token (facet-engine), mapped onto
+    node chrome and edges by `theme-asset.ts` and never onto a label; sketch
+    declares 1.4. An edge keeps EVERY vertex the flattener produced and
+    gains an anchor only along a straight run longer than `EDGE_STEP_PX`
+    (`anchored`); the resampler it replaced kept one point per step, which
+    erased a hop (nine samples over ten pixels) and any bend inside the
+    step, so a sketched edge crossed other edges flat and cut its own
+    corners. A vertex's shake shrinks with its spacing, so the hop's dense
+    samples are not shaken into a burr. A hatched node draws its slant and
+    pitch from its own seed near one base (`HATCH_ANGLE_SPREAD`,
+    `HATCH_GAP_SPREAD`) and keeps the preset TINT under the lines — a label
+    sits on a coloured surface, not on bare accent strokes — and a coloured
+    group is inked but never hatched, since a frame is not a filled box. The
+    themed pixel golden is the instrument that sees all of this.
     **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
     is a radius; the backend blurs the element (σ = half the radius) and
     merges the blur twice under the element itself, so the halo is the
@@ -1039,12 +1089,50 @@ the table alone.
     and the specification's behaviour, so a browser does the same.
     `glowReachPx` (three deviations, rounded up) is what `sceneBounds` adds
     for a glowing node and what sizes the region, one constant with two
-    readers. `filter` is a paint attribute on every painted element (a path,
+    readers. The theme mapping puts the halo on node chrome and edges ONLY
+    (`theme-asset.ts`): a label blurred at three deviations thickened into a
+    smudge over the halo pill it already sits on, and a group frame was the
+    largest and least informative bloom on the board. What a halo has to
+    bloom from is the theme's `strokeWidthPx` — a 1px stroke blurred peaks
+    at a quarter of its opacity — and neon's default strokes carry HUE per
+    kind, since the halo repeats the stroke colour and a grey one read as a
+    smudge; an unpainted board was the one thing on the theme that did not
+    glow (`themes.test.ts` pins the chroma and the per-kind difference). `filter` is a paint attribute on every painted element (a path,
     a text run, a symbol's `<use>`), and hoist.ts deliberately never lifts
     it: it is not inherited. mcp-server's `glow-raster.test.ts` pins the one
     claim only a rasterizer can check — resvg paints the halo beside a
     horizontal edge — because an unlit export would otherwise read as a
     working one.
+
+**An edge's ALGORITHM is contributable, not only the geometry it draws
+with.** A contribution registers `routers` by bare name and answers
+`readRouting` for the edges it claims; `composeEdge` asks each contribution
+in turn, composes `${namespace}.${name}`, and calls the router it finds. A
+decline (`null`), a name nobody registered, a path under two points, or a
+missing endpoint all fall back to the built-in — never an error, so a
+document written against another deployment's plugins still draws.
+
+What crosses the seam is a ROUTE (points, and whether they curve), never a
+scene node: `pullEdgeOntoOutlines`, the arrowheads, the appearance and the
+sketch ink stay here and apply to every edge the same way, so a router
+cannot become a second producer of that geometry. The side pass runs BEFORE
+any router — fan-out needs to see the whole edge set — so it works in the
+built-in vocabulary and a router receives its sides rather than choosing
+them.
+
+Selection is a READER rather than a widened payload, and that was measured
+rather than assumed: making `visual.edges/v0`'s `routing` accept a
+namespaced id put the payload outside `deriveFacetForm`'s vocabulary, so the
+facet produced no derived form — silently costing the routing control the
+inspector renders. A plugin stores its choice in its OWN facet, exactly as a
+plugin adding a silhouette adds it to its own rather than widening
+`visual.shape`.
+
+(The measurement had a second half that no longer holds, and saying so keeps
+the first half readable: the payload SAMPLES went empty too, because the
+generator derived them from the same form. Since 2026-09-09 it draws from
+the Zod schema instead, so a widened union would still be generated. The
+editor half is the one that stands.)
 
 ## Conventions
 
@@ -1095,6 +1183,13 @@ the table alone.
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
   regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+  Two of its fixtures are THEMED — one canvas drawn under `visual.sketch`
+  and under `visual.neon`, each on its own paper — because every other
+  golden here is crisp, so a change to sketch's jitter or neon's blur moved
+  no committed pixel and the look layer was judged by nothing. They stay
+  text-free like the rest, and for a stricter reason: a baseline is compared
+  at zero mismatched pixels on machines whose installed fonts differ, so a
+  rendered glyph is the one thing in a scene that cannot be reproduced.
 - `layout/text-wrapping-quality.test.ts` is the text-wrapping SCOREBOARD, the
   same instrument-first shape as the routing one below: 11 corpus cases x 3
   narrow widths, every number pinned EXACTLY. Debt (overflowing runs, worst
@@ -1111,20 +1206,21 @@ the table alone.
   `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
   (`test-utils/facet-arbitraries.ts`, a thin shaping of facet-engine's
   `facetsArbitrary`, which draws each facet from its own Zod schema through
-  model's `arbitraryForSchema`) for the
-  nodes' facets AND the canvas's, rather than a list of facet names,
-  because what it guards is a second entry point folding over FEWER facets
-  than the committed layout — which a named list cannot cover for a facet
-  registered later. It shipped that way
-  twice: plain generated nodes, no silhouettes on either side, the property
-  agreeing vacuously while every edge into a shaped node floated off it for
-  a whole drag; then nodes with facets and a canvas with none, agreeing
-  again while a themed board's edges dragged crisp and straight. The second
-  is why the scenario also draws `style`: a theme is drawn under
-  `'document'` and never under the library's clean default. Three guards
-  keep it honest — one fails when a registered node or canvas facet is
-  never drawn, two fail when the drawn node facets, or the drawn canvas
-  facets, stop changing the layout being compared. Adding a facet needs no
+  model's `arbitraryForSchema`) for all THREE targets — node, canvas and
+  edge — rather than a list of facet names, because what it guards is a
+  second entry point folding over FEWER facets than the committed layout,
+  which a named list cannot cover for a facet registered later. It shipped
+  vacuous three times, once per target: plain generated nodes, no
+  silhouettes on either side, while every edge into a shaped node floated
+  off it for a whole drag; then nodes with facets and a canvas with none,
+  while a themed board's edges dragged crisp and straight; then, when
+  ADR-0013's edge target opened, edges with none — per-edge routing and the
+  bends a contributed router draws never reached a compared canvas. The
+  second is why the scenario also draws `style`: a theme is drawn under
+  `'document'` and never under the library's clean default. Four guards
+  keep it honest — one fails when a registered facet of any of the three is
+  never drawn, three fail when the drawn node, canvas or edge facets stop
+  changing the layout being compared. Adding a facet needs no
   edit here; a schema construct the walk cannot express throws at
   construction naming the path, which is the decision point. The generator
   drew from form-derived samples until 2026-09-09 — a finite list with no
