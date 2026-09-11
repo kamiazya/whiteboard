@@ -31,6 +31,8 @@ export {
   createUniqueNameResolver,
   type UniqueNameEntry,
 } from './references/unique-name-resolver.js'
+export type { CensusFacet, SpatialModelCensus } from './spatial/census.js'
+export { censusSpatialModel, jsonSchemaLeafPaths } from './spatial/census.js'
 export { strictDegrade } from './spatial/degrade.js'
 export { parseSpatial } from './spatial/parse.js'
 export type { SpatialSerializeMode } from './spatial/serialize.js'
