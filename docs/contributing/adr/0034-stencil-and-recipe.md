@@ -455,6 +455,61 @@ Two things the increment decided that this paragraph had not:
   came back `ledger` before `lakehouse` for a document authored the other way
   round. A name sort is the only order a caller can predict.
 
+#### The rung-3 reading: pass^3 = 1, and what it cost
+
+The lane gained a task — *dress a box with a style this workspace defines* —
+because everything below it answers by construction. Every unit test and the
+smoke hand the tool a `workspaceId` because the test wrote it; what none of
+them can say is whether a model reaches for the tool at all when the id it
+needs appears in no schema it reads. The fixture workspace therefore keeps a
+library of two stencils the bundled set does not cover, seeded as ordinary
+content the way a team would have agreed it earlier.
+
+| | reading |
+|---|---|
+| pass^3 | **1** (3 of 3 trials) |
+| mean calls | 3 — `wb_document_list`, `wb_facet_list`, `wb_canvas_edit[node.add]` |
+| tool errors | **0** |
+| cost | $0.21 for the three trials |
+
+Every trial reached `wb_facet_list`, every trial passed `assetKind:
+'stencils'` beside the `workspaceId`, and every trial then wore
+`workspace.lakehouse`. The capability is not merely reachable; it is
+reliably reached. The prompt named no tool, no parameter and no id — only
+that the style belonged to this workspace rather than to the server, which
+is the distinction a person would make and without which `visual.datastore`
+would have been a defensible answer.
+
+#### What the reading found that the diff does not contain
+
+`debtFreePowK` is **0**: all three boards score `nearMisses 1`, and the
+fixture's own architecture board scores no debt at all before the task runs.
+So the near miss is the added box, every time.
+
+It is not a placement mistake and not a model mistake. **All three trials
+declared no geometry whatsoever** — no x, y, width or height — leaving it to
+the tool, which is what the surface asks for. Reproduced with no model in the
+loop, and with a counterfactual that could have refuted it:
+
+| the same `node.add`, same position `(0, 940)` | `nearMisses` |
+|---|---|
+| default size, 260x120 | **1** |
+| the board's prevailing size, 200x80 | **0** |
+
+Every other box on that board is 200x80. At 260x120 the new box's left edge
+still lands on the column, and its centre and right edge miss every anchor
+there is.
+
+**That refines this ADR's own plan rather than confirming it.** The
+unimplemented half named above is a stencil's DEFAULT SIZE, and a default
+size cannot fix this: a stencil is authored once for every board, so
+whatever size `lakehouse` declares will be wrong on the boards drawn at
+another scale. What the measurement points at instead is placement adopting
+the PREVAILING size of the board it is placing into — which fixes every
+auto-placed box rather than only the stencil-dressed ones. Recorded, not
+chased: it is a `wb_canvas_edit` question and this increment is a discovery
+one.
+
 ### Decided (user, 2026-09-11): a document facet, `visual.stencils/v0`
 
 This section said the authoring format was not decided, and it stayed

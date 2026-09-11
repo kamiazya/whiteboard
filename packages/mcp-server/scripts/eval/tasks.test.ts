@@ -122,3 +122,72 @@ describe('the kinds task verifier', () => {
     await expect(verify(board)).resolves.toEqual({ ok: false, detail: 'missing: Stripe' })
   })
 })
+
+describe('the workspace-vocabulary verifier', () => {
+  // Earns its cases the way this file's header asks: not on principle, but
+  // because the verifier was WRITTEN around a specific way of being wrong.
+  // Grading a stencil by the box's COLOUR is the obvious shortcut and it
+  // passes the wrong board — `visual.gateway` is colour 3 and so is this
+  // workspace's `lakehouse`. What stops a later simplification back to that
+  // is a test that fails on it.
+  const DRESS = TASKS.find((t) => t.name === 'dress a box with a style this workspace defines')
+
+  /** The document the verifier reads, with one box dressed however given. */
+  const wbWith = (node: Record<string, unknown> | undefined) => ({
+    call: async (name: string) => {
+      if (name !== 'wb_document_get') {
+        throw new Error(`the verifier called an unexpected tool: ${name}`)
+      }
+      return {
+        documents: [
+          {
+            content: JSON.stringify({ nodes: node === undefined ? [] : [node], edges: [] }),
+          },
+        ],
+      }
+    },
+  })
+
+  const dressed = (stencil: string | undefined, color: string) => ({
+    id: 'lake',
+    type: 'text',
+    text: 'Events lake',
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 80,
+    color,
+    ...(stencil === undefined
+      ? {}
+      : { 'x-whiteboard': { facets: { 'visual.stencil/v0': { stencil } } } }),
+  })
+
+  const verify = (node: Record<string, unknown> | undefined) =>
+    // biome-ignore lint/style/noNonNullAssertion: the task is found above or every case fails
+    DRESS!.verify!(wbWith(node) as never, { 'boards/architecture': 'doc-1' } as never)
+
+  it('passes a box wearing the stencil this workspace defines', async () => {
+    await expect(verify(dressed('workspace.lakehouse', '3'))).resolves.toMatchObject({ ok: true })
+  })
+
+  it('refuses a BUILT-IN stencil of the same colour, which a colour check would pass', async () => {
+    // The whole reason the verifier reads the stored facet. `visual.gateway`
+    // is colour 3, so a box dressed with it is indistinguishable from the
+    // right answer by appearance alone — and it is the plausible wrong
+    // answer, since a model that never found the library still has to dress
+    // the box with something.
+    await expect(verify(dressed('visual.gateway', '3'))).resolves.toMatchObject({ ok: false })
+    await expect(verify(dressed('visual.datastore', '5'))).resolves.toMatchObject({ ok: false })
+  })
+
+  it('refuses a box coloured by hand, and says it wears no stencil', async () => {
+    await expect(verify(dressed(undefined, '3'))).resolves.toEqual({
+      ok: false,
+      detail: 'the box wears no stencil at all',
+    })
+  })
+
+  it('names the missing box rather than throwing on an untouched board', async () => {
+    await expect(verify(undefined)).resolves.toMatchObject({ ok: false })
+  })
+})
