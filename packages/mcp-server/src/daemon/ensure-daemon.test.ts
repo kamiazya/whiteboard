@@ -179,6 +179,50 @@ describe('ensureDaemon', () => {
     expect(args).toContain('--daemon')
   })
 
+  // The daemon token is a full-authority bearer credential. On Linux
+  // /proc/<pid>/cmdline is world-readable by default (hidepid=0), while
+  // /proc/<pid>/environ is 0400 owner-only — and argv additionally reaches
+  // every `ps aux`, monitoring agent, and pasted bug report. The CLI surface
+  // already refuses `--token` for this reason (cli/argv.ts); this is the
+  // auto-spawn path, which does not go through that parser.
+  it.each([
+    ['packaged', {} as NodeJS.ProcessEnv],
+    ['dev', { WHITEBOARD_DEV: '1' } as NodeJS.ProcessEnv],
+  ])('never puts the daemon token on the spawned argv (%s mode)', async (_label, env) => {
+    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      pid: 890,
+      port: 45010,
+      token: 'record-token',
+      version: '0.1.0',
+      startedAt: '2026-04-23T00:05:00.000Z',
+    })
+    spawnMock.mockReturnValue({ pid: 890, unref: vi.fn() })
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as typeof globalThis.fetch
+
+    await ensureDaemon({
+      dataDir: '/tmp/excalidraw-data',
+      env,
+      startPort: 45010,
+      startupTimeoutMs: 500,
+    })
+
+    expect(spawnMock).toHaveBeenCalledOnce()
+    const [, args, options] = spawnMock.mock.calls[0]
+
+    // The token travels in the environment instead, where the spawned
+    // daemon's resolveToken() reads it as WHITEBOARD_TOKEN.
+    const token = options?.env?.WHITEBOARD_TOKEN
+    expect(typeof token).toBe('string')
+    expect(token).not.toBe('')
+
+    // Assert on the VALUE, not only the flag name: a differently-spelled
+    // flag carrying the same secret would be the same leak.
+    expect(args.some((arg: string) => arg.includes(token as string))).toBe(false)
+    expect(args.some((arg: string) => arg.startsWith('--token'))).toBe(false)
+  })
+
   it('re-checks the registry after taking the startup lock and reuses a daemon started by another caller', async () => {
     loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
       pid: 91,

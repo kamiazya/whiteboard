@@ -32,32 +32,49 @@ describe('useDaemonConnection', () => {
     expect(result).toEqual({ status: 'none' })
   })
 
-  it('returns {status:"paired"} and seeds the daemon token for a bootstrap fragment', () => {
+  // 'paired' means "a link asked for this daemon", never "this page can
+  // talk to it": the fragment names a target and carries no credential, and
+  // App turns it into a real connection through the pairing-grant flow.
+  it('returns {status:"paired"} with the link target and NO token', () => {
     setHash(
       encodeDaemonConnectionFragment({
+        baseUrl: 'http://127.0.0.1:3000',
+        workspaceId: 'ws1',
+        path: 'canvas-a',
+      }),
+    )
+    render(<Consumer />)
+    const result = JSON.parse(screen.getByTestId('result').textContent ?? '{}')
+    expect(result.status).toBe('paired')
+    expect(result.payload).toEqual({
+      baseUrl: 'http://127.0.0.1:3000',
+      workspaceId: 'ws1',
+      path: 'canvas-a',
+    })
+    expect(readDaemonTokenOnce()).toBeNull()
+  })
+
+  // A link minted by an older daemon embeds that daemon's full-authority
+  // token. It must be REFUSED rather than parsed, and the fragment stripped
+  // from history either way — the credential is live until rotated, so a
+  // link left in the address bar is a link still worth stealing.
+  it('refuses a legacy credential-carrying fragment and strips it', () => {
+    const legacy = btoa(
+      JSON.stringify({
         baseUrl: 'http://127.0.0.1:3000',
         authMode: 'bootstrap',
         bootstrapToken: 'sekrit-token',
       }),
     )
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+    setHash(`#wb=${legacy}`)
     render(<Consumer />)
     const result = JSON.parse(screen.getByTestId('result').textContent ?? '{}')
-    expect(result.status).toBe('paired')
-    expect(result.payload.baseUrl).toBe('http://127.0.0.1:3000')
-    expect(readDaemonTokenOnce()).toBe('sekrit-token')
-  })
-
-  it('returns {status:"paired"} without seeding a token when authMode is "none"', () => {
-    setHash(
-      encodeDaemonConnectionFragment({
-        baseUrl: 'http://127.0.0.1:3000',
-        authMode: 'none',
-      }),
-    )
-    render(<Consumer />)
-    const result = JSON.parse(screen.getByTestId('result').textContent ?? '{}')
-    expect(result.status).toBe('paired')
+    expect(result.status).toBe('error')
     expect(readDaemonTokenOnce()).toBeNull()
+    expect(window.location.hash).not.toContain('wb=')
   })
 
   it('returns {status:"error"} for malformed base64', () => {
@@ -81,8 +98,6 @@ describe('useDaemonConnection', () => {
     // still carries a bootstrapToken that must not linger in the URL.
     const json = JSON.stringify({
       baseUrl: 'http://127.0.0.1:3000',
-      authMode: 'bootstrap',
-      bootstrapToken: 'sekrit-token-leak',
       extra: 'unexpected-field',
     })
     const b64 = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -106,8 +121,6 @@ describe('useDaemonConnection', () => {
     setHash(
       encodeDaemonConnectionFragment({
         baseUrl: 'http://127.0.0.1:3000',
-        authMode: 'bootstrap',
-        bootstrapToken: 'sekrit-token-2',
       }),
     )
     render(
@@ -117,7 +130,7 @@ describe('useDaemonConnection', () => {
     )
     const result = JSON.parse(screen.getByTestId('result').textContent ?? '{}')
     expect(result.status).toBe('paired')
-    expect(readDaemonTokenOnce()).toBe('sekrit-token-2')
+    expect(readDaemonTokenOnce()).toBeNull()
 
     cleanup()
     render(<Consumer />)

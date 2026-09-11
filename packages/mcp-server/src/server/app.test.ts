@@ -1095,8 +1095,6 @@ describe('createApp daemon mutation auth', () => {
       const { decodeBase64UrlText } = await import(
         '@kamiazya/whiteboard-daemon-client/api-contracts/pairing-link'
       )
-      // Longer than MIN_BOOTSTRAP_TOKEN_LENGTH — 'secret' alone is 6 chars,
-      // which the tool refuses to embed as too short.
       const token = 'secret-daemon-token'
       const app = createApp({
         ...createRuntimeOptions(token),
@@ -1118,12 +1116,15 @@ describe('createApp daemon mutation auth', () => {
 
       const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
       expect(res.isError, JSON.stringify(res)).not.toBe(true)
-      const result = res.structuredContent as { url: string; authMode: string }
-      expect(result.authMode).toBe('bootstrap')
+      const result = res.structuredContent as { url: string }
 
       const fragment = result.url.split('#wb=')[1]
-      const decoded = JSON.parse(decodeBase64UrlText(fragment)) as { baseUrl: string }
+      const decoded = JSON.parse(decodeBase64UrlText(fragment)) as Record<string, unknown>
       expect(decoded.baseUrl).toBe('http://127.0.0.1:3099')
+      // The daemon token reaches createApp here and must not reach the link:
+      // this is the wiring test, so it is the one that can prove the token
+      // the composition root holds is not the token a URL carries.
+      expect(JSON.stringify(decoded)).not.toContain(token)
 
       await transport.close()
     })

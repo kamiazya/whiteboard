@@ -114,19 +114,24 @@ the daemon's own page — there is no silent grant path.
    whiteboard daemon) to call the `wb_pairing_link_create` MCP tool. Optionally
    pass `workspaceId` / `path` to target a specific canvas, or `webOrigin` to
    point at a non-default web app deployment.
-2. The tool returns a URL carrying a `#wb=` fragment with the daemon's
-   bootstrap token (see [ADR-0002](../contributing/adr/0002-browser-to-daemon-transport.md)
-   for the transport design) — the same full-authority credential that
-   authenticates every `/api/*` request, valid until it is rotated, not a
-   short-lived or single-use token. Open that URL in your browser.
+2. The tool returns a URL carrying a `#wb=` fragment. **The fragment holds no
+   credential** — only which daemon to reach and what to open. Open that URL
+   in your browser.
 3. On a hosted `https:` origin, the browser's Local Network Access permission
    prompt appears — grant it to let the page reach your loopback daemon.
-4. The web app consumes the fragment and connects to the paired workspace.
+4. The web app reads the fragment and asks that daemon for access, through
+   exactly the same pairing grant as the section above: silently if this
+   browser origin was approved before, otherwise by sending you to the
+   daemon's own `/pair` consent page for one **Approve** click. Then it opens
+   the workspace or document the link named.
 
-**Treat the pairing link like a credential.** It embeds the daemon's
-bootstrap token, so anyone who has the link can pair with your daemon until
-the token is rotated. Share it only with the intended recipient, and prefer
-loopback (`http://127.0.0.1:...`) origins for purely local use.
+Earlier versions embedded the daemon's bootstrap token in the fragment — the
+same full-authority credential that authenticates every `/api/*` request,
+valid until rotated. Anyone who saw the link could pair with that daemon, and
+a pairing link is exactly the kind of thing that gets pasted into a chat, a
+terminal transcript, or a screen share. It no longer carries one, and a link
+minted by an older daemon is now **refused** by the web app rather than used,
+so re-mint it instead of re-opening it.
 
 The hosted app's "Check for local daemon" does not assume the default
 port: it re-checks daemons it has successfully found before (remembered in

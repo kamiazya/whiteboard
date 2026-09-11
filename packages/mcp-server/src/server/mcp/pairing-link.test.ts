@@ -12,7 +12,7 @@ import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_ALLOWED_WEB_ORIGINS } from '../security/web-origin-allowlist.js'
 import {
-  PAIRING_LINK_CREDENTIAL_NOTE,
+  PAIRING_LINK_NOTE,
   type PairingLinkContext,
   registerPairingLinkTool,
 } from './pairing-link.js'
@@ -45,7 +45,6 @@ describe('wb_pairing_link_create — with a daemon pairing context', () => {
   beforeEach(async () => {
     harness = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
     })
   })
 
@@ -57,15 +56,10 @@ describe('wb_pairing_link_create — with a daemon pairing context', () => {
   const call = (args: Record<string, unknown>) =>
     harness.client.callTool({ name: 'wb_pairing_link_create', arguments: args })
 
-  it('emits a url whose fragment decodes to a shared-schema-valid bootstrap payload', async () => {
+  it('emits a url whose fragment decodes to a shared-schema-valid payload', async () => {
     const res = await call({ workspaceId: 'ws1', path: 'canvas-a', fullscreen: true })
     expect(res.isError, JSON.stringify(res)).not.toBe(true)
-    const result = res.structuredContent as {
-      url: string
-      webOrigin: string
-      authMode: string
-    }
-    expect(result.authMode).toBe('bootstrap')
+    const result = res.structuredContent as { url: string; webOrigin: string }
     expect(result.url.startsWith(`${result.webOrigin}/#wb=`)).toBe(true)
     expect(result.url.split('#').length - 1).toBe(1)
 
@@ -75,16 +69,32 @@ describe('wb_pairing_link_create — with a daemon pairing context', () => {
       workspaceId: 'ws1',
       path: 'canvas-a',
       fullscreen: true,
-      authMode: 'bootstrap',
-      bootstrapToken: 'x'.repeat(24),
     })
 
-    // The credential warning has to reach the tool's REAL content, not just
-    // be buildable from the structuredContent in a test — a client only
-    // ever sees res.content, never a value it computes for itself.
+    // The note has to reach the tool's REAL content, not just be buildable
+    // from the structuredContent in a test — a client only ever sees
+    // res.content, never a value it computes for itself.
     const text = (res.content as Array<{ text: string }>)[0]?.text ?? ''
     expect(text).toContain(result.url)
-    expect(text).toContain(PAIRING_LINK_CREDENTIAL_NOTE)
+    expect(text).toContain(PAIRING_LINK_NOTE)
+  })
+
+  // The reason this tool changed: the minted URL travels through chat
+  // transcripts, shell history and screen shares, and used to carry the
+  // daemon's own full-authority bearer token — valid until rotated — inside
+  // the fragment. Asserted against the RAW decoded object rather than the
+  // parsed one, since the strict schema would already have thrown on the
+  // key and the test would pass for the wrong reason.
+  it('never emits a credential anywhere in the url or the text', async () => {
+    const res = await call({ workspaceId: 'ws1' })
+    const result = res.structuredContent as { url: string }
+    const decoded = decodeFragment(result.url) as Record<string, unknown>
+    expect(Object.keys(decoded).sort()).toEqual(['baseUrl', 'workspaceId'])
+    const text = (res.content as Array<{ text: string }>)[0]?.text ?? ''
+    for (const key of ['bootstrapToken', 'authMode', 'token']) {
+      expect(JSON.stringify(decoded)).not.toContain(key)
+      expect(text).not.toContain(key)
+    }
   })
 
   it('rejects path without workspaceId before any daemon interaction', async () => {
@@ -115,7 +125,7 @@ describe('wb_pairing_link_create — with a daemon pairing context', () => {
     // receives), not on buildPairingLinkText called directly against
     // structuredContent — that would pass even if the handler never
     // called buildPairingLinkText at all.
-    // PAIRING_LINK_CREDENTIAL_NOTE itself always mentions
+    // PAIRING_LINK_NOTE itself always mentions
     // WHITEBOARD_ALLOWED_WEB_ORIGINS in its general-rule sentence, so the
     // per-call not-admitted warning is identified by its own distinct
     // substring instead.
@@ -123,12 +133,12 @@ describe('wb_pairing_link_create — with a daemon pairing context', () => {
 
     const hosted = await call({ webOrigin: 'https://example.pages.dev' })
     const hostedText = (hosted.content as Array<{ text: string }>)[0]?.text ?? ''
-    expect(hostedText).toContain(PAIRING_LINK_CREDENTIAL_NOTE)
+    expect(hostedText).toContain(PAIRING_LINK_NOTE)
     expect(hostedText).toContain(NOT_ADMITTED_MARKER)
 
     const loopback = await call({ webOrigin: 'http://localhost:5173' })
     const loopbackText = (loopback.content as Array<{ text: string }>)[0]?.text ?? ''
-    expect(loopbackText).toContain(PAIRING_LINK_CREDENTIAL_NOTE)
+    expect(loopbackText).toContain(PAIRING_LINK_NOTE)
     expect(loopbackText).not.toContain(NOT_ADMITTED_MARKER)
   })
 })
@@ -137,7 +147,6 @@ describe('wb_pairing_link_create — daemon reports its own resolved allowlist',
   it('confirms coverage instead of warning when webOrigin is actually admitted', async () => {
     const { client, server } = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
       allowedWebOrigins: ['https://admitted.example.com'],
     })
     try {
@@ -146,7 +155,7 @@ describe('wb_pairing_link_create — daemon reports its own resolved allowlist',
         arguments: { webOrigin: 'https://admitted.example.com' },
       })
       const text = (res.content as Array<{ text: string }>)[0]?.text ?? ''
-      expect(text).toContain(PAIRING_LINK_CREDENTIAL_NOTE)
+      expect(text).toContain(PAIRING_LINK_NOTE)
       expect(text).not.toContain('would be rejected by CORS/origin checks')
     } finally {
       await client.close().catch(() => {})
@@ -157,7 +166,6 @@ describe('wb_pairing_link_create — daemon reports its own resolved allowlist',
   it('still warns when webOrigin is non-loopback and absent from the resolved allowlist', async () => {
     const { client, server } = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
       allowedWebOrigins: ['https://admitted.example.com'],
     })
     try {
@@ -182,7 +190,6 @@ describe('wb_pairing_link_create — daemon reports its own resolved allowlist',
     let origins: readonly string[] = []
     const { client, server } = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
       allowedWebOrigins: () => origins,
     })
     try {
@@ -203,39 +210,6 @@ describe('wb_pairing_link_create — daemon reports its own resolved allowlist',
       })
       const afterText = (after.content as Array<{ text: string }>)[0]?.text ?? ''
       expect(afterText).not.toContain('would be rejected by CORS/origin checks')
-    } finally {
-      await client.close().catch(() => {})
-      await server.close().catch(() => {})
-    }
-  })
-})
-
-describe('wb_pairing_link_create — daemon has no bootstrap token', () => {
-  it('uses authMode "none" and omits bootstrapToken from the fragment', async () => {
-    const { client, server } = await connectedClient({ daemonBaseUrl: 'http://127.0.0.1:54231' })
-    try {
-      const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
-      const result = res.structuredContent as { url: string; authMode: string }
-      expect(result.authMode).toBe('none')
-      const decoded = decodeFragment(result.url) as Record<string, unknown>
-      expect('bootstrapToken' in decoded).toBe(false)
-    } finally {
-      await client.close().catch(() => {})
-      await server.close().catch(() => {})
-    }
-  })
-})
-
-describe('wb_pairing_link_create — daemon has a too-short bootstrap token', () => {
-  it('refuses loudly instead of emitting a dead link', async () => {
-    const { client, server } = await connectedClient({
-      daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'short',
-    })
-    try {
-      const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
-      expect(res.isError).toBe(true)
-      expect((res.content as Array<{ text: string }>)[0]?.text).toMatch(/token/i)
     } finally {
       await client.close().catch(() => {})
       await server.close().catch(() => {})
@@ -301,7 +275,6 @@ describe('wb_pairing_link_create — WHITEBOARD_WEB_ORIGIN env fallback', () => 
     process.env[ENV_KEY] = 'https://env-configured.example.com'
     const { client, server } = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
     })
     try {
       const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
@@ -318,7 +291,6 @@ describe('wb_pairing_link_create — WHITEBOARD_WEB_ORIGIN env fallback', () => 
     process.env[ENV_KEY] = 'https://env-configured.example.com'
     const { client, server } = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
     })
     try {
       const res = await client.callTool({
@@ -343,7 +315,6 @@ describe('wb_pairing_link_create — WHITEBOARD_WEB_ORIGIN env fallback', () => 
     process.env[ENV_KEY] = ''
     const { client, server } = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
     })
     try {
       const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
@@ -364,7 +335,6 @@ describe('wb_pairing_link_create — WHITEBOARD_WEB_ORIGIN env fallback', () => 
     process.env[ENV_KEY] = 'https://example.com/some/path'
     const { client, server } = await connectedClient({
       daemonBaseUrl: 'http://127.0.0.1:54231',
-      bootstrapToken: 'x'.repeat(24),
     })
     try {
       const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })

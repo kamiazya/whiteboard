@@ -86,18 +86,25 @@ async function findAvailablePort(start = 3099): Promise<number> {
   })
 }
 
+// The token is deliberately NOT a parameter here: it travels in the spawned
+// process's ENVIRONMENT (WHITEBOARD_TOKEN, read by server/index.ts's
+// resolveToken), never on argv. On Linux /proc/<pid>/cmdline is world-readable
+// by default while /proc/<pid>/environ is 0400 owner-only, and argv also
+// reaches every `ps aux`, monitoring agent, and pasted bug report — so a
+// full-authority bearer credential on the command line is strictly worse than
+// the 0600 daemon.json it is written to moments later. `cli/argv.ts` already
+// refuses `--token` on the user-facing CLI for this reason; this spawn path
+// does not go through that parser, which is how it kept the flag.
 function buildDaemonSpawnArgs(options: {
   env: NodeJS.ProcessEnv
   port: number
-  token: string
   host: string
   idleTimeoutMs: number
 }): SpawnArgs {
-  const { env, port, token, host, idleTimeoutMs } = options
+  const { env, port, host, idleTimeoutMs } = options
   const baseArgs = [
     '--daemon',
     `--port=${port}`,
-    `--token=${token}`,
     `--host=${host}`,
     `--idle-timeout-ms=${idleTimeoutMs}`,
   ]
@@ -204,7 +211,6 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
       const { command, args } = buildDaemonSpawnArgs({
         env,
         port,
-        token,
         host,
         idleTimeoutMs,
       })
@@ -216,6 +222,12 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
         env: {
           ...env,
           WHITEBOARD_DATA_DIR: dataDir,
+          // Set LAST, so it overrides any ambient WHITEBOARD_TOKEN. This
+          // reproduces the precedence the old `--token=` flag had (argv beat
+          // env in resolveToken): the daemon must come up holding the token
+          // this call generated, since that is the one the record and every
+          // caller derived from it will carry.
+          WHITEBOARD_TOKEN: token,
         },
         detached: true,
         stdio: logFd !== null ? ['ignore', logFd, logFd] : 'ignore',

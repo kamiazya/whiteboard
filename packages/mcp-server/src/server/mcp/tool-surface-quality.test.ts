@@ -296,10 +296,17 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: ['wb_facet_list'],
       },
+      // Moved down when the link stopped carrying a credential: the
+      // description's SECURITY warning ("this URL embeds the daemon
+      // bootstrap token — treat it like a credential") described something
+      // that no longer exists, and the output schema's `authMode` and
+      // `expiresHint` described the same vanished token. 1257 -> 994
+      // visible bytes (-263, -21%) and 70 -> 35 description words, for a
+      // tool whose input schema did not change at all.
       wb_pairing_link_create: {
-        visibleBytes: 1257,
-        wireBytes: 1919,
-        descriptionWords: 70,
+        visibleBytes: 994,
+        wireBytes: 1442,
+        descriptionWords: 35,
         parameters: 4,
         undescribed: 0,
         strays: 'refused',
@@ -426,8 +433,8 @@ describe('what the tool table costs to read', () => {
       // +516 for `stencil` on node.add and node.patch plus the registered
       // assets on wb_facet_list — the two halves of one decision, since the
       // field is a plain string precisely because the list lives there.
-      visibleBytes: 36669,
-      wireBytes: 111600,
+      visibleBytes: 36406,
+      wireBytes: 111123,
       parameters: 276,
       undescribed: 191,
     })
