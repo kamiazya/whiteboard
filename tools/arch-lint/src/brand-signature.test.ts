@@ -69,6 +69,36 @@ const DIVERGENT: Readonly<Record<string, string>> = {
     'the ERROR mark: the signature carries on into a scribble, so it shares the opening and then deliberately does not stop where the plain mark does. That IS the artwork — a pen that kept going — and holding it to the canonical path would delete the only thing it says.',
 }
 
+/**
+ * What each surface holding the mark IS. `mark` draws the bare signature and
+ * must use the box BRAND.md states; `composes` builds something around it and
+ * needs a box of its own, saying what it adds.
+ *
+ * Every file the scan finds must appear here, and every entry must name a
+ * file it still finds — so a new brand surface cannot be added without
+ * answering which kind it is, which is the question that went unasked while
+ * the doc and the surfaces disagreed.
+ */
+const SURFACES: Readonly<Record<string, string>> = {
+  'apps/web/src/brand/welcome-mark.svg': 'mark',
+  'apps/web/src/brand/loader-mark.svg': 'mark',
+  'apps/web/src/brand/error-mark.svg': 'mark',
+  'apps/web/src/components/shell/ShellMark.tsx': 'mark',
+  'packages/canvas-viewer/canvas-viewer.widget.html': 'mark',
+  'apps/web/public/boot-splash.svg':
+    'composes: the product STORY — a cursor, nodes and edges, the spark, and the mark landing at the end. Its canvas is the scene, not the mark.',
+  'docs/assets/readme-mark.svg':
+    'composes: the framed and captioned lockup, which BRAND.md gives the README hero. Frame plus wordmark need a canvas well past the mark.',
+  'apps/web/scripts/generate-og-image.mjs':
+    'composes: the framed card with the spark. The board frame is a 84x62 rect at (2,2), so its bottom edge plus stroke reaches y~65.3 — a 56-tall box would clip it, which is why this one is 66.',
+  'apps/web/scripts/generate-pwa-icons.mjs':
+    'composes: a launcher icon at whatever size it is asked for, so its box is the size parameter rather than a constant.',
+  'packages/plugin-visual/src/icons/signature.ts':
+    'composes: the mark CROPPED to itself plus halo room, for a 16px picker glyph where the standard box spends half its width on margin. Its own comment carries the bounds.',
+  'apps/web/src/lib/favicon.ts':
+    'composes: nothing — it QUOTES the path in a comment to say where the favicon geometry came from, and draws no SVG of its own.',
+}
+
 function walk(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue
@@ -82,6 +112,20 @@ function walk(dir: string, found: string[] = []): string[] {
 interface Copy {
   readonly path: string
   readonly value: string
+}
+
+/**
+ * The box the mark's own surfaces draw it in, read from the same BRAND.md
+ * line as the path. The doc said `88x66` while every mark-only surface drew
+ * `88x56`, so the doc was the odd one out (user decision, 2026-09-11) — and
+ * the fix for a disagreement nobody could see is to make one side derive
+ * from the other, which is why this is parsed rather than typed here.
+ */
+function canonicalBox(): string {
+  const doc = readFileSync(join(REPO_ROOT, BRAND_DOC), 'utf8')
+  const found = doc.match(/in an (\d+)x(\d+) box/)
+  if (found === null) throw new Error(`${BRAND_DOC} no longer states the mark's box`)
+  return `viewBox="0 0 ${found[1]} ${found[2]}"`
 }
 
 function canonicalPath(): string {
@@ -122,7 +166,9 @@ function findCopies(): { readonly copies: readonly Copy[]; readonly files: numbe
 
 describe('the brand signature is one path', () => {
   const canonical = canonicalPath()
+  const box = canonicalBox()
   const { copies, files } = findCopies()
+  const surfaces = [...new Set(copies.map((copy) => copy.path))].sort()
 
   /**
    * A scan that matched nothing reports itself as "every copy agrees", which
@@ -168,6 +214,35 @@ describe('the brand signature is one path', () => {
   it('gives every divergence a reason, not a bare exemption', () => {
     const unexplained = Object.entries(DIVERGENT)
       .filter(([, reason]) => reason.trim().split(/\s+/).length < 8)
+      .map(([path]) => path)
+    expect(unexplained).toEqual([])
+  })
+
+  /**
+   * Both sides of the surface map. A file holding the mark and not listed is
+   * a surface nobody classified — which is exactly the state the box spent
+   * however long in, the doc saying one thing and every surface drawing
+   * another with nothing to notice.
+   */
+  it('classifies every surface that holds the mark, and lists none that does not', () => {
+    const unclassified = surfaces.filter((path) => SURFACES[path] === undefined)
+    expect(unclassified).toEqual([])
+    const stale = Object.keys(SURFACES).filter((path) => !surfaces.includes(path))
+    expect(stale).toEqual([])
+  })
+
+  it('draws the bare mark in the box BRAND.md states, wherever it is the mark', () => {
+    const wrongBox = surfaces
+      .filter((path) => SURFACES[path] === 'mark')
+      .filter((path) => !readFileSync(join(REPO_ROOT, path), 'utf8').includes(box))
+      .map((path) => `${path} does not draw ${box}`)
+    expect(wrongBox).toEqual([])
+  })
+
+  it('says what a composing surface adds, so its own box is a decision', () => {
+    const unexplained = Object.entries(SURFACES)
+      .filter(([, kind]) => kind !== 'mark')
+      .filter(([, kind]) => !kind.startsWith('composes:') || kind.split(/\s+/).length < 8)
       .map(([path]) => path)
     expect(unexplained).toEqual([])
   })

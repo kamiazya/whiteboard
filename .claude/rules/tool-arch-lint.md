@@ -170,11 +170,25 @@ sides plus a reason check, mutation-verified in five directions: a truncated
 copy, a nudged coordinate, a dropped entry, a fabricated entry, and a bare
 one-word reason each fail, naming the file.
 
-What it does NOT pin is the VIEW BOX. Five surfaces use `88 56`, the OG
-generator uses `88 66`, and BRAND.md's parenthetical says `88x66` — a real
-inconsistency, but the box is padding around a path that fits in both, and
-which one is canonical is a decision this guard should not make by picking
-the majority.
+It pins the VIEW BOX too, from the same BRAND.md line. That box read
+`88x66` in the doc while every surface drawing the bare mark used `88x56`, so
+the DOC was the odd one out (user decision, 2026-09-11) — and the fix for a
+disagreement nobody could see is to make one side derive from the other:
+change the number in BRAND.md and every mark surface is reported until it
+follows.
+
+That needs one distinction the guard cannot infer, so `SURFACES` classifies
+every file the scan finds as either `mark` (draws the bare signature, must
+use the stated box) or `composes: <what it adds>` (needs a box of its own).
+Both sides are guarded, which is the point: a new brand surface cannot be
+added without answering which kind it is, and that is precisely the question
+that went unasked while the doc and the surfaces disagreed.
+
+"Unify on 88x56" therefore does NOT reach the composing surfaces, and the
+framed ones show why: the board frame is a `84x62` rect at `(2,2)`, so its
+bottom edge plus stroke reaches y≈65.3 and a 56-tall box clips it. The OG
+card and the not-found mark are 66 tall because the FRAME requires it, not
+because a copy of the mark's box drifted.
 
 ## `vocabulary-check.test.ts`
 
