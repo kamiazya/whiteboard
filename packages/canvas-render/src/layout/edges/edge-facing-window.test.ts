@@ -4,16 +4,18 @@
 // realize the promised straight segment — the anchors land outside the
 // sliver and the route degrades to a shallow near-horizontal diagonal —
 // so they must take the one-bend L through the perpendicular sides instead.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 // The reported triangle: A above B (fully aligned), C to the right and
 // vertically between them, overlapping both in x by only 20px.
 const NODES: SpatialNode[] = [
-  { id: 'A', type: 'text', x: 100, y: 340, width: 200, height: 100, text: '' },
-  { id: 'B', type: 'text', x: 100, y: 570, width: 200, height: 100, text: '' },
-  { id: 'C', type: 'text', x: 280, y: 460, width: 200, height: 100, text: '' },
+  textNode({ id: 'A', x: 100, y: 340, width: 200, height: 100, text: '' }),
+  textNode({ id: 'B', x: 100, y: 570, width: 200, height: 100, text: '' }),
+  textNode({ id: 'C', x: 280, y: 460, width: 200, height: 100, text: '' }),
 ]
 const EDGES: CanvasEdge[] = [
   {

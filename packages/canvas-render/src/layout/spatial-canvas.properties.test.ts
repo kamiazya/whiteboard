@@ -1,6 +1,7 @@
 import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
@@ -317,7 +318,7 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     // tightened, which is the comment above in action rather than a defect —
     // a body that needs less height leaves the card less room to win in.
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: 200, height: 39, file: 'a.md' }],
+      nodes: [fileNode({ id: 'n', x: 0, y: 0, width: 200, height: 39, file: 'a.md' })],
       edges: [],
     }
     const text = collectRunText(
@@ -343,8 +344,8 @@ describe('layoutSpatialCanvas markdown-body properties (PBT)', () => {
     // boundary.
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'small', type: 'file', x: 0, y: 0, width: 200, height: 39, file: 'a.md' },
-        { id: 'big', type: 'file', x: 0, y: 0, width: 200, height: 56, file: 'a.md' },
+        fileNode({ id: 'small', x: 0, y: 0, width: 200, height: 39, file: 'a.md' }),
+        fileNode({ id: 'big', x: 0, y: 0, width: 200, height: 56, file: 'a.md' }),
       ],
       edges: [],
     }

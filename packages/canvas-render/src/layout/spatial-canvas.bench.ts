@@ -28,7 +28,9 @@
 // headroom this bench has: the styled rows carry ±10% run to run, so a change
 // worth arguing about has to move the RATIO by more than that. Anything
 // smaller than ~10% is noise here, not a result.
+
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { test } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
@@ -104,15 +106,16 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
 const OVERFLOWING_LABEL = 'Design review of the Q3 migration 設計レビュー 👨‍👩‍👧‍👦 🇯🇵 👍🏽 done'
 
 function labelledCanvasOf(nodeCount: number, label = OVERFLOWING_LABEL): SpatialCanvas {
-  const nodes: SpatialNode[] = Array.from({ length: nodeCount }, (_, i) => ({
-    id: `g${i}`,
-    type: 'group',
-    x: (i % 12) * 260,
-    y: Math.floor(i / 12) * 180,
-    width: 200,
-    height: 120,
-    label: `${label} ${i}`,
-  }))
+  const nodes: SpatialNode[] = Array.from({ length: nodeCount }, (_, i) =>
+    groupNode({
+      id: `g${i}`,
+      x: (i % 12) * 260,
+      y: Math.floor(i / 12) * 180,
+      width: 200,
+      height: 120,
+      label: `${label} ${i}`,
+    }),
+  )
   const edges: CanvasEdge[] = [
     {
       id: 'e0',

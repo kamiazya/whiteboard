@@ -3,8 +3,10 @@
 // the entries by array position gave it names that mean nothing outside the
 // digest and that shift whenever a node is added or removed — the reader
 // could see "these two overlap" and had no way to say which two.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import type { SpatialAppearanceResolver } from './layout/nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
@@ -30,15 +32,16 @@ const PLACES: Record<string, { x: number; y: number }> = {
 
 const canvasWith = (ids: readonly string[]): SpatialCanvas =>
   ({
-    nodes: ids.map((id) => ({
-      id,
-      type: 'text',
-      x: PLACES[id]?.x ?? 0,
-      y: PLACES[id]?.y ?? 0,
-      width: 100,
-      height: 60,
-      text: id,
-    })),
+    nodes: ids.map((id) =>
+      textNode({
+        id,
+        x: PLACES[id]?.x ?? 0,
+        y: PLACES[id]?.y ?? 0,
+        width: 100,
+        height: 60,
+        text: id,
+      }),
+    ),
     edges: [],
   }) as unknown as SpatialCanvas
 

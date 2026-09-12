@@ -3,8 +3,10 @@
 // spatial-embed.test.ts. Ranked between that seam and the facet card: a
 // document's own prose says more than its facets, and less than a spatial
 // canvas or an image the caller already resolved.
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {
   EmbedResolvedNode,
   ImageSceneNode,
@@ -36,15 +38,14 @@ function baseOptions(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions
   }
 }
 
-const NODE = {
+const NODE = fileNode({
   id: 'f1',
-  type: 'file',
   x: 100,
   y: 100,
   width: 300,
   height: 200,
   file: 'notes',
-} satisfies SpatialNode
+}) satisfies SpatialNode
 
 const canvasOf = (over?: Partial<Extract<SpatialNode, { type: 'file' }>>): SpatialCanvas => ({
   nodes: [{ ...NODE, ...over }],
@@ -162,7 +163,7 @@ describe('file-node markdown bodies', () => {
 
     it('a resolved canvas embed outranks a resolved markdown body', () => {
       const child: SpatialCanvas = {
-        nodes: [{ id: 'c1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: '' }],
+        nodes: [textNode({ id: 'c1', x: 0, y: 0, width: 400, height: 200, text: '' })],
         edges: [],
       }
       const scene = layoutSpatialCanvas(
@@ -265,7 +266,7 @@ describe('malformed bodies never abort the canvas', () => {
   const withSibling = (over?: Partial<Extract<SpatialNode, { type: 'file' }>>): SpatialCanvas => ({
     nodes: [
       { ...NODE, ...over },
-      { id: 'sibling', type: 'text', x: 500, y: 0, width: 200, height: 100, text: 'SIBLING' },
+      textNode({ id: 'sibling', x: 500, y: 0, width: 200, height: 100, text: 'SIBLING' }),
     ],
     edges: [],
   })

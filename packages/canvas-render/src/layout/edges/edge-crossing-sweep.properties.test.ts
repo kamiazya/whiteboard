@@ -3,8 +3,10 @@
 // comparisons are integer-exact, so a single missed candidate pair changes
 // side-choice equilibria. The full double loop over the shared narrow
 // phase stays here as the oracle.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
@@ -59,15 +61,9 @@ const scenarioArbitrary = fc
     style: fc.constantFrom('straight' as const, 'orthogonal' as const, 'curved' as const),
   })
   .map(({ nodeCount, positions, pairs, style }) => {
-    const nodes: SpatialNode[] = positions.slice(0, nodeCount).map((p, i) => ({
-      id: `n${i}`,
-      type: 'text',
-      x: p.x,
-      y: p.y,
-      width: p.w,
-      height: p.h,
-      text: '',
-    }))
+    const nodes: SpatialNode[] = positions
+      .slice(0, nodeCount)
+      .map((p, i) => textNode({ id: `n${i}`, x: p.x, y: p.y, width: p.w, height: p.h, text: '' }))
     const edges: CanvasEdge[] = pairs
       .map((p, i) => ({
         id: `e${i}`,
@@ -225,9 +221,9 @@ describe('edge-crossing sweep — differential equality with the pairwise oracle
 
   it('is deterministic: identical inputs produce deeply-equal matrices', () => {
     const nodes: SpatialNode[] = [
-      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: '' },
-      { id: 'b', type: 'text', x: 300, y: 0, width: 100, height: 60, text: '' },
-      { id: 'c', type: 'text', x: 150, y: 200, width: 100, height: 60, text: '' },
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: '' }),
+      textNode({ id: 'b', x: 300, y: 0, width: 100, height: 60, text: '' }),
+      textNode({ id: 'c', x: 150, y: 200, width: 100, height: 60, text: '' }),
     ]
     const edges: CanvasEdge[] = [
       {

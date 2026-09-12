@@ -8,15 +8,17 @@
 //    re-sided per frame) must side carried edges through the same
 //    optimizer the committed render uses, restricted to the carried set —
 //    otherwise the drop swaps sides the preview never showed.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors } from './spatial-edges.js'
 
 // The reported layout: A above, B below-left, C overlapping B's right side.
 const NODES: SpatialNode[] = [
-  { id: 'B', type: 'text', x: 100, y: 570, width: 200, height: 100, text: '' },
-  { id: 'C', type: 'text', x: 280, y: 530, width: 200, height: 100, text: '' },
-  { id: 'A', type: 'text', x: 100, y: 340, width: 200, height: 100, text: '' },
+  textNode({ id: 'B', x: 100, y: 570, width: 200, height: 100, text: '' }),
+  textNode({ id: 'C', x: 280, y: 530, width: 200, height: 100, text: '' }),
+  textNode({ id: 'A', x: 100, y: 340, width: 200, height: 100, text: '' }),
 ]
 const EDGES: CanvasEdge[] = [
   {
@@ -43,8 +45,8 @@ describe('interpenetrating boxes', () => {
     // without a guard the opposing fallback hands back the same
     // interpenetrating right->left the zero-bend rank just excluded.
     const nodes: SpatialNode[] = [
-      { id: 'B', type: 'text', x: 100, y: 570, width: 200, height: 100, text: '' },
-      { id: 'C', type: 'text', x: 280, y: 570, width: 200, height: 100, text: '' },
+      textNode({ id: 'B', x: 100, y: 570, width: 200, height: 100, text: '' }),
+      textNode({ id: 'C', x: 280, y: 570, width: 200, height: 100, text: '' }),
     ]
     const edge: CanvasEdge = {
       id: 'B-C',

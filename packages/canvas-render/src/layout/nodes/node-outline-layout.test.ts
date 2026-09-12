@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
@@ -13,9 +14,9 @@ const appearance: SpatialAppearanceResolver = {
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: '' },
-    { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 60, text: '' },
-    { id: 'c', type: 'text', x: -300, y: 200, width: 100, height: 60, text: '' },
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: '' }),
+    textNode({ id: 'b', x: 300, y: 200, width: 100, height: 60, text: '' }),
+    textNode({ id: 'c', x: -300, y: 200, width: 100, height: 60, text: '' }),
   ],
   // Two edges into the same side fan their anchors out, so at least one
   // terminal sits OFF the side's midpoint — i.e. off the ellipse tangent —

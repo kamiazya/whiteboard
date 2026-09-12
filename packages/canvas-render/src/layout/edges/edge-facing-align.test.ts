@@ -3,15 +3,17 @@
 // the promise held only when midpoints happened to align (offset stacked
 // nodes got a Z in orthogonal, a diagonal in straight, where a clean
 // vertical exists).
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 describe('facing-pair anchor alignment', () => {
   // Offset stacked nodes: raw x-overlap 50px, inset lane [160,190].
   const NODES: SpatialNode[] = [
-    { id: 'A', type: 'text', x: 0, y: 0, width: 200, height: 100, text: '' },
-    { id: 'B', type: 'text', x: 150, y: 300, width: 200, height: 100, text: '' },
+    textNode({ id: 'A', x: 0, y: 0, width: 200, height: 100, text: '' }),
+    textNode({ id: 'B', x: 150, y: 300, width: 200, height: 100, text: '' }),
   ]
   const EDGE: CanvasEdge = {
     id: 'A-B',
@@ -40,7 +42,7 @@ describe('facing-pair anchor alignment', () => {
     // over pair alignment, or the two corridors collapse onto each other.
     const nodes: SpatialNode[] = [
       ...NODES,
-      { id: 'C', type: 'text', x: -250, y: 300, width: 200, height: 100, text: '' },
+      textNode({ id: 'C', x: -250, y: 300, width: 200, height: 100, text: '' }),
     ]
     const edges: CanvasEdge[] = [
       EDGE,

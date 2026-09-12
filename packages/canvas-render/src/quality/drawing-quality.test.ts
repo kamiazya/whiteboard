@@ -15,6 +15,7 @@
 //
 // Pinned EXACTLY, like every scoreboard in this package: an improvement is
 // as loud as a regression, and whoever moves a number says why in the diff.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
@@ -491,15 +492,16 @@ describe('drawing quality: the instrument orders what a reader would', () => {
     // and the number that says so is the price column `density`, which has
     // no target. Pinned so the gap is a known one.
     const scattered = {
-      nodes: [0, 1, 2, 3].map((i) => ({
-        id: `b${i}`,
-        type: 'text' as const,
-        x: i * 3000,
-        y: (i % 2) * 2500,
-        width: 200,
-        height: 80,
-        text: `box ${i}`,
-      })),
+      nodes: [0, 1, 2, 3].map((i) =>
+        textNode({
+          id: `b${i}`,
+          x: i * 3000,
+          y: (i % 2) * 2500,
+          width: 200,
+          height: 80,
+          text: `box ${i}`,
+        }),
+      ),
       edges: [],
     }
     const s = scoreDrawing(scattered, layoutSpatialCanvas(scattered, { measure, appearance }))

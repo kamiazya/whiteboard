@@ -3,8 +3,10 @@
 // and until the palette could say what colour that furniture is, every
 // board drew it in one bundled slate while the text around it took the
 // theme (package-canvas-render.md decision 15).
+
 import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_THEMES } from '@kamiazya/whiteboard-plugin-visual'
 import type { Appearance, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
@@ -48,7 +50,7 @@ const DEMO: RenderContribution = {
 const BODY = ['> quoted', '', '```js', 'const a = 1', '```', '', '- [ ] todo'].join('\n')
 
 const boardIn = (theme: string | undefined, key = THEME_KEY): SpatialCanvas => ({
-  nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 320, height: 400, text: BODY }],
+  nodes: [textNode({ id: 'a', x: 0, y: 0, width: 320, height: 400, text: BODY })],
   edges: [],
   ...(theme === undefined ? {} : { facets: { [key]: { theme } } }),
 })

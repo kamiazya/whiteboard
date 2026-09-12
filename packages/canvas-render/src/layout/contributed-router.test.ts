@@ -4,6 +4,7 @@
 // stores the choice in its OWN facet and cannot reach another's router.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {
   EdgeRouteRequest,
   RenderContribution,
@@ -34,8 +35,8 @@ const options: SpatialLayoutOptions = {
  */
 const board = (routing: string | undefined): SpatialCanvas => ({
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 60, height: 40, text: 'a' },
-    { id: 'b', type: 'text', x: 400, y: 300, width: 60, height: 40, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 60, height: 40, text: 'a' }),
+    textNode({ id: 'b', x: 400, y: 300, width: 60, height: 40, text: 'b' }),
   ],
   edges: [
     {
@@ -88,7 +89,7 @@ describe('a contributed edge router', () => {
       ...board('detour'),
       nodes: [
         ...board('detour').nodes,
-        { id: 'c', type: 'text', x: 180, y: 140, width: 60, height: 40, text: 'c' },
+        textNode({ id: 'c', x: 180, y: 140, width: 60, height: 40, text: 'c' }),
       ],
     })
     const request = last.request as EdgeRouteRequest | undefined
