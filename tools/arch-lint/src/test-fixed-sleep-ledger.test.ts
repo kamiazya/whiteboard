@@ -72,7 +72,6 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/pages/BrowserDocumentPage.dialog-outlives-document.test.tsx': 5,
   'apps/web/src/pages/BrowserDocumentPage.rename.browser.test.tsx': 1,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1,
-  'apps/web/src/pages/BrowserIndexPage.back-during-load.browser.test.tsx': 1,
   'apps/web/src/pages/BrowserIndexPage.defaults.browser.test.tsx': 1,
   'apps/web/src/pages/DaemonDocumentPage.surface-outlives-document.test.tsx': 1,
   'apps/web/src/pages/PairConsentPage.test.tsx': 1,
