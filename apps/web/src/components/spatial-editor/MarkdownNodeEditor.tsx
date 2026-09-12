@@ -56,6 +56,7 @@ import {
   annotationMarks,
   setAnnotationProjection,
 } from '../markdown-editor/annotation-decorations.js'
+import { completionOnDelete } from '../markdown-editor/completion-on-delete.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { emojiCompletionSource } from '../markdown-editor/emoji-completion.js'
 import { emojiShortcodeMarks } from '../markdown-editor/emoji-shortcode-marks.js'
@@ -211,6 +212,10 @@ export function MarkdownNodeEditor({
         // one that applies — an ACTIVE popup takes the key, anything else
         // abandons the edit.
         autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
+        // Same reason as the document editor: nothing reopens a list after a
+        // deletion, so a name finished long ago could not be corrected with
+        // the list that wrote it.
+        completionOnDelete(),
         wikiLinkCompletionTheme,
         syntaxHighlighting(markdownHighlightStyle),
         // The node behind this editor draws its body with the shortcode
