@@ -163,7 +163,6 @@ describe('the workspace-vocabulary verifier', () => {
   })
 
   const verify = (node: Record<string, unknown> | undefined) =>
-    // biome-ignore lint/style/noNonNullAssertion: the task is found above or every case fails
     DRESS!.verify!(wbWith(node) as never, { 'boards/architecture': 'doc-1' } as never)
 
   it('passes a box wearing the stencil this workspace defines', async () => {
