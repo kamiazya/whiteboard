@@ -6,10 +6,16 @@ import {
   canvasCommentSchema,
   documentIdSchema,
   edgeEndSchema,
+  frameLabel,
   lineEndSchema,
+  type NodeKind,
+  nodeFile,
   nodeIdSchema,
+  nodeKind,
   nodePositionSchema,
   nodeSizeSchema,
+  nodeText,
+  nodeUrl,
   type SpatialCanvas,
   type SpatialNode,
   workspaceIdSchema,
@@ -162,11 +168,23 @@ const canvasSnapshotInputSchema = z
   .strict()
 type CanvasSnapshotInput = z.infer<typeof canvasSnapshotInputSchema>
 
+/** Everything a snapshot node carries whatever it shows. */
+type SnapshotNodeBase = {
+  readonly id: string
+  readonly type: SpatialNode['type']
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+  readonly color?: string
+  readonly locked?: true
+}
+
 function projectNode(
   node: SpatialNode,
   locked: boolean,
 ): { node: z.infer<typeof canvasSnapshotNodeSchema>; truncated: boolean } {
-  const base = {
+  const base: SnapshotNodeBase = {
     id: node.id,
     type: node.type,
     x: node.x,
@@ -177,31 +195,53 @@ function projectNode(
     ...(locked ? { locked: true as const } : {}),
   }
 
-  switch (node.type) {
-    case 'text': {
-      const cut = node.text.length > SNAPSHOT_TEXT_MAX_CHARS
-      return {
-        // No ellipsis is appended on a cut: the value stays an exact prefix
-        // of the stored text, so an agent can match it against what it wrote.
-        node: {
-          ...base,
-          text: cut ? node.text.slice(0, SNAPSHOT_TEXT_MAX_CHARS) : node.text,
-          ...(cut ? { textTruncated: true as const } : {}),
-        },
-        truncated: cut,
-      }
-    }
-    case 'group':
-      return {
-        node: { ...base, ...(node.label === undefined ? {} : { label: node.label }) },
-        truncated: false,
-      }
-    case 'file':
-      return { node: { ...base, file: node.file }, truncated: false }
-    case 'link':
-      return { node: { ...base, url: node.url }, truncated: false }
-  }
+  return PROJECT_NODE[nodeKind(node)](node, base)
 }
+
+/**
+ * One row per kind, in place of a `switch` over the node-kind union that
+ * ADR-0038 decision 3 dissolves. `NodeKind` is closed, so `satisfies` fails
+ * the build when the resource registry grows — the guard the `switch` gave,
+ * kept rather than traded away.
+ *
+ * `base.type` still publishes the stored word: what this TOOL emits is a wire
+ * contract with its own gate (ADR-0031), and converging it on the model's
+ * vocabulary is a separate change from moving the reader off it.
+ */
+const PROJECT_NODE = {
+  text: (node, base) => {
+    const text = nodeText(node) ?? ''
+    const cut = text.length > SNAPSHOT_TEXT_MAX_CHARS
+    return {
+      // No ellipsis is appended on a cut: the value stays an exact prefix of
+      // the stored text, so an agent can match it against what it wrote.
+      node: {
+        ...base,
+        text: cut ? text.slice(0, SNAPSHOT_TEXT_MAX_CHARS) : text,
+        ...(cut ? { textTruncated: true as const } : {}),
+      },
+      truncated: cut,
+    }
+  },
+  frame: (node, base) => {
+    const label = frameLabel(node)
+    return { node: { ...base, ...(label === undefined ? {} : { label }) }, truncated: false }
+  },
+  file: (node, base) => {
+    const file = nodeFile(node)
+    return { node: { ...base, ...(file === undefined ? {} : { file }) }, truncated: false }
+  },
+  link: (node, base) => {
+    const url = nodeUrl(node)
+    return { node: { ...base, ...(url === undefined ? {} : { url }) }, truncated: false }
+  },
+} satisfies Record<
+  NodeKind,
+  (
+    node: SpatialNode,
+    base: SnapshotNodeBase,
+  ) => { node: z.infer<typeof canvasSnapshotNodeSchema>; truncated: boolean }
+>
 
 function projectEdge(edge: CanvasEdge, locked: boolean): z.infer<typeof canvasSnapshotEdgeSchema> {
   return {
