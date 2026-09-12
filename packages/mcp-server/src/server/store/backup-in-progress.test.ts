@@ -174,14 +174,18 @@ describe('the backup-in-progress marker', () => {
         // read as a JSON problem instead of naming the atomicity it is here
         // to measure.
         const deadlineOf = async (): Promise<number> => {
-          for (;;) {
+          for (let attempt = 0; attempt < 100; attempt += 1) {
             try {
               return JSON.parse(await readFile(join(dir, 'backup-in-progress.json'), 'utf8'))
                 .expiresAt as number
             } catch {
-              await new Promise((r) => setTimeout(r, 1))
+              // A torn read. Retried immediately rather than after a pause:
+              // `readFile` already yields, the rewrite it collided with is
+              // sub-millisecond, and a fixed sleep here is the shape
+              // `test-fixed-sleep-ledger` refuses.
             }
           }
+          throw new Error('the marker never read back as JSON in 100 attempts')
         }
         const before = await deadlineOf()
         for (let i = 0; i < READS; i += 1) {
