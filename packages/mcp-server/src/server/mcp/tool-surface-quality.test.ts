@@ -417,12 +417,29 @@ describe('what the tool table costs to read', () => {
       // (branch `kind-sentence`): the sentence was followed, to this same
       // wrong facet. A join the answer carries is not a sentence a model
       // may or may not act on.
+      // +75 visible to describe `target`, the tool's last undescribed
+      // parameter — C3 paid, and NOT a steer.
+      //
+      // The steer was tried and REFUTED, which is why this number is 75 and
+      // not 221. The rung-3 lane had caught this parameter hiding a whole
+      // scope: asked for a board where what a box IS and whether it is
+      // HEALTHY both had to read at a glance, three trials of three filtered
+      // to `node` — right for dressing boxes — and so never saw that a
+      // board-wide scope exists, colouring by health and recording nothing
+      // (ADR-0033's `contested`). A clause saying so was added and measured
+      // over three more trials: the model filtered to `node` in all three
+      // again, and the reading stayed 0 of 3. The clause was withdrawn and
+      // the plain meaning kept (ADR-0031's fourteenth reading).
+      //
+      // That is now twice on this tool's subject, and the entry above says
+      // what both point at: a join the ANSWER carries is not a sentence a
+      // model may or may not act on.
       wb_facet_list: {
-        visibleBytes: 927,
-        wireBytes: 2039,
+        visibleBytes: 1002,
+        wireBytes: 2114,
         descriptionWords: 63,
         parameters: 3,
-        undescribed: 1,
+        undescribed: 0,
         strays: 'refused',
         names: [],
       },
@@ -635,10 +652,17 @@ describe('what the tool table costs to read', () => {
       // work — a facet reaches `wb_facet_set` as a generic record, so
       // declaring a semantic axis or a new silhouette costs a model
       // nothing on the table it reads every turn.
-      visibleBytes: 39001,
-      wireBytes: 116440,
+      //
+      // Then +75 to describe `wb_facet_list`'s `target` (see its row): C3
+      // falls 198 -> 197 for 75 bytes, which is the whole trade once the
+      // steering clause that would have cost 221 was measured and withdrawn.
+      // The rung-3 task it was aimed at reads 0 of 3 before and after, so
+      // this row buys the debt and nothing else — said plainly, because a
+      // re-pinned row with no reason is the regression the exact pin refuses.
+      visibleBytes: 39076,
+      wireBytes: 116515,
       parameters: 289,
-      undescribed: 198,
+      undescribed: 197,
     })
   })
 
