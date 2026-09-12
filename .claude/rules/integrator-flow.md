@@ -173,29 +173,17 @@ imports. Start the run, then leave the working tree alone.
   on demand and its tail was still loading at teardown; the file it names is
   a victim. Did not reproduce in three runs of CI's own shard command.
 - **An eleventh: a `vi.mock` factory that outlives its own test.**
-  `VITEST_BROWSER_CONNECTION_CLOSED`, with `[birpc] rpc is closed, cannot call
-  "resolveManualMock"` underneath and a stack through playwright's
-  `_onRoute`. Every test in the file PASSES and the file exits 1, so the exit
-  code is the only tell — the ninth and tenth shapes' signature again, with a
-  third cause. **`resolveManualMock` is the RPC that AWAITS the factory**, so
-  it is in flight for exactly as long as the factory is; when the last test
-  finishes first, the page closes under a live RPC and the rejection is
-  attributed to no test at all. Measured: a factory sleeping 1500ms inside a
-  test body that finished in 1821ms — the file passed, then died 25ms later
-  (job 103489355434). Reproduced deterministically by gating the factory shut
-  and letting one assertion fail, which is also the cheapest way to confirm
-  it.
-
-  The fix is not a longer timeout and not a shorter sleep, which only moves
-  the race: resolve the factory INSIDE the test and await the result, and
-  release it again in `afterEach` so the path where an assertion failed on
-  the way is covered too. Doing that is also what turns this into a readable
-  failure — the message then names the assertion instead of the connection.
-  The gate replaces the sleep rather than shortening it, because the window
-  a chunk-load test needs is a CONDITION; a duration is a window that can
-  close before the action under test, and the test then passes over a case it
-  never reached. `tools/arch-lint`'s `test-fixed-sleep-ledger.test.ts` is the
-  ratchet that records every such sleep still standing.
+  `VITEST_BROWSER_CONNECTION_CLOSED`, `[birpc] rpc is closed, cannot call
+  "resolveManualMock"`, a stack through playwright's `_onRoute`. The ninth
+  and tenth's signature — every test PASSED, file exits 1 — with a third
+  cause: **`resolveManualMock` AWAITS the factory**, so it is in flight for
+  as long as the factory is, and a page closing under a live one blames no
+  test at all. Measured: a 1500ms factory in a body that finished in 1821ms,
+  last file in the shard, dead 25ms later. Reproduce by gating the factory
+  shut and failing one assertion. Resolve it INSIDE the test and await it,
+  and release it in `afterEach` too, or a failed assertion becomes this
+  instead of a message naming itself. Gate rather than shorten — the window
+  is a CONDITION, and a duration can close before the action under test.
 
 - **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
   the menu stays shut, so the failure reads as "the list does not contain this item" when no
