@@ -3,7 +3,9 @@
 // containment moves (the frame carries fully-contained nodes), label
 // editing, and frame deletion that keeps members. Real pointer input for
 // the drag/double-press paths.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -16,11 +18,11 @@ afterEach(cleanup)
 const grouped: SpatialCanvas = {
   nodes: [
     // Frame first = bottom of the z-order, members drawn (and hit) above.
-    { id: 'g1', type: 'group', x: 80, y: 80, width: 360, height: 220, label: 'cluster' },
-    { id: 'a', type: 'text', x: 120, y: 120, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 280, y: 200, width: 120, height: 60, text: 'B' },
+    groupNode({ id: 'g1', x: 80, y: 80, width: 360, height: 220, label: 'cluster' }),
+    textNode({ id: 'a', x: 120, y: 120, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 280, y: 200, width: 120, height: 60, text: 'B' }),
     // Outside the frame — must NOT move with it.
-    { id: 'c', type: 'text', x: 600, y: 400, width: 120, height: 60, text: 'C' },
+    textNode({ id: 'c', x: 600, y: 400, width: 120, height: 60, text: 'C' }),
   ],
   edges: [],
 }
@@ -147,8 +149,8 @@ it('a real double-click on the frame edits its label; empty commit removes it', 
 it('Group selection from a multi-selected node frames the selection with padding', async () => {
   const twoLoose: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 120, y: 120, width: 120, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 300, y: 220, width: 120, height: 60, text: 'B' },
+      textNode({ id: 'a', x: 120, y: 120, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 300, y: 220, width: 120, height: 60, text: 'B' }),
     ],
     edges: [],
   }
@@ -183,8 +185,8 @@ it('Group selection from a multi-selected node frames the selection with padding
 it('a member painted below the frame is still selectable and draggable', async () => {
   const memberBelowFrame: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 120, y: 120, width: 120, height: 60, text: 'A' },
-      { id: 'g1', type: 'group', x: 80, y: 80, width: 360, height: 220, label: 'cluster' },
+      textNode({ id: 'a', x: 120, y: 120, width: 120, height: 60, text: 'A' }),
+      groupNode({ id: 'g1', x: 80, y: 80, width: 360, height: 220, label: 'cluster' }),
     ],
     edges: [],
   }
@@ -220,9 +222,7 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
   // the new frame outside the visible viewport — creation must bring it
   // back into view instead of leaving the user staring at nothing.
   const crowded: SpatialCanvas = {
-    nodes: [
-      { id: 'wall', type: 'text', x: -400, y: -300, width: 1600, height: 1200, text: 'wall' },
-    ],
+    nodes: [textNode({ id: 'wall', x: -400, y: -300, width: 1600, height: 1200, text: 'wall' })],
     edges: [],
   }
   const { Host, latest } = makeHost(crowded)
@@ -259,9 +259,9 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
 it('Group selection can frame a selection that includes a group frame', async () => {
   const mixed: SpatialCanvas = {
     nodes: [
-      { id: 'g1', type: 'group', x: 80, y: 80, width: 200, height: 140 },
-      { id: 'a', type: 'text', x: 120, y: 120, width: 100, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 400, y: 120, width: 120, height: 60, text: 'B' },
+      groupNode({ id: 'g1', x: 80, y: 80, width: 200, height: 140 }),
+      textNode({ id: 'a', x: 120, y: 120, width: 100, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 400, y: 120, width: 120, height: 60, text: 'B' }),
     ],
     edges: [],
   }

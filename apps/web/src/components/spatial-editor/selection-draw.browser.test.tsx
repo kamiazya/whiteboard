@@ -2,7 +2,9 @@
 // motion grammar brought to the canvas: draw once, never loop, and the
 // global prefers-reduced-motion collapse (index.css) lands it instantly on
 // the finished form because the motion is a CSS animation, not JS.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -12,8 +14,8 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 150, height: 80, text: 'a' },
-    { id: 'b', type: 'text', x: 400, y: 300, width: 150, height: 80, text: 'b' },
+    textNode({ id: 'a', x: 100, y: 100, width: 150, height: 80, text: 'a' }),
+    textNode({ id: 'b', x: 400, y: 300, width: 150, height: 80, text: 'b' }),
   ],
   edges: [],
 }

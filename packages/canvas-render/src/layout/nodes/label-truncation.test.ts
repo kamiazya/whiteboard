@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
@@ -47,7 +48,7 @@ describe('label truncation', () => {
 
   it('leaves a label that already fits untouched and unmarked', () => {
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n', type: 'file', x: 0, y: 0, width: NODE_WIDTH, height: 60, file: 'a.md' }],
+      nodes: [fileNode({ id: 'n', x: 0, y: 0, width: NODE_WIDTH, height: 60, file: 'a.md' })],
       edges: [],
     }
     const [run] = runsOf(canvas)

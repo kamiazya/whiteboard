@@ -7,6 +7,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { afterEach, describe, expect, test } from 'vitest'
 import { setLogSink } from '../log.js'
@@ -23,9 +24,9 @@ describe('composeCanvasScene', () => {
   test('a file node produces a visible chrome shape, and edges route through the shared anchor-assignment pass', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'file', x: 0, y: 0, width: 100, height: 60, file: 'notes/a.md' },
-        { id: 'b', type: 'group', x: 300, y: 0, width: 100, height: 60 },
-        { id: 'c', type: 'group', x: 300, y: 300, width: 100, height: 60 },
+        fileNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, file: 'notes/a.md' }),
+        groupNode({ id: 'b', x: 300, y: 0, width: 100, height: 60 }),
+        groupNode({ id: 'c', x: 300, y: 300, width: 100, height: 60 }),
       ],
       edges: [
         {
@@ -76,8 +77,8 @@ describe('composeCanvasScene', () => {
   test('is a pure delegate to layoutSpatialCanvas with the pinned MCP injection set (parity)', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'text', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello **world**' },
-        { id: 'file', type: 'file', x: 200, y: 0, width: 100, height: 60, file: 'a.png' },
+        textNode({ id: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello **world**' }),
+        fileNode({ id: 'file', x: 200, y: 0, width: 100, height: 60, file: 'a.png' }),
         {
           id: 'link',
           type: 'link',
@@ -87,15 +88,7 @@ describe('composeCanvasScene', () => {
           height: 40,
           url: 'https://example.com',
         },
-        {
-          id: 'group',
-          type: 'group',
-          x: 400,
-          y: 400,
-          width: 200,
-          height: 200,
-          label: 'a group',
-        },
+        groupNode({ id: 'group', x: 400, y: 400, width: 200, height: 200, label: 'a group' }),
       ],
       edges: [
         {
@@ -130,15 +123,7 @@ describe('composeCanvasScene', () => {
     // with a type outside the closed union).
     const canvas: SpatialCanvas = {
       nodes: [
-        {
-          id: 'n1',
-          type: 'text',
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 50,
-          text: '<div><span></div>',
-        },
+        textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: '<div><span></div>' }),
       ],
       edges: [],
     }
@@ -182,9 +167,7 @@ describe('composeCanvasScene', () => {
 
   test('is deterministic across repeated calls', () => {
     const canvas: SpatialCanvas = {
-      nodes: [
-        { id: 'n1', type: 'text', x: 10, y: 20, width: 100, height: 50, text: 'hello world' },
-      ],
+      nodes: [textNode({ id: 'n1', x: 10, y: 20, width: 100, height: 50, text: 'hello world' })],
       edges: [],
     }
 

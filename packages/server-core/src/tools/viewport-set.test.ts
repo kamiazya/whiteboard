@@ -1,4 +1,5 @@
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps, ViewportRequest } from '../server-deps.js'
 import {
@@ -23,7 +24,7 @@ async function seed(store: FakeDocumentStore): Promise<void> {
   await seedDoc(store, DOCUMENT_ID, (doc) => {
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' })],
       edges: [],
     })
   })

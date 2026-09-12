@@ -1,5 +1,7 @@
 // @vitest-environment node
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import { renderCanvasToSvg } from './scene-render.js'
@@ -11,13 +13,13 @@ function fakeMeasure(text: string) {
 function canvas(): SpatialCanvas {
   return {
     nodes: [
-      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
-      { id: 'b', type: 'file', x: 200, y: 0, width: 80, height: 40, file: 'x.png' },
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
+      fileNode({ id: 'b', x: 200, y: 0, width: 80, height: 40, file: 'x.png' }),
       // Every node kind participates: the minimap and hit-testing read the
       // MODEL rects, so a kind whose scene chrome diverged from its model
       // rect (a padded frame, an outside label) would silently misplace
       // there — the parity pin below is the tripwire.
-      { id: 'c', type: 'group', x: 0, y: 120, width: 220, height: 90, label: 'g' },
+      groupNode({ id: 'c', x: 0, y: 120, width: 220, height: 90, label: 'g' }),
       {
         id: 'd',
         type: 'link',
@@ -86,8 +88,8 @@ describe('renderCanvasToSvg', () => {
 describe('the editor draws the theme the document names (ADR-0030 decision 6)', () => {
   const themed: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-      { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 50, text: 'b' },
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+      textNode({ id: 'b', x: 300, y: 200, width: 100, height: 50, text: 'b' }),
     ],
     edges: [
       {

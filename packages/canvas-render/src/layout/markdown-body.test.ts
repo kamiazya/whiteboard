@@ -3,8 +3,10 @@
 // opt-in, for the lowlight reason recorded in architecture-map.md: a seam
 // four call sites have to remember is one a call site forgets, and the
 // surface that forgets draws a placeholder where the others draw the canvas.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { type LoadedReference, layoutMdastBlocks, referenceSeams } from '../index.js'
@@ -14,8 +16,8 @@ const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'n1', type: 'text', x: 0, y: 0, width: 2000, height: 400, text: 'WIDE NODE' },
-    { id: 'n2', type: 'text', x: 0, y: 500, width: 400, height: 200, text: 'LOW NODE' },
+    textNode({ id: 'n1', x: 0, y: 0, width: 2000, height: 400, text: 'WIDE NODE' }),
+    textNode({ id: 'n2', x: 0, y: 500, width: 400, height: 200, text: 'LOW NODE' }),
   ],
   edges: [],
 }
@@ -49,7 +51,7 @@ describe('layoutMdastBlocks (public) — canvas embeds', () => {
     // how the nested canvas drew every file node as an empty card.
     const NOTE = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
     const withFile: SpatialCanvas = {
-      nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 400, height: 300, file: NOTE }],
+      nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 400, height: 300, file: NOTE })],
       edges: [],
     }
     const scene = layoutMdastBlocks(body, {

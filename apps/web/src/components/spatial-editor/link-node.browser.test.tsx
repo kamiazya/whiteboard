@@ -3,7 +3,9 @@
 // Edit URL. Real pointer input where the double-press pairing matters —
 // synthetic-event-only coverage is how this editor's first-touch bugs
 // survived unnoticed.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -182,15 +184,7 @@ it('the link context menu offers Open link and Edit URL rewrites the target', as
 it('a javascript: URL is neither followable nor accepted by the dialog', async () => {
   const hostile: SpatialCanvas = {
     nodes: [
-      {
-        id: 'x1',
-        type: 'link',
-        x: 100,
-        y: 100,
-        width: 200,
-        height: 60,
-        url: 'javascript:alert(1)',
-      },
+      linkNode({ id: 'x1', x: 100, y: 100, width: 200, height: 60, url: 'javascript:alert(1)' }),
     ],
     edges: [],
   }

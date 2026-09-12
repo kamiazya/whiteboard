@@ -1,5 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
@@ -132,7 +133,7 @@ describe('renderSceneToKeyedSvg over a comment scene', () => {
       children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
     })
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
       edges: [],
       comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
     }
@@ -196,7 +197,7 @@ describe('the keyed projection marks the annotation layer', () => {
     children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
   })
   const canvas: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
     edges: [],
     comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
   }

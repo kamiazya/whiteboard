@@ -1,4 +1,5 @@
 // @vitest-environment node
+
 import type {
   CanvasComment,
   ClipboardFragment,
@@ -6,14 +7,15 @@ import type {
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { endNode, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
 
 function baseCanvas(): SpatialCanvas {
   return {
     nodes: [
-      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
-      { id: 'b', type: 'file', x: 200, y: 0, width: 80, height: 40, file: 'x.png' },
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
+      fileNode({ id: 'b', x: 200, y: 0, width: 80, height: 40, file: 'x.png' }),
     ],
     edges: [],
   }
@@ -137,15 +139,7 @@ describe('applyCommand', () => {
   it('create-node appends the node, leaving the input canvas untouched', () => {
     const canvas = baseCanvas()
     const snapshot = structuredClone(canvas)
-    const newNode = {
-      id: 'c',
-      type: 'text',
-      x: 400,
-      y: 0,
-      width: 100,
-      height: 50,
-      text: '',
-    } as const
+    const newNode = textNode({ id: 'c', x: 400, y: 0, width: 100, height: 50, text: '' })
     const next = applyCommand(canvas, { kind: 'create-node', node: newNode })
 
     expect(next).not.toBe(canvas)
@@ -156,7 +150,7 @@ describe('applyCommand', () => {
 
   it('create-node with an id already present is a no-op returning the input canvas', () => {
     const canvas = baseCanvas()
-    const dup = { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'dup' } as const
+    const dup = textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'dup' })
     const next = applyCommand(canvas, { kind: 'create-node', node: dup })
     expect(next).toBe(canvas)
   })
@@ -345,15 +339,7 @@ describe('applyCommand', () => {
   })
 
   it('create-group prepends the frame so members stay clickable above it', () => {
-    const group = {
-      id: 'g1',
-      type: 'group',
-      x: -20,
-      y: -20,
-      width: 400,
-      height: 200,
-      label: 'cluster',
-    } as const
+    const group = groupNode({ id: 'g1', x: -20, y: -20, width: 400, height: 200, label: 'cluster' })
     const grouped = applyCommand(baseCanvas(), { kind: 'create-group', node: group })
     // Array order IS z-order: the frame sits at the bottom, so hit-testing
     // (last containing box wins) still reaches the members inside it.
@@ -368,7 +354,7 @@ describe('applyCommand', () => {
   it('set-group-label sets, updates, empty-removes, and ignores non-groups', () => {
     const grouped = applyCommand(baseCanvas(), {
       kind: 'create-group',
-      node: { id: 'g1', type: 'group', x: -20, y: -20, width: 400, height: 200 },
+      node: groupNode({ id: 'g1', x: -20, y: -20, width: 400, height: 200 }),
     })
 
     const labeled = applyCommand(grouped, { kind: 'set-group-label', id: 'g1', label: 'phase 1' })
@@ -385,7 +371,7 @@ describe('applyCommand', () => {
   it('set-group-background sets, restyles, removes, and ignores non-groups', () => {
     const grouped = applyCommand(baseCanvas(), {
       kind: 'create-group',
-      node: { id: 'g1', type: 'group', x: -20, y: -20, width: 400, height: 200 },
+      node: groupNode({ id: 'g1', x: -20, y: -20, width: 400, height: 200 }),
     })
 
     const withBg = applyCommand(grouped, {
@@ -420,7 +406,7 @@ describe('applyCommand', () => {
   it('set-node-file retargets a file node and ignores non-file targets', () => {
     const withFile = applyCommand(baseCanvas(), {
       kind: 'create-node',
-      node: { id: 'f1', type: 'file', x: 0, y: 300, width: 200, height: 60, file: 'notes/plan' },
+      node: fileNode({ id: 'f1', x: 0, y: 300, width: 200, height: 60, file: 'notes/plan' }),
     })
 
     const retargeted = applyCommand(withFile, {
@@ -442,7 +428,7 @@ describe('applyCommand', () => {
 
   it('create then delete the same node is the identity (up to deep equality)', () => {
     const canvas = baseCanvas()
-    const node = { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' } as const
+    const node = textNode({ id: 'c', x: 400, y: 0, width: 100, height: 50, text: '' })
     const created = applyCommand(canvas, { kind: 'create-node', node })
     const deleted = applyCommand(created, { kind: 'delete-node', id: node.id })
     expect(deleted).toEqual(canvas)
@@ -492,10 +478,10 @@ describe('applyCommand', () => {
       // b or c would change nothing visible.
       const canvas: SpatialCanvas = {
         nodes: [
-          { id: 'a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'a' },
-          { id: 'b', type: 'text', x: 500, y: 500, width: 80, height: 40, text: 'b' },
-          { id: 'c', type: 'text', x: 700, y: 500, width: 80, height: 40, text: 'c' },
-          { id: 'd', type: 'text', x: 40, y: 20, width: 80, height: 40, text: 'd' },
+          textNode({ id: 'a', x: 0, y: 0, width: 80, height: 40, text: 'a' }),
+          textNode({ id: 'b', x: 500, y: 500, width: 80, height: 40, text: 'b' }),
+          textNode({ id: 'c', x: 700, y: 500, width: 80, height: 40, text: 'c' }),
+          textNode({ id: 'd', x: 40, y: 20, width: 80, height: 40, text: 'd' }),
         ],
         edges: [],
       }
@@ -520,8 +506,8 @@ describe('applyCommand', () => {
       // overlapping, so forward has nothing to step over.
       const canvas: SpatialCanvas = {
         nodes: [
-          { id: 'a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'a' },
-          { id: 'b', type: 'text', x: 80, y: 0, width: 80, height: 40, text: 'b' },
+          textNode({ id: 'a', x: 0, y: 0, width: 80, height: 40, text: 'a' }),
+          textNode({ id: 'b', x: 80, y: 0, width: 80, height: 40, text: 'b' }),
         ],
         edges: [],
       }
@@ -770,7 +756,7 @@ describe('set-edge-routing', () => {
 
   it('leaves nodes and edges untouched', () => {
     const canvas = {
-      nodes: [{ id: 'a', type: 'text' as const, x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'hi' })],
       edges: [
         {
           id: 'e1',
@@ -873,8 +859,8 @@ describe('buildFragmentInsertCommand', () => {
   // duplicateSelection (always cascades, never anchors).
   const fragment = (): Pick<ClipboardFragment, 'nodes' | 'edges'> => ({
     nodes: [
-      { id: 'src-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-      { id: 'src-b', type: 'text', x: 150, y: 20, width: 60, height: 40, text: 'b' },
+      textNode({ id: 'src-a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+      textNode({ id: 'src-b', x: 150, y: 20, width: 60, height: 40, text: 'b' }),
     ],
     edges: [
       {
@@ -893,7 +879,7 @@ describe('buildFragmentInsertCommand', () => {
   it('a cut fragment reconnects its boundary edges to surviving peers, reminted on the cut side', () => {
     // The peer stayed on the canvas; the cut node comes back with a new id.
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'peer', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'peer' }],
+      nodes: [textNode({ id: 'peer', x: 400, y: 0, width: 100, height: 50, text: 'peer' })],
       edges: [],
     }
     const cutFragment = {
@@ -935,8 +921,8 @@ describe('buildFragmentInsertCommand', () => {
   it('never reconnects a boundary edge whose original still exists — a lifted cut was not severed', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'src-b', type: 'text', x: 150, y: 20, width: 60, height: 40, text: 'b' },
-        { id: 'peer', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'peer' },
+        textNode({ id: 'src-b', x: 150, y: 20, width: 60, height: 40, text: 'b' }),
+        textNode({ id: 'peer', x: 400, y: 0, width: 100, height: 50, text: 'peer' }),
       ],
       // The severed edge is still on the canvas: the hold was lifted (or
       // resolved as a move), so this paste is a plain duplicate.
@@ -1017,7 +1003,7 @@ describe('buildFragmentInsertCommand', () => {
 
   it('reminted ids are disjoint from existing canvas node+edge ids', () => {
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'new-0', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+      nodes: [textNode({ id: 'new-0', x: 0, y: 0, width: 10, height: 10, text: '' })],
       edges: [],
     }
     const command = buildFragmentInsertCommand(canvas, fragment(), sequentialIds())
@@ -1040,7 +1026,7 @@ describe('buildFragmentInsertCommand', () => {
     // but this pins that the whole pipeline still drops it end to end.
     const canvas: SpatialCanvas = { nodes: [], edges: [] }
     const partial: Pick<ClipboardFragment, 'nodes' | 'edges'> = {
-      nodes: [{ id: 'src-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' }],
+      nodes: [textNode({ id: 'src-a', x: 0, y: 0, width: 100, height: 50, text: 'a' })],
       edges: [
         {
           id: 'src-e',
@@ -1057,7 +1043,7 @@ describe('buildFragmentInsertCommand', () => {
 
 describe('set-node-facet', () => {
   const base: SpatialCanvas = {
-    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'hi' })],
     edges: [],
   }
   const shapeFacet = (canvas: SpatialCanvas) => canvas.nodes[0]?.facets?.['visual.shape/v0']
@@ -1148,7 +1134,7 @@ describe('set-node-facet', () => {
 
 describe('decide-proposal', () => {
   const canvas: SpatialCanvas = {
-    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
     edges: [],
   }
   const changes: readonly ProposedChange[] = [
@@ -1164,7 +1150,7 @@ describe('decide-proposal', () => {
       id: 'node:new',
       op: 'node.add',
       status: 'open',
-      node: { id: 'new', type: 'text', x: 300, y: 0, width: 60, height: 40, text: 'added' },
+      node: textNode({ id: 'new', x: 300, y: 0, width: 60, height: 40, text: 'added' }),
     },
   ]
 
@@ -1260,8 +1246,8 @@ describe('set-canvas-facet', () => {
 describe('set-edge-facet', () => {
   const board = (): SpatialCanvas => ({
     nodes: [
-      { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-      { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
+      textNode({ id: 'a', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+      textNode({ id: 'b', text: 'b', x: 50, y: 50, width: 10, height: 10 }),
     ],
     edges: [
       {

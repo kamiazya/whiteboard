@@ -6,16 +6,18 @@
  * exactly the failure a real `postMessage` would raise, and the one this
  * file exists to catch before a worker does.
  */
+
 import { referenceSeamsFromWire, referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { LayoutRequest } from './layout-worker-protocol.js'
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: `see ![[${NOTE_ID}]]` },
-    { id: 'f', type: 'file', x: 200, y: 0, width: 100, height: 60, file: 'doc-1' },
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: `see ![[${NOTE_ID}]]` }),
+    fileNode({ id: 'f', x: 200, y: 0, width: 100, height: 60, file: 'doc-1' }),
   ],
   edges: [],
 }

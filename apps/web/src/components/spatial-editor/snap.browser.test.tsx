@@ -2,7 +2,9 @@
 // pins the wiring: that a dragged node actually lands on the snapped
 // position, that the guide is drawn, that Cmd/Ctrl suspends it, and that a
 // node never snaps to something travelling with it.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -15,8 +17,8 @@ afterEach(cleanup)
 // and the lattice.
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 137, y: 113, width: 100, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 400, width: 100, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 137, y: 113, width: 100, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 400, width: 100, height: 60, text: 'B' }),
   ],
   edges: [],
 }
@@ -159,9 +161,9 @@ it('snaps to the grid when no neighbour edge is in range', () => {
 
 const framedCanvas: SpatialCanvas = {
   nodes: [
-    { id: 'frame', type: 'group', x: 407, y: 400, width: 200, height: 200, label: 'F' },
+    groupNode({ id: 'frame', x: 407, y: 400, width: 200, height: 200, label: 'F' }),
     // Sits 5 inside the frame's left edge — close enough to attract.
-    { id: 'inner', type: 'text', x: 412, y: 460, width: 60, height: 40, text: 'I' },
+    textNode({ id: 'inner', x: 412, y: 460, width: 60, height: 40, text: 'I' }),
   ],
   edges: [],
 }

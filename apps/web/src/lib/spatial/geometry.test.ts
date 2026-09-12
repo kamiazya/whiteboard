@@ -1,5 +1,7 @@
 // @vitest-environment node
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   boxContains,
@@ -19,8 +21,8 @@ function canvas(nodes: SpatialCanvas['nodes']): SpatialCanvas {
 describe('indexNodeBoxes', () => {
   it('produces one box per node, in document order', () => {
     const c = canvas([
-      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' },
-      { id: 'b', type: 'file', x: 200, y: 0, width: 80, height: 40, file: 'x.png' },
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hi' }),
+      fileNode({ id: 'b', x: 200, y: 0, width: 80, height: 40, file: 'x.png' }),
     ])
     expect(indexNodeBoxes(c)).toEqual([
       { id: 'a', box: { x: 0, y: 0, width: 100, height: 50 } },
@@ -29,7 +31,7 @@ describe('indexNodeBoxes', () => {
   })
 
   it('marks group frames as containers', () => {
-    const c = canvas([{ id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 200 }])
+    const c = canvas([groupNode({ id: 'g', x: 0, y: 0, width: 300, height: 200 })])
     expect(indexNodeBoxes(c)).toEqual([
       { id: 'g', container: true, box: { x: 0, y: 0, width: 300, height: 200 } },
     ])

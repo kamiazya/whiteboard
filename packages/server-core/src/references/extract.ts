@@ -6,6 +6,7 @@ import {
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { searchableTexts, snippetAround } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
@@ -27,11 +28,13 @@ function spatialReferences(canvas: SpatialCanvas): RawReference[] {
       refs.push({ target: embedId, via: 'embed-node', context: 'embedded on this canvas' })
       continue
     }
-    if (node.type === 'file') {
-      refs.push({ target: node.file, via: 'file-node', context: 'referenced by a file node' })
+    const file = nodeFile(node)
+    if (file !== undefined) {
+      refs.push({ target: file, via: 'file-node', context: 'referenced by a file node' })
       continue
     }
-    if (node.type === 'text') refs.push(...textReferences(node.text))
+    const text = nodeText(node)
+    if (text !== undefined) refs.push(...textReferences(text))
   }
   return refs
 }

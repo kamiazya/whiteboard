@@ -4,7 +4,9 @@
 // inside the invisible hit shape — the exact press that used to fall
 // through to the canvas and start a marquee instead of the resize the
 // person aimed for.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -13,7 +15,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 200, y: 150, width: 200, height: 100, text: 'hi' }],
+  nodes: [textNode({ id: 'n1', x: 200, y: 150, width: 200, height: 100, text: 'hi' })],
   edges: [],
 }
 

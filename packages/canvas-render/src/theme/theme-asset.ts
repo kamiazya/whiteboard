@@ -5,8 +5,10 @@
 // test in theme-asset.test.ts — the two shapes are meant to be one, and the
 // contract lives in the engine only so that ADR-0013 decision 8 can build on
 // it without moving anything.
+
 import type { PaletteTokens, ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import { isFrame } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import type {
   SpatialAppearanceResolver,
@@ -117,7 +119,7 @@ export function createThemedAppearance(
   const resolveNode = (node: SpatialNode): SpatialNodeAppearance => {
     const resolved = base.resolveNode(node)
     const framed =
-      node.type === 'group' && frame !== undefined
+      isFrame(node) && frame !== undefined
         ? {
             ...(frame.strokeDasharray === undefined
               ? {}
@@ -125,7 +127,7 @@ export function createThemedAppearance(
             ...(frame.strokeWidth === undefined ? {} : { strokeWidth: frame.strokeWidth }),
           }
         : {}
-    const halo = node.type === 'group' ? {} : glow
+    const halo = isFrame(node) ? {} : glow
     return { ...resolved, appearance: { ...resolved.appearance, ...weight, ...framed, ...halo } }
   }
   const themed: SpatialAppearanceResolver = Object.freeze({

@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { parseSpatial } from './parse.js'
 import { serializeSpatial } from './serialize.js'
@@ -119,16 +120,15 @@ it('strict mode drops the facets bucket with the rest of x-whiteboard (one unifo
 it('extended mode keeps node-level facets (with and without an embed) through a round trip', () => {
   const canvas: SpatialCanvas = {
     nodes: [
-      {
+      textNode({
         id: 'n1',
-        type: 'text',
         text: 'shaped',
         x: 0,
         y: 0,
         width: 100,
         height: 50,
         facets: { 'visual.shape/v0': { kind: 'hexagon' } },
-      },
+      }),
     ],
     edges: [],
   }

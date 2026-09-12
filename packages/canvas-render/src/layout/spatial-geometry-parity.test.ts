@@ -5,8 +5,10 @@
 // they may legitimately disagree on color/stroke/fontFamily. This is the
 // property the pre-theme three-resolver split violated via
 // `minContentWidthPx`/`labelFontSizePx`.
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../measure.js'
@@ -82,25 +84,23 @@ function fixture(): SpatialCanvas {
     },
     // (b) a node narrower than ~17px — drives minContentWidthPx, otherwise
     // invisible since a wider node never hits the floor.
-    {
+    textNode({
       id: 'text-narrow',
-      type: 'text',
       x: 200,
       y: 0,
       width: 10,
       height: 40,
       text: 'hi there world, this wraps',
-    },
+    }),
     // (d) a multi-line wrapping body — proves wrapped-line counts agree.
-    {
+    textNode({
       id: 'text-wide',
-      type: 'text',
       x: 400,
       y: 0,
       width: 120,
       height: 80,
       text: 'a fairly long line of text that should wrap across more than one line',
-    },
+    }),
   ]
   const edges: SpatialCanvas['edges'] = [
     // (c) an edge carrying a label — drives labelFontSizePx via composeEdgeLabel.

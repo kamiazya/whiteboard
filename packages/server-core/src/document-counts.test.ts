@@ -1,5 +1,6 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { countAliveNodes, countLegacyTombstones } from './document-counts.js'
@@ -29,8 +30,8 @@ describe('countAliveNodes', () => {
   it('counts nodes-model nodes and excludes edges', () => {
     const doc = makeSpatialDoc({
       nodes: [
-        { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-        { id: 'n2', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
+        textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+        textNode({ id: 'n2', text: 'b', x: 0, y: 0, width: 10, height: 10 }),
       ],
       edges: [
         {
@@ -58,7 +59,7 @@ describe('countAliveNodes', () => {
 
   it('counts only the nodes map, not stale legacy entries, once nodes are present', () => {
     const doc = makeSpatialDoc({
-      nodes: [{ id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      nodes: [textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
     legacyElement(doc, 'stale-1', false)
@@ -91,7 +92,7 @@ describe('countLegacyTombstones', () => {
 
   it('returns 0 once nodes are present, ignoring stale legacy tombstones', () => {
     const doc = makeSpatialDoc({
-      nodes: [{ id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      nodes: [textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
     legacyElement(doc, 'stale-dead', true)

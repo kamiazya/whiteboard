@@ -3,26 +3,20 @@
 // so a carried edge re-siding onto the same side mid-gesture used to
 // re-fraction the bystander's anchor — a stationary edge visibly sliding
 // along its node. Overrides can now pin the committed anchor points too.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors } from './spatial-edges.js'
 
 // N -> T is the stationary bystander; M carries edge C. At M's committed
 // position C arrives at T's bottom; dragged below-left, C re-sides onto
 // T's LEFT — the side the bystander already occupies.
-const N: SpatialNode = { id: 'N', type: 'text', x: 0, y: 0, width: 100, height: 100, text: '' }
-const T: SpatialNode = { id: 'T', type: 'text', x: 300, y: 0, width: 100, height: 100, text: '' }
+const N: SpatialNode = textNode({ id: 'N', x: 0, y: 0, width: 100, height: 100, text: '' })
+const T: SpatialNode = textNode({ id: 'T', x: 300, y: 0, width: 100, height: 100, text: '' })
 // Dragged to directly LEFT of T: the zero-bend facing pair (right->left)
 // outranks the crowding tie-break, so C must join the occupied side.
-const M_DRAGGED: SpatialNode = {
-  id: 'M',
-  type: 'text',
-  x: 50,
-  y: 0,
-  width: 100,
-  height: 100,
-  text: '',
-}
+const M_DRAGGED: SpatialNode = textNode({ id: 'M', x: 50, y: 0, width: 100, height: 100, text: '' })
 const EDGES: CanvasEdge[] = [
   { id: 'F', from: { node: 'N' }, to: { node: 'T' } },
   { id: 'C', from: { node: 'M' }, to: { node: 'T' } },

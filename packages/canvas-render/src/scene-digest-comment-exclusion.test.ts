@@ -6,8 +6,10 @@
 // `wb_canvas_snapshot.comments` already publishes. This pins the invariant
 // through a real canvas + comment layout, so it stays green whether the
 // pin/bubble ids exist or not.
+
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import type { SpatialAppearanceResolver } from './layout/nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
@@ -41,7 +43,7 @@ const parseBody = (text: string): MdastRoot => ({
 })
 
 const canvasWithOneCommentedNode: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
   edges: [],
   comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
 }
@@ -91,7 +93,7 @@ it('reports exactly one entry with an open proposal on the canvas — its outlin
   // avoid — and `wb_canvas_snapshot` publishes proposals separately anyway.
   const digest = digestOf(
     {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
       edges: [],
     },
     [

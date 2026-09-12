@@ -4,6 +4,7 @@ import {
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -42,7 +43,7 @@ async function seedDocument(): Promise<{ index: FoldingBrowserIndex; documentId:
   })
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'first' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'first' })],
     edges: [],
   })
   doc.commit()

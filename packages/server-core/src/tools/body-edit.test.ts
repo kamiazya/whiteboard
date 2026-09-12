@@ -7,6 +7,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { TextAnchor } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -44,7 +45,7 @@ async function seedSpatial(store: FakeDocumentStore): Promise<void> {
   const doc = new LoroDoc()
   writeDocumentKind(doc, 'spatial')
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
     edges: [],
   })
   const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)

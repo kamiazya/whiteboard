@@ -3,7 +3,9 @@
 // change is outlined where it would land, and one bubble per proposal says
 // what it would do. Composed after nodes and edges, like the comment layer,
 // so it paints above content on every surface with no per-surface wiring.
+
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {
   ResolvedEdgeNode,
   SceneNode,
@@ -28,8 +30,8 @@ const appearance: SpatialAppearanceResolver = {
   }),
 }
 
-const NODE_A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' } as const
-const NODE_B = { id: 'b', type: 'text', x: 300, y: 0, width: 100, height: 40, text: 'B' } as const
+const NODE_A = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
+const NODE_B = textNode({ id: 'b', x: 300, y: 0, width: 100, height: 40, text: 'B' })
 const BOARD: SpatialCanvas = {
   nodes: [NODE_A, NODE_B],
   edges: [
@@ -94,7 +96,7 @@ describe('drawing a proposal in place', () => {
           id: 'node:c',
           status: 'open',
           op: 'node.add',
-          node: { id: 'c', type: 'text', x: 500, y: 200, width: 120, height: 60, text: 'C' },
+          node: textNode({ id: 'c', x: 500, y: 200, width: 120, height: 60, text: 'C' }),
         },
       ]),
     ])

@@ -29,6 +29,7 @@ import {
   resolveWorkspaceDocument,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebSocket, WebSocketServer } from 'ws'
@@ -228,9 +229,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       expect(entry).not.toBeNull()
       if (entry === null) return
       writeSpatialCanvas(documentContainers(clientDoc, entry.documentId), {
-        nodes: [
-          { id: 'real-socket-elem', type: 'text', text: 'x', x: 0, y: 0, width: 10, height: 10 },
-        ],
+        nodes: [textNode({ id: 'real-socket-elem', text: 'x', x: 0, y: 0, width: 10, height: 10 })],
         edges: [],
       })
       clientDoc.commit()
@@ -303,9 +302,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       expect(entry).not.toBeNull()
       if (entry === null) return
       writeSpatialCanvas(documentContainers(clientDoc, entry.documentId), {
-        nodes: [
-          { id: 'survivor-elem', type: 'text', text: 'x', x: 0, y: 0, width: 10, height: 10 },
-        ],
+        nodes: [textNode({ id: 'survivor-elem', text: 'x', x: 0, y: 0, width: 10, height: 10 })],
         edges: [],
       })
       clientDoc.commit()

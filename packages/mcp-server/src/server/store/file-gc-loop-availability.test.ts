@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -23,7 +24,7 @@ const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { makeSpatialDoc } = await import('../../shared/test-utils/spatial-doc.js')
 const { stallCeilingMs } = await import('../background-work-costs.js')
-const { loopTurnShare, measureLoopAvailability } = await import(
+const { loopTurnShare, measureLoopAvailability, measureSchedulingFloor } = await import(
   '../../shared/test-utils/loop-availability.js'
 )
 
@@ -41,15 +42,16 @@ afterEach(async () => {
 /** A canvas whose nodes all reference uploads, so the scan has real work. */
 function canvasReferencing(prefix: string, nodes: number): SpatialCanvas {
   return {
-    nodes: Array.from({ length: nodes }, (_unused, i) => ({
-      id: `node-${i}`,
-      type: 'file' as const,
-      file: newImageRef(`${prefix}-${i}`),
-      x: i * 10,
-      y: i * 10,
-      width: 100,
-      height: 100,
-    })),
+    nodes: Array.from({ length: nodes }, (_unused, i) =>
+      fileNode({
+        id: `node-${i}`,
+        file: newImageRef(`${prefix}-${i}`),
+        x: i * 10,
+        y: i * 10,
+        width: 100,
+        height: 100,
+      }),
+    ),
     edges: [],
   }
 }
@@ -176,7 +178,13 @@ describe('a file-GC pass', () => {
 
     // The declaration, checked rather than written down — see the same line
     // in workspace-tail-loop-availability.test.ts for what went wrong when
-    // nothing read it.
-    expect(availability.worstStallMs).toBeLessThanOrEqual(stallCeilingMs('file-gc-sweeper'))
+    // nothing read it, and for why it is charged against a free-loop
+    // reference taken in the same run rather than asserted as a bare number
+    // of milliseconds.
+    const floor = await measureSchedulingFloor(availability.elapsedMs, { intervalMs: 5 })
+    expect(
+      availability.worstStallMs,
+      `worst ${availability.worstStallMs}ms, machine floor ${floor.worstStallMs}ms`,
+    ).toBeLessThanOrEqual(stallCeilingMs('file-gc-sweeper') + floor.worstStallMs)
   }, 120_000)
 })

@@ -35,7 +35,13 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { canvasChangeConflicts } from '@kamiazya/whiteboard-model'
+import {
+  canvasChangeConflicts,
+  frameLabel,
+  nodeFile,
+  nodeText,
+  nodeUrl,
+} from '@kamiazya/whiteboard-model'
 import { CircleCheck, CircleX, ListChecks, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
@@ -309,14 +315,7 @@ function nameOfNodeId(id: string, canvas: SpatialCanvas): string {
 }
 
 function nameOfNode(node: SpatialNode): string {
-  const own =
-    node.type === 'text'
-      ? node.text
-      : node.type === 'file'
-        ? node.file
-        : node.type === 'link'
-          ? node.url
-          : node.label
+  const own = nodeText(node) ?? nodeFile(node) ?? nodeUrl(node) ?? frameLabel(node)
   const trimmed = own?.trim()
   if (trimmed === undefined || trimmed === '') return 'a node'
   const firstLine = trimmed.split('\n')[0] ?? trimmed

@@ -1,7 +1,9 @@
 // Bending a connection by hand. This is what says a stored bend survives
 // the whole way from a pointer drag to the ink: a reducer test cannot see
 // the layout, and a layout test cannot see the gesture.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -11,8 +13,8 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const nodes: SpatialCanvas['nodes'] = [
-  { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-  { id: 'b', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'B' },
+  textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+  textNode({ id: 'b', x: 500, y: 100, width: 120, height: 60, text: 'B' }),
 ]
 
 const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({

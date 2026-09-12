@@ -8,6 +8,7 @@ import {
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -158,7 +159,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'n' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'n' })],
         edges: [],
       })
     })
@@ -332,7 +333,7 @@ describe('node-target writes (nodeId)', () => {
     await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', text: 'hi', x: 0, y: 0, width: 100, height: 50 }],
+        nodes: [textNode({ id: 'n1', text: 'hi', x: 0, y: 0, width: 100, height: 50 })],
         edges: [],
       })
     })
@@ -346,8 +347,8 @@ describe('node-target writes (nodeId)', () => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
-          { id: 'n2', type: 'text', text: 'b', x: 300, y: 200, width: 100, height: 50 },
+          textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 100, height: 50 }),
+          textNode({ id: 'n2', text: 'b', x: 300, y: 200, width: 100, height: 50 }),
         ],
         edges: [
           {
@@ -643,7 +644,7 @@ describe('wb_facet_set canvas target (ADR-0030)', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' })],
         edges: [],
       })
     })

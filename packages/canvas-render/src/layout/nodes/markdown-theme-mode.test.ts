@@ -4,8 +4,10 @@
 // one from whatever ancestor the host happened to set, which put the single
 // most-read colour on the canvas outside the one producer — and outside the
 // contrast tests that guard the rest of it.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
@@ -26,7 +28,7 @@ const BODY: MdastRoot = {
 
 function bodyRuns(mode: 'light' | 'dark'): TextRunNode[] {
   const canvas: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 320, height: 320, text: 'x' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 320, text: 'x' })],
     edges: [],
   }
   const scene: Scene = layoutSpatialCanvas(canvas, {
@@ -54,7 +56,7 @@ function bodyRuns(mode: 'light' | 'dark'): TextRunNode[] {
 
 function quoteBlock(mode: 'light' | 'dark') {
   const canvas: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 320, height: 320, text: 'x' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 320, text: 'x' })],
     edges: [],
   }
   const scene = layoutSpatialCanvas(canvas, {

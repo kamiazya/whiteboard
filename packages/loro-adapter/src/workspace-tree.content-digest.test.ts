@@ -5,7 +5,9 @@
  * regression: two replicas make disjoint edits, exchange updates, and one of
  * them ends up holding content nobody wrote under a stamp that never moved.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeSpatialCanvas } from './loro-bridge.js'
@@ -17,7 +19,7 @@ import {
 
 const ID = '01JQXYZ0000000000000000000'
 const node = (id: string, text: string, x: number) =>
-  ({ id, type: 'text', x, y: 0, width: 100, height: 50, text }) as const
+  textNode({ id, x, y: 0, width: 100, height: 50, text })
 
 function content(canvas: SpatialCanvas): LoroDoc {
   const doc = new LoroDoc()

@@ -5,6 +5,7 @@
 
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -14,8 +15,8 @@ import { createBrowserMeasureText } from './measure-text.js'
 
 const goldenCanvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'Hello world' },
-    { id: 'b', type: 'text', x: 200, y: 0, width: 120, height: 60, text: 'Second box' },
+    textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'Hello world' }),
+    textNode({ id: 'b', x: 200, y: 0, width: 120, height: 60, text: 'Second box' }),
   ],
   edges: [
     {
@@ -101,7 +102,7 @@ describe('CanvasViewer (real browser)', () => {
 
   it('re-measures with the real font once readiness ticks for a component mounted before it was ready', async () => {
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 60, text: 'Whiteboard' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 60, text: 'Whiteboard' })],
       edges: [],
     }
 
@@ -128,8 +129,8 @@ describe('CanvasViewer (real browser)', () => {
 describe('CanvasViewer fits the box it is given', () => {
   const farCanvas: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 400, y: 300, width: 200, height: 80, text: 'far from origin' },
-      { id: 'b', type: 'text', x: 900, y: 700, width: 200, height: 80, text: 'also far' },
+      textNode({ id: 'a', x: 400, y: 300, width: 200, height: 80, text: 'far from origin' }),
+      textNode({ id: 'b', x: 900, y: 700, width: 200, height: 80, text: 'also far' }),
     ],
     edges: [],
   }

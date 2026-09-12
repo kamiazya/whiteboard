@@ -2,7 +2,9 @@
 // nodes is click A, then click B — no drag, no keyboard, no handle hunting.
 // The tool is additive: Select stays the default and double-click creation
 // survives in every mode (S6 decisions, 2026-08-08).
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -19,8 +21,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 300, width: 120, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 300, width: 120, height: 60, text: 'B' }),
   ],
   edges: [],
 }

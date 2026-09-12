@@ -7,7 +7,9 @@
 // the namespace and the payload supplies the bare kind. A plugin therefore
 // cannot reach another plugin's geometry by writing its id into a payload,
 // because the payload never holds a namespace.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
@@ -59,16 +61,15 @@ const TRIANGLE = {
 function canvasWith(facetKey: string, kind: string): SpatialCanvas {
   return {
     nodes: [
-      {
+      textNode({
         id: 'n1',
-        type: 'text',
         x: 0,
         y: 0,
         width: 200,
         height: 120,
         text: 'n1',
         facets: { [facetKey]: { kind } },
-      },
+      }),
     ],
     edges: [],
   }

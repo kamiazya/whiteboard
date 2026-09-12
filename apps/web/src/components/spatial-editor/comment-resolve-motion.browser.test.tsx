@@ -8,7 +8,9 @@
  * the press, and a mark that never travels that far would leave every one
  * of those tests green over a canvas that still cuts.
  */
+
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -19,7 +21,7 @@ const COMMENT: CanvasComment = { id: 'thread-1', x: 420, y: 120, text: 'is Frida
 
 function canvasWith(resolved: boolean): SpatialCanvas {
   return {
-    nodes: [{ id: 'n1', type: 'text', x: 40, y: 40, width: 200, height: 90, text: 'The plan' }],
+    nodes: [textNode({ id: 'n1', x: 40, y: 40, width: 200, height: 90, text: 'The plan' })],
     edges: [],
     comments: [{ ...COMMENT, resolved }],
   }
@@ -90,7 +92,7 @@ it('holds the pin on screen ramping out when a conversation resolves, then lets 
  */
 it('keeps a conversation on the outer edge painting while it ramps, past the re-fitted viewport', async () => {
   const outer: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 40, y: 150, width: 200, height: 80, text: 'The plan' }],
+    nodes: [textNode({ id: 'n1', x: 40, y: 150, width: 200, height: 80, text: 'The plan' })],
     edges: [],
     comments: [{ ...COMMENT, x: 300, y: 70, resolved: false }],
   }

@@ -3,7 +3,9 @@
 // follow), instead of falling through to double-click node creation. The
 // canvas model's edges carry an optional `label`; before this, the editor
 // had no way to author one.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -16,8 +18,8 @@ afterEach(cleanup)
 function makeStart(label?: string): SpatialCanvas {
   return {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
+      textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 400, y: 100, width: 120, height: 60, text: 'B' }),
     ],
     edges: [
       label === undefined

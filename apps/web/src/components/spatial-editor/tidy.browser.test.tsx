@@ -2,7 +2,9 @@
 // this pins the wiring: a multi-node selection gets a Tidy action scoped to
 // the selection, empty space gets a whole-canvas one, one action is one undo
 // step, and a locked node is never moved.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -15,8 +17,8 @@ afterEach(cleanup)
 // vertical clearance, so the only tidy move is b.x 48 → 40.
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 48, y: 200, width: 80, height: 100, text: 'B' },
+    textNode({ id: 'a', x: 40, y: 40, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 48, y: 200, width: 80, height: 100, text: 'B' }),
   ],
   edges: [],
 }
@@ -116,7 +118,7 @@ it('never moves a locked node — it stands as a fixed obstacle, and the column'
   const withLocked: SpatialCanvas = {
     nodes: [
       ...initial.nodes,
-      { id: 'c', type: 'text', x: 52, y: 400, width: 60, height: 40, text: 'C' },
+      textNode({ id: 'c', x: 52, y: 400, width: 60, height: 40, text: 'C' }),
     ],
     edges: [],
   }
@@ -138,9 +140,9 @@ it('orders a row by its edges: a hub at the end swaps with the nearest box it fa
   // the canvas's edges, so a fan-out hub moves between its targets here too.
   const board: SpatialCanvas = {
     nodes: [
-      { id: 'hub', type: 'text', x: 40, y: 40, width: 160, height: 60, text: 'Hub' },
-      { id: 'near', type: 'text', x: 264, y: 40, width: 160, height: 60, text: 'Near' },
-      { id: 'far', type: 'text', x: 488, y: 40, width: 160, height: 60, text: 'Far' },
+      textNode({ id: 'hub', x: 40, y: 40, width: 160, height: 60, text: 'Hub' }),
+      textNode({ id: 'near', x: 264, y: 40, width: 160, height: 60, text: 'Near' }),
+      textNode({ id: 'far', x: 488, y: 40, width: 160, height: 60, text: 'Far' }),
     ],
     edges: [
       {
@@ -186,8 +188,8 @@ it('grows a group around a member at its edge, in the same undo step as the move
   // the batch as a resize so one undo steps back through all of it.
   const framed: SpatialCanvas = {
     nodes: [
-      { id: 'g', type: 'group', x: 40, y: 40, width: 240, height: 160 },
-      { id: 'm', type: 'text', x: 176, y: 136, width: 104, height: 64, text: 'M' },
+      groupNode({ id: 'g', x: 40, y: 40, width: 240, height: 160 }),
+      textNode({ id: 'm', x: 176, y: 136, width: 104, height: 64, text: 'M' }),
     ],
     edges: [],
   }

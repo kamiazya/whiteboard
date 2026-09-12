@@ -4,7 +4,9 @@
  * for that) and for the `externalVersion`-driven local/external origin
  * distinction on a mid-gesture canvas prop swap.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -18,8 +20,8 @@ function fakeMeasure() {
 function twoNodeCanvas(): SpatialCanvas {
   return {
     nodes: [
-      { id: 'a', type: 'text', x: 20, y: 20, width: 100, height: 60, text: 'hello' },
-      { id: 'b', type: 'file', x: 250, y: 20, width: 80, height: 40, file: 'x.png' },
+      textNode({ id: 'a', x: 20, y: 20, width: 100, height: 60, text: 'hello' }),
+      fileNode({ id: 'b', x: 250, y: 20, width: 80, height: 40, file: 'x.png' }),
     ],
     edges: [],
   }

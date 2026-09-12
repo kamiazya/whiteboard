@@ -1,7 +1,9 @@
 // The minimap in the editor. Fitting geometry is unit-tested in
 // minimap.test.ts; this pins the wiring: when it appears, that pressing it
 // centres the canvas, and that it gets out of the way of a gesture.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -11,8 +13,8 @@ afterEach(cleanup)
 
 const spread: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 2000, y: 1200, width: 100, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 2000, y: 1200, width: 100, height: 60, text: 'B' }),
   ],
   edges: [],
 }
@@ -181,18 +183,9 @@ it('tracks a container resize that the window never sees', async () => {
 it('paints an authored preset colour, and leaves an unstyled node muted', () => {
   const coloured: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'A', color: '1' },
-      { id: 'b', type: 'text', x: 400, y: 400, width: 100, height: 60, text: 'B' },
-      {
-        id: 'c',
-        type: 'text',
-        x: 800,
-        y: 800,
-        width: 100,
-        height: 60,
-        text: 'C',
-        color: '#123456',
-      },
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'A', color: '1' }),
+      textNode({ id: 'b', x: 400, y: 400, width: 100, height: 60, text: 'B' }),
+      textNode({ id: 'c', x: 800, y: 800, width: 100, height: 60, text: 'C', color: '#123456' }),
     ],
     edges: [],
   }
@@ -229,7 +222,7 @@ const marked = (width: number): SpatialCanvas => ({
       text: 'A',
       facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
     },
-    { id: 'b', type: 'text', x: 4000, y: 4000, width: 100, height: 60, text: 'B' },
+    textNode({ id: 'b', x: 4000, y: 4000, width: 100, height: 60, text: 'B' }),
   ],
   edges: [],
 })
@@ -257,26 +250,24 @@ it('leaves a box too small for a mark as a plain box', () => {
 // left the box's own colour, which is what the overview is FOR, as a rim.
 const twoMarked: SpatialCanvas = {
   nodes: [
-    {
+    textNode({
       id: 'big',
-      type: 'text',
       x: 0,
       y: 0,
       width: 1400,
       height: 900,
       text: 'A',
       facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
-    },
-    {
+    }),
+    textNode({
       id: 'small',
-      type: 'text',
       x: 2000,
       y: 0,
       width: 600,
       height: 600,
       text: 'B',
       facets: { 'visual.symbol/v0': { kind: 'emoji', char: '⭐' } },
-    },
+    }),
   ],
   edges: [],
 }

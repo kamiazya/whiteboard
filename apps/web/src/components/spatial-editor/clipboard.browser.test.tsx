@@ -1,8 +1,10 @@
 // In-app copy/cut/paste (editor-completeness slice 4): Cmd/Ctrl+C/X/V over
 // the module-level clipboard store — cross-canvas within the tab, every
 // mutation ONE batch command (one undo step), reminted ids on every paste.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endIn, endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -15,8 +17,8 @@ beforeEach(clearClipboardFragmentForTests)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
-    { id: 'b', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'B' },
+    textNode({ id: 'a', x: 40, y: 40, width: 160, height: 80, text: 'A' }),
+    textNode({ id: 'b', x: 320, y: 40, width: 160, height: 80, text: 'B' }),
   ],
   edges: [
     {

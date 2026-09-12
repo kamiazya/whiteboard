@@ -11,7 +11,9 @@
  * decode-named-character-reference alias) is covered by the parity browser
  * test; this covers what the EDITOR does if that class of failure ever ships.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useWorkerScene } from './use-worker-scene.js'
@@ -25,15 +27,16 @@ const fakeMeasure = () => ({ advanceWidth: 30, ascent: 10, descent: 2, lineGap: 
 
 /** Past the offload threshold, no function seams — the worker path engages. */
 const canvasWith = (marker: string): SpatialCanvas => ({
-  nodes: Array.from({ length: 13 }, (_, i) => ({
-    id: `n${i}`,
-    type: 'text' as const,
-    x: i * 220,
-    y: 0,
-    width: 200,
-    height: 100,
-    text: i === 0 ? marker : `node ${i}`,
-  })),
+  nodes: Array.from({ length: 13 }, (_, i) =>
+    textNode({
+      id: `n${i}`,
+      x: i * 220,
+      y: 0,
+      width: 200,
+      height: 100,
+      text: i === 0 ? marker : `node ${i}`,
+    }),
+  ),
   edges: [],
 })
 

@@ -4,8 +4,10 @@
 // a non-rectangular node for the duration of the edit — so the scene now
 // keeps drawing the chrome and suppresses only the edited node's text
 // (canvas-render's `suppressedBodyNodeIds`), and the overlay is transparent.
+
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
@@ -35,16 +37,15 @@ beforeAll(async () => {
 // 'shapefit' measures ~58px, leaving margin.
 const DIAMOND: SpatialCanvas = {
   nodes: [
-    {
+    textNode({
       id: 'n1',
-      type: 'text',
       x: 100,
       y: 100,
       width: 200,
       height: 100,
       text: 'shapefit',
       facets: { 'visual.shape/v0': { kind: 'diamond' } },
-    },
+    }),
   ],
   edges: [],
 }
@@ -108,7 +109,7 @@ it('commit puts the committed text back into the scene', async () => {
 
 it('a plain rect node shows no doubled committed text under the now-transparent editor', async () => {
   const rect: SpatialCanvas = {
-    nodes: [{ id: 'r1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'rectbody' }],
+    nodes: [textNode({ id: 'r1', x: 100, y: 100, width: 200, height: 100, text: 'rectbody' })],
     edges: [],
   }
   const { container } = render(<Host start={rect} />)

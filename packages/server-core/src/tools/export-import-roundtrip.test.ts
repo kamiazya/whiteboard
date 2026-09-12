@@ -1,5 +1,6 @@
 import { parseSpatial } from '@kamiazya/whiteboard-codec'
 import { readFacets, readMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -186,16 +187,15 @@ describe('wb_document_set -> the JSON Canvas exporter composed round-trip', () =
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          {
+          textNode({
             id: 'n1',
-            type: 'text',
             x: 0,
             y: 0,
             width: 10,
             height: 10,
             text: 'hi',
             embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
-          },
+          }),
         ],
         edges: [],
       })

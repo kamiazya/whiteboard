@@ -4,7 +4,9 @@
 // trial the side-choice search evaluates takes the second path, so the two
 // have to agree exactly — not approximately, and not only on the shapes
 // somebody thought to write an example for.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
@@ -48,15 +50,11 @@ const layout = fc
     }),
   })
   .map(({ nodeCount, boxes, links, reSide }) => {
-    const nodes: SpatialNode[] = boxes.slice(0, nodeCount).map((b, i) => ({
-      id: `n${i}`,
-      type: 'text',
-      x: b.x,
-      y: b.y,
-      width: b.w,
-      height: b.h,
-      text: `n${i}`,
-    }))
+    const nodes: SpatialNode[] = boxes
+      .slice(0, nodeCount)
+      .map((b, i) =>
+        textNode({ id: `n${i}`, x: b.x, y: b.y, width: b.w, height: b.h, text: `n${i}` }),
+      )
     const edges: CanvasEdge[] = links.map((l, i) => ({
       id: `e${i}`,
       from: { node: `n${l.from % nodeCount}` },

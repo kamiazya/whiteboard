@@ -5,7 +5,9 @@
  * select/move/marquee semantics). Real PointerEvents with
  * pointerType='touch' exercise the actual root handlers.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -15,7 +17,7 @@ afterEach(cleanup)
 
 function Host() {
   const [canvas, setCanvas] = useState<SpatialCanvas>({
-    nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
     edges: [],
   })
   return (

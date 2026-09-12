@@ -3,6 +3,7 @@
 // scene DRAWS — and `rect` must remove the facet without a trace.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { VisualShapeFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -13,7 +14,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 80, y: 80, width: 200, height: 100, text: 'A' }],
+  nodes: [textNode({ id: 'a', x: 80, y: 80, width: 200, height: 100, text: 'A' })],
   edges: [],
 }
 
@@ -79,8 +80,8 @@ it('the Shape row stores the facet and the scene draws the silhouette', () => {
 it('a shape pick from a multi-selection reshapes every selected node', async () => {
   const start: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 80, y: 80, width: 160, height: 90, text: 'A' },
-      { id: 'b', type: 'text', x: 320, y: 80, width: 160, height: 90, text: 'B' },
+      textNode({ id: 'a', x: 80, y: 80, width: 160, height: 90, text: 'A' }),
+      textNode({ id: 'b', x: 320, y: 80, width: 160, height: 90, text: 'B' }),
     ],
     edges: [],
   }

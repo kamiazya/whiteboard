@@ -13,6 +13,7 @@ import {
   writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import {
   resolveNodeShape,
   resolveNodeStencil,
@@ -92,7 +93,7 @@ describe('a deployment\u2019s own stencils', () => {
       [
         {
           op: 'node.add',
-          node: { id: 'b', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'assets' },
+          node: textNode({ id: 'b', x: 0, y: 0, width: 200, height: 80, text: 'assets' }),
           stencil: 'infra.bucket',
         },
       ],
@@ -112,7 +113,7 @@ describe('a deployment\u2019s own stencils', () => {
         [
           {
             op: 'node.add',
-            node: { id: 'x', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'X' },
+            node: textNode({ id: 'x', x: 0, y: 0, width: 200, height: 80, text: 'X' }),
             stencil: 'infra.nope',
           },
         ],
@@ -133,7 +134,7 @@ describe('dressing a box with a stencil', () => {
       run([
         {
           op: 'node.add',
-          node: { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A' },
+          node: textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A' }),
         },
         { op: 'node.patch', id: 'a', patch: { stencil: 'visual.service' } },
       ]),
@@ -173,7 +174,7 @@ describe('dressing a box with a stencil', () => {
     const { result, canvas } = await run([
       {
         op: 'node.add',
-        node: { id: 'db', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'orders' },
+        node: textNode({ id: 'db', x: 0, y: 0, width: 200, height: 80, text: 'orders' }),
         stencil: 'visual.datastore',
       },
     ])
@@ -195,11 +196,11 @@ describe('dressing a box with a stencil', () => {
     const { canvas } = await run([
       {
         op: 'node.add',
-        node: { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A' },
+        node: textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A' }),
       },
       {
         op: 'node.add',
-        node: { id: 'b', type: 'text', x: 300, y: 0, width: 200, height: 80, text: 'B' },
+        node: textNode({ id: 'b', x: 300, y: 0, width: 200, height: 80, text: 'B' }),
       },
       { op: 'node.patch', all: true, patch: {}, stencil: 'visual.service' },
     ])
@@ -218,7 +219,7 @@ describe('dressing a box with a stencil', () => {
       run([
         {
           op: 'node.add',
-          node: { id: 'x', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'X' },
+          node: textNode({ id: 'x', x: 0, y: 0, width: 200, height: 80, text: 'X' }),
           stencil: 'visual.nope',
         },
       ]),
@@ -232,7 +233,7 @@ describe('dressing a box with a stencil', () => {
     const { canvas } = await run([
       {
         op: 'node.add',
-        node: { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A', color: '1' },
+        node: textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A', color: '1' }),
       },
       { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.datastore' },
       { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.queue' },
@@ -247,7 +248,7 @@ describe('dressing a box with a stencil', () => {
     const { canvas } = await run([
       {
         op: 'node.add',
-        node: { id: 'q', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'Q', color: '1' },
+        node: textNode({ id: 'q', x: 0, y: 0, width: 200, height: 80, text: 'Q', color: '1' }),
         stencil: 'visual.queue',
       },
     ])
@@ -299,7 +300,7 @@ describe('a workspace\u2019s own stencil library', () => {
   const addWearing = (stencil: string) => [
     {
       op: 'node.add',
-      node: { id: 'b', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'orders' },
+      node: textNode({ id: 'b', x: 0, y: 0, width: 200, height: 80, text: 'orders' }),
       stencil,
     },
   ]
@@ -392,7 +393,7 @@ describe('a workspace\u2019s own stencil library', () => {
       ops: [
         {
           op: 'node.add',
-          node: { id: 'p', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'plain' },
+          node: textNode({ id: 'p', x: 0, y: 0, width: 200, height: 80, text: 'plain' }),
         },
       ],
     })

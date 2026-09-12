@@ -15,6 +15,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -52,9 +53,7 @@ afterEach(async () => {
 
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
-  doc
-    .getMap('nodes')
-    .set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 300, height: 80, text })
+  doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 300, height: 80, text }))
   doc.commit()
   return doc
 }
@@ -110,15 +109,12 @@ describe('an export after an agent edit', () => {
   it('merges a diverged history instead of preferring the copy it holds', async () => {
     await saveDocument(WORKSPACE, PATH, new LoroDoc())
     const cached = await getDoc(WORKSPACE, PATH)
-    cached.getMap('nodes').set('editor', {
-      id: 'editor',
-      type: 'text',
-      x: 0,
-      y: 200,
-      width: 300,
-      height: 80,
-      text: 'from the editor',
-    })
+    cached
+      .getMap('nodes')
+      .set(
+        'editor',
+        textNode({ id: 'editor', x: 0, y: 200, width: 300, height: 80, text: 'from the editor' }),
+      )
     cached.commit()
 
     await writeThroughToolPath('from the agent')

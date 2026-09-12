@@ -4,6 +4,7 @@
 // the batch, that `assumed` covers exactly what the change touches and never
 // more, and that the op union is closed so a new verb cannot be added without
 // deciding what its prior value is.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   PROPOSED_CHANGE_OPS,
@@ -12,7 +13,7 @@ import {
   proposedChangeSchema,
 } from './proposal.js'
 
-const NODE = { id: 'n1', type: 'text', text: 'hello', x: 0, y: 0, width: 100, height: 40 } as const
+const NODE = textNode({ id: 'n1', text: 'hello', x: 0, y: 0, width: 100, height: 40 })
 
 function change(overrides: Record<string, unknown> = {}) {
   return {

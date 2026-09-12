@@ -7,6 +7,7 @@
 // simulation matches a browser.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -17,15 +18,14 @@ import { createBrowserMeasureText } from './measure-text.js'
 // wrapped body, whose last paragraph painted outside the frame entirely.
 const REPORTED: SpatialCanvas = {
   nodes: [
-    {
+    textNode({
       id: '81d6a81f-cd39-4d81-87c6-77465473a3b9',
-      type: 'text',
       x: 40,
       y: 260,
       width: 67,
       height: 51,
       text: 'かあらた\n\nかたそ',
-    },
+    }),
   ],
   edges: [],
 }

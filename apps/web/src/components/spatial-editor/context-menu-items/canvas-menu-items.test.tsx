@@ -2,7 +2,9 @@
 // The empty-canvas branch's composition rules: paste only with a clipboard
 // fragment, creation entries always, document/image only when the host wires
 // them, Tidy only once there is a second node to tidy against.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearClipboardFragmentForTests,
@@ -13,8 +15,8 @@ import { canvasMenuItems } from './canvas-menu-items.js'
 const emptyCanvas: SpatialCanvas = { nodes: [], edges: [] }
 const twoNodeCanvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'a' },
-    { id: 'b', type: 'text', x: 20, y: 0, width: 10, height: 10, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'a' }),
+    textNode({ id: 'b', x: 20, y: 0, width: 10, height: 10, text: 'b' }),
   ],
   edges: [],
 }
@@ -89,7 +91,7 @@ describe('canvasMenuItems', () => {
     writeClipboardFragment({
       type: 'whiteboard/clipboard',
       version: 1,
-      nodes: [{ id: 'n', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' }],
+      nodes: [textNode({ id: 'n', x: 0, y: 0, width: 1, height: 1, text: '' })],
       edges: [],
     })
     const withFragment = canvasMenuItems(baseInput(emptyCanvas))

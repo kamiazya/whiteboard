@@ -4,6 +4,7 @@
  * path — the same codec plan the daemon's route applies, so both modes give
  * one answer.
  */
+
 import {
   readMarkdownBody,
   readSpatialCanvas,
@@ -12,6 +13,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -76,24 +78,15 @@ describe('local rename follows references', () => {
     )
     const boardId = await seedSpatial(index, 'follow/board', {
       nodes: [
-        {
+        textNode({
           id: 't1',
           x: 0,
           y: 0,
           width: 100,
           height: 40,
-          type: 'text',
           text: 'see [[follow/design-login]]',
-        },
-        {
-          id: 'f1',
-          x: 0,
-          y: 60,
-          width: 100,
-          height: 40,
-          type: 'file',
-          file: 'follow/design-login',
-        },
+        }),
+        fileNode({ id: 'f1', x: 0, y: 60, width: 100, height: 40, file: 'follow/design-login' }),
       ],
       edges: [],
     })

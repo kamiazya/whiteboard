@@ -4,6 +4,7 @@ import {
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -20,7 +21,7 @@ const fakeMeasure: MeasureText = (text) => ({
 })
 
 const canvas: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 40, text: 'hello' })],
   edges: [],
 }
 
@@ -97,8 +98,8 @@ describe('CanvasViewer', () => {
 describe('CanvasViewer frames what it draws', () => {
   const offCanvas: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 400, y: 300, width: 200, height: 80, text: 'far from origin' },
-      { id: 'b', type: 'text', x: 700, y: 500, width: 200, height: 80, text: 'also far' },
+      textNode({ id: 'a', x: 400, y: 300, width: 200, height: 80, text: 'far from origin' }),
+      textNode({ id: 'b', x: 700, y: 500, width: 200, height: 80, text: 'also far' }),
     ],
     edges: [],
   }
@@ -136,8 +137,8 @@ describe('CanvasViewer draws the conversations it is handed', () => {
   it('outlines a node set from `threads`, which the flat comments in the canvas cannot carry', () => {
     const two: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
-        { id: 'b', type: 'text', x: 200, y: 100, width: 100, height: 40, text: 'b' },
+        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 200, y: 100, width: 100, height: 40, text: 'b' }),
       ],
       edges: [],
     }
@@ -165,8 +166,8 @@ describe('CanvasViewer draws the conversations it is handed', () => {
 describe('CanvasViewer style (ADR-0030 decision 6)', () => {
   const neon: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
-      { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 40, text: 'b' },
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' }),
+      textNode({ id: 'b', x: 300, y: 200, width: 100, height: 40, text: 'b' }),
     ],
     edges: [
       {

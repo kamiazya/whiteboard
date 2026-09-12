@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -215,17 +216,7 @@ describe('purgeDanglingFiles', () => {
       'ws_precision',
       'page',
       makeSpatialDoc({
-        nodes: [
-          {
-            id: 'n1',
-            type: 'file',
-            file: 'some-canvas',
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
-          },
-        ],
+        nodes: [fileNode({ id: 'n1', file: 'some-canvas', x: 0, y: 0, width: 100, height: 100 })],
         edges: [],
       }),
     )

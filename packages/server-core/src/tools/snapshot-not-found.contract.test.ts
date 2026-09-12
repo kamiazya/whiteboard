@@ -13,6 +13,7 @@
 // import passes for any throw at all, so a test written that way would go
 // green the moment the class moved. Comparing what the two sides actually
 // raise cannot pass vacuously.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
@@ -67,7 +68,7 @@ describe('a document with no saved snapshot', () => {
         ops: [
           {
             op: 'node.add',
-            node: { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
+            node: textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
           },
         ],
       }),

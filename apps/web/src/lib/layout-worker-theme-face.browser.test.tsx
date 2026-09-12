@@ -4,13 +4,15 @@
 // is the parity `fontAvailable` promises between the two realms.
 //
 // A real browser: the subject is a Worker's FontFaceSet.
+
 import { withViewerFontEmbedded } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import type { LayoutResponse, RegisterFaceRequest } from './layout-worker-protocol.js'
 
 const sketched: SpatialCanvas = {
-  nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 200, label: 'Keepers' }],
+  nodes: [groupNode({ id: 'g', x: 0, y: 0, width: 300, height: 200, label: 'Keepers' })],
   edges: [],
   facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
 }

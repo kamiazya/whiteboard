@@ -1,5 +1,6 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -29,7 +30,7 @@ describe('document-io', () => {
     const documentStore = new FakeDocumentStore()
     await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
         edges: [],
       })
     })
@@ -38,7 +39,7 @@ describe('document-io', () => {
 
     expect(doc).toBeInstanceOf(LoroDoc)
     expect(canvas.nodes).toEqual([
-      { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
+      textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
     ])
   })
 
@@ -48,8 +49,8 @@ describe('document-io', () => {
 
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
-        { id: 'n2', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'world' },
+        textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
+        textNode({ id: 'n2', x: 10, y: 10, width: 100, height: 50, text: 'world' }),
       ],
       edges: [],
     }

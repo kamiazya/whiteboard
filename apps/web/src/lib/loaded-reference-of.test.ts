@@ -1,11 +1,13 @@
 // @vitest-environment node
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { type ListedDocument, loadedReferenceOf } from './loaded-reference-of.js'
 
 const BOARD_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 const canvas: SpatialCanvas = {
-  nodes: [{ id: 'n', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'x' }],
+  nodes: [textNode({ id: 'n', x: 0, y: 0, width: 10, height: 10, text: 'x' })],
   edges: [],
 }
 const LEGACY_ID = 'legacy-row-id'

@@ -22,7 +22,9 @@ import {
   canvasLineSchema,
   endIn,
   endNodes,
+  isFrame,
   type nodePatchFieldsSchema,
+  nodeText,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
@@ -99,7 +101,7 @@ function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number)
  * goes back to the caller instead.
  */
 function assertTextFits(index: number, opName: string, node: SpatialNode, measure: MeasureText) {
-  if (node.type !== 'text') return
+  if (nodeText(node) === undefined) return
   // Whole pixels, as JSON Canvas sizes are; a box short by a fraction of one
   // is a box the renderer draws without a fade.
   const needs = Math.floor(fittedHeight(node, measure, 0))
@@ -295,7 +297,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
       const groupNamed = (index: number, opName: string, id: string): SpatialNode => {
         const group = nodeAt(id)
-        if (group === undefined || group.type !== 'group') {
+        if (group === undefined || !isFrame(group)) {
           fail(
             index,
             opName,
@@ -455,7 +457,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             !enclosedBy(group)(node) &&
             !unsettled(node) &&
             overlaps(node, box) &&
-            !(node.type === 'group' && enclosedBy(node)({ ...group, ...box })),
+            !(isFrame(node) && enclosedBy(node)({ ...group, ...box })),
         )
         if (wall !== undefined) {
           fail(
@@ -664,14 +666,15 @@ export function createCanvasEditTool(deps: ServerDeps) {
             if (nodeLocks.has(op.id)) {
               fail(index, op.op, `node "${op.id}" is locked; unlock it with a node.lock op first`)
             }
-            if (node.type !== 'text') {
+            const nodeOwnText = nodeText(node)
+            if (nodeOwnText === undefined) {
               fail(
                 index,
                 op.op,
                 `a ${node.type} node holds no text to splice; only a text node does`,
               )
             }
-            const lines = node.text.split('\n')
+            const lines = nodeOwnText.split('\n')
             // Refused rather than clamped: clamping would apply part of the
             // splice and report success, which is the failure the codec's
             // own parsers refuse to degrade into.

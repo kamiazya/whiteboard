@@ -4,6 +4,7 @@
 // test suite.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Resolved AFTER vi.resetModules(), never statically imported at the top of
@@ -48,7 +49,7 @@ describe('emphasis survives the whole export pipeline', () => {
   it('a real PNG render selects the vendored bold/italic faces — styled pixels differ from plain', async () => {
     const { renderSpatialCanvasToPng } = await importRenderer()
     const at = (text: string) => ({
-      nodes: [{ id: 'n1', type: 'text' as const, x: 0, y: 0, width: 320, height: 120, text }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 120, text })],
       edges: [],
     })
     // Same painted words; only the emphasis differs. resvg must accept the
@@ -65,15 +66,14 @@ describe('emphasis survives the whole export pipeline', () => {
     const scene = buildSpatialScene(
       {
         nodes: [
-          {
+          textNode({
             id: 'n1',
-            type: 'text',
             x: 0,
             y: 0,
             width: 320,
             height: 200,
             text: 'plain **bold** *lean* ~~gone~~',
-          },
+          }),
         ],
         edges: [],
       },
@@ -155,8 +155,8 @@ describe('headless-renderer', () => {
     // effectively invisible.
     const canvas = {
       nodes: [
-        { id: 'a', type: 'text' as const, x: 0, y: 0, width: 120, height: 60, text: 'from' },
-        { id: 'b', type: 'text' as const, x: 300, y: 0, width: 120, height: 60, text: 'to' },
+        textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'from' }),
+        textNode({ id: 'b', x: 300, y: 0, width: 120, height: 60, text: 'to' }),
       ],
       edges: [
         {
@@ -391,15 +391,7 @@ describe('an export says which declared families it could not provide', () => {
   // `undrawable` is empty and only this answer says anything happened.
   const CODE_CANVAS: SpatialCanvas = {
     nodes: [
-      {
-        id: 'n1',
-        type: 'text',
-        x: 0,
-        y: 0,
-        width: 320,
-        height: 200,
-        text: '```ts\nconst x = 1\n```',
-      },
+      textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 200, text: '```ts\nconst x = 1\n```' }),
     ],
     edges: [],
   }
@@ -419,7 +411,7 @@ describe('an export says which declared families it could not provide', () => {
     expect((await loadExportFonts()).length).toBeGreaterThan(0)
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const plain: SpatialCanvas = {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 320, height: 120, text: 'plain prose' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 120, text: 'plain prose' })],
       edges: [],
     }
     expect((await renderSpatialCanvasToSvg(plain, {})).unresolvedFamilies).toEqual([])
@@ -463,15 +455,7 @@ describe('an export colours code the way the editor does', () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const plain: SpatialCanvas = {
       nodes: [
-        {
-          id: 'n1',
-          type: 'text',
-          x: 0,
-          y: 0,
-          width: 360,
-          height: 160,
-          text: '```brainfuck\n+++\n```',
-        },
+        textNode({ id: 'n1', x: 0, y: 0, width: 360, height: 160, text: '```brainfuck\n+++\n```' }),
       ],
       edges: [],
     }

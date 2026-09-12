@@ -25,9 +25,11 @@
  * That is correct — with the row gone nothing can reach it — and it is still
  * a deletion, so it is asserted rather than assumed.
  */
+
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
@@ -64,7 +66,7 @@ afterEach(async () => {
 
 function canvasDoc(text: string): LoroDoc {
   return makeSpatialDoc({
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
     edges: [],
   })
 }

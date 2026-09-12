@@ -4,7 +4,9 @@
 //
 // The fix is layout, not z-order — the editor root IS the pointer surface, so
 // anything drawn over it swallows the press no matter what the canvas does.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -14,9 +16,9 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 140, height: 80, text: 'A' },
+    textNode({ id: 'a', x: 40, y: 40, width: 140, height: 80, text: 'A' }),
     // Far right — under where the dock used to be drawn.
-    { id: 'b', type: 'text', x: 600, y: 30, width: 160, height: 90, text: 'B' },
+    textNode({ id: 'b', x: 600, y: 30, width: 160, height: 90, text: 'B' }),
   ],
   edges: [],
 }

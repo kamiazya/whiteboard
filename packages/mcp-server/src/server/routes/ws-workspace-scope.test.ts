@@ -6,6 +6,7 @@
  * a workspace replica cannot import (a projection's ops live in a different
  * per-process lineage).
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,6 +16,7 @@ import {
   resolveWorkspaceDocument,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
@@ -85,7 +87,7 @@ class FakeWebSocket {
 function canvasDoc(ids: string[]): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: ids.map((id) => ({ id, type: 'text', text: id, x: 0, y: 0, width: 10, height: 10 })),
+    nodes: ids.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
   return doc
@@ -153,8 +155,8 @@ it('a workspace-scope binary frame persists and reaches the other workspace-scop
   const from = replica.version()
   writeSpatialCanvas(documentContainers(replica, entry.documentId), {
     nodes: [
-      { id: 'n-a', type: 'text', text: 'n-a', x: 0, y: 0, width: 10, height: 10 },
-      { id: 'n-b', type: 'text', text: 'n-b', x: 0, y: 0, width: 10, height: 10 },
+      textNode({ id: 'n-a', text: 'n-a', x: 0, y: 0, width: 10, height: 10 }),
+      textNode({ id: 'n-b', text: 'n-b', x: 0, y: 0, width: 10, height: 10 }),
     ],
     edges: [],
   })
@@ -200,8 +202,8 @@ it('a plain socket is a full workspace participant: its edit persists and reache
   const from = replica.version()
   writeSpatialCanvas(documentContainers(replica, entry.documentId), {
     nodes: [
-      { id: 'n-a', type: 'text', text: 'n-a', x: 0, y: 0, width: 10, height: 10 },
-      { id: 'n-b', type: 'text', text: 'n-b', x: 0, y: 0, width: 10, height: 10 },
+      textNode({ id: 'n-a', text: 'n-a', x: 0, y: 0, width: 10, height: 10 }),
+      textNode({ id: 'n-b', text: 'n-b', x: 0, y: 0, width: 10, height: 10 }),
     ],
     edges: [],
   })

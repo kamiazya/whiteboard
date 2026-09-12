@@ -25,7 +25,9 @@
  * at render time instead — owner decision, 2026-09-03), so a name change
  * rewrites nothing rather than propping up a form on its way out.
  */
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeFile, nodeText, withNodeFile, withNodeText } from '@kamiazya/whiteboard-model'
 import { scanReferences } from './scan.js'
 
 /**
@@ -79,17 +81,19 @@ export function rewriteCanvasReferences(
 ): CanvasRewriteResult {
   const changedNodes: SpatialNode[] = []
   const nodes = canvas.nodes.map((node): SpatialNode => {
-    if (node.type === 'text') {
-      const text = rewriteReferenceTargets(node.text, replacements)
-      if (text === node.text) return node
-      const next = { ...node, text }
+    const own = nodeText(node)
+    if (own !== undefined) {
+      const text = rewriteReferenceTargets(own, replacements)
+      if (text === own) return node
+      const next = withNodeText(node, text)
       changedNodes.push(next)
       return next
     }
-    if (node.type === 'file') {
-      const target = replacements.get(node.file)
+    const file = nodeFile(node)
+    if (file !== undefined) {
+      const target = replacements.get(file)
       if (target === undefined) return node
-      const next = { ...node, file: target }
+      const next = withNodeFile(node, target)
       changedNodes.push(next)
       return next
     }

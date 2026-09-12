@@ -1,11 +1,13 @@
 // @vitest-environment node
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { withNodeText } from './node-text.js'
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'before' },
+    textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'before' }),
     { id: 'n2', type: 'link', x: 0, y: 0, width: 10, height: 10, url: 'https://example.com' },
   ],
   edges: [],

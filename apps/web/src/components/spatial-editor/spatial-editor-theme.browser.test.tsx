@@ -4,7 +4,9 @@
  * attribute values, pinning the exact intended hex per theme (never merely
  * "not #737373", which would pass for any wrong color too).
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { EDITOR_DARK_PALETTE, EDITOR_LIGHT_PALETTE } from '../../lib/spatial/editor-appearance.js'
@@ -26,8 +28,8 @@ function fakeMeasure() {
 function twoNodeCanvasWithEdge(): SpatialCanvas {
   return {
     nodes: [
-      { id: 'a', type: 'text', x: 20, y: 20, width: 100, height: 60, text: 'hello' },
-      { id: 'b', type: 'text', x: 250, y: 20, width: 100, height: 60, text: 'world' },
+      textNode({ id: 'a', x: 20, y: 20, width: 100, height: 60, text: 'hello' }),
+      textNode({ id: 'b', x: 250, y: 20, width: 100, height: 60, text: 'world' }),
     ],
     edges: [
       {

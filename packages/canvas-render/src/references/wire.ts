@@ -1,5 +1,6 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile } from '@kamiazya/whiteboard-model'
 import type { ResolvedReference } from '../layout/spatial-canvas.js'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { type ReferenceSeams, referenceSeams } from './seams.js'
@@ -106,7 +107,10 @@ export function referenceWireFor(
   // `referenceTargets` names documents; an image file node is not one, and
   // its href still rides the wire as an extra the layout draws.
   for (const canvas of seeds.canvases ?? []) {
-    for (const node of canvas.nodes) if (node.type === 'file') keys.add(node.file)
+    for (const node of canvas.nodes) {
+      const file = nodeFile(node)
+      if (file !== undefined) keys.add(file)
+    }
   }
   const aliases = wire.aliases.filter(([key]) => keys.has(key))
   const ids = new Set(aliases.map(([, id]) => id))

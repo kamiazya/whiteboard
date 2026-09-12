@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { describe, expect, it } from 'vitest'
 import type { LoopAvailability } from './loop-availability.js'
-import { measureLoopAvailability } from './loop-availability.js'
+import { measureLoopAvailability, measureSchedulingFloor } from './loop-availability.js'
 
 function blockFor(ms: number): void {
   // Spins on the monotonic clock rather than Date.now: this stands in for a
@@ -170,5 +170,37 @@ describe('calibrated against known truths', () => {
     // The contiguous fixture's worst stall carries its own 200ms; the
     // chopped one's carries only what the machine did to it.
     expect(contiguous.worstStallMs - chopped.worstStallMs).toBeGreaterThan(100)
+  })
+
+  /**
+   * The reference the three `stallCeilingMs` assertions are charged against.
+   *
+   * Those assertions are absolute milliseconds, which this suite's own
+   * heading says is the one form that cannot be trusted — and it failed
+   * exactly that way: `workspace-tail` read 161.5ms against its 150ms
+   * ceiling in CI's stress lane, where all 290 of a PR's changed test files
+   * run in one process, on a fixture that reads 20-29ms idle. Nothing about
+   * the worker had changed; the process had been descheduled.
+   *
+   * What makes the difference form usable here is this claim: a free-loop
+   * reference taken in the same run cannot absorb a REAL block. If it could,
+   * subtracting it would turn the ceiling into a number that always passes.
+   *
+   * Measured over three runs each, at 400ms: idle, the floor reads
+   * 0.1/0.8/0.4ms with 80 of an ideal 80 ticks landing; under 16 competing
+   * processes on four cores it reads 19.3/15.2/16.9ms with 29-31 ticks. So
+   * it tracks contention by a factor of ~20 while a solid block stays at
+   * 400.1-411.8ms either way — which is both halves of what the ceilings
+   * need from it.
+   */
+  it('reports a floor a real block still stands out above', async () => {
+    const floor = await measureSchedulingFloor(400, { intervalMs: 5 })
+    const solid = await stalls(async () => blockFor(400))
+
+    // Reached, not assumed: the reference really churned for its duration.
+    expect(floor.elapsedMs).toBeGreaterThan(300)
+    expect(floor.samples).toBeGreaterThan(0)
+
+    expect(solid.worstStallMs - floor.worstStallMs).toBeGreaterThan(100)
   })
 })

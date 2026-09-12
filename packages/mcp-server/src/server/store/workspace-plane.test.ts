@@ -4,6 +4,7 @@
  * daemon's own route store must see ONE document, not a per-plane copy — an
  * agent edit the web app cannot see, or vice versa, is silent divergence.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -14,6 +15,7 @@ import {
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
@@ -54,7 +56,7 @@ afterEach(async () => {
 function canvasDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
     edges: [],
   })
   return doc
@@ -100,7 +102,7 @@ it('a tool read (document ref) sees a daemon-route write, and a tool write lands
 
   // Tool write: edits go back to the tree, where the route reads them.
   writeSpatialCanvas(toolDoc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'tool-edited' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'tool-edited' })],
     edges: [],
   })
   const { manifest, chunks } = chunkSnapshot(
@@ -265,7 +267,7 @@ it('the index creates, renames and deletes on the tree', async () => {
 
   // Content survives placement changes, and delete evacuates it.
   writeSpatialCanvas(documentContainers(tree, entry.documentId), {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'evacuate me' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'evacuate me' })],
     edges: [],
   })
   await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).save('ws-a', tree)

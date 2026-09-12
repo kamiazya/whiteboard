@@ -1,13 +1,12 @@
 import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useCanvasReferences } from './use-canvas-references.js'
 
 const canvas: SpatialCanvas = {
-  nodes: [
-    { id: 't', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'see [[notes/plan]]' },
-  ],
+  nodes: [textNode({ id: 't', x: 0, y: 0, width: 200, height: 100, text: 'see [[notes/plan]]' })],
   edges: [],
 }
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'

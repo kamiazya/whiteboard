@@ -3,15 +3,17 @@
 // vendored faces, or a face the user installed — so the family in the SVG is
 // always the family the coordinates came from. Nothing is installed in this
 // file; the installed half is `headless-renderer.installed-face.test.ts`.
+
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { renderSpatialCanvasToSvg } from './headless-renderer.js'
 
 const themed = (theme: string): SpatialCanvas => ({
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 160, height: 60, text: 'a' },
-    { id: 'b', type: 'text', x: 300, y: 200, width: 160, height: 60, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 160, height: 60, text: 'a' }),
+    textNode({ id: 'b', x: 300, y: 200, width: 160, height: 60, text: 'b' }),
   ],
   edges: [
     {

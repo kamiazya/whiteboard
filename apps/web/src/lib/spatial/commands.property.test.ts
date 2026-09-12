@@ -3,7 +3,9 @@
 // node count survive the remint+offset pipeline regardless of which offset
 // mode fires. Mutation-checked by temporarily breaking the offset/remint
 // rule in commands.ts and confirming this goes red (recorded in the commit).
+
 import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { applyCommand, buildFragmentInsertCommand } from './commands.js'
@@ -32,7 +34,7 @@ describe('buildFragmentInsertCommand properties', () => {
     'preserves node count, relative positions, and id disjointness from the source canvas',
     (fragment, anchor) => {
       const canvas: SpatialCanvas = {
-        nodes: [{ id: 'existing', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+        nodes: [textNode({ id: 'existing', x: 0, y: 0, width: 10, height: 10, text: '' })],
         edges: [],
       }
       let counter = 0

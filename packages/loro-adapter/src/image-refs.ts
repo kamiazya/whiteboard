@@ -5,7 +5,7 @@
  * a future node type gets added to one side and a live image gets dropped
  * or purged by the other.
  */
-import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
+import { imageRefId, isImageRef, nodeFile } from '@kamiazya/whiteboard-model'
 import type { DocumentContainers } from './containers.js'
 import { readSpatialCanvas } from './loro-bridge.js'
 
@@ -13,7 +13,8 @@ import { readSpatialCanvas } from './loro-bridge.js'
 export function collectImageRefIds(doc: DocumentContainers): Set<string> {
   const ids = new Set<string>()
   for (const node of readSpatialCanvas(doc).nodes) {
-    if (node.type === 'file' && isImageRef(node.file)) ids.add(imageRefId(node.file))
+    const file = nodeFile(node)
+    if (file !== undefined && isImageRef(file)) ids.add(imageRefId(file))
   }
   return ids
 }

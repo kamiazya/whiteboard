@@ -1,8 +1,10 @@
 // Duplicate (editor-completeness slice 3): Cmd/Ctrl+D and the context
 // menu's Duplicate item clone the selection as ONE batch command —
 // reminted ids, +16px offset, edge properties preserved, copies selected.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -13,8 +15,8 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
-    { id: 'b', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'B' },
+    textNode({ id: 'a', x: 40, y: 40, width: 160, height: 80, text: 'A' }),
+    textNode({ id: 'b', x: 320, y: 40, width: 160, height: 80, text: 'B' }),
   ],
   edges: [
     {

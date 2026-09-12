@@ -20,8 +20,10 @@
  * raise the parallel project's flake rate, so this file spends its budget
  * once.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -35,15 +37,16 @@ const EDGES = 90
 // Same shape as worker-scene-responsiveness: enough text to wrap, enough
 // edges to route, comfortably past the 12-element offload threshold.
 const heavy = (): SpatialCanvas => ({
-  nodes: Array.from({ length: NODES }, (_, i) => ({
-    id: `n${i}`,
-    type: 'text' as const,
-    x: (i % 8) * 260,
-    y: Math.floor(i / 8) * 180,
-    width: 200,
-    height: 120,
-    text: `node ${i} carries a sentence long enough to wrap somewhere`,
-  })),
+  nodes: Array.from({ length: NODES }, (_, i) =>
+    textNode({
+      id: `n${i}`,
+      x: (i % 8) * 260,
+      y: Math.floor(i / 8) * 180,
+      width: 200,
+      height: 120,
+      text: `node ${i} carries a sentence long enough to wrap somewhere`,
+    }),
+  ),
   edges: Array.from({ length: EDGES }, (_, i) => ({
     id: `e${i}`,
     from: { node: `n${i % NODES}` },
