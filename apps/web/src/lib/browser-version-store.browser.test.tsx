@@ -240,25 +240,23 @@ describe('has this state already been checkpointed', () => {
   })
 
   /**
-   * The fallback covers a row with no digest: one written before the field,
-   * or by an index that does not hold the content — which the `DocumentEntry`
-   * port explicitly permits. It keeps the behaviour such a row was written
-   * under, wrong in the direction it always was, so the sibling half is
-   * asserted too: without it, a fallback quietly replaced by `false` or by
-   * the digest path would still pass.
+   * The digest is taken from the RECORD, so the answer does not depend on
+   * which index a caller passed.
+   *
+   * `DocumentEntry.contentDigest` is optional on the port because an index
+   * that does not hold the content cannot derive one — and this app wires
+   * exactly such an index (`IdbDocumentIndex`, used by `browser-workspaces`
+   * and by the document page's own tests). A store that read the digest off
+   * the placement answered `undefined === <digest>` forever under one of
+   * them: every save refused or every point read as changed, depending on
+   * which way it was written. Both are silent in the app and neither is
+   * visible to a test that only ever passes the tree-backed index.
    */
-  it('falls back to the record frontier for a row saved without a digest', async () => {
+  it('answers the same through an index that cannot identify content', async () => {
     const { index, workspaceId, documentId } = await seedDocument('canvas-a')
-    const sibling = await index.createDocument({
-      workspaceId,
-      path: 'canvas-b',
-      kind: 'spatial',
-    })
     const docs = new BrowserWorkspaceDocs()
     await writeContent(docs, documentId, 'mine')
 
-    // An index that answers without a digest, so the row is written the way
-    // a pre-digest keeper wrote it. Read back through the real one.
     const digestless: Pick<DocumentIndex, 'resolveDocument'> = {
       async resolveDocument(input) {
         const entry = await index.resolveDocument(input)
@@ -267,14 +265,12 @@ describe('has this state already been checkpointed', () => {
         return rest
       },
     }
-    await new BrowserVersionStore({ docs, index: digestless }).save(workspaceId, 'canvas-a', {
-      auto: true,
-    })
+    const store = new BrowserVersionStore({ docs, index: digestless })
 
-    const store = new BrowserVersionStore({ docs, index })
+    await store.save(workspaceId, 'canvas-a', { auto: true })
     expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
 
-    await writeContent(docs, sibling.documentId, 'sibling moved')
+    await writeContent(docs, documentId, 'edited')
     expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
   })
 

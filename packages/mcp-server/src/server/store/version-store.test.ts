@@ -543,28 +543,22 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     })
 
     /**
-     * The fallback is the behaviour a pre-0026 row was WRITTEN under, kept
-     * for rows that can never gain a digest — a past checkpoint's content is
-     * only reachable by checking the record out at its frontiers, so there is
-     * nothing to backfill from. It is wrong in the direction it always was
-     * (a sibling's edit reads as a change), which is why the sibling half is
-     * asserted too: without it, a fallback silently replaced by `false` or by
-     * the digest path would still pass.
+     * There is no second read path, so a row that somehow held no digest must
+     * fall on the SAFE side of the one comparison: answering "changed" costs
+     * a checkpoint nobody needed, answering "unchanged" loses the point where
+     * somebody stopped. 0026 deleted every such row, which is why this reaches
+     * past the store to plant one — the column's `''` default is sqlite's
+     * requirement for a NOT NULL column, not a state this store can write.
      */
-    it('falls back to the workspace frontier for a row saved before the digest existed', async () => {
+    it('answers changed for a row holding no digest, rather than reading the blank as a match', async () => {
       await saveDocument('sess-1', 'canvas-y', makeSpatialDoc(textCanvas('y', 'mine')), {
         kind: 'spatial',
         overwrite: true,
       })
       await store.save('sess-1', 'canvas-y', new LoroDoc(), { auto: true })
-      await handle.db.updateTable('versions').set({ contentDigest: '' }).execute()
-
       expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-y')).toBe(true)
 
-      await saveDocument('sess-1', 'canvas-z', makeSpatialDoc(textCanvas('z', 'sibling')), {
-        kind: 'spatial',
-        overwrite: true,
-      })
+      await handle.db.updateTable('versions').set({ contentDigest: '' }).execute()
       expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-y')).toBe(false)
     })
 

@@ -1,14 +1,13 @@
 /**
- * The digest column's DEFAULT is what the read's fallback rests on: a row
- * written before this migration has to arrive as `''` rather than as null or
- * as a missing field, because `''` is the value `isUnchangedSinceLastVersion`
- * tests for to decide it is looking at a pre-digest row.
+ * A checkpoint written before the digest existed is REMOVED, not carried.
  *
- * Pinned against a real pre-migration row rather than a simulated one. The
- * store's own test for the fallback blanks the column with an UPDATE, which
- * assumes exactly the answer this file establishes; seeding the row before
- * the column exists is what makes that assumption checked rather than
- * repeated.
+ * It cannot gain one — the content a past checkpoint held is reachable only by
+ * checking the workspace record out at that row's frontiers, and a compacted
+ * record may not reach them at all — so carrying it would mean keeping the
+ * old, wrong comparison alive as a second read path for the lifetime of the
+ * column. This is the assertion that makes the store's single-comparison read
+ * correct rather than merely tidy, so it is pinned against a real
+ * pre-migration row rather than argued.
  */
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -63,7 +62,7 @@ beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'version-content-digest-'))
 })
 
-it('gives a row that predates the column an empty digest, keeping the point itself', async () => {
+it('removes a checkpoint that predates the column, since none can be backfilled', async () => {
   const handle = await openDb()
   await handle.migrateTo(PRE_0026)
 
@@ -90,15 +89,39 @@ it('gives a row that predates the column an empty digest, keeping the point itse
   await handle.migrateTo('head')
 
   expect(await versionColumns(handle.db)).toContain('contentDigest')
-  const rows = await handle.db
-    .selectFrom('versions')
-    .select(['id', 'label', 'frontiers', 'contentDigest'])
+  // Gone, rather than present with a blank digest. Asserted on the rows and
+  // not on a count, so a migration that replaced the row with a placeholder
+  // would fail here too.
+  expect(await handle.db.selectFrom('versions').selectAll().execute()).toEqual([])
+})
+
+/**
+ * What the sweep must NOT take. A version is a frontier plus a row, never a
+ * copy of content, so what a reader loses is the ability to look back — not
+ * anything a document holds now. The content itself is the workspace record's
+ * snapshot, and a sweep that reached it would be the same statement with a
+ * catastrophically different meaning that nothing else in this file notices.
+ */
+it('leaves the stored content alone, taking only the ability to look back', async () => {
+  const handle = await openDb()
+  await handle.migrateTo(PRE_0026)
+  await handle.db
+    .insertInto('documentSnapshots')
+    .values({
+      docKey: 'ws-1/workspace',
+      chunkCount: 1,
+      totalBytes: 4,
+      maxChunkBytes: 1_000_000,
+      frontier: new Uint8Array([1, 2, 3, 4]),
+      generation: 1,
+    })
     .execute()
-  // The point survives with everything a checkout needs; only the new field
-  // is blank, and blank is the honest answer — a past checkpoint's content is
-  // reachable only by checking the record out, so there is nothing to
-  // backfill it from.
-  expect(rows).toEqual([
-    { id: 'v-1', label: 'a point', frontiers: 'ZnJvbnRpZXJz', contentDigest: '' },
-  ])
+
+  await handle.migrateTo('head')
+
+  const rows = await handle.db
+    .selectFrom('documentSnapshots')
+    .select(['docKey', 'totalBytes'])
+    .execute()
+  expect(rows).toEqual([{ docKey: 'ws-1/workspace', totalBytes: 4 }])
 })

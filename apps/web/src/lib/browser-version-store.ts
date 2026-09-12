@@ -4,7 +4,11 @@ import {
   versionEntrySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { autoVersionsOverCap } from '@kamiazya/whiteboard-history'
-import { projectWorkspaceDocument, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  contentDigestOfDocument,
+  projectWorkspaceDocument,
+  readSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
@@ -43,26 +47,21 @@ const versionRowSchema = z
     auto: z.boolean().optional(),
     /** The variation HEAD was on when the point was taken; absent reads as `main`. */
     branchName: z.string().min(1).optional(),
-    /**
-     * A leftover from the retired row miniature (v17-v18), tolerated rather
-     * than stripped. Nothing reads it: this schema is `.strict()` over rows
-     * the reader SKIPS when they fail to parse, so dropping the key here
-     * would make every already-bookmarked point unreadable. See
-     * `browser-idb.ts`'s note at the deleted store for why the rewrite that
-     * would remove it was refused.
-     */
-    hasThumbnail: z.boolean().optional(),
     frontiers: z.instanceof(Uint8Array),
     /**
      * The identity of the CONTENT this point was taken of, so "has this
      * document changed?" can be asked about the document rather than about
-     * the record. Optional for the reason `auto` and `branchName` are: a row
-     * written before this existed must keep parsing, and absent is read as
-     * "no digest recorded" rather than as empty content. Nothing backfills
-     * one — a past checkpoint's content is reachable only by checking the
-     * record out at its frontier.
+     * the record.
+     *
+     * REQUIRED, unlike `auto` and `branchName`, which are optional exactly
+     * because a row written before them had to keep parsing. That reasoning
+     * does not apply here: no row written before this one exists any more —
+     * IndexedDB v19 emptied the store, because a past checkpoint's content is
+     * reachable only by checking the record out at its own frontier and so
+     * none could be backfilled. Requiring it is what keeps the read a single
+     * comparison instead of a second path answering the old, wrong question.
      */
-    contentDigest: z.string().min(1).optional(),
+    contentDigest: z.string().min(1),
   })
   .strict()
 type VersionRow = z.infer<typeof versionRowSchema>
@@ -112,6 +111,7 @@ export class BrowserVersionStore {
     const record = await this.deps.docs.open(workspaceId)
     if (record === null) throw new Error(`no workspace record for ${workspaceId}`)
     const projection = projectWorkspaceDocument(record, placement.documentId)
+    if (projection === null) throw new Error(`no content for ${path} in the workspace record`)
     const row: VersionRow = {
       id: generateDocumentId(),
       workspaceId,
@@ -119,7 +119,7 @@ export class BrowserVersionStore {
       path,
       ...(input.label === undefined || input.label === '' ? {} : { label: input.label }),
       createdAt: Date.now(),
-      elementCount: projection === null ? 0 : countNodes(projection),
+      elementCount: countNodes(projection),
       ...(input.operator === undefined ? {} : { operator: input.operator }),
       ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
       // Written only when true / named, so a manual save on the default
@@ -131,11 +131,16 @@ export class BrowserVersionStore {
       // The STORED record's frontier, never a live doc's: a checkpoint has to
       // point at ops that are on disk, and `open` reads what is.
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
-      // Free: `placement` is the resolve this save already did, and a
-      // tree-backed index derives the digest on that same read. Absent only
-      // from an index that does not hold the content, which the port says
-      // may answer without one.
-      ...(placement.contentDigest === undefined ? {} : { contentDigest: placement.contentDigest }),
+      // Taken from the RECORD, through the projection this save already made
+      // for the element count — never from the index. `DocumentEntry`'s
+      // digest is optional because an index that does not hold the content
+      // cannot derive one, and this app wires exactly such an index
+      // (`IdbDocumentIndex`, which `browser-workspaces.ts` uses); depending on
+      // it here meant a markdown note could not be checkpointed at all. The
+      // record is the one place that always holds the content, and
+      // `content-digest.hosts.test.ts` pins that a projection and the tree
+      // node it came from answer the same digest.
+      contentDigest: contentDigestOfDocument(projection),
     }
     await inTransaction(this.deps.dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
       await request(tx.objectStore(VERSIONS_STORE).put(versionRowSchema.parse(row)))
@@ -189,23 +194,27 @@ export class BrowserVersionStore {
    * own space: the digest is derived on the same read of the record that
    * `save` derived the row's from.
    *
-   * A row with no digest — written before the field, or by an index that does
-   * not hold content — falls back to the frontier comparison it was written
-   * under: wrong in the direction it always was, rather than newly wrong.
+   * There is no second path for a row carrying no digest, because none is
+   * left: IndexedDB v19 emptied this store of the rows written before the
+   * field, and every row `save` writes carries one.
+   *
+   * Both digests come from the RECORD, through the same projection — never
+   * from the index. `DocumentEntry.contentDigest` is optional precisely
+   * because an index that does not hold the content cannot derive one, and
+   * this app wires such an index; reading it here would make the answer
+   * depend on which index a caller happened to pass.
    */
   async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
     if (placement === null) return false
-    const record = await this.deps.docs.open(workspaceId)
-    if (record === null) return false
     const rows = await this.rowsOf(workspaceId, placement.documentId)
     const newest = rows.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))[0]
     if (newest === undefined) return false
-    if (newest.contentDigest !== undefined && placement.contentDigest !== undefined) {
-      return newest.contentDigest === placement.contentDigest
-    }
-    const now = new Uint8Array(encodeFrontiers(record.oplogFrontiers()))
-    return newest.frontiers.length === now.length && newest.frontiers.every((b, i) => b === now[i])
+    const record = await this.deps.docs.open(workspaceId)
+    if (record === null) return false
+    const projection = projectWorkspaceDocument(record, placement.documentId)
+    if (projection === null) return false
+    return newest.contentDigest === contentDigestOfDocument(projection)
   }
 
   /** Newest first, as the History panel lists them. */

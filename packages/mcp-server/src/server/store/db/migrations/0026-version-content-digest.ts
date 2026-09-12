@@ -11,13 +11,24 @@ import type { Migration } from 'kysely/migration'
 // digest is per document and derived from the merged content itself
 // (`contentDigestOf`), so it answers about one.
 //
-// `''` on an existing row means "taken before the digest was recorded", not
-// "empty content": nothing can be reconstructed for those rows, since the
-// content a past checkpoint held is only reachable by checking the record
-// out at its frontiers. The read falls back to the frontier comparison for
-// them, which is the behaviour they were written under.
+// EVERY EXISTING ROW GOES. A row written before this cannot gain a digest:
+// the content a past checkpoint held is reachable only by checking the
+// workspace record out at that row's frontiers, and a compacted record may no
+// longer reach them at all. Carrying such rows would mean carrying a second
+// read path — one that answers the old, wrong question — for the lifetime of
+// the column. At 0.0.x, with the repo's no-compat policy for stored shapes,
+// deleting them is the cheaper honesty: the read below is then one comparison
+// with no branch, and no row can answer for a question it was never asked.
+//
+// What that costs a reader is real and worth naming: their saved points go,
+// bookmarks they named included. The documents themselves are untouched — a
+// version is a frontier plus a row, never a copy of the content — so what is
+// lost is the ability to look back, not anything a document holds now.
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
+    // Before the column, so nothing has to test for a value that only ever
+    // means "written under the old question".
+    await sql`delete from versions`.execute(db)
     await sql`alter table versions add column contentDigest text not null default ''`.execute(db)
   },
 }

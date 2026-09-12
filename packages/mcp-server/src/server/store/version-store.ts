@@ -447,11 +447,10 @@ export class FileVersionStore implements VersionStore {
    * Both halves stay in this store's own space: the digest is derived on the
    * same read of the stored tree node that `save` derived the row's from.
    *
-   * A row written before migration 0026 carries no digest and falls back to
-   * the frontier comparison — the behaviour it was written under, wrong in
-   * the same direction as before rather than newly wrong. Nothing backfills
-   * it: the content a past checkpoint held is only reachable by checking the
-   * record out at its frontiers.
+   * There is no second path for a row carrying no digest, because 0026 left
+   * none: every row written before the column went rather than being carried.
+   * None could be backfilled, and each would otherwise have kept the old,
+   * wrong comparison alive to answer it.
    */
   async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
     validateWorkspaceId(workspaceId)
@@ -465,7 +464,7 @@ export class FileVersionStore implements VersionStore {
     if (entry === null) return false
     const row = await db
       .selectFrom('versions')
-      .select(['frontiers', 'contentDigest'])
+      .select(['contentDigest'])
       // Newest first, with the id as the tie-break the rest of this store
       // already orders by — two rows can share a millisecond.
       .where('workspaceId', '=', workspaceId)
@@ -475,9 +474,6 @@ export class FileVersionStore implements VersionStore {
       .limit(1)
       .executeTakeFirst()
     if (row === undefined) return false
-    if (row.contentDigest === '') {
-      return row.frontiers === bytesToBase64(encodeFrontiers(storedWorkspace.frontiers()))
-    }
     return row.contentDigest === entry.contentDigest
   }
 
