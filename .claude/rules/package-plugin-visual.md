@@ -245,7 +245,26 @@ makes a prefix usable: `:ro` scores `rocket` and `rolling_on_the_floor_laughing`
 alike, and on CLDR order alone the laughing face wins because Smileys is the
 first group.
 
-Three readers, one vocabulary, and the contract between them is asserted
+`./emoji/searchable` is the INDEX half — `emojiSearchText(text)`, the extra
+text a document earns for SHOWING a thing rather than naming it. It costs the
+same 190KB as `/emoji/search` and is taken the same two ways for the same
+reason: `server-core` statically (a server has no bundle to keep small and it
+indexes on every call), `apps/web` by dynamic import inside the files search
+(68KB of rows plus 115KB of Japanese, and somebody who never searches should
+not carry it).
+
+It answers TEXT rather than tokens, deliberately. How 「ロケット」 is cut up
+is `packages/search`'s scheme, and a caller returning tokens would be a second
+place that decides it — so the seam is `fullTextSearch`'s `alsoIndex`, which
+keeps that package depending on `model` alone rather than reaching up for a
+plugin. Two things it measured: a grapheme segmenter is what matches the 730
+multi-code-point rows (scanning code points finds a flag's base character and
+answers with the wrong thing), and each row is deduplicated WORD-wise, because
+`emojiSlug('rocket')` is `rocket` and a single-word name would otherwise emit
+the term twice — scoring a document that merely shows a rocket above one that
+writes the word.
+
+Four readers, one vocabulary, and the contract between them is asserted
 rather than assumed: `search.test.ts` checks that every slug the completion
 offers is one `emojiForShortcode` resolves, and to the same character. A
 completion offering a name the renderer draws as literal text is the feature

@@ -86,6 +86,32 @@ const K1 = 1.2
 const B = 0.75
 
 /**
+ * Extra searchable text a caller derives from a document's own content.
+ *
+ * The seam exists so that this package keeps depending on `model` alone. An
+ * emoji is the first customer — a document that SHOWS a rocket says
+ * `rocket` nowhere, and the vocabulary that knows it does is a PLUGIN's,
+ * which sits above this package in the dependency direction. Both callers
+ * of `fullTextSearch` already depend on that plugin, so they pass the
+ * expander rather than this package reaching up for it.
+ *
+ * It answers TEXT and not tokens, deliberately: how 「ロケット」 is cut up
+ * is this package's scheme to own, and a caller returning tokens would be a
+ * second place that decides it.
+ *
+ * Indexing only. A snippet quotes what the document actually says, so
+ * derived text must never reach `contextsFor` — a hit on a word the reader
+ * cannot see in their own note is confusing enough without the excerpt
+ * inventing it.
+ */
+export type AlsoIndex = (text: string) => string
+
+function addTo(text: string, alsoIndex: AlsoIndex): string {
+  const extra = alsoIndex(text)
+  return extra === '' ? text : `${text} ${extra}`
+}
+
+/**
  * BM25 over the documents' token bags, name and path included as text (a
  * query naming a document should find it without the caller special-casing
  * fields). Scores are relative to THIS corpus — never compare across calls.
@@ -93,7 +119,7 @@ const B = 0.75
 export function fullTextSearch(
   documents: readonly SearchableDocument[],
   query: string,
-  { limit = 10 }: { limit?: number } = {},
+  { limit = 10, alsoIndex }: { limit?: number; alsoIndex?: AlsoIndex } = {},
 ): SearchHit[] {
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0) return []
@@ -102,7 +128,9 @@ export function fullTextSearch(
     const counts = new Map<string, number>()
     let length = 0
     for (const text of [doc.path, doc.name ?? '', ...doc.texts]) {
-      for (const token of tokenizeForIndex(text)) {
+      for (const token of tokenizeForIndex(
+        alsoIndex === undefined ? text : addTo(text, alsoIndex),
+      )) {
         counts.set(token, (counts.get(token) ?? 0) + 1)
         length++
       }

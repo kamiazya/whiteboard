@@ -15,7 +15,7 @@
  * types a colon never pays for it.
  */
 import { EMOJI_GROUPS } from './catalog-data.js'
-import { EMOJI_JA } from './catalog-ja.js'
+import { emojiJapaneseTerms } from './japanese.js'
 import { emojiSlug } from './slug.js'
 
 export interface EmojiShortcodeMatch {
@@ -34,19 +34,9 @@ interface Row extends EmojiShortcodeMatch {
 
 let rows: readonly Row[] | undefined
 
-/** `character -> CLDR Japanese terms`, the same parse `sections.ts` does. */
-function japanese(): ReadonlyMap<string, string> {
-  const found = new Map<string, string>()
-  for (const row of EMOJI_JA.split('\n')) {
-    const tab = row.indexOf('\t')
-    if (tab !== -1) found.set(row.slice(0, tab), row.slice(tab + 1))
-  }
-  return found
-}
-
 function index(): readonly Row[] {
   if (rows !== undefined) return rows
-  const ja = japanese()
+  const ja = emojiJapaneseTerms()
   rows = EMOJI_GROUPS.flatMap(([, block]) =>
     block.split('\n').map((row): Row => {
       const [char, name, subgroup] = row.split('\t')
