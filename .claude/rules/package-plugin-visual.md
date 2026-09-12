@@ -92,6 +92,118 @@ Two projects, because the halves run in different environments:
 Assertions about what `visual` DECLARES belong here, not in `facet-ui`. The
 split is the test-level form of the dependency rule above.
 
+## The generated emoji catalog
+
+`src/emoji/catalog-data.ts` is GENERATED from Unicode's own `emoji-test.txt`
+(`scripts/generate-emoji-catalog.mjs`) and committed, the way the vendored
+lucide geometry is — a clone builds offline, and regenerating is a deliberate
+step at a Unicode release. 1914 fully-qualified sequences in CLDR order,
+skin-tone variants dropped (they are 2030 of 3944 and add no distinct meaning
+to a symbol on a box; free entry still takes one).
+
+Three things about it that a reader will otherwise re-decide:
+
+- **Derived, never curated.** "Which two hundred emoji does this product
+  like" has no defensible answer and goes stale each release. The published
+  file already carries the character, its CLDR short name and its
+  group/subgroup, which is exactly what a searchable palette needs, and it
+  is published in the order a keyboard should show them in.
+- **Reached by DYNAMIC import, from `data.ts`.** The facet definition is
+  loaded wherever a document is read — the SVG renderer, the layout worker,
+  `mcp-server` — and none of those draws a picker. A static import puts 69KB
+  of strings in every one of those graphs; a dynamic one is the only thing a
+  bundler treats as a separate chunk, which is why the engine's catalog
+  contract is a `load()` returning a promise rather than a list.
+- **This package owes the row check.** A listed picker option is parsed at
+  `defineFacet` time and a catalog's rows cannot be. `src/emoji/
+  catalog.test.ts` parses all of them against `visualSymbolFacetSchema`, and
+  also pins that no row repeats an option the definition lists inline — the
+  five hardcoded emoji this catalog replaced would otherwise have been drawn
+  twice.
+
+**The vendored icons are the catalog's FIRST BAND, not an inline row** (user
+decision, 2026-09-11). A row of monochrome line drawings directly above a
+grid of full-colour emoji reads as two unrelated palettes, and it was also
+indistinguishable from the category row below it — which picks a view rather
+than a value. As a band they are a category like any other, so a grid is all
+monochrome or all colour and never half of each, and the search reaches them
+the same way it reaches everything else. `visual.symbol`'s inline options are
+now ABSENCE alone: it is the one choice that belongs to no category and has
+to be reachable without browsing to one. Guarded from both sides, because
+putting the icons back in either place is a one-line change nothing else
+would notice.
+
+`ICON_SECTION` is built in `data.ts` rather than in `emoji/sections.ts`
+because it is this build's own geometry rather than Unicode's data, and it
+costs no bytes worth deferring.
+
+The subgroup travels as search KEYWORDS rather than a heading, and the
+measurement says it earns the bytes: `transport` goes from 0 matches to 85,
+`animal` 0 to 131, `sport` 3 to 156, `weather` 0 to 47.
+
+**What it does NOT buy is the word on the category chip.** `travel` matched
+nothing — the rocket is named "rocket" and filed under `transport-air`,
+while the band a person can see it in is "Travel & Places". That is fixed in
+the SEARCH rather than in the data (`facet-ui`'s `haystack` folds in the
+band's label), because it is true of any catalog and costs no bytes here.
+An earlier comment in this file claimed the subgroup was `travel-air` and
+that "travel" therefore worked; it was written from memory and the data
+refutes it.
+
+**Japanese is a SEARCH index, not a label set** (`catalog-ja.ts`, CLDR
+`release-48`, both `annotations/` and `annotationsDerived/`). What the picker
+SHOWS is still the English short name, because the UI around it is English
+and translating one string while leaving the rest is a half-localised panel;
+what it MATCHES is a different question, and a person typing 星 is looking
+for something this build has. Full coverage of all 1914, +118KB raw / ~34KB
+gzipped, in the lazily-loaded chunk.
+
+Two mechanics it needed, both found by measuring:
+
+- **CLDR's base file strips U+FE0F from every `cp`** — it says so in its own
+  header — and the derived file carries the sequences the base one lacks.
+  So the generator unions both and falls back to a variation-selector-
+  stripped lookup. `catalog.test.ts` guards coverage from both sides,
+  because a half-covered index is a search that quietly finds less rather
+  than an error anybody sees.
+- **CLDR annotates emoji, not groups**, and its per-emoji keywords are
+  specific (果物, 野菜). So the BAND carries Japanese of its own in
+  `CATEGORIES` and its options inherit it: `食べ物` went from 7 of Food &
+  Drink's 131 rows to all 131, `旅行` from 3 of 219 to 219.
+
+The pinned CLDR tag is load-bearing: the annotation files carry `$Revision$`
+where a version should be, so nothing in them says which CLDR they are, and
+fetching `main` would make two regenerations differ with no record of why.
+
+Not indexed: unconverted kana. CLDR's terms are kanji and katakana, so `ほし`
+finds nothing while `星` finds 42 — acceptable because an IME user converts
+before the term is a term, and a kana reading index is a different data set.
+
+## `/emoji` — the catalog as a reusable subpath
+
+`@kamiazya/whiteboard-plugin-visual/emoji` exports `emojiSections()` (the
+picker's rows) and `emojiSlug()` (the shortcode vocabulary). It is a subpath
+rather than part of the barrel for the reason the dynamic import exists: the
+tables are 190KB and the default entry is loaded wherever a document is READ.
+
+`emojiSlug` turns a CLDR short name into what a person types between colons —
+`grinning face` -> `grinning_face` (user decision, 2026-09-11: CLDR-derived,
+not GitHub's `:+1:` set, which would be a second vendored table with its own
+coverage story). DERIVED rather than stored: a slug is a pure function of a
+name the table already carries, so a fourth column would be 28KB and a second
+place for the same fact to be written differently.
+
+Its symbol map (`#` -> `hash`, `*` -> `asterisk`) is what keeps slugs unique,
+and it came from measuring rather than reading: stripping punctuation
+outright collides `keycap: #` with `keycap: *`, both landing on `keycap`. A
+shortcode naming two emoji is the one defect this vocabulary must not have,
+so `catalog.test.ts` asserts every one of the 1914 is distinct — over the
+whole table, so a future Unicode release that introduces a collision fails
+the suite rather than shipping an ambiguous `:name:`.
+
+The slug is also a search KEYWORD, because the search splits on whitespace:
+`thumbs_up` finds nothing against a label reading `thumbs up`.
+
 ## Vendored icons
 
 `src/icons/` carries lucide geometry with its LICENSE and provenance README,

@@ -79,6 +79,88 @@ export interface FacetPickerOption {
   readonly payload: unknown | null
   readonly label: string
   readonly glyph?: FacetGlyph
+  /**
+   * Extra words this option is findable by, beside its label. Only a
+   * searchable catalog reads them: an inline row draws every option it
+   * has, so there is nothing there to find.
+   *
+   * It exists because the authoritative name of a thing is often not the
+   * word somebody types for it. Measured over `plugin-visual`'s 1914 rows,
+   * carrying Unicode's own subgroup beside each name is what makes
+   * `transport` find 85 rows instead of 0, `animal` 131 instead of 0,
+   * `sport` 156 instead of 3 and `weather` 47 instead of 0.
+   */
+  readonly keywords?: readonly string[]
+}
+
+/**
+ * One band of a catalog: a heading, the options under it, and how the band
+ * is pictured in the chooser that switches between them.
+ *
+ * The glyph is declared rather than taken from the band's first option,
+ * which is what it was and what looked wrong: nine categories pictured by
+ * nine unrelated samples of their own contents sit at nine weights, some
+ * colour and some not, and read as a spilled palette rather than as a
+ * control. What browses is chrome and what is browsed is content; a plugin
+ * that means them to differ has to be able to say so.
+ */
+export interface FacetPickerCatalogSection {
+  readonly label: string
+  readonly options: readonly FacetPickerOption[]
+  readonly glyph?: FacetGlyph
+  /**
+   * Extra words the whole band is findable by — its options inherit them.
+   * The same job `FacetPickerOption.keywords` does one level down, and it
+   * needs doing at both: a band's LABEL is one string in one language, and
+   * `Food & Drink` is not what somebody types when they are looking for
+   * something to eat.
+   */
+  readonly keywords?: readonly string[]
+}
+
+/**
+ * Free entry, declared as DATA rather than as a parser: `payload` is the
+ * template every typed value is folded into, and `field` is where the text
+ * goes. `{ payload: { kind: 'emoji' }, field: 'char' }` says "whatever you
+ * type is the char of an emoji payload" without the plugin shipping a
+ * function to say it, and without the engine learning what an emoji is.
+ *
+ * What the value may BE stays the schema's answer, at the write boundary
+ * every other control already goes through. That is the whole reason free
+ * entry can be offered at all: `visual.symbol` refuses a string of two
+ * graphemes, so the control cannot write one, and nothing here has to
+ * know that rule in order to be safe.
+ */
+export interface FacetPickerEntrySpec {
+  readonly label: string
+  readonly placeholder?: string
+  readonly payload: Readonly<Record<string, unknown>>
+  readonly field: string
+}
+
+/**
+ * More choices than a definition can carry: a LOADER, called when a picker
+ * is actually opened.
+ *
+ * Deferred because a facet definition is loaded wherever a document is
+ * read — the renderer, the layout worker, the MCP server — and none of
+ * those opens a picker. `visual.symbol`'s catalog is 1900-odd rows; listed
+ * in the definition they would ride into every one of those graphs to be
+ * used by none of them. Returning a promise is what lets the plugin reach
+ * for a dynamic import, which is the only thing a bundler treats as a
+ * separate chunk.
+ *
+ * The cost of deferring is that these options are NOT parsed at definition
+ * time, the way listed ones are. The write path still refuses a bad one,
+ * so nothing invalid is stored; what is lost is the plugin failing to
+ * start. A plugin shipping a catalog owes its own test that every row
+ * parses — `plugin-visual` has one — because the rows are its data.
+ */
+export interface FacetPickerCatalogSpec {
+  /** Names the search box, for a reader with no heading in view. */
+  readonly label: string
+  readonly load: () => Promise<readonly FacetPickerCatalogSection[]>
+  readonly entry?: FacetPickerEntrySpec
 }
 
 /**
@@ -97,8 +179,9 @@ export type FacetOptionLayout = 'chips' | 'cards'
 
 export interface FacetPickerSpec {
   readonly options: readonly FacetPickerOption[]
-  /** Defaults to `chips`. */
+  /** Defaults to `chips`. Governs the LISTED options; a catalog is a grid. */
   readonly layout?: FacetOptionLayout
+  readonly catalog?: FacetPickerCatalogSpec
 }
 
 /**
@@ -201,6 +284,7 @@ export type FacetForm =
       readonly kind: 'picker'
       readonly options: readonly FacetPickerOption[]
       readonly layout: FacetOptionLayout
+      readonly catalog?: FacetPickerCatalogSpec
     }
   | { readonly kind: 'fields'; readonly fields: readonly FacetFormField[] }
   | {
@@ -301,10 +385,12 @@ export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec):
   // plugin means: the derivation describes the STORAGE, and the picker
   // describes the choice a person is actually making.
   if (editor?.picker !== undefined) {
+    const catalog = editor.picker.catalog
     return {
       kind: 'picker',
       options: editor.picker.options,
       layout: editor.picker.layout ?? 'chips',
+      ...(catalog === undefined ? {} : { catalog }),
     }
   }
   if (schema instanceof z.ZodObject) {
@@ -438,5 +524,44 @@ function normalizePicker(
     seen.add(fingerprint)
     return { ...option, payload }
   })
+  if (picker.catalog !== undefined) {
+    assertCatalogFits(facetName, schema, picker.catalog)
+  }
   return { ...picker, options }
+}
+
+/**
+ * What CAN be checked about a catalog at definition time. Its rows cannot
+ * be — they are not loaded yet, deliberately — so what is left is the two
+ * declarations around them, and both have a failure mode that reaches a
+ * person as a control doing nothing rather than as an error.
+ */
+function assertCatalogFits(
+  facetName: string,
+  schema: z.ZodTypeAny,
+  catalog: FacetPickerCatalogSpec,
+): void {
+  if (catalog.label.trim() === '') {
+    throw new Error(`facet "${facetName}" needs a non-blank catalog label`)
+  }
+  const entry = catalog.entry
+  if (entry === undefined) return
+  if (entry.label.trim() === '') {
+    throw new Error(`facet "${facetName}" needs a non-blank free-entry label`)
+  }
+  if (Object.hasOwn(entry.payload, entry.field)) {
+    // Two sources for one key, and only the typed one can ever win — so the
+    // declared value is a constant nobody will ever read, which reads to
+    // the next author as a default that is honoured.
+    throw new Error(
+      `facet "${facetName}" free-entry template already fills "${entry.field}", the field its text writes`,
+    )
+  }
+  if (schema.safeParse(entry.payload).success) {
+    // Then the text is optional, and the control writes the moment it is
+    // drawn — an option nobody listed, sitting under the ones that were.
+    throw new Error(
+      `facet "${facetName}" free-entry template writes a payload its schema accepts before anything is typed`,
+    )
+  }
 }

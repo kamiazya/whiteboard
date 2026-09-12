@@ -4,6 +4,20 @@
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
+// STATIC, and load-bearing rather than convenience. `visual.symbol`'s
+// catalog reaches its rows through `await import('./emoji/sections.js')`,
+// and a `findBy*` waiting on that charges the 190KB tables'
+// transform-and-load to testing-library's 1000ms retry budget — far tighter
+// than the per-test timeout, and so the first thing to blow once the
+// machine is busy. Naming the module here instantiates it in the COLLECTION
+// phase, which no query budget bounds, and the dynamic import then resolves
+// from the graph.
+//
+// Measured in CI's `stress-changed-tests` over the same nine files: this
+// file ran 1737ms and passed, then 3630ms and failed at
+// `findByLabelText('Icon database')` after three cases were added to two of
+// the other eight. Nothing about this file had changed.
+import { emojiSections } from '@kamiazya/whiteboard-plugin-visual/emoji'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -371,7 +385,7 @@ it('does not print a field label that repeats the facet name', () => {
 })
 
 describe('a registered editor replaces the derived form', () => {
-  it('renders the badge picker for visual.symbol, and writes through the registry', () => {
+  it('renders the badge picker for visual.symbol, and writes through the registry', async () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
@@ -381,8 +395,25 @@ describe('a registered editor replaces the derived form', () => {
       />,
     )
     // The picker that used to live in the context menu now lives here, so
-    // the facet has one face instead of two.
-    fireEvent.click(screen.getByLabelText('Emoji ⭐'))
+    // the facet has one face instead of two — behind a trigger, because a
+    // catalog is hundreds of cells and a property row is one line.
+    fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
+    // The icons are the catalog's first band, so they arrive with it.
+    fireEvent.click(await screen.findByLabelText('Icon database'))
+    expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'icon', name: 'database' })
+    // And the emoji arm, which no listed option covers any more. ⭐ IS in
+    // the catalog, so what the one box offers is the row rather than the
+    // typed character — the picker never draws one symbol twice. Which is
+    // a claim about the DATA, so it is asserted rather than assumed: were
+    // the row gone, the case below would pass on the free-entry cell and
+    // stop testing what it says it tests.
+    expect(emojiSections().some((band) => band.options.some((row) => row.label === 'star'))).toBe(
+      true,
+    )
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search symbols' }), {
+      target: { value: '⭐' },
+    })
+    fireEvent.click(await screen.findByLabelText('star'))
     expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'emoji', char: '⭐' })
     // And the derived variants form is NOT what got rendered.
     expect(screen.queryByLabelText('Symbol Kind')).toBeNull()
