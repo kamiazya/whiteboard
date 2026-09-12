@@ -437,6 +437,32 @@ describe('a canvas declares its own axes', () => {
     expect(undeclared.contested).toBe(1)
   })
 
+  it('counts an axis once however many times the canvas names it', () => {
+    // `visualAxesFacetSchema` validates each key and does not require them to
+    // be distinct, so a document may legitimately arrive naming one twice.
+    // Pushed twice, the SAME partition is scored twice and every column
+    // derived from it doubles — `partitions`, `constructs`, and whichever of
+    // `deficit`/`redundancy` that partition contributes. An instrument whose
+    // job is to report honest counts must not let a repeated declaration
+    // inflate them.
+    //
+    // Deduplicated on READ rather than refused on write, which is this
+    // module's standing posture (see `declaredAxisKeys`): stored content may
+    // be written by any build, and a payload another version wrote must cost
+    // the axis, never the score.
+    const once = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.status/v0'),
+    } as unknown as SpatialCanvas)
+    const twice = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.status/v0', 'ops.status/v0'),
+    } as unknown as SpatialCanvas)
+    expect(twice).toEqual(once)
+  })
+
   it('ignores an axis no box carries, rather than inventing an empty construct', () => {
     const stray = scoreFacets({
       nodes: [...boxes],

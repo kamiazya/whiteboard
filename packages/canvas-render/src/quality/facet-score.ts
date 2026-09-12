@@ -234,12 +234,23 @@ function declaredPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]
  *
  * Read defensively: this runs over stored content, and a payload written by
  * another version must cost the axis, never the score.
+ *
+ * DISTINCT, because the schema does not require it to be. `visualAxesFacetSchema`
+ * validates the shape of each key and says nothing about repeats, so a
+ * document may legitimately name one twice — and the same partition pushed
+ * twice is scored twice, doubling `partitions`, `constructs` and whichever of
+ * `deficit`/`redundancy` it contributes. Measured on a board declaring one
+ * axis twice: `partitions` 1 -> 2, `constructs` 2 -> 4. Deduplicated here
+ * rather than refused at the write, for the same reason the rest of this
+ * function is defensive: a stored payload is data, and a repeat should cost
+ * the reader nothing rather than cost the document its whole declaration.
  */
 function declaredAxisKeys(canvas: SpatialCanvas): readonly string[] {
   const declared = canvas.facets?.[VISUAL_AXES_KEY]
   if (declared === null || typeof declared !== 'object') return []
   const axes = (declared as { axes?: unknown }).axes
-  return Array.isArray(axes) ? axes.filter((key): key is string => typeof key === 'string') : []
+  if (!Array.isArray(axes)) return []
+  return [...new Set(axes.filter((key): key is string => typeof key === 'string'))]
 }
 
 /**
