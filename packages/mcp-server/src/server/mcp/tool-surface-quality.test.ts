@@ -198,7 +198,12 @@ describe('what the tool table costs to read', () => {
         // inlining it. Recorded rather than smoothed over — the lever is
         // worth pulling on the table's total, and this row is what it costs
         // to pull.
-        wireBytes: 21956,
+        // -8 when `node.patch`'s geometry stopped restating `int`. ATTRIBUTED
+        // by measurement, not by argument: reverted, this row reads 21956;
+        // applied, 21948. The mechanism is NOT established — `body-edit.ts`
+        // imports no node patch and no integer schema — so the number is
+        // recorded and the cause is left open rather than invented.
+        wireBytes: 21948,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -312,9 +317,14 @@ describe('what the tool table costs to read', () => {
       // description bought is on `line.add`'s draft: when to reach for ink
       // over a relation, which is the only thing here a model cannot infer
       // from JSON Canvas.
+      // -4: `node.patch`'s geometry stopped restating `int` and now derives
+      // from what a node STORES, which is a real number (ADR-0037 slice 4).
+      // The table pays four bytes less for a schema that accepts strictly
+      // more — the patch had been refusing the sub-pixel coordinates the
+      // editor writes.
       wb_canvas_edit: {
-        visibleBytes: 15823,
-        wireBytes: 38801,
+        visibleBytes: 15819,
+        wireBytes: 38789,
         descriptionWords: 169,
         parameters: 165,
         undescribed: 130,
@@ -604,8 +614,11 @@ describe('what the tool table costs to read', () => {
       // reach for ink over a relation (C4). The rest are `id`, `color`,
       // `label` and `facets`, which mean on a line exactly what they already
       // mean on an edge.
-      visibleBytes: 39001,
-      wireBytes: 116298,
+      // 39,001 -> 38,997: `node.patch`'s geometry derived rather than
+      // restated (see `wb_canvas_edit` above). Strictly more accepted, four
+      // bytes cheaper.
+      visibleBytes: 38997,
+      wireBytes: 116278,
       parameters: 289,
       undescribed: 198,
     })
