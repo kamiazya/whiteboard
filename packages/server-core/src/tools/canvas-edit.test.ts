@@ -29,6 +29,7 @@ import {
   PLACEMENT_COLUMNS,
   PLACEMENT_GUTTER_PX,
 } from './canvas-edit.js'
+import { canvasEditOutputSchema } from './canvas-edit-ops.js'
 import { loadDocument } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -70,12 +71,20 @@ describe('wb_canvas_edit tool', () => {
           op: 'node.add',
           node: { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
         },
-        { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'b', label: 'to' } },
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'e',
+            from: { node: 'a' },
+            to: { node: 'b' },
+            label: 'to',
+          },
+        },
       ],
     })
 
     expect(result.applied).toBe(3)
-    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], comments: [] })
+    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [], comments: [] })
     // The result carries the board AFTER the batch, so a caller never has
     // to spend a second round trip re-reading what it just wrote.
     expect(result.snapshot.nodes.map((n) => n.id)).toEqual(['a', 'b'])
@@ -186,7 +195,13 @@ describe('wb_canvas_edit tool', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -201,7 +216,7 @@ describe('wb_canvas_edit tool', () => {
       ],
     })
 
-    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], comments: [] })
+    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [], comments: [] })
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
     expect(canvas.nodes[0]).toMatchObject({ x: 7, color: '3' })
@@ -218,7 +233,13 @@ describe('wb_canvas_edit tool', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -320,7 +341,13 @@ describe('wb_canvas_edit tool', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -445,7 +472,14 @@ describe('wb_canvas_edit tool', () => {
         mode: 'apply',
         ops: [
           { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
-          { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'missing' } },
+          {
+            op: 'edge.add',
+            edge: {
+              id: 'e',
+              from: { node: 'a' },
+              to: { node: 'missing' },
+            },
+          },
         ],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 1 })
@@ -463,7 +497,14 @@ describe('wb_canvas_edit tool', () => {
       ops: [
         { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
         { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
-        { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'b' } },
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'e',
+            from: { node: 'a' },
+            to: { node: 'b' },
+          },
+        },
       ],
     })
 
@@ -577,16 +618,33 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       }
       const props = (node as { properties?: Record<string, unknown> }).properties
       if (props !== undefined) {
-        for (const side of ['fromSide', 'toSide']) {
-          const field = props[side] as { description?: string } | undefined
-          if (field !== undefined) found.push(`${side}: ${field.description ?? ''}`)
-        }
+        // `side` INSIDE an endpoint since ADR-0037 slice 3, not a
+        // `fromSide`/`toSide` sibling — so the names this walk looks for
+        // moved, and a walk still looking for the old ones finds nothing
+        // and reports "no side is described" as loudly as it would report a
+        // real regression.
+        const field = props.side as { description?: string } | undefined
+        if (field !== undefined) found.push(`side: ${field.description ?? ''}`)
       }
       for (const value of Object.values(node)) walk(value)
     }
     walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
-    // edge.add and edge.patch each carry both sides.
-    expect(found).toHaveLength(4)
+    // TWO, not eight. `EdgeEnd` and `LineEnd` are each named in zod's
+    // registry, so each is emitted into `$defs` ONCE and referenced at its
+    // four sites (`from` and `to`, on that element's `add` and `patch`) —
+    // which is what keeps the tool table under ADR-0031 §5's ceiling. The
+    // description still reaches every writer; it is stated once per element
+    // instead of four times, and this walk does not follow `$ref`.
+    //
+    // It was 1 while only an edge had a named end. The line ops made
+    // `LineEnd` reachable from the tool, so its node arm's `side` is the
+    // second — one description per NAMED end, which is the shape this count
+    // is pinning.
+    //
+    // A count rather than a bare `>= 1`, for the reason it was 4 before: a
+    // walk that stopped matching would report zero, and zero is what a
+    // description nobody writes also looks like.
+    expect(found).toHaveLength(2)
     for (const line of found) expect(line, line).toMatch(/Omit/)
   })
 
@@ -647,7 +705,17 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const parsed = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      ops: [{ op: 'edge.add', fromNode: 'a', toNode: 'b', edge: { fromNode: 'a', toNode: 'b' } }],
+      ops: [
+        {
+          op: 'edge.add',
+          from: { node: 'a' },
+          to: { node: 'b' },
+          edge: {
+            from: { node: 'a' },
+            to: { node: 'b' },
+          },
+        },
+      ],
     })
     expect(parsed.success).toBe(false)
     const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
@@ -680,7 +748,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'triangle' } }],
+      ops: [{ op: 'edge.patch', id: 'e', patch: { to: { node: 'b', end: 'triangle' } } }],
     })
     expect(parsed.success).toBe(false)
 
@@ -688,7 +756,16 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'arrow', fromEnd: 'none' } }],
+      ops: [
+        {
+          op: 'edge.patch',
+          id: 'e',
+          patch: {
+            to: { node: 'b', end: 'arrow' },
+            from: { node: 'a', end: 'none' },
+          },
+        },
+      ],
     })
     expect(valid.success).toBe(true)
   })
@@ -700,7 +777,13 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -729,7 +812,13 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
         { id: 'x', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'node x' },
         { id: 'y', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'node y' },
       ],
-      edges: [{ id: 'x', fromNode: 'x', toNode: 'y' }],
+      edges: [
+        {
+          id: 'x',
+          from: { node: 'x' },
+          to: { node: 'y' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -821,7 +910,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     })
 
     expect(second.geometry).toEqual([])
-    expect(second.touched).toEqual({ nodes: [], edges: [], comments: [] })
+    expect(second.touched).toEqual({ nodes: [], edges: [], lines: [], comments: [] })
   })
 })
 
@@ -936,7 +1025,13 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+      ],
     })
     const { activities, viewports, notifier } = makeNotifier()
     const tool = createCanvasEditTool({ ...makeDeps(store), clientNotifier: notifier })
@@ -949,7 +1044,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     })
 
     expect(activities).toHaveLength(1)
-    expect(activities[0].touched).toEqual({ nodes: [], edges: ['e'], comments: [] })
+    expect(activities[0].touched).toEqual({ nodes: [], edges: ['e'], lines: [], comments: [] })
     expect(viewports).toEqual([])
   })
 
@@ -1136,8 +1231,16 @@ describe('wb_canvas_edit — region.set', () => {
         { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
       ],
       edges: [
-        { id: 'internal', fromNode: 'a', toNode: 'b' },
-        { id: 'leaving', fromNode: 'a', toNode: 'far' },
+        {
+          id: 'internal',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+        {
+          id: 'leaving',
+          from: { node: 'a' },
+          to: { node: 'far' },
+        },
       ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1165,9 +1268,21 @@ describe('wb_canvas_edit — region.set', () => {
         { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
       ],
       edges: [
-        { id: 'keep', fromNode: 'a', toNode: 'b' },
-        { id: 'drop', fromNode: 'b', toNode: 'a' },
-        { id: 'leaving', fromNode: 'a', toNode: 'far' },
+        {
+          id: 'keep',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+        {
+          id: 'drop',
+          from: { node: 'b' },
+          to: { node: 'a' },
+        },
+        {
+          id: 'leaving',
+          from: { node: 'a' },
+          to: { node: 'far' },
+        },
       ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1348,7 +1463,14 @@ describe('wb_canvas_edit — region.set', () => {
       mode: 'apply',
       ops: [
         // Touches `outside` — and this edge is nowhere near `g`.
-        { op: 'edge.add', edge: { id: 'outside', fromNode: 'far1', toNode: 'far2' } },
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'outside',
+            from: { node: 'far1' },
+            to: { node: 'far2' },
+          },
+        },
         { op: 'region.set', within: 'g', nodes: [] },
       ],
     })
@@ -1365,7 +1487,13 @@ describe('wb_canvas_edit — region.set', () => {
         { id: 'in', type: 'text', x: 20, y: 20, width: 10, height: 10, text: 'in' },
         { id: 'far', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
       ],
-      edges: [{ id: 'smuggled', fromNode: 'in', toNode: 'far' }],
+      edges: [
+        {
+          id: 'smuggled',
+          from: { node: 'in' },
+          to: { node: 'far' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -1710,8 +1838,16 @@ describe('wb_canvas_edit — tidy orders a row by its edges', () => {
         { id: 'search', type: 'text', x: 488, y: 400, width: 160, height: 60, text: 'search' },
       ],
       edges: [
-        { id: 'e1', fromNode: 'apigw', toNode: 'auth' },
-        { id: 'e2', fromNode: 'apigw', toNode: 'search' },
+        {
+          id: 'e1',
+          from: { node: 'apigw' },
+          to: { node: 'auth' },
+        },
+        {
+          id: 'e2',
+          from: { node: 'apigw' },
+          to: { node: 'search' },
+        },
       ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -2066,8 +2202,16 @@ describe('wb_canvas_edit — a selector where an id goes', () => {
       { id: 'far', type: 'text' as const, x: 900, y: 900, width: 80, height: 40, text: 'far' },
     ],
     edges: [
-      { id: 'ab', fromNode: 'a', toNode: 'b' },
-      { id: 'bfar', fromNode: 'b', toNode: 'far' },
+      {
+        id: 'ab',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+      {
+        id: 'bfar',
+        from: { node: 'b' },
+        to: { node: 'far' },
+      },
     ],
   }
 
@@ -2408,10 +2552,9 @@ describe('node.patch and a node type that does not have the key', () => {
 
   test("refuses a key the target node's type does not have, rather than dropping it", async () => {
     // `label` is on the patch allowlist because a GROUP has one. A text node
-    // does not, and the per-type schemas are non-strict, so the merge's
-    // re-parse strips the key and the write reports success over a document
-    // it did not change. Named, because a silent no-op is the one failure a
-    // caller cannot see.
+    // does not, so the merge's re-parse refuses it and the write must say
+    // which key and which type — a silent no-op is the one failure a caller
+    // cannot see.
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedCanvas(store, { nodes: [TEXT_NODE], edges: [] })
@@ -2648,17 +2791,49 @@ describe('the node extension on the write side', () => {
     expect(JSON.stringify(result.error?.issues)).toContain('an embed names the document')
   })
 
-  test('narrows a flat extension to the stored shape: an embed, or facets alone', () => {
+  test('reports a sub-pixel size rather than refusing its own answer', async () => {
+    // Both payloads here echo what is STORED, and the model's geometry is a
+    // real number since ADR-0037 slice 4 — so an output schema still saying
+    // `int` makes the tool answer with something its own contract refuses,
+    // which the MCP SDK raises as a failed call. Rounding belongs to the
+    // JSON Canvas projection, not to a read of the board.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      // No x/y, so the node is auto-placed and lands in `geometry` too.
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'n1', type: 'file', file: 'a.md', width: 120.5, height: 40.25 },
+        },
+      ],
+    })
+
+    const parsed = canvasEditOutputSchema.parse(result)
+    expect(parsed.geometry).toEqual([
+      { id: 'n1', x: expect.any(Number), y: expect.any(Number), width: 120.5, height: 40.25 },
+    ])
+    expect(parsed.snapshot.nodes[0]).toMatchObject({ width: 120.5, height: 40.25 })
+  })
+
+  test("narrows a flat extension to the model's fields: an embed, or facets alone", () => {
     const parse = (extension: Record<string, unknown>) =>
       canvasEditInputSchema.parse({
         workspaceId: 'ws',
         documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
         ops: [{ op: 'node.add', node: { type: 'text', text: 'x', 'x-whiteboard': extension } }],
       }).ops[0]
+    // In comes the FORMAT's union arm, under the published input key; out come
+    // the MODEL's two independent fields (ADR-0037). The key stays because it
+    // is what a model reads in `tools/list`; moving it is a tool-surface change.
     const embed = parse({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' })
     expect(embed.op === 'node.add' && embed.node['x-whiteboard']).toEqual({
-      kind: 'embed',
-      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
+      embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' },
     })
     const facets = parse({ facets: { 'example.kanban/v1': { status: 'todo' } } })
     expect(facets.op === 'node.add' && facets.node['x-whiteboard']).toEqual({
@@ -2789,5 +2964,199 @@ describe('wb_canvas_edit — a node created without a width', () => {
     }
     const nodes = await addTo(board, [{ id: 'new', type: 'text', text: 'added' }])
     expect(widthOf(nodes, 'new')).toBe(200)
+  })
+})
+
+/**
+ * A LINE is ink, not a relation
+ * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
+ * decision 2), so it is the one element that may end nowhere. The model has
+ * held one since the split; these are the ops that let anything but the
+ * editor author one.
+ */
+describe('wb_canvas_edit — line ops', () => {
+  const ONE_BOX: SpatialCanvas = {
+    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' }],
+    edges: [],
+  }
+
+  test('line.add draws ink between two bare points, which no edge can express', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, ONE_BOX)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'line.add',
+          line: {
+            id: 'l1',
+            from: { kind: 'point', point: { x: 10, y: 10 } },
+            to: { kind: 'point', point: { x: 90, y: 90 } },
+          },
+        },
+      ],
+    })
+
+    expect(result.applied).toBe(1)
+    expect(result.touched.lines).toEqual(['l1'])
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines).toEqual([
+      {
+        id: 'l1',
+        from: { kind: 'point', point: { x: 10, y: 10 } },
+        to: { kind: 'point', point: { x: 90, y: 90 } },
+      },
+    ])
+  })
+
+  test('line.add may anchor one end to a node and leave the other free', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, ONE_BOX)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'line.add',
+          line: {
+            id: 'l1',
+            from: { kind: 'node', node: 'a' },
+            to: { kind: 'point', point: { x: 300, y: 300 } },
+          },
+        },
+      ],
+    })
+
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines?.[0]?.from).toEqual({ kind: 'node', node: 'a' })
+  })
+
+  test('a line end naming a node that is not on the canvas is refused', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, ONE_BOX)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'line.add',
+            line: {
+              id: 'l1',
+              from: { kind: 'node', node: 'ghost' },
+              to: { kind: 'point', point: { x: 1, y: 1 } },
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/ghost/)
+  })
+
+  test('line.patch moves an end, and line.remove takes the ink away', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      ...ONE_BOX,
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 1, y: 1 } },
+        },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'line.patch', id: 'l1', patch: { to: { kind: 'node', node: 'a' } } }],
+    })
+    const patched = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(patched?.lines?.[0]?.to).toEqual({ kind: 'node', node: 'a' })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'line.remove', id: 'l1' }],
+    })
+    const removed = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(removed?.lines ?? []).toEqual([])
+  })
+
+  test('removing a node takes the lines anchored to it, and leaves free ink alone', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      ...ONE_BOX,
+      lines: [
+        {
+          id: 'anchored',
+          from: { kind: 'node', node: 'a' },
+          to: { kind: 'point', point: { x: 5, y: 5 } },
+        },
+        {
+          id: 'free',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 1, y: 1 } },
+        },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.remove', id: 'a' }],
+    })
+
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines?.map((line) => line.id)).toEqual(['free'])
+  })
+})
+
+/**
+ * `writeSpatialCanvas` resyncs by OMISSION, so every collection the batch
+ * does not carry back is deleted. The canvas's facets and its untouched
+ * comments were already carried for that reason; `lines` was not, so the
+ * editor could draw ink (slice 3b) and the next tool call anywhere on the
+ * board erased it.
+ */
+describe('wb_canvas_edit — ink the batch never mentions', () => {
+  test('keeps a line a previous author drew, through an unrelated edit', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' }],
+      edges: [],
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 9, y: 9 } },
+        },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.patch', id: 'a', patch: { text: 'edited' } }],
+    })
+
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines?.map((line) => line.id)).toEqual(['l1'])
   })
 })

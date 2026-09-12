@@ -3,11 +3,11 @@ import {
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
 } from '@kamiazya/whiteboard-canvas-render'
+import { jsonCanvasDocumentSchema, toJsonCanvas } from '@kamiazya/whiteboard-codec'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
   documentIdSchema,
-  spatialCanvasSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -42,7 +42,7 @@ export const canvasViewReferenceSchema = z
     /** Present only for a markdown document: its raw body. */
     body: z.string().optional(),
     /** Present only for a spatial document: its canvas. */
-    canvas: spatialCanvasSchema.optional(),
+    canvas: jsonCanvasDocumentSchema.optional(),
   })
   .strict()
 
@@ -71,7 +71,7 @@ export const canvasViewOutputSchema = z
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
     /** The document itself: the widget lays it out, it is not pre-rendered. */
-    scene: spatialCanvasSchema,
+    scene: jsonCanvasDocumentSchema,
     /**
      * The document's conversations, for what the scene's flat projection
      * cannot carry: a passage's words, a node set's outline. The pins still
@@ -136,7 +136,12 @@ export function createCanvasViewTool(deps: ServerDeps) {
       return {
         workspaceId: input.workspaceId,
         documentId: input.documentId,
-        scene: canvas,
+        // Projected, because the tool's published output schema is the WIRE
+        // shape and a client reading it may be another tool entirely. Before
+        // ADR-0037 this was the same object; now the model carries `comments`,
+        // `facets` and `embed` as its own fields and the format carries them
+        // under its extension key.
+        scene: toJsonCanvas(canvas),
         threads: readAnnotations(doc),
         ...(input.style === undefined ? {} : { style: input.style }),
         ...(themeFont === undefined ? {} : { themeFont }),
@@ -160,7 +165,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
                   ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
                   ...(loaded.name !== undefined ? { name: loaded.name } : {}),
                   ...(loaded.body !== undefined ? { body: loaded.body } : {}),
-                  ...(loaded.canvas !== undefined ? { canvas: loaded.canvas } : {}),
+                  ...(loaded.canvas !== undefined ? { canvas: toJsonCanvas(loaded.canvas) } : {}),
                 },
               ],
             ]

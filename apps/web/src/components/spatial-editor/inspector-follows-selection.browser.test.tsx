@@ -41,7 +41,7 @@ const panelOf = (c: HTMLElement) =>
   c.querySelector('[data-testid="facet-form-panel"]') as HTMLElement | null
 
 const shapeOf = (canvas: SpatialCanvas, id: string) =>
-  canvas.nodes.find((n) => n.id === id)?.['x-whiteboard']?.facets?.['visual.shape/v0']
+  canvas.nodes.find((n) => n.id === id)?.facets?.['visual.shape/v0']
 
 async function openInspector(container: HTMLElement, x: number, y: number) {
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement

@@ -47,8 +47,17 @@ export interface CorpusDocument {
  * - `cross-lingual` — a Japanese query for an English document (or the
  *   reverse). Structurally out of lexical reach, and the capability the
  *   research measured an embedding model actually delivering.
+ * - `emoji` — the wanted document SHOWS a thing rather than naming it.
+ *   Measured before the category existed: a raw 🚀 contributes zero tokens
+ *   (`ship it 🚀 today` indexes as `ship it today`), so a document whose
+ *   point is the picture is findable by nothing at all. `:rocket:` is the
+ *   exception and it is an ACCIDENT — the colons are not word characters,
+ *   so the run `rocket` falls out — which is why no query here is judged
+ *   against a shortcode's own English name: that one is already lexical,
+ *   and crediting it to this category would measure stage 0 against
+ *   itself. What is left is out of lexical reach today by construction.
  */
-export type QueryCategory = 'lexical' | 'bigram' | 'paraphrase' | 'cross-lingual'
+export type QueryCategory = 'lexical' | 'bigram' | 'paraphrase' | 'cross-lingual' | 'emoji'
 
 export interface JudgedQuery {
   readonly query: string
@@ -146,6 +155,36 @@ export const CORPUS_DOCUMENTS: readonly CorpusDocument[] = [
     ],
     edges: [{ id: 'f1', from: 'm1', to: 'm2', label: 'creates a starter document' }],
   },
+  // The two storage forms a person's emoji actually arrives in: pasted raw,
+  // and written as the shortcode the editor now draws. Both are here
+  // because they fail differently — raw contributes no token at all, while
+  // a shortcode leaks its English name and nothing else.
+  {
+    path: 'notes/untitled-4',
+    name: '打ち上げメモ',
+    kind: 'markdown',
+    tags: ['plan'],
+    body: ['# 打ち上げメモ', '', '次のリリースは 🚀 で行く。準備は整った。'].join('\n'),
+  },
+  {
+    path: 'notes/untitled-5',
+    name: '障害対応ログ',
+    kind: 'markdown',
+    tags: ['ops'],
+    body: ['# 障害対応ログ', '', '本番が :fire: になった。原因は設定ミス。'].join('\n'),
+  },
+  // A canvas too, because the seam has to be text-level rather than
+  // markdown-level: a node's label is indexed by the same path and would
+  // otherwise be the surface that quietly keeps the old behaviour.
+  {
+    path: 'plans/untitled-6',
+    name: 'リリース計画',
+    kind: 'spatial',
+    nodes: [
+      { id: 'r1', text: '出荷 🎉' },
+      { id: 'r2', text: '振り返り' },
+    ],
+  },
 ]
 
 export const JUDGED_QUERIES: readonly JudgedQuery[] = [
@@ -195,4 +234,15 @@ export const JUDGED_QUERIES: readonly JudgedQuery[] = [
     category: 'cross-lingual',
     relevant: { 'notes/untitled-2': 3 },
   },
+
+  // --- emoji: the document shows the thing, and never spells it ---
+  // Each judged against a document whose text shares no token with the
+  // query, which the corpus guard checks — so a hit here can only come
+  // from the emoji's own vocabulary reaching the index.
+  { query: 'rocket', category: 'emoji', relevant: { 'notes/untitled-4': 3 } },
+  { query: 'ロケット', category: 'emoji', relevant: { 'notes/untitled-4': 3 } },
+  // CLDR's Japanese for 🔥, against the SHORTCODE document — its English
+  // name is already lexical there, and its Japanese is not.
+  { query: '炎', category: 'emoji', relevant: { 'notes/untitled-5': 3 } },
+  { query: 'party', category: 'emoji', relevant: { 'plans/untitled-6': 3 } },
 ]

@@ -180,8 +180,11 @@ describe('dressing a box with a stencil', () => {
     expect(result.applied).toBe(1)
     const node = canvas.nodes.find((n) => n.id === 'db')
     expect(node).toBeDefined()
-    expect(node?.color).toBe('5')
     expect(resolveNodeShape(node as never)).toBe('cylinder')
+    // And NO colour: the bundled vocabulary spends silhouette alone, so the
+    // colour channel is free for whatever second axis the drawing declares
+    // (ADR-0036 §5).
+    expect(node?.color).toBeUndefined()
     expect(resolveNodeStencil(node as never)).toBe('visual.datastore')
     // The text the caller wrote is untouched: a stencil says what a box IS,
     // never what it says.
@@ -203,7 +206,7 @@ describe('dressing a box with a stencil', () => {
     for (const id of ['a', 'b']) {
       const node = canvas.nodes.find((n) => n.id === id)
       expect(resolveNodeStencil(node as never)).toBe('visual.service')
-      expect(node?.color).toBe('4')
+      expect(resolveNodeShape(node as never)).toBe('octagon')
     }
   })
 
@@ -222,23 +225,20 @@ describe('dressing a box with a stencil', () => {
     ).rejects.toThrow(/visual\.datastore/)
   })
 
-  test('re-dressing a box takes the NEW stencil\u2019s colour, not the one it already had', async () => {
-    // Found by re-reading the diff. `dressWithStencil` decided "the caller
-    // was explicit" by looking at `node.color` — which on a patch is always
-    // set, from an earlier stencil or an earlier edit. So every re-dress
-    // took the new silhouette and badge and kept the OLD colour: a box
-    // belonging to neither construct, which is ADR-0033's `excess` shape.
-    // The four tests written before this one all dressed colourless boxes.
+  test('re-dressing a box takes the NEW silhouette and keeps the colour the caller set', async () => {
+    // The colour here is the drawing's SECOND axis — health, say — and it
+    // belongs to nobody else. Changing what a box IS must not overwrite what
+    // the drawing says about how it is doing (ADR-0036 §5).
     const { canvas } = await run([
       {
         op: 'node.add',
-        node: { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A' },
+        node: { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A', color: '1' },
       },
       { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.datastore' },
       { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.queue' },
     ])
     const node = canvas.nodes.find((n) => n.id === 'a')
-    expect(node?.color).toBe('6')
+    expect(node?.color).toBe('1')
     expect(resolveNodeShape(node as never)).toBe('parallelogram')
     expect(resolveNodeStencil(node as never)).toBe('visual.queue')
   })
@@ -328,11 +328,35 @@ describe('a workspace\u2019s own stencil library', () => {
     // other. Asserted on the STORED payload rather than through a resolver:
     // a resolver takes a registry, and the question here is what the
     // document now says, not what some registry can make of it.
-    expect(
-      (node as { 'x-whiteboard'?: { facets?: Record<string, unknown> } })['x-whiteboard']?.facets?.[
-        'visual.stencil/v0'
-      ],
-    ).toEqual({ stencil: 'workspace.bucket' })
+    expect(node?.facets?.['visual.stencil/v0']).toEqual({ stencil: 'workspace.bucket' })
+  })
+
+  test('re-dressing takes the NEW stencil\u2019s colour, not the one it already had', async () => {
+    // Found by re-reading the diff. `dressWithStencil` decided "the caller
+    // was explicit" by looking at `node.color` — which on a patch is always
+    // set, from an earlier stencil or an earlier edit. So every re-dress
+    // took the new silhouette and badge and kept the OLD colour: a box
+    // belonging to neither construct, which is ADR-0033's `excess` shape.
+    //
+    // It lives HERE, on library stencils, because the bundled set spends no
+    // colour any more (ADR-0036 §5) and so cannot exercise the rule. A
+    // vocabulary somebody else authors still may, and this is the guard that
+    // keeps `requestedColor` a parameter rather than a read off the node.
+    const library = {
+      'visual.stencils/v0': {
+        stencils: {
+          cold: { displayName: 'Cold', color: '5' },
+          hot: { displayName: 'Hot', color: '6' },
+        },
+      },
+    }
+    const { canvas } = await runWithLibrary(library, [
+      ...addWearing('workspace.cold'),
+      { op: 'node.patch', id: 'b', patch: {}, stencil: 'workspace.hot' },
+    ])
+    const node = canvas.nodes.find((n) => n.id === 'b')
+    expect(node?.color).toBe('6')
+    expect(resolveNodeStencil(node as never)).toBe('workspace.hot')
   })
 
   test('refuses a library id in a workspace that has no library, listing what it does have', async () => {
@@ -382,6 +406,6 @@ describe('a workspace\u2019s own stencil library', () => {
       { 'visual.stencils/v0': { stencils: { bucket: { displayName: 'Bucket' } } } },
       addWearing('visual.datastore'),
     )
-    expect(canvas.nodes.find((n) => n.id === 'b')?.color).toBe('5')
+    expect(resolveNodeShape(canvas.nodes.find((n) => n.id === 'b') as never)).toBe('cylinder')
   })
 })

@@ -21,7 +21,7 @@ function canvasWith(resolved: boolean): SpatialCanvas {
   return {
     nodes: [{ id: 'n1', type: 'text', x: 40, y: 40, width: 200, height: 90, text: 'The plan' }],
     edges: [],
-    'x-whiteboard': { comments: [{ ...COMMENT, resolved }] },
+    comments: [{ ...COMMENT, resolved }],
   }
 }
 
@@ -92,7 +92,7 @@ it('keeps a conversation on the outer edge painting while it ramps, past the re-
   const outer: SpatialCanvas = {
     nodes: [{ id: 'n1', type: 'text', x: 40, y: 150, width: 200, height: 80, text: 'The plan' }],
     edges: [],
-    'x-whiteboard': { comments: [{ ...COMMENT, x: 300, y: 70, resolved: false }] },
+    comments: [{ ...COMMENT, x: 300, y: 70, resolved: false }],
   }
   const view = (resolved: boolean) => (
     <div style={{ width: 520, height: 300 }}>
@@ -100,7 +100,7 @@ it('keeps a conversation on the outer edge painting while it ramps, past the re-
         defaultTool="select"
         canvas={{
           ...outer,
-          'x-whiteboard': { comments: [{ ...COMMENT, x: 300, y: 70, resolved }] },
+          comments: [{ ...COMMENT, x: 300, y: 70, resolved }],
         }}
         createId={() => 'id-1'}
         onChange={vi.fn()}

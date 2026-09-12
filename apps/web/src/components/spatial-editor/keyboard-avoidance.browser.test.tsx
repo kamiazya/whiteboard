@@ -233,10 +233,7 @@ const THREAD: CommentThread = {
 it("the thread card's reply box rises above the keyboard, card and all", async () => {
   const fake = installFakeVisualViewport()
   const { container } = render(
-    <Host
-      start={{ nodes: [], edges: [], 'x-whiteboard': { comments: [COMMENT] } }}
-      threads={[THREAD]}
-    />,
+    <Host start={{ nodes: [], edges: [], comments: [COMMENT] }} threads={[THREAD]} />,
   )
   const root = rootOf(container)
   await vi.waitFor(() =>
@@ -275,10 +272,7 @@ it('focusing a reply box that overhangs the root never scrolls the root under th
   }
   installFakeVisualViewport()
   const { container } = render(
-    <Host
-      start={{ nodes: [], edges: [], 'x-whiteboard': { comments: [COMMENT] } }}
-      threads={[long]}
-    />,
+    <Host start={{ nodes: [], edges: [], comments: [COMMENT] }} threads={[long]} />,
   )
   const root = rootOf(container)
   await vi.waitFor(() =>
@@ -316,10 +310,7 @@ it('focusing a reply box that overhangs the root never scrolls the root under th
 it('a focused button raises no keyboard, so it moves nothing', async () => {
   const fake = installFakeVisualViewport()
   const { container } = render(
-    <Host
-      start={{ nodes: [], edges: [], 'x-whiteboard': { comments: [COMMENT] } }}
-      threads={[THREAD]}
-    />,
+    <Host start={{ nodes: [], edges: [], comments: [COMMENT] }} threads={[THREAD]} />,
   )
   const root = rootOf(container)
   await vi.waitFor(() =>

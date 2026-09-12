@@ -68,7 +68,12 @@ describe('wb_document_search', () => {
         { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
         {
           op: 'edge.add',
-          edge: { id: 'e1', fromNode: 'a', toNode: 'b', label: 'depends on redis' },
+          edge: {
+            id: 'e1',
+            from: { node: 'a' },
+            to: { node: 'b' },
+            label: 'depends on redis',
+          },
         },
       ],
     })

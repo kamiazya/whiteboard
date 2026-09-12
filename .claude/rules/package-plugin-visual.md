@@ -245,7 +245,26 @@ makes a prefix usable: `:ro` scores `rocket` and `rolling_on_the_floor_laughing`
 alike, and on CLDR order alone the laughing face wins because Smileys is the
 first group.
 
-Three readers, one vocabulary, and the contract between them is asserted
+`./emoji/searchable` is the INDEX half — `emojiSearchText(text)`, the extra
+text a document earns for SHOWING a thing rather than naming it. It costs the
+same 190KB as `/emoji/search` and is taken the same two ways for the same
+reason: `server-core` statically (a server has no bundle to keep small and it
+indexes on every call), `apps/web` by dynamic import inside the files search
+(68KB of rows plus 115KB of Japanese, and somebody who never searches should
+not carry it).
+
+It answers TEXT rather than tokens, deliberately. How 「ロケット」 is cut up
+is `packages/search`'s scheme, and a caller returning tokens would be a second
+place that decides it — so the seam is `fullTextSearch`'s `alsoIndex`, which
+keeps that package depending on `model` alone rather than reaching up for a
+plugin. Two things it measured: a grapheme segmenter is what matches the 730
+multi-code-point rows (scanning code points finds a flag's base character and
+answers with the wrong thing), and each row is deduplicated WORD-wise, because
+`emojiSlug('rocket')` is `rocket` and a single-word name would otherwise emit
+the term twice — scoring a document that merely shows a rocket above one that
+writes the word.
+
+Four readers, one vocabulary, and the contract between them is asserted
 rather than assumed: `search.test.ts` checks that every slug the completion
 offers is one `emojiForShortcode` resolves, and to the same character. A
 completion offering a name the renderer draws as literal text is the feature
@@ -279,58 +298,42 @@ Geometry rather than the `lucide-react` package because the renderer has no
 React: lucide-react ships components, and only the symbol picker can use them.
 Follow the README's recipe when adding one, and keep the table alphabetical.
 
-## The contributed edge ROUTER (`visual.path/v0`)
+## The edge router seam, and the facet that is no longer here
 
-`edge-router.ts` is this plugin's `EdgeRouter`, registered as `routers` on
-the render contribution and claimed by `readRouting` — the first real
-customer of canvas-render's router seam, and the reason it exists.
+`visual.path/v0` and `edge-router.ts` are GONE
+([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4).
+An edge's bends are `edge.bends`, a field of the model, and the route through
+them is `canvas-render`'s `layout/edges/bend-route.ts`. Do not re-add a bend
+facet here.
 
-**What it is FOR is the part to keep.** The renderer's three routings all
-COMPUTE a path from two boxes and the obstacles between them, so none of
-them can honour a bend somebody placed by hand, and JSON Canvas has no
-waypoint to put one in. So the bends live in this plugin's own facet, and
-this plugin draws them. A reader that does not know the plugin draws the
-same edge with the built-in routing — which is exactly what makes a bend a
-rendering preference rather than content.
+**Why they existed and why they left, because the reasoning is what stops
+this being re-litigated.** JSON Canvas has no waypoint, and the model WAS the
+format, so a bend could not be a field — the only place it could live was a
+plugin's facet, and drawing it needed a router contribution point plus the
+extraction of `packages/scene`. ADR-0037's own table cites that as the
+worked example of what the old binding cost. Once the model was free, the
+three answers ADR-0037 decision 3 asks of a native field all came back yes
+(a person authors a bend by dragging a handle the CORE editor draws; the
+renderer and the editor both read it; its projection is `extension`), and a
+core field that only a plugin could draw would DROP authored geometry the
+record still holds — silently, which is the failure this repo has already
+corrected once, in `lowlight`.
 
-Three decisions worth not re-litigating:
+**The seam itself stays, and it now has no bundled consumer.**
+`RenderContribution.routers` / `readRouting` are a published contract and
+were the right seam; what they carried turned out to be core. That is a
+reachability gap of the kind `codebase-auditor` flags, so it is recorded
+rather than left to be discovered: see the backlog issue
+`issues/router-seam-has-no-bundled-consumer`. Do not delete the seam to close
+it, and do not invent a router to justify it.
 
-- **A separate facet from `visual.edges/v0`, not a field on it.** `edges`
-  picks between routings; this one supplies the path. An edge carrying
-  bends is not choosing a routing at all. It is also why the routing
-  vocabulary was NOT widened — canvas-render's rule records what widening
-  it cost.
-- **The chosen SIDES are honoured, not re-derived from the first bend.**
-  The anchor pass sees the whole edge set (crowding, fan-out lanes,
-  crossings) and one edge's router cannot improve on it; an edge that
-  wants a particular side says so through JSON Canvas's own
-  `fromSide`/`toSide`, which that pass already reads. The router only
-  computes an endpoint itself when NO side was resolved, and then it faces
-  the neighbouring bend rather than a compiled-in default.
-- **A payload the facet's own schema refuses draws the BUILT-IN route**,
-  never half a path. Same degradation as an unknown shape id.
-
-The derived editor answers `unsupported` for it — a list of points is
-outside `deriveFacetForm`'s vocabulary — so the inspector shows the bends
-read-only. That is the form layer's honest signal rather than a gap, and
-the affordance a person uses is a DRAG on the canvas
-(`apps/web`'s `EdgeBendHandles`), not a form.
-
-One thing that surface measured belongs here, because it is a property of
-where a bend LIVES rather than of the editor: the midpoint of a run is
-already spoken for. `edgeLabelAnchor` draws an edge's label there and
-double-pressing there opens its editor, so the add-a-bend ghosts sit at a
-third and two thirds of each run instead. Placed at the midpoint they
-swallowed the second press and failed every case in
-`edge-label-edit.browser.test.tsx` while the bend tests stayed green — two
-affordances aiming at the same pixel.
-
-
-The end-to-end guard is `pnpm smoke:e2e`. Nothing in the type system
-connects the facet `wb_facet_set` writes to the polyline the daemon emits,
-so that step is what would catch the contribution being dropped from the
-bundled plugin, or the bends being lost between the Loro edge bucket and
-the layout.
+What DID stay here, because it is a property of where a bend lives rather
+than of any facet: the midpoint of an edge run is already spoken for.
+`edgeLabelAnchor` draws an edge's label there and double-pressing there opens
+its editor, so the add-a-bend ghosts sit at a third and two thirds of each
+run instead. Placed at the midpoint they swallowed the second press and
+failed every case in `edge-label-edit.browser.test.tsx` while the bend tests
+stayed green — two affordances aiming at the same pixel.
 
 ## The theme facet and the bundled theme assets (ADR-0030)
 

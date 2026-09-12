@@ -23,7 +23,11 @@ const ownInk = (path: readonly { x: number; y: number }[], n: SpatialNode) =>
 it('a named pair that forces a route through its own box is overruled', () => {
   const nodes = [node('api', 160, 380), node('auth', 400, 380)]
   const edges: CanvasEdge[] = [
-    { id: 'e', fromNode: 'api', toNode: 'auth', fromSide: 'bottom', toSide: 'top' },
+    {
+      id: 'e',
+      from: { node: 'api', side: 'bottom' as const },
+      to: { node: 'auth', side: 'top' as const },
+    },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'straight')
   const routed = routeEdge(nodes, edges[0] as CanvasEdge, 'straight', anchors.get('e'))
@@ -36,7 +40,11 @@ it('a named pair that forces a route through its own box is overruled', () => {
 it('a named pair that routes cleanly is kept as named', () => {
   const nodes = [node('web', 280, 80), node('api', 160, 380)]
   const edges: CanvasEdge[] = [
-    { id: 'e', fromNode: 'web', toNode: 'api', fromSide: 'bottom', toSide: 'top' },
+    {
+      id: 'e',
+      from: { node: 'web', side: 'bottom' as const },
+      to: { node: 'api', side: 'top' as const },
+    },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'straight')
   const routed = routeEdge(nodes, edges[0] as CanvasEdge, 'straight', anchors.get('e'))

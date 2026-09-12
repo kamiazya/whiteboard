@@ -82,32 +82,54 @@ describe('workspace-record growth scoreboard', () => {
 
   it('pins record size against document count (no edits)', () => {
     // Each pre-attached container costs a document ~16-31B here. The last
-    // move was the proposal layer's `proposals` map (ADR-0029) joining
-    // `CONTENT_CONTAINER_KEYS`: 919 -> 950 at one document, 14860 -> 16082 at
-    // fifty. Before it, the annotation layer's `threads` map (ADR-0026) took
-    // the same step: 889 -> 919 and 13866 -> 14860. That is the price of
-    // pre-attaching — a container attached on first READ instead would cost
-    // nothing here and clear the UndoManager's redo stack, which is the trade
-    // the pre-attached set exists to refuse.
-    expect(build(1, 0).afterCreateBytes).toBe(950)
-    expect(build(10, 0).afterCreateBytes).toBe(3481)
-    expect(build(50, 0).afterCreateBytes).toBe(16082)
+    // move was the ink plane's `lines` map (ADR-0038 decision 2) joining
+    // `CONTENT_CONTAINER_KEYS`: 950 -> 974 at one document, 16082 -> 17284 at
+    // fifty. Before it, the proposal layer's `proposals` map (ADR-0029) took
+    // the same step (919 -> 950, 14860 -> 16082), and the annotation layer's
+    // `threads` map (ADR-0026) before that (889 -> 919, 13866 -> 14860). That
+    // is the price of pre-attaching — a container attached on first READ
+    // instead would cost nothing here and clear the UndoManager's redo stack,
+    // which is the trade the pre-attached set exists to refuse.
+    //
+    // Both halves of that were re-measured when `lines` joined, because the
+    // cheap-looking alternative was tried first: reaching for the plane only
+    // when a board had ink cost +156B per edit on the scoreboard below (a
+    // `getMap` on an unheld root registers it, and the commit writes that
+    // down), and asking the document whether it held the root first made the
+    // undo test go red instead. The trade this list already records is the
+    // one that survives both.
+    expect(build(1, 0).afterCreateBytes).toBe(974)
+    expect(build(10, 0).afterCreateBytes).toBe(3662)
+    expect(build(50, 0).afterCreateBytes).toBe(16810)
   })
 
   it('pins oplog growth per edit and the shallow reclaim', () => {
     const n = build(10, 100)
     // The delta LOG price of an edit — what accumulates between compactions.
-    expect(n.updateBytes).toBe(178660)
+    //
+    // 178660 -> 156960 (-12%) when ADR-0037 moved the canvas's facets to a key
+    // of their own. The saving is not the move: it is that the write path used
+    // to emit a DELETE for the canvas envelope on every save, including the
+    // overwhelming majority of saves on boards that never had one. ~22B per
+    // edit, forever, for a key that was not there. This scoreboard is the only
+    // thing that said so — nothing else in the suite can see an op that costs
+    // bytes and changes no state.
+    expect(n.updateBytes).toBe(156960)
     // The stored-snapshot price of the same history — Loro's snapshot
-    // encoding compresses it to ~8B/edit.
-    expect(n.fullBytes).toBe(11699)
+    // encoding compresses it to ~8B/edit. 11699 -> 11040 for the same reason
+    // the delta log shrank: 1000 fewer no-op deletes in the history; 11040 ->
+    // 11136 when the ink plane joined the pre-attached set, which is the
+    // create-time price of one more container across ten documents and not a
+    // per-edit cost — `updateBytes` above did not move.
+    expect(n.fullBytes).toBe(11136)
     // The reclaim: a shallow cut at the current frontier collapses the whole
     // edit history. It is no longer byte-IDENTICAL to the create-time record:
     // since the comments container (ADR-0024) joined the pre-attached set, a
     // container that has never been written encodes leaner in a shallow
-    // snapshot than at create time (measured 3456 vs 3481, and the gap grows
+    // snapshot than at create time (measured 3317 vs 3481, and the gap grows
     // with each such container — 9B when comments was the only one, 27B once
-    // threads joined), so the cut is pinned exactly AND bounded by the
+    // threads joined, 164B once ADR-0037 stopped writing a canvas envelope
+    // key on a board that has no facets), so the cut is pinned exactly AND bounded by the
     // create-time size — the reclaim story ("compaction takes back everything
     // the edits added") is the invariant, byte identity was only its
     // strongest available form.

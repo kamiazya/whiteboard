@@ -6,7 +6,6 @@ import {
   namespacedIdSchema,
 } from '@kamiazya/whiteboard-facet-engine'
 import type {
-  CanvasEdge,
   EdgeRoutingStyle,
   ExtensionFacets,
   LineJumps,
@@ -15,9 +14,9 @@ import type {
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
-  integerSchema,
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
+import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import {
   EDGE_ROUTING_OPTIONS,
@@ -49,65 +48,6 @@ export type VisualEdgesFacet = z.infer<typeof visualEdgesFacetSchema>
 export const VISUAL_EDGES_KEY = 'visual.edges/v0'
 
 /**
- * A ceiling rather than an unbounded list: every bend is drawn on every
- * frame of a drag, and a document is written by agents as well as people. It
- * is deliberately far above what a person places by hand — what it stops is
- * a generated payload nobody meant.
- */
-const MAX_WAYPOINTS = 64
-
-/**
- * `visual.path/v0` — where an edge BENDS, in canvas coordinates.
- *
- * A separate facet from `visual.edges/v0` rather than a field on it, because
- * the two answer different questions: `edges` picks between routings that
- * COMPUTE a path, and this one supplies the path. An edge carrying bends is
- * not choosing a routing at all — which is why the plugin draws it with a
- * router of its own rather than by widening the routing vocabulary.
- *
- * JSON Canvas has no waypoint, so this is exactly the kind of concept that
- * belongs on the facet side: nothing is lost when the document is read by a
- * reader that does not know this plugin — the edge draws with the built-in
- * routing again.
- *
- * The derived editor cannot express a list of points, so this facet answers
- * `unsupported` there. That is the honest signal ADR-0013's form layer is
- * built to give: bends want a drag affordance, not a form.
- */
-export const visualPathFacetSchema = z.object({
-  // Integers, the way every other coordinate in the model is stored: the
-  // drag rounds before it writes, and a fractional anchor is the class that
-  // survives one session and vanishes on the next reload.
-  waypoints: z
-    .array(z.object({ x: integerSchema, y: integerSchema }))
-    .min(1)
-    .max(MAX_WAYPOINTS),
-})
-
-export type VisualPathFacet = z.infer<typeof visualPathFacetSchema>
-
-export const VISUAL_PATH_KEY = 'visual.path/v0'
-
-/**
- * The bends this edge stores, or none — its own facet and nothing else, the
- * way `resolveEdgeOwnStyle` reads the routing. A payload the schema refuses
- * answers with none, so a malformed write draws the built-in route rather
- * than half a path.
- */
-export function resolveEdgeWaypoints(
-  edge: CanvasEdge,
-  registry: FacetRegistry = bundledFacetRegistry,
-): readonly { readonly x: number; readonly y: number }[] {
-  const stored = edge['x-whiteboard']?.facets?.[VISUAL_PATH_KEY]
-  if (stored === undefined) return []
-  const resolution = registry.resolveFacetPayload(VISUAL_PATH_KEY, stored)
-  if (resolution.kind !== 'resolved') return []
-  // Re-parse rather than cast: the registry resolved through this very
-  // schema, so this cannot fail — but it keeps the type honest.
-  return visualPathFacetSchema.parse(resolution.value).waypoints
-}
-
-/**
  * `visual.shape/v0` — what silhouette this node draws. The vocabulary
  * matches canvas-render's outline decomposition (its absent value is the
  * historic rect, deliberately unrepresentable here too — removing the facet
@@ -115,12 +55,49 @@ export function resolveEdgeWaypoints(
  * since this package cannot depend on it.
  */
 export const visualShapeFacetSchema = z.object({
-  kind: z.enum(['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder']),
+  kind: z.enum(['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder', 'octagon']),
 })
 
 export type VisualShapeFacet = z.infer<typeof visualShapeFacetSchema>
 
 export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
+
+/**
+ * `visual.axes/v0` — which of its own facets a canvas treats as SEMANTIC
+ * AXES, so a reader can tell a distinction it means from a distinction it
+ * merely draws.
+ *
+ * A board carries several at once: an infrastructure drawing wants
+ * silhouette for what a component IS and colour for whether it is healthy,
+ * and those are two axes competing for two channels. Without a declaration
+ * the second one has nowhere to live — anything a document says about its
+ * boxes beyond frame, node kind and stencil is invisible to every reader
+ * that did not write it, so a colour spent on it looks like decoration.
+ *
+ * A LIST OF KEYS rather than "every facet is an axis", and that is the whole
+ * design. `visual.shape/v0` is a facet and is emphatically not an axis — it
+ * says what a box DRAWS, not what it IS — and nothing about a facet's shape
+ * reveals which kind it is. Only the document knows, so the document says.
+ *
+ * The keys are not checked against the registry here: a canvas may name an
+ * axis carried by a facet a later build registers, or one this deployment
+ * disabled, and losing the whole declaration to that would cost more than
+ * the stray key does. A key no box carries simply contributes no partition.
+ */
+export const visualAxesFacetSchema = z.object({
+  axes: z.array(
+    z
+      .string()
+      .regex(
+        /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/,
+        'must be a facet key like "visual.shape/v0"',
+      ),
+  ),
+})
+
+export type VisualAxesFacet = z.infer<typeof visualAxesFacetSchema>
+
+export const VISUAL_AXES_KEY = 'visual.axes/v0'
 
 /**
  * A node's badge: a named icon from the renderer's vendored set, or a
@@ -259,6 +236,21 @@ export const visualPlugin = definePlugin({
   displayName: 'Visual style',
   facets: [
     defineFacet({
+      name: 'axes',
+      displayName: 'Semantic axes',
+      version: 'v0',
+      // CANVAS only. An axis is a statement about the whole drawing — "on
+      // this board, colour means health" — and the same sentence attached to
+      // one node would say nothing a reader could act on.
+      targets: ['canvas'],
+      schema: visualAxesFacetSchema,
+      // No editor spec, deliberately: there is no control for this yet, and
+      // a derived form over a free list of facet keys would be a text box
+      // that writes a key nobody can verify. Written today through
+      // `wb_facet_set`, which is what a model reaches for, and the UI comes
+      // when there is a second axis worth picking from a list.
+    }),
+    defineFacet({
       name: 'edges',
       displayName: 'Edges',
       version: 'v0',
@@ -297,16 +289,6 @@ export const visualPlugin = definePlugin({
       },
     }),
     defineFacet({
-      name: 'path',
-      displayName: 'Bends',
-      version: 'v0',
-      // Edges only: a bend is a property of ONE line. The canvas-wide
-      // question ("how are edges drawn here") is `visual.edges`, and a
-      // board-wide list of points would mean nothing.
-      targets: ['edge'],
-      schema: visualPathFacetSchema,
-    }),
-    defineFacet({
       name: 'shape',
       displayName: 'Shape',
       version: 'v0',
@@ -334,6 +316,11 @@ export const visualPlugin = definePlugin({
               payload: { kind: 'hexagon' },
               label: 'Hexagon',
               glyph: { kind: 'shape', name: 'hexagon' },
+            },
+            {
+              payload: { kind: 'octagon' },
+              label: 'Octagon',
+              glyph: { kind: 'shape', name: 'octagon' },
             },
             {
               payload: { kind: 'parallelogram' },
@@ -498,8 +485,7 @@ export function resolveCanvasEdgeStyle(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): EdgeRouting {
-  const extension = canvas['x-whiteboard']
-  const stored = extension?.facets?.[VISUAL_EDGES_KEY]
+  const stored = canvas.facets?.[VISUAL_EDGES_KEY]
   if (stored !== undefined) {
     const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
     if (resolution.kind === 'resolved') {
@@ -563,7 +549,7 @@ export function resolveEffectiveCanvasEdgeStyle(
  */
 export function resolveEdgeStyle(
   canvas: SpatialCanvas,
-  edge: CanvasEdge,
+  edge: RoutableElement,
   registry: FacetRegistry = bundledFacetRegistry,
 ): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
   const own = resolveEdgeOwnStyle(edge, registry)
@@ -581,10 +567,12 @@ export function resolveEdgeStyle(
  * the edge actually holds, and a resolved value cannot say.
  */
 export function resolveEdgeOwnStyle(
-  edge: CanvasEdge,
+  // Either element: a LINE carries the same facet bucket an edge does, and
+  // what this reads is the bucket (ADR-0038 decision 2).
+  edge: RoutableElement,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualEdgesFacet {
-  const stored = edge['x-whiteboard']?.facets?.[VISUAL_EDGES_KEY]
+  const stored = edge.facets?.[VISUAL_EDGES_KEY]
   if (stored === undefined) return {}
   const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
   if (resolution.kind !== 'resolved') return {}
@@ -602,7 +590,7 @@ export function resolveCanvasTheme(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): string | undefined {
-  const stored = canvas['x-whiteboard']?.facets?.[VISUAL_THEME_KEY]
+  const stored = canvas.facets?.[VISUAL_THEME_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_THEME_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined
@@ -618,7 +606,7 @@ export function resolveNodeShape(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualShapeFacet['kind'] | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_SHAPE_KEY]
+  const stored = node.facets?.[VISUAL_SHAPE_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_SHAPE_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined
@@ -652,7 +640,7 @@ export function resolveNodeSymbol(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  return readSymbol(node['x-whiteboard']?.facets, registry)
+  return readSymbol(node.facets, registry)
 }
 
 /** The symbol a SPATIAL document wears, stored on its canvas envelope. */
@@ -660,7 +648,7 @@ export function resolveCanvasSymbol(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  return readSymbol(canvas['x-whiteboard']?.facets, registry)
+  return readSymbol(canvas.facets, registry)
 }
 
 /**
@@ -684,7 +672,7 @@ export function resolveNodeTextAlign(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualTextFacet['align'] | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_TEXT_KEY]
+  const stored = node.facets?.[VISUAL_TEXT_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_TEXT_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined

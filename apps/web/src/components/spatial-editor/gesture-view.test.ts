@@ -24,7 +24,13 @@ const canvas: SpatialCanvas = {
     { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
     { id: 'g', type: 'group', x: 80, y: 80, width: 200, height: 120 },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 const notLocked = () => false
@@ -125,12 +131,10 @@ describe('ghostCommentObstacles', () => {
 
   const withComments: SpatialCanvas = {
     ...canvas,
-    'x-whiteboard': {
-      comments: [
-        { id: 'rides', x: 220, y: 160, text: 'on the carried node', targetNodeId: 'a' },
-        { id: 'stays', x: 486, y: 286, text: 'on the bystander', targetNodeId: 'b' },
-      ],
-    },
+    comments: [
+      { id: 'rides', x: 220, y: 160, text: 'on the carried node', targetNodeId: 'a' },
+      { id: 'stays', x: 486, y: 286, text: 'on the bystander', targetNodeId: 'b' },
+    ],
   }
 
   it('leaves out the bubble of a comment that rides the ghost', () => {
@@ -153,7 +157,7 @@ describe('ghostCommentObstacles', () => {
   it('counts a free-floating comment as a bystander: it has no node to ride', () => {
     const free: SpatialCanvas = {
       ...canvas,
-      'x-whiteboard': { comments: [{ id: 'rides', x: 220, y: 160, text: 'anchored to a spot' }] },
+      comments: [{ id: 'rides', x: 220, y: 160, text: 'anchored to a spot' }],
     }
     expect(ghostCommentObstacles(free, committed(), new Set(['a']))).toContainEqual({
       x: 234,

@@ -168,7 +168,10 @@ describe('row order by edges', () => {
   // a quarter less ink. Telling the model so, in the skill or in the call's
   // answer, moved nothing in nine trials; tidy moves it.
   const edges = (pairs: readonly (readonly [string, string])[]) =>
-    pairs.map(([fromNode, toNode]) => ({ fromNode, toNode }))
+    pairs.map(([fromNode, toNode]) => ({
+      from: { node: fromNode },
+      to: { node: toNode },
+    }))
 
   it('a box whose same-row connections all lie to one side swaps with the nearest of them', () => {
     const nodes = [
@@ -881,7 +884,10 @@ describe('tidy properties', () => {
     const nodes = plainNodes(rects)
     const edges = pairs
       .filter(([a, b]) => a !== b && a < nodes.length && b < nodes.length)
-      .map(([a, b]) => ({ fromNode: `n${a}`, toNode: `n${b}` }))
+      .map(([a, b]) => ({
+        from: { node: `n${a}` },
+        to: { node: `n${b}` },
+      }))
     const once = applyMoves(nodes, tidyNodes(nodes, { edges }))
     expect(tidyNodes(once, { edges })).toEqual([])
   })
@@ -943,8 +949,8 @@ describe('tidy properties', () => {
         edges: pairs
           .filter(([a, b]) => a !== b && a < nodes.length && b < nodes.length)
           .map(([a, b]) => ({
-            fromNode: nodes[a]?.id as string,
-            toNode: nodes[b]?.id as string,
+            from: { node: nodes[a]?.id as string },
+            to: { node: nodes[b]?.id as string },
           })),
       }
       const once = applyMoves(nodes, [...tidyNodes(nodes, options)])

@@ -29,7 +29,7 @@ const THREAD: CommentThread = {
 const OPEN: SpatialCanvas = {
   nodes: [],
   edges: [],
-  'x-whiteboard': { comments: [{ id: 'thread-1', x: 600, y: 450, text: 'Does this hold?' }] },
+  comments: [{ id: 'thread-1', x: 600, y: 450, text: 'Does this hold?' }],
 }
 
 function door(canvas: SpatialCanvas) {
@@ -37,7 +37,7 @@ function door(canvas: SpatialCanvas) {
   return { onChange, write: spatialThreadWrite(() => canvas, onChange) }
 }
 
-const commentsOf = (canvas: SpatialCanvas) => canvas['x-whiteboard']?.comments ?? []
+const commentsOf = (canvas: SpatialCanvas) => canvas.comments ?? []
 
 describe('the spatial document’s thread write door', () => {
   it('resolves onto the canvas it hands back, so the bubble stops being drawn at once', () => {
@@ -51,7 +51,7 @@ describe('the spatial document’s thread write door', () => {
   it('reopens onto it too — the direction that left a live conversation invisible', () => {
     const resolved: SpatialCanvas = {
       ...OPEN,
-      'x-whiteboard': { comments: [{ ...commentsOf(OPEN)[0], resolved: true }] },
+      comments: [{ ...commentsOf(OPEN)[0], resolved: true }],
     } as SpatialCanvas
     const { onChange, write } = door(resolved)
     write.setThreadStatus('thread-1', 'open')

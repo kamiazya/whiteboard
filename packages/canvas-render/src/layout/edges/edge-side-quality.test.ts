@@ -79,9 +79,21 @@ describe('self-overlap (retrace) cost', () => {
       box('x4', 700, 300, 100, 60),
     ]
     const edges: CanvasEdge[] = [
-      { id: 'hair', fromNode: 'm2', toNode: 'm1' },
-      { id: 'c1', fromNode: 'x1', toNode: 'x2' },
-      { id: 'c2', fromNode: 'x3', toNode: 'x4' },
+      {
+        id: 'hair',
+        from: { node: 'm2' },
+        to: { node: 'm1' },
+      },
+      {
+        id: 'c1',
+        from: { node: 'x1' },
+        to: { node: 'x2' },
+      },
+      {
+        id: 'c2',
+        from: { node: 'x3' },
+        to: { node: 'x4' },
+      },
     ]
     const { path } = routed(nodes, edges, 'hair')
     expect(selfOverlap(path)).toBe(0)
@@ -101,8 +113,16 @@ describe('realized-bend tie-break', () => {
       box('down', 550, 900, 100, 60),
     ]
     const edges: CanvasEdge[] = [
-      { id: 'main', fromNode: 'src', toNode: 'dst' },
-      { id: 'vert', fromNode: 'up', toNode: 'down' },
+      {
+        id: 'main',
+        from: { node: 'src' },
+        to: { node: 'dst' },
+      },
+      {
+        id: 'vert',
+        from: { node: 'up' },
+        to: { node: 'down' },
+      },
     ]
     const { path } = routed(nodes, edges, 'main')
     expect(bends(path)).toBeLessThanOrEqual(2)
@@ -117,7 +137,13 @@ describe('realized-bend tie-break', () => {
       box('dst', 700, 700, 200, 100),
       box('wall', 320, 380, 160, 200),
     ]
-    const edges: CanvasEdge[] = [{ id: 'main', fromNode: 'src', toNode: 'dst' }]
+    const edges: CanvasEdge[] = [
+      {
+        id: 'main',
+        from: { node: 'src' },
+        to: { node: 'dst' },
+      },
+    ]
     const { sides } = routed(nodes, edges, 'main')
     expect(sides?.fromSide).toBe('right')
     expect(sides?.toSide).toBe('top')

@@ -100,3 +100,31 @@ measurement before and after any change to this function.
 - Reaching for a LoroDoc parameter "because the caller has one". It drags
   the CRDT into a package that is otherwise pure, and every caller already
   holds the body or the canvas.
+
+## The `alsoIndex` seam
+
+`fullTextSearch` takes an optional `alsoIndex: (text: string) => string`,
+extra searchable text a caller derives from a document's own content. It
+exists so this package keeps depending on `model` alone.
+
+The first customer is emoji. A document that SHOWS a rocket says `rocket`
+nowhere — measured, the word pattern is `[\p{L}\p{N}]+` and an emoji is
+neither, so `ship it 🚀 today` indexes as `["ship","it","today"]` and `🚀🔥`
+as `[]`. The vocabulary that knows what a 🚀 is called is a PLUGIN's, which
+sits above this package; both callers of `fullTextSearch` already depend on
+that plugin, so they pass the expander rather than this package reaching up
+for it.
+
+Two properties of the seam, each load-bearing:
+
+- **It answers TEXT, not tokens.** How 「ロケット」 is cut into bigrams is
+  this package's scheme to own, and a caller returning tokens would be a
+  second place that decides it.
+- **Indexing only, never the snippet.** `contextsFor` quotes what the
+  document actually says. A hit on a word the reader cannot find in their own
+  note is confusing enough without the excerpt inventing it.
+
+What it moved is pinned in `server-core`'s search scoreboard, whose `emoji`
+category went from `{ ndcg: 0, recall: 0, of: 4 }` to `{ ndcg: 1, recall: 1 }`
+in the commit that added the expander — the instrument landed one commit
+earlier, showing the zero, so the movement is a reading rather than a claim.

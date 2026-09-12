@@ -146,7 +146,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // is about to be built in, fixed here BEFORE the code so the naming is not
   // settled by whichever file happens to be written first — which is the one
   // thing this table is for, and what it costs is a bucket.
-  '.claude/rules/vocabulary.md': 17,
+  '.claude/rules/vocabulary.md': 18,
 }
 
 /**
@@ -295,18 +295,25 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // with the half of that measurement that the schema-drawn generator has
 // since retired, said plainly so the surviving half stays readable.
 //
-// 131 for the THIRD axis (ADR-0033, `quality/facet-score.ts`): what a board
-// says with appearance rather than with position, and the first reading of
-// it — every board in the corpus, the hand-drawn references included, spends
-// one treatment and owes all 22 constructs. A reader who does not know that
-// will read the scoreboard's zeroes as health.
+// 131 for the THIRD axis (the facet-vocabulary ADR, `quality/facet-score.ts`):
+// what a board says with appearance rather than with position, and the first
+// reading of it — every board in the corpus, the hand-drawn references
+// included, spends one treatment and owes all 22 constructs. A reader who
+// does not know that will read the scoreboard's zeroes as health.
 //
 // 132 for the STENCIL partition (ADR-0034), and specifically for the one
 // measured case it buys that frames and kinds cannot reach. Without that
 // paragraph a later reader sees a third partition with no stated reason and
 // either trusts it or deletes it; the measurement is what makes it either
 // defensible or removable.
-const CANVAS_RENDER_BUDGET = 132
+//
+// 133 since bends came home: what the renderer's own stored-bend route is and
+// when it declines, why it moved out of a plugin, and — the part worth the
+// bytes — that the router SEAM stays and now has no bundled consumer, so
+// nobody deletes it looking for dead code or invents a router to justify it.
+// Plus the note that an edge with a FREE end is not routed yet, which is a
+// decision rather than an omission.
+const CANVAS_RENDER_BUDGET = 133
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

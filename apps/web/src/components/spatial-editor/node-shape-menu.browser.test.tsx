@@ -18,7 +18,7 @@ const initial: SpatialCanvas = {
 }
 
 const shapeFacetOf = (canvas: SpatialCanvas) =>
-  canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0'] as VisualShapeFacet | undefined
+  canvas.nodes[0]?.facets?.['visual.shape/v0'] as VisualShapeFacet | undefined
 
 function makeHost() {
   const latest: { canvas: SpatialCanvas } = { canvas: initial }
@@ -118,9 +118,9 @@ it('a shape pick from a multi-selection reshapes every selected node', async () 
   fireEvent.click(panel.querySelector('[aria-label="Diamond"]') as HTMLElement)
   await vi.waitFor(() => {
     for (const id of ['a', 'b']) {
-      expect(
-        latest.canvas.nodes.find((n) => n.id === id)?.['x-whiteboard']?.facets?.['visual.shape/v0'],
-      ).toEqual({ kind: 'diamond' })
+      expect(latest.canvas.nodes.find((n) => n.id === id)?.facets?.['visual.shape/v0']).toEqual({
+        kind: 'diamond',
+      })
     }
   })
 })

@@ -1,5 +1,6 @@
 import type { BodyProposedChange, SpatialProposedChange } from './proposal.js'
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from './spatial.js'
+import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from './spatial.js'
+import { endNode } from './spatial.js'
 
 /**
  * What adopting a proposed change MEANS, and whether it still fits (ADR-0029
@@ -57,11 +58,22 @@ export function applyCanvasChange(
       // the edges that would dangle with it, the way the editor's own delete
       // does. Silently leaving them would make the adopted board unsavable.
       return {
+        ...canvas,
         nodes: canvas.nodes.filter((node) => node.id !== change.nodeId),
-        ...(canvas['x-whiteboard'] === undefined ? {} : { 'x-whiteboard': canvas['x-whiteboard'] }),
         edges: canvas.edges.filter(
-          (edge) => edge.fromNode !== change.nodeId && edge.toNode !== change.nodeId,
+          (edge) => endNode(edge.from) !== change.nodeId && endNode(edge.to) !== change.nodeId,
         ),
+        // Ink anchored to the node goes with it for the same reason, and ink
+        // anchored to nothing stays: a line's free end names no node, so there
+        // is nothing for the removal to dangle (ADR-0038 decision 2).
+        ...(canvas.lines === undefined
+          ? {}
+          : {
+              lines: canvas.lines.filter(
+                (line) =>
+                  endNode(line.from) !== change.nodeId && endNode(line.to) !== change.nodeId,
+              ),
+            }),
       }
     }
     case 'edge.add':
@@ -77,7 +89,35 @@ export function applyCanvasChange(
       }
     case 'edge.remove':
       return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== change.edgeId) }
+    case 'line.add':
+      if ((canvas.lines ?? []).some((line) => line.id === change.line.id)) return canvas
+      return { ...canvas, lines: [...(canvas.lines ?? []), change.line] }
+    case 'line.patch':
+      if (!(canvas.lines ?? []).some((line) => line.id === change.lineId)) return canvas
+      return {
+        ...canvas,
+        lines: (canvas.lines ?? []).map((line) =>
+          line.id === change.lineId ? patchedInto(line, change.patch as Fields) : line,
+        ),
+      }
+    case 'line.remove':
+      // The collection is left ABSENT rather than emptied when the last line
+      // goes, because absence is what the canvas carried before any ink did
+      // and `spatialCanvasSchema` makes `lines` optional — an empty array
+      // would be a second spelling of the same board.
+      return withLines(
+        canvas,
+        (canvas.lines ?? []).filter((line) => line.id !== change.lineId),
+      )
   }
+}
+
+const withLines = (canvas: SpatialCanvas, lines: SpatialCanvas['lines']): SpatialCanvas => {
+  if (lines === undefined || lines.length === 0) {
+    const { lines: _dropped, ...rest } = canvas
+    return rest
+  }
+  return { ...canvas, lines }
 }
 
 /**
@@ -121,6 +161,17 @@ export function canvasChangeConflicts(
       const edge = canvas.edges.find((candidate) => candidate.id === change.edgeId)
       return edge === undefined || !sameElement(edge, change.assumed)
     }
+    case 'line.add':
+      return (canvas.lines ?? []).some((line) => line.id === change.line.id)
+    case 'line.patch': {
+      const line = (canvas.lines ?? []).find((candidate) => candidate.id === change.lineId)
+      if (line === undefined) return true
+      return differsFromPrior(line as Fields, change.patch as Fields, change.assumed as Fields)
+    }
+    case 'line.remove': {
+      const line = (canvas.lines ?? []).find((candidate) => candidate.id === change.lineId)
+      return line === undefined || !sameElement(line, change.assumed)
+    }
   }
 }
 
@@ -135,8 +186,8 @@ function differsFromPrior(current: Fields, patch: Fields, assumed: Fields): bool
  * what they were shown.
  */
 function sameElement(
-  current: SpatialNode | CanvasEdge,
-  assumed: SpatialNode | CanvasEdge,
+  current: SpatialNode | CanvasEdge | CanvasLine,
+  assumed: SpatialNode | CanvasEdge | CanvasLine,
 ): boolean {
   const a = current as Fields
   const b = assumed as Fields
@@ -145,8 +196,9 @@ function sameElement(
     const left = a[field]
     const right = b[field]
     if (Object.is(left, right)) continue
-    // One level of structure, for a node's `x-whiteboard` embed. Deeper than
-    // that a JSON comparison is the honest tool, and no element goes deeper.
+    // One level of structure, for a node's `embed` and its facets bucket.
+    // Deeper than that a JSON comparison is the honest tool, and no element
+    // goes deeper.
     if (JSON.stringify(left) !== JSON.stringify(right)) return false
   }
   return true

@@ -12,7 +12,7 @@ import { commentComposeStyle } from './comment-compose-overlay.js'
 const neon: SpatialCanvas = {
   nodes: [],
   edges: [],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
 }
 
 describe('commentComposeStyle', () => {

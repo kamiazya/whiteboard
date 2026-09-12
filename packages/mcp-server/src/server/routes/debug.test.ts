@@ -109,7 +109,13 @@ describe('GET /api/debug', () => {
         { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
         { id: 'n2', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'n1' },
+          to: { node: 'n2' },
+        },
+      ],
     })
     await saveDocument('sess-nodes', 'canvas-1', doc)
 

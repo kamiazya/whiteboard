@@ -56,29 +56,39 @@ export function carriedByGesture(
  * when its target is missing from the nodes it is given, and the base is
  * given the canvas WITHOUT the carried nodes.
  */
-export function commentExtensionFor(
+/**
+ * One synthetic per-layer canvas: the nodes that layer draws, the comments it
+ * owns, and the canvas's own facets.
+ *
+ * The facets are the reason this is a function rather than three object
+ * literals. They say how the canvas is DRAWN — its theme, its edge routing —
+ * and a layer that omits them draws the bundled look for the length of the
+ * drag, which is a real defect this editor shipped once. Three call sites
+ * spreading them by hand is three chances to forget; one is none.
+ */
+export function layerCanvas(
+  canvas: SpatialCanvas,
+  nodes: SpatialCanvas['nodes'],
+  comments: SpatialCanvas['comments'],
+): SpatialCanvas {
+  return {
+    nodes,
+    edges: [],
+    ...(canvas.facets === undefined ? {} : { facets: canvas.facets }),
+    ...(comments === undefined ? {} : { comments }),
+  }
+}
+
+export function commentsFor(
   canvas: SpatialCanvas,
   carriedIds: ReadonlySet<string>,
   carried: boolean,
-): SpatialCanvas['x-whiteboard'] {
-  const extension = canvas['x-whiteboard']
-  if (extension === undefined) return undefined
-  // Everything else in the envelope — the facets that say how the canvas is
-  // DRAWN (its theme, its edge routing) — rides every layer unchanged. Only
-  // the comments are split; a ghost without the envelope draws the bundled
-  // look for the length of the drag.
-  const { comments, ...rest } = extension
-  if (comments === undefined) {
-    if (!carried) return extension
-    return Object.keys(rest).length === 0 ? undefined : rest
-  }
-  return {
-    ...rest,
-    comments: comments.filter(
-      (comment) =>
-        (comment.targetNodeId !== undefined && carriedIds.has(comment.targetNodeId)) === carried,
-    ),
-  }
+): SpatialCanvas['comments'] {
+  if (canvas.comments === undefined) return undefined
+  return canvas.comments.filter(
+    (comment) =>
+      (comment.targetNodeId !== undefined && carriedIds.has(comment.targetNodeId)) === carried,
+  )
 }
 
 /**
@@ -105,9 +115,7 @@ export function ghostCommentObstacles(
   committed: Scene,
   carried: ReadonlySet<string>,
 ): BoundingBox[] {
-  const riding = new Set(
-    (commentExtensionFor(canvas, carried, true)?.comments ?? []).map((comment) => comment.id),
-  )
+  const riding = new Set((commentsFor(canvas, carried, true) ?? []).map((comment) => comment.id))
   return [
     ...canvas.nodes
       .filter((node) => !carried.has(node.id) && node.type !== 'group')

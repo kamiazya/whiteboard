@@ -14,7 +14,7 @@ const THEME_KEY = 'visual.theme/v0'
 const canvasIn = (theme: string | undefined): SpatialCanvas => ({
   nodes: [],
   edges: [],
-  ...(theme === undefined ? {} : { 'x-whiteboard': { facets: { [THEME_KEY]: { theme } } } }),
+  ...(theme === undefined ? {} : { facets: { [THEME_KEY]: { theme } } }),
 })
 
 describe('the canvas theme row', () => {

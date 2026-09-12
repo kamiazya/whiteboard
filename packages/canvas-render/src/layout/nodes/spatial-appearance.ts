@@ -15,8 +15,8 @@
 // `spatial-geometry-parity.test.ts` guard). A caller that wants a
 // non-default geometry passes `SpatialLayoutOptions.geometry` explicitly at
 // the call site, never through this resolver.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { Appearance } from '@kamiazya/whiteboard-scene'
+import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { SpatialSyntaxPalette } from '../../theme/spatial-palette.js'
 
 /** What a resolver decided for one spatial node's chrome. */
@@ -35,7 +35,7 @@ export interface SpatialAppearanceResolver {
    */
   readonly mode?: 'light' | 'dark'
   resolveNode(node: SpatialNode): SpatialNodeAppearance
-  resolveEdge(edge: CanvasEdge): Appearance | undefined
+  resolveEdge(edge: RoutableElement): Appearance | undefined
   /** Appearance for a `file`/`link`/`group` label run or a degraded body fallback run. */
   resolveLabel(): Appearance
   /**

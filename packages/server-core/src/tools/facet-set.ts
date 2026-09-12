@@ -367,16 +367,16 @@ async function setOne(
     if (node === undefined) {
       throw new NodeNotFoundError(documentId, nodeId)
     }
-    const merged: ExtensionFacets = { ...node['x-whiteboard']?.facets, ...sets }
+    const merged: ExtensionFacets = { ...node.facets, ...sets }
     for (const key of deletions) delete merged[key]
-    const { facets: _replaced, ...extensionRest } = node['x-whiteboard'] ?? {}
-    const nextExtension =
-      Object.keys(merged).length === 0 ? extensionRest : { ...extensionRest, facets: merged }
-    const { 'x-whiteboard': _extension, ...nodeRest } = node
+    // Canonical emptiness: an empty bucket disappears rather than being
+    // stored as `{}`, so a node that set a facet and cleared it is identical
+    // to one that never had it. The node's `embed` is untouched — they are
+    // independent fields now, where the format's extension made them two arms
+    // of a union and this branch had to preserve the other one by hand.
+    const { facets: _replaced, ...nodeRest } = node
     const nextNode = (
-      Object.keys(nextExtension).length === 0
-        ? nodeRest
-        : { ...nodeRest, 'x-whiteboard': nextExtension }
+      Object.keys(merged).length === 0 ? nodeRest : { ...nodeRest, facets: merged }
     ) as SpatialNode
     writeSpatialCanvas(doc, {
       ...canvas,
@@ -406,16 +406,14 @@ async function setOne(
     if (edge === undefined) {
       throw new EdgeNotFoundError(documentId, edgeId)
     }
-    const merged: ExtensionFacets = { ...edge['x-whiteboard']?.facets, ...sets }
+    const merged: ExtensionFacets = { ...edge.facets, ...sets }
     for (const key of deletions) delete merged[key]
     // The same canonical emptiness the node and canvas branches keep: an
-    // empty bucket takes the extension with it, so an edge that set a facet
-    // and cleared it serializes identically to one that never had it.
-    const { 'x-whiteboard': _extension, ...edgeRest } = edge
+    // empty bucket disappears, so an edge that set a facet and cleared it
+    // serializes identically to one that never had it.
+    const { facets: _replaced, ...edgeRest } = edge
     const nextEdge: CanvasEdge =
-      Object.keys(merged).length === 0
-        ? edgeRest
-        : { ...edgeRest, 'x-whiteboard': { facets: merged } }
+      Object.keys(merged).length === 0 ? edgeRest : { ...edgeRest, facets: merged }
     writeSpatialCanvas(doc, {
       ...canvas,
       edges: canvas.edges.map((candidate) => (candidate.id === edgeId ? nextEdge : candidate)),
@@ -437,20 +435,15 @@ async function setOne(
       )
     }
     const canvas = readSpatialCanvas(doc)
-    const merged: ExtensionFacets = { ...canvas['x-whiteboard']?.facets, ...sets }
+    const merged: ExtensionFacets = { ...canvas.facets, ...sets }
     for (const key of deletions) delete merged[key]
-    // The same canonical emptiness the web editor's `withCanvasFacet`
-    // keeps: an empty bucket disappears, and an empty envelope with it, so
-    // a reverted canvas never carries a redundant extension forever.
-    const { facets: _replaced, ...extensionRest } = canvas['x-whiteboard'] ?? {}
-    const nextExtension =
-      Object.keys(merged).length === 0 ? extensionRest : { ...extensionRest, facets: merged }
-    const { 'x-whiteboard': _extension, ...canvasRest } = canvas
+    // The same canonical emptiness the web editor's `withCanvasFacet` keeps:
+    // an empty bucket disappears, so a reverted canvas never carries a
+    // redundant field forever. The comments beside it are untouched.
+    const { facets: _replaced, ...canvasRest } = canvas
     writeSpatialCanvas(
       doc,
-      Object.keys(nextExtension).length === 0
-        ? canvasRest
-        : { ...canvasRest, 'x-whiteboard': nextExtension },
+      Object.keys(merged).length === 0 ? canvasRest : { ...canvasRest, facets: merged },
     )
     await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
     return { documentId, facets: merged }

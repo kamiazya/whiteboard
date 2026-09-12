@@ -109,7 +109,11 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
         })),
         ...Array.from({ length: 6 }, (_, i) => ({
           op: 'edge.add',
-          edge: { id: `e${i}`, fromNode: `n${i}`, toNode: `n${i + 1}` },
+          edge: {
+            id: `e${i}`,
+            from: { node: `n${i}` },
+            to: { node: `n${i + 1}` },
+          },
         })),
       ]
       await call(context, 'wb_canvas_edit', {

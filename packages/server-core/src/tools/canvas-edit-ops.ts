@@ -8,16 +8,21 @@ import {
   annotationIdSchema,
   canvasCommentDraftSchema,
   canvasEdgeSchema,
+  canvasLineSchema,
   documentIdSchema,
+  type ExtensionFacets,
   edgePatchFieldsSchema,
   extensionFacetsSchema,
+  linePatchFieldsSchema,
+  type NodeEmbed,
   nodeIdSchema,
   nodePatchFieldsSchema,
+  nodePositionSchema,
+  nodeSizeSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
   spatialNodeSchema,
   workspaceIdSchema,
-  type XWhiteboard,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
@@ -29,7 +34,23 @@ import { canvasSnapshotSchema } from './canvas-snapshot.js'
 // required because there is no sensible default for a link with no url.
 const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
 const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
-const [textOption, fileOption, linkOption, groupOption] = spatialNodeSchema.options
+const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
+/**
+ * The model's two extension fields are omitted from the derived options and
+ * reached through `WRITE_EXTENSION` below instead.
+ *
+ * Deriving from the stored schemas means a field added to a node type arrives
+ * here for free — which is the point, and wrong for exactly these two: the
+ * tool already publishes a way to write them, and a second one is two
+ * spellings of one thing on a table a model reads every turn. Measured when
+ * ADR-0037 moved them onto the node: 14 new parameters across the four node
+ * types, every one of them undescribed.
+ */
+const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
+const textOption = textNode.omit(STORED_EXTENSION_FIELDS)
+const fileOption = fileNode.omit(STORED_EXTENSION_FIELDS)
+const linkOption = linkNode.omit(STORED_EXTENSION_FIELDS)
+const groupOption = groupNode.omit(STORED_EXTENSION_FIELDS)
 
 /**
  * The node extension as a WRITER declares it: one flat object instead of
@@ -54,17 +75,25 @@ const nodeExtensionWriteSchema = z
   .refine((value) => (value.kind === 'embed') === (value.documentId !== undefined), {
     message: 'an embed names the document it embeds: kind "embed" and documentId go together',
   })
-  .transform((value): XWhiteboard => {
-    if (value.kind === 'embed' && value.documentId !== undefined) {
-      return {
-        kind: 'embed',
-        documentId: value.documentId,
-        ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
-        ...(value.facets === undefined ? {} : { facets: value.facets }),
-      }
-    }
-    return value.facets === undefined ? {} : { facets: value.facets }
-  })
+  /**
+   * Out comes the MODEL's two fields, not the format's union arm.
+   *
+   * The tool's INPUT key stays `x-whiteboard` — it is published in
+   * `tools/list`, a model reads it every turn, and moving it is a tool-surface
+   * change with its own gate (ADR-0031). What ADR-0037 changed is the far
+   * side: a node carries `embed` and `facets` independently now, and the
+   * transform is where the union arm becomes them.
+   */
+  .transform((value): { embed?: NodeEmbed; facets?: ExtensionFacets } => ({
+    ...(value.kind === 'embed' &&
+      value.documentId !== undefined && {
+        embed: {
+          documentId: value.documentId,
+          ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
+        },
+      }),
+    ...(value.facets === undefined ? {} : { facets: value.facets }),
+  }))
 const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
 
 /**
@@ -105,6 +134,14 @@ const nodeDraftSchema = z.discriminatedUnion('type', [
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
 
 /**
+ * Ink, which an edge cannot be: a LINE's ends are a node or a bare POINT, so
+ * this is the only draft on the tool that can put a stroke where nothing is
+ * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
+ * decision 2).
+ */
+const lineDraftSchema = canvasLineSchema.partial({ id: true })
+
+/**
  * A key of the draft, written beside `op` instead of inside it, is told
  * where it belongs. `node.patch`, `node.remove` and `node.lock` all take
  * `id` at the op level and `node.add` takes it inside `node`, so a model
@@ -120,8 +157,12 @@ const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
 const keysOf = (schema: { shape: Record<string, unknown> }) => Object.keys(schema.shape)
 const NODE_DRAFT_KEYS = new Set(nodeDraftSchema.options.flatMap(keysOf))
 const EDGE_DRAFT_KEYS = new Set(keysOf(edgeDraftSchema))
+const LINE_DRAFT_KEYS = new Set(keysOf(lineDraftSchema))
 const quoted = (keys: readonly string[]) => keys.map((key) => `"${key}"`).join(', ')
-const draftKeysBelongInside = (field: 'node' | 'edge', draftKeys: ReadonlySet<string>) => ({
+const draftKeysBelongInside = (
+  field: 'node' | 'edge' | 'line',
+  draftKeys: ReadonlySet<string>,
+) => ({
   error: (issue: { code: string; keys?: readonly string[] }) =>
     issue.code === 'unrecognized_keys' && (issue.keys ?? []).some((key) => draftKeys.has(key))
       ? `Unrecognized key(s): ${quoted(issue.keys ?? [])} — the new ${field}'s own fields go inside \`${field}\`, not beside \`op\`.`
@@ -291,6 +332,29 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     .object({ op: z.literal('edge.remove'), ...EDGE_TARGET })
     .strict()
     .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  /**
+   * The same three verbs for INK. A line asserts nothing about what is
+   * connected to what, so it is what to reach for when a stroke is
+   * decoration — a bracket, an underline, an arrow pointing at empty space —
+   * and `edge.*` is what to reach for when the drawing means two boxes are
+   * related. Nothing here takes a selector: `within` and `all` answer "every
+   * edge between these boxes", and a line has no such relation to read.
+   */
+  z
+    .object(
+      {
+        op: z.literal('line.add'),
+        line: lineDraftSchema.describe(
+          'A stroke to draw. Either end is a node or a bare point, so this is what to use when the line is decoration rather than a claim that two boxes are related — for that, use edge.add.',
+        ),
+      },
+      draftKeysBelongInside('line', LINE_DRAFT_KEYS),
+    )
+    .strict(),
+  z
+    .object({ op: z.literal('line.patch'), id: nodeIdSchema, patch: linePatchFieldsSchema })
+    .strict(),
+  z.object({ op: z.literal('line.remove'), id: nodeIdSchema }).strict(),
   z
     .object({ op: z.literal('node.lock'), ...NODE_TARGET, locked: z.boolean() })
     .strict()
@@ -432,10 +496,10 @@ export type CanvasEditInput = z.infer<typeof canvasEditInputSchema>
 export const geometryEntrySchema = z
   .object({
     id: nodeIdSchema,
-    x: z.number().int(),
-    y: z.number().int(),
-    width: z.number().int(),
-    height: z.number().int(),
+    x: nodePositionSchema,
+    y: nodePositionSchema,
+    width: nodeSizeSchema,
+    height: nodeSizeSchema,
   })
   .strict()
 
@@ -452,6 +516,7 @@ export const canvasEditOutputSchema = z
       .object({
         nodes: z.array(nodeIdSchema),
         edges: z.array(nodeIdSchema),
+        lines: z.array(nodeIdSchema),
         comments: z.array(nodeIdSchema),
       })
       .strict(),

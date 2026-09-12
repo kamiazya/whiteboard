@@ -9,7 +9,7 @@ import { resolveCanvasPalette, resolveCanvasThemeFontFamily } from './spatial-ca
 const canvasIn = (theme: string | undefined): SpatialCanvas => ({
   nodes: [],
   edges: [],
-  ...(theme === undefined ? {} : { 'x-whiteboard': { facets: { 'visual.theme/v0': { theme } } } }),
+  ...(theme === undefined ? {} : { facets: { 'visual.theme/v0': { theme } } }),
 })
 
 describe('resolveCanvasPalette', () => {

@@ -4,7 +4,13 @@ import { anchorResolverFor } from './anchor-resolver.js'
 
 const canvas: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'ship the plan' }],
-  edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n1' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'n1' },
+      to: { node: 'n1' },
+    },
+  ],
 }
 const resolve = anchorResolverFor({ kind: 'spatial', canvas }) as NonNullable<
   ReturnType<typeof anchorResolverFor>

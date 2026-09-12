@@ -43,7 +43,7 @@ describe('parseViewerScene', () => {
           width: 10,
           height: 10,
           text: '',
-          'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+          embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
         },
       ],
     }
@@ -77,7 +77,13 @@ describe('parseViewerScene', () => {
   it('rejects an edge referencing a nonexistent node', () => {
     const canvas = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' }],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'missing' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'a' },
+          to: { node: 'missing' },
+        },
+      ],
     }
     const result = parseViewerScene(canvas)
     expect(result.ok).toBe(false)
@@ -112,7 +118,7 @@ describe('serializeViewerScene', () => {
           width: 10,
           height: 10,
           text: 'hi',
-          'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+          embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
         },
       ],
       edges: [],
@@ -133,7 +139,7 @@ describe('serializeViewerScene', () => {
           width: 10,
           height: 10,
           text: 'hi',
-          'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+          embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
         },
       ],
       edges: [],

@@ -35,7 +35,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { arbitraryForSchema, sameSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { afterAll, describe, expect } from 'vitest'
+import { afterAll, describe, expect, vi } from 'vitest'
 import type { z } from 'zod'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
@@ -50,6 +50,23 @@ const WORKSPACE_ID = SEEDED_WORKSPACE_ID
 const SPATIAL_ID = SEEDED_SPATIAL_ID
 const MARKDOWN_ID = SEEDED_MARKDOWN_ID
 const MISSING_ID = MISSING_DOCUMENT_ID
+
+// A CEILING sized on a measurement, not a delay. The slowest property here
+// (`wb_document_get`) takes 891ms of vitest's default 5000ms on an idle
+// machine — 18% of the budget — and the whole-repo parallel run is where that
+// headroom goes. It failed there twice on two DIFFERENT seeds, and both
+// replay green when passed back to `withDefaults({ seed })`, so what ran out
+// is the clock and not a counterexample: fast-check prints its seed in the
+// test NAME, which is what makes a timeout here read exactly like a property
+// failure. `reference-semantics.property.test.ts` sets its own for the same
+// reason. The remedy is never a pinned seed.
+vi.setConfig({ testTimeout: 60_000 })
+
+/** A drawn endpoint when it is a free POINT, else nothing to preserve. */
+const pointAt = (end: unknown) =>
+  typeof end === 'object' && end !== null && (end as { kind?: string }).kind === 'point'
+    ? (end as { kind: 'point'; point: { x: number; y: number } })
+    : undefined
 
 async function seededTools() {
   return (await seededServer()).tools
@@ -214,17 +231,55 @@ function fitCanvasOp(op: Record<string, unknown>): Record<string, unknown> {
         id: 'e1',
         patch: {
           ...patch,
-          ...(patch.fromNode === undefined ? {} : { fromNode: 'n1' }),
-          ...(patch.toNode === undefined ? {} : { toNode: 'n2' }),
+          // A drawn endpoint names an id nothing on the seeded board has, so
+          // the node arm is re-pointed at a node that exists; a POINT arm is
+          // left exactly as drawn, since it names nothing to correct.
+          ...(patch.from === undefined
+            ? {}
+            : { from: pointAt(patch.from) ?? { kind: 'node' as const, node: 'n1' } }),
+          ...(patch.to === undefined
+            ? {}
+            : { to: pointAt(patch.to) ?? { kind: 'node' as const, node: 'n2' } }),
         },
       }
     }
     case 'edge.remove':
     case 'edge.lock':
       return { ...targeted, id: 'e1' }
+    // Ink, steered exactly as an edge is: at the seeded line, with a drawn
+    // NODE end re-pointed at a node that exists and a POINT end left alone —
+    // a point names nothing, so there is nothing to correct. Without the
+    // steer these two arms only ever name an id the board has not got, and
+    // the ledger reports an op that answers as one that never does.
+    case 'line.patch': {
+      const patch = (op.patch ?? {}) as Record<string, unknown>
+      return {
+        ...targeted,
+        id: 'l1',
+        patch: {
+          ...patch,
+          ...(patch.from === undefined
+            ? {}
+            : { from: pointAt(patch.from) ?? { kind: 'node' as const, node: 'n1' } }),
+          ...(patch.to === undefined
+            ? {}
+            : { to: pointAt(patch.to) ?? { kind: 'node' as const, node: 'n2' } }),
+        },
+      }
+    }
+    case 'line.remove':
+      return { ...targeted, id: 'l1' }
     case 'edge.add': {
       const edge = (op.edge ?? {}) as Record<string, unknown>
-      return { ...op, edge: { ...edge, id: 'e2', fromNode: 'n1', toNode: 'n2' } }
+      return {
+        ...op,
+        edge: {
+          ...edge,
+          id: 'e2',
+          from: { node: 'n1' },
+          to: { node: 'n2' },
+        },
+      }
     }
     case 'region.set':
       return {
@@ -307,6 +362,9 @@ const OP_REACH: Record<string, OpReach> = {
   'wb_canvas_edit/edge.add': 'answers',
   'wb_canvas_edit/edge.patch': 'answers',
   'wb_canvas_edit/edge.remove': 'answers',
+  'wb_canvas_edit/line.add': 'answers',
+  'wb_canvas_edit/line.patch': 'answers',
+  'wb_canvas_edit/line.remove': 'answers',
   'wb_canvas_edit/node.lock': 'answers',
   'wb_canvas_edit/edge.lock': 'answers',
   'wb_canvas_edit/tidy': 'answers',

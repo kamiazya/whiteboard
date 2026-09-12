@@ -24,10 +24,10 @@ const frame = (id: string, x: number, y: number, width: number, height: number):
   ({ id, type: 'group', x, y, width, height, label: id }) as SpatialNode
 
 const shaped = (kind: string) => ({
-  'x-whiteboard': { facets: { 'visual.shape/v0': { kind } } },
+  facets: { 'visual.shape/v0': { kind } },
 })
 const badged = (char: string) => ({
-  'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char } } },
+  facets: { 'visual.symbol/v0': { kind: 'emoji', char } },
 })
 
 const canvasOf = (nodes: readonly SpatialNode[]): SpatialCanvas =>
@@ -179,16 +179,14 @@ describe('facet vocabulary: a stencil is a declared distinction', () => {
   // which is exactly `excess`: the axis would score a real improvement as a
   // defect.
   const stencilled = (id: string) => ({
-    'x-whiteboard': { facets: { 'visual.stencil/v0': { stencil: id } } },
+    facets: { 'visual.stencil/v0': { stencil: id } },
   })
   const dressed = (id: string, colour: string, shape: string) => ({
     ...stencilled(id),
     color: colour,
-    'x-whiteboard': {
-      facets: {
-        'visual.stencil/v0': { stencil: id },
-        'visual.shape/v0': { kind: shape },
-      },
+    facets: {
+      'visual.stencil/v0': { stencil: id },
+      'visual.shape/v0': { kind: shape },
     },
   })
 
@@ -277,7 +275,7 @@ describe('facet vocabulary: what carries a distinction, and what does not', () =
     // `visual.text/v0` is placement, not kind — a board that sets it on one
     // frame's boxes has still said nothing about how they differ.
     const aligned = {
-      'x-whiteboard': { facets: { 'visual.text/v0': { align: 'center' } } },
+      facets: { 'visual.text/v0': { align: 'center' } },
     }
     const s = score([
       ...plain.slice(0, 2),
@@ -297,7 +295,7 @@ describe('facet vocabulary: what carries a distinction, and what does not', () =
     const s = score([
       ...plain.slice(0, 2),
       box('a', 40, 60, {
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'not-a-shape' } } },
+        facets: { 'visual.shape/v0': { kind: 'not-a-shape' } },
       }),
       box('b', 260, 60),
       box('c', 640, 60),
@@ -305,5 +303,172 @@ describe('facet vocabulary: what carries a distinction, and what does not', () =
     ])
     expect(s.treatments).toBe(1)
     expect(s.deficit).toBe(2)
+  })
+})
+
+/**
+ * Per-CHANNEL attribution, and why the columns above cannot answer it.
+ *
+ * `excess` counts whole TREATMENTS — a `colour|shape` pair — so a board where
+ * shape carries the kind cleanly and colour is spent on nothing reports the
+ * same number as one where both are muddled. It cannot say WHICH channel is
+ * the problem, and that is exactly the question a person has to answer before
+ * deciding "colour will mean status, so kind moves to shape".
+ *
+ * The case that forces it (user, 2026-09-12): an infrastructure diagram wants
+ * colour for healthy-vs-failing AND shape for what each component is. Two
+ * semantic axes, two channels, and the encoding has to stay uniform within
+ * each. Every bundled stencil today writes a COLOUR as well as a silhouette,
+ * so applying one spends the channel the status axis needs.
+ */
+describe('channel attribution', () => {
+  // A stencil is what makes a distinction DECLARED — the finding this whole
+  // increment came from is that `visual.shape/v0` alone declares nothing, so
+  // a board that varies silhouette without a stencil has a contested SHAPE
+  // channel and not a carried one. These fixtures therefore dress their
+  // boxes; that is also the realistic case.
+  const wearing = (kind: string, shape: string, colour?: string) => ({
+    ...(colour === undefined ? {} : { color: colour }),
+    facets: {
+      'visual.stencil/v0': { stencil: kind },
+      'visual.shape/v0': { kind: shape },
+    },
+  })
+
+  // Two kinds, told apart by silhouette alone. Colour is left free — which
+  // is what an infrastructure diagram needs if colour is to mean status.
+  const byShape = [
+    box('api', 0, 0, wearing('visual.gateway', 'hexagon')),
+    box('db', 300, 0, wearing('visual.datastore', 'cylinder')),
+    box('cache', 600, 0, wearing('visual.datastore', 'cylinder')),
+  ]
+
+  it('reads a channel as carried when it is constant within every class and differs across them', () => {
+    expect(score(byShape).channels).toEqual({ colour: 'unused', shape: 'carried' })
+    expect(score(byShape).contested).toBe(0)
+  })
+
+  it('reads a channel as contested when it is spent and no declared partition explains it', () => {
+    // The status axis arrives: one datastore goes red because it is failing.
+    // Nothing in the document says what red means, and it cuts the kind
+    // classes — so colour is spent and unexplained while shape still carries
+    // its own distinction. Two axes wanted, one of them undeclared.
+    const withStatus = [
+      byShape[0] as SpatialNode,
+      box('db', 300, 0, wearing('visual.datastore', 'cylinder', '1')),
+      byShape[2] as SpatialNode,
+    ]
+    const s = score(withStatus)
+    expect(s.channels).toEqual({ colour: 'contested', shape: 'carried' })
+    expect(s.contested).toBe(1)
+  })
+
+  it('reads both channels as carried when one partition drives them together', () => {
+    // What every bundled stencil does today: it writes a COLOUR as well as a
+    // silhouette, from the same kind. Uniform, correct by every column above
+    // — and it leaves no free channel for a second axis, which is the
+    // conflict none of those columns can see.
+    const dressed = [
+      box('api', 0, 0, wearing('visual.gateway', 'hexagon', '3')),
+      box('db', 300, 0, wearing('visual.datastore', 'cylinder', '5')),
+    ]
+    expect(score(dressed).channels).toEqual({ colour: 'carried', shape: 'carried' })
+    expect(score(dressed).contested).toBe(0)
+  })
+
+  it('reads a channel as unused rather than contested when the board never spends it', () => {
+    expect(score(plain).channels).toEqual({ colour: 'unused', shape: 'unused' })
+    expect(score(plain).contested).toBe(0)
+  })
+})
+
+/**
+ * A board declaring its OWN axis.
+ *
+ * Until now the only distinctions this score could see were the three it
+ * knows by name: which frame holds a box, the node's kind, and the stencil it
+ * wears. Anything else a document says about its boxes — that these are
+ * failing and those are healthy, that these are ours and those are a
+ * vendor's — was invisible, so a colour spent on it read as `contested`: a
+ * distinction the reader sees and the document does not state. It DID state
+ * it; the instrument could not hear it.
+ *
+ * That is what stops a second semantic axis existing at all (user,
+ * 2026-09-12): an infrastructure diagram wants shape for what a component is
+ * and colour for whether it is healthy, and the second one had nowhere to be
+ * declared. `visual.axes/v0` is where — a canvas names the facet keys it
+ * treats as axes, and each becomes a partition like the three built in.
+ *
+ * Deliberately NOT "any facet is an axis". `visual.shape/v0` is a facet and
+ * is emphatically not a construct — it says what a box DRAWS, not what it
+ * IS, and counting it would make every silhouette its own declared class.
+ * The document has to say which of its facets carry meaning, because nothing
+ * about a facet's shape reveals that.
+ */
+describe('a canvas declares its own axes', () => {
+  const withStatus = (status: string) => ({
+    facets: { 'ops.status/v0': { state: status } },
+  })
+  const axes = (...keys: readonly string[]) => ({
+    facets: { 'visual.axes/v0': { axes: [...keys] } },
+  })
+
+  const boxes = [
+    box('api', 0, 0, { color: '4', ...withStatus('healthy') }),
+    box('db', 300, 0, { color: '4', ...withStatus('healthy') }),
+    box('cache', 600, 0, { color: '1', ...withStatus('failing') }),
+  ]
+
+  it('reads a declared axis as a partition, so a colour spent on it is carried', () => {
+    const declared = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.status/v0'),
+    } as unknown as SpatialCanvas)
+    expect(declared.channels.colour).toBe('carried')
+    expect(declared.contested).toBe(0)
+  })
+
+  it('says the same board is contested when the axis is not declared', () => {
+    // The mutation is the DECLARATION, not the drawing: identical boxes, and
+    // the only difference is whether the canvas says what the colour means.
+    const undeclared = scoreFacets({ nodes: [...boxes], edges: [] } as unknown as SpatialCanvas)
+    expect(undeclared.channels.colour).toBe('contested')
+    expect(undeclared.contested).toBe(1)
+  })
+
+  it('counts an axis once however many times the canvas names it', () => {
+    // `visualAxesFacetSchema` validates each key and does not require them to
+    // be distinct, so a document may legitimately arrive naming one twice.
+    // Pushed twice, the SAME partition is scored twice and every column
+    // derived from it doubles — `partitions`, `constructs`, and whichever of
+    // `deficit`/`redundancy` that partition contributes. An instrument whose
+    // job is to report honest counts must not let a repeated declaration
+    // inflate them.
+    //
+    // Deduplicated on READ rather than refused on write, which is this
+    // module's standing posture (see `declaredAxisKeys`): stored content may
+    // be written by any build, and a payload another version wrote must cost
+    // the axis, never the score.
+    const once = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.status/v0'),
+    } as unknown as SpatialCanvas)
+    const twice = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.status/v0', 'ops.status/v0'),
+    } as unknown as SpatialCanvas)
+    expect(twice).toEqual(once)
+  })
+
+  it('ignores an axis no box carries, rather than inventing an empty construct', () => {
+    const stray = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.nothing/v0'),
+    } as unknown as SpatialCanvas)
+    expect(stray.channels.colour).toBe('contested')
   })
 })

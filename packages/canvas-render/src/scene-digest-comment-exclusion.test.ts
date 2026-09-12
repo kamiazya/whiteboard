@@ -43,7 +43,7 @@ const parseBody = (text: string): MdastRoot => ({
 const canvasWithOneCommentedNode: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
   edges: [],
-  'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }] },
+  comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
 }
 
 const digestOf = (canvas: SpatialCanvas, proposals?: readonly Proposal[]) =>
@@ -75,7 +75,7 @@ it('keeps the positional fallback for a comment-only canvas — excluded chrome 
   const commentOnly: SpatialCanvas = {
     nodes: [],
     edges: [],
-    'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 60, text: 'stray note' }] },
+    comments: [{ id: 'c1', x: 400, y: 60, text: 'stray note' }],
   }
   const digest = digestOf(commentOnly)
   expect(digest.nodes.every((n) => n.id.startsWith('n'))).toBe(true)

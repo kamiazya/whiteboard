@@ -36,7 +36,7 @@ const DEMO: RenderContribution = {
   namespace: 'demo',
   themes: { inked: themeWith(CHROME), plain: themeWith(undefined) },
   readTheme: (canvas) => {
-    const stored = canvas['x-whiteboard']?.facets?.[THEME_KEY]
+    const stored = canvas.facets?.[THEME_KEY]
     return typeof stored === 'object' && stored !== null
       ? (stored as { theme?: string }).theme
       : undefined
@@ -50,7 +50,7 @@ const BODY = ['> quoted', '', '```js', 'const a = 1', '```', '', '- [ ] todo'].j
 const boardIn = (theme: string | undefined, key = THEME_KEY): SpatialCanvas => ({
   nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 320, height: 400, text: BODY }],
   edges: [],
-  ...(theme === undefined ? {} : { 'x-whiteboard': { facets: { [key]: { theme } } } }),
+  ...(theme === undefined ? {} : { facets: { [key]: { theme } } }),
 })
 
 function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {

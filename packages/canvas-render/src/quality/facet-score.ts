@@ -25,8 +25,14 @@
  * cannot score well by spending more: an appearance matching no declared
  * distinction is `excess`, and one appearance carrying two is `overload`.
  */
+
+import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { resolveNodeShape, resolveNodeStencil } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  resolveNodeShape,
+  resolveNodeStencil,
+  VISUAL_AXES_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 
 export interface FacetScore {
   /**
@@ -98,7 +104,38 @@ export interface FacetScore {
    */
   readonly treatments: number
   readonly redundancy: number
+
+  /**
+   * What each visual CHANNEL is doing, one level below the columns above.
+   *
+   * `excess` counts whole treatments — a `colour|shape` pair — so it cannot
+   * say which half of one is unexplained. A board where shape carries the
+   * kind cleanly and colour is spent on nothing scores the same as one where
+   * both are muddled, and the two want opposite repairs.
+   *
+   * - `carried`: constant within every class of some declared partition, and
+   *   differing across at least two of them. The channel encodes that
+   *   distinction and a reader can invert it.
+   * - `contested`: spent — two or more values on the board — and constant
+   *   within the classes of NO declared partition. Somebody meant something
+   *   by it and the document does not say what.
+   * - `unused`: one value everywhere. Not a fault; a free channel.
+   *
+   * The case this exists for (user, 2026-09-12): an infrastructure diagram
+   * wants colour for healthy-vs-failing AND shape for what a component is.
+   * Two axes, two channels, each uniform within itself. Every bundled
+   * stencil writes a colour as well as a silhouette, so dressing a board
+   * spends the channel the second axis needs — a conflict that is invisible
+   * to every column above, because with one axis declared nothing looks
+   * wrong.
+   */
+  readonly channels: { readonly colour: ChannelUse; readonly shape: ChannelUse }
+  /** How many channels are `contested`. 0, 1 or 2. */
+  readonly contested: number
 }
+
+/** @see FacetScore.channels */
+export type ChannelUse = 'carried' | 'contested' | 'unused'
 
 /**
  * The channels that can say "these two differ in KIND" **on a board**.
@@ -176,13 +213,99 @@ function declaredPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]
   // read as fully carried.
   const byStencil = new Map<string, string>(boxes.map((b) => [b.id, resolveNodeStencil(b) ?? '']))
   out.push(byStencil)
+  for (const key of declaredAxisKeys(canvas)) {
+    out.push(new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])))
+  }
   return out.filter((p) => new Set(p.values()).size >= 2)
+}
+
+/**
+ * The facet keys a canvas names as its own semantic axes.
+ *
+ * Three partitions are known by name above — frame, node kind, stencil — and
+ * everything else a document says about its boxes was invisible, so a colour
+ * spent on it scored `contested`: a distinction the reader sees and the
+ * document does not state. It did state it; this could not hear it.
+ *
+ * Deliberately a DECLARATION rather than "every facet is an axis".
+ * `visual.shape/v0` is a facet and is not a construct — it says what a box
+ * DRAWS, not what it IS — and nothing about a facet's shape reveals which it
+ * is. Only the document knows, so the document says.
+ *
+ * Read defensively: this runs over stored content, and a payload written by
+ * another version must cost the axis, never the score.
+ *
+ * DISTINCT, because the schema does not require it to be. `visualAxesFacetSchema`
+ * validates the shape of each key and says nothing about repeats, so a
+ * document may legitimately name one twice — and the same partition pushed
+ * twice is scored twice, doubling `partitions`, `constructs` and whichever of
+ * `deficit`/`redundancy` it contributes. Measured on a board declaring one
+ * axis twice: `partitions` 1 -> 2, `constructs` 2 -> 4. Deduplicated here
+ * rather than refused at the write, for the same reason the rest of this
+ * function is defensive: a stored payload is data, and a repeat should cost
+ * the reader nothing rather than cost the document its whole declaration.
+ */
+function declaredAxisKeys(canvas: SpatialCanvas): readonly string[] {
+  const declared = canvas.facets?.[VISUAL_AXES_KEY]
+  if (declared === null || typeof declared !== 'object') return []
+  const axes = (declared as { axes?: unknown }).axes
+  if (!Array.isArray(axes)) return []
+  return [...new Set(axes.filter((key): key is string => typeof key === 'string'))]
+}
+
+/**
+ * A box's class under one axis: a stable key for that facet's payload.
+ *
+ * A box that does not carry the facet keys as `null` through the same
+ * function, and that is a class like any other — "unmarked" is something the
+ * board says about a box, exactly as "in no frame" is. Dropping those boxes
+ * would let a half-declared board read as fully carried.
+ *
+ * No special case for the absent payload: `facetPayloadKey` already answers
+ * a stable key distinct from every real one. Writing one anyway survived a
+ * mutation check, because `''` and `'null'` partition identically — an inert
+ * branch reads exactly like a branch that decides something.
+ */
+function facetPayloadKeyOf(node: SpatialNode, key: string): string {
+  return facetPayloadKey(node.facets?.[key])
 }
 
 const classesOf = (partition: Partition): Map<string, string[]> => {
   const classes = new Map<string, string[]>()
   for (const [id, cls] of partition) classes.set(cls, [...(classes.get(cls) ?? []), id])
   return classes
+}
+
+/**
+ * Whether one channel encodes one of the declared distinctions.
+ *
+ * Two conditions, and only one of them needs testing. A channel carries a
+ * partition when it is CONSTANT WITHIN every class and DIFFERS across at
+ * least two of them — but every partition covers every box, so a channel
+ * constant within each class and equal across them holds one value
+ * board-wide and has already returned `unused` above. The second condition
+ * is therefore implied, and was written out here until a mutation check
+ * survived removing it: an unreachable branch reads exactly like a branch
+ * that decides something.
+ */
+function channelUse(
+  read: (t: Treatment) => string,
+  boxes: readonly SpatialNode[],
+  treatment: ReadonlyMap<string, Treatment>,
+  partitions: readonly Partition[],
+): ChannelUse {
+  const channelOf = (id: string) => read(treatment.get(id) ?? DEFAULT_TREATMENT)
+  // One value everywhere is not a distinction, and checking it first is what
+  // makes the second condition above implicit.
+  if (new Set(boxes.map((b) => channelOf(b.id))).size <= 1) return 'unused'
+  const carried = partitions.some((partition) => {
+    const perClass = new Map<string, Set<string>>()
+    for (const [id, cls] of partition) {
+      perClass.set(cls, (perClass.get(cls) ?? new Set<string>()).add(channelOf(id)))
+    }
+    return [...perClass.values()].every((seen) => seen.size === 1)
+  })
+  return carried ? 'carried' : 'contested'
 }
 
 export function scoreFacets(canvas: SpatialCanvas): FacetScore {
@@ -250,7 +373,14 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
     }
   }
 
+  const channels = {
+    colour: channelUse((t) => t.colour, boxes, treatment, partitions),
+    shape: channelUse((t) => t.shape, boxes, treatment, partitions),
+  } as const
+
   return {
+    channels,
+    contested: Object.values(channels).filter((use) => use === 'contested').length,
     partitions: partitions.length,
     constructs: allClasses.length,
     deficit,

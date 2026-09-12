@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { canvasEdgeSchema, spatialNodeSchema } from './spatial.js'
+import { canvasEdgeSchema, endNode, spatialNodeSchema } from './spatial.js'
 
 /**
  * The typed clipboard envelope for copy/paste of canvas fragments
@@ -69,24 +69,24 @@ export const clipboardFragmentSchema = z
         ctx.addIssue({ code: 'custom', message: `duplicate edge id "${edge.id}"`, path: ['edges'] })
       }
       edgeIds.add(edge.id)
-      if (!seen.has(edge.fromNode)) {
+      // A point end names nothing, so it is never outside the fragment: it
+      // travels with the edge exactly as a coordinate does.
+      for (const side of ['from', 'to'] as const) {
+        const node = endNode(edge[side])
+        if (node === undefined || seen.has(node)) continue
         ctx.addIssue({
           code: 'custom',
-          message: `edge "${edge.id}" references fromNode "${edge.fromNode}" outside the fragment`,
-          path: ['edges', index, 'fromNode'],
-        })
-      }
-      if (!seen.has(edge.toNode)) {
-        ctx.addIssue({
-          code: 'custom',
-          message: `edge "${edge.id}" references toNode "${edge.toNode}" outside the fragment`,
-          path: ['edges', index, 'toNode'],
+          message: `edge "${edge.id}" references ${side} node "${node}" outside the fragment`,
+          path: ['edges', index, side, 'node'],
         })
       }
     })
     value.cut?.boundaryEdges.forEach((edge, index) => {
       // A boundary edge must CROSS the border: exactly one endpoint inside.
-      const inFragment = Number(seen.has(edge.fromNode)) + Number(seen.has(edge.toNode))
+      const inFragment = (['from', 'to'] as const).filter((side) => {
+        const node = endNode(edge[side])
+        return node !== undefined && seen.has(node)
+      }).length
       if (inFragment !== 1) {
         ctx.addIssue({
           code: 'custom',

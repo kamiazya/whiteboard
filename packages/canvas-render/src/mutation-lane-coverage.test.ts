@@ -131,17 +131,27 @@ describe('the mutation lane covers what it says it covers', () => {
     // is: the split moved `buildUnits` — where `tidy.ts`'s own survivors had
     // migrated — so leaving it out would have quietly reduced the lane's
     // reach while the report read the same.
-    // 69 since `quality/facet-score.ts`, OUTSIDE the lane for the reason
-    // `drawing-score.ts` and `composition-score.ts` are: an instrument whose
-    // calibration plants one defect and reads one column is exactly the
-    // shape a mutation run reports as unsurprising survivors. Hand-checked
-    // instead, and the check found two real defects rather than none — a
-    // treatment lookup keyed by the node where an id was wanted, so every
-    // board read as spending nothing, and overload and excess both firing on
-    // the same board because they were tested independently.
+    // 70 after two files arrived from opposite directions, both OUTSIDE the
+    // lane and each for its own reason.
+    //
+    // `layout/edges/bend-route.ts` (the model-and-format ADR's bends slice):
+    // its branches are ways of declining, or of picking one of four borders,
+    // each pinned by name in `bend-route.test.ts`. Nothing in it is a
+    // property that could be silently asserting nothing. If a stored path
+    // ever grows a COST model — a bend that yields to an obstacle, say —
+    // that answer changes.
+    //
+    // `quality/facet-score.ts`, for the reason `drawing-score.ts` and
+    // `composition-score.ts` are: an instrument whose calibration plants one
+    // defect and reads one column is exactly the shape a mutation run
+    // reports as unsurprising survivors. Hand-checked instead, and the check
+    // found two real defects rather than none — a treatment lookup keyed by
+    // the node where an id was wanted, so every board read as spending
+    // nothing, and overload and excess both firing on the same board because
+    // they were tested independently.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 13,
-      production: 69,
+      production: 70,
     })
   })
 

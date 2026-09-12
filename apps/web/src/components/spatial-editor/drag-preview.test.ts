@@ -116,7 +116,7 @@ describe('computeDragPreview — connecting', () => {
       ...connect,
       canvas: {
         ...connect.canvas,
-        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' as const } } },
+        facets: { 'visual.edges/v0': { routing: 'curved' as const } },
       },
     }
     const state = connectingState()

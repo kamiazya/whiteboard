@@ -23,7 +23,13 @@ type Node = {
   width: number
   height: number
 }
-type Edge = { id: string; fromNode: string; toNode: string }
+// An END is an object, not a flat key (ADR-0037 slice 3). Spelled out here
+// rather than imported because this fixture stands in for what the snapshot
+// hands a verifier, and a fixture that drifts from that shape is how a
+// POSITIVE control stops controlling anything.
+type End = { kind: 'node'; node: string }
+type Edge = { id: string; from: End; to: End }
+const at = (node: string): End => ({ kind: 'node', node })
 type Board = { nodes: Node[]; edges: Edge[] }
 
 /** A board the fixture agent would be passed for `boards/checkout`. */
@@ -67,7 +73,7 @@ const goodBoard = (): Board => ({
     width: 200,
     height: 80,
   })),
-  edges: FLOWS.map(([from, to], i) => ({ id: `e${i}`, fromNode: from, toNode: to })),
+  edges: FLOWS.map(([from, to], i) => ({ id: `e${i}`, from: at(from), to: at(to) })),
 })
 
 const verify = (board: Board) => KINDS?.verify?.(wbFor(board) as never, {} as never)
@@ -100,8 +106,8 @@ describe('the kinds task verifier', () => {
     if (orders !== undefined) orders.text = 'Orders Payments Service'
     board.edges = board.edges.map((e) => ({
       ...e,
-      fromNode: e.fromNode === 'payments' ? 'orders' : e.fromNode,
-      toNode: e.toNode === 'payments' ? 'orders' : e.toNode,
+      from: e.from.node === 'payments' ? at('orders') : e.from,
+      to: e.to.node === 'payments' ? at('orders') : e.to,
     }))
     await expect(verify(board)).resolves.toMatchObject({ ok: false })
   })
@@ -111,14 +117,14 @@ describe('the kinds task verifier', () => {
     // services. A board drawn with every arrow reversed is a different
     // claim about the system, not a stylistic difference.
     const board = goodBoard()
-    board.edges = board.edges.map((e) => ({ ...e, fromNode: e.toNode, toNode: e.fromNode }))
+    board.edges = board.edges.map((e) => ({ ...e, from: e.to, to: e.from }))
     await expect(verify(board)).resolves.toMatchObject({ ok: false })
   })
 
   it('names a box it wants and cannot find, rather than throwing', async () => {
     const board = goodBoard()
     board.nodes = board.nodes.filter((n) => n.id !== 'stripe')
-    board.edges = board.edges.filter((e) => e.toNode !== 'stripe')
+    board.edges = board.edges.filter((e) => e.to.node !== 'stripe')
     await expect(verify(board)).resolves.toEqual({ ok: false, detail: 'missing: Stripe' })
   })
 })
@@ -127,9 +133,11 @@ describe('the workspace-vocabulary verifier', () => {
   // Earns its cases the way this file's header asks: not on principle, but
   // because the verifier was WRITTEN around a specific way of being wrong.
   // Grading a stencil by the box's COLOUR is the obvious shortcut and it
-  // passes the wrong board — `visual.gateway` is colour 3 and so is this
-  // workspace's `lakehouse`. What stops a later simplification back to that
-  // is a test that fails on it.
+  // passes the wrong board. It did when this was written, because
+  // `visual.gateway` was colour 3 and so is this workspace's `lakehouse`;
+  // since ADR-0036 §5 no bundled stencil carries a colour at all, so the
+  // shortcut is worse still. What stops a later simplification back to it is
+  // a test that fails on it.
   const DRESS = TASKS.find((t) => t.name === 'dress a box with a style this workspace defines')
 
   /** The document the verifier reads, with one box dressed however given. */
@@ -170,9 +178,10 @@ describe('the workspace-vocabulary verifier', () => {
   })
 
   it('refuses a BUILT-IN stencil of the same colour, which a colour check would pass', async () => {
-    // The whole reason the verifier reads the stored facet. `visual.gateway`
-    // is colour 3, so a box dressed with it is indistinguishable from the
-    // right answer by appearance alone — and it is the plausible wrong
+    // The whole reason the verifier reads the stored facet. The colour is
+    // supplied here by hand — no bundled stencil writes one since ADR-0036
+    // §5 — so a box dressed with a built-in is indistinguishable from the
+    // right answer by appearance alone, and it is the plausible wrong
     // answer, since a model that never found the library still has to dress
     // the box with something.
     await expect(verify(dressed('visual.gateway', '3'))).resolves.toMatchObject({ ok: false })

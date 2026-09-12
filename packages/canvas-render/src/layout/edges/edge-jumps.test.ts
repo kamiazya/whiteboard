@@ -32,12 +32,18 @@ const cross = (lineJumps?: 'none' | 'arc'): SpatialCanvas => ({
     { id: 'd', type: 'text', x: 200, y: 300, width: 50, height: 50, text: 'd' },
   ],
   edges: [
-    { id: 'e1', fromNode: 'a', toNode: 'b' },
-    { id: 'e2', fromNode: 'c', toNode: 'd' },
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+    {
+      id: 'e2',
+      from: { node: 'c' },
+      to: { node: 'd' },
+    },
   ],
-  ...(lineJumps !== undefined
-    ? { 'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps } } } }
-    : {}),
+  ...(lineJumps !== undefined ? { facets: { 'visual.edges/v0': { lineJumps } } } : {}),
 })
 
 const options = () => ({
@@ -81,11 +87,23 @@ describe('line jumps', () => {
         { id: 'd2', type: 'text', x: 178, y: 300, width: 50, height: 50, text: 'd2' },
       ],
       edges: [
-        { id: 'v1', fromNode: 'c1', toNode: 'd1' },
-        { id: 'v2', fromNode: 'c2', toNode: 'd2' },
-        { id: 'h', fromNode: 'a', toNode: 'b' },
+        {
+          id: 'v1',
+          from: { node: 'c1' },
+          to: { node: 'd1' },
+        },
+        {
+          id: 'v2',
+          from: { node: 'c2' },
+          to: { node: 'd2' },
+        },
+        {
+          id: 'h',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
       ],
-      'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+      facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
     }
     const scene = layoutSpatialCanvas(tight, options())
     const jumps = edgeById(scene.nodes, 'h')?.jumps
@@ -103,10 +121,18 @@ describe('line jumps', () => {
         { id: 'q', type: 'text', x: 300, y: 200, width: 50, height: 50, text: 'q' },
       ],
       edges: [
-        { id: 'f1', fromNode: 'hub', toNode: 'p' },
-        { id: 'f2', fromNode: 'hub', toNode: 'q' },
+        {
+          id: 'f1',
+          from: { node: 'hub' },
+          to: { node: 'p' },
+        },
+        {
+          id: 'f2',
+          from: { node: 'hub' },
+          to: { node: 'q' },
+        },
       ],
-      'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+      facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
     }
     const scene = layoutSpatialCanvas(fan, options())
     expect(edgeById(scene.nodes, 'f2')?.jumps).toBeUndefined()

@@ -37,7 +37,7 @@ describe('colorRow', () => {
     const neon: SpatialCanvas = {
       nodes: [],
       edges: [],
-      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
     }
     const palette = resolveCanvasPalette(neon, 'dark')
     const row = colorRow(palette, undefined, vi.fn())

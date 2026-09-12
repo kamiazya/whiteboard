@@ -1,3 +1,4 @@
+import { endSide } from '@kamiazya/whiteboard-model'
 // The OOUI object-action surface: right-click a node for its actions,
 // right-click empty space to create "here". Real pointer input throughout —
 // synthetic-event-only coverage is how this editor's first-touch bugs
@@ -156,7 +157,14 @@ const edgeStart: SpatialCanvas = {
     { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
     { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'link' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+      label: 'link',
+    },
+  ],
 }
 
 function makeEdgeHost() {
@@ -264,7 +272,7 @@ it('the arrow option row marks the spec default and applies a new direction in o
   expect(forward?.getAttribute('aria-checked')).toBe('true')
 
   clickOption(container, 'Arrows', 'Both')
-  await vi.waitFor(() => expect(latest.canvas.edges[0].fromEnd).toBe('arrow'))
+  await vi.waitFor(() => expect(latest.canvas.edges[0].from.end).toBe('arrow'))
   // toEnd 'arrow' is the spec default — canonical form omits the field.
   expect(latest.canvas.edges[0]).not.toHaveProperty('toEnd')
   expect(latest.commands).toContain('set-edge-ends')
@@ -289,12 +297,12 @@ it('the side option rows pin an endpoint directly, without cycling', async () =>
 
   // Direct pick inside the "From side" group — one tap to any side.
   clickOption(container, 'From side', 'Bottom')
-  await vi.waitFor(() => expect(latest.canvas.edges[0].fromSide).toBe('bottom'))
+  await vi.waitFor(() => expect(endSide(latest.canvas.edges[0].from)).toBe('bottom'))
   expect(latest.commands).toContain('set-edge-side')
 
   // Menu is still open — pin the other endpoint in the same visit.
   clickOption(container, 'To side', 'Top')
-  await vi.waitFor(() => expect(latest.canvas.edges[0].toSide).toBe('top'))
+  await vi.waitFor(() => expect(endSide(latest.canvas.edges[0].to)).toBe('top'))
 
   // And back to auto removes the pin.
   clickOption(container, 'From side', 'Auto')
@@ -464,8 +472,16 @@ it('the Color row from a multi-selection recolors every member and the edges bet
       { id: 'c', type: 'text', x: 500, y: 300, width: 120, height: 60, text: 'C' },
     ],
     edges: [
-      { id: 'ab', fromNode: 'a', toNode: 'b' },
-      { id: 'bc', fromNode: 'b', toNode: 'c' },
+      {
+        id: 'ab',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+      {
+        id: 'bc',
+        from: { node: 'b' },
+        to: { node: 'c' },
+      },
     ],
   }
   const latest: { canvas: SpatialCanvas } = { canvas: areaStart }

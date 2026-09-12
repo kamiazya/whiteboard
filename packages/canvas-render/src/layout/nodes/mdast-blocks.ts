@@ -44,6 +44,14 @@ import { checkboxMarker } from './task-checkbox.js'
 import { fitToWidth } from './truncate.js'
 
 /**
+ * What an alt-less inline image reads as. A box has to exist for the
+ * picture to go in, and an empty string measures to zero width — so this is
+ * a width, not a label. One en-space rather than a word: it is not text
+ * anybody wrote, and a reader who has the image does not need telling.
+ */
+const IMAGE_PLACEHOLDER = '\u2002'
+
+/**
  * Every layout constant comes from ONE theme object (theme/markdown-theme.ts),
  * calibrated to GitHub's rendered-markdown surface. Read once here so the
  * rest of the file reads as geometry rather than as a table of numbers, and
@@ -782,7 +790,20 @@ function layoutPhrasing(
           break
         }
         case 'image':
-          emit(child.alt ?? '', {}, currentStyle)
+          // The run stays a RUN, `text` the alt — see `paints` on
+          // TextRunNode. An alt-less one takes a placeholder ATOMICALLY:
+          // the wrappable path collapses `text.trim()`, which erases a
+          // whitespace placeholder and the run with it (measured). One
+          // WITH an alt stays wrappable, because an alt is prose.
+          {
+            const alt = child.alt === undefined || child.alt === '' ? undefined : child.alt
+            emit(
+              alt ?? IMAGE_PLACEHOLDER,
+              { paints: { kind: 'image', src: child.url } },
+              currentStyle,
+              alt !== undefined,
+            )
+          }
           break
         case 'imageReference':
           emit(child.alt ?? child.identifier, {}, currentStyle)

@@ -1,3 +1,4 @@
+import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 /**
  * What a tidy is about: the boxes, the OPTIONS a caller sets, and the UNITS
  * the passes actually move — an outermost frame and everything more than
@@ -31,7 +32,7 @@ export interface TidyOptions {
    * swaps with the nearest of them, so a hub that fans out sits between the
    * boxes it fans out to. Without them rows keep the order they were drawn.
    */
-  readonly edges?: readonly { readonly fromNode: string; readonly toNode: string }[]
+  readonly edges?: readonly Pick<CanvasEdge, 'from' | 'to'>[]
 }
 
 export const TIDY_BAND_PX = 24

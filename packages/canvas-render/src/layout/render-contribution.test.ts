@@ -52,7 +52,7 @@ const TRIANGLE = {
 const readFacet =
   (key: string) =>
   (node: SpatialNode): string | undefined => {
-    const stored = node['x-whiteboard']?.facets?.[key]
+    const stored = node.facets?.[key]
     if (stored === null || typeof stored !== 'object') return undefined
     const kind = (stored as { readonly kind?: unknown }).kind
     return typeof kind === 'string' && kind !== '' ? kind : undefined
@@ -76,7 +76,7 @@ const canvasOf = (id: string, facets?: Record<string, unknown>): SpatialCanvas =
       width: 200,
       height: 120,
       text: id,
-      ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+      ...(facets === undefined ? {} : { facets }),
     },
   ],
   edges: [],

@@ -8,7 +8,6 @@
  * canvas point once capture is taken, and somewhere to send an event.
  */
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
-import { resolveEdgeWaypoints } from '@kamiazya/whiteboard-plugin-visual'
 import type { Point, Viewport } from '../../lib/spatial/viewport.js'
 import { clientPointToRootLocal, screenToCanvas } from '../../lib/spatial/viewport.js'
 import { EdgeBendHandles } from './EdgeBendHandles.js'
@@ -32,7 +31,7 @@ export function EdgeBendLayer({
   // The bends the edge STORES, which is not the drawn path: that one
   // carries the endpoints and whatever the flattener added, and only these
   // can be grabbed.
-  const stored = resolveEdgeWaypoints(edge)
+  const stored = edge.bends ?? []
   const edgeId = edge.id
   return (
     <EdgeBendHandles

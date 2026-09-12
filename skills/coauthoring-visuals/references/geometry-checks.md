@@ -33,7 +33,9 @@ But if the meaning is already solid, geometry failures are usually the fastest t
 - clipped label: widen the node (`width`/`height`) or shorten the text
 - dangling connection: nudge the node it targets, or `edge.patch` a `fromSide`/`toSide` the author
   named back to nothing so the router chooses the face
-- edge-through-node: move the intervening node aside, since edges have no manual routing points to bend around it
+- edge-through-node: move the intervening node aside, or `edge.patch` `bends` — a list of points
+  the line is drawn through — to route it around by hand. Prefer moving the node: a bend is a
+  fixed point that stops following the boxes when they move next.
 - stacked parallel edges: offset the nodes vertically, or demote one edge into a side path
 - stray element: `node.remove` it if it should not be there, or `node.patch` it back near the rest
   of the diagram if it should

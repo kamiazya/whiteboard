@@ -15,7 +15,11 @@ import { type EdgeAnchorPair, routeCacheKey } from './spatial-edges.js'
  * genuinely different routes collapse onto one cache entry and the search
  * scores geometry it never drew. This pins each field individually.
  */
-const edge: CanvasEdge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+const edge: CanvasEdge = {
+  id: 'e1',
+  from: { node: 'a' },
+  to: { node: 'b' },
+}
 const base: EdgeAnchorPair = {
   from: { x: 10, y: 20 },
   to: { x: 30, y: 40 },

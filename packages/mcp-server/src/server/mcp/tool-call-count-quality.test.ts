@@ -172,10 +172,25 @@ describe('what an errand costs in tool calls', () => {
       // the whole cost — a second document, which used to cost a whole
       // extra call, now costs one more op. The tool table an agent reads
       // first goes 21 -> 18.
+      //
+      // +228 request and +528 response when an edge END became an OBJECT
+      // (ADR-0037 slice 3): 38 bytes per edge written and 88 per edge read
+      // back, across six edges. The format spells an end as three flat keys
+      // because a flat file has no other way; the model spells it as one
+      // thing, and this is what that costs on the wire. Bought with it: an
+      // end can now say it is a POINT, which four flat keys could not say at
+      // any price. Calls unchanged, which is the axis this scoreboard is
+      // actually about.
       'author a canvas of 8 nodes and 6 edges': {
+        // +48 response bytes on every canvas errand, and CALLS UNCHANGED at
+        // every row: ADR-0038 decision 2's line ops made `lines` a collection
+        // the result carries, so a board with no ink pays for two empty
+        // arrays (the snapshot's and `touched`'s). That is the shape to
+        // check on an addition — a new capability that cost a round trip
+        // would show here, and this one costs bytes a reader skips.
         calls: 2,
-        requestBytes: 1532,
-        responseBytes: 3172,
+        requestBytes: 1592,
+        responseBytes: 3364,
       },
       // A DISCOVERY errand (足場4b): learn what this workspace's own stencil
       // library defines, then wear one of its ids. Two calls, and the id is
@@ -196,10 +211,37 @@ describe('what an errand costs in tool calls', () => {
       // call most conversations make once, which is the same trade the
       // assets half of this tool already decided the other way. The price
       // is stated here instead.
+      //
+      // 10,148 -> 11,138, and the attribution matters more than the number:
+      // +968 of it is `visual.axes/v0` joining the facet list (ADR-0036 §1),
+      // +22 the sixth silhouette in `visual.shape/v0`'s enum. Measured by
+      // re-running this pin with each change reverted in turn, because the
+      // two landed in different increments and the first one's cost was
+      // never re-pinned — this row had been stale on the branch, along with
+      // `facet-list.test.ts`, for want of running `mcp-node` on that commit.
+      // A facet is exactly what this answer is for, so this is the declared
+      // price of declaring one, not a regression.
       'wear a stencil this workspace defines': {
         calls: 2,
         requestBytes: 354,
-        responseBytes: 10148,
+        // -1,018 because the DEPLOYMENT lists one fewer facet: `visual.path/v0`
+        // retired when bends became a field of the edge, so `wb_facet_list`
+        // answers seven rather than eight. Measured, not inferred — the
+        // response carries no `$ref` at all (0 of each), so the endpoint's
+        // registry entry is not what moved this, and the whole delta is on
+        // `wb_facet_list` (8,128 of the 9,130) rather than on the write.
+        // A facet the product no longer has to call a plugin's is also one a
+        // model no longer has to read past.
+        //
+        // Then 9,178 -> 10,168, and the attribution matters more than the
+        // number: +968 of it is `visual.axes/v0` joining the facet list
+        // (ADR-0036 §1), +22 the sixth silhouette in `visual.shape/v0`'s
+        // enum. Measured on the pre-merge base by re-running this pin with
+        // each change reverted in turn, and the merged delta came out at
+        // the same +990 — so the two are independent of the line ops and of
+        // `visual.path/v0` retiring. This is the declared price of
+        // declaring a facet, which is exactly what this answer is for.
+        responseBytes: 10168,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
@@ -268,10 +310,24 @@ describe('what an errand costs in tool calls', () => {
       // carries both numbers and the reason that saving is NOT the case for
       // the field: 480 visible bytes on rung 1 are paid every turn, and 337
       // is saved per errand.
+      //
+      // Response 2,086 -> 1,918 when the bundled stencils stopped spending
+      // colour (ADR-0036 §5): six `color` fields leave the answer and one
+      // silhouette joins it, `service` having had none. Nothing was cut for
+      // the sake of bytes — this is the by-product of freeing the colour
+      // channel for a second semantic axis, and it is stated here so the
+      // row is not read as a separate saving.
       'dress six boxes as six kinds': {
         calls: 1,
         requestBytes: 916,
-        responseBytes: 2086,
+        //
+        // Then 2,134 -> 1,966 when the bundled stencils stopped spending
+        // colour (ADR-0036 §5): six `color` fields leave the answer and one
+        // silhouette joins it, `service` having had none. Nothing was cut
+        // for the sake of bytes — this is the by-product of freeing the
+        // colour channel for a second semantic axis, and it is stated here
+        // so the row is not read as a separate saving.
+        responseBytes: 1966,
       },
       // 2,060 -> 2,056 when an auto-placed box took the board's own width
       // instead of a flat 260. Four bytes, and what they are worth reading
@@ -286,7 +342,7 @@ describe('what an errand costs in tool calls', () => {
       'make a group hold exactly three boxes': {
         calls: 1,
         requestBytes: 549,
-        responseBytes: 2056,
+        responseBytes: 2104,
       },
     })
   })

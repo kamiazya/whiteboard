@@ -27,14 +27,129 @@ paths:
 - mdast schemas follow the mdast spec content-model hierarchy (flow / phrasing / list / table / row content). Do not widen a parent's `children` back to the flat node union.
 - IDs: document ID = canonical ULID (first char `[0-7]`); node ID = nanoid (charset deliberately unenforced — documented looseness).
 - Workspace identity (ADR-0019) is three layers, not one: canonical workspace ID = a bare ULID, the same canonical-ULID shape as document ID (no `ws_` prefix — symmetric with `documentIdSchema`, distinct Zod schemas are the confusion guard); segment = the URL-safe, per-keeper-unique, renameable handle, which must NOT itself be ULID-shaped (a 26-char Crockford base32 string with a leading `[0-7]`, checked case-insensitively) because workspace URLs resolve segment-first with canonical-id fallback in one position; displayName = free text, no uniqueness, no identity duties. `workspaceIdSchema` (the pre-ADR-0019 single-string shape) is untouched — it describes the legacy live data both keepers still hold, and re-keying onto the three-layer shape is a later migration-driven slice.
-- JSON Canvas geometry is integer, with no extension carve-out: `x-whiteboard` carries no geometry of its own.
-- There are three `x-whiteboard` sites, and the line between them is what keeps the node-level one from growing back:
-  - **On a NODE** it is the canvas-embed extension only — CONTENT that JSON Canvas cannot express. Do NOT grow it into a general home for visual primitives JSON Canvas lacks (the `freehand`/`shape` variants were removed for exactly that reason); express those through an existing node type instead.
-  - **On an EDGE** it is the edge-target `facets` bucket and nothing else (ADR-0013 decision 5's edge slot, opened 2026-09-10). Never an embed: an edge has no content JSON Canvas cannot express. `edgePatchFieldsSchema` is DERIVED from `canvasEdgeSchema`, so the field reached `edge.patch` for free — and reaching the proposal diff for free is what exposed its identity comparison (`Object.is` on two deep-equal objects from two different parses); that diff now compares structurally.
-  - **On the CANVAS** it holds rendering PREFERENCES for things JSON Canvas already models — as canvas-target FACETS in its `facets` bucket (`visual.edges/v0` for routing and line jumps, `visual.theme/v0`) — plus the comment annotation layer. A consumer that drops it still renders every edge, just with its own routing. Nothing that changes what the document MEANS belongs here. The pre-facet `edgeRouting` field was retired outright (2026-09-10, no compatibility read): a document still carrying it loses that key on parse.
-- Both are the documented exception to the reject-not-drop rule above — an unrecognised payload is silently dropped (`.catch(undefined)`) so a document written by another version still parses. The reject-not-drop contract governs what others must honour; these keys are our own escape hatch, and the document survives either way.
+- **Geometry is a REAL number, and the format's integer pixels are the projection's**
+  ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4).
+  `nodePositionSchema` / `nodeSizeSchema` are `z.number().finite()` (sizes non-negative), and
+  they are EXPORTED because every payload that echoes stored geometry has to accept what the
+  model stores — a read still declaring `int` does not reject an input, it makes a tool answer
+  with something its own `outputSchema` refuses. Finite rather than merely numeric:
+  `JSON.stringify(Infinity)` is `null` and a NaN corner is not a corner.
+- **An edge carries its own `bends`** — the points the line is drawn through, in order, capped at
+  64. Same slice, and the ADR's worked example of what the old binding cost: JSON Canvas has no
+  waypoint, so while the model WAS the format a bend could only exist as a plugin facet
+  (`visual.path/v0`, retired) drawn by a contributed router. It passes ADR-0037 decision 3's three
+  answers — a person authors one by dragging a handle the core editor draws, the renderer and the
+  editor both read it, and its projection is `extension`. `edgePatchFieldsSchema` derives from
+  `canvasEdgeSchema`, so it reached `wb_canvas_edit`'s edge patch for free, which is the whole
+  gain: a facet payload is opaque to that tool, so a model could not place a bend at all before.
+- **An edge END is a node or a POINT**
+  ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 3). `edgeEndpointSchema`
+  is a discriminated union on `kind` — `{ kind: 'node', node, side?, end? }` or
+  `{ kind: 'point', point, end? }` — in place of the format's four flat keys
+  (`fromNode`/`fromSide`/`toNode`/`toSide`), which could not say "this end is a point" at all.
+  A union rather than optional fields plus a refinement, and not merely for taste:
+  `edgePatchFieldsSchema` IS `canvasEdgeSchema.omit({id}).partial()`, Zod v4 refuses `.partial()`
+  over a refined object, so a refinement here would be paid for with a second hand-written schema
+  beside this one — the exact drift this package exists to prevent.
+  Read an end through the exported helpers — `endpointNode`, `endpointNodes`, `endpointIn`,
+  `endpointSide`, `nodeAtEnd`, `isSelfLoop`, `nodeEndpoint` — never by hand. Every one of the ~50
+  sites that used to read `edge.fromNode` wants "the node, if there is one", and a `.kind` check
+  written fifty times is fifty chances for one of them to treat a free end as a dangling
+  reference. Two of the helpers exist because the obvious inline form is WRONG rather than merely
+  verbose: `byId.get(endpointNode(end) ?? '')` is one character from a lookup on a key that can be
+  real, and `endpointNode(from) === endpointNode(to)` answers TRUE for two free ends, which is the
+  opposite of a self-loop. Both were written during this slice and both were caught by reading the
+  diff, not by a test.
+  Its projection is `dropped`, and the WHOLE EDGE with it: JSON Canvas requires an edge to run
+  between two nodes, so a point-ended edge is omitted from both export modes. It is the one row in
+  the loss table whose unit is the element rather than the field.
+  The generator draws roughly one end in ten free, and `test-utils/arbitraries.test.ts` is what
+  makes that a fact rather than a claim — it counts what a run produced and fails on a share out
+  of band, on node ends that stopped being correlated, and on a corpus with no half-free edge in
+  it. Mutation-checked in both directions.
+- **A schema this model repeats is NAMED in zod's global registry**, and that is a decision about
+  the MCP tool table taken here because it can be taken nowhere else. `edgeEndpointSchema` carries
+  `{ id: 'EdgeEndpoint' }`, which makes every JSON Schema emission put it in `$defs` once and
+  `$ref` it at each use instead of inlining the whole union.
+  Measured on the four sites `wb_canvas_edit` has (`from` and `to`, on `edge.add` and
+  `edge.patch`): **4,579 bytes inlined against 1,786 referenced**. Inlined, the table read 40,315 —
+  over ADR-0031 §5's ~40,000 — and the endpoint was 90% of the growth that put it there. The
+  growth was DUPLICATION rather than expressiveness, which is the one kind a schema can give back
+  without giving anything up: `parameters` and `undescribed` both fall BELOW main's on a strictly
+  richer schema, because a subschema walked four times is now walked once.
+  **The registry is the only lever.** The MCP SDK converts by calling
+  `schema['~standard'].jsonSchema.input({ target })` and passes no `reused` option, so
+  `z.toJSONSchema(..., { reused: 'ref' })` never reaches a published schema. The SDK's own escape
+  hatch, `fromJsonSchema`, swaps zod validation for ajv — which would cost the by-name refusals the
+  tool-surface scoreboard pins, and this package's whole reason for existing. Rejected on that,
+  not on effort.
+  What it buys has to stay READABLE on its own: a `$ref` whose `$defs` entry is missing breaks no
+  test here, because the server validates with zod and never reads its own JSON Schema.
+  `mcp-server`'s `schema-references.test.ts` is what looks — no dangling or non-local reference
+  anywhere in the table, and the endpoint resolving to the union it names rather than merely to
+  something.
+- **An EDGE is a RELATION and a LINE is INK**
+  ([ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md) decision 2). `canvasEdgeSchema`'s
+  ends are `edgeEndSchema` — `{ node, side?, end? }`, a plain object with no `kind`, because a
+  one-armed union discriminates nothing and would cost a key on every stored end. The
+  node-or-point union is `lineEndSchema`, on `canvasLineSchema`, and `canvas.lines` is where ink
+  lives. A line may join two nodes: that is the expressiveness the split buys, and where freehand
+  lands rather than growing a third concept.
+  - **`bendsFieldSchema` is declared ONCE for both.** It was written out twice, identically, on the
+    edge and on the line — the drift this package exists to prevent, and it cost bytes twice over
+    because a tool emitting an `add` and a `patch` arm for each element spelled the same
+    description four times. It is registered as `Bends`, beside `CanvasPoint`, `CanvasColor` and
+    `NodeEmbed`: the four subschemas the LINE ops made repeat enough to be worth naming, chosen by
+    measuring waste (occurrences-1 x bytes) rather than by size. Registering costs a `$defs` entry
+    plus a `$ref` per site, so it is a LOSS on a schema used once — `wb_body_edit` pays 1,396 wire
+    bytes for it while `canvas_view` saves 1,241. Judge it on the table's total, not per tool.
+  - **Two collections rather than one `kind`-tagged element, and the reason is measured.** zod v4's
+    `discriminatedUnion` has no `.omit()` or `.partial()` AT ALL (probed), so a tagged element would
+    force `edgePatchFieldsSchema` to be hand-written beside `canvasEdgeSchema` — the exact drift
+    this package exists to prevent. `linePatchFieldsSchema` is derived the same way the edge one is.
+  - **`lines` is OPTIONAL, not `.default([])`.** The default makes the field required on the OUTPUT
+    type, and this repo builds 925 canvas literals across 295 files; every one would have gained a
+    `lines: []` saying nothing, and a diff a reviewer cannot read is a diff nobody reviews. Readers
+    spell `canvas.lines ?? []`, as they already do for `comments`.
+  - **Both end schemas are REGISTERED** (`EdgeEnd`, `LineEnd`), and the edge one had to be. Measured
+    when the split landed: leaving `edgeEndSchema` unregistered took the visible tool table
+    37,796 -> 38,317 bytes and `parameters` 273 -> 285 — a regression on a strictly simpler schema,
+    because the union it replaced had been carrying a `$defs` entry and a plain object does not.
+    Registered, the table came in at 36,945, BELOW where it started. The saving belongs to the
+    repetition, not to the shape.
+  - Ids are unique ACROSS both collections, not per collection: an anchor names an element id (a
+    comment's `targetEdgeId`, a proposal's change), so two elements answering to one id makes an
+    anchor ambiguous rather than merely untidy.
+  - Read either kind of end through `endNode` / `endNodes` / `endIn` / `endSide` / `nodeAtEnd` /
+    `isSelfLoop`, which all take `LineEnd | EdgeEnd` — a reader walking both collections should
+    never have to know which it is holding.
+- **This package no longer spells `x-whiteboard` anywhere.** ADR-0037 moved the interchange
+  format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
+  format's extension key is three ordinary fields:
+  - `comments` and `facets` on the canvas,
+  - `embed` and `facets` on a node — INDEPENDENT fields, where the format makes them two arms of
+    one union; a node carrying both was spelled as the embed arm with facets inside it, and
+    every writer that wanted to change one had to preserve the other by hand,
+  - `facets` on an edge (ADR-0013 decision 5's edge slot). `edgePatchFieldsSchema` is DERIVED
+    from `canvasEdgeSchema`, so the field reaches `edge.patch` for free — and reaching the
+    proposal diff for free is what exposed its identity comparison (`Object.is` on two deep-equal
+    objects from two different parses); that diff now compares structurally.
+- **The node, edge and canvas schemas are `.strict()`, and the WIRE schemas in codec are not.**
+  The asymmetry is the whole point. A JSON Canvas document another tool wrote may legitimately
+  carry vendor keys, so refusing it would be wrong; this is the INTERNAL model, where a key it
+  does not name is a defect. A plain `z.object` STRIPS an unknown key and returns success, which
+  during ADR-0037's migration would have meant every reader still spelling the old key parsing
+  cleanly and losing what it read. Measured: without the storage lift that goes with it, a node
+  written under the old key does not lose a field — it VANISHES, because `readSpatialCanvas`
+  drops what fails to parse (`loro-adapter`'s `legacy-extension.test.ts`).
+- Strictness has one cost worth knowing: a schema error names the KEY and not the node's type,
+  so a caller told only that `label` is invalid is left guessing which of its nodes was wrong.
+  `canvas-edit`'s patch path therefore uses strictness as the DETECTOR and still writes the
+  message itself.
 - A preference meant to be overridable at a finer scope (an edge overriding the canvas's routing style) declares its vocabulary ONCE — `edgeRoutingStyleSchema` / `lineJumpsSchema`, with `edgeRoutingSchema` as the RESOLVED shape a resolver hands the layout — and the override reuses it rather than restating the shape. The stored shape is always the facet.
-- **`x-whiteboard` is the ONLY extension key** an emitted document may carry — never add a second non-standard field at any level. The contract is published as a generated JSON Schema (`json-schema.ts` → `docs/reference/x-whiteboard.schema.json`, a vitest file snapshot held in sync by `json-schema.test.ts`; regenerate with `pnpm vitest run --project model-node json-schema -u`) and enforced by codec's `extension-contract.property.test.ts` (foreign keys stripped on parse, emission stays within JSON Canvas 1.0 + `x-whiteboard`). Extending what lives INSIDE `x-whiteboard` means regenerating the artifact in the same increment.
+- The extension contract — `x-whiteboard` is the ONLY non-standard key an emitted document may
+  carry — is now `packages/codec`'s to keep, along with the generated
+  `docs/reference/x-whiteboard.schema.json`. See `.claude/rules/package-codec.md`.
 
 - **OKF's own vocabulary is modelled in `trust.ts`**, and it is deliberately looser than the spec's
   prose reads. `okfActorSchema` validates a non-blank single-line string, NOT §7's three bullets —

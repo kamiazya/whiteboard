@@ -102,9 +102,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // never touched it. `withEdgeStyle` now delegates to it rather than
   // repeating that rule, which is why the arm costs less than it reads.
   // +34 for the edge target: `set-edge-facet` writes a plugin-owned payload
-  // to ONE edge, the twin of `set-node-facet`, and the bends a connection
-  // stores ride it.
-  'apps/web/src/lib/spatial/commands.ts': 1029,
+  // to ONE edge, the twin of `set-node-facet`.
+  // +17: `set-edge-bends`, the bend drag's write. Not a facet write since
+  // ADR-0037 slice 4 — bends are a field of the edge, so the command carries
+  // a value rather than an opaque plugin payload.
+  // +18 when an edge END became a discriminated union (ADR-0037 slice 3):
+  // `set-edge-ends` and `set-edge-side` write INSIDE the endpoint now, and
+  // `set-edge-side` grew a real branch — only a node end has a side to pin,
+  // so the write is a no-op on a free one. The width is the branch, not
+  // ceremony: the flat version could not have had it.
+  'apps/web/src/lib/spatial/commands.ts': 1064,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -133,7 +140,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a seam (the open passage, its extension, the projection effect, where
   // the passage currently sits) is `use-passage-proposals.ts`, and what is
   // left is the component's own prop surface and one conditional render.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1137,
+  // +3 for `completionOnDelete`: an import, the call, and one line saying
+  // why. Raised rather than paid for by trimming prose — this file funded
+  // an earlier increment that way, and a budget met by deleting rationale
+  // buys lines at the price of the thing the lines were for.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1140,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first
@@ -147,7 +158,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // same reason — the thread it becomes is one every reader would drop.
   // +1: an edge's `x-whiteboard` facets bucket crosses the bridge the way a
   // node's already did, so a per-edge facet survives a round trip.
-  'packages/loro-adapter/src/loro-bridge.ts': 961,
+  // +3: an edge's `bends`, written as one value — the round-trip property
+  // reported it dropped before the line existed.
+  // +6 for the comment on `edgeToFields` saying WHY an endpoint is stored as
+  // one value: it is one thing with one meaning, so last-writer-wins per key
+  // is the whole merge story, and two peers re-attaching the same end
+  // converge on an end one of them chose rather than on a half of each.
+  'packages/loro-adapter/src/loro-bridge.ts': 1083,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -163,7 +180,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `node.patch` could carry content at all. This file grew and the REPO
   // shrank — body-patch.ts (134) and its two test files (165 + 106) are
   // deleted, so 14 files come to 295 insertions against 541 deletions.
-  'packages/server-core/src/tools/canvas-edit.ts': 1098,
+  // +7 where two increments met: this file gained a workspace stencil
+  // library's resolution from main and the endpoint helpers from the model
+  // move, and neither alone crossed the line it was already over.
+  // 1112 -> 1180 for ADR-0038 decision 2's three LINE op executors plus the
+  // `lines` collection threaded through the working copy — including the
+  // sweep that takes ink anchored to a removed node and leaves free ink
+  // alone, which is the one place the two element kinds must differ.
+  'packages/server-core/src/tools/canvas-edit.ts': 1180,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -203,7 +227,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // paint helpers every element shares to `svg/paint.ts`. What is left is
   // the text, list, table, code, icon and edge cases plus the document
   // envelope.
-  'packages/canvas-render/src/svg/backend.ts': 831,
+  // +19 for the inline-image substitution: a run carrying `paints` draws
+  // its picture in the run's box instead of its glyphs. `renderTextRun` is
+  // the single funnel every block routes through, so one branch here is
+  // what reaches heading, paragraph and table cell alike.
+  'packages/canvas-render/src/svg/backend.ts': 850,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -291,7 +319,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // that forgot — the alternative was a seam per surface, which is the
   // reference-seams defect. The two comment lines that survived say what
   // only this site can: that `inlineCode` deliberately does not expand.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1678,
+  // +21 for `case 'image'`: an inline `![](...)` marks its run to paint
+  // the picture rather than emitting the alt words, and an alt-less one
+  // takes an atomic placeholder because the wrappable path trims a
+  // whitespace-only run out of existence.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1699,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //
@@ -342,7 +374,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +26 for the per-edge routing fold and the contributed router's call
   // site. The router's own resolution is `layout/contributed-router.ts`;
   // what stays here is the composer asking for it and falling back.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2432,
+  // +8: `pullEdgeOntoOutlines` and `proposedEdgePath` each ask for a node
+  // that may not be there, which is two lines apiece plus the sentence
+  // saying a free end has no silhouette to be pulled onto.
+  // 2444 -> 2463: the proposal layer draws a proposed LINE. Without it the
+  // op stored a change nothing rendered — built but unwired, and every test
+  // green over a board that said nothing had happened.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2463,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -350,7 +388,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +24 for the per-edge style resolver threaded through the anchor pass:
   // side choice reads the whole edge set, so one edge overriding the board's
   // routing has to be visible to it rather than applied afterwards.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2114,
+  // +26: the stored-bend branch, taken before the self-edge shape and before
+  // any computed routing (ADR-0037 slice 4). The route itself is
+  // `bend-route.ts`; what lives here is choosing it.
+  // +11 net, and the shape is worth reading: the reshape HOISTED three
+  // `endNode` reads out of O(nodes) filters on the routing path (760k
+  // calls per clustered layout, per the profile this rule records) and moved
+  // the map lookup to model's own `nodeAtEnd`, deleting the local copy. What
+  // is left is those hoists and the comments on them.
+  // +16 for `rectAtEnd`: a free end is a DEGENERATE box at its point, which
+  // is the whole of what lets this file draw one without a second routing
+  // path beside the one it has.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2170,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.

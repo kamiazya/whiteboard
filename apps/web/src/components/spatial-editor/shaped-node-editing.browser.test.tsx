@@ -43,7 +43,7 @@ const DIAMOND: SpatialCanvas = {
       width: 200,
       height: 100,
       text: 'shapefit',
-      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'diamond' } } },
+      facets: { 'visual.shape/v0': { kind: 'diamond' } },
     },
   ],
   edges: [],

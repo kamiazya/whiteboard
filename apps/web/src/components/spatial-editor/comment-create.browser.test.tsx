@@ -78,7 +78,7 @@ it('Comment on this: composes at the node and commits a node-anchored comment', 
   const [comment] = createdComments(latest.commands)
   expect(comment).toMatchObject({ targetNodeId: 'n1', x: 300, y: 100, text: 'looks off' })
   expect(comment?.id.length).toBeGreaterThan(0)
-  expect(latest.canvas['x-whiteboard']?.comments).toHaveLength(1)
+  expect(latest.canvas.comments).toHaveLength(1)
   expect(container.querySelector('[data-testid="comment-compose"]')).toBeNull()
 })
 
@@ -122,7 +122,7 @@ it('Escape abandons the draft; an empty commit creates nothing', async () => {
   )
 
   expect(createdComments(latest.commands)).toHaveLength(0)
-  expect(latest.canvas['x-whiteboard']?.comments).toBeUndefined()
+  expect(latest.canvas.comments).toBeUndefined()
 })
 
 it('a locked node still offers Comment on this beside Unlock — a comment does not edit the node', async () => {

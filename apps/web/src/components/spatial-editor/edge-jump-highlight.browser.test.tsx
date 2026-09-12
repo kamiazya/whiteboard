@@ -17,10 +17,18 @@ const doc: SpatialCanvas = {
     { id: 'd', type: 'text', x: 300, y: 400, width: 120, height: 60, text: 'd' },
   ],
   edges: [
-    { id: 'h', fromNode: 'a', toNode: 'b' },
-    { id: 'v', fromNode: 'c', toNode: 'd' },
+    {
+      id: 'h',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+    {
+      id: 'v',
+      from: { node: 'c' },
+      to: { node: 'd' },
+    },
   ],
-  'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } } },
+  facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
 }
 
 function press(el: HTMLElement, type: string, x: number, y: number) {

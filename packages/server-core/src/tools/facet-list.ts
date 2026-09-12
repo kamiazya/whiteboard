@@ -83,6 +83,28 @@ export const facetListOutputSchema = z
            * output contract exactly when it degraded.
            */
           schema: z.unknown().optional(),
+          /**
+           * Which of this facet's FIELDS takes the id of a registered
+           * asset, and of which kind — the join between the two lists
+           * below, which each carried one half of it.
+           *
+           * Without it a model has to guess that `visual.stencil/v0`'s
+           * `stencil` field is where a `stencils` id goes. Round 13 of the
+           * eval lane measured what that costs: asked for a flow whose
+           * kinds differ, a model called this tool with
+           * `assetKind: 'stencils'`, then wrote `visual.shape/v0` with
+           * `{kind: 'diamond'}` — a registered facet, a successful write,
+           * and a SILHOUETTE rather than a kind, so the board recorded a
+           * distinction a reader sees and the document does not state. The
+           * shape facet publishes an enum containing the word it wanted;
+           * the stencil facet publishes a pattern-checked string. It picked
+           * the one it could act on.
+           *
+           * OMITTED, not `{}`, for a facet that names no asset: most do
+           * not, and an empty object on every entry is bytes that say
+           * nothing.
+           */
+          assetRefs: z.record(z.string(), assetKindSchema).optional(),
         })
         .strict(),
     ),
@@ -159,6 +181,14 @@ export function createFacetListTool(deps: ServerDeps) {
             // still belongs in the list — the key and targets are useful
             // on their own — so the schema degrades rather than the entry.
             schema: describeSchema(definition.schema),
+            // Spread so the key is ABSENT rather than `undefined` for a
+            // facet with no asset behind it — `.strict()` admits it either
+            // way, but `JSON.stringify` drops an undefined value's key and
+            // keeps an explicit `{}`, and the two answers would differ on
+            // the wire for no reason.
+            ...(definition.assetRefs === undefined
+              ? {}
+              : { assetRefs: { ...definition.assetRefs } }),
           })),
         )
         .filter((facet) => parsed.target === undefined || facet.targets.includes(parsed.target))

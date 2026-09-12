@@ -31,7 +31,7 @@ const ANCHORED: CanvasComment = {
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': { comments: [ANCHORED, FREE] },
+  comments: [ANCHORED, FREE],
 }
 
 function makeHost(initial: SpatialCanvas = start) {
@@ -60,7 +60,7 @@ function makeHost(initial: SpatialCanvas = start) {
 }
 
 function commentOf(canvas: SpatialCanvas, id: string): CanvasComment | undefined {
-  return canvas['x-whiteboard']?.comments?.find((c) => c.id === id)
+  return canvas.comments?.find((c) => c.id === id)
 }
 
 function movesOf(commands: readonly EditorCommand[]) {

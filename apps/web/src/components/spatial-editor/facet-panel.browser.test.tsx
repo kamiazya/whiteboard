@@ -71,7 +71,7 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // search, not a field beside it.
   expect(panel.querySelector('[aria-label="Any character or emoji"]')).toBeNull()
 
-  expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']).toEqual({
+  expect(latest.canvas.nodes[0]?.facets?.['visual.shape/v0']).toEqual({
     kind: 'hexagon',
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()

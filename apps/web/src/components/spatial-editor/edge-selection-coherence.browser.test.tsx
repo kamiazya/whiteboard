@@ -25,7 +25,13 @@ const start: SpatialCanvas = {
     { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
     { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
   ],
-  edges: [{ id: 'e0', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e0',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 let latest: SpatialCanvas = start

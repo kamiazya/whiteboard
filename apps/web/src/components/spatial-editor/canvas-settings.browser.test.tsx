@@ -22,7 +22,7 @@ import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { CANVAS_SETTINGS_WIDGETS } from './facet-widgets/index.js'
 
 const edgesFacetOf = (canvas: SpatialCanvas) =>
-  canvas['x-whiteboard']?.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
+  canvas.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
 
 afterEach(cleanup)
 
@@ -31,7 +31,13 @@ const initial: SpatialCanvas = {
     { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
     { id: 'b', type: 'text', x: 400, y: 240, width: 120, height: 60, text: 'B' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 function makeHost() {
@@ -80,7 +86,7 @@ it('a theme pick writes visual.theme to the canvas envelope; Default clears it',
   await vi.waitFor(() => expect(themeRadio('Neon')).toBeTruthy())
   fireEvent.click(themeRadio('Neon'))
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toEqual({
+    expect(latest.canvas.facets?.['visual.theme/v0']).toEqual({
       theme: 'visual.neon',
     })
   })
@@ -89,7 +95,7 @@ it('a theme pick writes visual.theme to the canvas envelope; Default clears it',
 
   fireEvent.click(themeRadio('Default'))
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toBeUndefined()
+    expect(latest.canvas.facets?.['visual.theme/v0']).toBeUndefined()
   })
 })
 
@@ -240,7 +246,7 @@ it('lets a person give the document its own mark, and take it back', async () =>
   })
   fireEvent.click(pick)
   await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.facets?.['visual.symbol/v0']).toEqual({
+    expect(latest.canvas.facets?.['visual.symbol/v0']).toEqual({
       kind: 'emoji',
       char: '⭐',
     }),
@@ -249,9 +255,7 @@ it('lets a person give the document its own mark, and take it back', async () =>
   fireEvent.click(picker.querySelector('[aria-label="No symbol"]') as HTMLElement)
   // Removed without a trace: a canvas that chose and reverted serializes
   // like one that never chose.
-  await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.facets?.['visual.symbol/v0']).toBeUndefined(),
-  )
+  await vi.waitFor(() => expect(latest.canvas.facets?.['visual.symbol/v0']).toBeUndefined())
 })
 
 /**
@@ -448,7 +452,7 @@ it('offers no Clear beside a picker that already has a none option', async () =>
   })
   fireEvent.click(neon)
   await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toEqual({
+    expect(latest.canvas.facets?.['visual.theme/v0']).toEqual({
       theme: 'visual.neon',
     }),
   )
@@ -462,9 +466,7 @@ it('offers no Clear beside a picker that already has a none option', async () =>
 
   // And the none option is what takes it back.
   fireEvent.click(menu()?.querySelector('[aria-label="Default"]') as HTMLElement)
-  await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toBeUndefined(),
-  )
+  await vi.waitFor(() => expect(latest.canvas.facets?.['visual.theme/v0']).toBeUndefined())
 })
 
 /**

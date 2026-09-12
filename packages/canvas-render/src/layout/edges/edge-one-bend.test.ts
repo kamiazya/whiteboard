@@ -20,8 +20,17 @@ const node = (id: string, x: number, y: number, width: number, height: number): 
   text: '',
 })
 
-const edge = (id: string, fromNode: string, toNode: string, rest: Partial<CanvasEdge> = {}) =>
-  ({ id, fromNode, toNode, ...rest }) as CanvasEdge
+const edge = (
+  id: string,
+  fromNode: string,
+  toNode: string,
+  rest: Partial<CanvasEdge> = {},
+): CanvasEdge => ({
+  id,
+  from: { node: fromNode },
+  to: { node: toNode },
+  ...rest,
+})
 
 /** Direction changes between horizontal and vertical travel. */
 function bendCount(path: readonly { x: number; y: number }[]): number {

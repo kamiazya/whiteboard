@@ -34,15 +34,16 @@ import { namespacedIdSchema, type ThemeTokens } from '@kamiazya/whiteboard-facet
 import type {
   AnchorRect,
   CanvasComment,
-  CanvasEdge,
   CommentThread,
+  EdgeEnd,
   EdgeRoutingStyle,
+  LineEnd,
   Proposal,
   SpatialCanvas,
   SpatialNode,
   SpatialProposedChange,
 } from '@kamiazya/whiteboard-model'
-import { canvasChangeConflicts, spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import { canvasChangeConflicts, endNode, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
@@ -54,6 +55,7 @@ import type {
   NodeDecoration,
   RenderContribution,
   ResolvedEdgeNode,
+  RoutableElement,
   Scene,
   SceneInk,
   SceneNode,
@@ -1309,7 +1311,7 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
 
 function composeEdge(
   canvas: SpatialCanvas,
-  edge: CanvasEdge,
+  edge: RoutableElement,
   options: ResolvedLayoutOptions,
   routingStyle: EdgeRoutingStyle | undefined,
   anchors: EdgeAnchorPair | undefined,
@@ -1353,7 +1355,7 @@ function composeEdge(
 function pullEdgeOntoOutlines(
   routed: ResolvedEdgeNode,
   canvas: SpatialCanvas,
-  edge: CanvasEdge,
+  edge: RoutableElement,
   nodeOutlines: Readonly<Record<string, string>> | undefined,
   shapes: ShapeTable | undefined,
 ): ResolvedEdgeNode {
@@ -1371,8 +1373,11 @@ function pullEdgeOntoOutlines(
     a: { readonly x: number; readonly y: number },
     b: { readonly x: number; readonly y: number },
   ): boolean => a.x !== b.x || a.y !== b.y
-  const toKind = nodeOutlines[edge.toNode]
-  const toBox = toKind === undefined ? undefined : boxOf(edge.toNode)
+  // A free end has no node, so no silhouette to be pulled onto — it already
+  // sits exactly where the document put it.
+  const toId = endNode(edge.to)
+  const toKind = toId === undefined ? undefined : nodeOutlines[toId]
+  const toBox = toKind === undefined || toId === undefined ? undefined : boxOf(toId)
   if (toKind !== undefined && toBox !== undefined) {
     const last = path[path.length - 1]
     const inward = path[path.length - 2]
@@ -1381,8 +1386,9 @@ function pullEdgeOntoOutlines(
       if (moved(pulled, last)) path = [...path.slice(0, -1), pulled]
     }
   }
-  const fromKind = nodeOutlines[edge.fromNode]
-  const fromBox = fromKind === undefined ? undefined : boxOf(edge.fromNode)
+  const fromId = endNode(edge.from)
+  const fromKind = fromId === undefined ? undefined : nodeOutlines[fromId]
+  const fromBox = fromKind === undefined || fromId === undefined ? undefined : boxOf(fromId)
   if (fromKind !== undefined && fromBox !== undefined) {
     const first = path[0]
     const inward = path[1]
@@ -1402,7 +1408,7 @@ function pullEdgeOntoOutlines(
  * inline label editor uses.
  */
 function composeEdgeLabel(
-  edge: CanvasEdge,
+  edge: RoutableElement,
   routed: ResolvedEdgeNode,
   options: ResolvedLayoutOptions,
   obstacles: ReturnType<typeof labelObstacles>, // what the label must not lie over
@@ -1934,7 +1940,7 @@ function composeComments(
   options: ResolvedLayoutOptions,
   edgePathOf: EdgePathLookup,
 ): readonly SceneNode[] {
-  const comments = options.comments ?? canvas['x-whiteboard']?.comments
+  const comments = options.comments ?? canvas.comments
   if (comments === undefined || comments.length === 0) return []
 
   const chrome = options.appearance.resolveComment?.()
@@ -2268,15 +2274,36 @@ function proposedEdgePath(
   if (change.op === 'edge.patch' || change.op === 'edge.remove') {
     return edgePathOf(change.edgeId)
   }
+  // Ink already on the board is traced the same way, and for the same
+  // reason: `composeEdgesAndLabels` routes lines through the edge pipeline,
+  // so a line's id is in the same path table (ADR-0038 decision 2).
+  if (change.op === 'line.patch' || change.op === 'line.remove') {
+    return edgePathOf(change.lineId)
+  }
+  if (change.op === 'line.add') {
+    const at = (end: LineEnd) => {
+      if (end.kind === 'point') return end.point
+      const node = canvas.nodes.find((candidate) => candidate.id === end.node)
+      return node === undefined
+        ? undefined
+        : { x: node.x + node.width / 2, y: node.y + node.height / 2 }
+    }
+    const from = at(change.line.from)
+    const to = at(change.line.to)
+    return from === undefined || to === undefined ? undefined : [from, to]
+  }
   if (change.op !== 'edge.add') return undefined
-  const centre = (id: string) => {
-    const node = canvas.nodes.find((candidate) => candidate.id === id)
+  // A FREE end has no box to take a centre from, so a proposed edge carrying
+  // one draws no preview line — the same answer a dangling reference gets.
+  const centre = (end: EdgeEnd) => {
+    const id = endNode(end)
+    const node = id === undefined ? undefined : canvas.nodes.find((c) => c.id === id)
     return node === undefined
       ? undefined
       : { x: node.x + node.width / 2, y: node.y + node.height / 2 }
   }
-  const from = centre(change.edge.fromNode)
-  const to = centre(change.edge.toNode)
+  const from = centre(change.edge.from)
+  const to = centre(change.edge.to)
   return from === undefined || to === undefined ? undefined : [from, to]
 }
 
@@ -2314,7 +2341,7 @@ function composeEdgesAndLabels(
   // search asks for an edge's style many times per layout, and each ask
   // would otherwise re-resolve and re-parse a stored payload.
   const ownStyles = new Map<string, VisualEdgesFacet>()
-  const ownStyleOf = (edge: CanvasEdge): VisualEdgesFacet => {
+  const ownStyleOf = (edge: RoutableElement): VisualEdgesFacet => {
     const hit = ownStyles.get(edge.id)
     if (hit !== undefined) return hit
     const own = resolveEdgeOwnStyle(edge)
@@ -2324,31 +2351,35 @@ function composeEdgesAndLabels(
   // The side pass runs BEFORE any router does, over the whole edge set, so
   // it works in the built-in vocabulary; a contributed router receives the
   // sides it chose rather than being bound by them.
-  const styleOf = (edge: CanvasEdge): EdgeRoutingStyle =>
+  const styleOf = (edge: RoutableElement): EdgeRoutingStyle =>
     ownStyleOf(edge).routing ?? edgeStyle.style ?? 'straight'
-  const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges, styleOf, resolved.edgeSideOverrides)
-  const routedEdges = canvas.edges.map((edge) =>
+  // Edges AND lines, through one pipeline: the route between two places is the
+  // same question whichever the element is, and the anchoring pass has to see
+  // every element or two of them will pick the same side of one box.
+  const routable: readonly RoutableElement[] = [...canvas.edges, ...(canvas.lines ?? [])]
+  const anchors = assignEdgeAnchors(canvas.nodes, routable, styleOf, resolved.edgeSideOverrides)
+  const routedEdges = routable.map((edge) =>
     composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id)),
   )
   // A jump is drawn on the LATER edge of a crossing pair, so "does this edge
   // hop" is asked of the edge that would draw the arc. Crossings are still
   // computed over EVERY edge — who crosses whom is geometry, and an edge
   // that wants no arcs of its own is still something its neighbours cross.
-  const hopsOf = (edge: CanvasEdge): boolean =>
+  const hopsOf = (edge: RoutableElement): boolean =>
     (ownStyleOf(edge).lineJumps ?? edgeStyle.lineJumps ?? 'none') === 'arc'
-  const anyHops = canvas.edges.some(hopsOf)
+  const anyHops = routable.some(hopsOf)
   const jumpsByEdge = anyHops ? computeEdgeJumps(routedEdges) : undefined
   const edgeContent =
     jumpsByEdge === undefined
       ? routedEdges
       : routedEdges.map((edge, index) => {
           const jumps = jumpsByEdge.get(edge.id)
-          const source = canvas.edges[index]
+          const source = routable[index]
           if (jumps === undefined || source === undefined || !hopsOf(source)) return edge
           return { ...edge, jumps }
         })
   const obstacles = labelObstacles(canvas.nodes)
-  const labelContent = canvas.edges
+  const labelContent = routable
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved, obstacles))
     .filter((label): label is TextRunNode => label !== undefined)
   return { content: [...edgeContent, ...labelContent], anchors }

@@ -105,7 +105,7 @@ describe('GET /backlinks', () => {
             id: 'n-embed',
             type: 'file',
             file: 'embed-placeholder',
-            'x-whiteboard': { kind: 'embed', documentId: target.documentId },
+            'x-whiteboard': { embed: { documentId: target.documentId } },
           },
         },
         { op: 'node.add', node: { id: 'n-file', type: 'file', file: 'target' } },

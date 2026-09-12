@@ -39,10 +39,14 @@ const canvas: SpatialCanvas = {
     { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'a', color: '5' },
     { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 60, text: 'b' },
   ],
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-  'x-whiteboard': {
-    comments: [{ id: 'k', x: 50, y: 30, text: 'note', targetNodeId: 'a' }],
-  },
+  edges: [
+    {
+      id: 'e',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
+  comments: [{ id: 'k', x: 50, y: 30, text: 'note', targetNodeId: 'a' }],
 }
 
 const shapes = (scene: Scene) => scene.nodes.filter((n): n is ShapeSceneNode => n.kind === 'shape')

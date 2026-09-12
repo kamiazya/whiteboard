@@ -1,16 +1,29 @@
 import type { CodecParseError, CodecParseResult } from '@kamiazya/whiteboard-codec'
 import {
+  fromJsonCanvas,
+  jsonCanvasDocumentSchema,
   parseSpatial,
   type SpatialSerializeMode,
   serializeSpatial,
 } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 
-// The viewer's scene model IS model's spatial canvas — re-exported,
-// never redeclared. A second spatial schema here would be exactly the
-// drift class this repo's zod-schema-discipline forbids.
-export const viewerSceneSchema = spatialCanvasSchema
+/**
+ * What this widget ACCEPTS is a JSON Canvas document — a file another tool may
+ * have written — so the published input contract is codec's wire schema,
+ * re-exported and never redeclared. It deliberately does not follow the
+ * product's own model: ADR-0037 moves that away from the format, and an input
+ * contract that tracked it would break every third-party document the moment
+ * it did.
+ */
+export const viewerSceneSchema = jsonCanvasDocumentSchema
+
+/**
+ * What the viewer HOLDS once a scene is parsed: the model, because that is
+ * what the renderer draws. Accepting the format and holding the model is the
+ * whole shape of the seam — `parseViewerScene` is where the lift happens, and
+ * it happens on both input paths or the two disagree.
+ */
 export type ViewerScene = SpatialCanvas
 
 /**
@@ -23,7 +36,7 @@ export type ViewerScene = SpatialCanvas
 export function parseViewerScene(input: unknown): CodecParseResult<ViewerScene> {
   if (typeof input === 'string') return parseSpatial(input)
 
-  const parsed = spatialCanvasSchema.safeParse(input)
+  const parsed = jsonCanvasDocumentSchema.safeParse(input)
   if (!parsed.success) {
     const error: CodecParseError = {
       stage: 'json-canvas-schema',
@@ -32,7 +45,7 @@ export function parseViewerScene(input: unknown): CodecParseResult<ViewerScene> 
     }
     return { ok: false, error }
   }
-  return { ok: true, value: parsed.data }
+  return { ok: true, value: fromJsonCanvas(parsed.data) }
 }
 
 /** Thin delegation to codec's serializer — no separate viewer-side logic. */

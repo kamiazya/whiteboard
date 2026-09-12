@@ -20,8 +20,8 @@
 // background with light node chrome — changing that is a behavior decision
 // (export gaining a dark chrome variant), not a convergence one, and is
 // out of this slice's scope.
-import type { CanvasColor, CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { Appearance } from '@kamiazya/whiteboard-scene'
+import type { CanvasColor, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
 import {
@@ -101,7 +101,7 @@ function buildTheme(palette: SpatialPalette, mode: SpatialThemeMode): SpatialApp
           : { fill: rawHex(node.color) ?? style.fill, stroke: style.stroke }
       return { radius: palette.cornerRadiusPx, appearance }
     },
-    resolveEdge: (edge: CanvasEdge) => ({
+    resolveEdge: (edge: RoutableElement) => ({
       stroke: presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
     }),
     resolveSyntax: () => palette.syntax,

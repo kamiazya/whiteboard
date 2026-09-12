@@ -349,13 +349,19 @@ describe('node-target writes (nodeId)', () => {
           { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
           { id: 'n2', type: 'text', text: 'b', x: 300, y: 200, width: 100, height: 50 },
         ],
-        edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+        edges: [
+          {
+            id: 'e1',
+            from: { node: 'n1' },
+            to: { node: 'n2' },
+          },
+        ],
       })
     })
     return { documentStore, tool: createFacetSetTool(makeDeps(documentStore)) }
   }
 
-  test('sets a node-target facet into the node x-whiteboard facets bucket', async () => {
+  test("sets a node-target facet into the node's facets bucket", async () => {
     const { documentStore, tool } = await spatialWith()
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -372,9 +378,7 @@ describe('node-target writes (nodeId)', () => {
     const doc = new LoroDoc()
     if (loaded !== null) doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
     const canvas = readSpatialCanvas(doc)
-    expect(canvas?.nodes[0]?.['x-whiteboard']).toEqual({
-      facets: { 'visual.shape/v0': { kind: 'hexagon' } },
-    })
+    expect(canvas?.nodes[0]?.facets).toEqual({ 'visual.shape/v0': { kind: 'hexagon' } })
   })
 
   test('a null payload deletes the facet from the node', async () => {
@@ -409,7 +413,7 @@ describe('node-target writes (nodeId)', () => {
     ).rejects.toThrow(/targets a node/)
   })
 
-  test('sets an edge-target facet into the edge x-whiteboard facets bucket', async () => {
+  test("sets an edge-target facet into the edge's facets bucket", async () => {
     const { documentStore, tool } = await spatialWithEdge()
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -426,11 +430,9 @@ describe('node-target writes (nodeId)', () => {
     const doc = new LoroDoc()
     if (loaded !== null) doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
     const canvas = readSpatialCanvas(doc)
-    expect(canvas?.edges[0]?.['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-    })
+    expect(canvas?.edges[0]?.facets).toEqual({ 'visual.edges/v0': { routing: 'orthogonal' } })
     // The nodes beside it are untouched — the write names one edge.
-    expect(canvas?.nodes[0]?.['x-whiteboard']).toBeUndefined()
+    expect(canvas?.nodes[0]?.facets).toBeUndefined()
   })
 
   test('a null payload deletes the facet from the edge, leaving no empty extension', async () => {
@@ -454,7 +456,7 @@ describe('node-target writes (nodeId)', () => {
     })
     const doc = new LoroDoc()
     if (loaded !== null) doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
-    expect(readSpatialCanvas(doc)?.edges[0]).not.toHaveProperty('x-whiteboard')
+    expect(readSpatialCanvas(doc)?.edges[0]).not.toHaveProperty('facets')
   })
 
   test('rejects a registered facet whose targets exclude edge', async () => {
@@ -665,7 +667,7 @@ describe('wb_facet_set canvas target (ADR-0030)', () => {
     })
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.facets).toEqual({
+    expect(readSpatialCanvas(doc).facets).toEqual({
       [THEME_KEY]: { theme: 'visual.neon' },
     })
   })
@@ -691,7 +693,7 @@ describe('wb_facet_set canvas target (ADR-0030)', () => {
     })
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
-    expect(readSpatialCanvas(doc)['x-whiteboard']).toBeUndefined()
+    expect(readSpatialCanvas(doc).facets).toBeUndefined()
   })
 
   test('refuses a theme id no plugin registered, naming what is', async () => {
@@ -758,7 +760,7 @@ describe('wb_facet_set canvas target (ADR-0030)', () => {
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
     expect(readDocumentKind(doc)).toBeUndefined()
-    expect(readSpatialCanvas(doc)['x-whiteboard']?.facets).toEqual({
+    expect(readSpatialCanvas(doc).facets).toEqual({
       [THEME_KEY]: { theme: 'visual.neon' },
     })
   })
