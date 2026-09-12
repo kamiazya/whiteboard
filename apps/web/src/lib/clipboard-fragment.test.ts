@@ -4,9 +4,31 @@
 // fragment can land any number of times in any canvas without colliding.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { clipboardFragmentSchema, endIn, endNode } from '@kamiazya/whiteboard-model'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { extractClipboardFragment, remintClipboardFragment } from './clipboard-fragment.js'
+
+// A CEILING sized on a measurement, not a delay. The property below takes
+// 1220ms of vitest's default 5000ms on an idle machine — 24% of the budget
+// with nothing else running — and `stress-changed-tests`, which repeats a PR's
+// touched files 3x IN-PROCESS, is what spends the rest: CI measured 12603ms
+// for the three and timed out.
+//
+// The repeat is the multiplier rather than the machine. Running CI's own
+// command (`vitest run --repeats=3 --fsModuleCache`) on this file ALONE and
+// idle reproduces 11730ms — ~3910ms a repeat, 3.2x the isolated cost — so it
+// sits just under the 5000ms budget here and just over it there. That is a
+// margin, not a flake, and a re-run would not have fixed it.
+//
+// Not a counterexample, and not a cost this branch added. `@fast-check/vitest`
+// prints the seed in the test NAME, so `Test timed out in 5000ms` arrives
+// reading exactly like a property failure; what ran out is the clock. Measured
+// at `origin/main` in a worktree, the same property is 1219/1215/1223ms against
+// this branch's 1215/1220/1220ms, and the cost is linear in `numRuns`
+// (20 runs -> 125ms), so it is the property's own per-draw price, unchanged.
+// `tool-inputs.fuzz.property.test.ts` carries one for the same reason. The
+// remedy is never a pinned seed.
+vi.setConfig({ testTimeout: 60_000 })
 
 const canvas: SpatialCanvas = {
   nodes: [
