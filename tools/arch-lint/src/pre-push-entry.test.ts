@@ -43,9 +43,22 @@ describe('the architecture scans run before a push', () => {
     expect(prePushCommands().length).toBeGreaterThanOrEqual(5)
   })
 
+  /**
+   * Both halves are required, because either alone is satisfied by a command
+   * that runs nothing. Measured: with only the substring check, replacing the
+   * entry with `echo --project arch-lint-node` left this green — a guard whose
+   * whole job is to be unfoolable, reporting a gate that was not there.
+   * `pnpm vitest run` alone is the same hole facing the other way: it says
+   * nothing about WHICH project.
+   *
+   * Not an equality against the whole command, which a later `--silent` or
+   * `--reporter` would fail while the gate still ran — and a guard that fails
+   * on a harmless edit is one that gets weakened until it means nothing.
+   */
   it('is run by a pre-push command', () => {
-    const runsThisProject = prePushCommands().filter((command) =>
-      command.includes('--project arch-lint-node'),
+    const runsThisProject = prePushCommands().filter(
+      (command) =>
+        /^pnpm vitest run\b/.test(command) && /--project\s+arch-lint-node\b/.test(command),
     )
     expect(runsThisProject).toHaveLength(1)
   })
