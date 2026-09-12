@@ -226,13 +226,31 @@ will not resolve, silently, in a document that already has the text in it.
 `shortcode.test.ts` checks the two directions against each other over all
 1914 rows rather than against a hand-written list.
 
+`./emoji/search` is the TYPING half — `searchEmojiShortcodes(query)`, which
+the markdown editor's `:` completion reaches by dynamic import. It reads the
+Japanese index as well as the rows, so it costs the full 190KB and belongs
+nowhere near the read path; a person who never types a colon never loads it.
+Its ranking is exact name, then prefix, then slug substring, then any term —
+and within a score the SHORTER slug, which is not a tie-break detail but what
+makes a prefix usable: `:ro` scores `rocket` and `rolling_on_the_floor_laughing`
+alike, and on CLDR order alone the laughing face wins because Smileys is the
+first group.
+
+Three readers, one vocabulary, and the contract between them is asserted
+rather than assumed: `search.test.ts` checks that every slug the completion
+offers is one `emojiForShortcode` resolves, and to the same character. A
+completion offering a name the renderer draws as literal text is the feature
+failing in the one place nobody would think to look.
+
 **What is lost is GitHub's muscle memory, and typing is where that bites.**
 `:white_check_mark:` and `:heavy_plus_sign:` resolve to nothing — CLDR calls
 them `check mark button` and `plus`. The slug rule's own note says the search
 finds those by name anyway, and that was true of the PICKER; a name typed
 between colons has no search behind it, so until the `:` completion lands
 this is a real gap rather than a cosmetic one. Measured in the preview pane,
-not reasoned about.
+not reasoned about. The `:` completion narrows it rather than closing it —
+typing `:check` reaches `check_mark_button` — but a person who types the
+GitHub name in full still gets literal text.
 
 ## Vendored icons
 

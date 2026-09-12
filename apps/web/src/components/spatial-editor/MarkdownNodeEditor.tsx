@@ -29,6 +29,12 @@
  * background this replaced existed solely to hide the committed text.
  */
 
+import {
+  acceptCompletion,
+  autocompletion,
+  closeCompletion,
+  completionStatus,
+} from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
@@ -51,9 +57,11 @@ import {
   setAnnotationProjection,
 } from '../markdown-editor/annotation-decorations.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
+import { emojiCompletionSource } from '../markdown-editor/emoji-completion.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
+import { wikiLinkCompletionTheme } from '../markdown-editor/wiki-link-completion.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null
@@ -152,6 +160,13 @@ export function MarkdownNodeEditor({
       doc: initialText,
       extensions: [
         markdown({ extensions: [GFM] }),
+        // The `:name:` completion, wired here as well as in the markdown
+        // editor's SourcePane — this editor is a second CodeMirror view, not
+        // that pane, so it inherits none of its extensions. A shortcode a
+        // person can type in a note and not in a node body would be the same
+        // syntax behaving differently on two surfaces.
+        autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
+        wikiLinkCompletionTheme,
         // The exit verbs outrank EVERYTHING, including the language
         // keymap's Enter continuation and the style keymap's Mod-Enter.
         Prec.highest(
@@ -165,12 +180,27 @@ export function MarkdownNodeEditor({
             },
             {
               key: 'Escape',
-              run: () => {
+              run: (view) => {
+                // Dismiss the popup before abandoning the EDIT. Losing a
+                // node's whole draft to an Escape aimed at a completion list
+                // is not a trade anyone would take, and this editor is the
+                // only one where Escape is destructive.
+                if (completionStatus(view.state) === 'active' && closeCompletion(view)) return true
                 cancel()
                 return true
               },
             },
-            { key: 'Enter', run: exitEmptyListItem },
+            {
+              key: 'Enter',
+              run: (view) => {
+                // A visible option list owns Enter. Without this the
+                // exit/continuation verb below fires under the popup, which
+                // is the same thing `Prec.highest` is here to prevent for
+                // the language keymap.
+                if (completionStatus(view.state) === 'active') return acceptCompletion(view) || true
+                return exitEmptyListItem(view)
+              },
+            },
           ]),
         ),
         syntaxHighlighting(markdownHighlightStyle),
