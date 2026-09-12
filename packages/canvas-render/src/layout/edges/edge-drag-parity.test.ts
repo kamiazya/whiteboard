@@ -19,9 +19,22 @@ const NODES: SpatialNode[] = [
   { id: 'A', type: 'text', x: 100, y: 340, width: 200, height: 100, text: '' },
 ]
 const EDGES: CanvasEdge[] = [
-  { id: 'B-C', fromNode: 'B', toNode: 'C' },
-  { id: 'A-B', fromNode: 'A', toNode: 'B', label: 'hoge' },
-  { id: 'A-C', fromNode: 'A', toNode: 'C' },
+  {
+    id: 'B-C',
+    from: { node: 'B' },
+    to: { node: 'C' },
+  },
+  {
+    id: 'A-B',
+    from: { node: 'A' },
+    to: { node: 'B' },
+    label: 'hoge',
+  },
+  {
+    id: 'A-C',
+    from: { node: 'A' },
+    to: { node: 'C' },
+  },
 ]
 
 describe('interpenetrating boxes', () => {
@@ -33,7 +46,11 @@ describe('interpenetrating boxes', () => {
       { id: 'B', type: 'text', x: 100, y: 570, width: 200, height: 100, text: '' },
       { id: 'C', type: 'text', x: 280, y: 570, width: 200, height: 100, text: '' },
     ]
-    const edge: CanvasEdge = { id: 'B-C', fromNode: 'B', toNode: 'C' }
+    const edge: CanvasEdge = {
+      id: 'B-C',
+      from: { node: 'B' },
+      to: { node: 'C' },
+    }
     const anchors = assignEdgeAnchors(nodes, [edge], 'orthogonal')
     const bc = anchors.get('B-C')
     expect([bc?.fromSide, bc?.toSide]).not.toEqual(['right', 'left'])

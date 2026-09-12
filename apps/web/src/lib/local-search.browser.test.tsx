@@ -5,7 +5,8 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -19,6 +20,16 @@ import { seedWorkspaceDocumentContent } from './workspace-content.js'
 // documents in either mode.
 
 claimIsolatedWhiteboardDb('local-body-search')
+
+// The claim is made once per MODULE, and `--repeats` re-runs the tests
+// without re-importing — so without this every seed after the first collides
+// on its own path (`DocumentPathTakenError`). Found by CI's
+// `stress-changed-tests`, which runs a PR's touched test files five times:
+// this file was never repeat-safe and only became a candidate when a diff
+// touched it.
+beforeEach(async () => {
+  await clearWhiteboardDb()
+})
 
 async function seedMarkdown(index: IdbDocumentIndex, path: string, body: string): Promise<string> {
   const entry = await index.createDocument({
@@ -66,7 +77,14 @@ describe('local body search', () => {
       nodes: [
         { id: 'n1', type: 'text', text: 'Session handshake', x: 0, y: 0, width: 80, height: 40 },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n1', label: 'retries' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'n1' },
+          to: { node: 'n1' },
+          label: 'retries',
+        },
+      ],
     })
     const source = createLocalFilesSource()
 

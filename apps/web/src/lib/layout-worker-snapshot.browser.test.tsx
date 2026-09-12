@@ -22,7 +22,13 @@ const canvas: SpatialCanvas = {
     { id: 'a', type: 'text', x: 0, y: 0, width: 220, height: 120, text: 'first node' },
     { id: 'b', type: 'text', x: 400, y: 220, width: 220, height: 120, text: 'second node' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 function snapshotOf(value: SpatialCanvas): Uint8Array {

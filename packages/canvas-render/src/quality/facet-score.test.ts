@@ -24,10 +24,10 @@ const frame = (id: string, x: number, y: number, width: number, height: number):
   ({ id, type: 'group', x, y, width, height, label: id }) as SpatialNode
 
 const shaped = (kind: string) => ({
-  'x-whiteboard': { facets: { 'visual.shape/v0': { kind } } },
+  facets: { 'visual.shape/v0': { kind } },
 })
 const badged = (char: string) => ({
-  'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char } } },
+  facets: { 'visual.symbol/v0': { kind: 'emoji', char } },
 })
 
 const canvasOf = (nodes: readonly SpatialNode[]): SpatialCanvas =>
@@ -179,16 +179,14 @@ describe('facet vocabulary: a stencil is a declared distinction', () => {
   // which is exactly `excess`: the axis would score a real improvement as a
   // defect.
   const stencilled = (id: string) => ({
-    'x-whiteboard': { facets: { 'visual.stencil/v0': { stencil: id } } },
+    facets: { 'visual.stencil/v0': { stencil: id } },
   })
   const dressed = (id: string, colour: string, shape: string) => ({
     ...stencilled(id),
     color: colour,
-    'x-whiteboard': {
-      facets: {
-        'visual.stencil/v0': { stencil: id },
-        'visual.shape/v0': { kind: shape },
-      },
+    facets: {
+      'visual.stencil/v0': { stencil: id },
+      'visual.shape/v0': { kind: shape },
     },
   })
 
@@ -277,7 +275,7 @@ describe('facet vocabulary: what carries a distinction, and what does not', () =
     // `visual.text/v0` is placement, not kind — a board that sets it on one
     // frame's boxes has still said nothing about how they differ.
     const aligned = {
-      'x-whiteboard': { facets: { 'visual.text/v0': { align: 'center' } } },
+      facets: { 'visual.text/v0': { align: 'center' } },
     }
     const s = score([
       ...plain.slice(0, 2),
@@ -297,7 +295,7 @@ describe('facet vocabulary: what carries a distinction, and what does not', () =
     const s = score([
       ...plain.slice(0, 2),
       box('a', 40, 60, {
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'not-a-shape' } } },
+        facets: { 'visual.shape/v0': { kind: 'not-a-shape' } },
       }),
       box('b', 260, 60),
       box('c', 640, 60),

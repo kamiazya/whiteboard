@@ -25,6 +25,7 @@
  * weight).
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 
 export interface CompositionScore {
@@ -211,8 +212,8 @@ export function scoreComposition(canvas: SpatialCanvas, scene: Scene): Compositi
   const degree = new Map<string, { out: number; in: number }>()
   for (const box of boxes) degree.set(box.id, { out: 0, in: 0 })
   for (const edge of canvas.edges) {
-    const from = degree.get(edge.fromNode)
-    const to = degree.get(edge.toNode)
+    const from = nodeAtEnd(edge.from, degree)
+    const to = nodeAtEnd(edge.to, degree)
     if (from !== undefined) from.out++
     if (to !== undefined) to.in++
   }

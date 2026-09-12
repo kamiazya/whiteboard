@@ -7,11 +7,10 @@
 // dispatches the list with the new point already inserted.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { VISUAL_PATH_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import { createIdleState, reduceGesture } from './gestures.js'
 
-const board = (waypoints?: readonly { x: number; y: number }[]): SpatialCanvas => ({
+const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({
   nodes: [
     { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
     { id: 'b', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'b' },
@@ -19,11 +18,9 @@ const board = (waypoints?: readonly { x: number; y: number }[]): SpatialCanvas =
   edges: [
     {
       id: 'e',
-      fromNode: 'a',
-      toNode: 'b',
-      ...(waypoints === undefined
-        ? {}
-        : { 'x-whiteboard': { facets: { [VISUAL_PATH_KEY]: { waypoints } } } }),
+      from: { node: 'a' },
+      to: { node: 'b' },
+      ...(bends === undefined ? {} : { bends }),
     },
   ],
 })
@@ -59,15 +56,12 @@ describe('dragging a bend', () => {
     )
     expect(result.commands).toEqual([
       {
-        kind: 'set-edge-facet',
+        kind: 'set-edge-bends',
         id: 'e',
-        key: VISUAL_PATH_KEY,
-        payload: {
-          waypoints: [
-            { x: 100, y: 200 },
-            { x: 340, y: 260 },
-          ],
-        },
+        bends: [
+          { x: 100, y: 200 },
+          { x: 340, y: 260 },
+        ],
       },
     ])
   })
@@ -82,12 +76,7 @@ describe('dragging a bend', () => {
       { x: 250, y: 180 },
     )
     expect(result.commands).toEqual([
-      {
-        kind: 'set-edge-facet',
-        id: 'e',
-        key: VISUAL_PATH_KEY,
-        payload: { waypoints: [{ x: 250, y: 180 }] },
-      },
+      { kind: 'set-edge-bends', id: 'e', bends: [{ x: 250, y: 180 }] },
     ])
   })
 
@@ -98,7 +87,7 @@ describe('dragging a bend', () => {
       { x: 250.4, y: 25.4 },
       { x: 250.9, y: 180.6 },
     )
-    expect(result.commands[0]).toMatchObject({ payload: { waypoints: [{ x: 251, y: 180 }] } })
+    expect(result.commands[0]).toMatchObject({ bends: [{ x: 251, y: 180 }] })
   })
 
   it('commits nothing when the pointer never moved, so a stray click stores no bend', () => {
@@ -112,18 +101,16 @@ describe('dragging a bend', () => {
     expect(result.state.kind).toBe('idle')
   })
 
-  it('removes the facet outright when the last bend is dragged away', () => {
-    // `undefined` is how set-edge-facet says "no facet", and an edge with
-    // none inherits the board's routing again — an empty list would be a
-    // payload the facet's own schema refuses.
+  it('removes the field outright when the last bend is dragged away', () => {
+    // An empty list is how set-edge-bends says "no bends", and an edge with
+    // none takes a computed route again — the model refuses an empty array
+    // for exactly that reason: absence already says it.
     const result = reduceGesture(createIdleState(), board([{ x: 250, y: 180 }]), {
       type: 'remove-bend',
       edgeId: 'e',
       index: 0,
     })
-    expect(result.commands).toEqual([
-      { kind: 'set-edge-facet', id: 'e', key: VISUAL_PATH_KEY, payload: undefined },
-    ])
+    expect(result.commands).toEqual([{ kind: 'set-edge-bends', id: 'e', bends: [] }])
   })
 
   it('keeps the rest when one bend of several is removed', () => {
@@ -136,12 +123,7 @@ describe('dragging a bend', () => {
       { type: 'remove-bend', edgeId: 'e', index: 0 },
     )
     expect(result.commands).toEqual([
-      {
-        kind: 'set-edge-facet',
-        id: 'e',
-        key: VISUAL_PATH_KEY,
-        payload: { waypoints: [{ x: 300, y: 200 }] },
-      },
+      { kind: 'set-edge-bends', id: 'e', bends: [{ x: 300, y: 200 }] },
     ])
   })
 

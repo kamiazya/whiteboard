@@ -11,7 +11,18 @@
  * reaching for each other.
  */
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+
+/**
+ * What a router and an appearance resolver are handed: an EDGE or a LINE
+ * ([ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
+ * decision 2). The two differ in what they MEAN and in the shape of an end,
+ * never in how a route between two places is found, so a contribution sees
+ * both — and a router that only understands relations narrows on `'kind' in
+ * end` rather than being handed a narrower type it cannot ask about.
+ */
+export type RoutableElement = CanvasEdge | CanvasLine
+
 import type { Appearance, BoundingBox, SceneNode } from './scene-graph.js'
 
 /**
@@ -114,7 +125,7 @@ export interface EdgeRouteAnchors {
 
 /** Everything a router is told about the one edge it is drawing. */
 export interface EdgeRouteRequest {
-  readonly edge: CanvasEdge
+  readonly edge: RoutableElement
   /** The endpoint nodes' boxes. A route needs their geometry, not their content. */
   readonly from: BoundingBox
   readonly to: BoundingBox
@@ -201,5 +212,5 @@ export interface RenderContribution {
    * engine derives an editor form from, which silently cost the routing
    * control the inspector renders.
    */
-  readonly readRouting?: (edge: CanvasEdge, canvas: SpatialCanvas) => string | undefined
+  readonly readRouting?: (edge: RoutableElement, canvas: SpatialCanvas) => string | undefined
 }

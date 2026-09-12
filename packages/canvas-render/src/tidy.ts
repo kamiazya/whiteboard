@@ -65,6 +65,8 @@
  * by it (moving the frame would carry it away from a member that cannot
  * follow); out-of-scope units likewise.
  */
+import type { CanvasEdge } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 import {
   buildUnits,
   overlapsWithMargin,
@@ -290,10 +292,7 @@ function bandsBy(units: Unit[], anchor: (u: Unit) => number): Unit[][] {
  * second tidy moves nothing. Frames are left alone (a frame's order is its
  * members' business), and so is a hub or partner that cannot move.
  */
-function orderRowsByEdges(
-  units: Unit[],
-  edges: readonly { readonly fromNode: string; readonly toNode: string }[],
-): void {
+function orderRowsByEdges(units: Unit[], edges: readonly Pick<CanvasEdge, 'from' | 'to'>[]): void {
   const unitOf = new Map<string, Unit>()
   for (const unit of units) {
     if (unit.members.length === 1 && unit.members[0]?.type !== 'group') {
@@ -306,10 +305,10 @@ function orderRowsByEdges(
     const along: Unit[] = []
     for (const edge of edges) {
       const otherId =
-        edge.fromNode === hub.rootId
-          ? edge.toNode
-          : edge.toNode === hub.rootId
-            ? edge.fromNode
+        endNode(edge.from) === hub.rootId
+          ? endNode(edge.to)
+          : endNode(edge.to) === hub.rootId
+            ? endNode(edge.from)
             : undefined
       if (otherId === undefined) continue
       const other = unitOf.get(otherId)

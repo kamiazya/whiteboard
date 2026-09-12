@@ -1,15 +1,18 @@
 // The committed schema under docs/reference/ is the published artifact of the
 // extension contract; this file-snapshot test holds it byte-equal to what the
 // Zod schemas generate (CI fails on drift). Regenerate deliberately with:
-//   pnpm vitest run --project model-node json-schema -u
+//   pnpm vitest run --project codec-node json-schema -u
+
+import { EXTENSION_FACET_KEY_PATTERN } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { EXTENSION_FACET_KEY_PATTERN } from './facets.js'
 import { xWhiteboardJsonSchema } from './json-schema.js'
 
 describe('x-whiteboard JSON Schema artifact', () => {
-  it('docs/reference/x-whiteboard.schema.json matches the model schemas', async () => {
+  it('docs/reference/x-whiteboard.schema.json matches the wire schemas', async () => {
     const generated = `${JSON.stringify(xWhiteboardJsonSchema(), null, 2)}\n`
-    await expect(generated).toMatchFileSnapshot('../../../docs/reference/x-whiteboard.schema.json')
+    await expect(generated).toMatchFileSnapshot(
+      '../../../../docs/reference/x-whiteboard.schema.json',
+    )
   })
 
   it('describes all three extension sites as draft 2020-12 definitions', () => {
@@ -18,8 +21,9 @@ describe('x-whiteboard JSON Schema artifact', () => {
     const defs = schema.$defs as Record<string, Record<string, unknown>>
     expect(Object.keys(defs).sort()).toEqual(['canvasExtension', 'edgeExtension', 'nodeExtension'])
     expect(defs.canvasExtension.type).toBe('object')
-    // The edge site is facets and nothing else — no embed variant, so no
-    // union: an edge has no content JSON Canvas cannot express.
+    // The edge site is one object — facets and bends, no embed variant, so
+    // no union: what an edge holds that the format cannot state is geometry,
+    // not content.
     expect(defs.edgeExtension.type).toBe('object')
     expect('anyOf' in defs.edgeExtension).toBe(false)
     // The node site is a UNION since ADR-0013: an embed variant and a

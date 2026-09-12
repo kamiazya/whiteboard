@@ -24,8 +24,14 @@ const neon: SpatialCanvas = {
     { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a' },
     { id: 'b', type: 'text', x: 300, y: 200, width: 120, height: 60, text: 'b' },
   ],
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  edges: [
+    {
+      id: 'e',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
+  facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
 }
 
 const edgePaths = [

@@ -30,7 +30,6 @@
  * hold that edit.
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { resolveEdgeWaypoints, VISUAL_PATH_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
@@ -205,10 +204,10 @@ function findNode(canvas: SpatialCanvas, id: string) {
 }
 
 /** Whether the gesture's target(s) are still present, with matching type, in `canvas`. */
-/** The bends an edge stores today, through the plugin that owns them. */
+/** The bends an edge stores — its own field since ADR-0037 slice 4. */
 function storedWaypoints(canvas: SpatialCanvas, edgeId: string): readonly Point[] {
   const edge = canvas.edges.find((candidate) => candidate.id === edgeId)
-  return edge === undefined ? [] : resolveEdgeWaypoints(edge)
+  return edge?.bends ?? []
 }
 
 function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean {
@@ -315,18 +314,12 @@ function reducePointerUpMoving(
 }
 
 /**
- * The bend list an edge should carry, as a `set-edge-facet` command — or
- * the facet REMOVED when nothing is left, since an edge with no facet
- * inherits the board's routing again and an empty list is a payload the
- * facet's own schema refuses.
+ * The bend list an edge should carry. An empty list clears the field, since
+ * an edge storing no bends takes a computed route again — and the model
+ * refuses an empty array for exactly that reason: absence already says it.
  */
 function bendCommand(edgeId: string, waypoints: readonly Point[]): EditorCommand {
-  return {
-    kind: 'set-edge-facet',
-    id: edgeId,
-    key: VISUAL_PATH_KEY,
-    payload: waypoints.length === 0 ? undefined : { waypoints: [...waypoints] },
-  }
+  return { kind: 'set-edge-bends', id: edgeId, bends: [...waypoints] }
 }
 
 function reducePointerUpBending(
@@ -341,9 +334,11 @@ function reducePointerUpBending(
   if (dx === 0 && dy === 0) return idle
   const moved = state.waypoints.map((point, at) =>
     at === state.index
-      ? // Whole units, the way a node position is rounded — a canvas whose
-        // coordinates are integers everywhere else should not grow
-        // sub-pixel ones here.
+      ? // Whole units, the way a node position is rounded. The MODEL accepts
+        // a fraction since ADR-0037 slice 4, so this is a UI decision rather
+        // than a schema one: a point somebody dragged to is a point they can
+        // find again, and 137.4183 is not. Ink, when it arrives, is the case
+        // that wants the fraction — and it will not come through this drag.
         { x: Math.round(point.x + dx), y: Math.round(point.y + dy) }
       : point,
   )

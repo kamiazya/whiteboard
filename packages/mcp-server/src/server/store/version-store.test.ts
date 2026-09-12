@@ -152,7 +152,13 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         { id: 'n2', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
         { id: 'n3', type: 'text', text: 'c', x: 0, y: 0, width: 10, height: 10 },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'n1' },
+          to: { node: 'n2' },
+        },
+      ],
     })
     const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
     expect(entry.elementCount).toBe(3)

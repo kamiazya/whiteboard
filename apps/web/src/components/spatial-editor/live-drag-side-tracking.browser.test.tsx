@@ -24,8 +24,14 @@ it('a carried edge re-sides mid-drag to match the drop result', async () => {
       { id: 't', type: 'text', x: 60, y: 20, width: 160, height: 60, text: 'T' },
       { id: 'd', type: 'text', x: 80, y: 480, width: 160, height: 90, text: 'D' },
     ],
-    edges: [{ id: 'e1', fromNode: 't', toNode: 'd' }],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+    edges: [
+      {
+        id: 'e1',
+        from: { node: 't' },
+        to: { node: 'd' },
+      },
+    ],
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   const latest = { canvas: initial }
   function Host() {
@@ -82,8 +88,14 @@ it('bystander edges stay frozen while an unrelated node is dragged', async () =>
       { id: 'b', type: 'text', x: 260, y: 520, width: 120, height: 60, text: 'B' },
       { id: 'd', type: 'text', x: 620, y: 240, width: 160, height: 120, text: 'D' },
     ],
-    edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+    edges: [
+      {
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+    ],
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   function Host() {
     const [canvas, setCanvas] = useState(initial)
@@ -134,10 +146,18 @@ it('a bystander edge holds its exact anchor when the carried edge joins its side
       { id: 'm', type: 'text', x: 340, y: 380, width: 100, height: 100, text: 'M' },
     ],
     edges: [
-      { id: 'f', fromNode: 'n', toNode: 't' },
-      { id: 'c', fromNode: 'm', toNode: 't' },
+      {
+        id: 'f',
+        from: { node: 'n' },
+        to: { node: 't' },
+      },
+      {
+        id: 'c',
+        from: { node: 'm' },
+        to: { node: 't' },
+      },
     ],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   function Host() {
     const [canvas, setCanvas] = useState(initial)

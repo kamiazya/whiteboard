@@ -32,7 +32,13 @@ const NODE_A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text
 const NODE_B = { id: 'b', type: 'text', x: 300, y: 0, width: 100, height: 40, text: 'B' } as const
 const BOARD: SpatialCanvas = {
   nodes: [NODE_A, NODE_B],
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 function layout(canvas: SpatialCanvas, proposals: readonly Proposal[]): readonly SceneNode[] {
@@ -134,7 +140,11 @@ describe('drawing a proposal in place', () => {
           status: 'open',
           op: 'edge.remove',
           edgeId: 'e',
-          assumed: { id: 'e', fromNode: 'a', toNode: 'b' },
+          assumed: {
+            id: 'e',
+            from: { node: 'a' },
+            to: { node: 'b' },
+          },
         },
       ]),
     ])
@@ -149,12 +159,68 @@ describe('drawing a proposal in place', () => {
           id: 'edge:new',
           status: 'open',
           op: 'edge.add',
-          edge: { id: 'new', fromNode: 'a', toNode: 'b' },
+          edge: {
+            id: 'new',
+            from: { node: 'a' },
+            to: { node: 'b' },
+          },
         },
       ]),
     ])
     const drawn = edgeById(nodes, 'edge:new/outline')
     expect(drawn?.path.length).toBeGreaterThanOrEqual(2)
+  })
+
+  // Ink is a proposal's subject too (ADR-0038 decision 2), and the outline is
+  // the only thing that tells a person one was proposed. An op that stores a
+  // change nothing draws is the built-but-unwired shape `userReach` names:
+  // every test passes, and the board says nothing happened.
+  it('draws a proposed line, including the end that lands in empty space', () => {
+    const nodes = layout({ nodes: [NODE_A], edges: [] }, [
+      proposalOf([
+        {
+          id: 'line:new',
+          status: 'open',
+          op: 'line.add',
+          line: {
+            id: 'new',
+            from: { kind: 'node', node: 'a' },
+            to: { kind: 'point', point: { x: 400, y: 400 } },
+          },
+        },
+      ]),
+    ])
+    const drawn = edgeById(nodes, 'line:new/outline')
+    expect(drawn?.path.length).toBeGreaterThanOrEqual(2)
+    // The free end is drawn WHERE IT WAS PUT, not at a node's centre — that
+    // coordinate is the whole of what a point end says.
+    expect(drawn?.path.at(-1)).toEqual({ x: 400, y: 400 })
+  })
+
+  it('traces a proposed line change along the ink already on the board', () => {
+    const board = {
+      nodes: [NODE_A, NODE_B],
+      edges: [],
+      lines: [
+        {
+          id: 'l',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
+    }
+    const nodes = layout(board, [
+      proposalOf([
+        {
+          id: 'line:l',
+          status: 'open',
+          op: 'line.remove',
+          lineId: 'l',
+          assumed: board.lines[0],
+        },
+      ]),
+    ])
+    expect(edgeById(nodes, 'line:l/outline')?.path).toEqual(edgeById(nodes, 'l')?.path)
   })
 
   // Decision 4's default control is the whole proposal, so the bubble counts

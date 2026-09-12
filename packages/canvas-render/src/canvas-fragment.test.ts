@@ -16,8 +16,16 @@ const canvas: SpatialCanvas = {
     text('in-second', 610, 10),
   ],
   edges: [
-    { id: 'e-in', fromNode: 'in-launch', toNode: 'g-inner' },
-    { id: 'e-out', fromNode: 'in-launch', toNode: 'outside' },
+    {
+      id: 'e-in',
+      from: { node: 'in-launch' },
+      to: { node: 'g-inner' },
+    },
+    {
+      id: 'e-out',
+      from: { node: 'in-launch' },
+      to: { node: 'outside' },
+    },
   ],
 }
 

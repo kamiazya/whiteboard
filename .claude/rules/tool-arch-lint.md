@@ -134,6 +134,22 @@ exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
 
+## The spatial-codec registry scan
+
+`repo-coverage.test.ts` checks one thing that is not a boundary: every
+`*_PROJECTION` table declared under `packages/codec/src/spatial` is named in
+that package's `codecs.ts`. It lives here rather than in codec because the
+check has to READ that package's source, and codec's only in-package way to do
+that is `import.meta.glob` — which needs `vite/client` in its `types` and would
+drag the DOM lib into a shared-layer package whose tsconfig exists to keep it
+out. This tool already reads every package's source textually.
+
+What it is worth: a projection table nothing registers is a FORMAT that none of
+codec's round-trip, confluence or loss-table guards are being asked of, which
+reads exactly like a format that answered them. Mutation-checked both ways — an
+unregistered third table fails it, and a scan whose pattern stops matching
+fails the count test rather than silently reporting everything as registered.
+
 ## `brand-signature.test.ts`
 
 BRAND.md says "Every brand surface renders this exact path" and, until this

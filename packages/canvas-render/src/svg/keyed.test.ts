@@ -134,7 +134,7 @@ describe('renderSceneToKeyedSvg over a comment scene', () => {
     const canvas: SpatialCanvas = {
       nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
       edges: [],
-      'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }] },
+      comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
     }
     const laidOut = layoutSpatialCanvas(canvas, {
       measure: createFakeMeasure(),
@@ -198,7 +198,7 @@ describe('the keyed projection marks the annotation layer', () => {
   const canvas: SpatialCanvas = {
     nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
     edges: [],
-    'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }] },
+    comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
   }
   const laidOut = layoutSpatialCanvas(canvas, {
     measure: createFakeMeasure(),

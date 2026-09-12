@@ -30,7 +30,7 @@ const THREAD: CommentThread = {
 const start: SpatialCanvas = {
   nodes: [],
   edges: [],
-  'x-whiteboard': { comments: [FREE] },
+  comments: [FREE],
 }
 
 function Host() {

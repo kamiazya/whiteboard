@@ -3,10 +3,32 @@
 // self-contained fragment from a selection, and remint ids on paste so a
 // fragment can land any number of times in any canvas without colliding.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { clipboardFragmentSchema } from '@kamiazya/whiteboard-model'
-import { describe, expect, it } from 'vitest'
+import { clipboardFragmentSchema, endIn, endNode } from '@kamiazya/whiteboard-model'
+import { describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { extractClipboardFragment, remintClipboardFragment } from './clipboard-fragment.js'
+
+// A CEILING sized on a measurement, not a delay. The property below takes
+// 1220ms of vitest's default 5000ms on an idle machine — 24% of the budget
+// with nothing else running — and `stress-changed-tests`, which repeats a PR's
+// touched files 3x IN-PROCESS, is what spends the rest: CI measured 12603ms
+// for the three and timed out.
+//
+// The repeat is the multiplier rather than the machine. Running CI's own
+// command (`vitest run --repeats=3 --fsModuleCache`) on this file ALONE and
+// idle reproduces 11730ms — ~3910ms a repeat, 3.2x the isolated cost — so it
+// sits just under the 5000ms budget here and just over it there. That is a
+// margin, not a flake, and a re-run would not have fixed it.
+//
+// Not a counterexample, and not a cost this branch added. `@fast-check/vitest`
+// prints the seed in the test NAME, so `Test timed out in 5000ms` arrives
+// reading exactly like a property failure; what ran out is the clock. Measured
+// at `origin/main` in a worktree, the same property is 1219/1215/1223ms against
+// this branch's 1215/1220/1220ms, and the cost is linear in `numRuns`
+// (20 runs -> 125ms), so it is the property's own per-draw price, unchanged.
+// `tool-inputs.fuzz.property.test.ts` carries one for the same reason. The
+// remedy is never a pinned seed.
+vi.setConfig({ testTimeout: 60_000 })
 
 const canvas: SpatialCanvas = {
   nodes: [
@@ -15,8 +37,16 @@ const canvas: SpatialCanvas = {
     { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'c' },
   ],
   edges: [
-    { id: 'ab', fromNode: 'a', toNode: 'b' },
-    { id: 'bc', fromNode: 'b', toNode: 'c' },
+    {
+      id: 'ab',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+    {
+      id: 'bc',
+      from: { node: 'b' },
+      to: { node: 'c' },
+    },
   ],
 }
 
@@ -37,7 +67,13 @@ describe('extractClipboardFragment', () => {
     // same-canvas paste can reconnect it; a copy never records it.
     expect(fragment.cut).toEqual({
       id: 'cut-1',
-      boundaryEdges: [{ id: 'bc', fromNode: 'b', toNode: 'c' }],
+      boundaryEdges: [
+        {
+          id: 'bc',
+          from: { node: 'b' },
+          to: { node: 'c' },
+        },
+      ],
     })
     expect(clipboardFragmentSchema.safeParse(fragment).success).toBe(true)
     expect(extractClipboardFragment(canvas, new Set(['a', 'b'])).cut).toBeUndefined()
@@ -62,8 +98,8 @@ describe('remintClipboardFragment', () => {
     const { nodes, edges } = remintClipboardFragment(fragment, seq(), new Set(['a', 'b', 'c']))
     expect(nodes.map((node) => node.id)).toEqual(['minted-1', 'minted-2'])
     expect(edges).toHaveLength(1)
-    expect(edges[0].fromNode).toBe('minted-1')
-    expect(edges[0].toNode).toBe('minted-2')
+    expect(endNode(edges[0].from)).toBe('minted-1')
+    expect(endNode(edges[0].to)).toBe('minted-2')
     expect(edges[0].id).not.toBe('ab')
     // Non-id fields survive untouched.
     expect(nodes[0]).toMatchObject({ type: 'text', text: 'a', x: 0, y: 0 })
@@ -83,7 +119,13 @@ describe('remintClipboardFragment', () => {
   it('drops edges whose endpoints are not both present in the fragment (defensive on foreign input)', () => {
     const foreign = {
       ...extractClipboardFragment(canvas, new Set(['a'])),
-      edges: [{ id: 'x', fromNode: 'a', toNode: 'ghost' }],
+      edges: [
+        {
+          id: 'x',
+          from: { node: 'a' },
+          to: { node: 'ghost' },
+        },
+      ],
     }
     const { edges } = remintClipboardFragment(foreign, seq(), new Set())
     expect(edges).toEqual([])
@@ -107,8 +149,8 @@ describe('remintClipboardFragment', () => {
       expect(minted.size).toBe(nodes.length)
       for (const id of minted) expect(['a', 'b', 'c']).not.toContain(id)
       for (const edge of edges) {
-        expect(minted.has(edge.fromNode)).toBe(true)
-        expect(minted.has(edge.toNode)).toBe(true)
+        expect(endIn(edge.from, minted)).toBe(true)
+        expect(endIn(edge.to, minted)).toBe(true)
       }
     },
   )

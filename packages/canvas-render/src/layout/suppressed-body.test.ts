@@ -34,7 +34,7 @@ const CANVAS: SpatialCanvas = {
       width: 200,
       height: 120,
       text: 'editedbody',
-      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'diamond' } } },
+      facets: { 'visual.shape/v0': { kind: 'diamond' } },
     },
     { id: 'bystander', type: 'text', x: 300, y: 0, width: 200, height: 120, text: 'bystanderbody' },
   ],

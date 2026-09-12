@@ -106,7 +106,7 @@ it('answers failed for bytes that will not decode', async () => {
 it("carries a spatial document's own symbol back with its outline", async () => {
   const marked: SpatialCanvas = {
     ...canvas,
-    'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } } },
+    facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
   }
   const reply = await ask({ snapshot: snapshotOf(marked) })
 

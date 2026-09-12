@@ -95,7 +95,7 @@ describe('layoutMdastBlocks (public) — canvas embeds', () => {
 describe('layoutMdastBlocks (public) — an embedded canvas keeps its own theme', () => {
   const themed: SpatialCanvas = {
     ...canvas,
-    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
   }
   const inkStyles = (nodes: readonly SceneNode[]): string[] => {
     const out: string[] = []

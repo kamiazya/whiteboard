@@ -19,7 +19,13 @@ const canvas: SpatialCanvas = {
     { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 120, text: 'Alpha' },
     { id: 'b', type: 'text', x: 300, y: 60, width: 200, height: 120, text: 'Beta' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 } as SpatialCanvas
 
 function snapshotBytes(): Uint8Array {

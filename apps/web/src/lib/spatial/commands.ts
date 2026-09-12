@@ -30,6 +30,9 @@ import {
   type CommentThreadStatus,
   canvasCommentFromThread,
   type EdgeRoutingStyle,
+  endIn,
+  endNode,
+  isSelfLoop,
   type LineJumps,
   type ProposedChange,
   type ProposedChangeStatus,
@@ -137,6 +140,20 @@ export type EditorLeafCommand =
       readonly key: string
       /** undefined removes the facet — an edge with none inherits the board's. */
       readonly payload: unknown
+    }
+  | {
+      /**
+       * The points this edge is drawn THROUGH, as a whole list — the bend
+       * drag's write.
+       *
+       * Not a facet write since ADR-0037 slice 4: bends are a field of the
+       * edge, so the value travels as a value rather than as an opaque
+       * plugin payload, and an empty list is spelled as the absence it means.
+       */
+      readonly kind: 'set-edge-bends'
+      readonly id: string
+      /** An empty list removes the field — the edge takes a computed route again. */
+      readonly bends: readonly { readonly x: number; readonly y: number }[]
     }
   | {
       // Edits the canvas ENVELOPE rather than its contents, so it names no
@@ -395,7 +412,7 @@ function connectNodes(
   // fail validation downstream.
   const edgeIdExists = canvas.edges.some((edge) => edge.id === edgeId)
   if (edgeIdExists) return canvas
-  const edge: CanvasEdge = { id: edgeId, fromNode, toNode }
+  const edge: CanvasEdge = { id: edgeId, from: { node: fromNode }, to: { node: toNode } }
   return { ...canvas, edges: [...canvas.edges, edge] }
 }
 
@@ -422,7 +439,7 @@ function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
   return {
     ...canvas,
     nodes: canvas.nodes.filter((node) => node.id !== id),
-    edges: canvas.edges.filter((edge) => edge.fromNode !== id && edge.toNode !== id),
+    edges: canvas.edges.filter((edge) => endNode(edge.from) !== id && endNode(edge.to) !== id),
   }
 }
 
@@ -441,11 +458,14 @@ function setEdgeEnds(
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      const { fromEnd: _from, toEnd: _to, ...rest } = edge
+      // An arrowhead lives ON the end it is drawn at (ADR-0037 slice 3), so
+      // the default is spelled by ABSENCE there rather than by a sibling key.
+      const { end: _fromEnd, ...from } = edge.from
+      const { end: _toEnd, ...to } = edge.to
       return {
-        ...rest,
-        ...(fromEnd === 'none' ? {} : { fromEnd }),
-        ...(toEnd === 'arrow' ? {} : { toEnd }),
+        ...edge,
+        from: { ...from, ...(fromEnd === 'none' ? {} : { end: fromEnd }) },
+        to: { ...to, ...(toEnd === 'arrow' ? {} : { end: toEnd }) },
       }
     }),
   }
@@ -499,24 +519,19 @@ function withEdgeStyle(
 }
 
 /**
- * Write one facet into the canvas envelope, or remove it with `undefined`.
+ * Write one facet onto the canvas, or remove it with `undefined`.
  *
  * The canonical-emptiness rule lives here and nowhere else: an empty facets
- * bucket disappears, and an empty `x-whiteboard` disappears with it — so a
- * canvas that chose a setting and reverted serializes identically to one
- * that never touched it. Two writers deciding that separately is how a
- * reverted canvas comes to carry a redundant extension forever.
+ * bucket disappears, so a canvas that chose a setting and reverted serializes
+ * identically to one that never touched it. Two writers deciding that
+ * separately is how a reverted canvas comes to carry a redundant field
+ * forever.
  */
 function withCanvasFacet(canvas: SpatialCanvas, key: string, payload: unknown): SpatialCanvas {
-  const { 'x-whiteboard': extension, ...rest } = canvas
-  const { facets, ...others } = extension ?? {}
+  const { facets, ...rest } = canvas
   const { [key]: _previous, ...otherFacets } = facets ?? {}
   const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-  const nextExtension = {
-    ...others,
-    ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
-  }
-  return Object.keys(nextExtension).length === 0 ? rest : { ...rest, 'x-whiteboard': nextExtension }
+  return Object.keys(nextFacets).length === 0 ? rest : { ...rest, facets: nextFacets }
 }
 
 function setEdgeRouting(canvas: SpatialCanvas, style: EdgeRoutingStyle): SpatialCanvas {
@@ -545,17 +560,14 @@ function setNodeFacet(
     ...canvas,
     nodes: canvas.nodes.map((node) => {
       if (node.id !== id) return node
-      const { facets, ...extensionRest } = node['x-whiteboard'] ?? {}
+      const { facets, ...rest } = node
       const { [key]: _previous, ...otherFacets } = facets ?? {}
       const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-      const nextExtension = {
-        ...extensionRest,
-        ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
-      }
-      const { 'x-whiteboard': _extension, ...rest } = node
-      return Object.keys(nextExtension).length === 0
+      // The node's `embed` is untouched: independent fields now, where the
+      // format's extension made them two arms of one union.
+      return Object.keys(nextFacets).length === 0
         ? (rest as typeof node)
-        : ({ ...rest, 'x-whiteboard': nextExtension } as typeof node)
+        : ({ ...rest, facets: nextFacets } as typeof node)
     }),
   }
 }
@@ -578,12 +590,26 @@ function setEdgeFacet(
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      const { [key]: _previous, ...otherFacets } = edge['x-whiteboard']?.facets ?? {}
+      const { facets, ...rest } = edge
+      const { [key]: _previous, ...otherFacets } = facets ?? {}
       const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-      const { 'x-whiteboard': _extension, ...rest } = edge
-      return Object.keys(nextFacets).length === 0
-        ? rest
-        : { ...rest, 'x-whiteboard': { facets: nextFacets } }
+      return Object.keys(nextFacets).length === 0 ? rest : { ...rest, facets: nextFacets }
+    }),
+  }
+}
+
+function setEdgeBends(
+  canvas: SpatialCanvas,
+  id: string,
+  bends: readonly { readonly x: number; readonly y: number }[],
+): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  return {
+    ...canvas,
+    edges: canvas.edges.map((edge) => {
+      if (edge.id !== id) return edge
+      const { bends: _previous, ...rest } = edge
+      return bends.length === 0 ? rest : { ...rest, bends: [...bends] }
     }),
   }
 }
@@ -692,13 +718,15 @@ function setEdgeSide(
   side: 'top' | 'right' | 'bottom' | 'left' | undefined,
 ): SpatialCanvas {
   if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  const key = endpoint === 'from' ? 'fromSide' : 'toSide'
   return {
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      const { [key]: _removed, ...rest } = edge
-      return side === undefined ? rest : { ...rest, [key]: side }
+      // An EDGE's end always names a node since ADR-0038 decision 2, so the
+      // narrowing the free arm used to need is gone. Pinning a side on a LINE
+      // is its own command when the editor grows one.
+      const { side: _removed, ...rest } = edge[endpoint]
+      return { ...edge, [endpoint]: side === undefined ? rest : { ...rest, side } }
     }),
   }
 }
@@ -732,15 +760,10 @@ function withComments(
   canvas: SpatialCanvas,
   update: (comments: readonly CanvasComment[]) => CanvasComment[] | undefined,
 ): SpatialCanvas {
-  const { 'x-whiteboard': extension, ...rest } = canvas
-  const nextComments = update(extension?.comments ?? [])
+  const { comments, ...rest } = canvas
+  const nextComments = update(comments ?? [])
   if (nextComments === undefined) return canvas
-  const { comments: _previous, ...otherExtension } = extension ?? {}
-  const nextExtension = {
-    ...otherExtension,
-    ...(nextComments.length > 0 ? { comments: nextComments } : {}),
-  }
-  return Object.keys(nextExtension).length === 0 ? rest : { ...rest, 'x-whiteboard': nextExtension }
+  return nextComments.length > 0 ? { ...rest, comments: nextComments } : rest
 }
 
 function createComment(canvas: SpatialCanvas, comment: CanvasComment): SpatialCanvas {
@@ -802,6 +825,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return withCanvasFacet(canvas, command.key, command.payload)
     case 'set-edge-facet':
       return setEdgeFacet(canvas, command.id, command.key, command.payload)
+    case 'set-edge-bends':
+      return setEdgeBends(canvas, command.id, command.bends)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
     case 'set-line-jumps':
@@ -869,9 +894,9 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
 
 function createEdge(canvas: SpatialCanvas, edge: CanvasEdge): SpatialCanvas {
   if (canvas.edges.some((existing) => existing.id === edge.id)) return canvas
-  if (edge.fromNode === edge.toNode) return canvas
+  if (isSelfLoop(edge)) return canvas
   const nodeIds = new Set(canvas.nodes.map((node) => node.id))
-  if (!nodeIds.has(edge.fromNode) || !nodeIds.has(edge.toNode)) return canvas
+  if (!endIn(edge.from, nodeIds) || !endIn(edge.to, nodeIds)) return canvas
   return { ...canvas, edges: [...canvas.edges, edge] }
 }
 
@@ -1000,17 +1025,23 @@ export function buildFragmentInsertCommand(
     // cut was lifted, or resolved as a move): nothing to reconnect, and a
     // second wire onto the peer would be the new defect.
     if (canvasEdgeIds.has(edge.id)) return []
-    const from = reminted.idMap.get(edge.fromNode)
-    const to = reminted.idMap.get(edge.toNode)
+    // A boundary edge crosses the cut, so exactly one end is being re-minted
+    // and the other must already be on the canvas. A FREE end is neither, so
+    // an edge carrying one is never a boundary edge.
+    const fromId = endNode(edge.from)
+    const toId = endNode(edge.to)
+    if (fromId === undefined || toId === undefined) return []
+    const from = reminted.idMap.get(fromId)
+    const to = reminted.idMap.get(toId)
     if ((from === undefined) === (to === undefined)) return []
-    const peer = from === undefined ? edge.fromNode : edge.toNode
+    const peer = from === undefined ? fromId : toId
     if (!canvasNodeIds.has(peer)) return []
     return [
       {
         ...edge,
         id: reminted.mintId(),
-        fromNode: from ?? edge.fromNode,
-        toNode: to ?? edge.toNode,
+        from: { ...edge.from, kind: 'node' as const, node: from ?? fromId },
+        to: { ...edge.to, kind: 'node' as const, node: to ?? toId },
       },
     ]
   })

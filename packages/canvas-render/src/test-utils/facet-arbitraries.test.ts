@@ -19,19 +19,17 @@ const registry = createFacetRegistry([
 ])
 
 describe('facetsArb', () => {
-  it('draws every registered payload, and the absent extension too', () => {
+  it('draws every registered payload, and the absent bucket too', () => {
     const drawn = fc.sample(facetsArb(registry, 'node'), 200)
     const kinds = new Set(
-      drawn.map((x) => (x?.facets?.['demo.shape/v0'] as { kind?: string } | undefined)?.kind),
+      drawn.map((x) => (x?.['demo.shape/v0'] as { kind?: string } | undefined)?.kind),
     )
     expect(kinds).toEqual(new Set([undefined, 'ellipse', 'diamond']))
     expect(drawn.filter((x) => x === undefined).length).toBeGreaterThan(0)
-    expect(drawn.some((x) => x !== undefined && Object.keys(x.facets ?? {}).length === 0)).toBe(
-      false,
-    )
+    expect(drawn.some((x) => x !== undefined && Object.keys(x).length === 0)).toBe(false)
   })
 
-  it('draws only the absent extension for a registry with no facet', () => {
+  it('draws only the absent bucket for a registry with no facet', () => {
     expect(fc.sample(facetsArb(createFacetRegistry([]), 'node'), 20)).toEqual(
       Array.from({ length: 20 }, () => undefined),
     )

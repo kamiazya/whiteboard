@@ -30,7 +30,7 @@ const preset = {
 const neon: SpatialCanvas = {
   nodes: [preset],
   edges: [],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
 }
 
 const plain: SpatialCanvas = { nodes: [preset], edges: [] }

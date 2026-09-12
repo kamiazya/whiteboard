@@ -42,8 +42,8 @@ const group = (id: string, x: number, y: number, width: number, height: number):
 })
 const edge = (id: string, fromNode: string, toNode: string): CanvasEdge => ({
   id,
-  fromNode,
-  toNode,
+  from: { node: fromNode },
+  to: { node: toNode },
 })
 const canvasOf = (
   nodes: readonly SpatialNode[],

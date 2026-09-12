@@ -347,6 +347,53 @@ describe('path aliases the cycle scan has to be told about', () => {
   })
 })
 
+describe('every spatial format codec is registered', () => {
+  // The direction codec's own `codecs.property.test.ts` cannot check from
+  // inside itself. Every guarantee a projection makes — its round trip, what a
+  // foreign reader keeps, what its published loss table says — is asked of the
+  // entries in `SPATIAL_CODECS` and of nothing else. A projection table that
+  // no entry points at is a format none of those questions are being asked of,
+  // which reads exactly like a format that answered them.
+  //
+  // It lives here rather than there because the check has to READ the
+  // package's source, and the only in-package way to do that is
+  // `import.meta.glob`, which needs `vite/client` in codec's `types` — and
+  // that drags the DOM lib into a shared-layer package whose tsconfig exists
+  // to keep it out. This tool already reads every package's source textually.
+  const SPATIAL_DIR = join(REPO_ROOT, 'packages/codec/src/spatial')
+  const REGISTRY = join(SPATIAL_DIR, 'codecs.ts')
+
+  const declaredTables = readdirSync(SPATIAL_DIR)
+    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .flatMap((file) =>
+      [
+        ...readFileSync(join(SPATIAL_DIR, file), 'utf-8').matchAll(
+          /export const (\w+_PROJECTION)\b/g,
+        ),
+      ].map((match) => match[1] as string),
+    )
+    .sort()
+
+  it('found the projection tables at all', () => {
+    // A scan that stops matching reports itself as "every table is
+    // registered", which is the failure that looks most like success.
+    expect(
+      declaredTables.length,
+      'no *_PROJECTION export found under packages/codec/src/spatial — the scan below is checking nothing',
+    ).toBeGreaterThanOrEqual(2)
+  })
+
+  it('names every declared projection table in the codec registry', () => {
+    const registry = readFileSync(REGISTRY, 'utf-8')
+    const unregistered = declaredTables.filter((table) => !registry.includes(table))
+    expect(
+      unregistered,
+      'a projection table is declared under packages/codec/src/spatial and named nowhere in codecs.ts — ' +
+        'add a SPATIAL_CODECS entry for it, so the round-trip, confluence and loss-table guards are asked of it too',
+    ).toEqual([])
+  })
+})
+
 describe('architecture-map.md doc sync', () => {
   const doc = readFileSync(ARCHITECTURE_MAP_DOC, 'utf-8')
 

@@ -16,8 +16,12 @@ import {
 import {
   type CanvasComment,
   type CanvasEdge,
+  type CanvasLine,
   canvasCommentSchema,
   canvasEdgeSchema,
+  canvasLineSchema,
+  endIn,
+  endNodes,
   type nodePatchFieldsSchema,
   type SpatialCanvas,
   type SpatialNode,
@@ -128,11 +132,13 @@ function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
   let tidied = false
   let resolvedComments = 0
   for (const op of ops) {
-    if (op.op === 'node.add' || op.op === 'edge.add') counts.added += 1
-    else if (op.op === 'node.patch' || op.op === 'edge.patch') counts.changed += 1
+    if (op.op === 'node.add' || op.op === 'edge.add' || op.op === 'line.add') counts.added += 1
+    else if (op.op === 'node.patch' || op.op === 'edge.patch' || op.op === 'line.patch')
+      counts.changed += 1
     else if (op.op === 'comment.add') counts.commented += 1
     else if (op.op === 'comment.resolve') resolvedComments += 1
-    else if (op.op === 'node.remove' || op.op === 'edge.remove') counts.removed += 1
+    else if (op.op === 'node.remove' || op.op === 'edge.remove' || op.op === 'line.remove')
+      counts.removed += 1
     else if (op.op === 'node.lock' || op.op === 'edge.lock') {
       if (op.locked) counts.locked += 1
       else counts.unlocked += 1
@@ -244,11 +250,13 @@ export function createCanvasEditTool(deps: ServerDeps) {
       // fallback as though the board had always used it.
       const boardWidth = prevailingWidth(canvas.nodes)
       let edges: CanvasEdge[] = [...canvas.edges]
-      let comments: CanvasComment[] = [...(canvas['x-whiteboard']?.comments ?? [])]
+      let lines: CanvasLine[] = [...(canvas.lines ?? [])]
+      let comments: CanvasComment[] = [...(canvas.comments ?? [])]
       const nodeLocks = new Set(readNodeLocks(doc))
       const edgeLocks = new Set(readEdgeLocks(doc))
       const touchedNodes = new Set<string>()
       const touchedEdges = new Set<string>()
+      const touchedLines = new Set<string>()
       const touchedComments = new Set<string>()
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
@@ -283,6 +291,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
       const nodeAt = (id: string) => nodes.find((node) => node.id === id)
       const edgeAt = (id: string) => edges.find((edge) => edge.id === id)
+      const lineAt = (id: string) => lines.find((line) => line.id === id)
 
       const groupNamed = (index: number, opName: string, id: string): SpatialNode => {
         const group = nodeAt(id)
@@ -491,7 +500,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           const group = groupNamed(index, opName, target.within)
           const inside = new Set(nodes.filter(enclosedBy(group)).map((node) => node.id))
           const ids = edges
-            .filter((edge) => inside.has(edge.fromNode) && inside.has(edge.toNode))
+            .filter((edge) => endIn(edge.from, inside) && endIn(edge.to, inside))
             .map((edge) => edge.id)
           if (ids.length === 0) fail(index, opName, `no edge has both ends inside "${group.id}"`)
           return ids
@@ -511,29 +520,33 @@ export function createCanvasEditTool(deps: ServerDeps) {
         const node = nodeAt(id)
         if (node === undefined) fail(index, opName, `node "${id}" is not on the canvas`)
         const parsed = spatialNodeSchema.safeParse({ ...node, ...patch })
-        if (!parsed.success) fail(index, opName, issues(parsed.error))
-        const updated = parsed.data
-        // The per-type node schemas are non-strict on purpose — JSON
-        // Canvas 1.0 lets a document carry another tool's extension keys,
-        // and refusing them would make those documents unreadable. The
-        // cost is that a patch key the TARGET's type does not have is
-        // stripped by the re-parse above rather than rejected, so the
-        // write would report success over a document it did not change.
-        // `label` on a text node is the case that exists today: it is on
-        // the patch allowlist because a group has one.
-        //
-        // Caught here rather than by narrowing the allowlist per type,
-        // because one check covers every key and every type — including
-        // whichever content field a later increment allows.
-        const dropped = Object.keys(patch).filter((key) => !(key in updated))
-        if (dropped.length > 0) {
-          fail(
-            index,
-            opName,
-            `a ${updated.type} node has no ${dropped.join(', ')} — the patch would have been ` +
-              'accepted and silently dropped, so it is refused instead',
+        if (!parsed.success) {
+          // A patch key the TARGET's type does not have. `label` on a text
+          // node is the case that exists today: it is on the patch allowlist
+          // because a GROUP has one, so the key is known to the union and
+          // wrong for this member.
+          //
+          // Before ADR-0037 the node schemas were non-strict, the re-parse
+          // stripped such a key, and this was a hand-written diff of the keys
+          // that survived. Strictness detects it exhaustively now — but it
+          // reports "Unrecognized key", which names the key and NOT the type,
+          // and a caller told only `label` is invalid is left guessing which
+          // of its nodes was wrong. So strictness is the detector and the
+          // message is still written here.
+          const unknown = parsed.error.issues.flatMap((issue) =>
+            issue.code === 'unrecognized_keys' ? issue.keys : [],
           )
+          if (unknown.length > 0) {
+            fail(
+              index,
+              opName,
+              `a ${node.type} node has no ${unknown.join(', ')} — the patch would have been ` +
+                'accepted and silently dropped, so it is refused instead',
+            )
+          }
+          fail(index, opName, issues(parsed.error))
         }
+        const updated = parsed.data
         if (
           measure !== undefined &&
           (patch.text !== undefined || patch.width !== undefined || patch.height !== undefined)
@@ -581,7 +594,17 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 : placeInside(index, op.op, group, [{ width, height }])[0]
             if (at === undefined) fail(index, op.op, 'no placement')
 
-            const parsed = spatialNodeSchema.safeParse({ ...draft, id, ...at, width, height })
+            // The draft's extension arrives under the published input key and
+            // spreads out as the model's own fields — see WRITE_EXTENSION.
+            const { 'x-whiteboard': extension, ...rest } = draft
+            const parsed = spatialNodeSchema.safeParse({
+              ...rest,
+              ...extension,
+              id,
+              ...at,
+              width,
+              height,
+            })
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
             if (draft.height !== undefined && measure !== undefined) {
               assertTextFits(index, op.op, parsed.data, measure)
@@ -683,9 +706,16 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // "apply exactly the op I was handed" would store a board that
             // cannot be loaded.
             for (const edge of edges) {
-              if (ids.has(edge.fromNode) || ids.has(edge.toNode)) touchedEdges.add(edge.id)
+              if (endIn(edge.from, ids) || endIn(edge.to, ids)) touchedEdges.add(edge.id)
             }
-            edges = edges.filter((edge) => !ids.has(edge.fromNode) && !ids.has(edge.toNode))
+            edges = edges.filter((edge) => !endIn(edge.from, ids) && !endIn(edge.to, ids))
+            // Ink ANCHORED to a removed node goes with it for the same
+            // reason; ink anchored to nothing stays, because a free end names
+            // no node and so cannot dangle (ADR-0038 decision 2).
+            for (const line of lines) {
+              if (endIn(line.from, ids) || endIn(line.to, ids)) touchedLines.add(line.id)
+            }
+            lines = lines.filter((line) => !endIn(line.from, ids) && !endIn(line.to, ids))
             nodes = nodes.filter((node) => !ids.has(node.id))
             for (const id of ids) {
               nodeLocks.delete(id)
@@ -704,7 +734,10 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 `edge id "${id}" is already on the canvas; patch it or choose another id`,
               )
             }
-            for (const endpoint of [draft.fromNode, draft.toNode]) {
+            // A FREE end names no node, so there is nothing to be missing —
+            // the existence check is about a reference, and a point is not one
+            // (ADR-0037 slice 3).
+            for (const endpoint of endNodes(draft)) {
               if (nodeAt(endpoint) === undefined) {
                 fail(
                   index,
@@ -727,7 +760,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               fail(index, op.op, `edge "${op.id}" is locked; unlock it with an edge.lock op first`)
             }
             const merged = { ...edge, ...op.patch }
-            for (const endpoint of [merged.fromNode, merged.toNode]) {
+            for (const endpoint of endNodes(merged)) {
               if (nodeAt(endpoint) === undefined) {
                 fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
               }
@@ -752,6 +785,57 @@ export function createCanvasEditTool(deps: ServerDeps) {
               edgeLocks.delete(id)
               touchedEdges.add(id)
             }
+            return
+          }
+
+          case 'line.add': {
+            const draft = op.line
+            const id = draft.id ?? mintId(new Set(lines.map((line) => line.id)), 'l')
+            if (lineAt(id) !== undefined) {
+              fail(
+                index,
+                op.op,
+                `line id "${id}" is already on the canvas; patch it or choose another id`,
+              )
+            }
+            for (const endpoint of endNodes(draft)) {
+              if (nodeAt(endpoint) === undefined) {
+                fail(
+                  index,
+                  op.op,
+                  `endpoint "${endpoint}" is not on the canvas; add that node first`,
+                )
+              }
+            }
+            const parsed = canvasLineSchema.safeParse({ ...draft, id })
+            if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            lines = [...lines, parsed.data]
+            touchedLines.add(id)
+            return
+          }
+
+          case 'line.patch': {
+            const line = lineAt(op.id)
+            if (line === undefined) fail(index, op.op, `line "${op.id}" is not on the canvas`)
+            const merged = { ...line, ...op.patch }
+            for (const endpoint of endNodes(merged)) {
+              if (nodeAt(endpoint) === undefined) {
+                fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
+              }
+            }
+            const parsed = canvasLineSchema.safeParse(merged)
+            if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            lines = lines.map((existing) => (existing.id === op.id ? parsed.data : existing))
+            touchedLines.add(op.id)
+            return
+          }
+
+          case 'line.remove': {
+            if (lineAt(op.id) === undefined) {
+              fail(index, op.op, `line "${op.id}" is not on the canvas`)
+            }
+            lines = lines.filter((line) => line.id !== op.id)
+            touchedLines.add(op.id)
             return
           }
 
@@ -869,7 +953,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               for (const id of keep) {
                 const edge = edgeAt(id)
                 if (edge === undefined) fail(index, op.op, `edge "${id}" is not on the canvas`)
-                for (const endpoint of [edge.fromNode, edge.toNode]) {
+                for (const endpoint of endNodes(edge)) {
                   if (!members.has(endpoint)) {
                     fail(
                       index,
@@ -882,11 +966,11 @@ export function createCanvasEditTool(deps: ServerDeps) {
             }
             const removedEdges = new Set<string>()
             for (const edge of edges) {
-              const strandedBy = droppedIds.has(edge.fromNode) || droppedIds.has(edge.toNode)
+              const strandedBy = endIn(edge.from, droppedIds) || endIn(edge.to, droppedIds)
               const unlistedAmongMembers =
                 keep !== undefined &&
-                members.has(edge.fromNode) &&
-                members.has(edge.toNode) &&
+                endIn(edge.from, members) &&
+                endIn(edge.to, members) &&
                 !keep.has(edge.id)
               if (strandedBy || unlistedAmongMembers) {
                 removedEdges.add(edge.id)
@@ -971,19 +1055,16 @@ export function createCanvasEditTool(deps: ServerDeps) {
         }
       })
 
-      // The batch writes back the WHOLE canvas, so the canvas-level extension
-      // — rendering preferences and every comment the batch did not touch —
-      // must ride along, or the save deletes them (writeSpatialCanvas resyncs
-      // by omission).
-      const { comments: _stored, ...extensionRest } = canvas['x-whiteboard'] ?? {}
-      const keptExtension = {
-        ...extensionRest,
-        ...(comments.length > 0 ? { comments } : {}),
+      // The batch writes back the WHOLE canvas, so the canvas's own facets —
+      // and every comment the batch did not touch — must ride along, or the
+      // save deletes them (writeSpatialCanvas resyncs by omission).
+      const candidate: SpatialCanvas = {
+        nodes,
+        edges,
+        ...(canvas.facets !== undefined && { facets: canvas.facets }),
+        ...(lines.length > 0 && { lines }),
+        ...(comments.length > 0 && { comments }),
       }
-      const hasExtension = Object.values(keptExtension).some((value) => value !== undefined)
-      const candidate: SpatialCanvas = hasExtension
-        ? { nodes, edges, 'x-whiteboard': keptExtension }
-        : { nodes, edges }
       const parsed = spatialCanvasSchema.safeParse(candidate)
       if (!parsed.success) {
         throw new CanvasEditError(
@@ -1027,6 +1108,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           touched: {
             nodes: [...touchedNodes].sort(),
             edges: [...touchedEdges].sort(),
+            lines: [...touchedLines].sort(),
             comments: [...touchedComments].sort(),
           },
           geometry: [...geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
@@ -1044,6 +1126,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const touched = {
         nodes: [...touchedNodes].sort(),
         edges: [...touchedEdges].sort(),
+        lines: [...touchedLines].sort(),
         comments: [...touchedComments].sort(),
       }
 

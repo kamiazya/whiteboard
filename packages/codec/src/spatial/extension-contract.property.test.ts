@@ -9,6 +9,7 @@ import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { parseSpatial } from './parse.js'
+import { toJsonCanvas } from './projection.js'
 import { serializeSpatial } from './serialize.js'
 
 const CANVAS_KEYS = new Set(['nodes', 'edges', 'x-whiteboard'])
@@ -35,8 +36,15 @@ const EDGE_KEYS = new Set([
 const JUNK = { 'x-vendor': { custom: true }, obsidianField: 'v' }
 
 /** The canvas as JSON text with foreign keys injected at every level. */
+/**
+ * A WIRE document with another tool's keys sprinkled at every level.
+ *
+ * The canvas is projected first, because what arrives at `parseSpatial` is a
+ * JSON Canvas document and the model is no longer one: since ADR-0037 slice 4
+ * its geometry is sub-pixel, which the format does not state.
+ */
 function withForeignKeys(canvas: SpatialCanvas): string {
-  const doc = JSON.parse(JSON.stringify(canvas)) as {
+  const doc = JSON.parse(JSON.stringify(toJsonCanvas(canvas))) as {
     nodes: Record<string, unknown>[]
     edges: Record<string, unknown>[]
   }

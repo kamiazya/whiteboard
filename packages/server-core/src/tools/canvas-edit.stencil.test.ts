@@ -328,11 +328,7 @@ describe('a workspace\u2019s own stencil library', () => {
     // other. Asserted on the STORED payload rather than through a resolver:
     // a resolver takes a registry, and the question here is what the
     // document now says, not what some registry can make of it.
-    expect(
-      (node as { 'x-whiteboard'?: { facets?: Record<string, unknown> } })['x-whiteboard']?.facets?.[
-        'visual.stencil/v0'
-      ],
-    ).toEqual({ stencil: 'workspace.bucket' })
+    expect(node?.facets?.['visual.stencil/v0']).toEqual({ stencil: 'workspace.bucket' })
   })
 
   test('refuses a library id in a workspace that has no library, listing what it does have', async () => {

@@ -16,6 +16,7 @@
  * for this test is to disable offloading, which starves the counter.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -39,9 +40,9 @@ const heavy = (label: string): SpatialCanvas => ({
   })),
   edges: Array.from({ length: EDGES }, (_, i) => ({
     id: `e${i}`,
-    fromNode: `n${i % NODES}`,
-    toNode: `n${(i * 7 + 3) % NODES}`,
-  })).filter((e) => e.fromNode !== e.toNode),
+    from: { node: `n${i % NODES}` },
+    to: { node: `n${(i * 7 + 3) % NODES}` },
+  })).filter((e) => endNode(e.from) !== endNode(e.to)),
 })
 
 function Host() {

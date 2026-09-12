@@ -298,8 +298,16 @@ it('member outlines include the edges between members, not edges leaving the are
       { id: 'c', type: 'text', x: 500, y: 300, width: 120, height: 60, text: 'C' },
     ],
     edges: [
-      { id: 'ab', fromNode: 'a', toNode: 'b' },
-      { id: 'bc', fromNode: 'b', toNode: 'c' },
+      {
+        id: 'ab',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+      {
+        id: 'bc',
+        from: { node: 'b' },
+        to: { node: 'c' },
+      },
     ],
   }
   function WiredHost() {

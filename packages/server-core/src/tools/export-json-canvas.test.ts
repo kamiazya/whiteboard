@@ -17,10 +17,7 @@ const NODE_WITH_EXTENSION = {
   width: 100,
   height: 50,
   text: 'hi',
-  'x-whiteboard': {
-    kind: 'embed' as const,
-    documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' as const,
-  },
+  embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' as const },
 }
 
 function makeDeps(documentStore: FakeDocumentStore): ServerDeps {

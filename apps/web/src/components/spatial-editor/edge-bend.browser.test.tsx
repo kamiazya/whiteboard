@@ -1,9 +1,7 @@
-// Bending a connection by hand. The router that draws the bends lives in
-// the bundled plugin (`visual.path/v0`), so this is what says a stored
-// point survives the whole way from a pointer drag to the ink: a reducer
-// test cannot see the layout, and a layout test cannot see the gesture.
+// Bending a connection by hand. This is what says a stored bend survives
+// the whole way from a pointer drag to the ink: a reducer test cannot see
+// the layout, and a layout test cannot see the gesture.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { VISUAL_PATH_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -17,16 +15,14 @@ const nodes: SpatialCanvas['nodes'] = [
   { id: 'b', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'B' },
 ]
 
-const board = (waypoints?: readonly { x: number; y: number }[]): SpatialCanvas => ({
+const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({
   nodes,
   edges: [
     {
       id: 'e1',
-      fromNode: 'a',
-      toNode: 'b',
-      ...(waypoints === undefined
-        ? {}
-        : { 'x-whiteboard': { facets: { [VISUAL_PATH_KEY]: { waypoints } } } }),
+      from: { node: 'a' },
+      to: { node: 'b' },
+      ...(bends === undefined ? {} : { bends }),
     },
   ],
 })
@@ -50,12 +46,7 @@ function makeHost(start: SpatialCanvas) {
   return { Host, latest }
 }
 
-const storedBends = (canvas: SpatialCanvas) =>
-  (
-    canvas.edges[0]?.['x-whiteboard']?.facets?.[VISUAL_PATH_KEY] as
-      | { waypoints?: readonly { x: number; y: number }[] }
-      | undefined
-  )?.waypoints
+const storedBends = (canvas: SpatialCanvas) => canvas.edges[0]?.bends
 
 /**
  * A CLIENT point actually ON the drawn line, taken through the polyline's

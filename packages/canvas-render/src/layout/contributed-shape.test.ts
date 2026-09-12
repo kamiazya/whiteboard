@@ -67,7 +67,7 @@ function canvasWith(facetKey: string, kind: string): SpatialCanvas {
         width: 200,
         height: 120,
         text: 'n1',
-        'x-whiteboard': { facets: { [facetKey]: { kind } } },
+        facets: { [facetKey]: { kind } },
       },
     ],
     edges: [],
@@ -80,7 +80,7 @@ const DEMO: RenderContribution = {
   namespace: 'demo',
   shapes: { triangle: TRIANGLE },
   readShape: (node) => {
-    const stored = node['x-whiteboard']?.facets?.['demo.shape/v0']
+    const stored = node.facets?.['demo.shape/v0']
     if (stored === null || typeof stored !== 'object') return undefined
     const kind = (stored as { readonly kind?: unknown }).kind
     return typeof kind === 'string' && kind !== '' ? kind : undefined

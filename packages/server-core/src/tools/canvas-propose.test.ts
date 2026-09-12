@@ -27,7 +27,13 @@ const BOARD: SpatialCanvas = {
     { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' },
     { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
   ],
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 function makeDeps(store: FakeDocumentStore, over: Partial<ServerDeps> = {}): ServerDeps {
@@ -130,7 +136,11 @@ describe('wb_canvas_edit in propose mode', () => {
         status: 'open',
         op: 'edge.remove',
         edgeId: 'e',
-        assumed: { id: 'e', fromNode: 'a', toNode: 'b' },
+        assumed: {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
       },
     ])
   })
@@ -383,16 +393,16 @@ describe('elements whose fields hold objects', () => {
         width: 100,
         height: 40,
         text: 'A',
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' } } },
+        facets: { 'visual.shape/v0': { kind: 'hexagon' } },
       },
       { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
     ],
     edges: [
       {
         id: 'e',
-        fromNode: 'a',
-        toNode: 'b',
-        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+        from: { node: 'a' },
+        to: { node: 'b' },
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
     ],
   }
@@ -426,18 +436,18 @@ describe('elements whose fields hold objects', () => {
         {
           op: 'edge.patch',
           id: 'e',
-          patch: { 'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } } },
+          patch: { facets: { 'visual.edges/v0': { routing: 'curved' } } },
         },
       ],
     })
 
     const change = result.proposed?.changes[0]
     expect(change?.id).toBe('edge:e')
-    expect(change?.op === 'edge.patch' && change.patch['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'curved' } },
+    expect(change?.op === 'edge.patch' && change.patch.facets).toEqual({
+      'visual.edges/v0': { routing: 'curved' },
     })
-    expect(change?.op === 'edge.patch' && change.assumed['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    expect(change?.op === 'edge.patch' && change.assumed.facets).toEqual({
+      'visual.edges/v0': { routing: 'orthogonal' },
     })
   })
 })

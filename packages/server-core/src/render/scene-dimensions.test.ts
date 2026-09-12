@@ -44,7 +44,13 @@ describe('sceneEnvelope', () => {
     // it steps around, and the step is drawn beyond both boxes.
     const withEdge = canvas(
       [node('a', 0, 0, 200, 100), node('b', 40, 140, 200, 100)],
-      [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      [
+        {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+      ],
     )
     const nodesOnly = canvas([node('a', 0, 0, 200, 100), node('b', 40, 140, 200, 100)])
     const withEdgeSize = dimensionsOf(withEdge)

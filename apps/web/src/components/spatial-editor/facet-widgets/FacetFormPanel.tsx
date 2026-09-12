@@ -40,7 +40,7 @@ const subjectOf = (subject: FacetSubject): SpatialNode | CanvasEdge =>
   subject.kind === 'node' ? subject.node : subject.edge
 
 const storedFacets = (subject: FacetSubject): Record<string, unknown> =>
-  subjectOf(subject)['x-whiteboard']?.facets ?? {}
+  subjectOf(subject).facets ?? {}
 
 import { cn } from '../../../lib/utils.js'
 import { NODE_FACET_EDITORS } from './index.js'

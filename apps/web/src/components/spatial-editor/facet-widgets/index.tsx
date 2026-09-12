@@ -251,7 +251,7 @@ function derivedCanvasFacetRow(key: string, title: string): CanvasSettingsWidget
     <DerivedFacetForm
       facetKey={key}
       title={title}
-      stored={canvas['x-whiteboard']?.facets?.[key]}
+      stored={canvas.facets?.[key]}
       registry={facetRegistry}
       onWrite={(facetKey, payload) => run({ kind: 'set-canvas-facet', key: facetKey, payload })}
     />

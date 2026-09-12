@@ -66,11 +66,24 @@ const canvas: SpatialCanvas = {
     { id: 'g', type: 'group', x: -20, y: -20, width: 580, height: 440, label: 'group' },
   ],
   edges: [
-    { id: 'e1', fromNode: 'a', toNode: 'b', label: 'edge label' },
-    { id: 'e2', fromNode: 'b', toNode: 'c' },
-    { id: 'e3', fromNode: 'a', toNode: 'c' },
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+      label: 'edge label',
+    },
+    {
+      id: 'e2',
+      from: { node: 'b' },
+      to: { node: 'c' },
+    },
+    {
+      id: 'e3',
+      from: { node: 'a' },
+      to: { node: 'c' },
+    },
   ],
-  'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+  facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
 } as SpatialCanvas
 
 const layoutInWorker = (request: LayoutRequest) =>

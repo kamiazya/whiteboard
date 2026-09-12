@@ -95,6 +95,23 @@ async function callTool(name, args) {
 }
 
 /**
+ * The same call, expecting the server to REFUSE it — returns the refusal text
+ * so a step can check WHY rather than only that something went wrong. A
+ * refusal that arrives for the wrong reason passes a bare try/catch, which is
+ * how a guard comes to assert nothing.
+ */
+async function callToolExpectingError(name, args) {
+  try {
+    const answered = await callTool(name, args)
+    throw new Error(`expected ${name} to refuse, and it answered: ${JSON.stringify(answered)}`)
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error)
+    if (text.startsWith('expected ')) throw error
+    return text
+  }
+}
+
+/**
  * `wb_document_get` answers with a LIST since it took `documentIds`. Most
  * steps here read one document, so this unwraps that case and refuses a
  * `failed` entry rather than letting `undefined.content` report as a
@@ -620,7 +637,14 @@ async function main() {
         node: { id: 'dressed', type: 'text', x: 400, y: 0, width: 200, height: 100, text: 'store' },
         stencil: 'visual.datastore',
       },
-      { op: 'edge.add', edge: { id: 'link', fromNode: 'lockable', toNode: 'target' } },
+      {
+        op: 'edge.add',
+        edge: {
+          id: 'link',
+          from: { node: 'lockable' },
+          to: { node: 'target' },
+        },
+      },
     ],
   })
   if (seedBatch.applied !== 4 || seedBatch.snapshot.edges[0]?.id !== 'link') {
@@ -696,6 +720,92 @@ async function main() {
   }
   console.log('[e2e] wb_facet_set + wb_canvas_edit → a stencil the WORKSPACE defines dresses a box')
 
+  // A FREE END (ADR-0037 slice 3): an edge from a node to a bare point on
+  // the canvas. Here rather than only at the unit layer because the endpoint
+  // is a discriminated union crossing a process boundary in BOTH directions
+  // — accepted by `wb_canvas_edit`'s input schema, stored through the Loro
+  // field mapping, and echoed by `wb_canvas_snapshot`, whose `outputSchema`
+  // the SDK validates at runtime. A union that round-trips in-process and
+  // fails one of those three looks exactly like a working tool from here.
+  // A point-ended element is a LINE since ADR-0038 decision 2, and the line
+  // ops are what let anything but the editor author one. This is the round
+  // trip the gap this step used to record asked its closer to restore: write
+  // ink with a free end, read it back through the snapshot, and check that a
+  // strict JSON Canvas export leaves the whole element out.
+  await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      {
+        op: 'line.add',
+        line: {
+          id: 'loose',
+          from: { kind: 'node', node: 'lockable' },
+          to: { kind: 'point', point: { x: 420.5, y: -17.25 } },
+        },
+      },
+    ],
+  })
+  const withLine = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  const storedLine = (withLine.lines ?? []).find((entry) => entry.id === 'loose')
+  if (storedLine === undefined) {
+    throw new Error(
+      `the line did not survive the write/read round trip: ${JSON.stringify(withLine.lines)}`,
+    )
+  }
+  // The sub-pixel coordinate is the part only this trip can check: the model
+  // holds a real number and JSON Canvas holds whole pixels, so a projection
+  // leaking into the STORE would round it here and nothing in-process would
+  // notice (ADR-0037 slice 4).
+  if (storedLine.to?.kind !== 'point' || storedLine.to.point.x !== 420.5) {
+    throw new Error(`the free end did not round-trip: ${JSON.stringify(storedLine)}`)
+  }
+  if ((withLine.edges ?? []).some((entry) => entry.id === 'loose')) {
+    throw new Error('ink was reported as an edge; a line is not a relation')
+  }
+  // A strict JSON Canvas export leaves the WHOLE line out, because the format
+  // has no vocabulary for ink and this projection declines to lie about it by
+  // emitting an edge (ADR-0038 decision 2). The extended export keeps it on
+  // the extension key; only the strict reader loses it.
+  const strictExport = await readDocument(documentId, { strict: true })
+  if (/"loose"/.test(strictExport.content)) {
+    throw new Error('a strict JSON Canvas export carried ink the format cannot state')
+  }
+  const extendedExport = await readDocument(documentId)
+  if (!/"loose"/.test(extendedExport.content)) {
+    throw new Error('the extended export dropped a line it can carry on x-whiteboard')
+  }
+
+  // And the distinction the split exists to make, still refused from the
+  // other side: an EDGE is a relation, so it has no point arm and never
+  // grows one by accident. A refusal checked by REASON — one that arrives for
+  // another reason passes a bare try/catch and asserts nothing.
+  const looseRefusal = await callToolExpectingError('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      {
+        op: 'edge.add',
+        edge: {
+          id: 'not-ink',
+          from: { node: 'lockable' },
+          to: { kind: 'point', point: { x: 1, y: 2 } },
+        },
+      },
+    ],
+  })
+  if (!/kind/.test(looseRefusal)) {
+    throw new Error(
+      `wb_canvas_edit accepted a point end on an EDGE, or refused it for another reason: ${looseRefusal}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_edit line.add → free end round-tripped through the snapshot')
+
   // The EDGE slot (ADR-0013 decision 5), through a real client so the SDK
   // validates the result against `facetSetOutputSchema` at runtime. Written
   // here rather than at the unit layer alone because the edge is the third
@@ -740,33 +850,34 @@ async function main() {
   )
   console.log('[e2e] wb_facet_set → a node-target facet is refused on an edge')
 
-  // A CONTRIBUTED router, end to end: `visual.path/v0` is the plugin's own
-  // facet, and the renderer draws it only through the router contribution
-  // point. Nothing in the type system connects the facet a tool writes to
-  // the polyline the daemon emits, so this is the step that would catch the
-  // contribution being dropped from the bundled plugin, or the bends being
-  // lost between the Loro edge bucket and the layout.
+  // An edge's stored BENDS, end to end. Nothing in the type system connects
+  // the field a tool writes to the polyline the daemon emits, so this is the
+  // step that would catch a bend being lost between the Loro edge bucket and
+  // the layout. It used to write `visual.path/v0` through `wb_facet_set`;
+  // since ADR-0037 slice 4 bends are a field of the edge, so the write is an
+  // ordinary `edge.patch` — which is the whole gain, since a facet payload
+  // is opaque to `wb_canvas_edit` and this was not writable there at all.
   const BEND = { x: 4242, y: -1337 }
-  await callTool('wb_facet_set', {
+  await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
-    documentIds: [documentId],
-    edgeId: 'link',
-    facets: { 'visual.path/v0': { waypoints: [BEND] } },
+    documentId,
+    // `apply`, explicitly: a content batch DEFAULTS to `propose` (ADR-0029
+    // decision 7), and a proposed bend is not on the board for the render
+    // below to draw.
+    mode: 'apply',
+    ops: [{ op: 'edge.patch', id: 'link', patch: { bends: [BEND] } }],
   })
   const bent = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
   if (typeof bent.svg !== 'string' || !bent.svg.includes(`${BEND.x},${BEND.y}`)) {
     throw new Error('wb_scene_render drew no edge through the stored bend')
   }
-  console.log('[e2e] wb_facet_set + wb_scene_render → the contributed router draws a stored bend')
+  console.log('[e2e] wb_canvas_edit + wb_scene_render → an edge is drawn through its stored bend')
 
-  // Cleared again, so every later step reads the canvas the rest of this
-  // smoke was written against.
-  await callTool('wb_facet_set', {
-    workspaceId: WORKSPACE_ID,
-    documentIds: [documentId],
-    edgeId: 'link',
-    facets: { 'visual.path/v0': null },
-  })
+  // The bend is deliberately NOT cleared: `edge.patch` merges, so it has no
+  // way to REMOVE an optional field (the same is true of `label` and
+  // `color`, and it predates this slice). Nothing after this point reads the
+  // edge's route, so leaving it bent costs the smoke nothing — and writing a
+  // clear that does not clear would cost it more than the missing step.
 
   // Propose mode (ADR-0029). Through a real MCP client, so the SDK validates
   // the `proposed` payload against `proposalSchema` at runtime — the drift
@@ -957,7 +1068,16 @@ async function main() {
     {
       workspaceId: WORKSPACE_ID,
       documentId,
-      ops: [{ op: 'edge.add', edge: { id: 'dangling', fromNode: 'lockable', toNode: 'ghost' } }],
+      ops: [
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'dangling',
+            from: { node: 'lockable' },
+            to: { node: 'ghost' },
+          },
+        },
+      ],
     },
     'with an endpoint the canvas does not have',
     'add that node first',
@@ -1507,7 +1627,14 @@ async function main() {
     ops: [
       { op: 'node.add', node: { id: 'batch-a', type: 'text', text: 'batched A' } },
       { op: 'node.add', node: { id: 'batch-b', type: 'text', text: 'batched B' } },
-      { op: 'edge.add', edge: { id: 'batch-e', fromNode: 'batch-a', toNode: 'batch-b' } },
+      {
+        op: 'edge.add',
+        edge: {
+          id: 'batch-e',
+          from: { node: 'batch-a' },
+          to: { node: 'batch-b' },
+        },
+      },
     ],
   })
   if (applied.applied !== 3 || !applied.touched.nodes.includes('batch-a')) {

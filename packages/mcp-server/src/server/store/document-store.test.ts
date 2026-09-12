@@ -362,7 +362,13 @@ describe('saveDocument / loadDocument', () => {
         { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
         { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'b' },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'n1' },
+          to: { node: 'n2' },
+        },
+      ],
     })
     setNodeLock(doc, 'n1', true)
     setEdgeLock(doc, 'e1', true)

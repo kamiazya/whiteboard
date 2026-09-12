@@ -17,8 +17,14 @@ const canvasIn = (theme: string | undefined): SpatialCanvas => ({
     { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a', color: '5' },
     { id: 'b', type: 'text', x: 300, y: 200, width: 120, height: 60, text: 'b' },
   ],
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
-  ...(theme === undefined ? {} : { 'x-whiteboard': { facets: { [THEME_KEY]: { theme } } } }),
+  edges: [
+    {
+      id: 'e',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
+  ...(theme === undefined ? {} : { facets: { [THEME_KEY]: { theme } } }),
 })
 
 function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {

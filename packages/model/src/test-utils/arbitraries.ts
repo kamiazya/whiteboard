@@ -39,12 +39,12 @@ import {
 } from '../mdast/index.js'
 import {
   type CanvasEdge,
+  type CanvasLine,
   canvasCommentSchema,
   canvasEdgeSchema,
-  canvasExtensionSchema,
+  canvasLineSchema,
   type SpatialCanvas,
   spatialNodeSchema,
-  xWhiteboardSchema,
 } from '../spatial.js'
 import { okfActorSchema } from '../trust.js'
 import { fc } from './fast-check.js'
@@ -182,15 +182,13 @@ const sharedOverrides: SchemaArbitraryOptions['override'] = (_path, schema) => {
   return undefined
 }
 
-export const xWhiteboardArbitrary = arbitraryForSchema(xWhiteboardSchema, {
-  override: sharedOverrides,
-})
-
 export const spatialNodeArbitrary = arbitraryForSchema(spatialNodeSchema, {
   override: sharedOverrides,
 })
 
 export const canvasEdgeArbitrary = arbitraryForSchema(canvasEdgeSchema)
+
+export const canvasLineArbitrary = arbitraryForSchema(canvasLineSchema)
 
 export const markdownCanvasArbitrary = arbitraryForSchema(markdownDocumentSchema, {
   // A body long enough for a property about text to reach something.
@@ -337,20 +335,6 @@ export const commentThreadArbitrary = arbitraryForSchema(commentThreadSchema, {
 })
 
 /**
- * The canvas-level extension: routing preferences, comments and the
- * canvas's facets, each independently present. Comments get unique ids for
- * the same reason a thread's messages do.
- */
-const canvasExtensionArbitrary = arbitraryForSchema(canvasExtensionSchema, {
-  override: (path, schema) => {
-    if (path === '$.comments') {
-      return fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id })
-    }
-    return sharedOverrides?.(path, schema)
-  },
-})
-
-/**
  * A SpatialCanvas that is valid by construction.
  *
  * The two invariants `spatialCanvasSchema` enforces — unique node ids, and
@@ -379,20 +363,97 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
       },
       { weight: 1, arbitrary: fc.constantFrom(...ids).map((id) => [id, id]) },
     )
-    return fc
-      .uniqueArray(
-        fc
-          .tuple(endpoints, canvasEdgeArbitrary)
-          .map(([[fromNode, toNode], edge]) => ({ ...edge, fromNode, toNode })),
-        { maxLength: 5, selector: (edge) => edge.id },
-      )
-      .map((edges) => ({ nodes, edges }))
+    // An EDGE is a relation, so both of its ends name a node and the only
+    // correlation to maintain is referential integrity (ADR-0038 decision 2).
+    // The free arm moved to LINES below, where the choice is real.
+    const onNode = (drawn: CanvasEdge['from'], id: string): CanvasEdge['from'] => ({
+      node: id,
+      ...(drawn.side === undefined ? {} : { side: drawn.side }),
+      ...(drawn.end === undefined ? {} : { end: drawn.end }),
+    })
+    const edges = fc.uniqueArray(
+      fc.tuple(endpoints, canvasEdgeArbitrary).map(([[fromNode, toNode], edge]) => ({
+        ...edge,
+        from: onNode(edge.from, fromNode),
+        to: onNode(edge.to, toNode),
+      })),
+      { maxLength: 5, selector: (edge) => edge.id },
+    )
+
+    // A LINE's end is a node or a free POINT. The schema draws both arms
+    // evenly, which is not what a board looks like — most ink someone drew
+    // between boxes still lands on a box — so a roll keeps the drawn arm only
+    // when it is already a point, leaving roughly one end in five free. A
+    // looser share than the edges used to carry, because a line is where the
+    // free end now LIVES: a generator that almost never drew one would leave
+    // the arm this split exists for barely exercised.
+    //
+    // Measured, and by something that RUNS: `arbitraries.test.ts` counts the
+    // share over 2000 canvases and fails if it leaves a band, if node ends
+    // stop being correlated, or if no line is drawn with one end of each. A
+    // number with a source named beside it is still unbacked when nothing
+    // reads the source; this one is read.
+    const onLineNode = (
+      drawn: CanvasLine['from'],
+      id: string,
+      keepFree: boolean,
+    ): CanvasLine['from'] =>
+      keepFree && drawn.kind === 'point'
+        ? drawn
+        : {
+            kind: 'node',
+            node: id,
+            ...(drawn.kind === 'node' && drawn.side !== undefined ? { side: drawn.side } : {}),
+            ...(drawn.end === undefined ? {} : { end: drawn.end }),
+          }
+    const freeRoll = fc.nat({ max: 9 }).map((roll) => roll >= 6)
+    const lines = fc.uniqueArray(
+      fc
+        .tuple(endpoints, canvasLineArbitrary, freeRoll, freeRoll)
+        .map(([[fromNode, toNode], line, fromFree, toFree]) => ({
+          ...line,
+          from: onLineNode(line.from, fromNode, fromFree),
+          to: onLineNode(line.to, toNode, toFree),
+        })),
+      { maxLength: 3, selector: (line) => line.id },
+    )
+
+    // Ids are unique ACROSS the two collections, so the lines are re-keyed
+    // rather than filtered: a collision is not rare enough to leave to luck
+    // when both ids are drawn from the same short-string domain, and dropping
+    // the colliding line would quietly thin the very arm this generator is
+    // here to exercise.
+    return fc.tuple(edges, lines).map(([drawnEdges, drawnLines]) => ({
+      nodes,
+      edges: drawnEdges,
+      // Omitted when empty, so the generator draws the absent case too —
+      // which is what almost every stored board actually holds.
+      ...(drawnLines.length === 0
+        ? {}
+        : {
+            lines: drawnLines.map((line, index) => ({
+              ...line,
+              id: `line-${index}-${line.id}`,
+            })),
+          }),
+    }))
   })
   .chain(
     (canvas): fc.Arbitrary<SpatialCanvas> =>
       fc
-        .option(canvasExtensionArbitrary, { nil: undefined })
-        .map((extension) =>
-          extension === undefined ? canvas : { ...canvas, 'x-whiteboard': extension },
-        ),
+        .tuple(
+          // Comments get unique ids for the same reason a thread's messages
+          // do: the id is any non-empty string, drawn short, so collisions are
+          // rare enough to pass hundreds of runs and fail on someone else's seed.
+          fc.option(
+            fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id }),
+            { nil: undefined },
+          ),
+          fc.option(extensionFacetsArbitrary, { nil: undefined }),
+        )
+        .map(([comments, facets]) => ({
+          ...canvas,
+          ...(comments !== undefined && { comments }),
+          ...(facets !== undefined && { facets }),
+        })),
   )

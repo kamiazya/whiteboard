@@ -45,7 +45,7 @@ export function applyStencil(
   const stencil = registry.stencilAsset(id)
   if (stencil === undefined) return undefined
 
-  const previous = node['x-whiteboard']?.facets ?? {}
+  const previous = node.facets ?? {}
   const previousId = readStencilId(previous, registry)
   const worn = previousId === undefined ? undefined : registry.stencilAsset(previousId)
   const wornKeys = new Set(Object.keys(worn?.facets ?? {}))
@@ -56,10 +56,7 @@ export function applyStencil(
 
   const next: Record<string, unknown> = {
     ...node,
-    'x-whiteboard': {
-      ...node['x-whiteboard'],
-      facets: { ...kept, ...stencil.facets, [VISUAL_STENCIL_KEY]: { stencil: id } },
-    },
+    facets: { ...kept, ...stencil.facets, [VISUAL_STENCIL_KEY]: { stencil: id } },
   }
 
   // Colour follows the same rule as the facets: the new stencil's if it has
@@ -101,5 +98,5 @@ export function resolveNodeStencil(
   node: Node,
   registry: FacetRegistry = bundledFacetRegistry,
 ): string | undefined {
-  return readStencilId(node['x-whiteboard']?.facets, registry)
+  return readStencilId(node.facets, registry)
 }

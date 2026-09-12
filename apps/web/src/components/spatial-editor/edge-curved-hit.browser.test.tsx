@@ -18,8 +18,14 @@ const canvas: SpatialCanvas = {
     { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
     { id: 'b', type: 'text', x: 420, y: 320, width: 120, height: 60, text: 'B' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
-  'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } },
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
+  facets: { 'visual.edges/v0': { routing: 'curved' } },
 }
 
 it('selects a curved edge by clicking the drawn curve, and highlights along it', async () => {

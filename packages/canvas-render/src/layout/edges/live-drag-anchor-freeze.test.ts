@@ -24,8 +24,8 @@ const M_DRAGGED: SpatialNode = {
   text: '',
 }
 const EDGES: CanvasEdge[] = [
-  { id: 'F', fromNode: 'N', toNode: 'T' },
-  { id: 'C', fromNode: 'M', toNode: 'T' },
+  { id: 'F', from: { node: 'N' }, to: { node: 'T' } },
+  { id: 'C', from: { node: 'M' }, to: { node: 'T' } },
 ]
 
 describe('live-drag anchor freeze', () => {

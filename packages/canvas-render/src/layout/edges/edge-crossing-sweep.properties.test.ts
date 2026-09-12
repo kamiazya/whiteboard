@@ -4,6 +4,7 @@
 // side-choice equilibria. The full double loop over the shared narrow
 // phase stays here as the oracle.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
@@ -70,10 +71,10 @@ const scenarioArbitrary = fc
     const edges: CanvasEdge[] = pairs
       .map((p, i) => ({
         id: `e${i}`,
-        fromNode: `n${p.from % nodeCount}`,
-        toNode: `n${p.to % nodeCount}`,
+        from: { node: `n${p.from % nodeCount}` },
+        to: { node: `n${p.to % nodeCount}` },
       }))
-      .filter((e) => e.fromNode !== e.toNode)
+      .filter((e) => endNode(e.from) !== endNode(e.to))
     return { nodes, edges, style }
   })
 
@@ -229,9 +230,21 @@ describe('edge-crossing sweep — differential equality with the pairwise oracle
       { id: 'c', type: 'text', x: 150, y: 200, width: 100, height: 60, text: '' },
     ]
     const edges: CanvasEdge[] = [
-      { id: 'e0', fromNode: 'a', toNode: 'b' },
-      { id: 'e1', fromNode: 'c', toNode: 'a' },
-      { id: 'e2', fromNode: 'c', toNode: 'b' },
+      {
+        id: 'e0',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+      {
+        id: 'e1',
+        from: { node: 'c' },
+        to: { node: 'a' },
+      },
+      {
+        id: 'e2',
+        from: { node: 'c' },
+        to: { node: 'b' },
+      },
     ]
     const paths = routedPaths(nodes, edges, 'orthogonal')
     expect(buildPairwiseScores(paths)).toEqual(buildPairwiseScores(paths))

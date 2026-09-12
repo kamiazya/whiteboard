@@ -27,7 +27,7 @@ const COMMENT: CanvasComment = {
 }
 
 function commentsOf(doc: LoroDoc): CanvasComment[] {
-  return readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
+  return readSpatialCanvas(doc).comments ?? []
 }
 
 describe('the threads plane is the source of truth for comments', () => {
@@ -41,7 +41,7 @@ describe('the threads plane is the source of truth for comments', () => {
   it('writes nothing to the legacy comments map', () => {
     const doc = new LoroDoc()
     writeCanvasComment(doc, COMMENT)
-    writeSpatialCanvas(doc, { nodes: [], edges: [], 'x-whiteboard': { comments: [COMMENT] } })
+    writeSpatialCanvas(doc, { nodes: [], edges: [], comments: [COMMENT] })
     expect(doc.getMap('comments').keys()).toEqual([])
   })
 
@@ -70,7 +70,7 @@ describe('the threads plane is the source of truth for comments', () => {
     const doc = new LoroDoc()
     writeCanvasComment(doc, COMMENT)
     writeCanvasComment(doc, { ...COMMENT, id: 'c2' })
-    writeSpatialCanvas(doc, { nodes: [], edges: [], 'x-whiteboard': { comments: [COMMENT] } })
+    writeSpatialCanvas(doc, { nodes: [], edges: [], comments: [COMMENT] })
     expect(commentsOf(doc).map((c) => c.id)).toEqual(['c1'])
   })
 

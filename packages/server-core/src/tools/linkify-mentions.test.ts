@@ -126,7 +126,15 @@ describe('POST /linkify-mentions', () => {
       ops: [
         { op: 'node.add', node: { id: 'a', type: 'text', text: 'we depend on Redis heavily' } },
         { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
-        { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'b', label: 'Redis link' } },
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'e',
+            from: { node: 'a' },
+            to: { node: 'b' },
+            label: 'Redis link',
+          },
+        },
       ],
     })
     expect((await h.linkify(board.documentId, target.documentId)).body).toEqual({ linked: 1 })

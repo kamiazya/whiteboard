@@ -57,8 +57,12 @@ const group = (
   width,
   height,
 })
-const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge =>
-  label === undefined ? { id, fromNode, toNode } : { id, fromNode, toNode, label }
+const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge => ({
+  id,
+  from: { node: fromNode },
+  to: { node: toNode },
+  ...(label === undefined ? {} : { label }),
+})
 
 const ARCHITECTURE_EDGES: CanvasEdge[] = [
   edge('e1', 'cli', 'api'),
@@ -218,11 +222,8 @@ const laneArchitecture: SpatialCanvas = {
     ] as const
   ).map(([id, fromNode, toNode]) => ({
     id,
-    fromNode,
-    toNode,
-    fromSide: 'bottom' as const,
-    toSide: 'top' as const,
-    toEnd: 'arrow' as const,
+    from: { node: fromNode, side: 'bottom' as const },
+    to: { node: toNode, side: 'top' as const, end: 'arrow' as const },
   })),
 }
 
@@ -262,8 +263,18 @@ const laneInsert: SpatialCanvas = {
   nodes: [...fixtureArchitecture.nodes, box('cache', 'Cache', 625, 0, 150, 80)],
   edges: [
     ...fixtureArchitecture.edges.filter((e) => e.id !== 'db'),
-    { id: 'daemon-cache', fromNode: 'daemon', toNode: 'cache', label: '', toEnd: 'arrow' },
-    { id: 'cache-sqlite', fromNode: 'cache', toNode: 'sqlite', label: 'libsql', toEnd: 'arrow' },
+    {
+      id: 'daemon-cache',
+      from: { node: 'daemon' },
+      to: { node: 'cache', end: 'arrow' as const },
+      label: '',
+    },
+    {
+      id: 'cache-sqlite',
+      from: { node: 'cache' },
+      to: { node: 'sqlite', end: 'arrow' as const },
+      label: 'libsql',
+    },
   ],
 }
 

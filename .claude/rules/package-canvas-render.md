@@ -1104,13 +1104,41 @@ the table alone.
     horizontal edge — because an unlit export would otherwise read as a
     working one.
 
-**An edge's ALGORITHM is contributable, not only the geometry it draws
-with.** A contribution registers `routers` by bare name and answers
-`readRouting` for the edges it claims; `composeEdge` asks each contribution
-in turn, composes `${namespace}.${name}`, and calls the router it finds. A
-decline (`null`), a name nobody registered, a path under two points, or a
-missing endpoint all fall back to the built-in — never an error, so a
-document written against another deployment's plugins still draws.
+**An edge drawn through its STORED bends is the renderer's own**
+(`layout/edges/bend-route.ts`, taken inside `routeEdge` before the self-edge
+shape and before any computed routing). Every other routing here computes a
+path from two boxes and the obstacles between them, so none of them can
+honour a point somebody placed; this is what happens INSTEAD of choosing one,
+whenever `edge.bends` says where the line goes. It declines — and a route is
+computed — for an edge with no bends, and for a point this package cannot
+serialize, since `layoutSpatialCanvas` accepts an unparsed canvas and
+`formatCoord` throws on a non-finite number.
+
+It lived in `plugin-visual` as a contributed router until
+[ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4,
+because JSON Canvas has no waypoint and the model was the format. A renderer
+that ignored a field of the edge would drop authored geometry the record
+still holds, so the renderer owns it; `package-plugin-visual.md` carries the
+reasoning and the reachability gap it leaves.
+
+**An edge with a FREE end is not routed, and that is deliberate for now.**
+`nodeAtEnd` (model's) answers `undefined` for a point end exactly as it does
+for a dangling reference, so every caller in the edge cluster treats the two
+alike and the edge degrades to a zero-length path rather than drawing a line
+to the origin. Drawing one — the router taking a box-less end — is
+[ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 3b's
+job. Until then the model can STORE an end this renderer will not draw, which
+is the honest state and is pinned by example rather than left to be found.
+
+**An edge's ALGORITHM is still contributable, not only the geometry it draws
+with**, and the seam kept its shape when its first customer left. A
+contribution registers `routers` by bare name and answers `readRouting` for
+the edges it claims; `composeEdge` asks each contribution in turn, composes
+`${namespace}.${name}`, and calls the router it finds — BEFORE `routeEdge`,
+so a claiming router also wins over stored bends. A decline (`null`), a name
+nobody registered, a path under two points, or a missing endpoint all fall
+back to the built-in — never an error, so a document written against another
+deployment's plugins still draws. Nothing bundled claims an edge today.
 
 What crosses the seam is a ROUTE (points, and whether they curve), never a
 scene node: `pullEdgeOntoOutlines`, the arrowheads, the appearance and the
@@ -1215,7 +1243,9 @@ editor half is the one that stands.)
   off it for a whole drag; then nodes with facets and a canvas with none,
   while a themed board's edges dragged crisp and straight; then, when
   ADR-0013's edge target opened, edges with none — per-edge routing and the
-  bends a contributed router draws never reached a compared canvas. The
+  bends a contributed router drew never reached a compared canvas (bends are
+  a field of the edge since ADR-0037 slice 4, so the schema-derived generator
+  draws them without anyone asking it to). The
   second is why the scenario also draws `style`: a theme is drawn under
   `'document'` and never under the library's clean default. Four guards
   keep it honest — one fails when a registered facet of any of the three is

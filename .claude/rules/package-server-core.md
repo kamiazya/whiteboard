@@ -70,13 +70,21 @@ paths:
   at a time, each fitted to what the canvas holds). A batch tool's op union
   is ALSO driven one arm at a time, because a wide union passes on the arms
   a random batch happens to reach — measured: 100 batches of
-  `wb_canvas_edit` answered with 7 of its 13 op kinds, and `node.patch`,
+  `wb_canvas_edit` answered with 7 of its 13 op kinds (16 since the LINE ops
+  — `line.add`, `line.patch`, `line.remove`, which is what lets anything but
+  the editor author ink, ADR-0038 decision 2), and `node.patch`,
   `node.splice`, `edge.remove`, `comment.resolve` and `region.set` never
   reached the answering path. `OP_REACH` is the ledger over those arms in
   the repo's sense (`coverage-ledger.md`): read off the schema in both
   directions, `answers` checked against the run, and a `refused-only:`
   entry says why the seeding cannot reach an arm and is checked to still be
-  true. The `afterAll` also fails when a whole tool never answered, so a
+  true. **A new arm needs the seeded workspace to be able to REACH it**, not
+  only an entry: `line.patch` and `line.remove` were declared `answers` and
+  refused every draw for want of an id, because the fixture carried no ink.
+  A board with one line, plus the same per-arm steer the edge ops get, is
+  what turned the claim true — the ledger reporting "claimed to answer,
+  never did" is what caught it, and it reads like a broken op rather than an
+  empty fixture. The `afterAll` also fails when a whole tool never answered, so a
   tool added to the record that the seeding cannot reach is visible rather
   than green; `FUZZ_TALLY=1` prints each tool's tally, its refusal reasons
   and the shapes it answered with. The refusing doubles this lane does not

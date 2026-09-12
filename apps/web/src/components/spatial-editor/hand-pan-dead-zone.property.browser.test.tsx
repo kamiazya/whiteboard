@@ -83,7 +83,13 @@ const board: SpatialCanvas = {
       url: 'https://example.com/c',
     },
   ],
-  edges: [{ id: 'e1', fromNode: 't1', toNode: 't2' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 't1' },
+      to: { node: 't2' },
+    },
+  ],
 }
 
 function Host({ handle }: { handle: React.RefObject<SpatialEditorHandle | null> }) {

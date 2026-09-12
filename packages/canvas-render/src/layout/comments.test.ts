@@ -81,11 +81,11 @@ const TEXT_NODE: SpatialNode = {
   text: 'content',
 }
 
-function canvasWith(comments: NonNullable<SpatialCanvas['x-whiteboard']>['comments']) {
+function canvasWith(comments: SpatialCanvas['comments']) {
   return {
     nodes: [TEXT_NODE],
     edges: [],
-    'x-whiteboard': { comments },
+    comments,
   } satisfies SpatialCanvas
 }
 
@@ -290,10 +290,14 @@ describe('comment layer', () => {
     }
     const canvas: SpatialCanvas = {
       nodes: [left, right],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
-      'x-whiteboard': {
-        comments: [{ id: 'c1', x: 250, y: 130, text: 'this link', targetEdgeId: 'e1' }],
-      },
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'a' },
+          to: { node: 'b' },
+        },
+      ],
+      comments: [{ id: 'c1', x: 250, y: 130, text: 'this link', targetEdgeId: 'e1' }],
     }
     const scene = layoutSpatialCanvas(canvas, baseOptions())
     const edge = scene.nodes.find(
@@ -454,9 +458,7 @@ describe('comment layer', () => {
         {
           nodes: [TEXT_NODE, NEIGHBOUR],
           edges: [],
-          'x-whiteboard': {
-            comments: [{ id: 'c1', x: 0, y: 0, text: 'tighten', targetNodeId: 'n1' }],
-          },
+          comments: [{ id: 'c1', x: 0, y: 0, text: 'tighten', targetNodeId: 'n1' }],
         },
         baseOptions(),
       )
@@ -500,7 +502,7 @@ describe('comment layer', () => {
             { id: 'wall', type: 'text', x: 405, y: -500, width: 400, height: 1000, text: 'w' },
           ],
           edges: [],
-          'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 300, text: 'left' }] },
+          comments: [{ id: 'c1', x: 400, y: 300, text: 'left' }],
         },
         baseOptions(),
       )
@@ -522,7 +524,7 @@ describe('comment layer', () => {
         {
           nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 800, height: 800 }],
           edges: [],
-          'x-whiteboard': { comments: [{ id: 'c1', x: 100, y: 100, text: 'in the frame' }] },
+          comments: [{ id: 'c1', x: 100, y: 100, text: 'in the frame' }],
         },
         baseOptions(),
       )
@@ -535,7 +537,7 @@ describe('comment layer', () => {
       const alone = {
         nodes: [],
         edges: [],
-        'x-whiteboard': { comments: [{ id: 'c1', x: 100, y: 100, text: 'x' }] },
+        comments: [{ id: 'c1', x: 100, y: 100, text: 'x' }],
       } satisfies SpatialCanvas
       const withoutObstacle = bubbleOf(
         layoutSpatialCanvas(alone, baseOptions()).nodes,
@@ -652,7 +654,7 @@ describe('node sets and regions (the spatial arm with nodeIds or a rect)', () =>
       {
         nodes: [A, B],
         edges: [],
-        'x-whiteboard': { comments: [{ id: 'set', x: 5, y: 5, text: 'these two' }] },
+        comments: [{ id: 'set', x: 5, y: 5, text: 'these two' }],
       },
       baseOptions({ threads: [thread] }),
     )

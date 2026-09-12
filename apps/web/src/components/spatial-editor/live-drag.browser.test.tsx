@@ -17,7 +17,13 @@ const start: SpatialCanvas = {
     { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' },
     { id: 'b', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'Beta' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 function makeHost(initial: SpatialCanvas) {
@@ -121,7 +127,13 @@ it('re-routes a bystander edge live when the dragged node lands on its path', as
       { id: 'c', type: 'text', x: 100, y: 300, width: 120, height: 60, text: 'From' },
       { id: 'd', type: 'text', x: 700, y: 300, width: 120, height: 60, text: 'To' },
     ],
-    edges: [{ id: 'e-cd', fromNode: 'c', toNode: 'd' }],
+    edges: [
+      {
+        id: 'e-cd',
+        from: { node: 'c' },
+        to: { node: 'd' },
+      },
+    ],
   }
   const { Host } = makeHost(blocked)
   const { container } = render(<Host />)
@@ -156,10 +168,18 @@ it('recomputes line jumps live while the drag is in flight', async () => {
       { id: 'd', type: 'text', x: 350, y: 600, width: 120, height: 60, text: 'D' },
     ],
     edges: [
-      { id: 'e1', fromNode: 'a', toNode: 'b' },
-      { id: 'e2', fromNode: 'c', toNode: 'd' },
+      {
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+      {
+        id: 'e2',
+        from: { node: 'c' },
+        to: { node: 'd' },
+      },
     ],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+    facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
   }
   const { Host } = makeHost(crossing)
   const { container } = render(<Host />)
@@ -179,7 +199,14 @@ it('recomputes line jumps live while the drag is in flight', async () => {
 it('keeps a touched edge label visible and centered during the drag', async () => {
   const labelled: SpatialCanvas = {
     ...start,
-    edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'flow' }],
+    edges: [
+      {
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+        label: 'flow',
+      },
+    ],
   }
   const { Host } = makeHost(labelled)
   const { container } = render(<Host />)
@@ -256,10 +283,18 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
       { id: 'cyan', type: 'text', x: 700, y: 520, width: 160, height: 90, text: 'Cyan' },
     ],
     edges: [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      {
+        id: 'e-orange',
+        from: { node: 'yellow' },
+        to: { node: 'red' },
+      },
+      {
+        id: 'e-red',
+        from: { node: 'red' },
+        to: { node: 'cyan' },
+      },
     ],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   const { Host } = makeHost(crossing)
   const { container } = render(<Host />)
@@ -329,7 +364,13 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
           text: `f${i}`,
         })),
       ],
-      edges: [{ id: 'bystander', fromNode: 'p', toNode: 'q' }],
+      edges: [
+        {
+          id: 'bystander',
+          from: { node: 'p' },
+          to: { node: 'q' },
+        },
+      ],
     })
     function Host() {
       const [canvas, setCanvas] = useState<SpatialCanvas>(() => big(0))
@@ -404,14 +445,22 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
         width: 200,
         height: 200,
         text: 'Hub',
-        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'diamond' } } },
+        facets: { 'visual.shape/v0': { kind: 'diamond' } },
       },
     ],
     edges: [
-      { id: 'e-a', fromNode: 'a', toNode: 'hub' },
-      { id: 'e-c', fromNode: 'c', toNode: 'hub' },
+      {
+        id: 'e-a',
+        from: { node: 'a' },
+        to: { node: 'hub' },
+      },
+      {
+        id: 'e-c',
+        from: { node: 'c' },
+        to: { node: 'hub' },
+      },
     ],
-    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   const { Host } = makeHost(shaped)
   const { container } = render(<Host />)
@@ -441,7 +490,7 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
 it('a themed board keeps its look while a node is carried: ghost and backdrop alike', async () => {
   const neon: SpatialCanvas = {
     ...start,
-    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+    facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
   }
   const { Host } = makeHost(neon)
   const { container } = render(<Host />)

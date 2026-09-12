@@ -16,7 +16,11 @@ const textNode: SpatialNode = {
   height: 50,
   text: 'hi',
 }
-const edge = { id: 'e', fromNode: 'a', toNode: 'b' }
+const edge = {
+  id: 'e',
+  from: { node: 'a' },
+  to: { node: 'b' },
+}
 
 describe('createEditorAppearance', () => {
   it('resolves the light theme with the shared per-type fill and the accessible stroke', () => {

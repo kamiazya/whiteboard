@@ -31,6 +31,11 @@ const VERB_WORDS = {
   'edge.add': 'Add a connection',
   'edge.patch': 'Restyle a connection',
   'edge.remove': 'Remove a connection',
+  // "Line", not "connection": ink says nothing about what is related to what,
+  // and the copy is where a reader learns the difference the split makes.
+  'line.add': 'Draw a line',
+  'line.patch': 'Redraw a line',
+  'line.remove': 'Erase a line',
   'body.replace': 'Replace a passage',
 } as const satisfies Record<ProposedChange['op'], string>
 

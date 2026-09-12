@@ -18,7 +18,13 @@ const start: SpatialCanvas = {
     { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
     { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 function makeHost() {
@@ -94,7 +100,5 @@ it('an edge’s menu opens a comment about the edge, pinned on its line', async 
   // The stored point is below the line; where the pin is DRAWN (on the
   // line) is canvas-render's contract, pinned in its comments.test.ts. What
   // the editor owns is that the comment names the edge, above.
-  await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.comments?.[0]).toMatchObject({ targetEdgeId: 'e1' }),
-  )
+  await vi.waitFor(() => expect(latest.canvas.comments?.[0]).toMatchObject({ targetEdgeId: 'e1' }))
 })

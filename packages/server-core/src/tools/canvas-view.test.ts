@@ -142,7 +142,7 @@ describe('canvas_view tool', () => {
         writeSpatialCanvas(doc, {
           nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
           edges: [],
-          'x-whiteboard': { facets: { 'visual.theme/v0': { theme } } },
+          facets: { 'visual.theme/v0': { theme } },
         })
       })
     }

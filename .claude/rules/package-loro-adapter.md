@@ -192,15 +192,55 @@ implementations live in the composition roots.
   pinned: `workspace-record-growth.test.ts` measures 919 -> 950 bytes at one
   document and 14860 -> 16082 at fifty.
 
-- A third map, `doc.getMap('canvas')`, holds the canvas ENVELOPE —
-  properties of the canvas rather than of anything on it (today
-  `x-whiteboard`, the rendering preferences). Separate because the merge
-  story differs in kind: nodes and edges are keyed per object so two peers
-  editing different objects both survive, whereas a canvas-wide preference
-  is one value with one meaning and last-writer-wins per key is all it
-  needs. Anything the canvas carries beside `nodes`/`edges` must be written
-  here — a schema round-trip through JSON is NOT evidence it persists,
-  since this bridge is the path the app actually saves through.
+- A third map, `doc.getMap('canvas')`, holds properties of the canvas rather
+  than of anything on it — today `facets`, under a key of its own. Separate
+  from nodes and edges because the merge story differs in kind: those are
+  keyed per object so two peers editing different objects both survive,
+  whereas a canvas-wide preference is one value with one meaning and
+  last-writer-wins per key is all it needs. Anything the canvas carries
+  beside `nodes`/`edges` must be written here — a schema round-trip through
+  JSON is NOT evidence it persists, since this bridge is the path the app
+  actually saves through.
+
+- **An edge's ENDPOINT is one value too**, for the reason `bends` is and one more: the two arms of
+  the union share only `end`, so an end that is a node in one replica and a point in another has
+  no field-wise merge that means anything. Writing the whole endpoint under one key makes the
+  merge the "whoever wrote last placed this end" a reader expects.
+  `-0` does not survive the record here either, and a free end's `point` is its THIRD home — the
+  node's `x`/`y` and an edge's `bends` are the other two. Each was found by
+  `loro-bridge.property.test.ts` on the day its field arrived, which is the argument for keeping
+  the property rather than only the three examples beside it.
+
+- **An edge's `bends` are ONE value, not a nested container.** Last-writer-wins per key is what a
+  dragged path wants: two people reshaping one edge concurrently should converge on a path one of
+  them drew, never on an interleaved third neither did. `loro-bridge.property.test.ts` is what
+  says it persists at all — it reported the field dropped before `edgeToFields` carried it, which
+  no other test in the suite could have seen.
+
+- **A record written before [ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)
+  stored all of this under the FORMAT's extension key**, because the model
+  was the format. `liftLegacyExtension` converts a stored node or edge on
+  the way out and `readCanvasFacets` falls back to the old envelope, both
+  spelling the literal as it stood — the way a migration's own text always
+  does. Every write uses the model's names, so a record converges the first
+  time anything saves it.
+
+  This is load-bearing, not tidy. The model is `.strict()` now, so a stored
+  node still carrying the old key FAILS its schema and the read drops what
+  fails: measured in `legacy-extension.test.ts`, removing the lift makes
+  both nodes VANISH (`[]` where `['n1','n2']` is expected) rather than lose
+  a field. Nothing else in the suite can see that — every other test
+  asserts on a document this version wrote.
+
+- **A delete is an oplog op even when the key was never there.** Both the
+  facets write and the legacy cleanup check before deleting, and that is
+  not micro-optimisation: the write path used to delete the canvas envelope
+  on EVERY save, including the overwhelming majority of saves on boards
+  that never had one. Removing it cut delta-log growth 178660 -> 156960
+  bytes over 1000 edits (-12%, ~22B per edit) and the stored snapshot
+  11699 -> 11040. `workspace-record-growth.test.ts` is the only thing that
+  could say so — no correctness test can see an op that costs bytes and
+  changes no state.
 
 ## Tests
 
@@ -208,12 +248,12 @@ implementations live in the composition roots.
   `vitest.config.ts`).
 - Unit tests for CRDT merge behavior across the bridge.
 - `readSpatialCanvas`/`writeSpatialCanvas` tests: round-trip all node types
-  (text/file/link/group), edges, x-whiteboard extensions, overwrite/delete
+  (text/file/link/group), edges, a node's embed and every facets bucket, overwrite/delete
   semantics, and CRDT merge of independent node additions.
 - `loro-bridge.property.test.ts` draws canvases from the model schemas and
-  round-trips nodes, edges AND the canvas envelope (`edgeRouting`, the
-  canvas's facets) — the envelope because this bridge is the path the app
-  saves through and a JSON round-trip is no evidence a field persists here.
+  round-trips nodes, edges AND the canvas's own facets — the last because
+  this bridge is the path the app saves through and a JSON round-trip is no
+  evidence a field persists here.
   Mutation-checked: dropping a node's `subpath`, a group's
   `backgroundStyle`, an edge's `label` or the envelope's `facets` in the
   write path each turns it red.

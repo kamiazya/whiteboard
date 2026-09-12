@@ -29,7 +29,13 @@ function twoNodeCanvasWithEdge(): SpatialCanvas {
       { id: 'a', type: 'text', x: 20, y: 20, width: 100, height: 60, text: 'hello' },
       { id: 'b', type: 'text', x: 250, y: 20, width: 100, height: 60, text: 'world' },
     ],
-    edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+    edges: [
+      {
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+    ],
   }
 }
 
