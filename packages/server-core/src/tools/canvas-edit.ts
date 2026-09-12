@@ -519,7 +519,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           // because a GROUP has one, so the key is known to the union and
           // wrong for this member.
           //
-          // Before ADR-0035 the node schemas were non-strict, the re-parse
+          // Before ADR-0037 the node schemas were non-strict, the re-parse
           // stripped such a key, and this was a hand-written diff of the keys
           // that survived. Strictness detects it exhaustively now — but it
           // reports "Unrecognized key", which names the key and NOT the type,
@@ -722,7 +722,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             }
             // A FREE end names no node, so there is nothing to be missing —
             // the existence check is about a reference, and a point is not one
-            // (ADR-0035 slice 3).
+            // (ADR-0037 slice 3).
             for (const endpoint of endNodes(draft)) {
               if (nodeAt(endpoint) === undefined) {
                 fail(

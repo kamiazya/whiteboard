@@ -3,7 +3,7 @@ import { z } from 'zod'
 /**
  * OCIF v0.7.0 (https://spec.canvasprotocol.org/) as this package writes and
  * reads it — a WIRE shape, declared here for the reason
- * [ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md) put
+ * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md) put
  * JSON Canvas here: the model is native, and a format is a projection of it.
  *
  * Declared to the subset this projection uses rather than to the whole
@@ -22,7 +22,7 @@ import { z } from 'zod'
  * package non-conforming by construction.
  *
  * This is the opposite of the `.strict()` the internal model uses, and the
- * asymmetry is the same one ADR-0035 recorded for the JSON Canvas wire: a
+ * asymmetry is the same one ADR-0037 recorded for the JSON Canvas wire: a
  * foreign document's vendor keys are legitimate, and the INTERNAL model is
  * where an unknown key is a defect.
  */

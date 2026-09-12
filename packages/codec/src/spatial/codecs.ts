@@ -11,9 +11,9 @@ import { serializeSpatial } from './serialize.js'
 /**
  * Every format a spatial document can be written as, in one place.
  *
- * [ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md) made
+ * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md) made
  * the model native and JSON Canvas a projection of it;
- * [ADR-0036](../../../../docs/contributing/adr/0036-ocif-projection.md) added
+ * [ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md) added
  * a second. With two, "the projection" stopped being a thing and became a
  * KIND of thing — and the guards that were written once per format are the
  * part that does not survive a third being added by someone in a hurry.

@@ -104,9 +104,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +34 for the edge target: `set-edge-facet` writes a plugin-owned payload
   // to ONE edge, the twin of `set-node-facet`.
   // +17: `set-edge-bends`, the bend drag's write. Not a facet write since
-  // ADR-0035 slice 4 — bends are a field of the edge, so the command carries
+  // ADR-0037 slice 4 — bends are a field of the edge, so the command carries
   // a value rather than an opaque plugin payload.
-  // +18 when an edge END became a discriminated union (ADR-0035 slice 3):
+  // +18 when an edge END became a discriminated union (ADR-0037 slice 3):
   // `set-edge-ends` and `set-edge-side` write INSIDE the endpoint now, and
   // `set-edge-side` grew a real branch — only a node end has a side to pin,
   // so the write is a no-op on a free one. The width is the branch, not
@@ -370,7 +370,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // side choice reads the whole edge set, so one edge overriding the board's
   // routing has to be visible to it rather than applied afterwards.
   // +26: the stored-bend branch, taken before the self-edge shape and before
-  // any computed routing (ADR-0035 slice 4). The route itself is
+  // any computed routing (ADR-0037 slice 4). The route itself is
   // `bend-route.ts`; what lives here is choosing it.
   // +11 net, and the shape is worth reading: the reshape HOISTED three
   // `endNode` reads out of O(nodes) filters on the routing path (760k

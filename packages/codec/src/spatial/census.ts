@@ -109,7 +109,7 @@ const SITE_PREFIX: Record<string, string> = {
  * It does NOT classify. It used to split its answer by whether a path was
  * spelled under `x-whiteboard`, which worked only while the model WAS the
  * format — the very thing
- * [ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md) ends.
+ * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md) ends.
  * What a position costs an export is now the projection ledger's answer, and
  * keeping a second one here would be two authorities on one question.
  */

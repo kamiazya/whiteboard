@@ -47,11 +47,11 @@ describe('the drawing corpus restates the eval fixture board exactly', () => {
       /id: '([^']+)',\s*type: 'group',\s*label: '([^']+)',\s*x: (\d+),\s*y: (\d+),\s*width: (\d+),\s*height: (\d+)/g,
     ),
   ].map(([, id, label, x, y, w, h]) => `group('${id}', '${label}', ${x}, ${y}, ${w}, ${h})`)
-  // Whitespace-tolerant because an end is an OBJECT since ADR-0035 slice 3,
+  // Whitespace-tolerant because an end is an OBJECT since ADR-0037 slice 3,
   // so the formatter is free to wrap these where it could not wrap two flat
   // keys — and a regex that stops matching reports itself as "the corpus is
   // empty", which the count below is here to contradict. It did exactly that
-  // when ADR-0036 decision 2 dropped `kind` from an edge's end: the counts
+  // when ADR-0038 decision 2 dropped `kind` from an edge's end: the counts
   // went to zero rather than the per-line checks passing over nothing.
   const edges = [
     ...fixture.matchAll(

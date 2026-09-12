@@ -4,7 +4,7 @@
 # What a JSON Canvas export keeps, and what it costs
 
 A whiteboard document is not a JSON Canvas file. JSON Canvas 1.0 is a **projection** of it
-([ADR-0035](../contributing/adr/0035-model-and-format.md)), and first-party support means a
+([ADR-0037](../contributing/adr/0037-model-and-format.md)), and first-party support means a
 tested projection rather than an identity: a round-trip property over the expressible subset,
 and this table for everything else.
 

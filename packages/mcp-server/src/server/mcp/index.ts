@@ -8,6 +8,7 @@ import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { createCanvasClientNotifier } from '../canvas-client-notifier.js'
 import { getDataDir } from '../config.js'
 import { ensureWorkspaceId } from '../current-workspace.js'
+import { daemonDeviceActor } from '../daemon-actor.js'
 import { getDb } from '../store/db/index.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
@@ -113,7 +114,7 @@ export async function createMcpServer(options: CreateMcpServerOptions = {}) {
   const dataDir = getDataDir()
   const db = await getDb(dataDir)
   const container = createContainer(createStoreLocalModule({ db, blobDir: dataDir }))
-  const deps = resolveServerDeps(container)
+  const deps = resolveServerDeps(container, { daemonActor: daemonDeviceActor(dataDir) })
   // The WS-route bridge is attached at the roots rather than in
   // resolveServerDeps (the di graph must not import the routes layer); this
   // stdio root serves the same daemon process, so its tools notify the same

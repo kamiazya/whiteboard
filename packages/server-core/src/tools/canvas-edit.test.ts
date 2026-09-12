@@ -618,7 +618,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       }
       const props = (node as { properties?: Record<string, unknown> }).properties
       if (props !== undefined) {
-        // `side` INSIDE an endpoint since ADR-0035 slice 3, not a
+        // `side` INSIDE an endpoint since ADR-0037 slice 3, not a
         // `fromSide`/`toSide` sibling — so the names this walk looks for
         // moved, and a walk still looking for the old ones finds nothing
         // and reports "no side is described" as loudly as it would report a
@@ -2787,7 +2787,7 @@ describe('the node extension on the write side', () => {
 
   test('reports a sub-pixel size rather than refusing its own answer', async () => {
     // Both payloads here echo what is STORED, and the model's geometry is a
-    // real number since ADR-0035 slice 4 — so an output schema still saying
+    // real number since ADR-0037 slice 4 — so an output schema still saying
     // `int` makes the tool answer with something its own contract refuses,
     // which the MCP SDK raises as a failed call. Rounding belongs to the
     // JSON Canvas projection, not to a read of the board.
@@ -2823,7 +2823,7 @@ describe('the node extension on the write side', () => {
         ops: [{ op: 'node.add', node: { type: 'text', text: 'x', 'x-whiteboard': extension } }],
       }).ops[0]
     // In comes the FORMAT's union arm, under the published input key; out come
-    // the MODEL's two independent fields (ADR-0035). The key stays because it
+    // the MODEL's two independent fields (ADR-0037). The key stays because it
     // is what a model reads in `tools/list`; moving it is a tool-surface change.
     const embed = parse({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' })
     expect(embed.op === 'node.add' && embed.node['x-whiteboard']).toEqual({

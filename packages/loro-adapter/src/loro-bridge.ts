@@ -31,7 +31,7 @@ import { minimalChange } from './minimal-change.js'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
-// Ink (ADR-0036 decision 2), in its own plane for the reason edges have one:
+// Ink (ADR-0038 decision 2), in its own plane for the reason edges have one:
 // per-element keys, so two peers drawing concurrently both survive.
 const LINES_KEY = 'lines'
 
@@ -50,7 +50,7 @@ const CANVAS_KEY = 'canvas'
 const FACETS_FIELD = 'facets'
 /**
  * The key a canvas's facets, and a node's or edge's facets and embed, were
- * stored under before [ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md):
+ * stored under before [ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md):
  * the FORMAT's extension key, because the model was the format.
  *
  * Spelled as it stood, the way a migration's own text always is. It is only

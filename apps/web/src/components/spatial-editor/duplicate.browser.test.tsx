@@ -107,7 +107,7 @@ it('duplicating a multi-selection keeps the connecting edge WITH its properties,
   expect(copiedEdge.id).not.toBe('ab')
   expect(endIn(copiedEdge.from, copyIds)).toBe(true)
   expect(endIn(copiedEdge.to, copyIds)).toBe(true)
-  // A pinned side rides ON the endpoint (ADR-0035 slice 3), so what the copy
+  // A pinned side rides ON the endpoint (ADR-0037 slice 3), so what the copy
   // must keep is the endpoint's own `side`, not a sibling key of the edge.
   expect(copiedEdge.from).toMatchObject({ side: 'right' })
   expect(copiedEdge.to).toMatchObject({ side: 'left' })

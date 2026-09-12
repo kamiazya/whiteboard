@@ -17,6 +17,7 @@ import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
+import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
@@ -116,7 +117,10 @@ export async function startServerModeHttp(
   await ensureWorkspaceId(dataDir)
   const serverDeps = resolveServerDeps(
     createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
-    { ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }) },
+    {
+      ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
+      daemonActor: daemonDeviceActor(dataDir),
+    },
   )
 
   // Filled synchronously by createApp below, and read only by the

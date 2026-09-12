@@ -40,7 +40,7 @@ const JUNK = { 'x-vendor': { custom: true }, obsidianField: 'v' }
  * A WIRE document with another tool's keys sprinkled at every level.
  *
  * The canvas is projected first, because what arrives at `parseSpatial` is a
- * JSON Canvas document and the model is no longer one: since ADR-0035 slice 4
+ * JSON Canvas document and the model is no longer one: since ADR-0037 slice 4
  * its geometry is sub-pixel, which the format does not state.
  */
 function withForeignKeys(canvas: SpatialCanvas): string {

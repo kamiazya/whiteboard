@@ -201,7 +201,7 @@ function decorations(element: {
  *
  * This function used to ask whether both ends named a node before it could
  * say what the element became, and that question was the conflation
- * ADR-0036 decision 2 removed. The branch is gone: the two concepts are two
+ * ADR-0038 decision 2 removed. The branch is gone: the two concepts are two
  * functions, the way OCIF has two extensions.
  */
 function projectEdge(edge: CanvasEdge): OcifNode {
@@ -419,7 +419,7 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
         ...(facets === undefined ? {} : { facets }),
       }
       // WHICH extension it carries decides which collection it joins, and
-      // that is the whole of the read side of ADR-0036 decision 2. An
+      // that is the whole of the read side of ADR-0038 decision 2. An
       // `@ocif/edge` is a relation; anything else drawn as a line is ink.
       if (edgeExt !== undefined) {
         const ends = extensionOf(entry.data, OCIF_TYPE.edgeEnds)

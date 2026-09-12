@@ -7,7 +7,7 @@
  * happens INSTEAD of choosing one, whenever the edge says where it goes.
  *
  * It lived in `plugin-visual` as a contributed router until
- * [ADR-0035](../../../../../docs/contributing/adr/0035-model-and-format.md)
+ * [ADR-0037](../../../../../docs/contributing/adr/0037-model-and-format.md)
  * slice 4, because JSON Canvas has no waypoint and the model was the format,
  * so the bends could only exist as a plugin's facet. With `bends` a field of
  * the edge, a renderer that ignored them would drop geometry a person

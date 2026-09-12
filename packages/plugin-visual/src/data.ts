@@ -511,7 +511,7 @@ export function resolveEdgeStyle(
  */
 export function resolveEdgeOwnStyle(
   // Either element: a LINE carries the same facet bucket an edge does, and
-  // what this reads is the bucket (ADR-0036 decision 2).
+  // what this reads is the bucket (ADR-0038 decision 2).
   edge: RoutableElement,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualEdgesFacet {

@@ -23,7 +23,7 @@ type Node = {
   width: number
   height: number
 }
-// An END is an object, not a flat key (ADR-0035 slice 3). Spelled out here
+// An END is an object, not a flat key (ADR-0037 slice 3). Spelled out here
 // rather than imported because this fixture stands in for what the snapshot
 // hands a verifier, and a fixture that drifts from that shape is how a
 // POSITIVE control stops controlling anything.

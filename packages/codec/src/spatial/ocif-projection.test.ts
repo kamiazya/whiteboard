@@ -26,7 +26,7 @@ describe('what the two formats reach, read side by side', () => {
 
   it('leaves NEITHER format dropping anything, which is what the split bought', () => {
     // The headline, pinned so a later change to either ledger has to restate
-    // it. Before ADR-0036 decision 2 this read `JSON Canvas dropped 4, OCIF
+    // it. Before ADR-0038 decision 2 this read `JSON Canvas dropped 4, OCIF
     // dropped 0`; splitting the relation from the ink took JSON Canvas's four
     // to zero as well — those rows WERE an edge's point ends, which the format
     // was right to refuse and which are no longer an edge's to have.

@@ -506,6 +506,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
+      multiformats:
+        specifier: ^14.0.5
+        version: 14.0.5
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -6688,6 +6691,9 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  multiformats@14.0.5:
+    resolution: {integrity: sha512-vbIm83F2yZ1pWJGS0yl0ysracIvv56LtbrIyiIQHoLdYDJOMoLfVFsXhh9DUH4SFdkdkFhucyWniihsNzVEjkQ==}
 
   mutation-server-protocol@0.4.1:
     resolution: {integrity: sha512-SBGK0j8hLDne7bktgThKI8kGvGTx3rY3LAeQTmOKZ5bVnL/7TorLMvcVF7dIPJCu5RNUWhkkuF53kurygYVt3g==}
@@ -14415,6 +14421,8 @@ snapshots:
       typescript: 7.0.2
     transitivePeerDependencies:
       - '@types/node'
+
+  multiformats@14.0.5: {}
 
   mutation-server-protocol@0.4.1:
     dependencies:

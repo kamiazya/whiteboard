@@ -1,7 +1,7 @@
-# ADR-0036: OCIF is a third projection, and its decompositions discipline the native model
+# ADR-0038: OCIF is a third projection, and its decompositions discipline the native model
 
 **Status:** Accepted — design of record (human gate, 2026-09-12). Builds on
-[ADR-0035](0035-model-and-format.md), which made the model native and the
+[ADR-0037](0037-model-and-format.md), which made the model native and the
 formats projections; this one adds the third projection and takes two of the
 distinctions it exposes into the model. Stands on the ledger landed in
 `packages/codec/src/spatial/ocif-projection.ts`.
@@ -15,7 +15,7 @@ on its own merits, but the reason it reached the top of the queue is a second
 one: this model still carries decompositions it inherited from JSON Canvas
 rather than chose, and an external standard is a way to tell the difference.
 
-Measured before argued, the way ADR-0035 was. `OCIF_PROJECTION` is
+Measured before argued, the way ADR-0037 was. `OCIF_PROJECTION` is
 `JSON_CANVAS_PROJECTION`'s sibling — every position the model can hold, and
 what projecting it onto OCIF costs:
 
@@ -44,7 +44,7 @@ dropped** is the stronger form of the claim the next paragraph makes.*
 **`native` falls, and that reading is the opposite of what it looks like.**
 The eight positions OCIF states that JSON Canvas cannot are the ones that
 matter: `x`/`y`/`width`/`height` cross **unrounded** (OCIF's coordinates are
-real numbers in logical pixels, so ADR-0035 slice 4's sub-pixel geometry
+real numbers in logical pixels, so ADR-0037 slice 4's sub-pixel geometry
 survives), an embedded document crosses **natively** (OCIF nests canvases by
 letting a node reference an OCIF document as a resource), and **all three
 facet buckets** cross natively — because OCIF's `data[]` extension mechanism
@@ -65,7 +65,7 @@ somehow, which JSON Canvas cannot say.
   `end` as `[x, y]`. A drawing, not a relation.
 
 That last pair is a distinction this codebase does not make. `CanvasEdge`
-serves both, which is precisely why ADR-0035 slice 3 widened its endpoint to
+serves both, which is precisely why ADR-0037 slice 3 widened its endpoint to
 `node | point` — and why that widening does not project onto an OCIF edge at
 all.
 
@@ -73,12 +73,12 @@ all.
 
 ### 1. OCIF is a third PROJECTION. It does not become the native model.
 
-ADR-0035's thesis is unchanged: the model is native, and every format is a
+ADR-0037's thesis is unchanged: the model is native, and every format is a
 tested projection with a published loss table. OCIF joins JSON Canvas and OKF
 under that same rule — `toOcif`/`fromOcif` in `packages/codec`, a round-trip
 property over the expressible subset, and a generated loss table.
 
-First-party support means what ADR-0035 decision 2 says it means: the
+First-party support means what ADR-0037 decision 2 says it means: the
 projection is tested, not that the model *is* the format.
 
 ### 2. A RELATION and a DRAWN LINE are two things.
@@ -88,7 +88,7 @@ between two nodes and is what `rel`, graph traversal, and "what is connected to
 what" are about. A drawn line carries coordinates, may end nowhere, and is
 about ink.
 
-ADR-0035 slice 3's free endpoint is the evidence that the conflation was
+ADR-0037 slice 3's free endpoint is the evidence that the conflation was
 already costing something: it was reached by widening the *relation* until it
 could hold a *drawing*. Slice 3b then taught the router to draw one. Both stay
 — what changes is which concept owns them.
@@ -100,7 +100,7 @@ arriving at the same place from outside.
 ### 3. TEXT is a resource, not a field on a node kind.
 
 The node-kind union (`text | file | link | group`) is inherited from JSON
-Canvas and survived ADR-0035 unexamined. Under OCIF's decomposition it
+Canvas and survived ADR-0037 unexamined. Under OCIF's decomposition it
 dissolves: text is a resource, a file is a resource with a location, a link is
 a resource whose location is a URL, and a group is `parent` plus
 `@ocif/group`.
@@ -137,15 +137,15 @@ the edge split reaches the router, the editor, the snapshot and the MCP tool
 surface; the text change reaches OKF, search and layout.
 
 **Unchanged.** ADR-0013's facet system, which OCIF's extension mechanism
-independently validates rather than displaces. ADR-0035's ledger discipline,
+independently validates rather than displaces. ADR-0037's ledger discipline,
 which this extends rather than revises.
 
 ## Alternatives considered
 
 **Adopt OCIF as the native model.** The largest distillation, and rejected:
-it contradicts ADR-0035 directly, and it would bind the internal model to a
+it contradicts ADR-0037 directly, and it would bind the internal model to a
 Candidate Recommendation that the working group is explicitly still gathering
-implementation feedback on. That is the same shape as the binding ADR-0035
+implementation feedback on. That is the same shape as the binding ADR-0037
 removed, with a different format in the slot. Taking the *decompositions*
 without taking the *binding* gets the distillation and keeps the freedom.
 

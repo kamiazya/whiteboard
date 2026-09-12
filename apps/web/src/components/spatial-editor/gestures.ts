@@ -204,7 +204,7 @@ function findNode(canvas: SpatialCanvas, id: string) {
 }
 
 /** Whether the gesture's target(s) are still present, with matching type, in `canvas`. */
-/** The bends an edge stores — its own field since ADR-0035 slice 4. */
+/** The bends an edge stores — its own field since ADR-0037 slice 4. */
 function storedWaypoints(canvas: SpatialCanvas, edgeId: string): readonly Point[] {
   const edge = canvas.edges.find((candidate) => candidate.id === edgeId)
   return edge?.bends ?? []
@@ -335,7 +335,7 @@ function reducePointerUpBending(
   const moved = state.waypoints.map((point, at) =>
     at === state.index
       ? // Whole units, the way a node position is rounded. The MODEL accepts
-        // a fraction since ADR-0035 slice 4, so this is a UI decision rather
+        // a fraction since ADR-0037 slice 4, so this is a UI decision rather
         // than a schema one: a point somebody dragged to is a point they can
         // find again, and 137.4183 is not. Ink, when it arrives, is the case
         // that wants the fraction — and it will not come through this drag.

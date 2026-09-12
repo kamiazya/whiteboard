@@ -273,7 +273,7 @@ Follow the README's recipe when adding one, and keep the table alphabetical.
 ## The edge router seam, and the facet that is no longer here
 
 `visual.path/v0` and `edge-router.ts` are GONE
-([ADR-0035](../../docs/contributing/adr/0035-model-and-format.md) slice 4).
+([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4).
 An edge's bends are `edge.bends`, a field of the model, and the route through
 them is `canvas-render`'s `layout/edges/bend-route.ts`. Do not re-add a bend
 facet here.
@@ -282,9 +282,9 @@ facet here.
 this being re-litigated.** JSON Canvas has no waypoint, and the model WAS the
 format, so a bend could not be a field — the only place it could live was a
 plugin's facet, and drawing it needed a router contribution point plus the
-extraction of `packages/scene`. ADR-0035's own table cites that as the
+extraction of `packages/scene`. ADR-0037's own table cites that as the
 worked example of what the old binding cost. Once the model was free, the
-three answers ADR-0035 decision 3 asks of a native field all came back yes
+three answers ADR-0037 decision 3 asks of a native field all came back yes
 (a person authors a bend by dragging a handle the CORE editor draws; the
 renderer and the editor both read it; its projection is `extension`), and a
 core field that only a plugin could draw would DROP authored geometry the

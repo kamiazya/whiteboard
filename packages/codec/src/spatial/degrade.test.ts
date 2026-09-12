@@ -3,7 +3,7 @@ import { strictDegrade } from './degrade.js'
 import { type JsonCanvasDocument, jsonCanvasDocumentSchema } from './json-canvas.js'
 
 // The subject is the WIRE document, not the model. These fixtures were typed
-// `SpatialCanvas` while the two were the same object; ADR-0035 slice 3 parted
+// `SpatialCanvas` while the two were the same object; ADR-0037 slice 3 parted
 // them (an endpoint is one object in the model and three flat keys here), and
 // the annotation had to follow what the function actually takes.
 

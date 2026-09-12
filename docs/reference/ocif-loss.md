@@ -4,8 +4,8 @@
 # What an OCIF export keeps, and what it costs
 
 [OCIF v0.7.0](https://spec.canvasprotocol.org/) is a **third projection** of a whiteboard
-document ([ADR-0036](../contributing/adr/0036-ocif-projection.md)), beside JSON Canvas 1.0 and
-OKF Markdown. The claim first-party support makes is the same one ADR-0035 made for JSON
+document ([ADR-0038](../contributing/adr/0038-ocif-projection.md)), beside JSON Canvas 1.0 and
+OKF Markdown. The claim first-party support makes is the same one ADR-0037 made for JSON
 Canvas: a round-trip property over the expressible subset, and this table for everything else.
 
 The model can hold **57** field positions. **28** of them are something OCIF can

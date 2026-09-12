@@ -1,5 +1,5 @@
 // An edge with a FREE end — one that sits at a bare point rather than on a
-// node ([ADR-0035](../../../../../docs/contributing/adr/0035-model-and-format.md)
+// node ([ADR-0037](../../../../../docs/contributing/adr/0037-model-and-format.md)
 // slice 3b).
 //
 // The model could store one from slice 3a and this renderer would not draw

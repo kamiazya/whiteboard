@@ -45,7 +45,11 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
       daemonPingResponseSchema.parse({
         ok: true,
         instanceId: options.instanceId,
-        identity: { alg: options.identity.alg, publicKey: options.identity.publicKey },
+        identity: {
+          alg: options.identity.alg,
+          publicKey: options.identity.publicKey,
+          did: options.identity.did,
+        },
       }),
     )
   })

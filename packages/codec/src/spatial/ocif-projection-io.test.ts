@@ -12,7 +12,7 @@ describe('a document becomes OCIF and comes back', () => {
   })
 
   it('makes an edge an @ocif/edge and a line an @ocif/arrow', () => {
-    // The decision ADR-0036 took, and what it bought this file: the branch
+    // The decision ADR-0038 took, and what it bought this file: the branch
     // that used to ask whether both ends named a node is gone, because the
     // collection an element is in already answers it.
     const nodes = [

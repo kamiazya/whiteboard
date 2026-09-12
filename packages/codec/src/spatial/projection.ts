@@ -28,7 +28,7 @@ const ROUNDED = { kind: 'degraded', to: 'the nearest integer pixel' } as const
  *
  * This is the rung that replaces the one the format used to supply. While the
  * model IS the format, a field cannot be added without the format accepting
- * it, so nobody has to think about the export. ADR-0035 removes that refusal
+ * it, so nobody has to think about the export. ADR-0037 removes that refusal
  * deliberately — and a model free to grow, with nothing forcing anyone to say
  * what growing costs a reader who only speaks JSON Canvas, is the failure mode
  * that change would otherwise create.
@@ -56,9 +56,9 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   'nodes[].backgroundStyle': NATIVE,
   'edges[].id': NATIVE,
   // An end is one object in the model and three flat keys in the format
-  // (ADR-0035 slice 3); the projection folds one into the other. Every edge
+  // (ADR-0037 slice 3); the projection folds one into the other. Every edge
   // crosses now — the element that could not was ink wearing a relation's
-  // shape, and ADR-0036 decision 2 made it a LINE.
+  // shape, and ADR-0038 decision 2 made it a LINE.
   'edges[].from.node': NATIVE,
   'edges[].from.side': NATIVE,
   'edges[].from.end': NATIVE,
@@ -68,7 +68,7 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   'edges[].color': NATIVE,
   'edges[].label': NATIVE,
 
-  // ── Lines (ADR-0036 decision 2) ──────────────────────────────────────
+  // ── Lines (ADR-0038 decision 2) ──────────────────────────────────────
   // The whole collection rides `x-whiteboard.lines`, so every position here
   // is `extension` and none is `dropped`. A line between two nodes COULD be
   // emitted as a JSON Canvas edge and would read better in a foreign tool —
@@ -337,7 +337,7 @@ function projectNode(node: SpatialNode): JsonCanvasNode {
  * way to say it.
  *
  * The format requires `fromNode` and `toNode` — an edge runs between two
- * NODES or it is not an edge — and since ADR-0036 decision 2 that is what an
+ * NODES or it is not an edge — and since ADR-0038 decision 2 that is what an
  * edge IS, so every edge crosses. The element that could not cross was ink
  * wearing a relation's shape; it is a LINE now, and it rides the canvas's
  * extension key whole.
@@ -404,7 +404,7 @@ function roundPixel(value: number): number {
  * `JSON.parse` never yields `-0`, so emitting one writes a value the very
  * next read cannot return — the same trap `roundPixel`'s `+ 0` avoids. A
  * line's coordinates do not go through `roundPixel`, and must not: ink is
- * sub-pixel by nature, which is what ADR-0035 widened the model for, and the
+ * sub-pixel by nature, which is what ADR-0037 widened the model for, and the
  * whole collection rides the extension key rather than the format's integer
  * geometry. So they take the normalisation alone. `-0` and `0` are the same
  * point, so this canonicalises rather than degrades, and the ledger's
@@ -426,7 +426,7 @@ const jsonZeroEnd = (end: CanvasLine['from']): CanvasLine['from'] =>
  * A line as the extension key carries it: unchanged but for the one number
  * the wire cannot carry back. Every other field rides verbatim, which is the
  * point of the collection living on the extension rather than being mapped
- * onto the format's edges (ADR-0036 decision 2).
+ * onto the format's edges (ADR-0038 decision 2).
  */
 function projectLine(line: CanvasLine): CanvasLine {
   return {

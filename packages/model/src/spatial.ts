@@ -20,7 +20,7 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  * It is an ordinary field of the model at each of the three sites. It used to
  * ride inside the JSON Canvas extension key, which is where it still travels
  * on the WIRE — packing it back there is `codec`'s projection, and
- * [ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md) is why
+ * [ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md) is why
  * the model no longer spells the format's key itself.
  */
 const facetsFieldSchema = extensionFacetsSchema.optional().catch(undefined)
@@ -38,7 +38,7 @@ export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
 
 /**
  * Geometry is a REAL number here, where JSON Canvas 1.0 specifies integer
- * pixels ([ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md)).
+ * pixels ([ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md)).
  *
  * Ink is sub-pixel by nature — a pen reports fractions of a pixel, and a model
  * that rounds before it draws has thrown away what the pen measured. The
@@ -150,7 +150,7 @@ const attachedSideSchema = edgeSideSchema
 
 /**
  * One end of an EDGE, which is a relation
- * ([ADR-0036](../../../docs/contributing/adr/0036-ocif-projection.md)
+ * ([ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2). An edge runs between two nodes, so an end names one — there is
  * no arm for a bare coordinate, and that absence is the decision.
  *
@@ -163,7 +163,7 @@ const attachedSideSchema = edgeSideSchema
  * as `fromNode` + `fromSide` + `fromEnd`, three parallel keys per end, because
  * a flat file format has no other way. The model said the same thing only
  * because it WAS the format
- * ([ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md)); the
+ * ([ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md)); the
  * projection folds these back into the six flat keys on the way out, which is
  * what a projection is for.
  */
@@ -181,7 +181,7 @@ export const edgeEndSchema = z
  * and `to`, on `edge.add` and `edge.patch`), so four inlined copies of three
  * described fields is the most-repeated subschema the tool table has.
  *
- * Measured when ADR-0036 decision 2 narrowed it: leaving it unregistered took
+ * Measured when ADR-0038 decision 2 narrowed it: leaving it unregistered took
  * the visible table 37,796 -> 38,317 bytes and its `parameters` count 273 ->
  * 285 — a REGRESSION on a strictly simpler schema, purely because the union
  * it replaced had been carrying a `$defs` entry and a plain object does not.
@@ -361,7 +361,7 @@ export function nodeLineEnd(
 
 /**
  * An EDGE is a relation: node to node, and what "what is connected to what"
- * means ([ADR-0036](../../../docs/contributing/adr/0036-ocif-projection.md)
+ * means ([ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2). Ink that happens to run between two boxes is a
  * {@link canvasLineSchema}, not this.
  *
@@ -369,7 +369,7 @@ export function nodeLineEnd(
  * `@ocif/edge` requires both ends to be node ids and offers `rel` so that
  * `(start, rel, end)` reads as a triple, while a line to a coordinate is
  * `@ocif/arrow`, a shape. Two designers reached the same place, and the
- * conflation was already costing something — ADR-0035 slice 3 reached the
+ * conflation was already costing something — ADR-0037 slice 3 reached the
  * free endpoint by widening this relation until it could hold a drawing.
  */
 export const canvasEdgeSchema = z
@@ -382,7 +382,7 @@ export const canvasEdgeSchema = z
     /**
      * Points the edge is drawn THROUGH, in canvas coordinates, in order.
      *
-     * A native field rather than a plugin facet, by ADR-0035 decision 3's
+     * A native field rather than a plugin facet, by ADR-0037 decision 3's
      * three answers: a person authors them by dragging a handle the core
      * editor draws, the renderer and the editor both read them, and the
      * ledger declares them `extension` — JSON Canvas 1.0 has no waypoint, so
@@ -415,7 +415,7 @@ export type CanvasEdge = z.infer<typeof canvasEdgeSchema>
 /**
  * A LINE is ink: it may end nowhere, it may attach to a node at either end,
  * and it asserts nothing about what is related to what
- * ([ADR-0036](../../../docs/contributing/adr/0036-ocif-projection.md)
+ * ([ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2).
  *
  * Everything an edge carries, it carries too — a colour, a label, bends, a
@@ -562,7 +562,7 @@ export const spatialCanvasSchema = z
     nodes: z.array(spatialNodeSchema).default([]),
     edges: z.array(canvasEdgeSchema).default([]),
     /**
-     * The ink an edge is not (ADR-0036 decision 2).
+     * The ink an edge is not (ADR-0038 decision 2).
      *
      * OPTIONAL, like `comments` and unlike `nodes`/`edges`, and the reason is
      * measured rather than aesthetic: `.default([])` makes the field required
@@ -596,7 +596,7 @@ export const spatialCanvasSchema = z
    * not be — a JSON Canvas document another tool wrote may carry vendor keys,
    * and refusing it would be wrong. This is the INTERNAL model: a key it does
    * not name is a defect, and a plain `z.object` strips one in silence. That
-   * silence is what ADR-0035's migration had to survive, since every reader
+   * silence is what ADR-0037's migration had to survive, since every reader
    * that still spelled the format's extension key would otherwise have parsed
    * cleanly and lost what it was reading.
    */

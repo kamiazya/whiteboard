@@ -26,7 +26,7 @@ describe('the wire trip canonicalises exactly one thing', () => {
  * `JSON.stringify(-0)` is `"0"` and `JSON.parse` never yields `-0`, so a
  * projection that emits one writes a value the very next read cannot return.
  * `roundPixel` already says this for the coordinates it rounds; a line's are
- * NOT rounded — ink is sub-pixel by nature and that is what ADR-0035 widened
+ * NOT rounded — ink is sub-pixel by nature and that is what ADR-0037 widened
  * the model for — so they need the normalisation on its own. `-0` and `0` are
  * the same point, so this is a canonicalisation of the same kind as the empty
  * extension above, not a loss.

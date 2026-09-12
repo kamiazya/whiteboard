@@ -6,7 +6,7 @@ const baseGeometry = { id: 'n1', x: 0, y: 0, width: 100, height: 100 }
 /**
  * How the WIRE schema treats the one extension key JSON Canvas 1.0 leaves room
  * for, at all three sites. These cases lived in the model's own tests until
- * [ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md) moved
+ * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md) moved
  * the extension here: what they exercise is the FORMAT's behaviour — the
  * escape hatch that costs the extension rather than the document, a retired
  * key dropped like any foreign field, an embed refused on an edge — and none

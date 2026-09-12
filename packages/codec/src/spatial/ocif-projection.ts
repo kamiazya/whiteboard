@@ -152,7 +152,7 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'edges[].bends[].x': EXTENSION,
   'edges[].bends[].y': EXTENSION,
 
-  // ── Lines (ADR-0036 decision 2) ──────────────────────────────────────
+  // ── Lines (ADR-0038 decision 2) ──────────────────────────────────────
   // A line is an `@ocif/arrow`: a SHAPE whose ends are coordinates. Reading
   // this block beside the edge block above is the clearest statement of what
   // the split bought — the two elements project onto the format's own two

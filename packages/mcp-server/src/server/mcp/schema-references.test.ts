@@ -95,7 +95,7 @@ describe('a published schema resolves its own references', () => {
     const document = edit?.inputSchema as Record<string, unknown>
     const defs = (document?.$defs as Record<string, unknown>) ?? {}
 
-    // ADR-0036 decision 2 narrowed an edge's end to a node reference, so what
+    // ADR-0038 decision 2 narrowed an edge's end to a node reference, so what
     // is registered here is a small flat object rather than the old
     // node-or-point union. Registering it is still the saving: measured,
     // leaving it out took the visible table 37,796 -> 38,317 bytes on a

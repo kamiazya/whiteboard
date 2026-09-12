@@ -39,7 +39,7 @@ const zeroNormalised = <T extends { x?: number; y?: number }>(value: T): T => ({
 
 /**
  * The same normalisation for an EDGE, whose `bends` are points too
- * (ADR-0035 slice 4). It is separate rather than folded into the helper above
+ * (ADR-0037 slice 4). It is separate rather than folded into the helper above
  * because an edge has no `x`/`y` of its own — what it has is a list of them,
  * and the property found the gap the day bends arrived.
  */
@@ -56,7 +56,7 @@ const bendsNormalised = <T extends { bends?: readonly { x: number; y: number }[]
 const endNormalised = (end: LineEnd): LineEnd =>
   end.kind === 'point' ? { ...end, point: zeroNormalised(end.point) } : end
 
-// Only a LINE's ends can hold a coordinate since ADR-0036 decision 2, so this
+// Only a LINE's ends can hold a coordinate since ADR-0038 decision 2, so this
 // is the only element shape that needs it. An edge's ends name a node.
 const linePointsNormalised = (line: CanvasLine): CanvasLine => ({
   ...line,
@@ -77,7 +77,7 @@ describe('loro-bridge properties', () => {
       const result = readSpatialCanvas(doc)
       expect(byId(result.nodes)).toEqual(byId(canvas.nodes).map(zeroNormalised))
       expect(byId(result.edges)).toEqual(byId(canvas.edges).map(bendsNormalised))
-      // Ink travels its own plane (ADR-0036 decision 2), so it needs its own
+      // Ink travels its own plane (ADR-0038 decision 2), so it needs its own
       // half of this equality — without it the whole collection could stop
       // being written and the property would stay green.
       expect(byId(result.lines ?? [])).toEqual(
@@ -102,7 +102,7 @@ describe('loro-bridge properties', () => {
     const read = readSpatialCanvas(doc)
     expect(Object.is(read.nodes[0]?.x, 0)).toBe(true)
     // The sub-pixel coordinate beside it DOES survive: what the record cannot
-    // carry is the sign of a zero, not the fraction (ADR-0035 slice 4).
+    // carry is the sign of a zero, not the fraction (ADR-0037 slice 4).
     expect(read.nodes[0]?.y).toBe(1.5)
   })
 
@@ -134,7 +134,7 @@ describe('loro-bridge properties', () => {
   it('normalises a negative zero in a free LINE end the same way', () => {
     // The third of the three, and the one with the shortest path from a
     // gesture: releasing a connect drag in empty space writes the pointer's
-    // rounded position straight into the end. It is a LINE since ADR-0036
+    // rounded position straight into the end. It is a LINE since ADR-0038
     // decision 2 — an edge with a point end was ink wearing a relation's shape.
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {

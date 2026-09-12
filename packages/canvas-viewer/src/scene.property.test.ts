@@ -17,7 +17,7 @@ describe('scene parse/serialize properties', () => {
     'extended mode round-trip: parse(serialize(x, "extended")) equals x, once x is expressible',
     (canvas) => {
       // Extended mode is lossless over what the FORMAT can state, which since
-      // ADR-0035 slice 4 excludes sub-pixel geometry: JSON Canvas 1.0 is
+      // ADR-0037 slice 4 excludes sub-pixel geometry: JSON Canvas 1.0 is
       // integer pixels and the projection rounds. Putting the canvas through
       // the projection first is what names that subset.
       const expressible = fromJsonCanvas(toJsonCanvas(canvas))
@@ -32,7 +32,7 @@ describe('scene parse/serialize properties', () => {
     (canvas) => {
       // Degradation is a wire-level rule, so the expectation is the canvas
       // projected onto JSON Canvas, degraded there, and lifted back — not the
-      // model degraded in place. Since ADR-0035 those are different documents:
+      // model degraded in place. Since ADR-0037 those are different documents:
       // the projection is where `facets`, `comments` and `embed` become the
       // extension key that strict mode then drops.
       const json = serializeViewerScene(canvas, 'strict')

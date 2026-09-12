@@ -6,7 +6,7 @@ import { fromJsonCanvas, JSON_CANVAS_PROJECTION, toJsonCanvas } from './projecti
  * JSON Canvas 1.0 specifies geometry in integer pixels. The model does not:
  * ink is sub-pixel by nature, and a model that rounds before it draws has
  * thrown away what a pen measured
- * ([ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md)).
+ * ([ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md)).
  *
  * So this is the first field position whose projection is `degraded` rather
  * than `native` or `extension` — the ledger's third kind, which until now

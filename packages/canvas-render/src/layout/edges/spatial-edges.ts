@@ -1992,7 +1992,7 @@ function routeOrthogonal(
  */
 /**
  * The box an end is anchored to — a node's, or the DEGENERATE box at a free
- * point ([ADR-0035](../../../../../docs/contributing/adr/0035-model-and-format.md)
+ * point ([ADR-0037](../../../../../docs/contributing/adr/0037-model-and-format.md)
  * slice 3b). `undefined` only for a reference to a node that is not here,
  * which is a different thing and still degrades.
  *

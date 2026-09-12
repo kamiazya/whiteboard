@@ -15,7 +15,7 @@ import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiaz
 
 /**
  * What a router and an appearance resolver are handed: an EDGE or a LINE
- * ([ADR-0036](../../../docs/contributing/adr/0036-ocif-projection.md)
+ * ([ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2). The two differ in what they MEAN and in the shape of an end,
  * never in how a route between two places is found, so a contribution sees
  * both — and a router that only understands relations narrows on `'kind' in

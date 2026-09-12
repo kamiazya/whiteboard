@@ -1,4 +1,4 @@
-// ADR-0036 decision 2: a RELATION and a DRAWN LINE are two things.
+// ADR-0038 decision 2: a RELATION and a DRAWN LINE are two things.
 //
 // Red first. An edge whose end is a bare point is the conflation the split
 // removes — it was reached by widening the relation until it could hold a

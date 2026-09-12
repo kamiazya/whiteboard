@@ -40,7 +40,7 @@ describe('censusSpatialModel', () => {
 
   it('names every field position the model can hold', () => {
     expect(census.paths).toContain('nodes[].x')
-    // An edge's end is a node and nothing else since ADR-0036 decision 2.
+    // An edge's end is a node and nothing else since ADR-0038 decision 2.
     expect(census.paths).toContain('edges[].from.node')
     // BOTH arms of a LINE's end union, which is where the choice now lives:
     // the census's whole job on a union is to report the positions a document

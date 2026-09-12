@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas } from './loro-bridge.js'
 
 /**
- * A record written before [ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md)
+ * A record written before [ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md)
  * stored the canvas's facets, a node's facets and embed, and an edge's facets
  * under the FORMAT's extension key, because the model was the format. These
  * seed that shape by hand — the literal is the shape as it stood, the way a
@@ -52,7 +52,7 @@ function docWithLegacyShape(): LoroDoc {
   return doc
 }
 
-describe('a record written under the pre-ADR-0035 extension key still reads', () => {
+describe('a record written under the pre-ADR-0037 extension key still reads', () => {
   const canvas = readSpatialCanvas(docWithLegacyShape() as never)
 
   it('keeps both nodes rather than dropping the ones carrying the old key', () => {

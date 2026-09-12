@@ -1,5 +1,5 @@
 // The committed table under docs/reference/ is the published half of
-// ADR-0035 decision 2; this file-snapshot test holds it byte-equal to what the
+// ADR-0037 decision 2; this file-snapshot test holds it byte-equal to what the
 // ledger generates (CI fails on drift). Regenerate deliberately with:
 //   pnpm vitest run --project codec-node loss-table -u
 

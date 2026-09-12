@@ -98,7 +98,7 @@ export type NodePatchFields = z.infer<typeof nodePatchFieldsSchema>
 export const edgePatchFieldsSchema = canvasEdgeSchema.omit({ id: true }).partial().strict()
 
 /**
- * The same, for a LINE (ADR-0036 decision 2). Derived rather than written
+ * The same, for a LINE (ADR-0038 decision 2). Derived rather than written
  * beside `canvasLineSchema`, for the reason the edge one is: a proposal
  * STORES a patch, so a second hand-written declaration is the drift this
  * package exists to prevent.

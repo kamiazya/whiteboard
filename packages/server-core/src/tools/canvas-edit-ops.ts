@@ -41,7 +41,7 @@ const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
  * here for free — which is the point, and wrong for exactly these two: the
  * tool already publishes a way to write them, and a second one is two
  * spellings of one thing on a table a model reads every turn. Measured when
- * ADR-0035 moved them onto the node: 14 new parameters across the four node
+ * ADR-0037 moved them onto the node: 14 new parameters across the four node
  * types, every one of them undescribed.
  */
 const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
@@ -78,7 +78,7 @@ const nodeExtensionWriteSchema = z
    *
    * The tool's INPUT key stays `x-whiteboard` — it is published in
    * `tools/list`, a model reads it every turn, and moving it is a tool-surface
-   * change with its own gate (ADR-0031). What ADR-0035 changed is the far
+   * change with its own gate (ADR-0031). What ADR-0037 changed is the far
    * side: a node carries `embed` and `facets` independently now, and the
    * transform is where the union arm becomes them.
    */

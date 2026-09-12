@@ -146,7 +146,7 @@ export type EditorLeafCommand =
        * The points this edge is drawn THROUGH, as a whole list — the bend
        * drag's write.
        *
-       * Not a facet write since ADR-0035 slice 4: bends are a field of the
+       * Not a facet write since ADR-0037 slice 4: bends are a field of the
        * edge, so the value travels as a value rather than as an opaque
        * plugin payload, and an empty list is spelled as the absence it means.
        */
@@ -458,7 +458,7 @@ function setEdgeEnds(
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      // An arrowhead lives ON the end it is drawn at (ADR-0035 slice 3), so
+      // An arrowhead lives ON the end it is drawn at (ADR-0037 slice 3), so
       // the default is spelled by ABSENCE there rather than by a sibling key.
       const { end: _fromEnd, ...from } = edge.from
       const { end: _toEnd, ...to } = edge.to
@@ -722,7 +722,7 @@ function setEdgeSide(
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      // An EDGE's end always names a node since ADR-0036 decision 2, so the
+      // An EDGE's end always names a node since ADR-0038 decision 2, so the
       // narrowing the free arm used to need is gone. Pinning a side on a LINE
       // is its own command when the editor grows one.
       const { side: _removed, ...rest } = edge[endpoint]

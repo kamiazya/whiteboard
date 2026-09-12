@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
  * state, and what share only survives the one extension key? A corpus cannot
  * answer that — it answers what somebody happened to draw.
  *
- * Since ADR-0035 the model no longer spells the format's key, so the split is
+ * Since ADR-0037 the model no longer spells the format's key, so the split is
  * the projection LEDGER's answer rather than a prefix test. That is the point
  * of the ledger: one authority on what a position costs an export.
  *
@@ -40,8 +40,8 @@ const withKind = (kind: FieldProjection['kind']) =>
 
 describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () => {
   it("states 19 of the model's field positions exactly", () => {
-    // 19 -> 21 with ADR-0035 slice 3 (an END became one object, and its `kind`
-    // was a position of its own per side), and 21 -> 19 with ADR-0036
+    // 19 -> 21 with ADR-0037 slice 3 (an END became one object, and its `kind`
+    // was a position of its own per side), and 21 -> 19 with ADR-0038
     // decision 2, which took those two `kind` positions off an edge again: an
     // edge's end names a node and nothing else, so there is no discriminator
     // left to state.
@@ -50,7 +50,7 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
 
   it('cannot state NOTHING at all any more, which is what the split bought', () => {
     // The ledger's `dropped` column is EMPTY, and it is the most surprising
-    // consequence of ADR-0036 decision 2. It held four entries — an edge's
+    // consequence of ADR-0038 decision 2. It held four entries — an edge's
     // point ends, the only loss whose unit was the ELEMENT rather than the
     // field, because JSON Canvas requires `fromNode` and `toNode` and omitted
     // such an edge from both modes.
@@ -64,7 +64,7 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
 
   it('states 4 more only to the nearest whole pixel — a node box', () => {
     // The format HAS these fields, so they are not outside it; what it cannot
-    // say is a fraction. Since ADR-0035 slice 4 the model's geometry is real,
+    // say is a fraction. Since ADR-0037 slice 4 the model's geometry is real,
     // so the box is the ledger's first `degraded` entry, and this pin is what
     // makes a second one a decision rather than a merge.
     expect([...withKind('degraded')].sort()).toEqual([

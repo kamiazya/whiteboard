@@ -220,7 +220,7 @@ describe('applyCommand', () => {
       fromEnd: 'arrow',
       toEnd: 'arrow',
     })
-    // An arrowhead lives ON the end it is drawn at (ADR-0035 slice 3), so
+    // An arrowhead lives ON the end it is drawn at (ADR-0037 slice 3), so
     // "canonical form omits the default" is now a missing `end` INSIDE the
     // endpoint rather than a missing sibling key. Asserted on the endpoint
     // object for that reason: `not.toHaveProperty('toEnd')` still passes over

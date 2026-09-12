@@ -364,7 +364,7 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
       { weight: 1, arbitrary: fc.constantFrom(...ids).map((id) => [id, id]) },
     )
     // An EDGE is a relation, so both of its ends name a node and the only
-    // correlation to maintain is referential integrity (ADR-0036 decision 2).
+    // correlation to maintain is referential integrity (ADR-0038 decision 2).
     // The free arm moved to LINES below, where the choice is real.
     const onNode = (drawn: CanvasEdge['from'], id: string): CanvasEdge['from'] => ({
       node: id,

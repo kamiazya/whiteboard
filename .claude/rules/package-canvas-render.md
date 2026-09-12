@@ -1115,7 +1115,7 @@ serialize, since `layoutSpatialCanvas` accepts an unparsed canvas and
 `formatCoord` throws on a non-finite number.
 
 It lived in `plugin-visual` as a contributed router until
-[ADR-0035](../../docs/contributing/adr/0035-model-and-format.md) slice 4,
+[ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4,
 because JSON Canvas has no waypoint and the model was the format. A renderer
 that ignored a field of the edge would drop authored geometry the record
 still holds, so the renderer owns it; `package-plugin-visual.md` carries the
@@ -1126,7 +1126,7 @@ reasoning and the reachability gap it leaves.
 for a dangling reference, so every caller in the edge cluster treats the two
 alike and the edge degrades to a zero-length path rather than drawing a line
 to the origin. Drawing one — the router taking a box-less end — is
-[ADR-0035](../../docs/contributing/adr/0035-model-and-format.md) slice 3b's
+[ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 3b's
 job. Until then the model can STORE an end this renderer will not draw, which
 is the honest state and is pinned by example rather than left to be found.
 
@@ -1244,7 +1244,7 @@ editor half is the one that stands.)
   while a themed board's edges dragged crisp and straight; then, when
   ADR-0013's edge target opened, edges with none — per-edge routing and the
   bends a contributed router drew never reached a compared canvas (bends are
-  a field of the edge since ADR-0035 slice 4, so the schema-derived generator
+  a field of the edge since ADR-0037 slice 4, so the schema-derived generator
   draws them without anyone asking it to). The
   second is why the scenario also draws `style`: a theme is drawn under
   `'document'` and never under the library's clean default. Four guards

@@ -33,6 +33,8 @@ export interface AutoVersionOptions {
    * signalled it — so this is how a broadcast reaches the surfaces watching.
    */
   readonly onSaved?: (workspaceId: string, path: string, entry: VersionEntry) => void
+  /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
+  readonly daemonActor?: string
 }
 
 export type AutoVersionTrigger = CheckpointScheduler
@@ -79,6 +81,7 @@ export function createAutoVersionTrigger(
   versionStore: VersionStore,
   options: AutoVersionOptions = {},
 ): AutoVersionTrigger {
+  const { daemonActor } = options
   return createCheckpointScheduler<VersionEntry>({
     ...(options.quietMs === undefined ? {} : { quietMs: options.quietMs }),
     ...(options.ceilingMs === undefined ? {} : { ceilingMs: options.ceilingMs }),
@@ -92,7 +95,11 @@ export function createAutoVersionTrigger(
     save: (workspaceId, path, doc) => {
       const opts: { auto: boolean; operator: OperatorInfo } = {
         auto: true,
-        operator: { kind: 'system', peerId: doc.peerIdStr, displayName: 'auto-save' },
+        operator: {
+          kind: 'system',
+          ...(daemonActor === undefined ? {} : { actor: daemonActor }),
+          displayName: 'auto-save',
+        },
       }
       return versionStore.save(workspaceId, path, doc, opts)
     },

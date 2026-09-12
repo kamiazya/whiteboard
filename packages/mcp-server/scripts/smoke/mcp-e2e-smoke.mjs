@@ -720,14 +720,14 @@ async function main() {
   }
   console.log('[e2e] wb_facet_set + wb_canvas_edit → a stencil the WORKSPACE defines dresses a box')
 
-  // A FREE END (ADR-0035 slice 3): an edge from a node to a bare point on
+  // A FREE END (ADR-0037 slice 3): an edge from a node to a bare point on
   // the canvas. Here rather than only at the unit layer because the endpoint
   // is a discriminated union crossing a process boundary in BOTH directions
   // — accepted by `wb_canvas_edit`'s input schema, stored through the Loro
   // field mapping, and echoed by `wb_canvas_snapshot`, whose `outputSchema`
   // the SDK validates at runtime. A union that round-trips in-process and
   // fails one of those three looks exactly like a working tool from here.
-  // A point-ended element is a LINE since ADR-0036 decision 2, and
+  // A point-ended element is a LINE since ADR-0038 decision 2, and
   // `wb_canvas_edit` has no line op yet — so the tool REFUSES a point end on
   // an edge rather than accepting ink in a relation's shape.
   //
@@ -806,7 +806,7 @@ async function main() {
   // the field a tool writes to the polyline the daemon emits, so this is the
   // step that would catch a bend being lost between the Loro edge bucket and
   // the layout. It used to write `visual.path/v0` through `wb_facet_set`;
-  // since ADR-0035 slice 4 bends are a field of the edge, so the write is an
+  // since ADR-0037 slice 4 bends are a field of the edge, so the write is an
   // ordinary `edge.patch` — which is the whole gain, since a facet payload
   // is opaque to `wb_canvas_edit` and this was not writable there at all.
   const BEND = { x: 4242, y: -1337 }

@@ -6,7 +6,7 @@
 // the length of a drag — a defect this editor shipped once.
 //
 // The facets used to ride inside the canvas envelope, which is why one helper
-// once carried both halves. Since ADR-0035 they are a field of the canvas and
+// once carried both halves. Since ADR-0037 they are a field of the canvas and
 // `layerCanvas` is the single place a layer is built, so the property is over
 // that rather than over an envelope split.
 

@@ -16,7 +16,7 @@ import { fc } from './fast-check.js'
 describe('what spatialCanvasArbitrary draws', () => {
   const sample = fc.sample(spatialCanvasArbitrary, { numRuns: 2000, seed: 20260911 })
 
-  // A LINE's ends, since ADR-0036 decision 2 moved the free arm there: an
+  // A LINE's ends, since ADR-0038 decision 2 moved the free arm there: an
   // edge is a relation and both of its ends name a node, which the type now
   // says, so there is nothing left here to count about an edge's arms.
   const ends = sample.flatMap((canvas) =>

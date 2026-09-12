@@ -38,7 +38,7 @@ describe('spatialNodeSchema (text)', () => {
     expect(spatialNodeSchema.safeParse({ ...baseGeometry, type: 'text' }).success).toBe(false)
   })
 
-  // ADR-0035 slice 4: geometry is a real number here, because ink is
+  // ADR-0037 slice 4: geometry is a real number here, because ink is
   // sub-pixel. JSON Canvas 1.0's integer pixels are the PROJECTION's rounding.
   it('accepts a sub-pixel coordinate and keeps it', () => {
     const parsed = spatialNodeSchema.safeParse({

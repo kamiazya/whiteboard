@@ -83,7 +83,7 @@ interface Row {
 }
 
 /**
- * One row moved with ADR-0035 and it is worth naming, because a pinned number
+ * One row moved with ADR-0037 and it is worth naming, because a pinned number
  * that shifts silently is the thing this board exists to prevent.
  *
  * `wb_canvas_edit` lost two parameters: an edge's facets are written as
@@ -96,7 +96,7 @@ interface Row {
  *
  * The NODE side still spells `x-whiteboard`, because its input is deliberately
  * NOT the stored shape — a flat write schema that refuses a `kind: "embed"`
- * naming no document, by name. Converging the two is the follow-up ADR-0035
+ * naming no document, by name. Converging the two is the follow-up ADR-0037
  * names, and it goes through ADR-0031's criteria as a tool-surface change of
  * its own rather than riding along inside a refactor.
  *

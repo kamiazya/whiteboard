@@ -55,7 +55,7 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
     ],
     lines: [
       // The free-ended element, and the only way to occupy the four `point`
-      // positions. It is a LINE since ADR-0036 decision 2 — it was an edge
+      // positions. It is a LINE since ADR-0038 decision 2 — it was an edge
       // with a point end, which is ink wearing a relation's shape.
       {
         id: 'l1',
