@@ -12,7 +12,7 @@ import type { LayoutResponse, RegisterFaceRequest } from './layout-worker-protoc
 const sketched: SpatialCanvas = {
   nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 200, label: 'Keepers' }],
   edges: [],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+  facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
 }
 
 // A worker PER RUN, not per file: its face set is the subject, and a face

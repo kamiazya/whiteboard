@@ -6,9 +6,7 @@ function node(id: string, x: number, y: number, width: number, height: number): 
   return { type: 'text', id, x, y, width, height, text: '' }
 }
 
-function edge(
-  overrides: Partial<CanvasEdge> & Pick<CanvasEdge, 'id' | 'fromNode' | 'toNode'>,
-): CanvasEdge {
+function edge(overrides: Partial<CanvasEdge> & Pick<CanvasEdge, 'id' | 'from' | 'to'>): CanvasEdge {
   return overrides
 }
 
@@ -17,7 +15,11 @@ describe('routeEdge', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 200, 0, 100, 100)]
     const result = routeEdge(
       nodes,
-      edge({ id: 'e1', fromNode: 'a', toNode: 'b', fromSide: 'right', toSide: 'left' }),
+      edge({
+        id: 'e1',
+        from: { node: 'a', side: 'right' as const },
+        to: { node: 'b', side: 'left' as const },
+      }),
     )
     expect(result.fromSide).toBe('right')
     expect(result.toSide).toBe('left')
@@ -27,35 +29,70 @@ describe('routeEdge', () => {
 
   it('derives default sides deterministically when neither side is given (b is to the right of a)', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 300, 0, 100, 100)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      }),
+    )
     expect(result.fromSide).toBe('right')
     expect(result.toSide).toBe('left')
   })
 
   it('derives default sides deterministically when b is below a', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 0, 300, 100, 100)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      }),
+    )
     expect(result.fromSide).toBe('bottom')
     expect(result.toSide).toBe('top')
   })
 
   it('derives default sides deterministically when b is to the left of a', () => {
     const nodes = [node('a', 300, 0, 100, 100), node('b', 0, 0, 100, 100)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      }),
+    )
     expect(result.fromSide).toBe('left')
     expect(result.toSide).toBe('right')
   })
 
   it('derives default sides deterministically when b is above a', () => {
     const nodes = [node('a', 0, 300, 100, 100), node('b', 0, 0, 100, 100)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      }),
+    )
     expect(result.fromSide).toBe('top')
     expect(result.toSide).toBe('bottom')
   })
 
   it('threads the spec-default ends: fromEnd none, toEnd arrow', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 200, 0, 100, 100)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      }),
+    )
     expect(result.fromEnd).toBe('none')
     expect(result.toEnd).toBe('arrow')
   })
@@ -64,21 +101,39 @@ describe('routeEdge', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 200, 0, 100, 100)]
     const result = routeEdge(
       nodes,
-      edge({ id: 'e1', fromNode: 'a', toNode: 'b', fromEnd: 'arrow', toEnd: 'none' }),
+      edge({
+        id: 'e1',
+        from: { node: 'a', end: 'arrow' as const },
+        to: { node: 'b', end: 'none' as const },
+      }),
     )
     expect(result.fromEnd).toBe('arrow')
     expect(result.toEnd).toBe('none')
   })
 
   it('the degraded missing-endpoint edge still carries ends', () => {
-    const result = routeEdge([], edge({ id: 'e1', fromNode: 'ghost-a', toNode: 'ghost-b' }))
+    const result = routeEdge(
+      [],
+      edge({
+        id: 'e1',
+        from: { node: 'ghost-a' },
+        to: { node: 'ghost-b' },
+      }),
+    )
     expect(result.fromEnd).toBe('none')
     expect(result.toEnd).toBe('arrow')
   })
 
   it('produces a deterministic self-edge loop path without throwing', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'a' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'a' },
+      }),
+    )
     expect(result.path.length).toBeGreaterThan(1)
     expect(result.fromSide).toBe('right')
     expect(result.toSide).toBe('right')
@@ -88,7 +143,11 @@ describe('routeEdge', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
     const result = routeEdge(
       nodes,
-      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'right', toSide: 'right' }),
+      edge({
+        id: 'e1',
+        from: { node: 'a', side: 'right' as const },
+        to: { node: 'a', side: 'right' as const },
+      }),
     )
     // The right side's outward normal is +x, so the loop control points must
     // sit strictly to the right of the node (x > 100).
@@ -101,7 +160,11 @@ describe('routeEdge', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
     const result = routeEdge(
       nodes,
-      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'left', toSide: 'left' }),
+      edge({
+        id: 'e1',
+        from: { node: 'a', side: 'left' as const },
+        to: { node: 'a', side: 'left' as const },
+      }),
     )
     // The left side's outward normal is -x, so the loop control points must
     // sit strictly to the left of the node (x < 0).
@@ -114,7 +177,11 @@ describe('routeEdge', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
     const result = routeEdge(
       nodes,
-      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'top', toSide: 'top' }),
+      edge({
+        id: 'e1',
+        from: { node: 'a', side: 'top' as const },
+        to: { node: 'a', side: 'top' as const },
+      }),
     )
     // The top side's outward normal is -y, so the loop control points must
     // sit strictly above the node (y < 0).
@@ -127,7 +194,11 @@ describe('routeEdge', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
     const result = routeEdge(
       nodes,
-      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'bottom', toSide: 'bottom' }),
+      edge({
+        id: 'e1',
+        from: { node: 'a', side: 'bottom' as const },
+        to: { node: 'a', side: 'bottom' as const },
+      }),
     )
     // The bottom side's outward normal is +y, so the loop control points
     // must sit strictly below the node (y > 100).
@@ -138,21 +209,39 @@ describe('routeEdge', () => {
 
   it('handles coincident/zero-sized nodes deterministically without throwing', () => {
     const nodes = [node('a', 10, 10, 0, 0), node('b', 10, 10, 0, 0)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      }),
+    )
     expect(result.path).toHaveLength(2)
     expect(Number.isFinite(result.path[0].x)).toBe(true)
   })
 
   it('falls back to a degenerate zero-length path for a missing endpoint instead of throwing', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
-    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'missing' }))
+    const result = routeEdge(
+      nodes,
+      edge({
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'missing' },
+      }),
+    )
     expect(result.path).toHaveLength(2)
     expect(result.path[0]).toEqual(result.path[1])
   })
 
   it('is a pure function: same input yields the same output', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 300, 0, 100, 100)]
-    const e = edge({ id: 'e1', fromNode: 'a', toNode: 'b' })
+    const e = edge({
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    })
     expect(routeEdge(nodes, e)).toEqual(routeEdge(nodes, e))
   })
 })

@@ -39,8 +39,14 @@ const boardAt = async (wb, path) => {
 
 /**
  * A node's stored facets, which `wb_canvas_snapshot` does not carry — it
- * answers geometry and text. The document's own content does, under
- * `x-whiteboard`, which is also where the drawing score reads them.
+ * answers geometry and text. The document's own content does.
+ *
+ * Under `x-whiteboard`, because `wb_document_get` answers the JSON CANVAS
+ * PROJECTION (ADR-0037: the model is native, JSON Canvas is a projection) and
+ * the extension is where that projection puts a facet. The native model — and
+ * so `scoreFacets`, which reads it directly — spells the same thing
+ * `node.facets`. Two shapes for one idea, and this path is deliberately on
+ * the projection side because it reads what the TOOL answers.
  */
 const nodeFacetsAt = async (wb, ids, path, match) => {
   const read = await wb.call('wb_document_get', {
@@ -71,12 +77,26 @@ const firstOverlap = (nodes) => {
   }
   return undefined
 }
+/**
+ * The node an edge end sits on, or undefined for a free point.
+ *
+ * An end is an OBJECT on the snapshot, not a flat `fromNode` key. Reading the
+ * flat key here answered `undefined` for every edge, so every "is A connected
+ * to B" check said no — and a write task's verifier that can never pass looks
+ * exactly like one that correctly fails, because `--dry-run` asserts only
+ * that write verifiers FAIL on the unseeded fixture. Found by running the
+ * lane against a real model: eight `edge.add` calls, zero tool errors, and
+ * "not connected" for all eight.
+ */
+const endNode = (end) => (end?.kind === 'node' ? end.node : undefined)
 const linked = (board, a, b) =>
   board.edges.some(
-    (e) => (e.fromNode === a.id && e.toNode === b.id) || (e.fromNode === b.id && e.toNode === a.id),
+    (e) =>
+      (endNode(e.from) === a.id && endNode(e.to) === b.id) ||
+      (endNode(e.from) === b.id && endNode(e.to) === a.id),
   )
 const linkedFrom = (board, a, b) =>
-  board.edges.some((e) => e.fromNode === a.id && e.toNode === b.id)
+  board.edges.some((e) => endNode(e.from) === a.id && endNode(e.to) === b.id)
 const centreX = (n) => n.x + n.width / 2
 
 /** @type {readonly Task[]} */
@@ -287,7 +307,8 @@ export const TASKS = [
       const outside = chain.filter((n) => !inside(n)).map((n) => n.text)
       if (outside.length > 0)
         return { ok: false, detail: `outside the group: ${outside.join(', ')}` }
-      const linked = (a, b) => board.edges.some((e) => e.fromNode === a.id && e.toNode === b.id)
+      const linked = (a, b) =>
+        board.edges.some((e) => endNode(e.from) === a.id && endNode(e.to) === b.id)
       if (!linked(chain[0], chain[1]) || !linked(chain[1], chain[2])) {
         return { ok: false, detail: 'chain not connected in order' }
       }
@@ -562,7 +583,7 @@ export const TASKS = [
       ]
       for (const [from, to, label] of wanted) {
         const edge = board.edges.find(
-          (e) => e.fromNode === steps[from].id && e.toNode === steps[to].id,
+          (e) => endNode(e.from) === steps[from].id && endNode(e.to) === steps[to].id,
         )
         if (edge === undefined) return { ok: false, detail: `not connected: ${from}->${to}` }
         if (label !== undefined && (edge.label ?? '').trim().toLowerCase() !== label) {
@@ -792,7 +813,7 @@ export const TASKS = [
       // board with the arrows reversed makes a different claim about the
       // system rather than the same one drawn differently.
       const linked = (a, b) =>
-        board.edges.some((e) => e.fromNode === idOf(a) && e.toNode === idOf(b))
+        board.edges.some((e) => endNode(e.from) === idOf(a) && endNode(e.to) === idOf(b))
       const unlinked = flows.filter(([a, b]) => !linked(a, b)).map(([a, b]) => `${a}->${b}`)
       if (unlinked.length > 0) return { ok: false, detail: `not connected: ${unlinked.join(', ')}` }
       const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))

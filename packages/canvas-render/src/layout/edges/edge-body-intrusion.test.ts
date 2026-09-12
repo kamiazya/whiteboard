@@ -51,11 +51,31 @@ it('prefers an edge crossing over tunnelling through a bystander body', () => {
     box('gate2', 600, 2600, 100, 60),
   ]
   const edges: CanvasEdge[] = [
-    { id: 'q', fromNode: 'bottomLeft', toNode: 'blue' },
-    { id: 'h', fromNode: 'tallRight', toNode: 'bottomLeft' },
-    { id: 'g', fromNode: 'bottomLeft', toNode: 'green' },
-    { id: 'bg', fromNode: 'brown', toNode: 'green' },
-    { id: 'gate', fromNode: 'gate1', toNode: 'gate2' },
+    {
+      id: 'q',
+      from: { node: 'bottomLeft' },
+      to: { node: 'blue' },
+    },
+    {
+      id: 'h',
+      from: { node: 'tallRight' },
+      to: { node: 'bottomLeft' },
+    },
+    {
+      id: 'g',
+      from: { node: 'bottomLeft' },
+      to: { node: 'green' },
+    },
+    {
+      id: 'bg',
+      from: { node: 'brown' },
+      to: { node: 'green' },
+    },
+    {
+      id: 'gate',
+      from: { node: 'gate1' },
+      to: { node: 'gate2' },
+    },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
   const q = edges[0] as CanvasEdge

@@ -66,21 +66,27 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
     if (!styled) return node
     return {
       ...node,
-      'x-whiteboard': {
-        facets: {
-          'visual.shape/v0': { kind: SHAPES[i % SHAPES.length] },
-          'visual.symbol/v0':
-            i % 2 === 0 ? { kind: 'icon', name: 'star' } : { kind: 'emoji', char: '⭐' },
-          'visual.text/v0': { placement: ALIGNS[i % ALIGNS.length] },
-        },
+      facets: {
+        'visual.shape/v0': { kind: SHAPES[i % SHAPES.length] },
+        'visual.symbol/v0':
+          i % 2 === 0 ? { kind: 'icon', name: 'star' } : { kind: 'emoji', char: '⭐' },
+        'visual.text/v0': { placement: ALIGNS[i % ALIGNS.length] },
       },
     }
   })
   // Two edges only: present so the edge pass is not skipped outright, few
   // enough that its cost stays negligible against the node pass.
   const edges: CanvasEdge[] = [
-    { id: 'e0', fromNode: 'n0', toNode: `n${Math.min(1, nodeCount - 1)}` },
-    { id: 'e1', fromNode: `n${nodeCount - 1}`, toNode: 'n0' },
+    {
+      id: 'e0',
+      from: { node: 'n0' },
+      to: { node: `n${Math.min(1, nodeCount - 1)}` },
+    },
+    {
+      id: 'e1',
+      from: { node: `n${nodeCount - 1}` },
+      to: { node: 'n0' },
+    },
   ]
   return { nodes, edges }
 }
@@ -110,7 +116,11 @@ function labelledCanvasOf(nodeCount: number, label = OVERFLOWING_LABEL): Spatial
     label: `${label} ${i}`,
   }))
   const edges: CanvasEdge[] = [
-    { id: 'e0', fromNode: 'g0', toNode: `g${Math.min(1, nodeCount - 1)}` },
+    {
+      id: 'e0',
+      from: { node: 'g0' },
+      to: { node: `g${Math.min(1, nodeCount - 1)}` },
+    },
   ]
   return { nodes, edges }
 }

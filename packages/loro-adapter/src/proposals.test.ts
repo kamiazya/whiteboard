@@ -21,7 +21,11 @@ const PROPOSAL: Proposal = {
       status: 'open',
       op: 'edge.remove',
       edgeId: 'e1',
-      assumed: { id: 'e1', fromNode: 'n1', toNode: 'n2' },
+      assumed: {
+        id: 'e1',
+        from: { node: 'n1' },
+        to: { node: 'n2' },
+      },
     },
   ],
 }

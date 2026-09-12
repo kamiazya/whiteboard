@@ -1,4 +1,4 @@
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { routeEdge } from './spatial-edges.js'
@@ -20,10 +20,20 @@ const node = (id: string, x: number, y: number, w = 100, h = 60): SpatialNode =>
   text: id,
 })
 
-const edge = (from: string, to: string): CanvasEdge => ({
+const edge = (
+  from: string,
+  to: string,
+  sides: { readonly fromSide?: EdgeSide; readonly toSide?: EdgeSide } = {},
+): CanvasEdge => ({
   id: 'e1',
-  fromNode: from,
-  toNode: to,
+  from: {
+    node: from,
+    ...(sides.fromSide === undefined ? {} : { side: sides.fromSide }),
+  },
+  to: {
+    node: to,
+    ...(sides.toSide === undefined ? {} : { side: sides.toSide }),
+  },
 })
 
 /** Whether a segment passes through a node's box (touching an edge does not count). */
@@ -205,7 +215,7 @@ describe('orthogonal edges meet a node perpendicular to its side', () => {
 
   it('leaves a right-side attachment horizontally', () => {
     const nodes = [node('a', 0, 0), node('b', 400, 300)]
-    const routed = routeEdge(nodes, { ...edge('a', 'b'), fromSide: 'right' }, 'orthogonal')
+    const routed = routeEdge(nodes, edge('a', 'b', { fromSide: 'right' }), 'orthogonal')
 
     expect(routed.fromSide).toBe('right')
     expect(firstAxis(routed.path)).toBe('horizontal')
@@ -213,21 +223,21 @@ describe('orthogonal edges meet a node perpendicular to its side', () => {
 
   it('leaves a bottom-side attachment vertically', () => {
     const nodes = [node('a', 0, 0), node('b', 400, 300)]
-    const routed = routeEdge(nodes, { ...edge('a', 'b'), fromSide: 'bottom' }, 'orthogonal')
+    const routed = routeEdge(nodes, edge('a', 'b', { fromSide: 'bottom' }), 'orthogonal')
 
     expect(firstAxis(routed.path)).toBe('vertical')
   })
 
   it('arrives at a top-side attachment vertically', () => {
     const nodes = [node('a', 0, 0), node('b', 400, 300)]
-    const routed = routeEdge(nodes, { ...edge('a', 'b'), toSide: 'top' }, 'orthogonal')
+    const routed = routeEdge(nodes, edge('a', 'b', { toSide: 'top' }), 'orthogonal')
 
     expect(lastAxis(routed.path)).toBe('vertical')
   })
 
   it('arrives at a left-side attachment horizontally', () => {
     const nodes = [node('a', 0, 0), node('b', 400, 300)]
-    const routed = routeEdge(nodes, { ...edge('a', 'b'), toSide: 'left' }, 'orthogonal')
+    const routed = routeEdge(nodes, edge('a', 'b', { toSide: 'left' }), 'orthogonal')
 
     expect(lastAxis(routed.path)).toBe('horizontal')
   })

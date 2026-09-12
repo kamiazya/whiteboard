@@ -79,14 +79,14 @@ const node = (facets?: Record<string, unknown>): SpatialNode => ({
   width: 100,
   height: 60,
   text: '',
-  ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+  ...(facets === undefined ? {} : { facets }),
 })
 
 describe('FacetFormPanel', () => {
   it('lists every node-target facet under its plugin heading, widget or not', () => {
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
       />,
@@ -101,7 +101,10 @@ describe('FacetFormPanel', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node({ 'planning.due/v0': { date: '2026-08-22' } }) }}
+        subject={{
+          kind: 'node' as const,
+          node: node({ 'planning.due/v0': { date: '2026-08-22' } }),
+        }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -118,7 +121,7 @@ describe('FacetFormPanel', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -134,7 +137,10 @@ describe('FacetFormPanel', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node({ 'planning.due/v0': { date: '2026-08-22' } }) }}
+        subject={{
+          kind: 'node' as const,
+          node: node({ 'planning.due/v0': { date: '2026-08-22' } }),
+        }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -172,7 +178,7 @@ describe('control kinds the derived form emits', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -195,7 +201,7 @@ describe("the panel honours a facet's declared editor", () => {
   it("uses the spec's label and its segmented options, not the derived defaults", () => {
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
       />,
@@ -213,7 +219,7 @@ describe('the absence segment clears the facet, like the band does', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node({ 'visual.shape/v0': { kind: 'hexagon' } }) }}
+        subject={{ kind: 'node' as const, node: node({ 'visual.shape/v0': { kind: 'hexagon' } }) }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -234,7 +240,7 @@ describe('a draft never outlives what it was seeded from', () => {
     const stored = node({ 'planning.due/v0': { date: '2026-08-22' } })
     const { rerender } = render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: stored }}
+        subject={{ kind: 'node' as const, node: stored }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -243,7 +249,7 @@ describe('a draft never outlives what it was seeded from', () => {
     // The host applies the clear and re-renders with the facet gone.
     rerender(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
         editors={{}}
@@ -321,7 +327,7 @@ describe('choices apply on pick; free entry still needs Save', () => {
     const writes: { key: string; payload: unknown }[] = []
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={(key, payload) => writes.push({ key, payload })}
       />,
@@ -338,7 +344,7 @@ describe('choices apply on pick; free entry still needs Save', () => {
     const writes: unknown[] = []
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => writes.push(1)}
       />,
@@ -354,7 +360,7 @@ describe('a segmented option draws its declared glyph', () => {
   it('shows the shape, not the word — the same vocabulary the quick band uses', () => {
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
       />,
@@ -372,7 +378,7 @@ describe('a segmented option draws its declared glyph', () => {
 it('does not print a field label that repeats the facet name', () => {
   render(
     <FacetFormPanel
-      subject={{ kind: 'node', node: node() }}
+      subject={{ kind: 'node' as const, node: node() }}
       registry={registry}
       onWrite={() => {}}
     />,
@@ -389,7 +395,7 @@ describe('a registered editor replaces the derived form', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -430,7 +436,7 @@ describe('a registered editor replaces the derived form', () => {
     }
     render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
         editors={editors}
@@ -469,7 +475,7 @@ describe('a registered editor is a COMPONENT, not a function the panel calls', (
     const second = { 'visual.symbol/v0': Counter('second') }
     const { rerender } = render(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
         editors={first}
@@ -480,7 +486,7 @@ describe('a registered editor is a COMPONENT, not a function the panel calls', (
 
     rerender(
       <FacetFormPanel
-        subject={{ kind: 'node', node: node() }}
+        subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
         editors={second}
@@ -493,9 +499,9 @@ describe('a registered editor is a COMPONENT, not a function the panel calls', (
 describe('the panel retargeted at an edge', () => {
   const edge = (facets?: Record<string, unknown>): CanvasEdge => ({
     id: 'e1',
-    fromNode: 'a',
-    toNode: 'b',
-    ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+    from: { node: 'a' },
+    to: { node: 'b' },
+    ...(facets === undefined ? {} : { facets }),
   })
 
   it("lists the EDGE-target facets, not the node's", () => {

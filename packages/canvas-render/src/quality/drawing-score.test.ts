@@ -38,8 +38,12 @@ const group = (
   height: number,
   label = id,
 ): SpatialNode => ({ id, type: 'group', x, y, width, height, label })
-const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge =>
-  label === undefined ? { id, fromNode, toNode } : { id, fromNode, toNode, label }
+const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge => ({
+  id,
+  from: { node: fromNode },
+  to: { node: toNode },
+  ...(label === undefined ? {} : { label }),
+})
 const canvasOf = (nodes: SpatialNode[], edges: CanvasEdge[] = []): SpatialCanvas => ({
   nodes,
   edges,
@@ -553,16 +557,34 @@ describe('scoreDrawing: flow', () => {
   it('the arrowhead decides the direction, and an edge with none has no say', () => {
     const backwards = score(
       canvasOf(column, [
-        { id: 'ab', fromNode: 'a', toNode: 'b', fromEnd: 'arrow', toEnd: 'none' },
-        { id: 'bc', fromNode: 'b', toNode: 'c', fromEnd: 'arrow', toEnd: 'none' },
+        {
+          id: 'ab',
+          from: { node: 'a', end: 'arrow' as const },
+          to: { node: 'b', end: 'none' as const },
+        },
+        {
+          id: 'bc',
+          from: { node: 'b', end: 'arrow' as const },
+          to: { node: 'c', end: 'none' as const },
+        },
       ]),
     )
     const lines = score(
-      canvasOf(column, [{ id: 'ab', fromNode: 'a', toNode: 'b', fromEnd: 'none', toEnd: 'none' }]),
+      canvasOf(column, [
+        {
+          id: 'ab',
+          from: { node: 'a', end: 'none' as const },
+          to: { node: 'b', end: 'none' as const },
+        },
+      ]),
     )
     const bothWays = score(
       canvasOf(column, [
-        { id: 'ab', fromNode: 'a', toNode: 'b', fromEnd: 'arrow', toEnd: 'arrow' },
+        {
+          id: 'ab',
+          from: { node: 'a', end: 'arrow' as const },
+          to: { node: 'b', end: 'arrow' as const },
+        },
       ]),
     )
     expect(backwards.flow).toBe('up')

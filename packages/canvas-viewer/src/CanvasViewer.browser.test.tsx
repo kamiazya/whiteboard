@@ -17,7 +17,13 @@ const goldenCanvas: SpatialCanvas = {
     { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'Hello world' },
     { id: 'b', type: 'text', x: 200, y: 0, width: 120, height: 60, text: 'Second box' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 // Deterministic across Node and the browser: the SAME fake measurer used

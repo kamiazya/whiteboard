@@ -91,7 +91,12 @@ beforeAll(async () => {
         })),
         ...(doc.edges ?? []).map((e) => ({
           op: 'edge.add' as const,
-          edge: { id: e.id, fromNode: e.from, toNode: e.to, label: e.label },
+          edge: {
+            id: e.id,
+            from: { node: e.from },
+            to: { node: e.to },
+            label: e.label,
+          },
         })),
       ],
     })

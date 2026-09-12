@@ -18,6 +18,7 @@ export type {
   NodeDecoration,
   NodeOutline,
   RenderContribution,
+  RoutableElement,
   ScenePoint,
   ShapeContribution,
   ShapeTable,

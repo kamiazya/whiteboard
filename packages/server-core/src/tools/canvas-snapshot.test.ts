@@ -48,7 +48,14 @@ describe('wb_canvas_snapshot tool', () => {
           },
           { id: 'n4', type: 'file', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' },
         ],
-        edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n3', label: 'leads to' }],
+        edges: [
+          {
+            id: 'e1',
+            from: { node: 'n1' },
+            to: { node: 'n3' },
+            label: 'leads to',
+          },
+        ],
       })
     })
     const tool = createCanvasSnapshotTool(makeDeps(store))
@@ -66,7 +73,18 @@ describe('wb_canvas_snapshot tool', () => {
         { id: 'n3', type: 'link', x: 0, y: 100, width: 200, height: 60, url: 'https://a.example' },
         { id: 'n4', type: 'file', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n3', label: 'leads to' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'n1' },
+          to: { node: 'n3' },
+          label: 'leads to',
+        },
+      ],
+      // Present and empty on a board with no ink, not absent: a reader that
+      // has to tell "no lines" from "this server does not report lines"
+      // cannot, and an optional array is exactly that ambiguity.
+      lines: [],
       comments: [],
       nodeCount: 4,
       edgeCount: 1,
@@ -84,8 +102,16 @@ describe('wb_canvas_snapshot tool', () => {
           { id: 'n2', type: 'text', x: 0, y: 20, width: 10, height: 10, text: 'b' },
         ],
         edges: [
-          { id: 'e1', fromNode: 'n1', toNode: 'n2' },
-          { id: 'e2', fromNode: 'n2', toNode: 'n1' },
+          {
+            id: 'e1',
+            from: { node: 'n1' },
+            to: { node: 'n2' },
+          },
+          {
+            id: 'e2',
+            from: { node: 'n2' },
+            to: { node: 'n1' },
+          },
         ],
       })
       setNodeLock(doc, 'n1', true)
@@ -161,8 +187,8 @@ describe('wb_canvas_snapshot tool', () => {
     const store = new FakeDocumentStore()
     const edges = Array.from({ length: SNAPSHOT_MAX_EDGES + 3 }, (_, i) => ({
       id: `e${i}`,
-      fromNode: 'n1',
-      toNode: 'n2',
+      from: { node: 'n1' },
+      to: { node: 'n2' },
     }))
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {

@@ -58,7 +58,7 @@ export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateI
     return undefined
   }
   const commentById = (id: string): CanvasComment | undefined =>
-    canvasRef.current['x-whiteboard']?.comments?.find((entry) => entry.id === id)
+    canvasRef.current.comments?.find((entry) => entry.id === id)
   /**
    * Opens a conversation in place, or shuts the one already open. Pressing
    * the comment whose card is up is how it closes without hunting for the

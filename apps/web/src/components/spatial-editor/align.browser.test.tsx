@@ -202,7 +202,16 @@ it('emits nothing when the selection is already aligned', () => {
 })
 
 it('leaves edges alone — align moves nodes only', () => {
-  const withEdge: SpatialCanvas = { ...initial, edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }] }
+  const withEdge: SpatialCanvas = {
+    ...initial,
+    edges: [
+      {
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+      },
+    ],
+  }
   const seen = vi.fn()
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(withEdge)

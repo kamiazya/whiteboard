@@ -40,20 +40,16 @@ const board = (routing: string | undefined): SpatialCanvas => ({
   edges: [
     {
       id: 'e',
-      fromNode: 'a',
-      toNode: 'b',
-      ...(routing === undefined
-        ? {}
-        : { 'x-whiteboard': { facets: { 'demo.route/v0': { name: routing } } } }),
+      from: { node: 'a' },
+      to: { node: 'b' },
+      ...(routing === undefined ? {} : { facets: { 'demo.route/v0': { name: routing } } }),
     },
   ],
 })
 
 /** What the plugin reads out of its own facet — the engine would do this. */
-const storedRouting = (edge: {
-  readonly 'x-whiteboard'?: { readonly facets?: Record<string, unknown> }
-}) => {
-  const stored = edge['x-whiteboard']?.facets?.['demo.route/v0'] as { name?: string } | undefined
+const storedRouting = (edge: { readonly facets?: Record<string, unknown> }) => {
+  const stored = edge.facets?.['demo.route/v0'] as { name?: string } | undefined
   return stored?.name
 }
 

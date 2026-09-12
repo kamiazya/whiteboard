@@ -51,7 +51,7 @@ export function CommentDragLayer({
   const fragment = useMemo(
     () =>
       renderCanvasToSvg(
-        { nodes: [], edges: [], 'x-whiteboard': { comments: [comment] } },
+        { nodes: [], edges: [], comments: [comment] },
         // The dragged comment was hit-tested on the drawn scene, so it is
         // visible whatever its resolved state: draw it unconditionally.
         { measure, theme, commentObstacles: obstacles, showResolved: true },

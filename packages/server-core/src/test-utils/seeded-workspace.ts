@@ -41,8 +41,25 @@ export async function seededServer(): Promise<ReturnType<typeof createServer>> {
         { id: 'n2', type: 'text', x: 400, y: 0, width: 200, height: 80, text: 'two' },
         { id: 'g1', type: 'group', x: -20, y: 200, width: 640, height: 200, label: 'later' },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
-      'x-whiteboard': { comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }] },
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'n1' },
+          to: { node: 'n2' },
+        },
+      ],
+      // One stroke of INK, so the `line.*` ops have something to patch and
+      // remove. Without it those arms are declared reachable and are only
+      // ever refused for want of an id, which reads as a broken op rather
+      // than as an empty fixture (ADR-0038 decision 2).
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'node', node: 'n1' },
+          to: { kind: 'point', point: { x: 700, y: 300 } },
+        },
+      ],
+      comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }],
     })
   })
   await seedDoc(store, SEEDED_MARKDOWN_ID, (doc) => {

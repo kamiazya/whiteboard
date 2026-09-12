@@ -94,6 +94,9 @@ describe('proposedChangeSchema', () => {
       'edge.add',
       'edge.patch',
       'edge.remove',
+      'line.add',
+      'line.patch',
+      'line.remove',
       'node.add',
       'node.patch',
       'node.remove',
@@ -111,6 +114,9 @@ describe('proposedChangeSchema', () => {
       'edge.add': false,
       'edge.patch': true,
       'edge.remove': true,
+      'line.add': false,
+      'line.patch': true,
+      'line.remove': true,
       'body.replace': true,
     }
     expect(Object.keys(withPrior).sort()).toEqual([...PROPOSED_CHANGE_OPS].sort())

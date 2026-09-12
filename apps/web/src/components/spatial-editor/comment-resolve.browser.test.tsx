@@ -33,7 +33,7 @@ const DONE: CanvasComment = {
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': { comments: [OPEN, DONE] },
+  comments: [OPEN, DONE],
 }
 
 function makeHost(initial: SpatialCanvas = start) {
@@ -99,7 +99,7 @@ it('"Resolve" on a comment writes set-comment-resolved and the comment leaves th
   })
   await waitForPin(container, 'c-open', false)
   // Closed, not erased: the record is still in the document.
-  expect(latest.canvas['x-whiteboard']?.comments?.find((c) => c.id === 'c-open')).toMatchObject({
+  expect(latest.canvas.comments?.find((c) => c.id === 'c-open')).toMatchObject({
     resolved: true,
     text: 'still open',
   })

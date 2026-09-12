@@ -50,7 +50,7 @@ const NODE: SpatialCanvas['nodes'][number] = {
 
 async function storedComments(store: FakeDocumentStore) {
   const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-  return canvas['x-whiteboard']?.comments ?? []
+  return canvas.comments ?? []
 }
 
 describe('wb_canvas_edit comment ops', () => {
@@ -116,7 +116,7 @@ describe('wb_canvas_edit comment ops', () => {
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes).toHaveLength(1)
-    expect(canvas['x-whiteboard']?.comments ?? []).toHaveLength(0)
+    expect(canvas.comments ?? []).toHaveLength(0)
   })
 
   test('comment.resolve marks the record and comment.resolve with resolved:false reopens it', async () => {
@@ -124,7 +124,7 @@ describe('wb_canvas_edit comment ops', () => {
     await seedCanvas(store, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { comments: [{ id: 'c1', x: 0, y: 0, text: 'open question' }] },
+      comments: [{ id: 'c1', x: 0, y: 0, text: 'open question' }],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -156,7 +156,7 @@ describe('wb_canvas_edit comment ops', () => {
     await seedCanvas(store, {
       nodes: [],
       edges: [],
-      'x-whiteboard': { comments: [{ id: 'c1', x: 0, y: 0, text: 'kept' }] },
+      comments: [{ id: 'c1', x: 0, y: 0, text: 'kept' }],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -206,10 +206,8 @@ describe('wb_canvas_edit comment ops', () => {
     await seedCanvas(store, {
       nodes: [NODE],
       edges: [],
-      'x-whiteboard': {
-        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-        comments: [{ id: 'c1', x: 9, y: 9, text: 'still here after the batch' }],
-      },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+      comments: [{ id: 'c1', x: 9, y: 9, text: 'still here after the batch' }],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -221,10 +219,8 @@ describe('wb_canvas_edit comment ops', () => {
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas['x-whiteboard']?.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
-    expect(canvas['x-whiteboard']?.comments).toEqual([
-      { id: 'c1', x: 9, y: 9, text: 'still here after the batch' },
-    ])
+    expect(canvas.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
+    expect(canvas.comments).toEqual([{ id: 'c1', x: 9, y: 9, text: 'still here after the batch' }])
   })
 
   test('wb_canvas_snapshot carries the comments so a reader sees the conversation', async () => {
@@ -232,9 +228,7 @@ describe('wb_canvas_edit comment ops', () => {
     await seedCanvas(store, {
       nodes: [NODE],
       edges: [],
-      'x-whiteboard': {
-        comments: [{ id: 'c1', x: 1, y: 2, text: 'feedback', author: 'human:reviewer' }],
-      },
+      comments: [{ id: 'c1', x: 1, y: 2, text: 'feedback', author: 'human:reviewer' }],
     })
     const tool = createCanvasSnapshotTool(makeDeps(store))
 

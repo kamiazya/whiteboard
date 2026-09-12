@@ -50,7 +50,7 @@ it('the Text row stores the facet and moves the drawn text', () => {
   const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
   fireEvent.click(panel.querySelector('[aria-label="Middle"]') as HTMLElement)
 
-  expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.text/v0']).toEqual({
+  expect(latest.canvas.nodes[0]?.facets?.['visual.text/v0']).toEqual({
     align: 'center',
   })
   // Not merely stored: a rect's text moved down from the top.

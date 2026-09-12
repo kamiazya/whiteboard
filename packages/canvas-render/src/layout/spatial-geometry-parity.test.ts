@@ -104,7 +104,12 @@ function fixture(): SpatialCanvas {
   ]
   const edges: SpatialCanvas['edges'] = [
     // (c) an edge carrying a label — drives labelFontSizePx via composeEdgeLabel.
-    { id: 'edge-1', fromNode: 'link-1', toNode: 'text-wide', label: 'connects to' },
+    {
+      id: 'edge-1',
+      from: { node: 'link-1' },
+      to: { node: 'text-wide' },
+      label: 'connects to',
+    },
   ]
   return { nodes, edges }
 }

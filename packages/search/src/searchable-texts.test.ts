@@ -18,7 +18,14 @@ describe('searchableTexts', () => {
         { id: 'n1', type: 'text', text: 'Auth flow', x: 0, y: 0, width: 100, height: 40 },
         { id: 'g1', type: 'group', label: 'Backlog', x: 0, y: 0, width: 200, height: 200 },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'g1', label: 'blocks' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'n1' },
+          to: { node: 'g1' },
+          label: 'blocks',
+        },
+      ],
     }
     expect(searchableTexts({ kind: 'spatial', canvas })).toEqual(['Auth flow', 'Backlog', 'blocks'])
   })
@@ -70,7 +77,13 @@ describe('searchableTexts', () => {
   it('leaves out what carries no label', () => {
     const canvas: SpatialCanvas = {
       nodes: [{ id: 'g1', type: 'group', x: 0, y: 0, width: 10, height: 10 }],
-      edges: [{ id: 'e1', fromNode: 'g1', toNode: 'g1' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { node: 'g1' },
+          to: { node: 'g1' },
+        },
+      ],
     }
     expect(searchableTexts({ kind: 'spatial', canvas })).toEqual([])
   })

@@ -26,7 +26,7 @@ const LONE: CanvasComment = { id: 'thread-lone', x: 200, y: 200, text: 'one rema
 const CANVAS: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': { comments: [BUSY, LONE] },
+  comments: [BUSY, LONE],
 }
 
 function threadOf(id: string, messages: number): CommentThread {

@@ -233,19 +233,31 @@ const LOOK_CANVAS: SpatialCanvas = {
       width: 160,
       height: 80,
       text: '',
-      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'ellipse' } } },
+      facets: { 'visual.shape/v0': { kind: 'ellipse' } },
     },
   ],
   edges: [
-    { id: 'across', fromNode: 'preset', toNode: 'plain', toEnd: 'arrow' },
+    {
+      id: 'across',
+      from: { node: 'preset' },
+      to: { node: 'plain', end: 'arrow' as const },
+    },
     // The two diagonals of the four content nodes, so one hops the other.
-    { id: 'falling', fromNode: 'preset', toNode: 'oval', fromSide: 'bottom', toSide: 'top' },
-    { id: 'rising', fromNode: 'sink', toNode: 'plain', fromSide: 'top', toSide: 'bottom' },
+    {
+      id: 'falling',
+      from: { node: 'preset', side: 'bottom' as const },
+      to: { node: 'oval', side: 'top' as const },
+    },
+    {
+      id: 'rising',
+      from: { node: 'sink', side: 'top' as const },
+      to: { node: 'plain', side: 'bottom' as const },
+    },
   ],
   // Jump arcs are off unless a canvas asks for them, and a hop is one of the
   // shapes the crisp lane already pins — so the look goldens see it too.
   // `style` is left unsaid so each theme's own routing default still decides.
-  'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+  facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
 }
 
 /** A look golden: the scene plus the theme's own paper, since a halo on the
@@ -258,9 +270,7 @@ export interface LookScene {
 function buildLookScene(theme: string, mode: 'light' | 'dark'): LookScene {
   const canvas: SpatialCanvas = {
     ...LOOK_CANVAS,
-    'x-whiteboard': {
-      facets: { ...LOOK_CANVAS['x-whiteboard']?.facets, 'visual.theme/v0': { theme } },
-    },
+    facets: { ...LOOK_CANVAS.facets, 'visual.theme/v0': { theme } },
   }
   return {
     scene: layoutSpatialCanvas(canvas, {

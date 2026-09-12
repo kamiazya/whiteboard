@@ -6,7 +6,6 @@ import {
   namespacedIdSchema,
 } from '@kamiazya/whiteboard-facet-engine'
 import type {
-  CanvasEdge,
   EdgeRoutingStyle,
   ExtensionFacets,
   LineJumps,
@@ -15,9 +14,9 @@ import type {
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
-  integerSchema,
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
+import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import {
   EDGE_ROUTING_OPTIONS,
@@ -47,65 +46,6 @@ export const visualEdgesFacetSchema = z.object({
 export type VisualEdgesFacet = z.infer<typeof visualEdgesFacetSchema>
 
 export const VISUAL_EDGES_KEY = 'visual.edges/v0'
-
-/**
- * A ceiling rather than an unbounded list: every bend is drawn on every
- * frame of a drag, and a document is written by agents as well as people. It
- * is deliberately far above what a person places by hand — what it stops is
- * a generated payload nobody meant.
- */
-const MAX_WAYPOINTS = 64
-
-/**
- * `visual.path/v0` — where an edge BENDS, in canvas coordinates.
- *
- * A separate facet from `visual.edges/v0` rather than a field on it, because
- * the two answer different questions: `edges` picks between routings that
- * COMPUTE a path, and this one supplies the path. An edge carrying bends is
- * not choosing a routing at all — which is why the plugin draws it with a
- * router of its own rather than by widening the routing vocabulary.
- *
- * JSON Canvas has no waypoint, so this is exactly the kind of concept that
- * belongs on the facet side: nothing is lost when the document is read by a
- * reader that does not know this plugin — the edge draws with the built-in
- * routing again.
- *
- * The derived editor cannot express a list of points, so this facet answers
- * `unsupported` there. That is the honest signal ADR-0013's form layer is
- * built to give: bends want a drag affordance, not a form.
- */
-export const visualPathFacetSchema = z.object({
-  // Integers, the way every other coordinate in the model is stored: the
-  // drag rounds before it writes, and a fractional anchor is the class that
-  // survives one session and vanishes on the next reload.
-  waypoints: z
-    .array(z.object({ x: integerSchema, y: integerSchema }))
-    .min(1)
-    .max(MAX_WAYPOINTS),
-})
-
-export type VisualPathFacet = z.infer<typeof visualPathFacetSchema>
-
-export const VISUAL_PATH_KEY = 'visual.path/v0'
-
-/**
- * The bends this edge stores, or none — its own facet and nothing else, the
- * way `resolveEdgeOwnStyle` reads the routing. A payload the schema refuses
- * answers with none, so a malformed write draws the built-in route rather
- * than half a path.
- */
-export function resolveEdgeWaypoints(
-  edge: CanvasEdge,
-  registry: FacetRegistry = bundledFacetRegistry,
-): readonly { readonly x: number; readonly y: number }[] {
-  const stored = edge['x-whiteboard']?.facets?.[VISUAL_PATH_KEY]
-  if (stored === undefined) return []
-  const resolution = registry.resolveFacetPayload(VISUAL_PATH_KEY, stored)
-  if (resolution.kind !== 'resolved') return []
-  // Re-parse rather than cast: the registry resolved through this very
-  // schema, so this cannot fail — but it keeps the type honest.
-  return visualPathFacetSchema.parse(resolution.value).waypoints
-}
 
 /**
  * `visual.shape/v0` — what silhouette this node draws. The vocabulary
@@ -349,16 +289,6 @@ export const visualPlugin = definePlugin({
       },
     }),
     defineFacet({
-      name: 'path',
-      displayName: 'Bends',
-      version: 'v0',
-      // Edges only: a bend is a property of ONE line. The canvas-wide
-      // question ("how are edges drawn here") is `visual.edges`, and a
-      // board-wide list of points would mean nothing.
-      targets: ['edge'],
-      schema: visualPathFacetSchema,
-    }),
-    defineFacet({
       name: 'shape',
       displayName: 'Shape',
       version: 'v0',
@@ -555,8 +485,7 @@ export function resolveCanvasEdgeStyle(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): EdgeRouting {
-  const extension = canvas['x-whiteboard']
-  const stored = extension?.facets?.[VISUAL_EDGES_KEY]
+  const stored = canvas.facets?.[VISUAL_EDGES_KEY]
   if (stored !== undefined) {
     const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
     if (resolution.kind === 'resolved') {
@@ -620,7 +549,7 @@ export function resolveEffectiveCanvasEdgeStyle(
  */
 export function resolveEdgeStyle(
   canvas: SpatialCanvas,
-  edge: CanvasEdge,
+  edge: RoutableElement,
   registry: FacetRegistry = bundledFacetRegistry,
 ): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
   const own = resolveEdgeOwnStyle(edge, registry)
@@ -638,10 +567,12 @@ export function resolveEdgeStyle(
  * the edge actually holds, and a resolved value cannot say.
  */
 export function resolveEdgeOwnStyle(
-  edge: CanvasEdge,
+  // Either element: a LINE carries the same facet bucket an edge does, and
+  // what this reads is the bucket (ADR-0038 decision 2).
+  edge: RoutableElement,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualEdgesFacet {
-  const stored = edge['x-whiteboard']?.facets?.[VISUAL_EDGES_KEY]
+  const stored = edge.facets?.[VISUAL_EDGES_KEY]
   if (stored === undefined) return {}
   const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
   if (resolution.kind !== 'resolved') return {}
@@ -659,7 +590,7 @@ export function resolveCanvasTheme(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): string | undefined {
-  const stored = canvas['x-whiteboard']?.facets?.[VISUAL_THEME_KEY]
+  const stored = canvas.facets?.[VISUAL_THEME_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_THEME_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined
@@ -675,7 +606,7 @@ export function resolveNodeShape(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualShapeFacet['kind'] | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_SHAPE_KEY]
+  const stored = node.facets?.[VISUAL_SHAPE_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_SHAPE_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined
@@ -709,7 +640,7 @@ export function resolveNodeSymbol(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  return readSymbol(node['x-whiteboard']?.facets, registry)
+  return readSymbol(node.facets, registry)
 }
 
 /** The symbol a SPATIAL document wears, stored on its canvas envelope. */
@@ -717,7 +648,7 @@ export function resolveCanvasSymbol(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  return readSymbol(canvas['x-whiteboard']?.facets, registry)
+  return readSymbol(canvas.facets, registry)
 }
 
 /**
@@ -741,7 +672,7 @@ export function resolveNodeTextAlign(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualTextFacet['align'] | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_TEXT_KEY]
+  const stored = node.facets?.[VISUAL_TEXT_KEY]
   if (stored === undefined) return undefined
   const resolution = registry.resolveFacetPayload(VISUAL_TEXT_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined

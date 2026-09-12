@@ -47,15 +47,28 @@ function buildCanvas(): { canvas: SpatialCanvas; leafId: string; hubId: string }
     })
   }
   for (let i = 0; i < NODE_COUNT; i++) {
-    if (i + 1 < NODE_COUNT) edges.push({ id: `e${i}a`, fromNode: `n${i}`, toNode: `n${i + 1}` })
+    if (i + 1 < NODE_COUNT)
+      edges.push({
+        id: `e${i}a`,
+        from: { node: `n${i}` },
+        to: { node: `n${i + 1}` },
+      })
     if (i + COLS < NODE_COUNT && i % 2 === 0) {
-      edges.push({ id: `e${i}b`, fromNode: `n${i}`, toNode: `n${i + COLS}` })
+      edges.push({
+        id: `e${i}b`,
+        from: { node: `n${i}` },
+        to: { node: `n${i + COLS}` },
+      })
     }
   }
   // n0 is the hub every long-range edge below meets; n39 is the far corner
   // leaf (edge-degree 1) whose move should be the most local edit there is.
   for (const target of ['n13', 'n21', 'n34']) {
-    edges.push({ id: `hub-${target}`, fromNode: 'n0', toNode: target })
+    edges.push({
+      id: `hub-${target}`,
+      from: { node: 'n0' },
+      to: { node: target },
+    })
   }
   return { canvas: { nodes, edges }, leafId: 'n39', hubId: 'n0' }
 }

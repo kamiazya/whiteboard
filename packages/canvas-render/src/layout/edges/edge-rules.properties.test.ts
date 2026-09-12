@@ -755,8 +755,8 @@ describe('border-tracing / endpoint-body-ink: no double-charge', () => {
     'never charges the same single-segment/single-rect pair on both tiers',
     ({ rect, a, b }) => {
       const border = borderTracingRule.selfTerm([a, b], [], [rect], [])
-      const endpointInk = endpointBodyInkRule.selfTerm([a, b], [], [], [rect])
-      expect(Math.min(border, endpointInk)).toBe(0)
+      const endInk = endpointBodyInkRule.selfTerm([a, b], [], [], [rect])
+      expect(Math.min(border, endInk)).toBe(0)
     },
   )
 })

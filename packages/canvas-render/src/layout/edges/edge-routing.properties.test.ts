@@ -3,6 +3,7 @@
 // real defect, generalized from its example test so the generator explores
 // the arrangements nobody thought to write down.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
@@ -17,7 +18,11 @@ const node = (
     ? { id, type, x: r.x, y: r.y, width: r.w, height: r.h }
     : { id, type, x: r.x, y: r.y, width: r.w, height: r.h, text: id }
 
-const edge = (from: string, to: string): CanvasEdge => ({ id: 'e1', fromNode: from, toNode: to })
+const edge = (from: string, to: string): CanvasEdge => ({
+  id: 'e1',
+  from: { node: from },
+  to: { node: to },
+})
 
 // A rect strictly inside a W x H frame at the origin, with margin >= 1.
 const insideRect = (W: number, H: number) =>
@@ -186,23 +191,30 @@ describe('routing properties: anchor fan-out', () => {
         hub,
         ...spokes.map((id, i) => node(id, 'text', { ...spokePositions[i]!, w: 100, h: 100 })),
       ]
-      const edges: CanvasEdge[] = spokes.map((id, i) => ({
-        id: `e-${id}`,
-        fromNode: directions[i]! ? 'hub' : id,
-        toNode: directions[i]! ? id : 'hub',
-        ...(explicitSides[i] === undefined
-          ? {}
-          : directions[i]!
-            ? { fromSide: explicitSides[i] }
-            : { toSide: explicitSides[i] }),
-      }))
+      const edges: CanvasEdge[] = spokes.map((id, i) => {
+        // The pinned side belongs to whichever end is the HUB's, which is
+        // what `directions[i]` picks.
+        const pinned = explicitSides[i]
+        const outward = directions[i] === true
+        return {
+          id: `e-${id}`,
+          from: {
+            node: outward ? 'hub' : id,
+            ...(outward && pinned !== undefined ? { side: pinned } : {}),
+          },
+          to: {
+            node: outward ? id : 'hub',
+            ...(!outward && pinned !== undefined ? { side: pinned } : {}),
+          },
+        }
+      })
       const anchors = assignEdgeAnchors(nodes, edges)
       const routed = edges.map((e) => routeEdge(nodes, e, 'straight', anchors.get(e.id)))
 
       // Group the hub-side endpoint of every edge by reported side.
       const bySide = new Map<string, { point: { x: number; y: number }; far: SpatialNode }[]>()
       for (const [i, r] of routed.entries()) {
-        const hubIsFrom = edges[i]!.fromNode === 'hub'
+        const hubIsFrom = endNode(edges[i]!.from) === 'hub'
         const point = hubIsFrom ? r.path[0]! : r.path[r.path.length - 1]!
         const side = hubIsFrom ? r.fromSide : r.toSide
         const far = nodes.find((n) => n.id === spokes[i]!)!
@@ -256,7 +268,15 @@ describe('routing properties: occlusion-aware sides', () => {
       const from = nodes[fromIndex % nodes.length]!
       const to = nodes[toIndex % nodes.length]!
       if (from.id === to.id) return
-      const routed = routeEdge(nodes, { id: 'e', fromNode: from.id, toNode: to.id }, 'straight')
+      const routed = routeEdge(
+        nodes,
+        {
+          id: 'e',
+          from: { node: from.id },
+          to: { node: to.id },
+        },
+        'straight',
+      )
 
       const sidePoint = (n: SpatialNode, side: string) => {
         if (side === 'top') return { x: n.x + n.width / 2, y: n.y }
@@ -344,9 +364,8 @@ describe('routing properties: stub lane depth', () => {
       // group across sides.
       const edges: CanvasEdge[] = spokes.map((s, i) => ({
         id: `e${i}`,
-        fromNode: 'hub',
-        toNode: s.id,
-        fromSide: 'right' as const,
+        from: { node: 'hub', side: 'right' as const },
+        to: { node: s.id } as const,
       }))
       const anchors = assignEdgeAnchors([hub, ...spokes], edges)
       const exits = edges.map((e) => {
@@ -389,9 +408,8 @@ describe('routing properties: sweep-rank lanes', () => {
       ]
       const edges: CanvasEdge[] = spokes.map((s, i) => ({
         id: `e${i}`,
-        fromNode: 'hub',
-        toNode: s.id,
-        fromSide: 'right' as const,
+        from: { node: 'hub', side: 'right' as const },
+        to: { node: s.id } as const,
       }))
       const anchors = assignEdgeAnchors([hub, ...spokes], edges)
       const routed = edges.map((e) =>
@@ -447,10 +465,10 @@ function clutterConfig({
   const edges: CanvasEdge[] = pairs
     .map(([f, t], i) => ({
       id: `e${i}`,
-      fromNode: `n${f % nodes.length}`,
-      toNode: `n${t % nodes.length}`,
+      from: { node: `n${f % nodes.length}` },
+      to: { node: `n${t % nodes.length}` },
     }))
-    .filter((e) => e.fromNode !== e.toNode)
+    .filter((e) => endNode(e.from) !== endNode(e.to))
   return { nodes, edges }
 }
 
@@ -473,9 +491,15 @@ describe('routing properties: crossing minimization', () => {
           if (side === 'top') return p.y === n.y && p.x >= n.x && p.x <= n.x + n.width
           return p.y === n.y + n.height && p.x >= n.x && p.x <= n.x + n.width
         }
-        expect(onSide(byId.get(e.fromNode)!, routed.fromSide, routed.path[0]!)).toBe(true)
+        expect(onSide(byId.get(endNode(e.from) ?? '')!, routed.fromSide, routed.path[0]!)).toBe(
+          true,
+        )
         expect(
-          onSide(byId.get(e.toNode)!, routed.toSide, routed.path[routed.path.length - 1]!),
+          onSide(
+            byId.get(endNode(e.to) ?? '')!,
+            routed.toSide,
+            routed.path[routed.path.length - 1]!,
+          ),
         ).toBe(true)
       }
     },

@@ -88,15 +88,24 @@ extension key, `x-whiteboard`, allowed at three sites:
 - **A node** — the canvas-embed extension (`kind: "embed"` plus a canvas
   reference), the one piece of content JSON Canvas 1.0 cannot express, and
   node-target facets in the same `facets` bucket.
-- **An edge** — edge-target facets (`facets`) and nothing else: an edge has
-  no content JSON Canvas cannot express, so this site never carries an
-  embed. `visual.edges/v0` here overrides the board's routing for that one
-  edge, field by field, and `visual.path/v0` carries the bends the line is
-  drawn through (`waypoints`, canvas coordinates, in order — dragged on the
-  canvas, or written by an agent through `wb_facet_set`'s `edgeId`). A
-  consumer that drops the extension draws the same edge with its own
-  routing — bends are the clearest case of a rendering preference JSON
-  Canvas does not model.
+- **An edge** — edge-target facets (`facets`) and the bends the line is drawn
+  through (`bends`: canvas coordinates, in order, whole pixels here even
+  though the document stores them as real numbers). Never an embed: what an
+  edge holds that the format cannot state is geometry, not content.
+  `visual.edges/v0` here overrides the board's routing for that one edge,
+  field by field. A consumer that drops the extension draws the same edge
+  with its own computed routing — bends are the clearest case of something
+  JSON Canvas simply has no vocabulary for.
+
+One thing is dropped rather than carried: **an edge with a free end**. The
+document model lets an edge run from a node to a bare point on the canvas;
+JSON Canvas 1.0 requires both ends to name a node, and no extension shape
+would make such an edge *readable* by a consumer rather than merely present
+in a key it ignores. So a point-ended edge is omitted from **both** modes —
+the whole edge, not one of its fields — and it is the only entry in the loss
+table whose unit is the element. Anchoring it to an invented zero-size node
+would make the export a document with a box the author never drew, which is a
+worse answer than an absence the table names.
 
 No other non-standard field is ever emitted, at any level. Foreign keys on an
 imported document (another tool's vendor fields) are stripped on parse and
@@ -108,6 +117,12 @@ What may appear inside `x-whiteboard` is machine-readable:
 [`x-whiteboard.schema.json`](x-whiteboard.schema.json) (JSON Schema,
 draft 2020-12) is generated from the same Zod schemas the code validates
 with, so it cannot drift from the implementation.
+
+**What each mode costs, field by field**, is
+[what a JSON Canvas export costs](json-canvas-loss.md) — every position the
+document model can hold, and whether the format states it, rounds it, carries
+it on the extension key, or cannot take it. Generated from the projection
+itself for the same reason the JSON Schema is.
 
 ## Characters the exporter cannot draw
 

@@ -23,7 +23,13 @@ type Node = {
   width: number
   height: number
 }
-type Edge = { id: string; fromNode: string; toNode: string }
+// An END is an object, not a flat key (ADR-0037 slice 3). Spelled out here
+// rather than imported because this fixture stands in for what the snapshot
+// hands a verifier, and a fixture that drifts from that shape is how a
+// POSITIVE control stops controlling anything.
+type End = { kind: 'node'; node: string }
+type Edge = { id: string; from: End; to: End }
+const at = (node: string): End => ({ kind: 'node', node })
 type Board = { nodes: Node[]; edges: Edge[] }
 
 /** A board the fixture agent would be passed for `boards/checkout`. */
@@ -67,7 +73,7 @@ const goodBoard = (): Board => ({
     width: 200,
     height: 80,
   })),
-  edges: FLOWS.map(([from, to], i) => ({ id: `e${i}`, fromNode: from, toNode: to })),
+  edges: FLOWS.map(([from, to], i) => ({ id: `e${i}`, from: at(from), to: at(to) })),
 })
 
 const verify = (board: Board) => KINDS?.verify?.(wbFor(board) as never, {} as never)
@@ -100,8 +106,8 @@ describe('the kinds task verifier', () => {
     if (orders !== undefined) orders.text = 'Orders Payments Service'
     board.edges = board.edges.map((e) => ({
       ...e,
-      fromNode: e.fromNode === 'payments' ? 'orders' : e.fromNode,
-      toNode: e.toNode === 'payments' ? 'orders' : e.toNode,
+      from: e.from.node === 'payments' ? at('orders') : e.from,
+      to: e.to.node === 'payments' ? at('orders') : e.to,
     }))
     await expect(verify(board)).resolves.toMatchObject({ ok: false })
   })
@@ -111,14 +117,14 @@ describe('the kinds task verifier', () => {
     // services. A board drawn with every arrow reversed is a different
     // claim about the system, not a stylistic difference.
     const board = goodBoard()
-    board.edges = board.edges.map((e) => ({ ...e, fromNode: e.toNode, toNode: e.fromNode }))
+    board.edges = board.edges.map((e) => ({ ...e, from: e.to, to: e.from }))
     await expect(verify(board)).resolves.toMatchObject({ ok: false })
   })
 
   it('names a box it wants and cannot find, rather than throwing', async () => {
     const board = goodBoard()
     board.nodes = board.nodes.filter((n) => n.id !== 'stripe')
-    board.edges = board.edges.filter((e) => e.toNode !== 'stripe')
+    board.edges = board.edges.filter((e) => e.to.node !== 'stripe')
     await expect(verify(board)).resolves.toEqual({ ok: false, detail: 'missing: Stripe' })
   })
 })

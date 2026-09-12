@@ -265,7 +265,7 @@ describe('bottom dock composition', () => {
 describe('paper (ADR-0030)', () => {
   const neon = (): SpatialCanvas => ({
     ...twoNodeCanvas(),
-    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+    facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
   })
 
   it("paints the theme's surface for the UI mode under the canvas, so neon gets its night", () => {

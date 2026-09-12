@@ -5,7 +5,11 @@ import {
   canvasColorSchema,
   canvasCommentSchema,
   documentIdSchema,
+  edgeEndSchema,
+  lineEndSchema,
   nodeIdSchema,
+  nodePositionSchema,
+  nodeSizeSchema,
   type SpatialCanvas,
   type SpatialNode,
   workspaceIdSchema,
@@ -37,10 +41,10 @@ const canvasSnapshotNodeSchema = z
   .object({
     id: nodeIdSchema,
     type: z.enum(['text', 'file', 'link', 'group']),
-    x: z.number().int(),
-    y: z.number().int(),
-    width: z.number().int(),
-    height: z.number().int(),
+    x: nodePositionSchema,
+    y: nodePositionSchema,
+    width: nodeSizeSchema,
+    height: nodeSizeSchema,
     /** text nodes only, cut to SNAPSHOT_TEXT_MAX_CHARS. */
     text: z.string().optional(),
     textTruncated: z.literal(true).optional(),
@@ -69,11 +73,34 @@ const canvasSnapshotNodeSchema = z
   })
   .strict()
 
+/**
+ * INK, read back. A line is not an edge (ADR-0038 decision 2), so it is its
+ * own array rather than a flag on the edge list — a reader counting relations
+ * must not have to subtract the strokes.
+ *
+ * It carries no `locked`: lines have no lock op, so a field that is always
+ * absent would be a promise the surface does not keep.
+ */
+const canvasSnapshotLineSchema = z
+  .object({
+    id: nodeIdSchema,
+    from: lineEndSchema,
+    to: lineEndSchema,
+    label: z.string().optional(),
+    color: canvasColorSchema.optional(),
+  })
+  .strict()
+
 const canvasSnapshotEdgeSchema = z
   .object({
     id: nodeIdSchema,
-    fromNode: nodeIdSchema,
-    toNode: nodeIdSchema,
+    // The MODEL's endpoint, not the format's two flat keys: this is a read of
+    // the board, and a board can hold an edge with a free end (ADR-0037
+    // slice 3). Reusing the model's schema rather than restating it is what
+    // keeps a reader of this payload and a writer of `wb_canvas_edit` talking
+    // about the same thing.
+    from: edgeEndSchema,
+    to: edgeEndSchema,
     label: z.string().optional(),
     color: canvasColorSchema.optional(),
     locked: z.literal(true).optional(),
@@ -85,6 +112,12 @@ export const canvasSnapshotSchema = z
     documentId: documentIdSchema,
     nodes: z.array(canvasSnapshotNodeSchema),
     edges: z.array(canvasSnapshotEdgeSchema),
+    /**
+     * Every stroke on the board. Absent from a snapshot until the line ops
+     * landed, which meant a model could write ink through `wb_canvas_edit`
+     * and had no way to read it back.
+     */
+    lines: z.array(canvasSnapshotLineSchema),
     /**
      * The REAL totals on the board, not the returned lengths. A cap that
      * hides how much it dropped is worse than no cap: an agent reading a
@@ -173,8 +206,8 @@ function projectNode(
 function projectEdge(edge: CanvasEdge, locked: boolean): z.infer<typeof canvasSnapshotEdgeSchema> {
   return {
     id: edge.id,
-    fromNode: edge.fromNode,
-    toNode: edge.toNode,
+    from: edge.from,
+    to: edge.to,
     ...(edge.label === undefined ? {} : { label: edge.label }),
     ...(edge.color === undefined ? {} : { color: edge.color }),
     ...(locked ? { locked: true as const } : {}),
@@ -205,7 +238,14 @@ export function projectCanvasSnapshot(
     documentId,
     nodes: projected.map((entry) => entry.node),
     edges,
-    comments: canvas['x-whiteboard']?.comments ?? [],
+    lines: (canvas.lines ?? []).slice(0, SNAPSHOT_MAX_EDGES).map((line) => ({
+      id: line.id,
+      from: line.from,
+      to: line.to,
+      ...(line.label === undefined ? {} : { label: line.label }),
+      ...(line.color === undefined ? {} : { color: line.color }),
+    })),
+    comments: canvas.comments ?? [],
     nodeCount: canvas.nodes.length,
     edgeCount: canvas.edges.length,
     truncated:

@@ -63,7 +63,14 @@ describe('undrawableCharacters', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'a' },
         { id: 'b', type: 'text', x: 0, y: 20, width: 10, height: 10, text: 'b' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b', label: '矢印' }],
+      edges: [
+        {
+          id: 'e',
+          from: { node: 'a' },
+          to: { node: 'b' },
+          label: '矢印',
+        },
+      ],
     })
 
     expect(missing).toEqual(['グ', 'ル', 'ー', 'プ', '矢', '印'])

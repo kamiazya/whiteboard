@@ -27,7 +27,7 @@ const FREE: CanvasComment = {
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': { comments: [FREE] },
+  comments: [FREE],
 }
 
 function makeHost() {

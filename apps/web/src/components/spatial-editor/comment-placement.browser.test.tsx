@@ -19,17 +19,15 @@ afterEach(cleanup)
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 320, y: 320, width: 220, height: 120, text: 'covered' }],
   edges: [],
-  'x-whiteboard': {
-    comments: [
-      {
-        id: 'c-free',
-        x: 300,
-        y: 300,
-        text: 'about this spot',
-        createdAt: '2026-09-02T00:00:00.000Z',
-      },
-    ],
-  },
+  comments: [
+    {
+      id: 'c-free',
+      x: 300,
+      y: 300,
+      text: 'about this spot',
+      createdAt: '2026-09-02T00:00:00.000Z',
+    },
+  ],
 }
 
 function Host({ canvas: initial }: { canvas: SpatialCanvas }) {
@@ -54,7 +52,7 @@ function composeOrigin(): { x: number; y: number } {
 }
 
 it('"Comment here" beside a node opens the draft in a free quadrant, not over the node', async () => {
-  const { container } = render(<Host canvas={{ ...start, 'x-whiteboard': { comments: [] } }} />)
+  const { container } = render(<Host canvas={{ ...start, comments: [] }} />)
   const root = rootOf(container)
   await waitForContent(container, 'covered')
   const r = root.getBoundingClientRect()

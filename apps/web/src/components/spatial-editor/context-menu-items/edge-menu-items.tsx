@@ -5,6 +5,7 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  */
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
+import { endSide } from '@kamiazya/whiteboard-model'
 import {
   Lock as LockIcon,
   LockOpen,
@@ -74,8 +75,8 @@ export function edgeMenuItems({
   // actions, then properties, then the destructive entry.
   // Arrow direction reads the JSON Canvas defaults (fromEnd
   // none, toEnd arrow).
-  const fromEnd = edge.fromEnd ?? 'none'
-  const toEnd = edge.toEnd ?? 'arrow'
+  const fromEnd = edge.from.end ?? 'none'
+  const toEnd = edge.to.end ?? 'arrow'
   const arrowStates = [
     { label: '→', ariaLabel: 'Forward', fromEnd: 'none', toEnd: 'arrow' },
     { label: '↔', ariaLabel: 'Both', fromEnd: 'arrow', toEnd: 'arrow' },
@@ -94,7 +95,7 @@ export function edgeMenuItems({
     { label: 'left', ariaLabel: 'Left', icon: <PanelLeft />, side: 'left' },
   ] as const
   const sideRow = (endpoint: 'from' | 'to') => {
-    const current = endpoint === 'from' ? edge.fromSide : edge.toSide
+    const current = endSide(endpoint === 'from' ? edge.from : edge.to)
     return {
       kind: 'options' as const,
       label: endpoint === 'from' ? 'From side' : 'To side',

@@ -16,7 +16,13 @@ const initial: SpatialCanvas = {
     { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
     { id: 'b', type: 'text', x: 360, y: 40, width: 160, height: 80, text: 'B' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+  ],
 }
 
 // The edge runs between the two boxes, so its line crosses this point.

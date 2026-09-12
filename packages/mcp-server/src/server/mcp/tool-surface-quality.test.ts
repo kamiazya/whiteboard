@@ -82,6 +82,49 @@ interface Row {
   names: readonly string[]
 }
 
+/**
+ * One row moved with ADR-0037 and it is worth naming, because a pinned number
+ * that shifts silently is the thing this board exists to prevent.
+ *
+ * `wb_canvas_edit` lost two parameters: an edge's facets are written as
+ * `facets` now rather than `x-whiteboard.facets` — one level shallower, and
+ * one fewer key named after an interchange format on a table a model reads
+ * every turn. It followed rather than being chosen: the edge patch IS the
+ * stored proposal patch (ADR-0029), so the tool's input and the storage are
+ * one schema, and keeping the old spelling on the input alone would mean a
+ * wrapper pair that exists only to preserve it.
+ *
+ * The NODE side still spells `x-whiteboard`, because its input is deliberately
+ * NOT the stored shape — a flat write schema that refuses a `kind: "embed"`
+ * naming no document, by name. Converging the two is the follow-up ADR-0037
+ * names, and it goes through ADR-0031's criteria as a tool-surface change of
+ * its own rather than riding along inside a refactor.
+ *
+ * The wire-byte drops (~4KB across the table) are not a surface change at all:
+ * the model and the format are two schema objects now where they used to be
+ * one, so zod's JSON-Schema emitter inlines and $refs them differently.
+ * `visibleBytes` moved by 9 bytes, which is what says so.
+ *
+ * A second, smaller move came with slice 4: a node's `x`/`y`/`width`/`height`
+ * are `number` in the schema where they were `integer`, so every tool that
+ * carries a node box got a little cheaper to read (-680 wire bytes across the
+ * table, -16 visible on `wb_canvas_edit`). The parameter and undescribed
+ * counts are unchanged, which is what says the surface a model READS is the
+ * same set of fields saying the same things — only what they accept widened,
+ * and it widened towards the model rather than away from it.
+ *
+ * The bends half of the same slice DOES move the surface, and deliberately.
+ * An edge's `bends` is a field of the edge now rather than `visual.path/v0`,
+ * so it reaches `wb_canvas_edit`'s edge add and patch the way every other
+ * edge field does: +6 parameters (the list and its two coordinates, at both
+ * sites), of which the list itself carries a description and the coordinates
+ * do not — `x` and `y` on a point need no prose, and writing some would be
+ * padding a table a model reads every turn.
+ *
+ * What it BUYS against those bytes is the reason a model could not place a
+ * bend at all before: a facet payload is opaque to `wb_canvas_edit`, so the
+ * only writer was `wb_facet_set` with a plugin's key and its own schema.
+ */
 describe('what the tool table costs to read', () => {
   it('scores every registered tool', async () => {
     const { client, tools } = await connect()
@@ -90,6 +133,10 @@ describe('what the tool table costs to read', () => {
     const rows: Record<string, Row> = {}
     for (const tool of [...tools].sort((a, b) => a.name.localeCompare(b.name))) {
       const coverage = parameterCoverage(tool.inputSchema)
+      if (process.env.DUMP_PATHS !== undefined && tool.name === 'wb_canvas_edit') {
+        // eslint-disable-next-line
+        require('node:fs').writeFileSync(process.env.DUMP_PATHS, coverage.undescribed.join('\n'))
+      }
       // An unknown key beside nothing else: a refusal that names it has
       // read it; one that lists only the missing fields has dropped it.
       const stray = await client.callTool({ name: tool.name, arguments: { zz_stray: true } })
@@ -121,9 +168,13 @@ describe('what the tool table costs to read', () => {
       //
       // The MCP Apps UI tool. Nearly all of its wire size is an OUTPUT
       // schema (the whole scene), which the model never reads.
+      //
+      // -1,241 wire when `CanvasColor` / `CanvasPoint` / `NodeEmbed` /
+      // `Bends` were named in zod's registry: a scene repeats all four, so
+      // this row is where the registration pays most.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 18105,
+        wireBytes: 20500,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -135,9 +186,19 @@ describe('what the tool table costs to read', () => {
       // anchor is emitted here and in wb_thread_edit's anchor union. The
       // C3 case ADR-0031 §3b pays for: described because a model guessed,
       // not because a column said so.
+      // Wire only, +6,664: the INPUT is untouched, and the output schema
+      // carries a canvas. The endpoint union is paid by the client on
+      // connect and by the model not at all — the split this scoreboard
+      // keeps two columns for.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 22556,
+        // +1,396 wire, and it is the registration's PRICE rather than its
+        // saving: a named subschema costs a `$defs` entry plus a `$ref`
+        // wherever it is used, so a tool that uses one ONCE pays more than
+        // inlining it. Recorded rather than smoothed over — the lever is
+        // worth pulling on the table's total, and this row is what it costs
+        // to pull.
+        wireBytes: 21956,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -201,8 +262,8 @@ describe('what the tool table costs to read', () => {
       // C13 does NOT pay for it. The errand scoreboard says dressing six
       // boxes is one call either way and 337 request bytes cheaper, which
       // is a saving per errand against a cost per turn. What the field buys
-      // is on ADR-0033's axis, not this one: a board that declares what its
-      // kinds are instead of spending a scheme invented per drawing.
+      // is on the facet-vocabulary axis, not this one: a board that declares
+      // what its kinds are instead of spending a scheme invented per drawing.
       // 13466 -> 13502 swapping the stencil ENUM for a validated string that
       // points at `wb_facet_list`. Within 36 bytes of each other at the
       // bundled six — and only one of them scales. Measured: the enum costs
@@ -222,18 +283,54 @@ describe('what the tool table costs to read', () => {
       // lane trial that then spent seventeen calls recovering by hand.
       // -6 dropping `badge` from the stencil field's description: the
       // bundled set writes one, and a board draws none.
+      //
+      // Then the edge END became a discriminated union, and the endpoint is
+      // NAMED in zod's global registry (`packages/model/src/spatial.ts`), so
+      // it lands in `$defs` once and is referenced at each of its four sites
+      // instead of being inlined four times.
+      //
+      // That naming is why this row reads +1,006 against main rather than
+      // +3,799: inlined, the four sites are 4,579 bytes and the whole table
+      // read 40,315 — over ADR-0031 §5's ~40,000. Referenced they are 1,786,
+      // and every column below is better than the inline form on a strictly
+      // richer schema. `parameters` and `undescribed` fall BELOW main's
+      // (153/123) for the same reason: a subschema counted four times is now
+      // counted once, so the endpoint's `kind` discriminators stop being
+      // eight undescribed lines and become two.
+      //
+      // The saving is available only here, and that is worth knowing before
+      // reaching for it again: the SDK converts by calling
+      // `schema['~standard'].jsonSchema.input({ target })` and passes no
+      // `reused` option, so `z.toJSONSchema(..., { reused: 'ref' })` never
+      // reaches the published schema. A registry `id` does.
+      //
+      // +2,056 visible for ADR-0038 decision 2's three LINE ops (`line.add`,
+      // `line.patch`, `line.remove`) — what lets anything but the editor
+      // author ink. Inline they were +3,403 and the TABLE crossed 40,000;
+      // naming the four subschemas the new arms made repeat gave 1,543 back.
+      // `parameters` and `undescribed` rise with them, and the one
+      // description bought is on `line.add`'s draft: when to reach for ink
+      // over a relation, which is the only thing here a model cannot infer
+      // from JSON Canvas.
       wb_canvas_edit: {
-        visibleBytes: 13612,
-        wireBytes: 37402,
+        visibleBytes: 15823,
+        wireBytes: 38801,
         descriptionWords: 169,
-        parameters: 153,
-        undescribed: 123,
+        parameters: 165,
+        undescribed: 130,
         strays: 'refused',
         names: [],
       },
+      // Wire only, +1,884: this tool's INPUT is three fields and its OUTPUT
+      // carries edges, so the endpoint union costs the client on connect and
+      // the model nothing on every turn. Same for `canvas_view` above.
       wb_canvas_snapshot: {
         visibleBytes: 705,
-        wireBytes: 3935,
+        // +1,303 wire: the snapshot answers with `lines` now. It did not,
+        // which meant a model could write ink through `wb_canvas_edit` and
+        // had no way to read it back — a write with no read is half a
+        // capability, and the wire is where that costs.
+        wireBytes: 5532,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
@@ -485,13 +582,63 @@ describe('what the tool table costs to read', () => {
       // node types x the 29 bytes a strict object costs, for a stray key
       // refused instead of silently dropped, less 6 for a `badge` the
       // stencil field's description no longer promises (see wb_canvas_edit).
+      //
+      // Then +1,006 when an edge END became a discriminated union NAMED in
+      // zod's global registry, so it is emitted into `$defs` once and
+      // referenced at each of its four sites (`from` and `to`, on `edge.add`
+      // and on `edge.patch`).
+      //
+      // The naming is the whole reason this sits under ADR-0031 §5's ~40,000
+      // rather than over it. Inlined — zod's default, and what the SDK's
+      // conversion path gives you unless a schema is registered — the four
+      // sites are 4,579 bytes against 1,786 referenced, and the table read
+      // 40,315: the first reading ever to cross that line. The 2,793 is what
+      // this row gives back, and it is why the `workspaceId` below and any
+      // next addition have room rather than a decision to make.
+      //
+      // Measured against `origin/main` rather than inferred: `wb_canvas_edit`
+      // is the ONLY row whose visible bytes move, and inline it was +3,799 of
+      // which the endpoint union was +3,440 — the growth was DUPLICATION, not
+      // expressiveness, and duplication is the one kind of growth a schema
+      // can give back without giving anything up.
       // +274 for `workspaceId` on wb_facet_list (足場4b): the one parameter
       // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
       // once in the table and never per stencil.
-      visibleBytes: 36790,
-      wireBytes: 111649,
-      parameters: 277,
-      undescribed: 191,
+      //
+      // Then +2,056 on `wb_canvas_edit` for ADR-0038 decision 2's LINE ops —
+      // `line.add`, `line.patch` and `line.remove`, which are what let
+      // anything but the editor author ink. The model had held a line since
+      // the split and no tool could make one; the smoke asserted that gap
+      // rather than pretending it away.
+      //
+      // Inline it was +3,403 and the table read 40,348 — over ADR-0031 §5's
+      // ~40,000 for the second time in this branch's life. What gave 1,543 of
+      // it back is the same lever as last time, applied to what the new arms
+      // made repeat: `Bends` (four sites now, and its two SOURCE declarations
+      // were identical), `CanvasColor` (nine), `NodeEmbed` (four) and
+      // `CanvasPoint` (four) are named in zod's global registry, so each is
+      // emitted into `$defs` once. Measured per subschema before choosing
+      // them, by waste (occurrences-1 x bytes) rather than by size.
+      //
+      // The debt columns rise and that is not disguised: `parameters` 273 ->
+      // 289 and `undescribed` 185 -> 198 are the new element's own fields.
+      // One description was bought deliberately, on `line.add`'s draft, and
+      // it is the only one a model cannot infer from JSON Canvas: WHEN to
+      // reach for ink over a relation (C4). The rest are `id`, `color`,
+      // `label` and `facets`, which mean on a line exactly what they already
+      // mean on an edge.
+      //
+      // Then +142 on the WIRE alone, and nothing else: `assetRefs` on
+      // `wb_facet_list`'s answer, plus `visual.axes/v0` and a sixth
+      // silhouette (ADR-0036). `visibleBytes`, `parameters` and
+      // `undescribed` do not move at all, which is the whole shape of that
+      // work — a facet reaches `wb_facet_set` as a generic record, so
+      // declaring a semantic axis or a new silhouette costs a model
+      // nothing on the table it reads every turn.
+      visibleBytes: 39001,
+      wireBytes: 116440,
+      parameters: 289,
+      undescribed: 198,
     })
   })
 

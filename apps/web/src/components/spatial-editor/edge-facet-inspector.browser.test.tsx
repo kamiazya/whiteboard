@@ -21,13 +21,21 @@ const initial: SpatialCanvas = {
     { id: 'c', type: 'text', x: 60, y: 420, width: 120, height: 60, text: 'C' },
   ],
   edges: [
-    { id: 'ab', fromNode: 'a', toNode: 'b' },
-    { id: 'cb', fromNode: 'c', toNode: 'b' },
+    {
+      id: 'ab',
+      from: { node: 'a' },
+      to: { node: 'b' },
+    },
+    {
+      id: 'cb',
+      from: { node: 'c' },
+      to: { node: 'b' },
+    },
   ],
 }
 
 const edgeFacetOf = (canvas: SpatialCanvas, id: string) =>
-  canvas.edges.find((edge) => edge.id === id)?.['x-whiteboard']?.facets?.['visual.edges/v0'] as
+  canvas.edges.find((edge) => edge.id === id)?.facets?.['visual.edges/v0'] as
     | VisualEdgesFacet
     | undefined
 

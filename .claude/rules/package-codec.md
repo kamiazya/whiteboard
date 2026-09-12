@@ -20,6 +20,11 @@ paths:
   `resolveReferencesForExport` (export) (`references/`).
 - `CodecParseResult<T>`/`CodecParseError` — the total-parser error contract every parser here
   returns instead of throwing (`errors.ts`).
+- The JSON Canvas PROJECTION ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)):
+  the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
+  `JSON_CANVAS_PROJECTION` ledger and the `jsonCanvasLoss()` table it derives
+  (`spatial/projection.ts`), plus `censusSpatialModel` — how far the format reaches into the
+  model, counted from the schemas (`spatial/census.ts`).
 
 ## What does NOT belong here
 
@@ -92,7 +97,152 @@ rather than in a string, so joining its runs yields `tightenthis`.
   published schema state the single shape it holds. OKF §5.2's bare-`verified`-mapping widening is
   the standing example (`normalizeOkfVerified` in model).
 - Strict JSON Canvas degradation is ONE uniform rule: drop the entire `x-whiteboard` key from every
-  node. No per-kind special casing. Extended mode is lossless (round-trip property).
+  node. No per-kind special casing. Extended mode is lossless over what the extension key can
+  hold; GEOMETRY is the one thing it is not, because the format specifies integer pixels and the
+  model does not (ADR-0037 slice 4) — the ledger's only `degraded` entry, and the reason the
+  round-trip property is stated as IDEMPOTENCE (the expressible subset is the projection's image)
+  with the already-integral case pinned by example in `geometry-projection.test.ts`.
+- **A document becomes a JSON Canvas document in ONE place.** `serializeSpatial` and
+  `parseSpatial` both go through `spatial/projection.ts`, so `JSON_CANVAS_PROJECTION` is the
+  single account of what crossing costs. The projection RELOCATES rather than copies now: the
+  canvas's `comments` and `facets`, a node's `embed` and `facets`, and an edge's `facets` and
+  `bends` become the extension key on the way out, and the node's two independent fields fold
+  back into the format's single union arm. An edge's extension is therefore its OWN declaration
+  (`edgeExtensionSchema`) rather than the node's facets-only arm: since ADR-0037 slice 4 an edge
+  carries something the format cannot state, and it is geometry rather than content. One canonicalisation goes with it — an extension object with
+  nothing in it is not emitted, because absence says the same thing — and it is pinned by
+  example rather than left to the round-trip property. Adding a model field means adding its ledger entry —
+  `native` / `extension` / `degraded(to)` / `dropped(why)`, the last two owing a real reason.
+  The ledger is the ONLY thing that classifies a field now. `censusSpatialModel` used to split
+  its answer by whether a path was spelled under `x-whiteboard`, which worked only while the
+  model WAS the format; it enumerates and no longer judges.
+
+  The ledger is held from three sides, and each side catches something the others do not:
+  the four directions of `.claude/rules/coverage-ledger.md` against the census's own path list
+  (a missing entry, a stale one); a comparison against what `strictDegrade` REALLY drops, so a
+  declaration is never merely a claim; and `toJsonCanvas` building its result field by field
+  rather than by spread, so a field nobody projected fails the round-trip property instead of
+  riding along.
+- **Two things about those guards were learned by being wrong about them**, and both are the
+  same mistake in different clothes — a guard that runs in one direction reads exactly like one
+  that runs in both.
+  - The behaviour comparison first filtered the ledger down to what was ALREADY lost, making
+    the declared set a subset by construction. Under-declaring failed; **over-declaring passed
+    all three guards** — marking `nodes[].color` (which strict mode never touches) as
+    `extension` left every test green, which is a loss table that lies to a user about what an
+    export costs. It asserts equality in both directions now, and the fixture's own coverage of
+    every model position is asserted separately, since a fixture that stopped covering one
+    would weaken the equality silently.
+  - "Field by field" was true of the canvas's top-level fields and false of a node's or an
+    edge's extension object, which was spread through whole — so the stated mechanism covered
+    almost none of the fields it was written for. The decomposition reaches into every site
+    now. It stops at a facet PAYLOAD deliberately: its contents belong to a plugin.
+  Mutation-checked, all four: dropping `subpath` or `versionRef` from the projection fails the
+  round-trip property; calling an `extension` entry `native`, or a `native` entry `extension`,
+  fails the behaviour comparison.
+- **A format is a REGISTRY ENTRY, not a file somebody remembered to test**
+  (`spatial/codecs.ts` + `spatial/codecs.property.test.ts`). A `SpatialCodec` is the four
+  answers a format owes — its projection ledger, `write`, `read`, and `writeForForeignReader`
+  — and every guard is `it.each`/`describe.each` over `SPATIAL_CODECS`, so a format added to
+  the registry is asked all of them without a line being written. The per-format copies are
+  GONE: `projection.test.ts` and `ocif-projection.test.ts` now hold only what is specific to
+  their format, and `round-trip.property.test.ts` was deleted outright (the registry's
+  idempotence property is the same statement, through text rather than through the object).
+  - **There is no "write with any codec, read with any codec" symmetry, and claiming one
+    would be false.** Only **7 of 45** positions are `native` in BOTH ledgers, so a property
+    over the intersection would be close to vacuous — measured before designing anything.
+    What is both true and checkable is **confluence**: whatever each format takes away,
+    taking them away in either ORDER leaves the same document. Plus a fixed point — once a
+    document has been through every format, passing it through any of them again costs
+    nothing — over a set derived from the registry rather than written down, so a third
+    format narrows it with nobody editing a list.
+  - **Two properties, and the measurement says neither is redundant.** Confluence is blind to
+    DELETION, which is the commonest loss and commutes with everything: removing OCIF's edge
+    label from the lift leaves it green. Round-trip COMPLETENESS (a faithful trip loses
+    exactly the positions the ledger calls `dropped`) catches that one and is blind to
+    non-commuting transforms: teaching OCIF its own precision rule (one decimal, against JSON
+    Canvas's integer) leaves IT green while confluence goes red — 0.46 rounds to 0 one way
+    and to 1 the other. Four mutations, each caught by exactly one property.
+  - **The registry's own coverage is held from two sides, in two places.** Inside the package:
+    every entry's ledger covers exactly the census, no two entries share a table, ids are
+    unique. The third direction — a projection table in the package that NO entry points at —
+    needs to read the package's source, and the only in-package way is `import.meta.glob`,
+    which means `vite/client` in codec's `types`, which drags the DOM lib into a package whose
+    tsconfig exists to keep it out. So it is `tools/arch-lint`'s `repo-coverage.test.ts`,
+    beside the repo's other "a file appeared and nothing classified it" scans, mutation-checked
+    in both directions (an unregistered table fails; a scan whose pattern stops matching fails
+    the count test rather than reporting everything as registered).
+  - `fullyPopulatedCanvas` (`test-utils/`) is ONE fixture for every format's ledger
+    comparison, and the registry file asserts it occupies every census position on every run.
+    Two fixtures were two chances for one to stop covering a position, which weakens an
+    equality in silence rather than breaking it.
+  - Measured, so a later reader is not guessing: 5000 runs of each property (25x the budget)
+    found no counterexample, and the worst per-test duration under the full `codec-node` suite
+    is 543ms against the 5000ms default.
+- **OCIF v0.7.0 is a THIRD projection** ([ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md)):
+  `spatial/ocif.ts` (the wire shape), `spatial/ocif-projection-io.ts`
+  (`toOcif`/`fromOcif`/`parseOcif`) and `spatial/ocif-projection.ts` (the `OCIF_PROJECTION`
+  ledger), held by the same four directions as the JSON Canvas one plus a fifth that pins the
+  two ledgers to the SAME positions — the likeliest way two tables drift once there are two.
+  Its published table is `docs/reference/ocif-loss.md`, generated by the same
+  `loss-table.ts` as its sibling.
+  - **The behaviour comparison is against a READER, not a mode.** OCIF has no `strict`:
+    conformance REQUIRES preserving an extension a reader does not understand, which is why
+    nothing in this ledger is `dropped`. So the comparison strips every `@whiteboard/*` entry
+    and lifts what is left, and the positions that vanish must equal the ledger's `extension`
+    set exactly — both directions, for the reason `8d9762f4` recorded for the JSON Canvas one.
+    Mutation-checked four ways: an `extension` row called `native`, a `native` row called
+    `extension`, a foreign lift that stops reading `@ocif/edge`/`@ocif/arrow`, and a facet
+    bucket put back on a vendor key each turn it red.
+  - **Write the projection before trusting the table.** Five rows were written from the
+    specification and corrected by running: `nodes[].color` and `edges[].color` (resolving a
+    preset needs a palette, and a palette is `canvas-render`'s, which depends on THIS package),
+    `nodes[].subpath` and `nodes[].embed.versionRef` (what the FORMAT cannot state and what this
+    PROJECTION cannot carry are different questions), and the three facet buckets — the only one
+    where the table was right and the code was not. They rode `@whiteboard/facets` until the
+    foreign-reader comparison asked what survives stripping ours, and three `native` positions
+    vanished. A facet is one ordinary `data` entry per facet now, typed by the facet key, which
+    is what "OCIF's `data[]` IS this mechanism" always meant.
+  - **`fromOcif` reads OCIF's own vocabulary FIRST and ours only as a refinement**, and that
+    ordering is what makes a `degraded` row true rather than decorative: a node's kind comes
+    from its resource mime type and `@ocif/group`, an endpoint from `@ocif/edge`'s node ids or
+    `@ocif/arrow`'s coordinates, an arrowhead from `directed`. Reading our extension first would
+    make every row look native and the comparison would pass over nothing.
+  - Two shapes are baroque because the MODEL's shape allows what OCIF's does not, and both are
+    commented where they are written: a node carrying an embed AND its kind's own content (the
+    embed takes the one resource slot), and a facet payload that is not a spreadable object
+    (`z.unknown()`, and an object may carry a `type` of its own that would collide with the
+    extension's) — wrapped under `OCIF_WRAPPED_FACET` rather than lost.
+- `serializeSpatial`'s `extended` mode now emits the projection's canonical key order rather
+  than whatever order the caller's object carried. Nothing pins key order, and the artifact it
+  changes is the JSON embedded in an exported PNG's `iTXt` chunk — stated here because it is a
+  real change to a persisted artifact that no test would have reported.
+- **The loss table is PUBLISHED, and generated** (`spatial/loss-table.ts` ->
+  `docs/reference/json-canvas-loss.md`, a vitest file snapshot; regenerate with
+  `pnpm vitest run --project codec-node loss-table -u`). ADR-0037 decision 2 replaces "the model
+  IS the format" with two checkable claims — the round-trip property over the expressible subset,
+  and a published table for everything else — and this is the second one. Generated for the same
+  reason the JSON Schema is: a hand-kept table describing a format promise goes stale in silence.
+  The snapshot alone would record a table that quietly stopped listing half the model, so a
+  second test asserts the rows ARE the census, in both directions, and a third pins the headline
+  count to the ledger rather than to a literal. Scoped to the model's own positions: what a
+  deployment's plugins put inside a facet bucket is theirs, and every bit of it is lost in
+  `strict` whatever it is.
+- **`spatial/json-canvas.ts` is this package's own declaration of the wire shape**, and the
+  home of the extension contract: `x-whiteboard` is the ONLY non-standard key an emitted
+  document may carry, at three sites and no more. The published artifact
+  (`json-schema.ts` -> `docs/reference/x-whiteboard.schema.json`, a vitest file snapshot;
+  regenerate with `pnpm vitest run --project codec-node json-schema -u`) is generated from it,
+  and `extension-contract.property.test.ts` enforces it. Extending what lives INSIDE
+  `x-whiteboard` means regenerating the artifact in the same increment.
+- The wire schemas are NOT `.strict()` and the model's are. A JSON Canvas document another tool
+  wrote may legitimately carry vendor keys; the internal model must refuse a key it does not
+  name. Both directions of that asymmetry are deliberate — see `.claude/rules/package-model.md`.
+- The equivalence tests that proved the wire declaration a faithful LIFT of the model (an
+  identical generated JSON Schema, and the same parsed value for every document) were deleted
+  when the model diverged, exactly as the file said they would be. Keeping them past that point
+  would have asserted the fork they existed to rule out; the round-trip property carries the
+  claim now.
 - The extension contract — `x-whiteboard` is the only non-standard key ever emitted, foreign keys
   on an imported document are stripped and never re-emitted — is pinned by
   `spatial/extension-contract.property.test.ts`; its machine-readable half is

@@ -1,4 +1,4 @@
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { JsonCanvasDocument, JsonCanvasEdge, JsonCanvasNode } from './json-canvas.js'
 
 /**
  * Strict JSON Canvas 1.0 has no room for the `x-whiteboard` extension.
@@ -8,13 +8,13 @@ import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboar
  * Canvas, not part of the extension) and only loses `x-whiteboard.documentId`
  * because the whole extension object it lived in is gone.
  */
-function degradeNode(node: SpatialNode): SpatialNode {
+function degradeNode(node: JsonCanvasNode): JsonCanvasNode {
   const { 'x-whiteboard': _xWhiteboard, ...rest } = node
-  return rest as SpatialNode
+  return rest as JsonCanvasNode
 }
 
 /** The same one rule at the third site: an edge's facets bucket goes too. */
-function degradeEdge(edge: CanvasEdge): CanvasEdge {
+function degradeEdge(edge: JsonCanvasEdge): JsonCanvasEdge {
   const { 'x-whiteboard': _xWhiteboard, ...rest } = edge
   return rest
 }
@@ -26,7 +26,7 @@ function degradeEdge(edge: CanvasEdge): CanvasEdge {
  * spelled out here because "the object literal happens not to mention it" is
  * not a contract anyone can rely on.
  */
-export function strictDegrade(canvas: SpatialCanvas): SpatialCanvas {
+export function strictDegrade(canvas: JsonCanvasDocument): JsonCanvasDocument {
   return {
     nodes: canvas.nodes.map(degradeNode),
     edges: canvas.edges.map(degradeEdge),

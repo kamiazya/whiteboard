@@ -236,7 +236,7 @@ function declaredPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]
  * another version must cost the axis, never the score.
  */
 function declaredAxisKeys(canvas: SpatialCanvas): readonly string[] {
-  const declared = canvas['x-whiteboard']?.facets?.[VISUAL_AXES_KEY]
+  const declared = canvas.facets?.[VISUAL_AXES_KEY]
   if (declared === null || typeof declared !== 'object') return []
   const axes = (declared as { axes?: unknown }).axes
   return Array.isArray(axes) ? axes.filter((key): key is string => typeof key === 'string') : []
@@ -256,7 +256,7 @@ function declaredAxisKeys(canvas: SpatialCanvas): readonly string[] {
  * branch reads exactly like a branch that decides something.
  */
 function facetPayloadKeyOf(node: SpatialNode, key: string): string {
-  return facetPayloadKey(node['x-whiteboard']?.facets?.[key])
+  return facetPayloadKey(node.facets?.[key])
 }
 
 const classesOf = (partition: Partition): Map<string, string[]> => {
