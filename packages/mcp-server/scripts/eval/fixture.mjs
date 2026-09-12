@@ -183,8 +183,8 @@ export async function seed(wb) {
         op: 'edge.add',
         edge: {
           id: 'ws',
-          from: { kind: 'node', node: 'browser' },
-          to: { kind: 'node', node: 'daemon' },
+          from: { node: 'browser' },
+          to: { node: 'daemon' },
           label: 'WebSocket',
         },
       },
@@ -192,8 +192,8 @@ export async function seed(wb) {
         op: 'edge.add',
         edge: {
           id: 'db',
-          from: { kind: 'node', node: 'daemon' },
-          to: { kind: 'node', node: 'sqlite' },
+          from: { node: 'daemon' },
+          to: { node: 'sqlite' },
           label: 'libsql',
         },
       },
@@ -201,8 +201,8 @@ export async function seed(wb) {
         op: 'edge.add',
         edge: {
           id: 'pm',
-          from: { kind: 'node', node: 'browser' },
-          to: { kind: 'node', node: 'worker' },
+          from: { node: 'browser' },
+          to: { node: 'worker' },
           label: 'postMessage',
         },
       },
@@ -218,11 +218,11 @@ export async function seed(wb) {
       box('q1', 'Q1: hosted workspaces', 800, 0),
       {
         op: 'edge.add',
-        edge: { id: 'a', from: { kind: 'node', node: 'q3' }, to: { kind: 'node', node: 'q4' } },
+        edge: { id: 'a', from: { node: 'q3' }, to: { node: 'q4' } },
       },
       {
         op: 'edge.add',
-        edge: { id: 'b', from: { kind: 'node', node: 'q4' }, to: { kind: 'node', node: 'q1' } },
+        edge: { id: 'b', from: { node: 'q4' }, to: { node: 'q1' } },
       },
     ],
   })

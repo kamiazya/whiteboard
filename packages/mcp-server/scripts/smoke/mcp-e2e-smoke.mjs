@@ -95,6 +95,23 @@ async function callTool(name, args) {
 }
 
 /**
+ * The same call, expecting the server to REFUSE it — returns the refusal text
+ * so a step can check WHY rather than only that something went wrong. A
+ * refusal that arrives for the wrong reason passes a bare try/catch, which is
+ * how a guard comes to assert nothing.
+ */
+async function callToolExpectingError(name, args) {
+  try {
+    const answered = await callTool(name, args)
+    throw new Error(`expected ${name} to refuse, and it answered: ${JSON.stringify(answered)}`)
+  } catch (error) {
+    const text = error instanceof Error ? error.message : String(error)
+    if (text.startsWith('expected ')) throw error
+    return text
+  }
+}
+
+/**
  * `wb_document_get` answers with a LIST since it took `documentIds`. Most
  * steps here read one document, so this unwraps that case and refuses a
  * `failed` entry rather than letting `undefined.content` report as a
@@ -624,8 +641,8 @@ async function main() {
         op: 'edge.add',
         edge: {
           id: 'link',
-          from: { kind: 'node', node: 'lockable' },
-          to: { kind: 'node', node: 'target' },
+          from: { node: 'lockable' },
+          to: { node: 'target' },
         },
       },
     ],
@@ -710,7 +727,17 @@ async function main() {
   // field mapping, and echoed by `wb_canvas_snapshot`, whose `outputSchema`
   // the SDK validates at runtime. A union that round-trips in-process and
   // fails one of those three looks exactly like a working tool from here.
-  const freeEnd = await callTool('wb_canvas_edit', {
+  // A point-ended element is a LINE since ADR-0036 decision 2, and
+  // `wb_canvas_edit` has no line op yet — so the tool REFUSES a point end on
+  // an edge rather than accepting ink in a relation's shape.
+  //
+  // This asserts the gap, which is the honest thing to do with it: the model
+  // can hold ink no tool can author. It fails the day a line op is
+  // registered, which is the right direction — whoever adds it replaces this
+  // with the round trip the old free-end step used to make (write it, read it
+  // back through the snapshot, and check that a strict JSON Canvas export
+  // leaves the whole element out).
+  const looseRefusal = await callToolExpectingError('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
     mode: 'apply',
@@ -719,40 +746,17 @@ async function main() {
         op: 'edge.add',
         edge: {
           id: 'loose',
-          from: { kind: 'node', node: 'lockable' },
+          from: { node: 'lockable' },
           to: { kind: 'point', point: { x: 420.5, y: -17.25 } },
         },
       },
     ],
   })
-  const loose = freeEnd.snapshot.edges.find((edge) => edge.id === 'loose')
-  if (loose?.to?.kind !== 'point' || loose.to.point.x !== 420.5 || loose.to.point.y !== -17.25) {
-    throw new Error(`a free end did not survive wb_canvas_edit: ${JSON.stringify(loose)}`)
+  if (!/kind/.test(looseRefusal)) {
+    throw new Error(
+      `wb_canvas_edit accepted a point end on an EDGE, or refused it for another reason: ${looseRefusal}`,
+    )
   }
-  if (loose.from?.kind !== 'node' || loose.from.node !== 'lockable') {
-    throw new Error(`the node end of a half-free edge did not survive: ${JSON.stringify(loose)}`)
-  }
-  // JSON Canvas cannot state such an edge, so the export drops the WHOLE edge
-  // rather than half of it — the one entry in the loss table whose unit is
-  // the element. Read back through the published tool, because that claim is
-  // the projection's and this is where a reader of the format meets it.
-  const withLooseEdge = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentIds: [documentId],
-  })
-  const looseExport = JSON.parse(withLooseEdge.documents[0].content)
-  if (looseExport.edges.some((edge) => edge.id === 'loose')) {
-    throw new Error('a point-ended edge reached a JSON Canvas export, which cannot state one')
-  }
-  if (!looseExport.edges.some((edge) => edge.id === 'link')) {
-    throw new Error('dropping the point-ended edge took an ordinary edge with it')
-  }
-  await callTool('wb_canvas_edit', {
-    workspaceId: WORKSPACE_ID,
-    documentId,
-    mode: 'apply',
-    ops: [{ op: 'edge.remove', id: 'loose' }],
-  })
 
   // The EDGE slot (ADR-0013 decision 5), through a real client so the SDK
   // validates the result against `facetSetOutputSchema` at runtime. Written
@@ -1021,8 +1025,8 @@ async function main() {
           op: 'edge.add',
           edge: {
             id: 'dangling',
-            from: { kind: 'node', node: 'lockable' },
-            to: { kind: 'node', node: 'ghost' },
+            from: { node: 'lockable' },
+            to: { node: 'ghost' },
           },
         },
       ],
@@ -1579,8 +1583,8 @@ async function main() {
         op: 'edge.add',
         edge: {
           id: 'batch-e',
-          from: { kind: 'node', node: 'batch-a' },
-          to: { kind: 'node', node: 'batch-b' },
+          from: { node: 'batch-a' },
+          to: { node: 'batch-b' },
         },
       },
     ],
