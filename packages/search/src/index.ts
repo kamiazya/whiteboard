@@ -1,4 +1,5 @@
 export {
+  type AlsoIndex,
   fullTextSearch,
   type SearchableDocument,
   type SearchHit,

@@ -1050,6 +1050,12 @@ the cursor the instant the name completes, on the keystroke that finished it.
 A shortcode inside a code span or a fence stays text on both sides, because
 there the name is the subject.
 
+Correcting one works the same way as writing it. CodeMirror activates a
+completion on TYPING and has nothing for deletion, so backspacing into a name
+finished long ago offered nothing — the list that wrote it could not help fix
+it. A deletion now re-asks the sources, which is source-agnostic: `[[` behaves
+the same, and so does anything added later.
+
 **The ranges come from the renderer's own scanner** (`emojiShortcodeRanges`),
 not from a second one here. An editor that previewed something the renderer
 does not do would be worse than either behaviour alone, and two scanners are

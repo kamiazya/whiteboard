@@ -140,7 +140,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a seam (the open passage, its extension, the projection effect, where
   // the passage currently sits) is `use-passage-proposals.ts`, and what is
   // left is the component's own prop surface and one conditional render.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1137,
+  // +3 for `completionOnDelete`: an import, the call, and one line saying
+  // why. Raised rather than paid for by trimming prose — this file funded
+  // an earlier increment that way, and a budget met by deleting rationale
+  // buys lines at the price of the thing the lines were for.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1140,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first

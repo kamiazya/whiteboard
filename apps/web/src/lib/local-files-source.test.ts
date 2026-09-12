@@ -3,7 +3,7 @@
  * three-pane browser serve local mode, which is the whole point of the seam.
  */
 import 'fake-indexeddb/auto'
-import { writeCoreFacets, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
+import { writeCoreFacets, writeFacets, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -267,5 +267,41 @@ describe('createLocalFilesSource trash', () => {
     const source = createLocalFilesSource({ index: new IdbDocumentIndex() })
     expect(source.listTrash).toBeUndefined()
     expect(source.restoreFromTrash).toBeUndefined()
+  })
+})
+
+describe('createLocalFilesSource search', () => {
+  beforeEach(clearWhiteboardDb)
+
+  /**
+   * The keeper-parity case. The daemon's answer to this is pinned by
+   * `search-quality.test.ts`'s `emoji` category, and a capability that
+   * lands on one keeper and not the other is an ABSENT test rather than a
+   * failing one — every suite stays green over it. So the browser says it
+   * here, in its own words.
+   *
+   * Measured before the expander existed: `packages/search`'s word pattern
+   * is `[\p{L}\p{N}]+`, so a raw emoji contributes no token and a document
+   * whose point is the picture was findable by nothing.
+   */
+  it('finds a document by what its emoji is called, in either language', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'notes/untitled-1',
+      kind: 'markdown',
+      name: '打ち上げメモ',
+    })
+    const doc = new Loro()
+    writeMarkdownBody(doc, '次のリリースは 🚀 で行く。')
+    await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
+    const source = createLocalFilesSource({ index })
+
+    const byEnglish = await source.searchDocuments('rocket')
+    expect(byEnglish.map((hit) => hit.document.path)).toEqual(['notes/untitled-1'])
+
+    const byJapanese = await source.searchDocuments('ロケット')
+    expect(byJapanese.map((hit) => hit.document.path)).toEqual(['notes/untitled-1'])
   })
 })
