@@ -46,6 +46,15 @@ const NATIVE_POPOVER =
 
 /** The width a catalog wants, clamped to a phone at the placement step. */
 const PANEL_WIDTH = 320
+/** Between the trigger and the panel, and between the panel and the edge. */
+const GAP = 6
+const EDGE = 8
+/**
+ * Below this a downward panel is not worth opening — the search box and one
+ * row of cells are about 240px, so less than that shows a scroller with
+ * nothing usable above it and the panel flips to the other side instead.
+ */
+const MIN_HEIGHT = 240
 
 const TRIGGER: CSSProperties = {
   display: 'inline-flex',
@@ -75,6 +84,11 @@ const PANEL: CSSProperties = {
   background: SURFACE,
   color: INK,
   boxShadow: '0 8px 24px rgb(0 0 0 / 0.12)',
+  // The panel is taller than a laptop in a browser window: `maxHeight` is
+  // set per placement and this is what makes it scroll rather than clip.
+  // The UA sheet gives a native popover `overflow: auto` already; the
+  // fallback path is a plain div and gets nothing.
+  overflowY: 'auto',
   // Above the inspector on the non-native path, where there is no top layer
   // to be in. Ignored when the browser has put it in one.
   zIndex: 50,
@@ -118,14 +132,44 @@ export function CatalogPopover({ label, current, children }: CatalogPopoverProps
 
     const place = () => {
       const rect = button.getBoundingClientRect()
-      const width = Math.min(PANEL_WIDTH, window.innerWidth - 16)
+      const width = Math.min(PANEL_WIDTH, window.innerWidth - 2 * EDGE)
       // Right-aligned to the trigger, which is where the trigger itself
       // sits in a property row — then clamped, so a row near either edge
       // opens a panel that is entirely on screen.
-      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+      const left = Math.max(EDGE, Math.min(rect.right - width, window.innerWidth - width - EDGE))
       el.style.left = `${left}px`
-      el.style.top = `${rect.bottom + 6}px`
       el.style.width = `${width}px`
+
+      // The VERTICAL half of the same rule, and it needs both a side and a
+      // ceiling. `position: fixed` clips nothing and grows nothing: a
+      // catalog opened from a row near the bottom of the inspector — which
+      // is where the last facet in the panel always is — put its search box
+      // and every cell below the fold, on the native path as much as the
+      // fallback, because the top layer is not a scroll container either.
+      const below = window.innerHeight - rect.bottom - GAP - EDGE
+      const above = rect.top - GAP - EDGE
+      // Flip only when it actually buys room. A trigger low on a tall page
+      // has little either way, and a panel that jumps sides for two pixels
+      // reads as a glitch.
+      //
+      // Against the panel's OWN natural height where the browser reports
+      // one, because this component does not know what a catalog is tall:
+      // `scrollHeight` is the content, so it stays the same number once
+      // `maxHeight` is applied and a re-placement cannot walk it downwards.
+      // jsdom reports 0 and the floor answers instead.
+      const wanted = Math.max(MIN_HEIGHT, el.scrollHeight)
+      const up = below < wanted && above > below
+      // Never taller than the viewport, and never a sliver: on a short
+      // screen a scrolling panel beats a correctly-sized useless one.
+      const room = Math.min(window.innerHeight - 2 * EDGE, Math.max(MIN_HEIGHT, up ? above : below))
+      el.style.maxHeight = `${room}px`
+      // Both are written every time, and `auto` rather than `''` on
+      // purpose: the UA stylesheet gives `[popover]` `inset: 0`, so
+      // clearing `top` does not leave it unset — it leaves it at 0, and the
+      // over-constrained rule then drops the `bottom` that was supposed to
+      // anchor the panel above the trigger.
+      el.style.top = up ? 'auto' : `${rect.bottom + GAP}px`
+      el.style.bottom = up ? `${window.innerHeight - rect.top + GAP}px` : 'auto'
     }
     place()
 
@@ -146,7 +190,15 @@ export function CatalogPopover({ label, current, children }: CatalogPopoverProps
     // Capturing, so the panel follows a trigger inside a scrolling panel
     // rather than staying where the page was when it opened.
     window.addEventListener('scroll', place, true)
+    // A catalog opens at its loading height and grows when `load()` lands,
+    // so the side chosen at open was chosen against the wrong height. jsdom
+    // has no ResizeObserver, and the placement is correct without it — this
+    // only re-asks a question already answered once.
+    const grew =
+      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => place())
+    grew?.observe(el)
     return () => {
+      grew?.disconnect()
       if (NATIVE_POPOVER) el.removeEventListener('toggle', onToggle)
       document.removeEventListener('pointerdown', dismiss, true)
       document.removeEventListener('keydown', onEscape)

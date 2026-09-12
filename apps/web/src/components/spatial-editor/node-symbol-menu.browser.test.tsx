@@ -14,7 +14,10 @@ import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  window.scrollTo(0, 0)
+})
 
 const initial: SpatialCanvas = {
   nodes: [{ id: 'a', type: 'text', x: 80, y: 80, width: 200, height: 100, text: 'A' }],
@@ -24,13 +27,22 @@ const initial: SpatialCanvas = {
 const symbolOf = (canvas: SpatialCanvas) =>
   canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.symbol/v0'] as VisualSymbolFacet | undefined
 
-function makeHost() {
+function makeHost(scrollable = false) {
   const latest: { canvas: SpatialCanvas } = { canvas: initial }
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
     latest.canvas = canvas
     return (
-      <div style={{ width: 800, height: 600 }}>
+      <div
+        style={{
+          width: 800,
+          height: 600,
+          // Room to scroll in BOTH directions, so a case can stand the
+          // trigger at a chosen height in the viewport instead of taking
+          // whatever the page's own scroll-into-view left it at.
+          ...(scrollable ? { marginTop: 2000, marginBottom: 2000 } : {}),
+        }}
+      >
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -213,4 +225,55 @@ it('a symbol nobody listed is pasted into the one box, and a refused one is neve
     const recent = picker.querySelector('[aria-label="Symbol recently used"]')
     expect(recent?.textContent).toContain('👍🏽')
   })
+})
+
+/**
+ * The placement, on the path that has a TOP LAYER — which the jsdom cases
+ * cannot reach and which is where the trap is. `position: fixed` neither
+ * clips nor grows, and the top layer is not a scroll container either, so a
+ * catalog opened from a row low in the viewport put its search box and
+ * every one of its cells below the fold with nothing to scroll to them.
+ *
+ * The UA stylesheet is the second half: it gives `[popover]` `inset: 0`, so
+ * an unwritten `top` is `0` rather than unset and the `bottom` meant to
+ * hold the panel above its trigger is dropped as over-constrained. Only a
+ * real browser has that sheet.
+ *
+ * Asserted as the invariant rather than as coordinates: whichever side it
+ * chooses, all of it is on screen.
+ */
+it('opens a catalog entirely inside the viewport, from a row with no room under it', async () => {
+  const { Host } = makeHost(true)
+  const { container } = render(<Host />)
+
+  const picker = await openSymbolPicker(openInspector(container))
+  const trigger = container.querySelector('[aria-label="Choose symbol"]') as HTMLElement
+
+  // Stand the trigger 40px off the bottom, which is far less than the panel
+  // needs. SCROLLED there rather than laid out there: the page scrolls
+  // itself when the inspector takes focus, so a spacer above the host
+  // decides nothing — measured, an 820px spacer left 368px of clearance and
+  // a 300px-tall viewport left 198px, both more than the panel's own 146,
+  // and the case passed against the unfixed placement in each.
+  window.scrollTo(
+    0,
+    trigger.getBoundingClientRect().bottom + window.scrollY - (window.innerHeight - 40),
+  )
+  fireEvent.scroll(document)
+
+  const box = await vi.waitFor(() => {
+    const rect = picker.getBoundingClientRect()
+    // The premise, probed rather than assumed, and it is not "the trigger is
+    // low" — it is that what the panel HOLDS does not fit under it.
+    expect(window.innerHeight - trigger.getBoundingClientRect().bottom).toBeLessThan(
+      picker.scrollHeight,
+    )
+    expect(rect.height).toBeGreaterThan(100)
+    return rect
+  })
+
+  expect(box.top).toBeGreaterThanOrEqual(0)
+  expect(box.bottom).toBeLessThanOrEqual(window.innerHeight)
+  // And what it holds is reachable at that height rather than cut off.
+  expect(picker.scrollHeight).toBeLessThanOrEqual(Math.ceil(picker.clientHeight))
 })

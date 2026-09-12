@@ -39,7 +39,15 @@ const row = (char: string, label: string, keywords: string) => ({
 const SECTIONS = [
   {
     label: 'Smileys',
-    options: [row('😀', 'grinning face', 'smiling'), row('🔥', 'fire', 'hot flame')],
+    options: [
+      row('😀', 'grinning face', 'smiling'),
+      row('🔥', 'fire', 'hot flame'),
+      // A row this facet REFUSES, standing in for what a generated table
+      // or a third-party loader can produce: the definition travelled into
+      // the renderer and the MCP server long before `load()` ran, so
+      // nothing parsed this one at define time.
+      row('two chars', 'broken row', 'invalid'),
+    ],
   },
   {
     label: 'Travel & Places',
@@ -152,6 +160,45 @@ describe('a catalog picker offers more than the definition listed', () => {
     const category = screen.getByRole('radio', { name: 'Travel & Places' }) as HTMLInputElement
     const cell = screen.getByRole('radio', { name: 'fire' }) as HTMLInputElement
     expect(category.name).not.toBe(cell.name)
+  })
+})
+
+/**
+ * The net a listed option gets at `defineFacet` time and a LOADED row
+ * cannot: by the time `load()` runs, the definition has already travelled
+ * into the renderer, the layout worker and the MCP server, so a catalog's
+ * rows were never parsed against the schema they are written under.
+ *
+ * It matters because the picker's write is not checked again above it —
+ * the spatial editor's `set-node-facet` / `set-edge-facet` mutators store
+ * the payload they are handed. So this adapter is the last place that
+ * knows which facet is being written, and the only place that can refuse.
+ */
+describe('a loaded row crosses the same schema a typed one does', () => {
+  it('writes nothing when a catalog offers a payload the facet refuses', async () => {
+    const onWrite = mount()
+    await loaded()
+    fireEvent.click(screen.getByRole('radio', { name: 'broken row' }))
+    expect(onWrite).not.toHaveBeenCalled()
+  })
+
+  /**
+   * And the valid rows beside it are unaffected — a refusal is per row, not
+   * a section the picker gives up on.
+   */
+  it('still writes the rows the facet accepts', async () => {
+    const onWrite = mount()
+    await loaded()
+    fireEvent.click(screen.getByRole('radio', { name: 'fire' }))
+    expect(onWrite).toHaveBeenCalledWith(SYMBOL_KEY, { kind: 'emoji', char: '🔥' })
+  })
+
+  /** Clearing is the absence of a payload, so there is nothing to parse. */
+  it('still clears the facet, which no schema accepts as a value', async () => {
+    const onWrite = mount({ kind: 'emoji', char: '🔥' })
+    await loaded()
+    fireEvent.click(screen.getByRole('radio', { name: 'No symbol' }))
+    expect(onWrite).toHaveBeenCalledWith(SYMBOL_KEY, undefined)
   })
 })
 

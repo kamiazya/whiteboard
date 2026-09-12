@@ -41,14 +41,33 @@ paths:
   measured reason: nine glyph-only chips are 304px of a 302px panel, so the
   last one wrapped onto a line of its own.
 - **`FacetCatalogPicker` — the facet adapter over it**, and deliberately
-  thin: it loads what the facet's `catalog` declares and routes free entry
-  through `registry.validateFacetWrite`. How little it does is the honest
-  measure of how generic the control below it actually became.
+  thin: it loads what the facet's `catalog` declares and routes EVERY value
+  it offers — a loaded row as much as typed text — through
+  `registry.validateFacetWrite`. How little it does is the honest measure of
+  how generic the control below it actually became.
 
   That validation seam is the point rather than a detail: `CatalogPicker`
   holds no rule about what a symbol may be, so it cannot hold a laxer one
   than the facet does, and a surface with no schema behind it simply passes
   no seam.
+
+  It covered free entry ALONE at first, on the belief — written into this
+  file and into the adapter's own comment — that "the write path still
+  refuses a bad row". It does not. `apps/web`'s `FacetFormPanel` validates
+  a HAND-WRITTEN editor's write and passes `onWrite` straight into
+  `DerivedFacetForm`, and the `set-node-facet` / `set-edge-facet` /
+  `set-canvas-facet` mutators store the payload they are handed. So the
+  adapter was the last place that knew which facet was being written and
+  the only one that could refuse, and a loader's row reached storage
+  unparsed. Caught in review on this PR, not by a test — which is why the
+  test exists now.
+
+  At the PICK rather than over the loaded sections, measured: validating
+  the bundled catalog's 1914 rows costs 15-23ms of the thread that just
+  opened the panel, on every open. A row the facet refuses is a plugin
+  defect its own catalog test owes; paying a frame per open to soften it is
+  the wrong trade, and what this must not do — let it reach storage — it
+  does not.
 
   **Free entry has no input of its own.** It was a field plus an apply
   button beside the search box, and the two were one gesture twice — the
@@ -78,6 +97,29 @@ paths:
   the browser owns open/close and the trigger is `popovertarget`, so light
   dismiss knows the trigger belongs to the panel and a press on it does not
   close-then-reopen).
+
+  **The top layer is not a scroll container either, and neither is
+  `position: fixed`** — so escaping the inspector's clipping buys nothing
+  on its own. A catalog opened from a row low in the viewport, which is
+  where the last facet in the panel always is, placed itself below the fold
+  entire: measured at 866..1014 of a 900px viewport, 34px of it on screen
+  and nothing to scroll to the rest. `place()` therefore picks the side
+  with room, and caps `maxHeight` at what that side has with `overflowY`
+  under it. Two traps it has to know about:
+
+  - **The UA stylesheet gives `[popover]` `inset: 0`.** Clearing `top` does
+    not leave it unset, it leaves it at `0`, and the over-constrained rule
+    then drops the `bottom` that was supposed to anchor the panel above its
+    trigger. Both edges are written every placement, `auto` where they do
+    not apply.
+  - **A browser case cannot reach this by standing the host low.** The page
+    scrolls itself when the inspector takes focus, so where the trigger
+    ends up is the browser's decision: an 820px spacer left 368px of
+    clearance and a 300px-tall viewport left 198px, both more than the
+    panel's own 146, and the case passed against the unfixed placement in
+    each. Scroll the trigger to a chosen offset after opening, and probe
+    the premise that actually matters — the room under it is less than the
+    panel's `scrollHeight`, not that the trigger is "low".
 
   Recents are MODULE state, keyed by the picker's `name` — the picker
   unmounts every time its popover closes, which is the one moment recents
