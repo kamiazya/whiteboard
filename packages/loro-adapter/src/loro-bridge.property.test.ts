@@ -34,9 +34,15 @@ import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 //
 // Three rounds each side, no overlap between the two sets, so it is the
 // generator and not the draw. The worst then sits at 4223ms of vitest's
-// 5000ms default ON AN IDLE MACHINE — 84% — and `stress-changed-tests` charges
-// the SUM of the three repeats against that one budget, which is what tipped
-// all three over on CI.
+// 5000ms default ON AN IDLE MACHINE — 84% — so CI's own load is all it takes
+// to put a repeat over.
+//
+// PER REPEAT, not per test: `--repeats=N` gives each repetition its own
+// budget, so the numbers above are already what one repeat costs and the
+// remaining 16% is the whole margin. Probed, because the arithmetic looks the
+// same either way and the first reading here was that the SUM is charged: a
+// 3s body under a 5000ms budget passes `--repeats=3` at 12.16s total, which a
+// summed budget could not do.
 //
 // The density is kept rather than trimmed: a free line end is what this split
 // exists for, and drawing fewer would leave the arm barely exercised — it is

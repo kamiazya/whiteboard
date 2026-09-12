@@ -22,7 +22,7 @@
 import { movesForPathChange, scanReferences } from '@kamiazya/whiteboard-codec'
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
-import { describe, expect, vi } from 'vitest'
+import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -253,14 +253,6 @@ function tokenText(model: Model, slots: (string | null)[], token: Token): string
   const id = slots[token.slot]
   return id !== null && id !== undefined && model.docs.has(id) ? id : null
 }
-
-// A ceiling sized on a reading, not a delay: 40 runs measure 12–14s on an
-// idle machine (0.3s a run) and reached 34s under CI's full parallel run,
-// where the 30s default timed the property out with no counterexample —
-// the load-dependent family in integrator-flow.md. Three times the loaded
-// reading; the runs stay at 40 rather than fewer, since the density is what
-// the property is for.
-vi.setConfig({ testTimeout: 90_000 })
 
 describe('reference semantics under command sequences', () => {
   fcTest.prop([fc.array(cmdArb, { minLength: 1, maxLength: 12 })], withDefaults({ numRuns: 40 }))(
@@ -623,13 +615,30 @@ describe('reference semantics under command sequences', () => {
       }
     },
     // Budget, not numRuns: the seeded state + per-command full-content
-    // assertions price a 40-run pass at 3.5-6s on an idle machine (worst
-    // observed 7.3s under load), so the 5s default reads as a property
-    // failure that never happened. Re-measured 2026-09-10 on a cloud
-    // container: 22-23s alone and 34-39s with three vitest projects in
-    // flight, both over the previous 30s ceiling — a timeout that named
-    // this test while the property never failed. Sixty seconds is the
-    // ceiling those measurements size, not a delay.
-    60_000,
+    // assertions make this property's cost scale with how busy the machine
+    // is, so the default reads as a property failure that never happened.
+    // This number is the ONE ceiling the test has — an argument here beats
+    // a file-level `vi.setConfig({ testTimeout })`, and this file carried
+    // both until the smaller one silently won and the larger one, added to
+    // raise the ceiling, had never applied at all.
+    //
+    // Per REPEAT, not per test: `--repeats=N` gives each repetition its own
+    // budget. Probed — a 3s body under a 5000ms budget passes `--repeats=3`
+    // at 12.16s total, and this property passes at 143614ms for three.
+    //
+    // What a repeat costs, measured:
+    //   ~11-15s   alone, idle
+    //   22-23s    alone (2026-09-10 reading, cloud container)
+    //   34-39s    with three vitest projects in flight
+    //   47.9s     under `stress-changed-tests`' own load — that job runs
+    //             `--repeats=3` over EVERY changed test file, 168 of them
+    //             here, which is the heaviest context this test ever meets
+    //   >=60s     the same job on CI (227 files). A lower bound, not a
+    //             reading: the 60s ceiling truncated it, so what it would
+    //             have cost is unknown and cannot size anything.
+    // Nearly four times the heaviest reading that COMPLETED, rather than a
+    // multiple of CI's, which is only known to be larger than the ceiling
+    // it hit.
+    180_000,
   )
 })
