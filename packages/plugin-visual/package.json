@@ -20,9 +20,17 @@
       "types": "./src/emoji/search.ts",
       "import": "./src/emoji/search.ts"
     },
+    "./emoji/searchable": {
+      "types": "./src/emoji/searchable.ts",
+      "import": "./src/emoji/searchable.ts"
+    },
     "./emoji/shortcode": {
       "types": "./src/emoji/shortcode.ts",
       "import": "./src/emoji/shortcode.ts"
+    },
+    "./icons/shortcode": {
+      "types": "./src/icons/shortcode.ts",
+      "import": "./src/icons/shortcode.ts"
     },
     "./package.json": "./package.json",
     "./render": {
@@ -32,10 +40,6 @@
     "./ui": {
       "types": "./src/ui.tsx",
       "import": "./src/ui.tsx"
-    },
-    "./emoji/searchable": {
-      "types": "./src/emoji/searchable.ts",
-      "import": "./src/emoji/searchable.ts"
     }
   },
   "scripts": {
@@ -51,9 +55,11 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@fast-check/vitest": "^0.4.1",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19",
     "@vitejs/plugin-react": "^6.1.1",
+    "fast-check": "^4.7.0",
     "react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

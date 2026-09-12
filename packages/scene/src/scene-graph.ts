@@ -137,11 +137,15 @@ export interface TextRunNode {
    * heard of this field renders exactly what it rendered before. Only the
    * painter looks at it.
    *
-   * A closed union so a second kind (a vendored icon, once a body has a
-   * way to name one) is one arm rather than a second optional field
-   * meaning the same thing.
+   * A closed union, so a reader handles both kinds or neither. The `icon`
+   * arm names a REGISTERED icon rather than carrying geometry: the painter
+   * already resolves that name through its icon table for `IconSceneNode`,
+   * and a scene that inlined the paths would say the same picture twice and
+   * be unable to follow a deployment that contributes its own set.
    */
-  readonly paints?: { readonly kind: 'image'; readonly src: string }
+  readonly paints?:
+    | { readonly kind: 'image'; readonly src: string }
+    | { readonly kind: 'icon'; readonly name: string }
   /**
    * A filled box painted BEHIND this run, inset from `bbox` by
    * `backdropPadXPx`. Inline code's tinted panel is the only user today.
