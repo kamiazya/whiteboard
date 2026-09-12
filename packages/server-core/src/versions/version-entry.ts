@@ -30,6 +30,25 @@ export const operatorInfoSchema = z.object({
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 
 /**
+ * The operator as a REQUEST may state it: everything except the device.
+ *
+ * `actor` names the device that saved the row, and the keeper is the only
+ * party that can ever back that name with a key (ADR-0035 decision 2) — so a
+ * caller-supplied one is a self-report wearing a cryptographic shape.
+ * Anything reaching the save route could otherwise write a row claiming to be
+ * this daemon, or erase the device name by sending an operator without one.
+ *
+ * `.strict()` rather than stripping, because a field the server accepts and
+ * silently ignores is a caller who thinks it took effect — the shape that
+ * made `padding` a silent no-op on the viewport route.
+ *
+ * Derived by omission so it cannot drift from `operatorInfoSchema`: a field
+ * added there is stated by callers too, unless someone takes it away here.
+ */
+export const requestOperatorSchema = operatorInfoSchema.omit({ actor: true }).strict()
+export type RequestOperator = z.infer<typeof requestOperatorSchema>
+
+/**
  * One row of a document's version history, as every surface publishes it —
  * the HTTP list route, the `version_created` broadcast, and the
  * `wb_version_*` tools. The server hydrates missing legacy metadata before
