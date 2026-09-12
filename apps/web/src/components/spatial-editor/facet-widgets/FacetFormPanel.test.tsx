@@ -4,6 +4,20 @@
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
+// STATIC, and load-bearing rather than convenience. `visual.symbol`'s
+// catalog reaches its rows through `await import('./emoji/sections.js')`,
+// and a `findBy*` waiting on that charges the 190KB tables'
+// transform-and-load to testing-library's 1000ms retry budget — far tighter
+// than the per-test timeout, and so the first thing to blow once the
+// machine is busy. Naming the module here instantiates it in the COLLECTION
+// phase, which no query budget bounds, and the dynamic import then resolves
+// from the graph.
+//
+// Measured in CI's `stress-changed-tests` over the same nine files: this
+// file ran 1737ms and passed, then 3630ms and failed at
+// `findByLabelText('Icon database')` after three cases were added to two of
+// the other eight. Nothing about this file had changed.
+import { emojiSections } from '@kamiazya/whiteboard-plugin-visual/emoji'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -389,7 +403,13 @@ describe('a registered editor replaces the derived form', () => {
     expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'icon', name: 'database' })
     // And the emoji arm, which no listed option covers any more. ⭐ IS in
     // the catalog, so what the one box offers is the row rather than the
-    // typed character — the picker never draws one symbol twice.
+    // typed character — the picker never draws one symbol twice. Which is
+    // a claim about the DATA, so it is asserted rather than assumed: were
+    // the row gone, the case below would pass on the free-entry cell and
+    // stop testing what it says it tests.
+    expect(emojiSections().some((band) => band.options.some((row) => row.label === 'star'))).toBe(
+      true,
+    )
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search symbols' }), {
       target: { value: '⭐' },
     })
