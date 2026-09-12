@@ -20,6 +20,39 @@ const TARGETS = [
   { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'retro-notes', name: 'Retro notes' },
 ]
 
+/** The option carrying this label, RIGHT NOW. Never stored. */
+const optionLabelled = (label: string): HTMLElement | undefined =>
+  [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
+    li.textContent?.includes(label),
+  ) as HTMLElement | undefined
+
+/**
+ * Taps an option, re-resolving it at the moment of the gesture.
+ *
+ * The reference and the rect are both taken here rather than held from the
+ * `waitFor` that established the option exists: the popup re-renders its
+ * whole `<li>` list whenever the completion state updates, and
+ * `wikiLinkTouchAccept` refuses a node the view no longer contains — so a
+ * held reference makes the tap a no-op and the failure reads as "the option
+ * did not commit", naming the feature rather than the stale node.
+ *
+ * `travel` moves the finger between touchstart and touchend, which is how
+ * the scroll case says it is a scroll.
+ */
+function tap(label: string, identifier: number, travel = 0): void {
+  const el = optionLabelled(label)
+  if (el === undefined) throw new Error(`no completion option labelled ${label}`)
+  const rect = el.getBoundingClientRect()
+  const at = (type: 'touchstart' | 'touchend', y: number) =>
+    new TouchEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      changedTouches: [new Touch({ identifier, target: el, clientX: rect.x + 4, clientY: y })],
+    })
+  el.dispatchEvent(at('touchstart', rect.y + 4))
+  el.dispatchEvent(at('touchend', rect.y + 4 + travel))
+}
+
 describe('wiki link completion (real browser)', () => {
   it('typing [[Re offers documents and Enter inserts the readable link', async () => {
     let value = ''
@@ -151,26 +184,8 @@ describe('wiki link completion (real browser)', () => {
       getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
     )
     await userEvent.keyboard('see [[[[Ret')
-    const option = await vi.waitFor(() => {
-      const el = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
-        li.textContent?.includes('Retro notes'),
-      )
-      expect(el).toBeDefined()
-      return el as HTMLElement
-    })
-    const rect = option.getBoundingClientRect()
-    const touch = (type: string, y: number) =>
-      option.dispatchEvent(
-        new TouchEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          changedTouches: [
-            new Touch({ identifier: 1, target: option, clientX: rect.x + 4, clientY: y }),
-          ],
-        }),
-      )
-    touch('touchstart', rect.y + 4)
-    touch('touchend', rect.y + 4)
+    await vi.waitFor(() => expect(optionLabelled('Retro notes')).toBeDefined())
+    tap('Retro notes', 1)
     await vi.waitFor(() => {
       expect(value).toBe('see [[retro-notes]]')
     })
@@ -178,32 +193,8 @@ describe('wiki link completion (real browser)', () => {
     // And a scroll gesture over the list must NOT commit: same events, but
     // the finger travelled.
     await userEvent.keyboard(' and [[[[Rel')
-    const second = await vi.waitFor(() => {
-      const el = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
-        li.textContent?.includes('Release plan'),
-      )
-      expect(el).toBeDefined()
-      return el as HTMLElement
-    })
-    const r2 = second.getBoundingClientRect()
-    second.dispatchEvent(
-      new TouchEvent('touchstart', {
-        bubbles: true,
-        cancelable: true,
-        changedTouches: [
-          new Touch({ identifier: 2, target: second, clientX: r2.x + 4, clientY: r2.y + 4 }),
-        ],
-      }),
-    )
-    second.dispatchEvent(
-      new TouchEvent('touchend', {
-        bubbles: true,
-        cancelable: true,
-        changedTouches: [
-          new Touch({ identifier: 2, target: second, clientX: r2.x + 4, clientY: r2.y + 60 }),
-        ],
-      }),
-    )
+    await vi.waitFor(() => expect(optionLabelled('Release plan')).toBeDefined())
+    tap('Release plan', 2, 56)
     await new Promise((resolve) => setTimeout(resolve, 200))
     expect(value).toBe('see [[retro-notes]] and [[Rel')
   })
