@@ -44,6 +44,25 @@ describe('an icon shortcode typed in a note', () => {
     expect(use.closest('[stroke]')?.getAttribute('stroke')).toBe('currentColor')
   })
 
+  /**
+   * `currentColor` is a mechanism, not an outcome — the useful claim is that
+   * it RESOLVES to whatever the host's theme set, which only a real browser
+   * can answer. Two hosts, because one colour cannot distinguish "followed
+   * the theme" from "happened to match".
+   */
+  it('resolves that colour against the host, light or dark', () => {
+    for (const color of ['rgb(17, 24, 39)', 'rgb(229, 231, 235)']) {
+      const { container } = render(
+        <div style={{ color }}>
+          <PreviewPane value=":icon-star:" maxWidth={520} measure={fakeMeasure} />
+        </div>,
+      )
+      const use = container.querySelector('use') as SVGUseElement
+      expect(getComputedStyle(use).stroke).toBe(color)
+      cleanup()
+    }
+  })
+
   /** The safety case, on the surface a person reads it on. */
   it('leaves an unknown name, and one inside code, as written', () => {
     const svg = svgOf('see :icon-nope: and `:icon-star:` too')
