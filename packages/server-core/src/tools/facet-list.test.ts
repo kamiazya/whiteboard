@@ -63,6 +63,11 @@ describe('wb_facet_list', () => {
     // attachable to all three rather than three facets.
     const canvasOnly = await tool().execute({ target: 'canvas' })
     expect(canvasOnly.facets.map((f) => f.key)).toEqual([
+      // `visual.axes/v0` is canvas-only for the reason ADR-0036 §1 gives:
+      // naming a semantic axis is a statement about the whole drawing, and
+      // the same sentence attached to one node says nothing a reader could
+      // act on.
+      'visual.axes/v0',
       'visual.edges/v0',
       'visual.symbol/v0',
       'visual.theme/v0',
@@ -350,5 +355,53 @@ describe('wb_facet_list: a WORKSPACE’s own vocabulary', () => {
     expect(result.assets.some((asset) => asset.id === 'workspace.lakehouse')).toBe(true)
     const overTheWire = JSON.parse(JSON.stringify(result))
     expect(facetListOutputSchema.safeParse(overTheWire).success).toBe(true)
+  })
+})
+
+/**
+ * The join the answer used to leave to the reader.
+ *
+ * The tool returns `facets` and `assets` as two lists. Each is complete on
+ * its own and neither says which FIELD of which facet takes an id from
+ * which kind of asset — so a model that wants to say what a box is has to
+ * guess that `visual.stencil/v0`'s `stencil` field is where a `stencils`
+ * asset goes.
+ *
+ * Measured in round 13 of the eval lane rather than argued: asked to draw a
+ * flow whose steps and decisions differ, a model called this tool with
+ * `assetKind: 'stencils'` — the right question — and then wrote
+ * `visual.shape/v0` with `{kind: 'diamond'}`. That is a registered facet and
+ * the write succeeded; it records a SILHOUETTE and not a kind, so the board
+ * scored `constructs 0, excess 3`: a distinction a reader sees and the
+ * document does not state. The published schema for `visual.shape/v0`
+ * enumerates `diamond` outright while `visual.stencil/v0` publishes a
+ * pattern-checked string, so the model picked the field it could act on.
+ *
+ * The registry has held `assetRefs` since assets existed. Only the answer
+ * was missing it.
+ */
+describe('assets and facets join', () => {
+  test('a facet says which of its fields names an asset, and of what kind', async () => {
+    const result = await tool().execute({})
+    const stencil = result.facets.find((facet) => facet.key === 'visual.stencil/v0')
+    expect(stencil?.assetRefs).toEqual({ stencil: 'stencils' })
+
+    // The other side of the join resolves: the kind it names is a kind the
+    // same answer actually lists, so a model can go from field to id
+    // without a second call.
+    const ids = result.assets.filter((asset) => asset.kind === 'stencils').map((asset) => asset.id)
+    expect(ids.length).toBeGreaterThan(0)
+  })
+
+  test('a facet that names no asset omits the key, so the join costs nothing to carry', async () => {
+    const result = await tool().execute({})
+    // `visual.shape/v0` is the one this finding is about: a plain enum, no
+    // asset behind it. It must not grow a field that says `{}`.
+    expect(result.facets.find((facet) => facet.key === 'visual.shape/v0')).not.toHaveProperty(
+      'assetRefs',
+    )
+    expect(result.facets.find((facet) => facet.key === 'planning.due/v0')).not.toHaveProperty(
+      'assetRefs',
+    )
   })
 })

@@ -39,8 +39,14 @@ const boardAt = async (wb, path) => {
 
 /**
  * A node's stored facets, which `wb_canvas_snapshot` does not carry — it
- * answers geometry and text. The document's own content does, under
- * `x-whiteboard`, which is also where the drawing score reads them.
+ * answers geometry and text. The document's own content does.
+ *
+ * Under `x-whiteboard`, because `wb_document_get` answers the JSON CANVAS
+ * PROJECTION (ADR-0037: the model is native, JSON Canvas is a projection) and
+ * the extension is where that projection puts a facet. The native model — and
+ * so `scoreFacets`, which reads it directly — spells the same thing
+ * `node.facets`. Two shapes for one idea, and this path is deliberately on
+ * the projection side because it reads what the TOOL answers.
  */
 const nodeFacetsAt = async (wb, ids, path, match) => {
   const read = await wb.call('wb_document_get', {
@@ -702,10 +708,13 @@ export const TASKS = [
     // so a model reaching for the built-in would not have been wrong and
     // the task would have measured nothing.
     //
-    // Graded on the STORED facet rather than on the colour: `visual.gateway`
-    // is also colour 3, so a colour check would pass a board dressed with
-    // the wrong stencil. ADR-0034 records the id on the node for exactly
-    // this reason — what a box IS survives, not only how it looks.
+    // Graded on the STORED facet rather than on the colour, and the reason
+    // got stronger rather than weaker: when this was written `visual.gateway`
+    // was also colour 3, so a colour check passed a board dressed with the
+    // wrong stencil. Since ADR-0036 §5 the bundled set spends no colour at
+    // all, so a colour check would pass a box wearing ANY built-in stencil,
+    // or none. ADR-0034 records the id on the node for exactly this reason —
+    // what a box IS survives, not only how it looks.
     name: 'dress a box with a style this workspace defines',
     boards: ['boards/architecture'],
     prompt:

@@ -64,10 +64,17 @@ export function applyStencil(
   // behind. Without the clearing the two halves disagree — re-dressing drops
   // the old silhouette and badge while keeping the old colour, so the box
   // wears a mixture belonging to neither construct, which is the `excess`
-  // shape ADR-0033 names. It cannot arise on the bundled set, where every
-  // stencil sets a colour, and would arise the first time anybody authors
-  // one that does not. A colour the node had before ANY stencil is left
-  // alone: nothing here knows it came from a vocabulary.
+  // shape ADR-0033 names.
+  //
+  // Neither branch fires for the BUNDLED set any more: since ADR-0036 §5 no
+  // member carries a colour at all, so the channel is left for whatever
+  // second axis the drawing declares, and dressing a box by kind no longer
+  // destroys what its colour said. The rule stays for a vocabulary somebody
+  // else authors, which still may spend colour — `canvas-edit.stencil.test.ts`
+  // exercises it through a workspace library for exactly that reason.
+  //
+  // A colour the node had before ANY stencil is left alone: nothing here
+  // knows it came from a vocabulary.
   if (stencil.color !== undefined) next.color = stencil.color
   else if (worn?.color !== undefined) delete next.color
 

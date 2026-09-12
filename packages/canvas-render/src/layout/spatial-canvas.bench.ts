@@ -28,7 +28,9 @@
 // headroom this bench has: the styled rows carry ±10% run to run, so a change
 // worth arguing about has to move the RATIO by more than that. Anything
 // smaller than ~10% is noise here, not a result.
+
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import { test } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
@@ -44,7 +46,7 @@ const OPTIONS: SpatialLayoutOptions = {
 
 // Cycled rather than random: a bench whose input changes between runs is
 // measuring two things at once.
-const SHAPES = ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const
+const SHAPES = visualShapeFacetSchema.shape.kind.options
 const ALIGNS = ['top', 'middle'] as const
 
 function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
