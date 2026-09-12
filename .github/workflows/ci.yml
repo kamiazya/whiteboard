@@ -203,7 +203,22 @@ jobs:
   stress-changed-tests:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Sized on the largest changed set this repo has produced, because a loop
+    # that cannot finish reports `cancelled` — neither a pass nor a failure,
+    # and `ci-gate` correctly refuses it. Measured on a 290-file set (a
+    # repo-wide fixture migration): each of the five fresh runs took 369-380s
+    # and the first four passed 290/290, then the job hit 30 minutes partway
+    # into the fifth and the `--repeats=3` step never started. Four green
+    # passes reading as a red gate is the worst of both.
+    #
+    # 5 x 380s + ~45s setup + the repeats step is ~40 minutes, so 60 leaves
+    # headroom without being a budget nobody notices spending. Cost is in
+    # WORKER time (92-93% of each run, one process per file), not in the
+    # tests themselves (2%) — so if this needs raising again, split the five
+    # runs across a matrix instead. They are independent by construction, and
+    # `ci-gate` judges per-leg conclusions from the Actions API precisely so
+    # a leg count can change without renaming a required check.
+    timeout-minutes: 60
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
