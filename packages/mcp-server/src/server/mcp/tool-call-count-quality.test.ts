@@ -196,10 +196,20 @@ describe('what an errand costs in tool calls', () => {
       // call most conversations make once, which is the same trade the
       // assets half of this tool already decided the other way. The price
       // is stated here instead.
+      //
+      // 10,148 -> 11,138, and the attribution matters more than the number:
+      // +968 of it is `visual.axes/v0` joining the facet list (ADR-0035 §1),
+      // +22 the sixth silhouette in `visual.shape/v0`'s enum. Measured by
+      // re-running this pin with each change reverted in turn, because the
+      // two landed in different increments and the first one's cost was
+      // never re-pinned — this row had been stale on the branch, along with
+      // `facet-list.test.ts`, for want of running `mcp-node` on that commit.
+      // A facet is exactly what this answer is for, so this is the declared
+      // price of declaring one, not a regression.
       'wear a stencil this workspace defines': {
         calls: 2,
         requestBytes: 354,
-        responseBytes: 10148,
+        responseBytes: 11138,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
@@ -268,10 +278,17 @@ describe('what an errand costs in tool calls', () => {
       // carries both numbers and the reason that saving is NOT the case for
       // the field: 480 visible bytes on rung 1 are paid every turn, and 337
       // is saved per errand.
+      //
+      // Response 2,086 -> 1,918 when the bundled stencils stopped spending
+      // colour (ADR-0035 §5): six `color` fields leave the answer and one
+      // silhouette joins it, `service` having had none. Nothing was cut for
+      // the sake of bytes — this is the by-product of freeing the colour
+      // channel for a second semantic axis, and it is stated here so the
+      // row is not read as a separate saving.
       'dress six boxes as six kinds': {
         calls: 1,
         requestBytes: 916,
-        responseBytes: 2086,
+        responseBytes: 1918,
       },
       // 2,060 -> 2,056 when an auto-placed box took the board's own width
       // instead of a flat 260. Four bytes, and what they are worth reading

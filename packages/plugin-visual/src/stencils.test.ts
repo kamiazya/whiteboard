@@ -34,44 +34,54 @@ describe('the bundled stencil set', () => {
     expect(bundledFacetRegistry.assetIds('stencils')).toEqual(ids)
   })
 
-  it('gives no two members the same appearance, on at least two channels a board DRAWS', () => {
+  it('spends NO colour, so the channel is free for a second axis', () => {
+    // ADR-0035 §5. A channel carries at most one semantic axis, and the kind
+    // axis has one of its own now that the silhouette vocabulary holds six.
+    // The user's case (2026-09-12) is the one this is for: an infrastructure
+    // drawing says what each component IS with its shape and whether it is
+    // healthy with its colour, and a vocabulary that writes a colour spends
+    // the channel the second axis needs.
+    for (const id of ids) expect(bundledFacetRegistry.stencilAsset(id)?.color).toBeUndefined()
+  })
+
+  it('gives no two members the same silhouette, which is the channel that survives greyscale', () => {
     // ADR-0033's `distance`, asserted on the SET rather than on a drawing:
     // two stencils a reader cannot tell apart are a defect in the vocabulary,
-    // and no board using them can be scored out of it. Two channels rather
-    // than one because colour alone is the channel most often lost — a
-    // projector, a colour-blind reader, a greyscale print.
+    // and no board using them can be scored out of it.
     //
-    // Colour and silhouette, and NOT the badge. `plugin-visual` contributes
-    // no node decoration (see `render.ts`), so `visual.symbol/v0` draws
-    // nothing on a canvas; counting it passed a set whose `service` and
-    // `external` a reader of the finished drawing sees as two rectangles
-    // that differ only in colour. Found by rendering a board rather than by
-    // reading one — the badges were simply absent from the image.
+    // ONE channel, where this used to demand two — and the reason it demanded
+    // two is the reason one is now enough. Colour is the channel most often
+    // lost (a projector, a colour-blind reader, a greyscale print), so a set
+    // leaning on colour AND silhouette really leaned on silhouette for any
+    // reader who lost it. Spending no colour at all does not weaken that; it
+    // ends the pretence, and hands the lost-anyway channel to whatever axis
+    // the drawing declares.
     //
-    // A consequence worth knowing before growing the set: distance >= 2 for
-    // every pair means all colours distinct AND all silhouettes distinct, so
-    // the set's ceiling is min(6 JSON Canvas colours, 6 silhouettes) = SIX.
-    // A seventh stencil needs a new silhouette or a third drawn channel, not
-    // a seventh entry.
-    const treatments = ids.map((id) => {
-      const stencil = bundledFacetRegistry.stencilAsset(id)
-      return {
-        id,
-        colour: stencil?.color ?? '',
-        shape: JSON.stringify(stencil?.facets['visual.shape/v0'] ?? null),
-      }
-    })
-    const tooClose: string[] = []
-    for (let i = 0; i < treatments.length; i++) {
-      for (let j = i + 1; j < treatments.length; j++) {
-        const a = treatments[i]
-        const b = treatments[j]
+    // The consequence for growth is unchanged in shape and changed in
+    // number: every silhouette distinct means the set's ceiling is the
+    // silhouette vocabulary, SIX today. A seventh stencil needs a seventh
+    // silhouette, not a seventh entry.
+    const silhouettes = ids.map((id) => ({
+      id,
+      shape: JSON.stringify(
+        bundledFacetRegistry.stencilAsset(id)?.facets['visual.shape/v0'] ?? null,
+      ),
+    }))
+    const collisions: string[] = []
+    for (let i = 0; i < silhouettes.length; i++) {
+      for (let j = i + 1; j < silhouettes.length; j++) {
+        const a = silhouettes[i]
+        const b = silhouettes[j]
         if (a === undefined || b === undefined) continue
-        const apart = (a.colour === b.colour ? 0 : 1) + (a.shape === b.shape ? 0 : 1)
-        if (apart < 2) tooClose.push(`${a.id} vs ${b.id}: ${apart}`)
+        if (a.shape === b.shape) collisions.push(`${a.id} vs ${b.id}`)
       }
     }
-    expect(tooClose).toEqual([])
+    expect(collisions).toEqual([])
+    // And none of them is the plain rect, which is what an UNDRESSED box
+    // draws: a construct whose every member wears the default treatment is
+    // ADR-0033's `deficit`, and before the octagon `service` was exactly
+    // that the moment colour went away.
+    expect(silhouettes.filter((s) => s.shape === 'null')).toEqual([])
   })
 
   it('sets no geometry and no text, which is what keeps it a vocabulary', () => {
@@ -181,6 +191,21 @@ describe('applying a stencil', () => {
     const quiet = applyStencil(loud, 'extra.quiet', registry) as Node
     expect(quiet.color).toBeUndefined()
     expect(resolveNodeStencil(quiet, registry)).toBe('extra.quiet')
+  })
+
+  it('leaves a second axis’s colour alone through dressing AND re-dressing', () => {
+    // The payoff of spending no colour, stated as behaviour rather than as
+    // a score: the board below is coloured by health, and dressing a box by
+    // KIND — then changing its kind — no longer destroys what the colour
+    // said. Before this, `applyStencil` wrote the stencil's colour over it
+    // and the status axis was silently undrawn.
+    const failing = box({ color: '1' })
+    const dressed = applyStencil(failing, 'visual.datastore') as Node
+    expect(dressed.color).toBe('1')
+    const redressed = applyStencil(dressed, 'visual.queue') as Node
+    expect(redressed.color).toBe('1')
+    // The kind axis still moved, on its own channel.
+    expect(resolveNodeShape(redressed)).toBe('parallelogram')
   })
 
   it('leaves a colour the box had before any stencil alone', () => {

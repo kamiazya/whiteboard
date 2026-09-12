@@ -687,10 +687,13 @@ export const TASKS = [
     // so a model reaching for the built-in would not have been wrong and
     // the task would have measured nothing.
     //
-    // Graded on the STORED facet rather than on the colour: `visual.gateway`
-    // is also colour 3, so a colour check would pass a board dressed with
-    // the wrong stencil. ADR-0034 records the id on the node for exactly
-    // this reason — what a box IS survives, not only how it looks.
+    // Graded on the STORED facet rather than on the colour, and the reason
+    // got stronger rather than weaker: when this was written `visual.gateway`
+    // was also colour 3, so a colour check passed a board dressed with the
+    // wrong stencil. Since ADR-0035 §5 the bundled set spends no colour at
+    // all, so a colour check would pass a box wearing ANY built-in stencil,
+    // or none. ADR-0034 records the id on the node for exactly this reason —
+    // what a box IS survives, not only how it looks.
     name: 'dress a box with a style this workspace defines',
     boards: ['boards/architecture'],
     prompt:

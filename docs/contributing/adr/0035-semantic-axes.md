@@ -1,9 +1,9 @@
 # ADR-0035: A semantic axis is declared, and a channel carries at most one
 
-**Status:** Accepted for the instrument and the declaration, which are landed
-and measured. The consequence for the bundled stencils — that they spend the
-colour channel on the kind axis — is stated here as a decision and NOT yet
-carried out; §5 says what it costs and what has to be true first.
+**Status:** Accepted, and carried out. The instrument and the declaration
+landed first; the consequence for the bundled stencils — §5 — landed after the
+sixth silhouette made it free, and §5 records what it actually cost against
+what it was predicted to cost.
 
 ## Context
 
@@ -48,10 +48,11 @@ facet score; none required a model call.
    | colour stripped | **unused** | carried | 6 | **1** | 1 |
    | five shaped stencils, colour stripped | **unused** | carried | 5 | **0** | 1 |
 
-   `visual.shape/v0` holds five silhouettes and the default rect. `service` is
-   the one stencil with no silhouette, so without colour it is indistinguishable
+   `visual.shape/v0` held five silhouettes and the default rect. `service` was
+   the one stencil with no silhouette, so without colour it was indistinguishable
    from an undressed box — and the instrument refuses, by design, to read the
-   absence of a symbol as a symbol.
+   absence of a symbol as a symbol. §5 records what happened once a sixth
+   silhouette existed and that row stopped being the price.
 
 ## Decision
 
@@ -117,27 +118,44 @@ silhouette the renderer cannot draw and no one would be told. The enum is now
 the single source, the table is checked against it both ways, and the two
 copies derive from it.
 
-### 5. The bundled stencils should stop spending colour — NOT YET
+### 5. The bundled stencils spend silhouette and nothing else
 
-Under §1 and §2 the kind axis has a channel of its own (shape) and the colour
-channel should be free for a second axis. §Context's third measurement prices
-the move: `deficit 0 -> 1` and `distance 2 -> 1`, because `service` has no
-silhouette and the shape vocabulary holds exactly five.
+Under §1 and §2 the kind axis has a channel of its own, so colour belongs to
+whatever second axis the drawing declares. Every bundled stencil therefore
+drops its `color`, and `service` — the one member with no silhouette — takes
+the sixth one.
 
-**It is deliberately not done in this ADR's increment, because doing it alone
-would be a pure loss.** Freeing a channel pays only once something writes to
-it, and until §1 landed nothing could. Two things have to be true first:
+**The order mattered and is the whole lesson of this section.** Written first,
+this said NOT YET, and priced the move at `deficit 0 -> 1, distance 2 -> 1`
+against a five-silhouette vocabulary. The sixth silhouette (an OCTAGON — a
+`NodeOutline` kind would be a `packages/scene` contract change, a polygon is
+one table entry) landed as its own increment, and one of the two predicted
+costs then did not happen at all:
 
-- a second axis exists that a drawing actually declares — §1 makes it
-  possible, and `visual.axes/v0` has no UI and no lane task yet;
-- `service` gets a silhouette, or the set drops to five dressed kinds. A sixth
-  silhouette must be a POLYGON: `NodeOutline` lives in `packages/scene`, the
-  renderer/plugin contract, so a new outline kind is a contract change while a
-  polygon is one entry in the shape table.
+| six dressed boxes | `channels.colour` | `channels.shape` | constructs | deficit | distance |
+|---|---|---|---|---|---|
+| before (colour + silhouette) | carried | carried | 6 | 0 | 2 |
+| predicted, five silhouettes | unused | carried | 6 | **1** | 1 |
+| **after (six silhouettes, no colour)** | **unused** | carried | 6 | **0** | 1 |
 
-Recorded as a decision rather than a follow-up because the direction is
-settled: a channel carries at most one axis, and the kind axis does not get two
-while a declared axis has none.
+`distance 2 -> 1` is the whole cost, and it is the thing being deliberately
+given up: `distance` counts how many channels two treatments differ on, and
+this change spends one channel instead of two on purpose. What the old
+two-channel rule was hedging — colour lost to a projector, a colour-blind
+reader, a greyscale print — is not weakened by spending no colour; that reader
+was already reading silhouettes alone.
+
+**The payoff is behaviour, not a column.** A finished board coloured by status
+scores the same either way, because an author who hand-colours simply
+overwrites the stencil's colour. What changed is that `applyStencil` no longer
+destroys that colour: a box coloured by health, then dressed by kind, then
+RE-dressed, keeps what the colour said. Before, each dressing wrote the
+stencil's colour over it and the status axis was silently undrawn.
+
+Growth is bounded the same way and by a different number. Every silhouette
+distinct, and none of them the plain rect an undressed box already draws, puts
+the set at the ceiling of the silhouette vocabulary: six. A seventh stencil
+needs a seventh silhouette, not a seventh entry.
 
 ## Consequences
 
@@ -147,6 +165,15 @@ while a declared axis has none.
 - ADR-0034's stencil is unchanged in what it IS and constrained in what it may
   SPEND: it is still a named appearance applied to one node, and §5 says the
   appearance should stop including a colour once a second axis is real.
+- **`channels.X === 'carried'` does not say WHICH axis carries it**, and the
+  measurement above is where that showed. A board that declares a status axis
+  and lets a stencil's colour win reads `carried` — carried by the stencil
+  partition — and is indistinguishable from the same board where colour
+  carries status. The blind spot is narrow (it needs two declared axes
+  competing for one channel) and it is exactly the user's case, so it is
+  recorded rather than left to be rediscovered. Naming the partitions and
+  reporting which one each channel carries is the fix, and it is its own
+  increment: doing it inside §5's would have confounded the reading.
 - A canvas may name an axis carried by a facet a later build registers or this
   deployment disabled. The keys are not checked against the registry: losing a
   whole declaration to one stray key would cost more than the stray key does,
