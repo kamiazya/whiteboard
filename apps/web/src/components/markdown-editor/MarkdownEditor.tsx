@@ -54,7 +54,7 @@ import {
   railScrollable,
 } from './preview-width.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
-import { shortcodeCompletionSource } from './shortcode-completion.js'
+import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
@@ -382,6 +382,9 @@ export function MarkdownEditor({
           wikiLinkCompletionSource(() => linkTargetsRef.current),
           shortcodeCompletionSource,
         ],
+        // An icon row draws its own glyph where an emoji row shows its
+        // character; every other row renders as it always did.
+        addToOptions: shortcodeOptionRenderers,
         // The upstream default (75ms) rejects an Enter that lands too soon
         // after the popup (re)opens, to protect a popup that appeared under
         // an Enter meant as a newline. These completions only ever open

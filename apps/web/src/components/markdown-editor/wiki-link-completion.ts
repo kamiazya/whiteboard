@@ -75,14 +75,7 @@ export const wikiLinkCompletionTheme = EditorView.theme({
     border: '1px solid var(--border)',
     borderRadius: 'var(--radius-md)',
     boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-    // NOT `hidden`, which is what it was: the info panel is a CHILD of this
-    // element positioned to the SIDE of it, so clipping here erased it — its
-    // 52px box measured 1px inside the tooltip's right edge, and an icon
-    // preview that renders perfectly in isolation was invisible in the app.
-    // The list does its own clipping (`overflow: hidden auto` on the `ul`,
-    // measured scrolling 627px of rows in a 256px box), so nothing here was
-    // holding it in.
-    overflow: 'visible',
+    overflow: 'hidden',
   },
   // The heading a sectioned list draws. A custom element rather than a class
   // — `.cm-completionSection` matches nothing — and unstyled it renders at
@@ -103,15 +96,14 @@ export const wikiLinkCompletionTheme = EditorView.theme({
     fontSize: '0.75rem',
     marginLeft: '0.5rem',
   },
-  // The panel beside the list, holding whatever a row previews.
-  '.cm-tooltip.cm-tooltip-autocomplete .cm-completionInfo': {
-    backgroundColor: 'var(--popover)',
-    color: 'var(--popover-foreground)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-    padding: '0.5rem',
-    marginLeft: '0.25rem',
+  // A drawn glyph in the row's gutter, sitting where an emoji row's
+  // character does. `inline-flex` so it shares the label's baseline box
+  // rather than the line box, which left it riding high.
+  '.cm-tooltip.cm-tooltip-autocomplete .cm-completionIcon-wb-icon': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    verticalAlign: 'text-bottom',
+    marginRight: '0.375rem',
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': {
     fontFamily: 'inherit',

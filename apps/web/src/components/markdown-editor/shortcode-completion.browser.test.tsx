@@ -13,7 +13,7 @@ import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { shortcodeCompletionSource } from './shortcode-completion.js'
+import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 import { wikiLinkCompletionTheme } from './wiki-link-completion.js'
 
 let view: EditorView | undefined
@@ -160,17 +160,12 @@ describe('an icon offered under the same colon', () => {
  * The popup UNDER THE APP'S OWN THEME, which the cases above deliberately do
  * not install — and the one thing that only shows there.
  *
- * `.cm-completionInfo` is a CHILD of the tooltip positioned to the SIDE of
- * it, so an `overflow: hidden` ancestor erases it. The theme had exactly
- * that, and the erasure is invisible to every other kind of assertion:
- * clipping does not move a box, so the panel measured its full 52px one
- * pixel inside the tooltip's right edge while a person saw nothing. It took
- * a screenshot to notice, and this is what stops it needing one again.
- *
- * Asserted on the computed style rather than on geometry for that reason.
+ * The glyph is real DOM rather than a CSS `background-image` so it can take
+ * `currentColor` and follow the row it sits on, including the selected one.
+ * A background image is an isolated document and cannot see that colour.
  */
 describe('the popup under the app theme', () => {
-  it('does not clip the panel that previews an icon', async () => {
+  it('draws the glyph on the row, where an emoji shows its character', async () => {
     const host = document.createElement('div')
     document.body.append(host)
     const themed = new EditorView({
@@ -179,7 +174,11 @@ describe('the popup under the app theme', () => {
         doc: 'mark it ',
         extensions: [
           wikiLinkCompletionTheme,
-          autocompletion({ override: [shortcodeCompletionSource], interactionDelay: 0 }),
+          autocompletion({
+            override: [shortcodeCompletionSource],
+            addToOptions: shortcodeOptionRenderers,
+            interactionDelay: 0,
+          }),
         ],
       }),
     })
@@ -188,11 +187,13 @@ describe('the popup under the app theme', () => {
       themed.dispatch({ selection: { anchor: themed.state.doc.length } })
       type(themed, ':st')
       await vi.waitFor(() => expect(completionStatus(themed.state)).toBe('active'))
-      const tip = document.querySelector('.cm-tooltip-autocomplete') as HTMLElement
-      expect(document.querySelector('.cm-completionInfo')).not.toBeNull()
-      expect(getComputedStyle(tip).overflow).not.toContain('hidden')
-      // The list clips itself, so nothing was relying on the ancestor to.
-      expect(getComputedStyle(tip.querySelector('ul') as HTMLElement).overflowY).toBe('auto')
+      const row = document.querySelector('[role="option"]') as HTMLElement
+      expect(row.textContent).toContain('icon-star')
+      const glyph = row.querySelector('.cm-completionIcon-wb-icon svg') as SVGSVGElement
+      expect(glyph).not.toBeNull()
+      // Inside the row, before the label — the emoji rows' character column.
+      expect(row.firstElementChild?.nextElementSibling?.contains(glyph)).toBe(true)
+      expect(glyph.getAttribute('stroke')).toBe('currentColor')
     } finally {
       themed.destroy()
       host.remove()

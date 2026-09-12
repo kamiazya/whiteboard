@@ -98,30 +98,54 @@ function applyShortcode(shortcode: string) {
  * slice exists: a vocabulary a person has to already know the spelling of is
  * one nobody discovers, and the list now says out loud that icons are there.
  */
+const ICON_PREFIX = 'icon-'
 const ICON_SECTION = { name: 'Icons', rank: 0 }
 const EMOJI_SECTION = { name: 'Emoji', rank: 1 }
 
 /**
- * What the icon looks like, drawn by the SAME producer that will draw it in
- * the body — a one-node scene through `renderSceneToSvg`.
+ * The icon as it appears ON ITS ROW, where an emoji row shows its character.
  *
- * Not hand-built markup: a second emitter of an icon `<use>` is two places
- * for a set's viewBox and paint convention to be got wrong, which is the
- * reason `svg/icon.ts` exists at all. An emoji row shows its character, so
- * an icon row showing nothing is the asymmetry that leaves a person unable
- * to tell what they are about to insert.
+ * Drawn by the SAME producer that will draw it in the body — a one-node
+ * scene through `renderSceneToSvg`. Not hand-built markup: a second emitter
+ * of an icon `<use>` is two places for a set's viewBox and paint convention
+ * to be got wrong, which is the reason `svg/icon.ts` exists at all.
+ *
+ * `currentColor` rather than a fixed stroke, so the glyph follows the row —
+ * including the selected row, which paints `--accent-foreground`. That is
+ * also why this is real DOM and not a CSS `background-image`: a background
+ * image is an isolated document and cannot see the colour it sits on.
  */
-function iconPreview(name: string): Node {
-  const host = document.createElement('div')
-  host.className = 'cm-completionInfo-wb-icon'
-  host.style.color = 'inherit'
+function iconGlyph(name: string): HTMLElement {
+  const host = document.createElement('span')
+  host.className = 'cm-completionIcon-wb-icon'
+  host.setAttribute('aria-hidden', 'true')
   host.innerHTML = renderSceneToSvg(
-    { nodes: [{ kind: 'icon', bbox: { x: 0, y: 0, w: 32, h: 32 }, icon: name }] },
-    { width: 32, height: 32, viewBox: { x: 0, y: 0, w: 32, h: 32 } },
+    { nodes: [{ kind: 'icon', bbox: { x: 0, y: 0, w: 16, h: 16 }, icon: name }] },
+    { width: 16, height: 16, viewBox: { x: 0, y: 0, w: 16, h: 16 } },
   )
   host.firstElementChild?.setAttribute('stroke', 'currentColor')
   return host
 }
+
+/**
+ * Draws that glyph in the row's own gutter, the slot CodeMirror gives every
+ * option (`.cm-completionIcon`, position 20) and this app hides because the
+ * generic kind icon says nothing. Position 30 puts it after that slot and
+ * before the label, which is where an emoji row's character sits.
+ *
+ * Passed to each host's `autocompletion()` rather than installed as an
+ * extension of its own: `completionConfig` is not exported, and a second
+ * `autocompletion()` call beside the first would replace its `override`.
+ */
+export const shortcodeOptionRenderers = [
+  {
+    render: (completion: Completion): Node | null =>
+      completion.label.startsWith(ICON_PREFIX)
+        ? iconGlyph(completion.label.slice(ICON_PREFIX.length))
+        : null,
+    position: 30,
+  },
+]
 
 /**
  * The icon rows. Synchronous, unlike the emoji half: six strings, with no
@@ -135,12 +159,11 @@ function iconPreview(name: string): Node {
 function iconOptions(query: string): Completion[] {
   const names = searchIconShortcodes(query)
   return names.map((name, index) => ({
-    label: `icon-${name}`,
+    label: `${ICON_PREFIX}${name}`,
     detail: 'drawn, not a character',
     section: ICON_SECTION,
     boost: names.length - index,
-    info: () => iconPreview(name),
-    apply: applyShortcode(`icon-${name}`),
+    apply: applyShortcode(`${ICON_PREFIX}${name}`),
   }))
 }
 
