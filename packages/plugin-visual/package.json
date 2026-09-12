@@ -32,6 +32,10 @@
     "./ui": {
       "types": "./src/ui.tsx",
       "import": "./src/ui.tsx"
+    },
+    "./emoji/searchable": {
+      "types": "./src/emoji/searchable.ts",
+      "import": "./src/emoji/searchable.ts"
     }
   },
   "scripts": {

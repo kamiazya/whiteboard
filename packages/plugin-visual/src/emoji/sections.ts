@@ -11,7 +11,7 @@
  */
 import type { FacetPickerCatalogSection } from '@kamiazya/whiteboard-facet-engine'
 import { EMOJI_GROUPS } from './catalog-data.js'
-import { EMOJI_JA } from './catalog-ja.js'
+import { emojiJapaneseTerms } from './japanese.js'
 import { emojiSlug } from './slug.js'
 
 /**
@@ -49,19 +49,9 @@ const CATEGORIES: Readonly<Record<string, { readonly glyph: string; readonly ja:
  */
 let built: readonly FacetPickerCatalogSection[] | undefined
 
-/** `character -> CLDR Japanese terms`, from the generated index. */
-function japaneseIndex(): ReadonlyMap<string, string> {
-  const found = new Map<string, string>()
-  for (const row of EMOJI_JA.split('\n')) {
-    const tab = row.indexOf('\t')
-    if (tab !== -1) found.set(row.slice(0, tab), row.slice(tab + 1))
-  }
-  return found
-}
-
 export function emojiSections(): readonly FacetPickerCatalogSection[] {
   if (built !== undefined) return built
-  const japanese = japaneseIndex()
+  const japanese = emojiJapaneseTerms()
   built = EMOJI_GROUPS.map(([label, rows]) => {
     const category = CATEGORIES[label]
     return {
