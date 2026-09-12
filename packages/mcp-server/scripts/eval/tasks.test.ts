@@ -10,6 +10,7 @@
 // something about it has been got wrong, not on principle — every task in
 // the file would be a fixture pile that nobody reads.
 import { type EdgeEnd, edgeEndSchema } from '@kamiazya/whiteboard-model'
+import { applyStencil } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import { TASKS } from './tasks.mjs'
 
@@ -210,5 +211,134 @@ describe('the workspace-vocabulary verifier', () => {
 
   it('names the missing box rather than throwing on an untouched board', async () => {
     await expect(verify(undefined)).resolves.toMatchObject({ ok: false })
+  })
+})
+
+describe('the two-axis verifier', () => {
+  // A NEW verifier with a grading rule nothing else uses — two channels, each
+  // carrying a DIFFERENT declared distinction — so it gets a positive control
+  // on arrival rather than after something goes wrong with it. `--dry-run`
+  // proves only that it refuses an empty fixture; what a verifier grading by
+  // an instrument can also do is refuse EVERY board, and that reads the same.
+  const FLEET = TASKS.find((t) => t.name.startsWith('tell two things apart'))
+
+  type Box = { id: string; label: string; stencil: string; status: string; color: string }
+  const FLEET_BOXES: readonly Box[] = [
+    {
+      id: 'orders',
+      label: 'Orders service',
+      stencil: 'visual.service',
+      status: 'healthy',
+      color: '4',
+    },
+    {
+      id: 'billing',
+      label: 'Billing service',
+      stencil: 'visual.service',
+      status: 'failing',
+      color: '1',
+    },
+    { id: 'pg', label: 'Postgres', stencil: 'visual.datastore', status: 'healthy', color: '4' },
+    {
+      id: 'redis',
+      label: 'Redis cache',
+      stencil: 'visual.datastore',
+      status: 'failing',
+      color: '1',
+    },
+    {
+      id: 'pay',
+      label: 'Payment gateway',
+      stencil: 'visual.external',
+      status: 'healthy',
+      color: '4',
+    },
+  ]
+
+  /**
+   * A dressed box's facets, EXPANDED BY THE REAL STENCIL CODE rather than
+   * written out here.
+   *
+   * The first version of this fixture wrote `visual.stencil/v0` by hand and
+   * stopped there, and the positive control failed with `shape unused` —
+   * applying a stencil also writes `visual.shape/v0`, which is the facet the
+   * shape CHANNEL is read from. A hand-written stand-in for what a tool
+   * produces is exactly the drift `snapshot-shape.test.ts` was built to
+   * catch, and it was reproduced here within the hour of landing that guard.
+   */
+  const dressed = (stencil: string, status: string) => {
+    const node = applyStencil(
+      { id: 'x', type: 'text', text: '', x: 0, y: 0, width: 200, height: 80 } as never,
+      stencil,
+    )
+    if (node === undefined) throw new Error(`no such bundled stencil: ${stencil}`)
+    return { ...(node.facets ?? {}), 'ops.status/v0': { status } }
+  }
+
+  /** The JSON Canvas projection `wb_document_get` answers, with facets. */
+  const fleetContent = (boxes: readonly Box[], axes: readonly string[]) =>
+    JSON.stringify({
+      nodes: boxes.map((b, i) => ({
+        id: b.id,
+        type: 'text',
+        text: b.label,
+        x: i * 300,
+        y: 0,
+        width: 200,
+        height: 80,
+        color: b.color,
+        'x-whiteboard': { facets: dressed(b.stencil, b.status) },
+      })),
+      edges: [],
+      'x-whiteboard': { facets: { 'visual.axes/v0': { axes: [...axes] } } },
+    })
+
+  const wbOver = (content: string) => ({
+    call: async (name: string) => {
+      if (name === 'wb_document_list') {
+        return { documents: [{ path: 'boards/fleet', documentId: 'doc-1' }] }
+      }
+      if (name === 'wb_document_get') return { documents: [{ content }] }
+      if (name === 'wb_canvas_snapshot') return JSON.parse(content)
+      throw new Error(`the verifier called an unexpected tool: ${name}`)
+    },
+  })
+
+  const verify = (content: string) => FLEET?.verify?.(wbOver(content) as never, {} as never)
+
+  it('passes a board whose colour carries a DECLARED axis and whose shape carries the stencil', async () => {
+    await expect(verify(fleetContent(FLEET_BOXES, ['ops.status/v0']))).resolves.toMatchObject({
+      ok: true,
+    })
+  })
+
+  it('refuses the same board with the axis undeclared, which is the whole point', async () => {
+    // Identical pixels. The only difference is that nothing records what the
+    // colour means, so only whoever drew it can read it — ADR-0033's
+    // `contested`, and the defect the axis declaration exists to end.
+    await expect(verify(fleetContent(FLEET_BOXES, []))).resolves.toMatchObject({ ok: false })
+  })
+
+  it('refuses a board where both channels say the same thing', async () => {
+    // Colour follows the stencil exactly, so the second question — is it
+    // healthy? — is drawn by nothing, and the board answers one question
+    // twice. `carried` on both channels would pass a weaker rule.
+    const perStencil: Record<string, string> = {
+      'visual.service': '4',
+      'visual.datastore': '5',
+      'visual.external': '6',
+    }
+    const boxes = FLEET_BOXES.map((b) => ({ ...b, color: perStencil[b.stencil] as string }))
+    await expect(verify(fleetContent(boxes, ['ops.status/v0']))).resolves.toMatchObject({
+      ok: false,
+    })
+  })
+
+  it('refuses a board missing one of the things the prompt asked for', async () => {
+    const content = fleetContent(
+      FLEET_BOXES.filter((b) => b.id !== 'redis'),
+      ['ops.status/v0'],
+    )
+    await expect(verify(content)).resolves.toMatchObject({ ok: false, detail: 'missing: Redis' })
   })
 })

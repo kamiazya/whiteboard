@@ -14,6 +14,7 @@
 // the target document does (nor a tool's name). Write tasks are graded
 // against the real store after the agent exits, on a data directory of its
 // own, so no task can see another's side effects.
+
 import { WORKSPACE_ID } from './fixture.mjs'
 
 /**
@@ -66,6 +67,30 @@ const nodeFacetsAt = async (wb, ids, path, match) => {
 // that calls it, after its boxes and flows check out, so no generic probe
 // board gets that far and a rename of the field `boxesOverlap` reads went
 // undetected until they were driven directly.
+/**
+ * The workspace packages this file's verifiers read a board with, loaded
+ * LAZILY and memoised.
+ *
+ * Not a static import, and the reason is load ORDER rather than cost: these
+ * are TypeScript sources, and the runner registers the tsx loader at its own
+ * startup — after every static import in its graph, this file's included,
+ * has already been resolved. A static import here therefore resolves against
+ * a build artifact that is not there, and the run dies before the first
+ * task with a missing `.js` that names neither tsx nor this file. The runner
+ * imports the same two the same way for the same reason.
+ */
+let workspacePackagesPromise
+const workspacePackages = () => {
+  workspacePackagesPromise ??= Promise.all([
+    import('@kamiazya/whiteboard-codec'),
+    import('@kamiazya/whiteboard-canvas-render'),
+  ]).then(([codec, render]) => ({
+    parseSpatial: codec.parseSpatial,
+    scoreFacets: render.scoreFacets,
+  }))
+  return workspacePackagesPromise
+}
+
 export const text = (n) => (n.text ?? '').trim()
 export const byText = (board, t) =>
   board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
@@ -839,6 +864,85 @@ export const TASKS = [
         return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
       }
       return { ok: true, detail: `${wanted.length} boxes, ${flows.length} flows, no overlap` }
+    },
+  },
+  {
+    // TWO axes on one board, which is the case ADR-0036 was written for and
+    // the one no earlier task could reach: a reader wants to know what each
+    // thing IS and, separately, whether it is HEALTHY. Those are two
+    // distinctions competing for two channels, and only a document that
+    // DECLARES the second one makes it legible to a reader who did not draw
+    // it (ADR-0033's `contested`).
+    //
+    // The prompt names no facet key, no tool and no channel. It does say
+    // "two different questions", because that is the ask — a prompt that hid
+    // it would be testing whether the model invents a second axis unprompted,
+    // which is a different question and not this one. Which channel carries
+    // which is left entirely open: colour-for-health and shape-for-kind is
+    // the obvious reading, and the verifier accepts the opposite.
+    name: 'tell two things apart at once: what it is, and whether it is healthy',
+    boards: ['boards/fleet'],
+    prompt:
+      'Create a board at boards/fleet and draw our service fleet: an Orders service, a Billing service, a Postgres database, a Redis cache, and a payment gateway that is outside our system. Billing and Redis are currently failing; the rest are healthy. Someone glancing at the board should be able to answer two different questions without reading every label: what each thing IS, and whether it is healthy. Apply it directly; I am looking at the board.',
+    verify: async (wb, _ids) => {
+      const listed = await wb.call('wb_document_list', { workspaceId: WORKSPACE_ID })
+      const entry = listed.documents.find((d) => d.path === 'boards/fleet')
+      if (entry === undefined) return { ok: false, detail: 'no board at boards/fleet' }
+      const read = await wb.call('wb_document_get', {
+        workspaceId: WORKSPACE_ID,
+        documentIds: [entry.documentId],
+      })
+      const content = read.documents[0]?.content
+      if (content === undefined) return { ok: false, detail: 'the board has no content' }
+      const { parseSpatial, scoreFacets } = await workspacePackages()
+      const parsed = parseSpatial(content)
+      if (!parsed.ok) {
+        return { ok: false, detail: `the board does not parse: ${parsed.error.message}` }
+      }
+      const board = await wb.call('wb_canvas_snapshot', {
+        workspaceId: WORKSPACE_ID,
+        documentId: entry.documentId,
+      })
+      const wanted = ['Orders', 'Billing', 'Postgres', 'Redis', 'gateway']
+      const missing = wanted.filter(
+        (word) =>
+          !board.nodes.some(
+            (n) => n.type !== 'group' && text(n).toLowerCase().includes(word.toLowerCase()),
+          ),
+      )
+      if (missing.length > 0) return { ok: false, detail: `missing: ${missing.join(', ')}` }
+
+      // Graded by the INSTRUMENT, not by the path: two channels each
+      // constant within the classes of a DIFFERENT declared distinction is
+      // what "two questions answerable at a glance" means, and a model that
+      // gets there by putting health in the silhouette has drawn a board
+      // that reads, which is the whole ask.
+      const { channels } = scoreFacets(parsed.value)
+      const spent = Object.entries(channels).filter(([, r]) => r.use !== 'unused')
+      const say = () =>
+        Object.entries(channels)
+          .map(
+            ([name, r]) =>
+              `${name} ${r.use}${r.carriedBy.length > 0 ? `(${r.carriedBy.join('+')})` : ''}`,
+          )
+          .join(', ')
+      if (spent.length < 2)
+        return { ok: false, detail: `only ${spent.length} channel spent — ${say()}` }
+      const contested = spent.filter(([, r]) => r.use === 'contested').map(([name]) => name)
+      if (contested.length > 0) {
+        // The defect the axis declaration exists to fix: the board DRAWS a
+        // distinction and RECORDS none, so only whoever drew it can read it.
+        return {
+          ok: false,
+          detail: `${contested.join(' and ')} carries nothing declared — ${say()}`,
+        }
+      }
+      const [a, b] = spent.map(([, r]) => new Set(r.carriedBy))
+      const shared = [...a].filter((name) => b.has(name))
+      if (shared.length === a.size && shared.length === b.size) {
+        return { ok: false, detail: `both channels say the same thing — ${say()}` }
+      }
+      return { ok: true, detail: say() }
     },
   },
 ]
