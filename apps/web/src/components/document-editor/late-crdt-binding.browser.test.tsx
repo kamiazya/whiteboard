@@ -85,8 +85,15 @@ it('the editor survives a re-render that does not change the binding', async () 
   const view = container.querySelector('.cm-content')
 
   rerender(<Host extensions={binding} />)
-  await new Promise((resolve) => setTimeout(resolve, 50))
 
+  // A remount happens during the rerender itself, so the identity check needs
+  // no wait — and instead of waiting out a quiet period to prove one did not
+  // happen later, prove the surviving view still WRITES: a keystroke landing
+  // in the container is a condition, where a sleep is only a hope.
   expect(container.querySelector('.cm-content')).toBe(view)
-  expect(doc.getText('body').toString()).toBe('kept')
+  await userEvent.keyboard('!')
+  await vi.waitFor(() => {
+    expect(doc.getText('body').toString()).toBe('kept!')
+  })
+  expect(container.querySelector('.cm-content')).toBe(view)
 })
