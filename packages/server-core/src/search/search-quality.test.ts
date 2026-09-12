@@ -185,6 +185,13 @@ describe('stage-0 lexical retrieval quality', () => {
       // non-zero readings were both the corpus leaking, not capability.
       paraphrase: { ndcg: 0, recall: 0, of: 3 },
       'cross-lingual': { ndcg: 0, recall: 0, of: 3 },
+      // Also total, and for a different reason than the two above: not a
+      // synonym or a script this scheme cannot cross, but a vocabulary the
+      // index has never been shown. A document whose point is a picture is
+      // findable by nothing — measured, `ship it 🚀 today` indexes as
+      // `ship it today`. Unlike the debt above it, this one is reachable
+      // without a model, and moving it is what the next increment is for.
+      emoji: { ndcg: 0, recall: 0, of: 4 },
     })
     // Named, not just counted: a later reader can see WHICH questions go
     // unanswered without re-deriving them.
@@ -192,6 +199,10 @@ describe('stage-0 lexical retrieval quality', () => {
       'cross-lingual: embedding model download size',
       'cross-lingual: ストレージ容量の見積もり',
       'cross-lingual: 再接続の手順書',
+      'emoji: party',
+      'emoji: rocket',
+      'emoji: ロケット',
+      'emoji: 炎',
       'paraphrase: 回線トラブル時の対処',
       'paraphrase: 新規ユーザーが最初に通る画面',
       'paraphrase: 通信が不安定な場合の復旧',
