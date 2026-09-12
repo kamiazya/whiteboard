@@ -865,9 +865,28 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       // locator on the contenteditable is ambiguous under strict mode.
       await focusEditable(() => document.querySelector('[contenteditable="true"]'))
       await userEvent.keyboard('{Control>}{End}{/Control}{Enter}and an appended line')
-      await waitFor(() => {
-        expect(document.querySelector('.cm-content')?.textContent).toContain('and an appended line')
-      })
+      // The same 10s ceiling the embed waits below use, and for the same
+      // reason: `userEvent.keyboard` resolving means the keys were DISPATCHED,
+      // not that the page applied them, and testing-library's default retry
+      // budget is 1000ms of the RUNNER's clock. Under CI's stress lane — every
+      // test file a PR touched in one process, 290 of them — that ran out
+      // mid-word: `expected 'body stored as an okf-body nodeand ' to contain
+      // 'and an appended line'`, four of twenty characters in.
+      //
+      // Not established, and said rather than implied: whether the remaining
+      // keystrokes were LATE or genuinely DROPPED cannot be separated from one
+      // reading, and it did not reproduce locally (the file alone, the file
+      // under 12 CPU hogs with --repeats=3, or the whole 290-file set). A
+      // budget only fixes the first. If they are dropped this fails again and
+      // says so, which is why the assertion is unchanged.
+      await waitFor(
+        () => {
+          expect(document.querySelector('.cm-content')?.textContent).toContain(
+            'and an appended line',
+          )
+        },
+        { timeout: 10_000 },
+      )
 
       await waitForSaved()
       first.unmount()
