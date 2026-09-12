@@ -1,3 +1,11 @@
+/**
+ * What a run of body text DRAWS as, which is not what a document stores.
+ * Published because a caller that has to reason about the drawn glyphs —
+ * the export's undrawable-character report is the one that exists — cannot
+ * get there from the stored string, and a second copy of the rule is how
+ * that report comes to disagree with the picture.
+ */
+export { expandEmojiShortcodes } from '@kamiazya/whiteboard-plugin-visual/emoji/shortcode'
 export type {
   Appearance,
   BlockquoteNode,

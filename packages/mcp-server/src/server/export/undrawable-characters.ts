@@ -1,3 +1,4 @@
+import { expandEmojiShortcodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { loadExportFonts } from './measure-text.js'
 
@@ -31,8 +32,13 @@ export async function undrawableCharacters(canvas: SpatialCanvas): Promise<reado
 
   const seen = new Set<string>()
   const missing: string[] = []
-  const scan = (text: string | undefined): void => {
-    if (text === undefined) return
+  const scan = (raw: string | undefined): void => {
+    if (raw === undefined) return
+    // As DRAWN, not as stored. `:rocket:` is ASCII that every export font
+    // carries; the 🚀 the layout draws in its place is what none of them
+    // does, so scanning the stored string would report nothing about the
+    // one character that comes out a tofu box.
+    const text = expandEmojiShortcodes(raw)
     for (const char of text) {
       if (seen.has(char)) continue
       seen.add(char)
