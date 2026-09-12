@@ -39,6 +39,7 @@ import {
   setAnnotationProjection,
 } from './annotation-decorations.js'
 import { useAnnotationEntry } from './annotation-scope.js'
+import { completionOnDelete } from './completion-on-delete.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { emojiCompletionSource } from './emoji-completion.js'
@@ -386,6 +387,8 @@ export function MarkdownEditor({
         // through to the markdown keymap and put a NEWLINE under the popup.
         interactionDelay: 0,
       }),
+      // Deletion re-asks the sources; the plugin itself only activates on typing.
+      completionOnDelete(),
       // While the popup is OPEN ('active'), Enter is accept-or-nothing —
       // never a newline under a visible option list. 'pending' (the source
       // still running, typically for plain prose that will produce no
