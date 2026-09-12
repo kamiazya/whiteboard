@@ -175,5 +175,9 @@ export {
   workspaceEditInputSchema,
   workspaceEditOutputSchema,
 } from './tools/workspace-edit.js'
-export type { OperatorInfo, VersionEntry } from './versions/version-entry.js'
-export { operatorInfoSchema, versionEntrySchema } from './versions/version-entry.js'
+export type { OperatorInfo, RequestOperator, VersionEntry } from './versions/version-entry.js'
+export {
+  operatorInfoSchema,
+  requestOperatorSchema,
+  versionEntrySchema,
+} from './versions/version-entry.js'

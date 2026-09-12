@@ -184,6 +184,26 @@ describe('operatorInfoSchema', () => {
 })
 
 describe('saveVersionRequestSchema', () => {
+  // The request half of the operator is derived from the full one by
+  // omission, so a field added to `operatorInfoSchema` is stateable by a
+  // caller unless someone deliberately takes it away. `actor` is the one
+  // taken away: it names the device, and only the keeper can back that name
+  // with a key. Refused rather than stripped, so a caller learns its value
+  // did not take effect.
+  it('refuses an operator that names the device', () => {
+    const parsed = saveVersionRequestSchema.safeParse({
+      operator: { kind: 'ai', actor: 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP' },
+    })
+    expect(parsed.success).toBe(false)
+  })
+
+  it('accepts the half a caller legitimately knows', () => {
+    const parsed = saveVersionRequestSchema.safeParse({
+      operator: { kind: 'human', displayName: 'Alice', agentId: 'a-1', workspaceId: 'ws-1' },
+    })
+    expect(parsed.success).toBe(true)
+  })
+
   it('parses an empty body', () => {
     const result: SaveVersionRequest = saveVersionRequestSchema.parse({})
     expect(result.label).toBeUndefined()
@@ -192,10 +212,7 @@ describe('saveVersionRequestSchema', () => {
   it('roundtrip with label and operator', () => {
     const valid: SaveVersionRequest = {
       label: 'v1.0',
-      operator: {
-        kind: 'human',
-        actor: 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP',
-      },
+      operator: { kind: 'human', displayName: 'Alice' },
     }
     const result: SaveVersionRequest = roundtrip(saveVersionRequestSchema, valid)
     expect(result).toEqual(valid)
