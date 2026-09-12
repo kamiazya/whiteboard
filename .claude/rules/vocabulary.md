@@ -15,6 +15,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Node** / **Edge** | JSON Canvas elements | anything in an OKF document |
 | **Canvas** | the spatial surface, and the JSON Canvas format | the container a workspace holds — that is a Document |
 | **OpenCanvas** | nothing. Retired — it was a working name for this project's document world, never a spec | the format (that is **JSON Canvas 1.0**) or the entity (that is a **Document**) |
+| **OCIF** / **Open Canvas** (OCWG's) | the Open Canvas Interchange Format and the working group that publishes it — a real external standard, and a third projection target ([ADR-0036](../../docs/contributing/adr/0036-ocif-projection.md)) | **OpenCanvas**, the retired working name one row above. They are one search apart and mean opposite things: one is a spec this project targets, the other is a word this project stopped using |
 | **Scene** | the laid-out projection of a spatial document (what `composeCanvasScene` produces) | stored content |
 | **Version** | a saved point in a document's history | a branch |
 | **Browser** / **Daemon** | who KEEPS a workspace — the browser's own storage, or the whiteboard daemon | a claim about network locality; both run on the same machine |
