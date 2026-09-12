@@ -45,13 +45,20 @@ export const setPinnedRequestSchema = z.object({
 // OperatorInfo is declared in server-core beside the VersionHistory seam
 // and re-exported here so this barrel stays the one place apps/web reads a
 // daemon contract from.
-import { operatorInfoSchema, versionEntrySchema } from '@kamiazya/whiteboard-server-core'
+import {
+  operatorInfoSchema,
+  requestOperatorSchema,
+  versionEntrySchema,
+} from '@kamiazya/whiteboard-server-core'
 
 export { operatorInfoSchema, versionEntrySchema }
 
+// `operator` here is `requestOperatorSchema`, NOT the full operator: a caller
+// may say which KIND of party asked and what to show a reader, and may not
+// name the device. See its definition in server-core for why.
 export const saveVersionRequestSchema = z.object({
   label: z.string().optional(),
-  operator: operatorInfoSchema.optional(),
+  operator: requestOperatorSchema.optional(),
 })
 
 // POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore

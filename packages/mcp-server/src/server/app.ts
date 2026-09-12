@@ -420,6 +420,10 @@ export function createApp(options: AppOptions) {
   app.route(
     '/',
     createDocumentRouter({
+      // ADR-0035 decision 2: a version row records the DEVICE, by a name
+      // that cannot rotate. The identity is built above, so this is the one
+      // place that answer is known without threading it through the DI graph.
+      daemonActor: identity.did,
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
       ...(options.onAutoVersionTrigger === undefined
         ? {}

@@ -49,7 +49,7 @@ const SYMBOL_KEY = 'visual.symbol/v0'
  * Keyed by BARE name; the registry composes `visual.<name>`, as it does for
  * themes and icons.
  *
- * **Every member spends SILHOUETTE and nothing else** ([ADR-0035](../../../docs/contributing/adr/0035-semantic-axes.md)
+ * **Every member spends SILHOUETTE and nothing else** ([ADR-0036](../../../docs/contributing/adr/0036-semantic-axes.md)
  * §5). A channel carries at most one semantic axis, and the kind axis has
  * one of its own; colour therefore belongs to whatever second axis the
  * drawing declares — healthy-versus-failing on an infrastructure board being

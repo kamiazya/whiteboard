@@ -39,8 +39,10 @@ import {
   setAnnotationProjection,
 } from './annotation-decorations.js'
 import { useAnnotationEntry } from './annotation-scope.js'
+import { completionOnDelete } from './completion-on-delete.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
+import { emojiCompletionSource } from './emoji-completion.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PassageProposalCard } from './PassageProposalCard.js'
@@ -374,15 +376,19 @@ export function MarkdownEditor({
   const completionExtension = useMemo(
     () => [
       autocompletion({
-        override: [wikiLinkCompletionSource(() => linkTargetsRef.current)],
+        // Both sources in ONE `autocompletion()`: `override` replaces the
+        // whole list, so a second call beside this would kill the `[[` one.
+        override: [wikiLinkCompletionSource(() => linkTargetsRef.current), emojiCompletionSource],
         // The upstream default (75ms) rejects an Enter that lands too soon
         // after the popup (re)opens, to protect a popup that appeared under
-        // an Enter meant as a newline. This completion only ever opens
-        // inside an explicit `[[` trigger, where Enter means accept — and
-        // with the delay in place a fast typist's Enter fell through to the
-        // markdown keymap and put a NEWLINE under the visible popup.
+        // an Enter meant as a newline. These completions only ever open
+        // inside an explicit `[[` or `:name` trigger, where Enter means
+        // accept — and with the delay in place a fast typist's Enter fell
+        // through to the markdown keymap and put a NEWLINE under the popup.
         interactionDelay: 0,
       }),
+      // Deletion re-asks the sources; the plugin itself only activates on typing.
+      completionOnDelete(),
       // While the popup is OPEN ('active'), Enter is accept-or-nothing —
       // never a newline under a visible option list. 'pending' (the source
       // still running, typically for plain prose that will produce no

@@ -38,8 +38,10 @@ interface VersionsTable {
   branchName: string
   auto: Bool
   label: string | null
-  operatorKind: 'ai' | 'human' | 'system'
-  operatorPeerId: string
+  // '' is a real value here: no operator at all. See version-store's
+  // `VersionRow`, which carries the same pair and says why.
+  operatorKind: '' | 'ai' | 'human' | 'system'
+  operatorActor: string
   operatorDisplayName: string | null
   operatorAgentId: string | null
   operatorWorkspaceId: string | null

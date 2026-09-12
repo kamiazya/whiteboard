@@ -198,7 +198,7 @@ describe('what an errand costs in tool calls', () => {
       // is stated here instead.
       //
       // 10,148 -> 11,138, and the attribution matters more than the number:
-      // +968 of it is `visual.axes/v0` joining the facet list (ADR-0035 §1),
+      // +968 of it is `visual.axes/v0` joining the facet list (ADR-0036 §1),
       // +22 the sixth silhouette in `visual.shape/v0`'s enum. Measured by
       // re-running this pin with each change reverted in turn, because the
       // two landed in different increments and the first one's cost was
@@ -280,7 +280,7 @@ describe('what an errand costs in tool calls', () => {
       // is saved per errand.
       //
       // Response 2,086 -> 1,918 when the bundled stencils stopped spending
-      // colour (ADR-0035 §5): six `color` fields leave the answer and one
+      // colour (ADR-0036 §5): six `color` fields leave the answer and one
       // silhouette joins it, `service` having had none. Nothing was cut for
       // the sake of bytes — this is the by-product of freeing the colour
       // channel for a second semantic axis, and it is stated here so the

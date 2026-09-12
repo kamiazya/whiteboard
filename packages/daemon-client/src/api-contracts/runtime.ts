@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { didKeyToEd25519PublicKey } from './did-key.js'
 
 // instanceId (a per-daemon-start crypto.randomUUID) replaces the OS pid here.
 // pid is reused by the OS across processes, so a stale record comparing pid
@@ -9,10 +10,29 @@ import { z } from 'zod'
 // publicKey is the raw Ed25519 public key, base64url. Advertising it is safe:
 // trust comes from the web app PINNING the key at /pair consent time and
 // verifying signatures against the pin, never from the advertisement itself.
-export const daemonIdentitySchema = z.object({
-  alg: z.literal('Ed25519'),
-  publicKey: z.string().min(1),
-})
+// `did` is the same key under the name the rest of the world uses for one
+// (ADR-0035 decision 1) — derived from publicKey, never a second credential,
+// and never what a pin is taken on. Optional for the same wire-compat reason
+// `identity` itself is: a daemon predating it advertises the key alone.
+//
+// "Derived from publicKey" is CHECKED here rather than merely stated. The two
+// fields claim to name one key, and a prefix test admits a well-formed did
+// naming a different one: a responder could advertise the pinned publicKey
+// beside its OWN did, and a verifier that imported the key from the did would
+// then check signatures against the responder's key while believing it held
+// the pin. Nothing reads `did` yet, which is exactly when the cheap place to
+// close it is the contract — before a reader exists to trust it.
+export const daemonIdentitySchema = z
+  .object({
+    alg: z.literal('Ed25519'),
+    publicKey: z.string().min(1),
+    did: z.string().startsWith('did:key:').optional(),
+  })
+  .refine(
+    (identity) =>
+      identity.did === undefined || didKeyToEd25519PublicKey(identity.did) === identity.publicKey,
+    { message: 'did must decode to publicKey', path: ['did'] },
+  )
 
 export type DaemonIdentityInfo = z.infer<typeof daemonIdentitySchema>
 

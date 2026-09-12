@@ -63,7 +63,7 @@ describe('wb_facet_list', () => {
     // attachable to all three rather than three facets.
     const canvasOnly = await tool().execute({ target: 'canvas' })
     expect(canvasOnly.facets.map((f) => f.key)).toEqual([
-      // `visual.axes/v0` is canvas-only for the reason ADR-0035 §1 gives:
+      // `visual.axes/v0` is canvas-only for the reason ADR-0036 §1 gives:
       // naming a semantic axis is a statement about the whole drawing, and
       // the same sentence attached to one node says nothing a reader could
       // act on.

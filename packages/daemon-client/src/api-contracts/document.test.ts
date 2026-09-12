@@ -132,7 +132,7 @@ describe('setPinnedRequestSchema', () => {
 })
 
 describe('operatorInfoSchema', () => {
-  const valid: OperatorInfo = { kind: 'ai', peerId: 'peer-1' }
+  const valid: OperatorInfo = { kind: 'ai', actor: 'process:peer-1' }
 
   it('parses a well-formed value', () => {
     const result: OperatorInfo = operatorInfoSchema.parse(valid)
@@ -142,7 +142,7 @@ describe('operatorInfoSchema', () => {
   it('roundtrip with all optional fields', () => {
     const full: OperatorInfo = {
       kind: 'human',
-      peerId: 'peer-2',
+      actor: 'human:alice',
       displayName: 'Alice',
       agentId: 'agent-x',
       workspaceId: 'ws-1',
@@ -152,15 +152,58 @@ describe('operatorInfoSchema', () => {
   })
 
   it('rejects invalid kind', () => {
-    expect(operatorInfoSchema.safeParse({ kind: 'bot', peerId: 'p' }).success).toBe(false)
+    expect(operatorInfoSchema.safeParse({ kind: 'bot', actor: 'process:p' }).success).toBe(false)
   })
 
-  it('rejects empty peerId', () => {
-    expect(operatorInfoSchema.safeParse({ kind: 'ai', peerId: '' }).success).toBe(false)
+  // An actor is OKF's, so the schema is model's `okfActorSchema` rather
+  // than a second opinion about what a party looks like: blank and
+  // multi-line are what it refuses.
+  it('rejects an actor that is not a single non-blank line', () => {
+    expect(operatorInfoSchema.safeParse({ kind: 'ai', actor: '' }).success).toBe(false)
+    expect(operatorInfoSchema.safeParse({ kind: 'ai', actor: 'a\nb' }).success).toBe(false)
+  })
+
+  // The keeper without a device identity — a browser today — records the
+  // kind and no actor. Absent is a legal answer; inventing one is what this
+  // field stopped doing.
+  it('accepts a kind with no actor at all', () => {
+    expect(operatorInfoSchema.safeParse({ kind: 'human' }).success).toBe(true)
+  })
+
+  // Load-bearing, and the cost of getting it wrong is somebody's whole
+  // history. apps/web's `versionRowSchema` is `.strict()` and its reader
+  // SKIPS a row that fails to parse, so this object being strict would turn
+  // every IndexedDB row written before `peerId` became `actor` into a row
+  // that silently does not exist. Stripping the stale key is the behaviour
+  // that has to hold.
+  it('drops an identifier from before the rename rather than refusing the value', () => {
+    const parsed = operatorInfoSchema.safeParse({ kind: 'human', peerId: 'browser' })
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data).toEqual({ kind: 'human' })
   })
 })
 
 describe('saveVersionRequestSchema', () => {
+  // The request half of the operator is derived from the full one by
+  // omission, so a field added to `operatorInfoSchema` is stateable by a
+  // caller unless someone deliberately takes it away. `actor` is the one
+  // taken away: it names the device, and only the keeper can back that name
+  // with a key. Refused rather than stripped, so a caller learns its value
+  // did not take effect.
+  it('refuses an operator that names the device', () => {
+    const parsed = saveVersionRequestSchema.safeParse({
+      operator: { kind: 'ai', actor: 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP' },
+    })
+    expect(parsed.success).toBe(false)
+  })
+
+  it('accepts the half a caller legitimately knows', () => {
+    const parsed = saveVersionRequestSchema.safeParse({
+      operator: { kind: 'human', displayName: 'Alice', agentId: 'a-1', workspaceId: 'ws-1' },
+    })
+    expect(parsed.success).toBe(true)
+  })
+
   it('parses an empty body', () => {
     const result: SaveVersionRequest = saveVersionRequestSchema.parse({})
     expect(result.label).toBeUndefined()
@@ -169,7 +212,7 @@ describe('saveVersionRequestSchema', () => {
   it('roundtrip with label and operator', () => {
     const valid: SaveVersionRequest = {
       label: 'v1.0',
-      operator: { kind: 'human', peerId: 'peer-1' },
+      operator: { kind: 'human', displayName: 'Alice' },
     }
     const result: SaveVersionRequest = roundtrip(saveVersionRequestSchema, valid)
     expect(result).toEqual(valid)
@@ -230,7 +273,7 @@ describe('versionEntrySchema', () => {
     const withOptionals: VersionEntry = {
       ...valid,
       label: 'Checkpoint',
-      operator: { kind: 'ai', peerId: 'agent-1' },
+      operator: { kind: 'ai', actor: 'process:agent-1' },
     }
     const result: VersionEntry = roundtrip(versionEntrySchema, withOptionals)
     expect(result).toEqual(withOptionals)

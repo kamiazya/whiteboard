@@ -48,6 +48,8 @@ export interface DocumentRouterOptions {
    * work after `createApp` already holds it.
    */
   onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
+  /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
+  daemonActor?: string
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -61,6 +63,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   const versionStore = options.versionStore ?? new FileVersionStore()
   const triggerAutoVersion = createAutoVersionTrigger(versionStore, {
     ...(options.autoVersionQuietMs === undefined ? {} : { quietMs: options.autoVersionQuietMs }),
+    ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
     // The checkpoint lands long after the update that signalled it, so the
     // broadcast is the trigger's to make rather than the caller's.
     onSaved: (workspaceId, path, entry) => {
@@ -101,7 +104,13 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
     }),
   )
-  app.route('/', createVersionsRouter({ versionStore }))
+  app.route(
+    '/',
+    createVersionsRouter({
+      versionStore,
+      ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
+    }),
+  )
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())
   // Restore progress goes out over the WS surface; same dynamic import as

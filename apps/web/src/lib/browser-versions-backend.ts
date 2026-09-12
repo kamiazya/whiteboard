@@ -62,7 +62,7 @@ export function createBrowserVersionsBackend(deps: {
         label,
         // The person at this browser. The daemon names its humans by their
         // sync peer; the browser has one person and no peer to name.
-        operator: { kind: 'human', peerId: 'browser' },
+        operator: { kind: 'human' },
       })
     },
     async loadPast(_workspaceId, path, versionId) {

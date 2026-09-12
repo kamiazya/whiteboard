@@ -35,7 +35,7 @@ describe('the bundled stencil set', () => {
   })
 
   it('spends NO colour, so the channel is free for a second axis', () => {
-    // ADR-0035 §5. A channel carries at most one semantic axis, and the kind
+    // ADR-0036 §5. A channel carries at most one semantic axis, and the kind
     // axis has one of its own now that the silhouette vocabulary holds six.
     // The user's case (2026-09-12) is the one this is for: an infrastructure
     // drawing says what each component IS with its shape and whether it is

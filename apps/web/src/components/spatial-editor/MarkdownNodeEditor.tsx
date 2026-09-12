@@ -29,6 +29,12 @@
  * background this replaced existed solely to hide the committed text.
  */
 
+import {
+  acceptCompletion,
+  autocompletion,
+  closeCompletion,
+  completionStatus,
+} from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
@@ -50,10 +56,14 @@ import {
   annotationMarks,
   setAnnotationProjection,
 } from '../markdown-editor/annotation-decorations.js'
+import { completionOnDelete } from '../markdown-editor/completion-on-delete.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
+import { emojiCompletionSource } from '../markdown-editor/emoji-completion.js'
+import { emojiShortcodeMarks } from '../markdown-editor/emoji-shortcode-marks.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
+import { wikiLinkCompletionTheme } from '../markdown-editor/wiki-link-completion.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null
@@ -165,15 +175,53 @@ export function MarkdownNodeEditor({
             },
             {
               key: 'Escape',
-              run: () => {
+              run: (view) => {
+                // Dismiss the popup before abandoning the EDIT. Losing a
+                // node's whole draft to an Escape aimed at a completion list
+                // is not a trade anyone would take, and this editor is the
+                // only one where Escape is destructive.
+                if (completionStatus(view.state) === 'active' && closeCompletion(view)) return true
                 cancel()
                 return true
               },
             },
-            { key: 'Enter', run: exitEmptyListItem },
+            {
+              key: 'Enter',
+              run: (view) => {
+                // A visible option list owns Enter. Without this the
+                // exit/continuation verb below fires under the popup, which
+                // is the same thing `Prec.highest` is here to prevent for
+                // the language keymap.
+                if (completionStatus(view.state) === 'active') return acceptCompletion(view) || true
+                return exitEmptyListItem(view)
+              },
+            },
           ]),
         ),
+        // AFTER the exit verbs, and that order is load-bearing rather than
+        // tidy. `autocompletion()` installs its own keymap at `Prec.highest`
+        // too, so within that precedence whichever is listed FIRST wins the
+        // key — and its Escape is `closeCompletion`, which answers true for a
+        // merely PENDING query, not only an open popup. Listed first it
+        // swallowed every Escape typed within the activation debounce, so a
+        // node's draft could not be abandoned at all: measured, the handler
+        // below never ran, and `markdown-node-editor.browser.test.tsx`'s
+        // Escape cases are what caught it.
+        //
+        // With the exit verbs first, the distinction they already draw is the
+        // one that applies — an ACTIVE popup takes the key, anything else
+        // abandons the edit.
+        autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
+        // Same reason as the document editor: nothing reopens a list after a
+        // deletion, so a name finished long ago could not be corrected with
+        // the list that wrote it.
+        completionOnDelete(),
+        wikiLinkCompletionTheme,
         syntaxHighlighting(markdownHighlightStyle),
+        // The node behind this editor draws its body with the shortcode
+        // expanded, so the draft over it does too — otherwise committing
+        // changes the picture for a reason nothing on screen explains.
+        emojiShortcodeMarks(),
         history(),
         keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,

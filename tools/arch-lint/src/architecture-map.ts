@@ -237,7 +237,13 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // injects trace headers through when the embedding page registers a real
     // SDK. The SDK packages themselves were deleted with the dead
     // enableBrowserTracing half (zero production callers).
-    allowedThirdParty: ['zod', '@opentelemetry/api'],
+    // multiformats: the reference implementation of multibase + multicodec,
+    // which is what a `did:key` IS. Pure JS, zero dependencies, no DOM and no
+    // `node:*` — verified before adopting, so it holds in Node, the browser
+    // and a worker alike. Adopted over a hand-written base58 because that
+    // version's leading-zero branches are unreachable from this package's one
+    // call site and so could never be covered by a test here.
+    allowedThirdParty: ['zod', '@opentelemetry/api', 'multiformats'],
     exemptBoundaryViolationKinds: ['dom-global'],
   },
   // Composition root (Node CLI/daemon), never a runtime dependency of any

@@ -185,6 +185,15 @@ describe('stage-0 lexical retrieval quality', () => {
       // non-zero readings were both the corpus leaking, not capability.
       paraphrase: { ndcg: 0, recall: 0, of: 3 },
       'cross-lingual': { ndcg: 0, recall: 0, of: 3 },
+      // Was `{ ndcg: 0, recall: 0 }` when this category was added one
+      // commit earlier — total, like the two above it and for a different
+      // reason: not a synonym or a script the scheme cannot cross, but a
+      // vocabulary the index had never been shown. Showing it
+      // (`alsoIndex: emojiSearchText`) answers all four, the canvas and
+      // both Japanese ones included. That is the whole difference between
+      // this debt and the two above: those need a model, this needed a
+      // table the repo already ships.
+      emoji: { ndcg: 1, recall: 1, of: 4 },
     })
     // Named, not just counted: a later reader can see WHICH questions go
     // unanswered without re-deriving them.

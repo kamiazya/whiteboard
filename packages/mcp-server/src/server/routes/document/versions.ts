@@ -9,6 +9,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { RequestOperator } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getDoc } from '../../store/document-store.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
@@ -21,13 +22,19 @@ import { onDocumentsRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
   versionStore: VersionStore
+  /**
+   * This daemon as an OKF actor — its `did:key` (ADR-0035 decision 2).
+   * Optional so a composition without an identity records no actor rather
+   * than an invented one; `app.ts` always passes it.
+   */
+  daemonActor?: string
 }
 
 // GET /api/workspaces/:workspaceId/documents/:path/versions
 // POST /api/workspaces/:workspaceId/documents/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
   const app = new Hono()
-  const { versionStore } = options
+  const { versionStore, daemonActor } = options
 
   // List versions for one canvas in reverse chronological order.
   onDocumentsRoute(app, 'get', ['versions'], async (c, workspaceId, path) => {
@@ -89,13 +96,14 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
     },
   )
 
-  // Save a manual version with body { label?: string; operator?: OperatorInfo }. auto is false.
+  // Save a manual version with body { label?: string; operator?: RequestOperator }.
+  // auto is false.
   onDocumentsRoute(app, 'post', ['versions'], async (c, workspaceId, path) => {
     // Empty body is valid (no label / operator); a non-empty body must parse as
     // JSON and pass schema validation, otherwise return invalid_body.
     const rawText = await c.req.text()
     let label: string | undefined
-    let operator: OperatorInfo | undefined
+    let operator: RequestOperator | undefined
     if (rawText.length > 0) {
       let json: unknown
       try {
@@ -105,8 +113,14 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       }
       const parsed = saveVersionRequestSchema.safeParse(json)
       if (!parsed.success) {
-        const message =
-          parsed.error.issues[0]?.path[0] === 'operator'
+        const issue = parsed.error.issues[0]
+        // The actor case gets its own sentence: a caller sending one has a
+        // wrong model of whose name it is, and "operator is invalid" would
+        // send them looking at the wrong field.
+        const namedTheDevice = issue?.code === 'unrecognized_keys' && issue.keys.includes('actor')
+        const message = namedTheDevice
+          ? 'operator.actor is stamped by the daemon and must not be sent'
+          : issue?.path[0] === 'operator'
             ? 'operator is invalid'
             : 'label must be string'
         return c.json({ error: 'invalid_body', message }, 400)
@@ -116,10 +130,13 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
     }
     try {
       const doc = await getDoc(workspaceId, path)
-      const nextOperator = operator ?? {
-        kind: 'human' as const,
-        peerId: doc.peerIdStr,
-        displayName: defaultHumanDisplayName(),
+      // The SCHEMA is what stops a caller naming the device; this spread
+      // order is arrangement, not a second guard — measured, reversing it
+      // fails no test, because nothing can get an `actor` past the schema to
+      // notice. A caller that names no operator at all still gets one.
+      const nextOperator: OperatorInfo = {
+        ...(operator ?? { kind: 'human' as const, displayName: defaultHumanDisplayName() }),
+        ...(daemonActor === undefined ? {} : { actor: daemonActor }),
       }
       const entry = await versionStore.save(workspaceId, path, doc, {
         auto: false,

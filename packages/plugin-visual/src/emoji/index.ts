@@ -6,10 +6,14 @@
  * renderer, the layout worker, the MCP server — none of which opens a
  * picker. Whoever wants the rows reaches for this, and pays for them.
  *
- * Two consumers so far: the facet picker (through `data.ts`'s dynamic
- * import of `sections.js`) and, next, the markdown editor's `:name:`
- * shortcode — which needs the same slug function and the same table, and
- * would otherwise grow a second copy of both.
+ * Its readers are three, and they are one vocabulary read three ways: the
+ * facet picker (through `data.ts`'s dynamic import of `sections.js`), the
+ * renderer resolving a `:name:` while drawing (`./shortcode`, which is on
+ * the READ path and so imports no search index), and the markdown editor's
+ * `:` completion offering one while typing (`./search`, which does). Each
+ * is its own subpath because what they cost differs by an order of
+ * magnitude; what they must never differ on is what a name means, which is
+ * why all three go through `emojiSlug` over the same rows.
  */
 export { EMOJI_VERSION } from './catalog-data.js'
 export { EMOJI_JA_TAG } from './catalog-ja.js'

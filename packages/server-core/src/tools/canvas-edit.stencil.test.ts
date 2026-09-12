@@ -183,7 +183,7 @@ describe('dressing a box with a stencil', () => {
     expect(resolveNodeShape(node as never)).toBe('cylinder')
     // And NO colour: the bundled vocabulary spends silhouette alone, so the
     // colour channel is free for whatever second axis the drawing declares
-    // (ADR-0035 §5).
+    // (ADR-0036 §5).
     expect(node?.color).toBeUndefined()
     expect(resolveNodeStencil(node as never)).toBe('visual.datastore')
     // The text the caller wrote is untouched: a stencil says what a box IS,
@@ -228,7 +228,7 @@ describe('dressing a box with a stencil', () => {
   test('re-dressing a box takes the NEW silhouette and keeps the colour the caller set', async () => {
     // The colour here is the drawing's SECOND axis — health, say — and it
     // belongs to nobody else. Changing what a box IS must not overwrite what
-    // the drawing says about how it is doing (ADR-0035 §5).
+    // the drawing says about how it is doing (ADR-0036 §5).
     const { canvas } = await run([
       {
         op: 'node.add',
@@ -343,7 +343,7 @@ describe('a workspace\u2019s own stencil library', () => {
     // belonging to neither construct, which is ADR-0033's `excess` shape.
     //
     // It lives HERE, on library stencils, because the bundled set spends no
-    // colour any more (ADR-0035 §5) and so cannot exercise the rule. A
+    // colour any more (ADR-0036 §5) and so cannot exercise the rule. A
     // vocabulary somebody else authors still may, and this is the guard that
     // keeps `requestedColor` a parameter rather than a read off the node.
     const library = {

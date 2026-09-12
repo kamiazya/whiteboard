@@ -49,6 +49,13 @@ export interface ServerDepsOptions {
    * a registry must not be forced to build a second that disagrees with it.
    */
   readonly facetRegistry?: FacetRegistry
+  /**
+   * This daemon as an OKF actor — its `did:key`, from
+   * `daemonDeviceActor(dataDir)`. Stamped on an agent save that names no
+   * operator. A deployment fact rather than a storage one, which is why it
+   * rides here and not in the container.
+   */
+  readonly daemonActor?: string
 }
 
 /**
@@ -161,7 +168,7 @@ export function resolveServerDeps(
     documentWritten,
     // The daemon's own version store behind the seam, stamping the daemon's
     // agent identity on a save that names no operator (see the wrapper).
-    versions: agentVersionHistory(new FileVersionStore()),
+    versions: agentVersionHistory(new FileVersionStore(), options.daemonActor),
     // Same reason as documentTeardown: this package's own store, cache and
     // lock, bundled once so operations reach them through the seam instead
     // of any adapter importing a mechanic.

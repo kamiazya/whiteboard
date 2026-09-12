@@ -4,6 +4,7 @@ import {
   documentPathSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
+import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
 import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
@@ -196,7 +197,10 @@ export function createDocumentSearchTool(
       if (embedder === undefined) {
         // The returned page IS the prefix of the full ranking here, so the
         // index is the rank.
-        const hits = fullTextSearch(searchable, query, { limit: parsed.limit })
+        const hits = fullTextSearch(searchable, query, {
+          limit: parsed.limit,
+          alsoIndex: emojiSearchText,
+        })
         return {
           results: hits.map((hit, index) =>
             describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
@@ -206,7 +210,10 @@ export function createDocumentSearchTool(
 
       // Fusion needs the WHOLE lexical ranking, not the page the caller asked
       // for: a document the vector half also likes can climb from rank 20.
-      const lexical = fullTextSearch(searchable, query, { limit: searchable.length })
+      const lexical = fullTextSearch(searchable, query, {
+        limit: searchable.length,
+        alsoIndex: emojiSearchText,
+      })
       const semantic = await rankSemantically(
         deps,
         cache,

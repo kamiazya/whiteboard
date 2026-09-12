@@ -1,4 +1,4 @@
-# ADR-0035: A semantic axis is declared, and a channel carries at most one
+# ADR-0036: A semantic axis is declared, and a channel carries at most one
 
 **Status:** Accepted, and carried out. The instrument and the declaration
 landed first; the consequence for the bundled stencils — §5 — landed after the

@@ -204,6 +204,82 @@ the suite rather than shipping an ambiguous `:name:`.
 The slug is also a search KEYWORD, because the search splits on whitespace:
 `thumbs_up` finds nothing against a label reading `thumbs up`.
 
+`./emoji/shortcode` is the READ-PATH half, and a subpath of its own rather
+than part of `/emoji` for the reason `/emoji` is one: the barrel reaches
+`sections.ts`, which reaches `catalog-ja.ts` (118KB of search index nothing
+draws with). `expandEmojiShortcodes(text)` turns `:grinning_face:` into 😀
+and is called from canvas-render's inline walk, so every surface that draws
+a body resolves the same name to the same character.
+
+It is NOT behind a dynamic import, and the reason is what NEEDS it rather
+than how big it is. A picker's rows are read when a person opens a panel; a
+shortcode's table is read to draw a paragraph, in the layout worker, the SVG
+renderer and the MCP server alike — and a promise cannot be awaited inside a
+synchronous inline walk. The MAP is still lazy and gated on a candidate, so
+a body with no `:x:` in it never builds it.
+
+`emojiShortcodeRanges(text)` is the single definition of WHERE a shortcode
+is, and `expandEmojiShortcodes` is written over it. That is not tidiness: the
+markdown editor draws a widget over the same ranges
+(`apps/web`'s `emoji-shortcode-marks.ts`), so a second scanner there would
+make the pane a preview of something the renderer does not do — the worst
+shape available, worse than either behaviour on its own. One scanner, two
+readers, and `shortcode.test.ts` rebuilds the string from the ranges and
+asserts it equals what the expander produced.
+
+It derives from the SAME `EMOJI_GROUPS` through the same `emojiSlug` rather
+than from a generated reverse index. Measured: a slug-only table is 39.2KB
+against the 69.5KB this costs, so a second table buys 30KB and pays with a
+drift class — the day it lags, the picker inserts a shortcode the renderer
+will not resolve, silently, in a document that already has the text in it.
+`shortcode.test.ts` checks the two directions against each other over all
+1914 rows rather than against a hand-written list.
+
+`./emoji/search` is the TYPING half — `searchEmojiShortcodes(query)`, which
+the markdown editor's `:` completion reaches by dynamic import. It reads the
+Japanese index as well as the rows, so it costs the full 190KB and belongs
+nowhere near the read path; a person who never types a colon never loads it.
+Its ranking is exact name, then prefix, then slug substring, then any term —
+and within a score the SHORTER slug, which is not a tie-break detail but what
+makes a prefix usable: `:ro` scores `rocket` and `rolling_on_the_floor_laughing`
+alike, and on CLDR order alone the laughing face wins because Smileys is the
+first group.
+
+`./emoji/searchable` is the INDEX half — `emojiSearchText(text)`, the extra
+text a document earns for SHOWING a thing rather than naming it. It costs the
+same 190KB as `/emoji/search` and is taken the same two ways for the same
+reason: `server-core` statically (a server has no bundle to keep small and it
+indexes on every call), `apps/web` by dynamic import inside the files search
+(68KB of rows plus 115KB of Japanese, and somebody who never searches should
+not carry it).
+
+It answers TEXT rather than tokens, deliberately. How 「ロケット」 is cut up
+is `packages/search`'s scheme, and a caller returning tokens would be a second
+place that decides it — so the seam is `fullTextSearch`'s `alsoIndex`, which
+keeps that package depending on `model` alone rather than reaching up for a
+plugin. Two things it measured: a grapheme segmenter is what matches the 730
+multi-code-point rows (scanning code points finds a flag's base character and
+answers with the wrong thing), and each row is deduplicated WORD-wise, because
+`emojiSlug('rocket')` is `rocket` and a single-word name would otherwise emit
+the term twice — scoring a document that merely shows a rocket above one that
+writes the word.
+
+Four readers, one vocabulary, and the contract between them is asserted
+rather than assumed: `search.test.ts` checks that every slug the completion
+offers is one `emojiForShortcode` resolves, and to the same character. A
+completion offering a name the renderer draws as literal text is the feature
+failing in the one place nobody would think to look.
+
+**What is lost is GitHub's muscle memory, and typing is where that bites.**
+`:white_check_mark:` and `:heavy_plus_sign:` resolve to nothing — CLDR calls
+them `check mark button` and `plus`. The slug rule's own note says the search
+finds those by name anyway, and that was true of the PICKER; a name typed
+between colons has no search behind it, so until the `:` completion lands
+this is a real gap rather than a cosmetic one. Measured in the preview pane,
+not reasoned about. The `:` completion narrows it rather than closing it —
+typing `:check` reaches `check_mark_button` — but a person who types the
+GitHub name in full still gets literal text.
+
 ## Vendored icons
 
 `src/icons/` carries lucide geometry with its LICENSE and provenance README,

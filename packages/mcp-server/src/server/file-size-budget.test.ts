@@ -133,7 +133,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a seam (the open passage, its extension, the projection effect, where
   // the passage currently sits) is `use-passage-proposals.ts`, and what is
   // left is the component's own prop surface and one conditional render.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1137,
+  // +3 for `completionOnDelete`: an import, the call, and one line saying
+  // why. Raised rather than paid for by trimming prose — this file funded
+  // an earlier increment that way, and a budget met by deleting rationale
+  // buys lines at the price of the thing the lines were for.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1140,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first
@@ -282,7 +286,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
   // entered this file.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1675,
+  //
+  // +3 for the `:name:` shortcode projection, and the shape is the same: one
+  // import and one call, with the vocabulary and every word of its rationale
+  // in `plugin-visual`'s `emoji/shortcode.ts`. It lands HERE because the
+  // `case 'text'` below is the one place a text node's string reaches
+  // layout, so every body-drawing surface gets it and none can be the one
+  // that forgot — the alternative was a seam per surface, which is the
+  // reference-seams defect. The two comment lines that survived say what
+  // only this site can: that `inlineCode` deliberately does not expand.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1678,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

@@ -16,6 +16,14 @@
       "types": "./src/emoji/index.ts",
       "import": "./src/emoji/index.ts"
     },
+    "./emoji/search": {
+      "types": "./src/emoji/search.ts",
+      "import": "./src/emoji/search.ts"
+    },
+    "./emoji/shortcode": {
+      "types": "./src/emoji/shortcode.ts",
+      "import": "./src/emoji/shortcode.ts"
+    },
     "./package.json": "./package.json",
     "./render": {
       "types": "./src/render.ts",
@@ -24,6 +32,10 @@
     "./ui": {
       "types": "./src/ui.tsx",
       "import": "./src/ui.tsx"
+    },
+    "./emoji/searchable": {
+      "types": "./src/emoji/searchable.ts",
+      "import": "./src/emoji/searchable.ts"
     }
   },
   "scripts": {
