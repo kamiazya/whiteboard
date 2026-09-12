@@ -178,7 +178,32 @@ export interface FacetPickerCatalogSpec {
 export type FacetOptionLayout = 'chips' | 'cards'
 
 export interface FacetPickerSpec {
-  readonly options: readonly FacetPickerOption[]
+  /**
+   * The choices, written out. OPTIONAL, and the alternative is
+   * `specimenIcon` below: a picker declaring one leaves this out and the
+   * registry fills it from what the deployment actually holds.
+   *
+   * Declaring options is still the full-control road — an order the plugin
+   * means, an asset it wants left out — and the registry never
+   * second-guesses a list somebody wrote.
+   */
+  readonly options?: readonly FacetPickerOption[]
+  /**
+   * The mark this picker's cards draw, as a registered icon id — one
+   * specimen, drawn once per registered THEME through that theme's own ink
+   * and glow.
+   *
+   * Here rather than in the registry because the engine knows no plugin:
+   * `visual.signature` belongs to the bundled plugin exactly as a
+   * third-party mark would belong to its own. The facet names it once; the
+   * registry supplies the ids.
+   *
+   * Only a `themes` ref may use it, checked at definition time. The whole
+   * meaning is "drawn the way this asset draws", and a theme is the only
+   * asset that draws anything — a stencil id is not icon geometry, so the
+   * same mechanism over stencils would render a broken picture per card.
+   */
+  readonly specimenIcon?: string
   /** Defaults to `chips`. Governs the LISTED options; a catalog is a grid. */
   readonly layout?: FacetOptionLayout
   readonly catalog?: FacetPickerCatalogSpec
@@ -388,7 +413,10 @@ export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec):
     const catalog = editor.picker.catalog
     return {
       kind: 'picker',
-      options: editor.picker.options,
+      // Empty for a specimen picker, which `withAssetOptions` then fills.
+      // The form carries no `specimenIcon` of its own: a vessel draws the
+      // glyphs it is given, and the registry reads the spec directly.
+      options: editor.picker.options ?? [],
       layout: editor.picker.layout ?? 'chips',
       ...(catalog === undefined ? {} : { catalog }),
     }
@@ -497,6 +525,22 @@ function normalizePicker(
   schema: z.ZodTypeAny,
   picker: FacetPickerSpec,
 ): FacetPickerSpec {
+  if (picker.options === undefined) {
+    // Legal only as the specimen form: the registry has the ids and this
+    // declaration has the mark. `defineFacet` has already refused a
+    // specimen picker whose ref is not a theme.
+    if (picker.specimenIcon === undefined) {
+      throw new Error(`facet "${facetName}" declares a picker with no options`)
+    }
+    // The catalog check lives at the END of this function, past the options
+    // loop a specimen picker never enters — so without this line a specimen
+    // picker was the one place a blank catalog label was accepted, and a
+    // blank label reaches a person as a control that does nothing.
+    if (picker.catalog !== undefined) {
+      assertCatalogFits(facetName, schema, picker.catalog)
+    }
+    return picker
+  }
   if (picker.options.length === 0) {
     throw new Error(`facet "${facetName}" declares a picker with no options`)
   }

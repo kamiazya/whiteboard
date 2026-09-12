@@ -190,7 +190,7 @@ describe('a picker option carries what its schema parses it to', () => {
       schema: withDefault,
       editor: { picker: { options: [{ payload: { theme: 'neon' }, label: 'Neon' }] } },
     })
-    const option = facet.editor?.picker?.options[0]
+    const option = facet.editor?.picker?.options?.[0]
     expect(option?.payload).toEqual({ theme: 'neon', intensity: 1 })
     // The whole point: what a validated write stores and what the option
     // declares are now the same string under `facetPayloadKey`.

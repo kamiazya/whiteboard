@@ -15,12 +15,69 @@ export const PLACEMENT_GUTTER_PX = 40
  * Size given to a node that names none. A model asked to invent four
  * integers per node spends its attention on arithmetic instead of on the
  * diagram, so every geometry field is optional and these fill the gap.
+ *
+ * The WIDTH here is only the fallback; `prevailingWidth` below takes
+ * precedence when the board has an opinion, and says why.
  */
 export const DEFAULT_SIZE: Record<SpatialNode['type'], { width: number; height: number }> = {
   text: { width: 260, height: 120 },
   file: { width: 260, height: 120 },
   link: { width: 260, height: 120 },
   group: { width: 400, height: 300 },
+}
+
+/**
+ * The width this board already uses, or `undefined` when it has no opinion.
+ *
+ * A box whose width differs from its neighbours' lands its left edge on
+ * their column and misses with its centre and its right edge, because
+ * alignment is judged against the nearest of those three anchors. So a
+ * sized-by-default box costs a near miss on every board that has a width —
+ * which is nearly all of them: nine of the drawing corpus's eleven boards
+ * use exactly ONE box width, and the two that do not have an unambiguous
+ * commonest one.
+ *
+ * That makes this a better default than any constant could be, and the
+ * constant was nobody's preference anyway: the corpus is 200 where this
+ * file said 260, and the one board a model drew itself is a uniform 220.
+ *
+ * The HEIGHT is deliberately not treated the same way. It is already
+ * derived from the text at the chosen width, so it follows this width
+ * rather than fighting it, and a row anchor is not what the near miss was
+ * about.
+ *
+ * COMMONEST, not widest or first: the one non-uniform board in the corpus
+ * is a row of six at one width with a single squeezed neighbour, and the
+ * six are what a new box should join. Ties go to the wider, which no real
+ * board has needed — a deterministic answer is required and the wider box
+ * is the one whose text is less likely to need wrapping.
+ *
+ * Groups are excluded from the vote and keep their own default: a group is
+ * a container rather than a box on the column, and one enclosing the board
+ * would outvote every box inside it.
+ *
+ * There is deliberately NO minimum. A board of narrow boxes gets a narrow
+ * one, which is the rule doing its job, and the height already grows to
+ * hold the text at whatever width is chosen. A floor would be exactly the
+ * invented constant this function exists to remove, and nothing has
+ * measured one: the corpus runs 150-220. If narrow boards turn out to read
+ * badly, that is a finding with a number attached, not a guess to make now.
+ */
+export function prevailingWidth(nodes: readonly SpatialNode[]): number | undefined {
+  const counts = new Map<number, number>()
+  for (const node of nodes) {
+    if (node.type === 'group') continue
+    counts.set(node.width, (counts.get(node.width) ?? 0) + 1)
+  }
+  let best: number | undefined
+  let bestCount = 0
+  for (const [width, count] of counts) {
+    if (count > bestCount || (count === bestCount && width > (best ?? 0))) {
+      best = width
+      bestCount = count
+    }
+  }
+  return best
 }
 
 function contentBottomLeft(nodes: readonly SpatialNode[]): { x: number; y: number } {

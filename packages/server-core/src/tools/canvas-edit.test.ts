@@ -1983,7 +1983,14 @@ describe('wb_canvas_edit — node.add within a group', () => {
     await seedCanvas(store, {
       nodes: [
         { ...GROUP, width: 200, height: 100 },
-        { id: 'neighbour', type: 'text', x: 220, y: 20, width: 80, height: 40, text: 'next door' },
+        // 260 WIDE ON PURPOSE, and the second half of this test is what
+        // needs it: a node added with no geometry takes the board's
+        // prevailing box width, and this neighbour is the only box on the
+        // board, so it IS that width. At its original 80 the placed box
+        // fitted inside the group, nothing grew, and the refusal this test
+        // exists for never fired — a fixture that had stopped reaching its
+        // own case while still reading as a passing test.
+        { id: 'neighbour', type: 'text', x: 220, y: 20, width: 260, height: 40, text: 'next door' },
       ],
       edges: [],
     })
@@ -2007,8 +2014,9 @@ describe('wb_canvas_edit — node.add within a group', () => {
       opIndex: 0,
       message: expect.stringMatching(/"neighbour"/),
     })
-    // The placed path hits the same wall: three default boxes in a 200x100
-    // group grow it right and down, and the neighbour sits to the right.
+    // The placed path hits the same wall: a box sized from the board does
+    // not fit a 200x100 group, so it grows right, and the neighbour sits
+    // there.
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
@@ -2656,5 +2664,130 @@ describe('the node extension on the write side', () => {
     expect(facets.op === 'node.add' && facets.node['x-whiteboard']).toEqual({
       facets: { 'example.kanban/v1': { status: 'todo' } },
     })
+  })
+})
+
+describe('wb_canvas_edit — a node created without a width', () => {
+  // Found by the rung-3 lane, not by reading the code: three trials of three
+  // added a box declaring NO geometry at all — which is what the surface asks
+  // for — and every resulting board scored one near miss the fixture's own
+  // board did not have.
+  //
+  // Measured, with the two axes separated: at the same position, a 260-wide
+  // box on a board of 200-wide boxes scores `nearMisses 1` and a 200-wide one
+  // scores 0, while the HEIGHT changes nothing either way. `nearMisses` judges
+  // the nearest of three anchors — near edge, centre, far edge — so an odd
+  // width lands its left edge on the column and misses with the other two.
+  //
+  // 260 was nobody's preference: the drawing corpus is 200 on nine boards of
+  // eleven, and the one board a model drew itself is a uniform 220.
+  const box = (id: string, x: number, width: number): SpatialNode => ({
+    id,
+    type: 'text',
+    x,
+    y: 0,
+    width,
+    height: 80,
+    text: id,
+  })
+
+  // Derived from the tool's own schema rather than loosened to a record: a
+  // record typechecks against nothing, and the helper builds its ops
+  // dynamically, so the discriminated union is the only thing that would
+  // catch a draft this file gets wrong.
+  type NodeDraft = Extract<
+    z.infer<typeof canvasEditInputSchema>['ops'][number],
+    { op: 'node.add' }
+  >['node']
+
+  const addTo = async (canvas: SpatialCanvas, nodes: NodeDraft[]) => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, canvas)
+    const tool = createCanvasEditTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: nodes.map((node) => ({ op: 'node.add', node })),
+    })
+    const { canvas: after } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    return after.nodes
+  }
+
+  const widthOf = (nodes: readonly SpatialNode[], id: string) =>
+    nodes.find((n) => n.id === id)?.width
+
+  test('takes the width the board already uses, so it lands on the same column', async () => {
+    const board: SpatialCanvas = {
+      nodes: [box('a', 0, 200), box('b', 300, 200), box('c', 600, 200)],
+      edges: [],
+    }
+    const nodes = await addTo(board, [{ id: 'new', type: 'text', text: 'added' }])
+    expect(widthOf(nodes, 'new')).toBe(200)
+  })
+
+  test('keeps the built-in width on a board with nothing to copy', async () => {
+    // The fallback, and the case every existing test in this file exercises:
+    // an empty board has no prevailing width, so the constant stands.
+    const nodes = await addTo(EMPTY, [{ id: 'new', type: 'text', text: 'added' }])
+    expect(widthOf(nodes, 'new')).toBe(260)
+  })
+
+  test('takes the commonest width, not the first or the widest', async () => {
+    // The corpus's one non-uniform board is this shape — six boxes at one
+    // width and a squeezed one at another — so the rule has to answer it.
+    const board: SpatialCanvas = {
+      nodes: [box('a', 0, 200), box('b', 300, 150), box('c', 600, 200), box('d', 900, 200)],
+      edges: [],
+    }
+    const nodes = await addTo(board, [{ id: 'new', type: 'text', text: 'added' }])
+    expect(widthOf(nodes, 'new')).toBe(200)
+  })
+
+  test('reads the board as it stood BEFORE the batch, so a box this batch adds is not a vote', async () => {
+    // The same trap `PlacementCursor` anchors once for: re-reading per node
+    // would have each addition chase the ones this batch is adding.
+    //
+    // The DECLARED box is what makes this test able to fail. The first
+    // version added three coordinate-less boxes to an empty board and
+    // expected 260 three times — which a per-node reading also produces,
+    // because each box takes the prevailing width and so reinforces it.
+    // It passed against the mutation it existed to catch. A box whose width
+    // the CALLER named is the only thing in a batch that can disagree with
+    // the board, so it is the only fixture that separates the two readings:
+    // once-before-the-batch answers 260, per-node answers 500.
+    const nodes = await addTo(EMPTY, [
+      { id: 'declared', type: 'text', text: 'declared', width: 500 },
+      { id: 'placed', type: 'text', text: 'placed' },
+    ])
+    expect(widthOf(nodes, 'declared')).toBe(500)
+    expect(widthOf(nodes, 'placed')).toBe(260)
+  })
+
+  test('a declared width still wins, and a group is not sized from the boxes', async () => {
+    // A group's default is its own: it is sized by what it holds, and copying
+    // a box width would make every auto-placed group 200 wide.
+    const board: SpatialCanvas = { nodes: [box('a', 0, 200), box('b', 300, 200)], edges: [] }
+    const nodes = await addTo(board, [
+      { id: 'named', type: 'text', text: 'named', width: 333 },
+      { id: 'grp', type: 'group', label: 'G' },
+    ])
+    expect(widthOf(nodes, 'named')).toBe(333)
+    expect(widthOf(nodes, 'grp')).toBe(400)
+  })
+
+  test('ignores group widths when reading what the board uses', async () => {
+    // A group is a container, not a box on the column, and one enclosing the
+    // board would otherwise outvote every box inside it.
+    const board: SpatialCanvas = {
+      nodes: [
+        { id: 'frame', type: 'group', x: -20, y: -20, width: 700, height: 300, label: 'F' },
+        box('a', 0, 200),
+        box('b', 300, 200),
+      ],
+      edges: [],
+    }
+    const nodes = await addTo(board, [{ id: 'new', type: 'text', text: 'added' }])
+    expect(widthOf(nodes, 'new')).toBe(200)
   })
 })

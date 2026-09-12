@@ -87,6 +87,36 @@ hold it: the registry validates the id's existence on write (`wb_facet_set`
 and the editor both go through `validateFacetWrite`), and a render that meets
 an unknown id draws `clean` and reports `onDegrade({ kind: 'unknown-theme' })`.
 
+#### The picker follows the registry (2026-09-12)
+
+Registering a theme was supposed to need no UI edit anywhere, and for a
+while did not: the facet declared its three options by hand, so a deployment
+registering a fourth got a picker that did not offer it — applicable through
+`wb_facet_set`, unselectable in the editor, which is the one state an
+ecosystem cannot ship.
+
+Stencils closed the same gap first, by declaring the WIDGET and letting the
+registry fill the choices. The theme picker could not take that road: it
+draws CARDS, a card needs a picture, and the options a registry builds for a
+field carry none. The engine could not supply one either — `visual.signature`
+belongs to the bundled plugin, and the engine knows no plugin.
+
+So the FACET names the mark once and the registry supplies the ids:
+
+```
+editor: { picker: { layout: 'cards', specimenIcon: 'visual.signature' } }
+```
+
+One card per registered theme, each the same mark drawn through that theme's
+own `ink` and `glow`, led by a plain one for the absent facet. Options stay
+declarable — a picker that writes its own list is making a choice the
+registry does not second-guess — and `specimenIcon` is refused at definition
+time unless the facet has exactly one `themes` ref, because "drawn the way
+this asset draws" means nothing for an asset that does not draw.
+
+What a person sees did not change: `assetLabel` derives "Sketch" and "Neon"
+from the ids, character for character what the hand-written labels said.
+
 ### 3. Assets are registered on the plugin; the token contract is the engine's
 
 ADR-0013 decision 3's `assets` layer lands, for themes and icon sets:
