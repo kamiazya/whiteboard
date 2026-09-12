@@ -1,5 +1,6 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { getDataDir } from '../server/config.js'
+import { daemonDeviceActor } from '../server/daemon-actor.js'
 import { getDb } from '../server/store/db/index.js'
 import { prepareDataDir } from '../server/store/db/prepare.js'
 import { createContainer, resolveServerDeps } from './container.js'
@@ -38,5 +39,7 @@ export async function getDefaultServerDeps(): Promise<ServerDeps> {
   const dataDir = getDataDir()
   await prepareDataDir(dataDir)
   const db = await getDb(dataDir)
-  return resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: dataDir })))
+  return resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: dataDir })), {
+    daemonActor: daemonDeviceActor(dataDir),
+  })
 }

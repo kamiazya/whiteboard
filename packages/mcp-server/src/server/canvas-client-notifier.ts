@@ -7,7 +7,7 @@ import type {
   ViewportRequest,
 } from '@kamiazya/whiteboard-server-core'
 import { nanoid } from 'nanoid'
-import { DAEMON_AGENT_ACTOR } from './daemon-peer.js'
+import { DAEMON_AGENT_ACTOR } from './daemon-actor.js'
 import { getLogger } from './log.js'
 import {
   getReadyClientCount,

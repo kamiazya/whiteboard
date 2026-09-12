@@ -18,6 +18,7 @@ import { LOOP_COSTS } from './background-work-costs.js'
 import { createCanvasClientNotifier } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
+import { daemonDeviceActor } from './daemon-actor.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
 import type { AutoVersionTrigger } from './routes/document.js'
@@ -306,7 +307,10 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   await ensureWorkspaceId(dataDir)
   const resolvedDeps = resolveServerDeps(
     createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
-    { ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }) },
+    {
+      ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
+      daemonActor: daemonDeviceActor(dataDir),
+    },
   )
   // The WS-route bridge is attached HERE, not in resolveServerDeps: the di
   // graph must not import the routes layer (value cycle), and this root is
