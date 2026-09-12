@@ -224,6 +224,37 @@ default. Check these before designing a bigger cut:
   The first is the SDK's and cannot be removed; the second is C10's price
   and is kept.
 
+Two cuts that look available and are NOT, each refuted by measurement
+rather than by argument. Both would pass every gate this repo has.
+
+- **Registering a DESCRIBED LEAF deletes its description.** Naming a
+  schema in zod's registry emits it into `$defs` once and `$ref`s it at
+  each site, which is where the 5,177 bytes the five existing
+  registrations save come from (measured by removing each one: `LineEnd`
+  -2,540 visible, `EdgeEnd` -1,382, `Bends` -609, `CanvasColor` -595,
+  `CanvasPoint` -51, `NodeEmbed` 0 — output schemas only). But a
+  description INSIDE a registered object survives (`EdgeEnd` keeps all
+  three of its) while a description ON the registered schema is dropped:
+  `$defs.BoxWidth` came back `{"type":"number","minimum":0}` with the
+  sentence gone. Registering the described `width`/`height` reads as -837
+  bytes and 4 arms x (60 + 150) is the whole of it — the bytes ARE the
+  descriptions. **Only a composite may be registered.**
+- **`allOf` + `$ref` inheritance publishes a schema that refuses every
+  valid call.** The four node arms spend 424 bytes each on the same
+  shared base, 1,696 together, so extracting it is worth ~1,100. What
+  `z.intersection` emits is `allOf: [{$ref}, {...additionalProperties:
+  false}]`, and `additionalProperties` only sees its own subschema's
+  properties. Checked with ajv 8 against 2020-12, three shapes side by
+  side: flat (today) accepts valid input and refuses a stray key;
+  allOf+`additionalProperties` **REFUSES valid input**; allOf +
+  `unevaluatedProperties: false` is correct. zod 4.4.3 can READ
+  `unevaluatedProperties` (`from-json-schema.ts`) and never EMITS it
+  (`to-json-schema.ts`, zero occurrences), and handing the SDK a raw JSON
+  Schema inlines the `$ref`s instead, so both doors are shut. The danger
+  is the shape of the failure: zod validates with its own logic, so the
+  server works, the tests pass, and only a client validating against the
+  published schema breaks — silently and completely.
+
 A description costs ~50 bytes each time it is emitted, and a field of the
 node union is emitted once per arm per op: describing every parameter
 would add ~40% to the table. Describe what the lane shows a model getting
