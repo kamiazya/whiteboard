@@ -24,6 +24,11 @@ import type { FieldProjection } from './projection.js'
  * Sources: the v0.7.0 specification (Candidate Recommendation) at
  * https://spec.canvasprotocol.org/ — file structure, node properties,
  * resources, the extension mechanism, and the built-in `@ocif/*` extensions.
+ *
+ * Five entries here were written from the specification alone and corrected
+ * by `ocif-projection-io.ts` and the foreign-reader comparison beside this
+ * table. Each correction is commented at its row, because what a table gets
+ * wrong when it is read rather than run is the most useful thing it records.
  */
 
 const NATIVE = { kind: 'native' } as const
@@ -36,7 +41,9 @@ const EXTENSION = { kind: 'extension' } as const
  *
  * So the discriminator does not cross as a field. The INFORMATION survives
  * (a reader can still tell a group from a note) but it survives as a
- * different shape, which is what `degraded` is for.
+ * different shape, which is what `degraded` is for — and `fromOcif` earns
+ * the word by deriving the kind from the mime type and `@ocif/group` rather
+ * than from anything of ours.
  */
 const AS_SHAPE = {
   kind: 'degraded',
@@ -44,16 +51,19 @@ const AS_SHAPE = {
 } as const
 
 /**
- * A JSON Canvas colour is a PRESET index ("1".."6") or a hex value, and a
- * preset means "whatever this theme paints that role". OCIF's shape
- * extensions take concrete `fillColor`/`strokeColor`, so a preset has to be
- * resolved on the way out and arrives as the colour it happened to resolve
- * to — the role is gone.
+ * Colour was written `degraded` here from the spec — OCIF's shape extensions
+ * take a concrete `fillColor`, so a preset index would have to be resolved on
+ * the way out and would arrive having lost the theme role it named.
+ *
+ * Writing the projection corrected it. Resolving a preset needs a palette,
+ * and a palette is a RENDERING decision this package does not get to make
+ * (`canvas-render` owns it and depends on this package, not the other way
+ * round). So the projection carries the colour as authored, on an extension
+ * of ours, and a foreign reader paints the node however it paints an
+ * un-styled one. Emitting a resolved `@ocif/rect` BESIDE that — better
+ * interop, at the cost of a palette this layer would have to invent — is a
+ * named follow-up rather than a thing this table can claim.
  */
-const RESOLVED_COLOUR = {
-  kind: 'degraded',
-  to: 'a concrete fillColor/strokeColor on the shape extension; a preset index loses the theme role it named',
-} as const
 
 /**
  * OCIF draws this as `@ocif/arrow`, which is a SHAPE with coordinates rather
@@ -90,18 +100,19 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'nodes[].width': NATIVE,
   'nodes[].height': NATIVE,
   'nodes[].type': AS_SHAPE,
-  'nodes[].color': RESOLVED_COLOUR,
+  'nodes[].color': EXTENSION,
   // Text is a resource (`text/markdown`), a file is a resource with a
   // `location`, a URL is a resource whose location is that URL.
   'nodes[].text': NATIVE,
   'nodes[].file': NATIVE,
   'nodes[].url': NATIVE,
-  // A fragment inside the referenced file. OCIF's resource reference names
-  // the whole resource and has no notion of a part of one.
-  'nodes[].subpath': {
-    kind: 'dropped',
-    why: 'an OCIF resource reference names a whole resource; the format has no vocabulary for a fragment inside one',
-  },
+  // Written `dropped` from the spec — an OCIF resource reference names a whole
+  // resource and has no vocabulary for a fragment inside one. The projection
+  // corrected it: what the FORMAT cannot state and what this PROJECTION cannot
+  // carry are two different questions, and an extension of ours answers the
+  // second. A foreign reader still loses it, which is what `extension` has
+  // always meant here.
+  'nodes[].subpath': EXTENSION,
   // A group's chrome. `@ocif/group` carries membership and nothing about how
   // the frame is painted, so these ride an extension of ours.
   'nodes[].label': EXTENSION,
@@ -112,10 +123,10 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   // and native here — the second thing OCIF states that the older format
   // cannot.
   'nodes[].embed.documentId': NATIVE,
-  'nodes[].embed.versionRef': {
-    kind: 'dropped',
-    why: 'OCIF has no version concept; a reference names a resource, not a point in its history',
-  },
+  // Same correction as `subpath`: OCIF has no version concept, so a foreign
+  // reader gets the document and not the point in its history — but the
+  // projection carries it and its own round trip keeps it.
+  'nodes[].embed.versionRef': EXTENSION,
 
   // ── Edges ────────────────────────────────────────────────────────────
   // An OCIF edge is a NODE carrying `@ocif/edge`, so an edge's identity is a
@@ -136,7 +147,7 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'edges[].to.side': EXTENSION,
   'edges[].from.end': AS_DIRECTED,
   'edges[].to.end': AS_DIRECTED,
-  'edges[].color': RESOLVED_COLOUR,
+  'edges[].color': EXTENSION,
   // OCIF has `rel` for what an edge MEANS and nothing for what it says on
   // the canvas. A label would be a separate node in OCIF's own vocabulary,
   // which is a structural change rather than a field, so it rides ours.
@@ -167,6 +178,12 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   // attribute group with a `type`, declared in the file's own `schemas`
   // array. A facet bucket is not something OCIF tolerates on a vendor key —
   // it is what the format is built out of.
+  //
+  // The fifth correction, and the only one where the TABLE was right and the
+  // projection was not: a facet rode `@whiteboard/facets` until the
+  // foreign-reader comparison asked what survives stripping our extensions,
+  // and three positions declared `native` vanished. One `data` entry per
+  // facet now, typed by the facet key.
   'facets/*': NATIVE,
   'nodes[].facets/*': NATIVE,
   'edges[].facets/*': NATIVE,

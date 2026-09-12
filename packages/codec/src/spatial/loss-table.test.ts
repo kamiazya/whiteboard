@@ -5,7 +5,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { censusSpatialModel } from './census.js'
-import { jsonCanvasLossTable } from './loss-table.js'
+import { jsonCanvasLossTable, ocifLossTable } from './loss-table.js'
+import { OCIF_PROJECTION } from './ocif-projection.js'
 import { JSON_CANVAS_PROJECTION, jsonCanvasLoss } from './projection.js'
 
 describe('the published JSON Canvas loss table', () => {
@@ -47,5 +48,45 @@ describe('the published JSON Canvas loss table', () => {
     expect(jsonCanvasLossTable()).toContain(
       `**${kinds.length}** field positions. **${surviving}** of them`,
     )
+  })
+})
+
+describe('the published OCIF loss table', () => {
+  it('docs/reference/ocif-loss.md matches the ledger', async () => {
+    await expect(ocifLossTable()).toMatchFileSnapshot('../../../../docs/reference/ocif-loss.md')
+  })
+
+  it('names every position the model can hold, and no other', () => {
+    const census = censusSpatialModel([])
+    const table = ocifLossTable()
+    const listed = [...table.matchAll(/^\| `([^`]+)` \|/gm)].map((match) => match[1])
+    expect([...listed].sort()).toEqual([...census.paths, ...census.facetBuckets].sort())
+  })
+
+  it('gives every lossy row a reason a reader can act on', () => {
+    const table = ocifLossTable()
+    for (const projection of Object.values(OCIF_PROJECTION)) {
+      if (projection.kind === 'degraded') expect(table).toContain(projection.to)
+      if (projection.kind === 'dropped') expect(table).toContain(projection.why)
+    }
+  })
+
+  it('counts the understood half from the ledger rather than from a literal', () => {
+    const kinds = Object.values(OCIF_PROJECTION).map((projection) => projection.kind)
+    const understood = kinds.filter((kind) => kind === 'native' || kind === 'degraded').length
+    expect(ocifLossTable()).toContain(
+      `**${kinds.length}** field positions. **${understood}** of them`,
+    )
+  })
+
+  it('says nothing is dropped only while nothing is', () => {
+    // The headline sentence is a CLAIM about the ledger, not decoration, and it
+    // is the one a reader will quote when choosing a format. A position that
+    // becomes `dropped` has to change the prose, not merely add a row to a
+    // section nobody reads.
+    const dropped = Object.values(OCIF_PROJECTION).filter(
+      (projection) => projection.kind === 'dropped',
+    )
+    expect(ocifLossTable().includes('**Nothing is dropped**')).toBe(dropped.length === 0)
   })
 })
