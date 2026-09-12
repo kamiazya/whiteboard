@@ -136,5 +136,18 @@ describe('workspace-record growth scoreboard', () => {
     // strongest available form.
     expect(n.shallowBytes).toBe(3456)
     expect(n.shallowBytes).toBeLessThanOrEqual(build(10, 0).afterCreateBytes)
-  })
+    // A CEILING sized on a measurement, not a delay: `build(10, 100)` is 1000
+    // synchronous edits, each with a commit and an `export({ mode: 'update' })`,
+    // and it reads 553-584ms over three runs on an idle machine — 8.5x inside
+    // the project's 5000ms default, which is ample everywhere except the one
+    // place it ran out. CI's stress lane runs every test file a PR touched in
+    // ONE process (290 of them on a repo-wide fixture migration) and timed
+    // this out at 5000ms. A saturated runner costs far more than 8.5x: the
+    // same session measured a free event loop's worst stall rising ~20x under
+    // only 16 competing processes, which puts this body near 12s there.
+    //
+    // Safe to widen because every assertion above is an EXACT byte pin on a
+    // deterministic fixture — a slower machine cannot make them pass, so the
+    // budget can only decide whether the scoreboard is read at all.
+  }, 60_000)
 })
