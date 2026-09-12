@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BUILT_IN_SHAPES,
   nodeOutline,
   outlineContains,
   outlineContentBox,
@@ -117,6 +118,47 @@ describe('nodeOutline — hexagon / parallelogram / cylinder', () => {
         { x: 10, y: 80 },
       ],
     })
+  })
+
+  it('octagon: a rect with symmetric corner cuts, off the SMALLER dimension', () => {
+    // h is the smaller dimension here, so the cut is 15 — and the flat
+    // vertical edges it leaves are what a reader tells apart from the
+    // hexagon's points, which at this box run 25px in from each end.
+    expect(nodeOutline('visual.octagon', box)).toEqual({
+      kind: 'polygon',
+      points: [
+        { x: 25, y: 20 },
+        { x: 95, y: 20 },
+        { x: 110, y: 35 },
+        { x: 110, y: 65 },
+        { x: 95, y: 80 },
+        { x: 25, y: 80 },
+        { x: 10, y: 65 },
+        { x: 10, y: 35 },
+      ],
+    })
+    // A tall narrow box takes the same cut off its WIDTH, so the silhouette
+    // stays an octagon instead of collapsing the way a width-only term
+    // would. The hexagon's own case at this proportion is the contrast.
+    expect(nodeOutline('visual.octagon', { x: 0, y: 0, w: 40, h: 200 })).toEqual({
+      kind: 'polygon',
+      points: [
+        { x: 10, y: 0 },
+        { x: 30, y: 0 },
+        { x: 40, y: 10 },
+        { x: 40, y: 190 },
+        { x: 30, y: 200 },
+        { x: 10, y: 200 },
+        { x: 0, y: 190 },
+        { x: 0, y: 10 },
+      ],
+    })
+  })
+
+  it('octagon: a cut corner is outside, the flat side next to it is inside', () => {
+    expect(outlineContains('visual.octagon', box, { x: 12, y: 22 })).toBe(false)
+    expect(outlineContains('visual.octagon', box, { x: 10, y: 50 })).toBe(true)
+    expect(outlineContains('visual.octagon', box, { x: 60, y: 20 })).toBe(true)
   })
 
   it('cylinder: bbox plus a capped lid radius, never more than a quarter of the height', () => {
@@ -255,13 +297,11 @@ describe('degenerate boxes and unsupported shapes', () => {
 })
 
 describe('outlineContentBox — the inscribed box content must stay inside', () => {
-  const kinds = [
-    'visual.ellipse',
-    'visual.diamond',
-    'visual.hexagon',
-    'visual.parallelogram',
-    'visual.cylinder',
-  ] as const
+  // Read off the table rather than written out again. This list was a fifth
+  // copy of the silhouette vocabulary (ADR-0035 decision 4 retired three
+  // others), and a copy is what lets kind N+1 ship with its inscription
+  // unchecked — which is exactly what these two invariants are for.
+  const kinds = Object.keys(BUILT_IN_SHAPES)
 
   it('every corner of the content box lies inside the outline, for every kind', () => {
     for (const kind of kinds) {

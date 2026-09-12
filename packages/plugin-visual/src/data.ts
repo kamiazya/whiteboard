@@ -115,7 +115,7 @@ export function resolveEdgeWaypoints(
  * since this package cannot depend on it.
  */
 export const visualShapeFacetSchema = z.object({
-  kind: z.enum(['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder']),
+  kind: z.enum(['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder', 'octagon']),
 })
 
 export type VisualShapeFacet = z.infer<typeof visualShapeFacetSchema>
@@ -386,6 +386,11 @@ export const visualPlugin = definePlugin({
               payload: { kind: 'hexagon' },
               label: 'Hexagon',
               glyph: { kind: 'shape', name: 'hexagon' },
+            },
+            {
+              payload: { kind: 'octagon' },
+              label: 'Octagon',
+              glyph: { kind: 'shape', name: 'octagon' },
             },
             {
               payload: { kind: 'parallelogram' },
