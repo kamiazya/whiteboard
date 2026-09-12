@@ -1,3 +1,4 @@
+import { clearCatalogRecents } from '@kamiazya/whiteboard-facet-ui'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { cleanup } from '@testing-library/react'
 import { afterEach, expect, vi } from 'vitest'
@@ -229,3 +230,11 @@ afterEach(() => {
     )
   }
 })
+
+// A facet catalog's "recently used" band is MODULE state — it has to be, so
+// it survives the inspector closing — which means it also survives a test.
+// Left alone it leaks a symbol one test picked into the next test's panel,
+// where it shows up as an extra radiogroup nobody put there. Cleared here
+// for the reason storage and fake timers are: what a test changes globally,
+// the setup restores.
+afterEach(clearCatalogRecents)

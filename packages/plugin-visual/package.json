@@ -12,6 +12,10 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./emoji": {
+      "types": "./src/emoji/index.ts",
+      "import": "./src/emoji/index.ts"
+    },
     "./package.json": "./package.json",
     "./render": {
       "types": "./src/render.ts",

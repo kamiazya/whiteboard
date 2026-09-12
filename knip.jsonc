@@ -77,6 +77,13 @@
     "packages/canvas-render": {
       "project": ["src/**/*.ts"]
     },
+    "packages/plugin-visual": {
+      // A hand-run regenerator, not a build step: the emoji catalog it
+      // writes is committed so a clone builds offline, and it is re-run at
+      // a Unicode release. Nothing imports it, and nothing should.
+      "entry": ["scripts/*.mjs"],
+      "project": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.mjs"]
+    },
     "packages/canvas-viewer": {
       "entry": [
         "scripts/*.mjs"

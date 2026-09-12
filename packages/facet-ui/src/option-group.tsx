@@ -136,6 +136,42 @@ const CARD_SELECTED: CSSProperties = {
 /** A card's picture has room to be a picture. */
 const CARD_GLYPH: CSSProperties = { ...GLYPH_BOX, width: '1.25rem', height: '1.25rem' }
 
+/**
+ * The CATALOG grid: square glyph-only cells, packed as tightly as a thumb
+ * allows, for a band holding hundreds rather than a handful.
+ *
+ * Not a `cards` grid with the words removed — a card is a cell whose NAME
+ * carries meaning a picture cannot, and "grinning face" under a grinning
+ * face is the opposite of that. Not a `chips` row either: a wrapping row
+ * of 388 pills has no line a reader can scan down.
+ *
+ * `auto-fill` rather than `auto-fit`: a row of six symbols must stay a row
+ * of six cells, and `auto-fit` collapses the empty tracks so four symbols
+ * stretch into four fat ones.
+ */
+const GRID_GROUP: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(1.75rem, 1fr))',
+  gap: '0.125rem',
+  width: '100%',
+}
+
+const GRID_OPTION: CSSProperties = {
+  ...OPTION,
+  minWidth: 0,
+  padding: 0,
+  fontSize: '1rem',
+}
+
+const GRID_OPTION_SELECTED: CSSProperties = {
+  ...GRID_OPTION,
+  background: ACCENT,
+  color: INK,
+}
+
+/** Bigger than a chip's, because in a grid the picture is all there is. */
+const GRID_GLYPH: CSSProperties = { ...GLYPH_BOX, width: '1.125rem', height: '1.125rem' }
+
 /** Visually hidden, still focusable — the focus ring is drawn by the label. */
 const INPUT: CSSProperties = {
   position: 'absolute',
@@ -182,10 +218,16 @@ export interface FacetOptionProps {
    * as cards and are still better as chips, because "Hexagon" tells a reader
    * nothing the hexagon has not already said.
    *
+   * `grid` is neither, and only a searchable CATALOG asks for it: square
+   * glyph-only cells, hundreds of them, scanned down rather than read
+   * across. A plugin cannot declare it — `FacetOptionLayout` has two
+   * values — because it is not a question about this row's vocabulary, it
+   * is what a catalog IS.
+   *
    * Ignored in a menu: a menu row is a row, and a grid of cells inside one
    * is not a menu any more.
    */
-  readonly layout?: 'chips' | 'cards'
+  readonly layout?: 'chips' | 'cards' | 'grid'
 }
 
 export function FacetOption({
@@ -199,14 +241,26 @@ export function FacetOption({
 }: FacetOptionProps) {
   const id = useId()
   const card = layout === 'cards' && shell !== 'menu'
+  const grid = layout === 'grid' && shell !== 'menu'
   const body =
     glyph === undefined ? (
       label
     ) : (
-      <span aria-hidden="true" style={card ? CARD_GLYPH : GLYPH}>
+      <span aria-hidden="true" style={card ? CARD_GLYPH : grid ? GRID_GLYPH : GLYPH}>
         {glyph}
       </span>
     )
+  const cellStyle = grid
+    ? selected
+      ? GRID_OPTION_SELECTED
+      : GRID_OPTION
+    : card
+      ? selected
+        ? CARD_SELECTED
+        : CARD
+      : selected
+        ? OPTION_SELECTED
+        : OPTION
   if (shell === 'menu') {
     return (
       <button
@@ -228,7 +282,7 @@ export function FacetOption({
       // The label carries the focus ring because the input it labels is
       // clipped to a pixel — without this a keyboard user arrowing through
       // the group sees nothing move.
-      style={card ? (selected ? CARD_SELECTED : CARD) : selected ? OPTION_SELECTED : OPTION}
+      style={cellStyle}
       // A card prints its word, so a tooltip repeating it is noise.
       title={glyph === undefined || card ? undefined : label}
       onFocus={(event) => {
@@ -265,7 +319,13 @@ export interface FacetOptionGroupProps {
    */
   readonly shell?: 'group' | 'menu'
   /** Must match what its options are given; see `FacetOptionProps.layout`. */
-  readonly layout?: 'chips' | 'cards'
+  readonly layout?: 'chips' | 'cards' | 'grid'
+}
+
+const GROUP_STYLE: Readonly<Record<'chips' | 'cards' | 'grid', CSSProperties>> = {
+  chips: GROUP,
+  cards: CARD_GROUP,
+  grid: GRID_GROUP,
 }
 
 export function FacetOptionGroup({
@@ -278,7 +338,7 @@ export function FacetOptionGroup({
     return <span style={GROUP}>{children}</span>
   }
   return (
-    <span role="radiogroup" aria-label={label} style={layout === 'cards' ? CARD_GROUP : GROUP}>
+    <span role="radiogroup" aria-label={label} style={GROUP_STYLE[layout]}>
       {children}
     </span>
   )

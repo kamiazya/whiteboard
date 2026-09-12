@@ -1086,7 +1086,8 @@ Three things follow:
   | layout | is | for |
   |---|---|---|
   | `cards` | the picture over its word, in a bordered cell | a short vocabulary whose NAMES carry meaning a picture cannot fully take on — Edge routing, Line jumps, Theme |
-  | `chips` | the picture alone, its word the `aria-label` and the `title` | a palette where the count makes labels impossible and the glyph is the whole affordance — Symbol's twelve, a colour swatch |
+  | `chips` | the picture alone, its word the `aria-label` and the `title` | a palette where the count makes labels impossible and the glyph is the whole affordance — Symbol's icons, a colour swatch |
+  | `grid` | square glyph-only cells, packed and scrolling | a CATALOG — hundreds of options scanned down rather than read across. Not declarable: it is not a question about the row's vocabulary, it is what a catalog is |
 
   `cards` is the shape Settings already gives theme and tab icon, so the
   two surfaces stopped being two languages. The one difference is the
@@ -1110,6 +1111,70 @@ Three things follow:
   way a registered theme inks it, which is how the theme row shows the
   signature mark three times — plain, hand-drawn, lit — rather than three
   identical strokes beside three words. See BRAND.md for the mark itself.
+
+- **A picker may be OPEN, and it is still one control.** A facet whose
+  schema accepts more values than a definition can carry — `visual.symbol`
+  takes any single grapheme — gets a `catalog` (sections loaded on demand,
+  searched) and a free-entry `entry` beside the options it lists. Every
+  band of it is still `FacetOption`, INCLUDING the row that picks which
+  category is showing: a category chooser is "pick one of N" like any
+  other, and a `tablist` for it would have been the seventh spelling. The
+  one thing the two bands do not share is the radio `name` — the sections
+  are a view, the cells are the value, and one name for both lets the
+  browser treat a category as an answer.
+
+  **A catalog opens over the row, not inside it.** Hundreds of cells in a
+  property row is not a row: inline, `visual.symbol` was taller than every
+  other facet in the panel put together and pushed the ones below it off
+  screen. So the row keeps one line and shows what is CHOSEN — the listed
+  option's glyph, or, for a value the catalog has not loaded yet, the field
+  free entry already declares as the one a person types into. The panel goes
+  in the browser's top layer, which is the only way out of the inspector's
+  own scroll clipping, and its content stays unmounted until it is opened —
+  which is what keeps a lazily-imported catalog actually lazy.
+
+  Search matches the option's name, the words its plugin gives it, the band
+  it lives in, and the character itself — the last because pasting an emoji
+  in is how somebody asks "is this one already here". `visual.symbol` indexes
+  Japanese as well as English: what is SHOWN stays the English short name
+  (the panel around it is English), and what is MATCHED is a different
+  question.
+
+  Two words survive in it and both earn their place: the search box's
+  placeholder, and `Recent` over the recently-used band. A band of loose
+  symbols above a search box reads as more of the row above it, and
+  "recently used" is the one thing a picture cannot say about a picture.
+
+  **One band, one kind of picture.** A grid holding this build's monochrome
+  line icons beside full-colour emoji reads as two unrelated palettes, so the
+  icons are a CATEGORY of the catalog rather than a row above it — and the
+  category chooser is drawn in the panel's own stroke language, so what
+  browses is monochrome and what is browsed is whatever it is. The one thing
+  that has to be forced is the emoji themselves: left to the inherited font
+  stack a browser draws whichever face claims each codepoint first, and
+  several ordinary text faces claim the common emoji as monochrome outlines
+  (measured: 😀 😃 🙂 ☺️ grey beside 🤣 🥰 in colour, in this repo's own
+  headless Chromium). `facet-ui`'s `EmojiText` names the colour faces.
+
+  **Free entry is a RESULT, not a second input.** It was a field with an
+  apply button beside the search box, and the two were the same gesture
+  twice: the search already matches a pasted CHARACTER, so "I have this
+  symbol, use it" had two controls and only one of them wrote anything.
+  Nobody could tell which. Now there is one box — type words to filter, and
+  a character the catalog does not have is offered as the leading cell,
+  which is also what makes it discoverable without a field to notice.
+
+  Two things fall out of that, both better than what they replace. Text the
+  facet would refuse is simply NOT OFFERED rather than taken and then
+  reported as an error. And a character the catalog already has is not
+  offered either, so one symbol is never drawn twice in one view — the
+  recently-used band counts as "already there" for the same reason.
+
+  What free entry does NOT do is loosen anything. It builds the payload
+  from a declared template and hands it to `validateFacetWrite` like every
+  other control, so the message a person sees when they type two characters
+  is the facet's own. `node-symbol-menu.browser.test.tsx` locks both halves
+  — a symbol found by searching, and one typed in that the schema refuses.
 
 What this rule does NOT claim is that every choice in the app looks
 identical — only that the difference is a DECLARED layout rather than a
