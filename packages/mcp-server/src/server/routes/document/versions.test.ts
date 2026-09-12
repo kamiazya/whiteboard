@@ -30,6 +30,10 @@ const { createDocumentRouter } = await import('../document.js')
 // one it was given rather than minting something per call.
 const TEST_DAEMON_ACTOR = 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP'
 
+// A different real did:key — what a caller would put there to claim it was
+// some other device, or this daemon's own.
+const SOMEONE_ELSES_ACTOR = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK'
+
 describe('versions router', () => {
   it('returns a Hono instance', () => {
     const versionStore = { listVersions: vi.fn(), saveVersion: vi.fn() }
@@ -97,18 +101,16 @@ describe('versions API', () => {
   })
 
   it('POST /versions persists an explicit operator', async () => {
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const app = createDocumentRouter({
+      autoVersionQuietMs: 60_000,
+      daemonActor: TEST_DAEMON_ACTOR,
+    })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         label: 'ai save',
-        operator: {
-          kind: 'ai',
-          actor: 'process:peer-ai',
-          displayName: 'Assistant',
-          agentId: 'agent-1',
-        },
+        operator: { kind: 'ai', displayName: 'Assistant', agentId: 'agent-1' },
       }),
     })
 
@@ -118,11 +120,12 @@ describe('versions API', () => {
         operator?: { kind: string; actor?: string; displayName?: string; agentId?: string }
       }
     }
+    // Everything the caller stated, plus the device it does not get to name.
     expect(body.version.operator).toEqual({
       kind: 'ai',
-      actor: 'process:peer-ai',
       displayName: 'Assistant',
       agentId: 'agent-1',
+      actor: TEST_DAEMON_ACTOR,
     })
 
     const listRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
@@ -185,6 +188,55 @@ describe('versions API', () => {
 
     expect(first?.actor).toBe(TEST_DAEMON_ACTOR)
     expect(second?.actor).toBe(TEST_DAEMON_ACTOR)
+  })
+
+  // `actor` is the DEVICE that saved the row, and the daemon is the only
+  // party that can ever back it with a key (ADR-0035 decision 2). Accepting
+  // one from the request made it a self-report wearing a cryptographic
+  // shape: anything holding `workspace:write` could write a row claiming to
+  // be this daemon, or any other device.
+  it('refuses an operator that names a device, rather than believing the caller', async () => {
+    const app = createDocumentRouter({
+      autoVersionQuietMs: 60_000,
+      daemonActor: TEST_DAEMON_ACTOR,
+    })
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operator: { kind: 'human', actor: SOMEONE_ELSES_ACTOR, displayName: 'Mallory' },
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('invalid_body')
+    expect(body.message).toMatch(/actor/)
+  })
+
+  // The half a caller legitimately knows and the daemon does not: which KIND
+  // of party asked, and what to show a reader. Those stay a self-report, as
+  // they always were.
+  it('keeps the caller\u2019s kind and display name, and stamps its own device', async () => {
+    const app = createDocumentRouter({
+      autoVersionQuietMs: 60_000,
+      daemonActor: TEST_DAEMON_ACTOR,
+    })
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operator: { kind: 'ai', displayName: 'Assistant' } }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      version: { operator?: { kind: string; actor?: string; displayName?: string } }
+    }
+    expect(body.version.operator).toEqual({
+      kind: 'ai',
+      displayName: 'Assistant',
+      actor: TEST_DAEMON_ACTOR,
+    })
   })
 
   it('POST /update auto-version persists system/auto-save operator', async () => {
