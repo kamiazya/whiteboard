@@ -344,7 +344,10 @@ describe('channel attribution', () => {
   ]
 
   it('reads a channel as carried when it is constant within every class and differs across them', () => {
-    expect(score(byShape).channels).toEqual({ colour: 'unused', shape: 'carried' })
+    expect(score(byShape).channels).toEqual({
+      colour: { use: 'unused', carriedBy: [] },
+      shape: { use: 'carried', carriedBy: ['stencil'] },
+    })
     expect(score(byShape).contested).toBe(0)
   })
 
@@ -359,7 +362,10 @@ describe('channel attribution', () => {
       byShape[2] as SpatialNode,
     ]
     const s = score(withStatus)
-    expect(s.channels).toEqual({ colour: 'contested', shape: 'carried' })
+    expect(s.channels).toEqual({
+      colour: { use: 'contested', carriedBy: [] },
+      shape: { use: 'carried', carriedBy: ['stencil'] },
+    })
     expect(s.contested).toBe(1)
   })
 
@@ -372,12 +378,18 @@ describe('channel attribution', () => {
       box('api', 0, 0, wearing('visual.gateway', 'hexagon', '3')),
       box('db', 300, 0, wearing('visual.datastore', 'cylinder', '5')),
     ]
-    expect(score(dressed).channels).toEqual({ colour: 'carried', shape: 'carried' })
+    expect(score(dressed).channels).toEqual({
+      colour: { use: 'carried', carriedBy: ['stencil'] },
+      shape: { use: 'carried', carriedBy: ['stencil'] },
+    })
     expect(score(dressed).contested).toBe(0)
   })
 
   it('reads a channel as unused rather than contested when the board never spends it', () => {
-    expect(score(plain).channels).toEqual({ colour: 'unused', shape: 'unused' })
+    expect(score(plain).channels).toEqual({
+      colour: { use: 'unused', carriedBy: [] },
+      shape: { use: 'unused', carriedBy: [] },
+    })
     expect(score(plain).contested).toBe(0)
   })
 })
@@ -425,7 +437,7 @@ describe('a canvas declares its own axes', () => {
       edges: [],
       ...axes('ops.status/v0'),
     } as unknown as SpatialCanvas)
-    expect(declared.channels.colour).toBe('carried')
+    expect(declared.channels.colour.use).toBe('carried')
     expect(declared.contested).toBe(0)
   })
 
@@ -433,7 +445,7 @@ describe('a canvas declares its own axes', () => {
     // The mutation is the DECLARATION, not the drawing: identical boxes, and
     // the only difference is whether the canvas says what the colour means.
     const undeclared = scoreFacets({ nodes: [...boxes], edges: [] } as unknown as SpatialCanvas)
-    expect(undeclared.channels.colour).toBe('contested')
+    expect(undeclared.channels.colour.use).toBe('contested')
     expect(undeclared.contested).toBe(1)
   })
 
@@ -463,12 +475,86 @@ describe('a canvas declares its own axes', () => {
     expect(twice).toEqual(once)
   })
 
+  it('names WHICH axis carries the channel, so two boards that read alike are told apart', () => {
+    // The blind spot ADR-0036 recorded and this closes. `carried` alone
+    // cannot distinguish a board where colour encodes the declared STATUS
+    // axis from one where a stencil's colour won and the status axis is
+    // silently undrawn — both boards read `carried`, and they want opposite
+    // repairs.
+    //
+    // Identical boxes, identical declaration; the only difference is which
+    // distinction the colours line up with.
+    const byStatus = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.status/v0'),
+    } as unknown as SpatialCanvas)
+
+    // Same three boxes, but each wearing its own stencil and coloured to
+    // match THAT rather than its health. The status axis is still declared
+    // and now nothing draws it.
+    const dressed = [
+      box('api', 0, 0, {
+        color: '3',
+        facets: {
+          'visual.stencil/v0': { stencil: 'visual.gateway' },
+          ...withStatus('healthy').facets,
+        },
+      }),
+      box('db', 300, 0, {
+        color: '5',
+        facets: {
+          'visual.stencil/v0': { stencil: 'visual.datastore' },
+          ...withStatus('healthy').facets,
+        },
+      }),
+      box('cache', 600, 0, {
+        color: '5',
+        facets: {
+          'visual.stencil/v0': { stencil: 'visual.datastore' },
+          ...withStatus('failing').facets,
+        },
+      }),
+    ]
+    const byStencil = scoreFacets({
+      nodes: dressed,
+      edges: [],
+      ...axes('ops.status/v0'),
+    } as unknown as SpatialCanvas)
+
+    expect(byStatus.channels.colour.use).toBe('carried')
+    expect(byStencil.channels.colour.use).toBe('carried')
+    // ...and THIS is what the two readings could not say before.
+    expect(byStatus.channels.colour.carriedBy).toEqual(['ops.status/v0'])
+    expect(byStencil.channels.colour.carriedBy).toEqual(['stencil'])
+  })
+
+  it('holds `carried` and a non-empty `carriedBy` as one fact, never half of each', () => {
+    // The invariant that keeps the pair honest: a channel is carried exactly
+    // when some declared partition carries it, so the two fields cannot
+    // disagree. Asserted across every board this file builds rather than on
+    // one, because the failure mode is a branch that sets one and forgets
+    // the other.
+    for (const canvas of [
+      { nodes: [...boxes], edges: [], ...axes('ops.status/v0') },
+      { nodes: [...boxes], edges: [] },
+      { nodes: [...boxes], edges: [], ...axes('ops.nothing/v0') },
+    ]) {
+      const s = scoreFacets(canvas as unknown as SpatialCanvas)
+      for (const reading of [s.channels.colour, s.channels.shape]) {
+        expect(reading.carriedBy.length > 0, JSON.stringify(reading)).toBe(
+          reading.use === 'carried',
+        )
+      }
+    }
+  })
+
   it('ignores an axis no box carries, rather than inventing an empty construct', () => {
     const stray = scoreFacets({
       nodes: [...boxes],
       edges: [],
       ...axes('ops.nothing/v0'),
     } as unknown as SpatialCanvas)
-    expect(stray.channels.colour).toBe('contested')
+    expect(stray.channels.colour.use).toBe('contested')
   })
 })

@@ -37,6 +37,10 @@ const of = (name: string) => scores.get(name) as FacetScore
  * colours. `facet-score.test.ts` holds the calibration; this file will keep
  * reporting zero until the corpus gains a dressed board, and a zero here is
  * therefore evidence of nothing.
+ *
+ * `carriedBy` is empty on every one for the same reason: an unused channel
+ * carries nothing, so the field that names WHICH distinction a channel
+ * encodes has nothing to name here either.
  */
 const UNSPENT = {
   deficit: 0,
@@ -45,7 +49,10 @@ const UNSPENT = {
   distance: 0,
   treatments: 1,
   redundancy: 0,
-  channels: { colour: 'unused', shape: 'unused' },
+  channels: {
+    colour: { use: 'unused', carriedBy: [] },
+    shape: { use: 'unused', carriedBy: [] },
+  },
   contested: 0,
 } as const
 

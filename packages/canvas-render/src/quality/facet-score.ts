@@ -129,13 +129,34 @@ export interface FacetScore {
    * to every column above, because with one axis declared nothing looks
    * wrong.
    */
-  readonly channels: { readonly colour: ChannelUse; readonly shape: ChannelUse }
+  readonly channels: { readonly colour: ChannelReading; readonly shape: ChannelReading }
   /** How many channels are `contested`. 0, 1 or 2. */
   readonly contested: number
 }
 
 /** @see FacetScore.channels */
 export type ChannelUse = 'carried' | 'contested' | 'unused'
+
+/**
+ * What a channel is doing, and — when it is carrying something — WHICH
+ * declared distinctions it carries, by name: `frame`, `kind`, `stencil`, or
+ * the facet key of a declared axis.
+ *
+ * `use === 'carried'` exactly when `carriedBy` is non-empty; they are two
+ * readings of one fact and a test holds them together.
+ *
+ * The name is what ADR-0036 recorded as missing. `carried` alone cannot
+ * separate a board where colour encodes the declared STATUS axis from one
+ * where a stencil's colour won and the status axis is silently undrawn —
+ * identical columns, opposite repairs. That is precisely the user's case
+ * (an infrastructure diagram: shape for what a component IS, colour for
+ * whether it is healthy), so the instrument had to be able to see it before
+ * a board could be judged on it.
+ */
+export interface ChannelReading {
+  readonly use: ChannelUse
+  readonly carriedBy: readonly string[]
+}
 
 /**
  * The channels that can say "these two differ in KIND" **on a board**.
@@ -194,8 +215,25 @@ const contains = (outer: Rect, inner: Rect): boolean =>
  */
 type Partition = ReadonlyMap<string, string>
 
-function declaredPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]): Partition[] {
-  const out: Partition[] = []
+/**
+ * A partition and the NAME of the distinction it states — `frame`, `kind`,
+ * `stencil`, or the facet key of a declared axis.
+ *
+ * The name exists so `channels` can say which axis carries a channel. Without
+ * it, a board where colour encodes a declared status axis and one where a
+ * stencil's colour won read identically as `carried`, and they want opposite
+ * repairs (ADR-0036's recorded blind spot).
+ */
+interface NamedPartition {
+  readonly name: string
+  readonly partition: Partition
+}
+
+function declaredPartitions(
+  canvas: SpatialCanvas,
+  boxes: readonly SpatialNode[],
+): NamedPartition[] {
+  const out: NamedPartition[] = []
   const frames = canvas.nodes.filter((n) => n.type === 'group')
   if (frames.length > 0) {
     const byFrame = new Map<string, string>()
@@ -203,20 +241,22 @@ function declaredPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]
       const frame = frames.find((f) => contains(rectOf(f), rectOf(box)))
       byFrame.set(box.id, frame?.id ?? '')
     }
-    out.push(byFrame)
+    out.push({ name: 'frame', partition: byFrame })
   }
   const byKind = new Map<string, string>(boxes.map((b) => [b.id, b.type]))
-  out.push(byKind)
+  out.push({ name: 'kind', partition: byKind })
   // A box wearing no stencil is its own class (''), exactly as a box in no
   // frame is: "undressed" is a thing the board says about it, not an absence
   // to be excluded — dropping those boxes would let a half-dressed board
   // read as fully carried.
   const byStencil = new Map<string, string>(boxes.map((b) => [b.id, resolveNodeStencil(b) ?? '']))
-  out.push(byStencil)
+  out.push({ name: 'stencil', partition: byStencil })
   for (const key of declaredAxisKeys(canvas)) {
-    out.push(new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])))
+    // Named by the facet KEY, which is what the canvas itself wrote — so a
+    // reading points at the declaration rather than at a position in a list.
+    out.push({ name: key, partition: new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])) })
   }
-  return out.filter((p) => new Set(p.values()).size >= 2)
+  return out.filter((p) => new Set(p.partition.values()).size >= 2)
 }
 
 /**
@@ -292,20 +332,29 @@ function channelUse(
   read: (t: Treatment) => string,
   boxes: readonly SpatialNode[],
   treatment: ReadonlyMap<string, Treatment>,
-  partitions: readonly Partition[],
-): ChannelUse {
+  partitions: readonly NamedPartition[],
+): ChannelReading {
   const channelOf = (id: string) => read(treatment.get(id) ?? DEFAULT_TREATMENT)
   // One value everywhere is not a distinction, and checking it first is what
   // makes the second condition above implicit.
-  if (new Set(boxes.map((b) => channelOf(b.id))).size <= 1) return 'unused'
-  const carried = partitions.some((partition) => {
-    const perClass = new Map<string, Set<string>>()
-    for (const [id, cls] of partition) {
-      perClass.set(cls, (perClass.get(cls) ?? new Set<string>()).add(channelOf(id)))
-    }
-    return [...perClass.values()].every((seen) => seen.size === 1)
-  })
-  return carried ? 'carried' : 'contested'
+  if (new Set(boxes.map((b) => channelOf(b.id))).size <= 1) {
+    return { use: 'unused', carriedBy: [] }
+  }
+  // EVERY partition it is constant within, not the first. A channel can
+  // genuinely be constant within the classes of more than one declared
+  // distinction — a board whose stencils and whose declared axis happen to
+  // agree — and naming one of them arbitrarily would be the same
+  // over-claiming this field exists to end.
+  const carriedBy = partitions
+    .filter(({ partition }) => {
+      const perClass = new Map<string, Set<string>>()
+      for (const [id, cls] of partition) {
+        perClass.set(cls, (perClass.get(cls) ?? new Set<string>()).add(channelOf(id)))
+      }
+      return [...perClass.values()].every((seen) => seen.size === 1)
+    })
+    .map(({ name }) => name)
+  return carriedBy.length > 0 ? { use: 'carried', carriedBy } : { use: 'contested', carriedBy: [] }
 }
 
 export function scoreFacets(canvas: SpatialCanvas): FacetScore {
@@ -314,7 +363,7 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
   const key = (id: string) => keyOf(treatment.get(id) ?? DEFAULT_TREATMENT)
 
   const partitions = declaredPartitions(canvas, boxes)
-  const allClasses = partitions.flatMap((p) => [...classesOf(p).values()])
+  const allClasses = partitions.flatMap((p) => [...classesOf(p.partition).values()])
 
   let deficit = 0
   let redundancy = 0
@@ -350,7 +399,7 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
     })
     if (insideSomeClass) continue
     const isWholeClasses = partitions.some((p) =>
-      [...classesOf(p).values()].every((members) => {
+      [...classesOf(p.partition).values()].every((members) => {
         const held = members.filter((id) => worn.has(id)).length
         return held === 0 || held === members.length
       }),
@@ -380,7 +429,7 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
 
   return {
     channels,
-    contested: Object.values(channels).filter((use) => use === 'contested').length,
+    contested: Object.values(channels).filter((r) => r.use === 'contested').length,
     partitions: partitions.length,
     constructs: allClasses.length,
     deficit,

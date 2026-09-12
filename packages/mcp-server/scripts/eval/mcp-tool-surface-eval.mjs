@@ -129,7 +129,24 @@ function facetLine(facets) {
   if (facets.constructs === 0) return '; facets: declares nothing'
   const owed = ['overload', 'excess'].filter((c) => facets[c] > 0).map((c) => `${c} ${facets[c]}`)
   const misuse = owed.length === 0 ? '' : `, ${owed.join(' ')}`
-  return `; facets deficit ${facets.deficit}/${facets.constructs}, treatments ${facets.treatments}, distance ${facets.distance}${misuse}`
+  return `; facets deficit ${facets.deficit}/${facets.constructs}, treatments ${facets.treatments}, distance ${facets.distance}${misuse}${channelClause(facets.channels)}`
+}
+
+/**
+ * Each channel and WHAT IT CARRIES, by name — `colour carried(ops.status/v0)`
+ * rather than a bare `carried`.
+ *
+ * Printed on the line rather than left to `--out`, because the line is where
+ * a reading is actually taken and the name is the whole reason the field
+ * exists: `carried` alone cannot separate a board whose colour encodes the
+ * declared axis from one whose stencil colour won and left that axis
+ * undrawn. Those want opposite repairs and used to print identically.
+ */
+function channelClause(channels) {
+  if (channels === undefined) return ''
+  const say = ([name, reading]) =>
+    `${name} ${reading.use}${reading.carriedBy.length > 0 ? `(${reading.carriedBy.join('+')})` : ''}`
+  return `; ${Object.entries(channels).map(say).join(', ')}`
 }
 
 /**

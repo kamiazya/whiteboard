@@ -165,15 +165,22 @@ needs a seventh silhouette, not a seventh entry.
 - ADR-0034's stencil is unchanged in what it IS and constrained in what it may
   SPEND: it is still a named appearance applied to one node, and §5 says the
   appearance should stop including a colour once a second axis is real.
-- **`channels.X === 'carried'` does not say WHICH axis carries it**, and the
-  measurement above is where that showed. A board that declares a status axis
-  and lets a stencil's colour win reads `carried` — carried by the stencil
-  partition — and is indistinguishable from the same board where colour
-  carries status. The blind spot is narrow (it needs two declared axes
-  competing for one channel) and it is exactly the user's case, so it is
-  recorded rather than left to be rediscovered. Naming the partitions and
-  reporting which one each channel carries is the fix, and it is its own
-  increment: doing it inside §5's would have confounded the reading.
+- **`channels.X` now says WHICH axis carries it** — CLOSED, in its own
+  increment as this bullet said it would be. It read `carried` for both a
+  board that declares a status axis and lets a stencil's colour win and one
+  where colour carries status; identical columns, opposite repairs, and
+  exactly the user's case. Each channel is now a reading — `use` plus
+  `carriedBy`, the NAMES of the declared distinctions it is constant within
+  (`frame`, `kind`, `stencil`, or a declared axis's facet key). A LIST, not
+  one name: a channel can genuinely be constant within more than one declared
+  distinction, and picking one arbitrarily would be the same over-claiming
+  the field exists to end. `use === 'carried'` exactly when `carriedBy` is
+  non-empty, held together by a test because the failure mode is a branch
+  that sets one and forgets the other.
+
+  Doing it inside §5's increment would have confounded that increment's
+  reading, which is why it waited — and waiting cost nothing, because §5's
+  own table reports `deficit` and `distance`, neither of which this touches.
 - A canvas may name an axis carried by a facet a later build registers or this
   deployment disabled. The keys are not checked against the registry: losing a
   whole declaration to one stray key would cost more than the stray key does,
