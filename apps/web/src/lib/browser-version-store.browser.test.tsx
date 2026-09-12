@@ -274,6 +274,53 @@ describe('has this state already been checkpointed', () => {
     expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
   })
 
+  /**
+   * A point's digest and its frontier must describe ONE state.
+   *
+   * They used to come from two reads — the digest off the resolved placement,
+   * the frontier off a separately opened record — so a write landing between
+   * them recorded a digest of the state BEFORE it against a frontier pointing
+   * after it. The checkpoint then disagreed with itself: restoring it gave one
+   * state, and the unchanged check compared against another, so the scheduler
+   * took a second point of the state it had just recorded.
+   *
+   * Both now come from the same opened record, which nothing else can mutate
+   * — but that is structure, and structure is what a later edit undoes without
+   * any other test noticing.
+   */
+  it('records the digest of the state its frontier points at when a write lands mid-save', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'before')
+
+    // Lands the write inside the window: after the placement lookup, before
+    // the record is opened.
+    let raced = false
+    const racing: Pick<DocumentIndex, 'resolveDocument'> = {
+      async resolveDocument(input) {
+        const entry = await index.resolveDocument(input)
+        if (!raced) {
+          raced = true
+          await writeContent(docs, documentId, 'landed mid-save')
+        }
+        return entry
+      },
+    }
+
+    await new BrowserVersionStore({ docs, index: racing }).save(workspaceId, 'canvas-a', {
+      auto: true,
+    })
+    // The window was actually entered; without this the case could pass by
+    // never having raced at all.
+    expect(raced).toBe(true)
+
+    // The record was opened after that write, so the point holds it. Read
+    // through the REAL index, so the answer is about the stored row rather
+    // than about the racing wrapper.
+    const store = new BrowserVersionStore({ docs, index })
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
+  })
+
   it('answers a manual save the same way, since a bookmark is a point too', async () => {
     const { index, workspaceId, documentId } = await seedDocument('canvas-a')
     const docs = new BrowserWorkspaceDocs()
