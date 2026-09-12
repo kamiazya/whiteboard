@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   loopTurnShare,
   measureLoopAvailability,
+  measureSchedulingFloor,
 } from '../../shared/test-utils/loop-availability.js'
 import { stallCeilingMs } from '../background-work-costs.js'
 import { createIsolatedDb } from './db/test-helpers.js'
@@ -210,6 +211,23 @@ describe('a workspace-tail pass', () => {
     // 20-29ms, because it came from a scratch script at a bigger fixture and
     // the citation beside it was written from memory. A ceiling a test
     // asserts cannot drift that way.
-    expect(availability.worstStallMs).toBeLessThanOrEqual(stallCeilingMs('workspace-tail'))
+    //
+    // Charged against a free-loop reference taken in the same run, because
+    // `worstStallMs` cannot tell a blocked loop from a DESCHEDULED process.
+    // Written as a bare ceiling this read 161.5ms against 150 in CI's stress
+    // lane, where all 290 of a PR's changed test files run in one vitest
+    // process — on a fixture that reads 20-29ms, and with nothing about the
+    // worker changed. That is the fourth machine-calibrated constant to fail
+    // in this repo, and `loop-availability.test.ts`'s heading already names
+    // the remedy: claim a DIFFERENCE between two references measured in the
+    // same run. The floor cannot absorb a real block, which is the property
+    // that keeps this from becoming a number that always passes —
+    // `reports a floor a real block still stands out above` pins it, and
+    // without the yield this pass stalls 2927ms unbroken.
+    const floor = await measureSchedulingFloor(availability.elapsedMs, { intervalMs: 5 })
+    expect(
+      availability.worstStallMs,
+      `worst ${availability.worstStallMs}ms, machine floor ${floor.worstStallMs}ms`,
+    ).toBeLessThanOrEqual(stallCeilingMs('workspace-tail') + floor.worstStallMs)
   }, 300_000)
 })

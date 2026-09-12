@@ -4,7 +4,10 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import type { LoopAvailability } from '../../../shared/test-utils/loop-availability.js'
-import { measureLoopAvailability } from '../../../shared/test-utils/loop-availability.js'
+import {
+  measureLoopAvailability,
+  measureSchedulingFloor,
+} from '../../../shared/test-utils/loop-availability.js'
 import { withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-loop-')
@@ -146,10 +149,14 @@ describe('what a checkpoint costs the loop that is serving requests', () => {
       median(readings, (a) => a.elapsedMs),
       detail,
     ).toBeGreaterThanOrEqual(MIN_PASS_MS)
+    // Charged against a free-loop reference taken in the same run — see the
+    // same line in workspace-tail-loop-availability.test.ts for why a bare
+    // number of milliseconds is an assertion about how quiet the machine was.
+    const floor = await measureSchedulingFloor(median(readings, (a) => a.elapsedMs))
     expect(
       median(readings, (a) => a.worstStallMs),
-      detail,
-    ).toBeLessThan(stallCeilingMs('auto-checkpoint'))
+      `${detail}, machine floor ${floor.worstStallMs}ms`,
+    ).toBeLessThan(stallCeilingMs('auto-checkpoint') + floor.worstStallMs)
   })
 })
 

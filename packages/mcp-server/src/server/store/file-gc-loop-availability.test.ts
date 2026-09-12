@@ -24,7 +24,7 @@ const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { makeSpatialDoc } = await import('../../shared/test-utils/spatial-doc.js')
 const { stallCeilingMs } = await import('../background-work-costs.js')
-const { loopTurnShare, measureLoopAvailability } = await import(
+const { loopTurnShare, measureLoopAvailability, measureSchedulingFloor } = await import(
   '../../shared/test-utils/loop-availability.js'
 )
 
@@ -178,7 +178,13 @@ describe('a file-GC pass', () => {
 
     // The declaration, checked rather than written down — see the same line
     // in workspace-tail-loop-availability.test.ts for what went wrong when
-    // nothing read it.
-    expect(availability.worstStallMs).toBeLessThanOrEqual(stallCeilingMs('file-gc-sweeper'))
+    // nothing read it, and for why it is charged against a free-loop
+    // reference taken in the same run rather than asserted as a bare number
+    // of milliseconds.
+    const floor = await measureSchedulingFloor(availability.elapsedMs, { intervalMs: 5 })
+    expect(
+      availability.worstStallMs,
+      `worst ${availability.worstStallMs}ms, machine floor ${floor.worstStallMs}ms`,
+    ).toBeLessThanOrEqual(stallCeilingMs('file-gc-sweeper') + floor.worstStallMs)
   }, 120_000)
 })
