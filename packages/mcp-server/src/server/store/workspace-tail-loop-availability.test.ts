@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { newImageRef } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -34,15 +35,16 @@ afterEach(async () => {
 
 function canvasReferencing(prefix: string, nodes: number): SpatialCanvas {
   return {
-    nodes: Array.from({ length: nodes }, (_unused, i) => ({
-      id: `node-${i}`,
-      type: 'file' as const,
-      file: newImageRef(`${prefix}-${i}`),
-      x: i,
-      y: i,
-      width: 100,
-      height: 100,
-    })),
+    nodes: Array.from({ length: nodes }, (_unused, i) =>
+      fileNode({
+        id: `node-${i}`,
+        file: newImageRef(`${prefix}-${i}`),
+        x: i,
+        y: i,
+        width: 100,
+        height: 100,
+      }),
+    ),
     edges: [],
   }
 }

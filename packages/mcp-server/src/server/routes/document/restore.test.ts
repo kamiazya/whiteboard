@@ -1,4 +1,5 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -47,15 +48,7 @@ function nodesModelDocUpdate(nodeIds: string[]): Uint8Array {
   const doc = new LoroDoc()
   const vv0 = doc.version()
   writeSpatialCanvas(doc, {
-    nodes: nodeIds.map((id) => ({
-      id,
-      type: 'text' as const,
-      text: id,
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-    })),
+    nodes: nodeIds.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
   return doc.export({ mode: 'update', from: vv0 }) as Uint8Array
@@ -69,8 +62,8 @@ describe('restore router (real node counts)', () => {
     const svv0 = sourceDoc.version()
     writeSpatialCanvas(sourceDoc, {
       nodes: [
-        { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-        { id: 'n2', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
+        textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+        textNode({ id: 'n2', text: 'b', x: 0, y: 0, width: 10, height: 10 }),
       ],
       edges: [],
     })
@@ -746,7 +739,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const initial = new LoroDoc()
     const vv0 = initial.version()
     writeSpatialCanvas(initial, {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'before' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'before' })],
       edges: [],
     })
     initial.commit()

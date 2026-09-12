@@ -4,7 +4,9 @@
 // glyph metrics. Same canvas, different wrap points — so the SVG an agent
 // read back was not the picture a user exported. `ServerDeps.measure` is
 // what closed that, and this is the test that keeps it closed.
+
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { createCanvasRenderSvgTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
@@ -19,28 +21,26 @@ const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 // let the two producers agree by accident.
 const canvas = {
   nodes: [
-    {
+    textNode({
       id: 'n1',
-      type: 'text' as const,
       x: 0,
       y: 0,
       width: 240,
       height: 200,
       text: 'Wide MMMM MMMM MMMM versus narrow iiii iiii iiii - where does this wrap?',
-    },
+    }),
     // A Latin-only fixture cannot see the failure that matters most here: the
     // estimator and a `.notdef`-returning font AGREE with each other on CJK,
     // both at a fraction of the true width, so parity holds while the picture
     // is wrong. This node wraps only if the kana are measured at a full em.
-    {
+    textNode({
       id: 'n2',
-      type: 'text' as const,
       x: 0,
       y: 240,
       width: 200,
       height: 200,
       text: 'これは日本語のテキストです。ノードの幅を超えたときにどこで折り返すのか、全角を全角として測っているかどうかで答えが変わります。',
-    },
+    }),
   ],
   edges: [],
 }

@@ -1,5 +1,6 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import type { LoopAvailability } from '../../../shared/test-utils/loop-availability.js'
@@ -26,15 +27,9 @@ const { stallCeilingMs } = await import('../../background-work-costs.js')
 
 function canvasOf(nodes: number): SpatialCanvas {
   return {
-    nodes: Array.from({ length: nodes }, (_unused, i) => ({
-      id: `node-${i}`,
-      type: 'text' as const,
-      text: `node ${i}`,
-      x: i,
-      y: i,
-      width: 100,
-      height: 60,
-    })),
+    nodes: Array.from({ length: nodes }, (_unused, i) =>
+      textNode({ id: `node-${i}`, text: `node ${i}`, x: i, y: i, width: 100, height: 60 }),
+    ),
     edges: [],
   }
 }

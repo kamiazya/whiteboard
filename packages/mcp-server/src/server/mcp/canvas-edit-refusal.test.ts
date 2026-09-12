@@ -2,6 +2,7 @@
 // model reads it: through a real McpServer + Client over an in-memory
 // transport, so the SDK's own argument validation is what answers rather
 // than a restatement of the schema in a unit test.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
@@ -46,7 +47,7 @@ describe('wb_canvas_edit — a misplaced draft key', () => {
           {
             op: 'node.add',
             id: 'hub',
-            node: { type: 'text', text: 'Hub', x: 0, y: 0, width: 200, height: 80 },
+            node: textNode({ text: 'Hub', x: 0, y: 0, width: 200, height: 80 }),
           },
         ],
       },

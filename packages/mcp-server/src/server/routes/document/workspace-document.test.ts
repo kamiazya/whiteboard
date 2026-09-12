@@ -9,6 +9,7 @@
  *   projection — without that, the next per-document save would diff STALE
  *   content back over the imported edit and silently revert it.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -18,6 +19,7 @@ import {
   resolveWorkspaceDocument,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { seedWorkspaceRow } from '../_test-helpers.js'
@@ -60,7 +62,7 @@ afterEach(async () => {
 function canvasUpdate(doc: LoroDoc, ids: string[]): Uint8Array {
   const from = doc.version()
   writeSpatialCanvas(doc, {
-    nodes: ids.map((id) => ({ id, type: 'text', text: id, x: 0, y: 0, width: 10, height: 10 })),
+    nodes: ids.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
   return new Uint8Array(doc.export({ mode: 'update', from }))
@@ -130,8 +132,8 @@ it('POST workspace-document/update lands on the tree and refreshes per-document 
   const from = peer.version()
   writeSpatialCanvas(documentContainers(peer, entry.documentId), {
     nodes: [
-      { id: 'n-a', type: 'text', text: 'n-a', x: 0, y: 0, width: 10, height: 10 },
-      { id: 'n-b', type: 'text', text: 'n-b', x: 0, y: 0, width: 10, height: 10 },
+      textNode({ id: 'n-a', text: 'n-a', x: 0, y: 0, width: 10, height: 10 }),
+      textNode({ id: 'n-b', text: 'n-b', x: 0, y: 0, width: 10, height: 10 }),
     ],
     edges: [],
   })

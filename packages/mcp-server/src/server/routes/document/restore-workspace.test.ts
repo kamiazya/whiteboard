@@ -9,10 +9,12 @@
  *   restoring v1 left a later-added node in place. This file is the
  *   regression pin for both.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { seedWorkspaceRow } from '../_test-helpers.js'
@@ -55,7 +57,7 @@ afterEach(async () => {
 function canvasUpdate(doc: LoroDoc, ids: string[]): Uint8Array {
   const from = doc.version()
   writeSpatialCanvas(doc, {
-    nodes: ids.map((id) => ({ id, type: 'text', text: id, x: 0, y: 0, width: 10, height: 10 })),
+    nodes: ids.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
   return new Uint8Array(doc.export({ mode: 'update', from }))

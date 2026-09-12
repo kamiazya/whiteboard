@@ -3,6 +3,7 @@
 // The round trip itself is `codecs.property.test.ts`'s, stated as idempotence
 // and asked of every registered format. What is here is what only OCIF has:
 // the edge/arrow branch, a text body as a resource, and explicit group members.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { parseOcif, toOcif } from './ocif-projection-io.js'
 
@@ -16,8 +17,8 @@ describe('a document becomes OCIF and comes back', () => {
     // that used to ask whether both ends named a node is gone, because the
     // collection an element is in already answers it.
     const nodes = [
-      { id: 'a', type: 'text' as const, text: 'a', x: 0, y: 0, width: 10, height: 10 },
-      { id: 'b', type: 'text' as const, text: 'b', x: 90, y: 0, width: 10, height: 10 },
+      textNode({ id: 'a', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+      textNode({ id: 'b', text: 'b', x: 90, y: 0, width: 10, height: 10 }),
     ]
     const projected = toOcif({
       nodes,
@@ -94,7 +95,7 @@ describe('parseOcif reads foreign OCIF text', () => {
     // This is the same trip through JSON and the schema — the check the fuzz
     // lanes make of every tool answer, made of this projection's output.
     const canvas = {
-      nodes: [{ id: 'n', type: 'text' as const, text: 'hi', x: 0.5, y: -2, width: 10, height: 10 }],
+      nodes: [textNode({ id: 'n', text: 'hi', x: 0.5, y: -2, width: 10, height: 10 })],
       edges: [],
       lines: [
         {

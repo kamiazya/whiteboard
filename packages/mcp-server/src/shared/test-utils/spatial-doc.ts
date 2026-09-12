@@ -15,6 +15,7 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { newImageRef } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 
 /** A doc holding the given nodes-model spatial canvas, saved through the real bridge. */
@@ -28,15 +29,14 @@ export function makeSpatialDoc(canvas: SpatialCanvas): LoroDoc {
 function imageOnlyCanvas(fileId: string): SpatialCanvas {
   return {
     nodes: [
-      {
+      fileNode({
         id: `node-${fileId}`,
-        type: 'file',
         file: newImageRef(fileId),
         x: 0,
         y: 0,
         width: 100,
         height: 100,
-      },
+      }),
     ],
     edges: [],
   }

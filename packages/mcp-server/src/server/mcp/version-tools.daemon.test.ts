@@ -1,4 +1,5 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import {
   createVersionListTool,
@@ -38,7 +39,7 @@ async function load(deps: ServerDeps, documentId: string): Promise<LoroDoc> {
 async function writeText(deps: ServerDeps, documentId: string, text: string): Promise<void> {
   const doc = await load(deps, documentId)
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text })],
     edges: [],
   })
   doc.commit()

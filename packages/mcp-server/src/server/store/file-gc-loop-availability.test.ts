@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -41,15 +42,16 @@ afterEach(async () => {
 /** A canvas whose nodes all reference uploads, so the scan has real work. */
 function canvasReferencing(prefix: string, nodes: number): SpatialCanvas {
   return {
-    nodes: Array.from({ length: nodes }, (_unused, i) => ({
-      id: `node-${i}`,
-      type: 'file' as const,
-      file: newImageRef(`${prefix}-${i}`),
-      x: i * 10,
-      y: i * 10,
-      width: 100,
-      height: 100,
-    })),
+    nodes: Array.from({ length: nodes }, (_unused, i) =>
+      fileNode({
+        id: `node-${i}`,
+        file: newImageRef(`${prefix}-${i}`),
+        x: i * 10,
+        y: i * 10,
+        width: 100,
+        height: 100,
+      }),
+    ),
     edges: [],
   }
 }

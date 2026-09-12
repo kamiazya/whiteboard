@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 
 /**
  * A canvas occupying every field position the model can hold.
@@ -12,9 +13,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 export function fullyPopulatedCanvas(): SpatialCanvas {
   return {
     nodes: [
-      {
+      textNode({
         id: 'n1',
-        type: 'text',
         x: 0,
         y: 0,
         width: 10,
@@ -22,8 +22,8 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
         text: 'a',
         color: '1',
         facets: { 'visual.shape/v0': { kind: 'rect' } },
-      },
-      { id: 'n2', type: 'file', x: 1, y: 1, width: 2, height: 2, file: 'a.png', subpath: '#x' },
+      }),
+      fileNode({ id: 'n2', x: 1, y: 1, width: 2, height: 2, file: 'a.png', subpath: '#x' }),
       { id: 'n3', type: 'link', x: 2, y: 2, width: 2, height: 2, url: 'https://e.test/' },
       {
         // The embed rides the GROUP, which is the one node kind with no content

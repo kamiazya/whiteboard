@@ -8,8 +8,10 @@
  * that map because a function cannot cross the host boundary the widget
  * sits behind.
  */
+
 import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -20,7 +22,7 @@ const seamsOf = (entries: Record<string, { name?: string; body?: string }>) =>
   referenceSeams(new Map(Object.entries(entries)))
 
 const canvas: SpatialCanvas = {
-  nodes: [{ id: 'f1', type: 'file', x: 0, y: 0, width: 320, height: 220, file: 'notes' }],
+  nodes: [fileNode({ id: 'f1', x: 0, y: 0, width: 320, height: 220, file: 'notes' })],
   edges: [],
 }
 

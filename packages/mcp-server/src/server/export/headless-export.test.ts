@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
@@ -50,7 +51,7 @@ afterEach(async () => {
 function spatialTextDoc(nodeId: string, text: string): LoroDoc {
   const doc = new LoroDoc()
   const nodes = doc.getMap('nodes')
-  nodes.set(nodeId, { id: nodeId, type: 'text', x: 0, y: 0, width: 100, height: 50, text })
+  nodes.set(nodeId, textNode({ id: nodeId, x: 0, y: 0, width: 100, height: 50, text }))
   doc.commit()
   return doc
 }
@@ -129,7 +130,7 @@ describe('exportCanvasHeadless', () => {
     // migration probe on the load path.
     const doc = new LoroDoc()
     const nodes = doc.getMap('nodes')
-    nodes.set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' })
+    nodes.set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' }))
     doc.commit()
 
     expect(_hasLegacyElementsForTests(doc)).toBe(false)

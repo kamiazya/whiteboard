@@ -9,6 +9,7 @@
 // Only the kinds task is covered. A verifier earns a case here when
 // something about it has been got wrong, not on principle — every task in
 // the file would be a fixture pile that nobody reads.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { TASKS } from './tasks.mjs'
 
@@ -64,15 +65,9 @@ const FLOWS = [
 
 /** Seven boxes in a row, no overlaps, every flow in the prompt's direction. */
 const goodBoard = (): Board => ({
-  nodes: LABELS.map(([id, text], i) => ({
-    id,
-    type: 'text',
-    text,
-    x: i * 300,
-    y: 0,
-    width: 200,
-    height: 80,
-  })),
+  nodes: LABELS.map(([id, text], i) =>
+    textNode({ id, text, x: i * 300, y: 0, width: 200, height: 80 }),
+  ),
   edges: FLOWS.map(([from, to], i) => ({ id: `e${i}`, from: at(from), to: at(to) })),
 })
 

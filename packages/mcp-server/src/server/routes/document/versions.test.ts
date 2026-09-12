@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -312,7 +313,7 @@ describe('GET /versions/:id/document', () => {
 
     const first = new LoroDoc()
     writeSpatialCanvas(first, {
-      nodes: [{ id: 'kept', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'kept' }],
+      nodes: [textNode({ id: 'kept', x: 0, y: 0, width: 80, height: 40, text: 'kept' })],
       edges: [],
     })
     first.commit()
@@ -331,8 +332,8 @@ describe('GET /versions/:id/document', () => {
     second.import(first.export({ mode: 'snapshot' }))
     writeSpatialCanvas(second, {
       nodes: [
-        { id: 'kept', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'kept' },
-        { id: 'added-later', type: 'text', x: 90, y: 0, width: 80, height: 40, text: 'later' },
+        textNode({ id: 'kept', x: 0, y: 0, width: 80, height: 40, text: 'kept' }),
+        textNode({ id: 'added-later', x: 90, y: 0, width: 80, height: 40, text: 'later' }),
       ],
       edges: [],
     })
