@@ -53,6 +53,16 @@ const versionRowSchema = z
      */
     hasThumbnail: z.boolean().optional(),
     frontiers: z.instanceof(Uint8Array),
+    /**
+     * The identity of the CONTENT this point was taken of, so "has this
+     * document changed?" can be asked about the document rather than about
+     * the record. Optional for the reason `auto` and `branchName` are: a row
+     * written before this existed must keep parsing, and absent is read as
+     * "no digest recorded" rather than as empty content. Nothing backfills
+     * one — a past checkpoint's content is reachable only by checking the
+     * record out at its frontier.
+     */
+    contentDigest: z.string().min(1).optional(),
   })
   .strict()
 type VersionRow = z.infer<typeof versionRowSchema>
@@ -121,6 +131,11 @@ export class BrowserVersionStore {
       // The STORED record's frontier, never a live doc's: a checkpoint has to
       // point at ops that are on disk, and `open` reads what is.
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
+      // Free: `placement` is the resolve this save already did, and a
+      // tree-backed index derives the digest on that same read. Absent only
+      // from an index that does not hold the content, which the port says
+      // may answer without one.
+      ...(placement.contentDigest === undefined ? {} : { contentDigest: placement.contentDigest }),
     }
     await inTransaction(this.deps.dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
       await request(tx.objectStore(VERSIONS_STORE).put(versionRowSchema.parse(row)))
@@ -159,18 +174,24 @@ export class BrowserVersionStore {
   }
 
   /**
-   * Does the newest checkpoint already hold the state the record is in?
+   * Does the newest checkpoint already hold the state this document is in?
    *
-   * Both halves in this store's own space — the frontier read exactly as
-   * `save` reads it, off the STORED record, against a row the same
-   * expression wrote. The scheduler asks rather than comparing frontiers
-   * itself: a version's frontier is the RECORD's, and a doc compared across
-   * that boundary is never equal.
+   * Answered on the document's CONTENT, because a record frontier cannot
+   * answer it: every document in a workspace lives in one record, so any
+   * sibling's edit moves the frontier and the question comes back "somebody
+   * edited something here". Measured on the daemon twin before the fix: five
+   * sibling edits, five wrong answers. In a workspace anybody is working in,
+   * that leaves the scheduler unable to tell an untouched document from an
+   * edited one at all.
    *
-   * The frontier being the record's also means a sibling document's edit
-   * moves it, so this answers false for a document nothing touched. That
-   * costs at most one extra checkpoint, on a document that was signalled
-   * anyway, and errs toward recording where somebody stopped.
+   * The digest is a function of the MERGED content, not of a write stamp, so
+   * two replicas that converged agree on it. Both halves stay in this store's
+   * own space: the digest is derived on the same read of the record that
+   * `save` derived the row's from.
+   *
+   * A row with no digest — written before the field, or by an index that does
+   * not hold content — falls back to the frontier comparison it was written
+   * under: wrong in the direction it always was, rather than newly wrong.
    */
   async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
@@ -180,6 +201,9 @@ export class BrowserVersionStore {
     const rows = await this.rowsOf(workspaceId, placement.documentId)
     const newest = rows.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))[0]
     if (newest === undefined) return false
+    if (newest.contentDigest !== undefined && placement.contentDigest !== undefined) {
+      return newest.contentDigest === placement.contentDigest
+    }
     const now = new Uint8Array(encodeFrontiers(record.oplogFrontiers()))
     return newest.frontiers.length === now.length && newest.frontiers.every((b, i) => b === now[i])
   }

@@ -47,6 +47,12 @@ interface VersionsTable {
   operatorWorkspaceId: string | null
   elementCount: number
   frontiers: string
+  // The identity of the content this point was taken of. `''` means the row
+  // predates migration 0026 and carries none — a past checkpoint's content
+  // is only reachable by checking the record out, so nothing could be
+  // backfilled. The workspace-scoped `frontiers` above answer a different
+  // question: they move when ANY document in the workspace is edited.
+  contentDigest: string
   createdAt: Timestamp
   // Set only on the point a restore produced; see `versionEntrySchema`.
   restoredFrom: string | null

@@ -4,6 +4,7 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -207,6 +208,73 @@ describe('has this state already been checkpointed', () => {
     expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
 
     await writeContent(docs, documentId, 'second')
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
+  })
+
+  /**
+   * The question is about ONE document, and a record frontier cannot answer
+   * it: every document in a workspace lives in one record, so a sibling's
+   * edit moves the frontier too. Measured before the fix on the daemon twin:
+   * five sibling edits, five wrong answers. The cost is not a stray row here
+   * and there — in a workspace anybody is working in, the scheduler cannot
+   * tell an untouched document from an edited one at all.
+   */
+  it('stays yes while only a sibling document is edited', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const sibling = await index.createDocument({
+      workspaceId,
+      path: 'canvas-b',
+      kind: 'spatial',
+    })
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'mine')
+    const store = new BrowserVersionStore({ docs, index })
+
+    await store.save(workspaceId, 'canvas-a', { auto: true })
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
+
+    for (const text of ['one', 'two', 'three', 'four', 'five']) {
+      await writeContent(docs, sibling.documentId, text)
+      expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
+    }
+  })
+
+  /**
+   * The fallback covers a row with no digest: one written before the field,
+   * or by an index that does not hold the content — which the `DocumentEntry`
+   * port explicitly permits. It keeps the behaviour such a row was written
+   * under, wrong in the direction it always was, so the sibling half is
+   * asserted too: without it, a fallback quietly replaced by `false` or by
+   * the digest path would still pass.
+   */
+  it('falls back to the record frontier for a row saved without a digest', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const sibling = await index.createDocument({
+      workspaceId,
+      path: 'canvas-b',
+      kind: 'spatial',
+    })
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'mine')
+
+    // An index that answers without a digest, so the row is written the way
+    // a pre-digest keeper wrote it. Read back through the real one.
+    const digestless: Pick<DocumentIndex, 'resolveDocument'> = {
+      async resolveDocument(input) {
+        const entry = await index.resolveDocument(input)
+        if (entry === null) return null
+        const { contentDigest: _dropped, ...rest } = entry
+        return rest
+      },
+    }
+    await new BrowserVersionStore({ docs, index: digestless }).save(workspaceId, 'canvas-a', {
+      auto: true,
+    })
+
+    const store = new BrowserVersionStore({ docs, index })
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
+
+    await writeContent(docs, sibling.documentId, 'sibling moved')
     expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
   })
 
