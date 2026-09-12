@@ -123,6 +123,43 @@ export type VisualShapeFacet = z.infer<typeof visualShapeFacetSchema>
 export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
 
 /**
+ * `visual.axes/v0` — which of its own facets a canvas treats as SEMANTIC
+ * AXES, so a reader can tell a distinction it means from a distinction it
+ * merely draws.
+ *
+ * A board carries several at once: an infrastructure drawing wants
+ * silhouette for what a component IS and colour for whether it is healthy,
+ * and those are two axes competing for two channels. Without a declaration
+ * the second one has nowhere to live — anything a document says about its
+ * boxes beyond frame, node kind and stencil is invisible to every reader
+ * that did not write it, so a colour spent on it looks like decoration.
+ *
+ * A LIST OF KEYS rather than "every facet is an axis", and that is the whole
+ * design. `visual.shape/v0` is a facet and is emphatically not an axis — it
+ * says what a box DRAWS, not what it IS — and nothing about a facet's shape
+ * reveals which kind it is. Only the document knows, so the document says.
+ *
+ * The keys are not checked against the registry here: a canvas may name an
+ * axis carried by a facet a later build registers, or one this deployment
+ * disabled, and losing the whole declaration to that would cost more than
+ * the stray key does. A key no box carries simply contributes no partition.
+ */
+export const visualAxesFacetSchema = z.object({
+  axes: z.array(
+    z
+      .string()
+      .regex(
+        /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/,
+        'must be a facet key like "visual.shape/v0"',
+      ),
+  ),
+})
+
+export type VisualAxesFacet = z.infer<typeof visualAxesFacetSchema>
+
+export const VISUAL_AXES_KEY = 'visual.axes/v0'
+
+/**
  * A node's badge: a named icon from the renderer's vendored set, or a
  * single emoji/character. A union on purpose — the two arms render through
  * different scene nodes (icon geometry vs a text glyph) and future arms
@@ -258,6 +295,21 @@ export const visualPlugin = definePlugin({
   id: 'visual',
   displayName: 'Visual style',
   facets: [
+    defineFacet({
+      name: 'axes',
+      displayName: 'Semantic axes',
+      version: 'v0',
+      // CANVAS only. An axis is a statement about the whole drawing — "on
+      // this board, colour means health" — and the same sentence attached to
+      // one node would say nothing a reader could act on.
+      targets: ['canvas'],
+      schema: visualAxesFacetSchema,
+      // No editor spec, deliberately: there is no control for this yet, and
+      // a derived form over a free list of facet keys would be a text box
+      // that writes a key nobody can verify. Written today through
+      // `wb_facet_set`, which is what a model reaches for, and the UI comes
+      // when there is a second axis worth picking from a list.
+    }),
     defineFacet({
       name: 'edges',
       displayName: 'Edges',

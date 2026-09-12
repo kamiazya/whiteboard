@@ -25,8 +25,14 @@
  * cannot score well by spending more: an appearance matching no declared
  * distinction is `excess`, and one appearance carrying two is `overload`.
  */
+
+import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { resolveNodeShape, resolveNodeStencil } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  resolveNodeShape,
+  resolveNodeStencil,
+  VISUAL_AXES_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 
 export interface FacetScore {
   /**
@@ -207,7 +213,50 @@ function declaredPartitions(canvas: SpatialCanvas, boxes: readonly SpatialNode[]
   // read as fully carried.
   const byStencil = new Map<string, string>(boxes.map((b) => [b.id, resolveNodeStencil(b) ?? '']))
   out.push(byStencil)
+  for (const key of declaredAxisKeys(canvas)) {
+    out.push(new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])))
+  }
   return out.filter((p) => new Set(p.values()).size >= 2)
+}
+
+/**
+ * The facet keys a canvas names as its own semantic axes.
+ *
+ * Three partitions are known by name above — frame, node kind, stencil — and
+ * everything else a document says about its boxes was invisible, so a colour
+ * spent on it scored `contested`: a distinction the reader sees and the
+ * document does not state. It did state it; this could not hear it.
+ *
+ * Deliberately a DECLARATION rather than "every facet is an axis".
+ * `visual.shape/v0` is a facet and is not a construct — it says what a box
+ * DRAWS, not what it IS — and nothing about a facet's shape reveals which it
+ * is. Only the document knows, so the document says.
+ *
+ * Read defensively: this runs over stored content, and a payload written by
+ * another version must cost the axis, never the score.
+ */
+function declaredAxisKeys(canvas: SpatialCanvas): readonly string[] {
+  const declared = canvas['x-whiteboard']?.facets?.[VISUAL_AXES_KEY]
+  if (declared === null || typeof declared !== 'object') return []
+  const axes = (declared as { axes?: unknown }).axes
+  return Array.isArray(axes) ? axes.filter((key): key is string => typeof key === 'string') : []
+}
+
+/**
+ * A box's class under one axis: a stable key for that facet's payload.
+ *
+ * A box that does not carry the facet keys as `null` through the same
+ * function, and that is a class like any other — "unmarked" is something the
+ * board says about a box, exactly as "in no frame" is. Dropping those boxes
+ * would let a half-declared board read as fully carried.
+ *
+ * No special case for the absent payload: `facetPayloadKey` already answers
+ * a stable key distinct from every real one. Writing one anyway survived a
+ * mutation check, because `''` and `'null'` partition identically — an inert
+ * branch reads exactly like a branch that decides something.
+ */
+function facetPayloadKeyOf(node: SpatialNode, key: string): string {
+  return facetPayloadKey(node['x-whiteboard']?.facets?.[key])
 }
 
 const classesOf = (partition: Partition): Map<string, string[]> => {

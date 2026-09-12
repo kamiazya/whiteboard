@@ -385,3 +385,68 @@ describe('channel attribution', () => {
     expect(score(plain).contested).toBe(0)
   })
 })
+
+/**
+ * A board declaring its OWN axis.
+ *
+ * Until now the only distinctions this score could see were the three it
+ * knows by name: which frame holds a box, the node's kind, and the stencil it
+ * wears. Anything else a document says about its boxes — that these are
+ * failing and those are healthy, that these are ours and those are a
+ * vendor's — was invisible, so a colour spent on it read as `contested`: a
+ * distinction the reader sees and the document does not state. It DID state
+ * it; the instrument could not hear it.
+ *
+ * That is what stops a second semantic axis existing at all (user,
+ * 2026-09-12): an infrastructure diagram wants shape for what a component is
+ * and colour for whether it is healthy, and the second one had nowhere to be
+ * declared. `visual.axes/v0` is where — a canvas names the facet keys it
+ * treats as axes, and each becomes a partition like the three built in.
+ *
+ * Deliberately NOT "any facet is an axis". `visual.shape/v0` is a facet and
+ * is emphatically not a construct — it says what a box DRAWS, not what it
+ * IS, and counting it would make every silhouette its own declared class.
+ * The document has to say which of its facets carry meaning, because nothing
+ * about a facet's shape reveals that.
+ */
+describe('a canvas declares its own axes', () => {
+  const withStatus = (status: string) => ({
+    'x-whiteboard': { facets: { 'ops.status/v0': { state: status } } },
+  })
+  const axes = (...keys: readonly string[]) => ({
+    'x-whiteboard': { facets: { 'visual.axes/v0': { axes: [...keys] } } },
+  })
+
+  const boxes = [
+    box('api', 0, 0, { color: '4', ...withStatus('healthy') }),
+    box('db', 300, 0, { color: '4', ...withStatus('healthy') }),
+    box('cache', 600, 0, { color: '1', ...withStatus('failing') }),
+  ]
+
+  it('reads a declared axis as a partition, so a colour spent on it is carried', () => {
+    const declared = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.status/v0'),
+    } as unknown as SpatialCanvas)
+    expect(declared.channels.colour).toBe('carried')
+    expect(declared.contested).toBe(0)
+  })
+
+  it('says the same board is contested when the axis is not declared', () => {
+    // The mutation is the DECLARATION, not the drawing: identical boxes, and
+    // the only difference is whether the canvas says what the colour means.
+    const undeclared = scoreFacets({ nodes: [...boxes], edges: [] } as unknown as SpatialCanvas)
+    expect(undeclared.channels.colour).toBe('contested')
+    expect(undeclared.contested).toBe(1)
+  })
+
+  it('ignores an axis no box carries, rather than inventing an empty construct', () => {
+    const stray = scoreFacets({
+      nodes: [...boxes],
+      edges: [],
+      ...axes('ops.nothing/v0'),
+    } as unknown as SpatialCanvas)
+    expect(stray.channels.colour).toBe('contested')
+  })
+})
