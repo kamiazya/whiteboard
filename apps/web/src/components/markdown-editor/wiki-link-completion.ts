@@ -62,6 +62,12 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
   }
 })
 
+/**
+ * The popup's chrome, for EVERY completion source the editors install — the
+ * `[[` one this module owns and the `:` one beside it. It lives here because
+ * that is where the first source was; a reader looking for why a shortcode
+ * row is styled the way it is has to come to this file.
+ */
 export const wikiLinkCompletionTheme = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete': {
     backgroundColor: 'var(--popover)',
@@ -69,7 +75,43 @@ export const wikiLinkCompletionTheme = EditorView.theme({
     border: '1px solid var(--border)',
     borderRadius: 'var(--radius-md)',
     boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-    overflow: 'hidden',
+    // NOT `hidden`, which is what it was: the info panel is a CHILD of this
+    // element positioned to the SIDE of it, so clipping here erased it — its
+    // 52px box measured 1px inside the tooltip's right edge, and an icon
+    // preview that renders perfectly in isolation was invisible in the app.
+    // The list does its own clipping (`overflow: hidden auto` on the `ul`,
+    // measured scrolling 627px of rows in a 256px box), so nothing here was
+    // holding it in.
+    overflow: 'visible',
+  },
+  // The heading a sectioned list draws. A custom element rather than a class
+  // — `.cm-completionSection` matches nothing — and unstyled it renders at
+  // the label's own size and colour, so a heading reads as loud as the rows
+  // it is grouping.
+  '.cm-tooltip.cm-tooltip-autocomplete completion-section': {
+    display: 'block',
+    padding: '0.375rem 0.5rem 0.125rem',
+    fontSize: '0.75rem',
+    fontWeight: '500',
+    color: 'var(--muted-foreground)',
+  },
+  // Says what KIND of thing a row is, so it must not compete with what the
+  // row is called.
+  '.cm-tooltip.cm-tooltip-autocomplete .cm-completionDetail': {
+    color: 'var(--muted-foreground)',
+    fontStyle: 'normal',
+    fontSize: '0.75rem',
+    marginLeft: '0.5rem',
+  },
+  // The panel beside the list, holding whatever a row previews.
+  '.cm-tooltip.cm-tooltip-autocomplete .cm-completionInfo': {
+    backgroundColor: 'var(--popover)',
+    color: 'var(--popover-foreground)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+    padding: '0.5rem',
+    marginLeft: '0.25rem',
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': {
     fontFamily: 'inherit',

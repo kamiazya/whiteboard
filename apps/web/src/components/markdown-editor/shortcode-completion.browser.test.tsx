@@ -14,6 +14,7 @@ import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { shortcodeCompletionSource } from './shortcode-completion.js'
+import { wikiLinkCompletionTheme } from './wiki-link-completion.js'
 
 let view: EditorView | undefined
 
@@ -152,5 +153,49 @@ describe('an icon offered under the same colon', () => {
     await vi.waitFor(() => expect(completionStatus(target.state)).toBe('active'))
     acceptCompletion(target)
     await vi.waitFor(() => expect(target.state.doc.toString()).toBe('mark it :icon-star:'))
+  })
+})
+
+/**
+ * The popup UNDER THE APP'S OWN THEME, which the cases above deliberately do
+ * not install — and the one thing that only shows there.
+ *
+ * `.cm-completionInfo` is a CHILD of the tooltip positioned to the SIDE of
+ * it, so an `overflow: hidden` ancestor erases it. The theme had exactly
+ * that, and the erasure is invisible to every other kind of assertion:
+ * clipping does not move a box, so the panel measured its full 52px one
+ * pixel inside the tooltip's right edge while a person saw nothing. It took
+ * a screenshot to notice, and this is what stops it needing one again.
+ *
+ * Asserted on the computed style rather than on geometry for that reason.
+ */
+describe('the popup under the app theme', () => {
+  it('does not clip the panel that previews an icon', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const themed = new EditorView({
+      parent: host,
+      state: EditorState.create({
+        doc: 'mark it ',
+        extensions: [
+          wikiLinkCompletionTheme,
+          autocompletion({ override: [shortcodeCompletionSource], interactionDelay: 0 }),
+        ],
+      }),
+    })
+    try {
+      themed.focus()
+      themed.dispatch({ selection: { anchor: themed.state.doc.length } })
+      type(themed, ':st')
+      await vi.waitFor(() => expect(completionStatus(themed.state)).toBe('active'))
+      const tip = document.querySelector('.cm-tooltip-autocomplete') as HTMLElement
+      expect(document.querySelector('.cm-completionInfo')).not.toBeNull()
+      expect(getComputedStyle(tip).overflow).not.toContain('hidden')
+      // The list clips itself, so nothing was relying on the ancestor to.
+      expect(getComputedStyle(tip.querySelector('ul') as HTMLElement).overflowY).toBe('auto')
+    } finally {
+      themed.destroy()
+      host.remove()
+    }
   })
 })
