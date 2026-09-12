@@ -47,7 +47,7 @@ describe('createCanvasClientNotifier', () => {
     await vi.waitFor(() => expect(sendAgentActivity).toHaveBeenCalledTimes(1))
 
     expect(sendAgentActivity).toHaveBeenCalledWith(WORKSPACE_ID, PATH, {
-      operator: { kind: 'ai', peerId: expect.stringMatching(/^daemon-/) },
+      operator: { kind: 'ai', actor: expect.stringMatching(/^process:daemon-/) },
       touched: { nodes: ['a'], edges: [] },
       summary: 'added 1',
     })

@@ -7,7 +7,7 @@ import type {
   ViewportRequest,
 } from '@kamiazya/whiteboard-server-core'
 import { nanoid } from 'nanoid'
-import { DAEMON_PEER_ID } from './daemon-peer.js'
+import { DAEMON_AGENT_ACTOR } from './daemon-peer.js'
 import { getLogger } from './log.js'
 import {
   getReadyClientCount,
@@ -28,7 +28,7 @@ const log = getLogger('canvas-client-notifier')
  * - **documentId -> path.** The WS routes are keyed by workspace and document
  *   PATH, which is placement, and placement lives in the index rather than
  *   in a tool's arguments.
- * - **Operator identity.** `kind: 'ai'` plus `DAEMON_PEER_ID`.
+ * - **Operator identity.** `kind: 'ai'` plus `DAEMON_AGENT_ACTOR`.
  *
  * Every method swallows its own failures. The port's contract is that a tool
  * may call it AFTER its write is committed, so a transport error here must
@@ -50,7 +50,7 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
           const path = await pathOf(activity.workspaceId, activity.documentId)
           if (path === null) return
           sendAgentActivity(activity.workspaceId, path, {
-            operator: { kind: 'ai', peerId: DAEMON_PEER_ID },
+            operator: { kind: 'ai', actor: DAEMON_AGENT_ACTOR },
             touched: {
               nodes: [...activity.touched.nodes],
               edges: [...activity.touched.edges],

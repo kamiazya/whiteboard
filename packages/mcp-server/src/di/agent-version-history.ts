@@ -1,5 +1,5 @@
 import type { VersionHistory } from '@kamiazya/whiteboard-server-core'
-import { DAEMON_PEER_ID } from '../server/daemon-peer.js'
+import { DAEMON_AGENT_ACTOR } from '../server/daemon-peer.js'
 import type { VersionStore } from '../server/store/version-store.js'
 
 /**
@@ -16,7 +16,7 @@ export function agentVersionHistory(store: VersionStore): VersionHistory {
     save: (workspaceId, path, doc, options) =>
       store.save(workspaceId, path, doc, {
         ...options,
-        operator: options.operator ?? { kind: 'ai', peerId: DAEMON_PEER_ID },
+        operator: options.operator ?? { kind: 'ai', actor: DAEMON_AGENT_ACTOR },
       }),
     load: (workspaceId, id) => store.load(workspaceId, id),
     loadWorkspaceAt: (workspaceId, id) => store.loadWorkspaceAt(workspaceId, id),

@@ -157,7 +157,7 @@ describe('runMigrations', () => {
         auto: 1,
         label: null,
         operatorKind: 'system',
-        operatorPeerId: '',
+        operatorActor: '',
         operatorDisplayName: null,
         operatorAgentId: null,
         operatorWorkspaceId: null,

@@ -1,7 +1,7 @@
 import type { VersionHistory } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { DAEMON_PEER_ID } from '../server/daemon-peer.js'
+import { DAEMON_AGENT_ACTOR } from '../server/daemon-peer.js'
 import type { VersionStore } from '../server/store/version-store.js'
 import { agentVersionHistory } from './agent-version-history.js'
 
@@ -28,13 +28,13 @@ describe('agentVersionHistory', () => {
     expect(save).toHaveBeenCalledWith('ws', 'notes/plan', expect.any(LoroDoc), {
       auto: false,
       label: 'v1',
-      operator: { kind: 'ai', peerId: DAEMON_PEER_ID },
+      operator: { kind: 'ai', actor: DAEMON_AGENT_ACTOR },
     })
   })
 
   it('passes a named operator through untouched', async () => {
     const { store, save } = storeSpy()
-    const operator = { kind: 'human' as const, peerId: 'p-1', displayName: 'Yuki' }
+    const operator = { kind: 'human' as const, actor: 'human:yuki', displayName: 'Yuki' }
 
     await agentVersionHistory(store).save('ws', 'notes/plan', new LoroDoc(), {
       auto: false,

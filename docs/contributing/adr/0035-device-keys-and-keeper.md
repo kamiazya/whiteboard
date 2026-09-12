@@ -18,7 +18,7 @@ may freeze into a document.
 | where | shape | cryptographic |
 |---|---|---|
 | OKF trust family (ADR-0016) | `generated.by` / `verified.by` | no — a declared actor |
-| version history | `operatorInfoSchema.peerId` (`versions/version-entry.ts`) | no — `apps/web` writes the literal `'browser'` |
+| version history | `operatorInfoSchema.actor` (`versions/version-entry.ts`) | no — a declared actor, absent where no device identity exists |
 | daemon identity | Ed25519 keypair (`security/daemon-identity.ts`) | **yes — the only one** |
 
 They were invented independently and none references another. ADR-0016's own
@@ -28,9 +28,19 @@ Consequences already says what the first one is worth:
 > provenance will be wrong.
 
 So the hole an identity layer would fill is documented by the project itself.
-Note also that `operatorInfoSchema.peerId` is **not** Loro's peer id — it is a
-free string with a colliding name, which `loro-adapter/src/workspace-tree.ts`
-avoids relying on for its own reasons.
+
+*Correction (2026-09-12, same day, while implementing this).* The paragraph
+here first said `operatorInfoSchema.peerId` was **not** Loro's peer id, only
+a free string with a colliding name. That was wrong, and the truth is worse.
+At two of its five call sites the value **was** `doc.peerIdStr` — Loro's own
+peer id — which Loro mints fresh on every load of the same document
+(measured: three loads of one snapshot, three different numbers). The other
+three wrote a per-process nanoid or the literal `'browser'`. So the field
+was not one vocabulary with a confusing name; it was three unrelated value
+spaces under `z.string().min(1)`, with no row recording which it held. And
+nothing read it — the only reads were two tests asserting it was non-blank,
+which a random number satisfies. The convergence below therefore begins by
+deleting what identified nobody, not by renaming it.
 
 ### The synchronisation model is already decided
 
@@ -89,7 +99,8 @@ depends on its method: an identifier that stays fixed while its keys rotate
 losing the device would orphan every record naming it.
 
 **Until a method is chosen, documents and version rows carry the device DID
-only.** Two places make this load-bearing rather than tidy:
+only** — and where no device identity exists yet (a browser profile), they
+carry no actor at all rather than a stand-in. Two places make this load-bearing rather than tidy:
 
 - the OKF trust family, which is stored in its own CRDT bucket and **projected
   to the frontmatter root on serialise** (ADR-0016 decision 4) — so it leaves in
