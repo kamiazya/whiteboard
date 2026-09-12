@@ -2,6 +2,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { backupIsInProgress, withBackupMarker } from './backup-in-progress.js'
 
 let dir: string
@@ -138,14 +139,61 @@ describe('the backup-in-progress marker', () => {
     expect(seenPastOriginalDeadline).toBe(true)
   })
 
+  /**
+   * A refresh must never make the marker read as "no backup running".
+   *
+   * `backupIsInProgress` fails OPEN by design — an unreadable marker is not
+   * one — so a reader that catches the marker mid-rewrite gets the same
+   * answer as no backup at all, and GC resumes underneath a running one.
+   * That is precisely the window `withBackupMarker` exists to close, and a
+   * non-atomic rewrite reopened it once per refresh.
+   *
+   * The TTL here is a minute, so a `false` cannot mean expiry; it can only
+   * mean the read failed. Measured against the plain `writeFile` this
+   * replaced: 535 of 6860 reads answered false at a 1ms refresh, and 26 of
+   * 9504 at the 30ms one the case above uses — which is what made that case
+   * fail on CI, twice, through two rewrites that only moved its timing
+   * around.
+   */
+  it('is never read as absent while a refresh is rewriting it', async () => {
+    let reads = 0
+    let absent = 0
+    await withBackupMarker(
+      dir,
+      async () => {
+        const deadline = Date.now() + 300
+        while (Date.now() < deadline) {
+          reads += 1
+          if (!(await backupIsInProgress(dir, Date.now()))) absent += 1
+        }
+      },
+      { ttlMs: 60_000, refreshEveryMs: 1 },
+    )
+    // The subject has to be present: a loop that barely ran would report
+    // zero failures without having overlapped a single rewrite.
+    expect(reads).toBeGreaterThan(100)
+    expect(absent).toBe(0)
+  })
+
   /** Fail OPEN: an unreadable marker must not wedge GC permanently. */
   it('is ignored when it cannot be read as a marker', async () => {
     await writeFile(join(dir, 'backup-in-progress.json'), 'not json')
     expect(await backupIsInProgress(dir)).toBe(false)
   })
 
-  it('leaves nothing behind', async () => {
+  /**
+   * The MARKER leaves nothing behind. The staging directory the atomic write
+   * uses is not this module's to remove — it is one shared directory at the
+   * top of the data dir, used concurrently by every writer here, so deleting
+   * it in this `finally` would pull the ground from under a blob put that is
+   * mid-flight. It is empty, excluded from backups, and stays.
+   *
+   * Asserted as an exact set rather than "no marker", so a future writer that
+   * really does leak a file still fails here.
+   */
+  it('leaves nothing behind but the shared staging directory', async () => {
     await withBackupMarker(dir, async () => {})
-    expect(await readdir(dir)).toEqual([])
+    expect(await readdir(dir)).toEqual([PENDING_WRITES_DIRNAME])
+    expect(await readdir(join(dir, PENDING_WRITES_DIRNAME))).toEqual([])
   })
 })
