@@ -2,9 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
+import { DAEMON_AGENT_ACTOR, daemonDeviceActor } from './daemon-actor.js'
 import { createDaemonIdentity } from './security/daemon-identity.js'
-
-const { DAEMON_AGENT_ACTOR, daemonDeviceActor } = await import('./daemon-actor.js')
 
 const dirs: string[] = []
 async function freshDataDir(): Promise<string> {
