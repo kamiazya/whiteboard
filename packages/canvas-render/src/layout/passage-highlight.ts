@@ -87,21 +87,50 @@ interface Piece {
 }
 
 /**
- * The runs read as one string, with a space standing in for each wrap:
- * a run that starts a new line lost the space that preceded it in the
- * source, and the search below needs somewhere to match it.
+ * The runs read as one string, with a space standing in for each space the
+ * layout dropped — because layout encodes the gap between two words as an
+ * x OFFSET, not as text, and the search below needs somewhere to match it.
+ *
+ * Two ways a space goes missing, and both have to be put back:
+ *
+ * - a run that starts a NEW LINE lost the space that preceded it;
+ * - a run split from its neighbour at an INLINE BOUNDARY — emphasis,
+ *   strong, a link, inline code, an image — lost it the same way, on the
+ *   same line.
+ *
+ * The second was missing, and a comment on a sentence containing a bold
+ * word silently lost its highlight. Measured: `see *a diagram* here` came
+ * out as three runs reading `seea diagramhere`, so the quote
+ * `see\s+a\s+diagram\s+here` matched nothing, against one run and a clean
+ * match for the same sentence written without the emphasis.
+ *
+ * A GAP is what distinguishes the two cases, not the boundary itself:
+ * `**bold**face` is one word and its runs are flush, so nothing is
+ * inserted — inserting there would mis-place the highlight and let a quote
+ * match text the document does not contain. The threshold is a fraction of
+ * the run's own height rather than an absolute: a space at 12px is not a
+ * space at 48px, and the height is the only size the run carries.
  */
+const SPACE_GAP_RATIO = 0.15
+
 function renderedTextOf(runs: readonly TextRunNode[]): { text: string; pieces: Piece[] } {
   let text = ''
   const pieces: Piece[] = []
   let previous: TextRunNode | undefined
   for (const run of runs) {
-    if (previous !== undefined && run.bbox.y !== previous.bbox.y && !/\s$/.test(text)) text += ' '
+    if (previous !== undefined && !/\s$/.test(text) && separated(previous, run)) text += ' '
     pieces.push({ run, at: text.length })
     text += run.text
     previous = run
   }
   return { text, pieces }
+}
+
+/** Whether the source had whitespace between two adjacent runs. */
+function separated(previous: TextRunNode, run: TextRunNode): boolean {
+  if (run.bbox.y !== previous.bbox.y) return true
+  const gap = run.bbox.x - (previous.bbox.x + previous.bbox.w)
+  return gap > run.bbox.h * SPACE_GAP_RATIO
 }
 
 function escapeRegExp(value: string): string {
