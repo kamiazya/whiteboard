@@ -98,7 +98,38 @@ export interface FacetScore {
    */
   readonly treatments: number
   readonly redundancy: number
+
+  /**
+   * What each visual CHANNEL is doing, one level below the columns above.
+   *
+   * `excess` counts whole treatments — a `colour|shape` pair — so it cannot
+   * say which half of one is unexplained. A board where shape carries the
+   * kind cleanly and colour is spent on nothing scores the same as one where
+   * both are muddled, and the two want opposite repairs.
+   *
+   * - `carried`: constant within every class of some declared partition, and
+   *   differing across at least two of them. The channel encodes that
+   *   distinction and a reader can invert it.
+   * - `contested`: spent — two or more values on the board — and constant
+   *   within the classes of NO declared partition. Somebody meant something
+   *   by it and the document does not say what.
+   * - `unused`: one value everywhere. Not a fault; a free channel.
+   *
+   * The case this exists for (user, 2026-09-12): an infrastructure diagram
+   * wants colour for healthy-vs-failing AND shape for what a component is.
+   * Two axes, two channels, each uniform within itself. Every bundled
+   * stencil writes a colour as well as a silhouette, so dressing a board
+   * spends the channel the second axis needs — a conflict that is invisible
+   * to every column above, because with one axis declared nothing looks
+   * wrong.
+   */
+  readonly channels: { readonly colour: ChannelUse; readonly shape: ChannelUse }
+  /** How many channels are `contested`. 0, 1 or 2. */
+  readonly contested: number
 }
+
+/** @see FacetScore.channels */
+export type ChannelUse = 'carried' | 'contested' | 'unused'
 
 /**
  * The channels that can say "these two differ in KIND" **on a board**.
@@ -185,6 +216,38 @@ const classesOf = (partition: Partition): Map<string, string[]> => {
   return classes
 }
 
+/**
+ * Whether one channel encodes one of the declared distinctions.
+ *
+ * Two conditions, and only one of them needs testing. A channel carries a
+ * partition when it is CONSTANT WITHIN every class and DIFFERS across at
+ * least two of them — but every partition covers every box, so a channel
+ * constant within each class and equal across them holds one value
+ * board-wide and has already returned `unused` above. The second condition
+ * is therefore implied, and was written out here until a mutation check
+ * survived removing it: an unreachable branch reads exactly like a branch
+ * that decides something.
+ */
+function channelUse(
+  read: (t: Treatment) => string,
+  boxes: readonly SpatialNode[],
+  treatment: ReadonlyMap<string, Treatment>,
+  partitions: readonly Partition[],
+): ChannelUse {
+  const valueOf = (id: string) => read(treatment.get(id) ?? DEFAULT_TREATMENT)
+  // One value everywhere is not a distinction, and checking it first is what
+  // makes the second condition above implicit.
+  if (new Set(boxes.map((b) => valueOf(b.id))).size <= 1) return 'unused'
+  const carried = partitions.some((partition) => {
+    const perClass = new Map<string, Set<string>>()
+    for (const [id, cls] of partition) {
+      perClass.set(cls, (perClass.get(cls) ?? new Set<string>()).add(valueOf(id)))
+    }
+    return [...perClass.values()].every((seen) => seen.size === 1)
+  })
+  return carried ? 'carried' : 'contested'
+}
+
 export function scoreFacets(canvas: SpatialCanvas): FacetScore {
   const boxes = canvas.nodes.filter((n) => n.type !== 'group')
   const treatment = new Map(boxes.map((b) => [b.id, treatmentOf(b)]))
@@ -250,7 +313,14 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
     }
   }
 
+  const channels = {
+    colour: channelUse((t) => t.colour, boxes, treatment, partitions),
+    shape: channelUse((t) => t.shape, boxes, treatment, partitions),
+  } as const
+
   return {
+    channels,
+    contested: Object.values(channels).filter((use) => use === 'contested').length,
     partitions: partitions.length,
     constructs: allClasses.length,
     deficit,

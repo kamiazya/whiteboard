@@ -307,3 +307,81 @@ describe('facet vocabulary: what carries a distinction, and what does not', () =
     expect(s.deficit).toBe(2)
   })
 })
+
+/**
+ * Per-CHANNEL attribution, and why the columns above cannot answer it.
+ *
+ * `excess` counts whole TREATMENTS — a `colour|shape` pair — so a board where
+ * shape carries the kind cleanly and colour is spent on nothing reports the
+ * same number as one where both are muddled. It cannot say WHICH channel is
+ * the problem, and that is exactly the question a person has to answer before
+ * deciding "colour will mean status, so kind moves to shape".
+ *
+ * The case that forces it (user, 2026-09-12): an infrastructure diagram wants
+ * colour for healthy-vs-failing AND shape for what each component is. Two
+ * semantic axes, two channels, and the encoding has to stay uniform within
+ * each. Every bundled stencil today writes a COLOUR as well as a silhouette,
+ * so applying one spends the channel the status axis needs.
+ */
+describe('channel attribution', () => {
+  // A stencil is what makes a distinction DECLARED — the finding this whole
+  // increment came from is that `visual.shape/v0` alone declares nothing, so
+  // a board that varies silhouette without a stencil has a contested SHAPE
+  // channel and not a carried one. These fixtures therefore dress their
+  // boxes; that is also the realistic case.
+  const wearing = (kind: string, shape: string, colour?: string) => ({
+    ...(colour === undefined ? {} : { color: colour }),
+    'x-whiteboard': {
+      facets: {
+        'visual.stencil/v0': { stencil: kind },
+        'visual.shape/v0': { kind: shape },
+      },
+    },
+  })
+
+  // Two kinds, told apart by silhouette alone. Colour is left free — which
+  // is what an infrastructure diagram needs if colour is to mean status.
+  const byShape = [
+    box('api', 0, 0, wearing('visual.gateway', 'hexagon')),
+    box('db', 300, 0, wearing('visual.datastore', 'cylinder')),
+    box('cache', 600, 0, wearing('visual.datastore', 'cylinder')),
+  ]
+
+  it('reads a channel as carried when it is constant within every class and differs across them', () => {
+    expect(score(byShape).channels).toEqual({ colour: 'unused', shape: 'carried' })
+    expect(score(byShape).contested).toBe(0)
+  })
+
+  it('reads a channel as contested when it is spent and no declared partition explains it', () => {
+    // The status axis arrives: one datastore goes red because it is failing.
+    // Nothing in the document says what red means, and it cuts the kind
+    // classes — so colour is spent and unexplained while shape still carries
+    // its own distinction. Two axes wanted, one of them undeclared.
+    const withStatus = [
+      byShape[0] as SpatialNode,
+      box('db', 300, 0, wearing('visual.datastore', 'cylinder', '1')),
+      byShape[2] as SpatialNode,
+    ]
+    const s = score(withStatus)
+    expect(s.channels).toEqual({ colour: 'contested', shape: 'carried' })
+    expect(s.contested).toBe(1)
+  })
+
+  it('reads both channels as carried when one partition drives them together', () => {
+    // What every bundled stencil does today: it writes a COLOUR as well as a
+    // silhouette, from the same kind. Uniform, correct by every column above
+    // — and it leaves no free channel for a second axis, which is the
+    // conflict none of those columns can see.
+    const dressed = [
+      box('api', 0, 0, wearing('visual.gateway', 'hexagon', '3')),
+      box('db', 300, 0, wearing('visual.datastore', 'cylinder', '5')),
+    ]
+    expect(score(dressed).channels).toEqual({ colour: 'carried', shape: 'carried' })
+    expect(score(dressed).contested).toBe(0)
+  })
+
+  it('reads a channel as unused rather than contested when the board never spends it', () => {
+    expect(score(plain).channels).toEqual({ colour: 'unused', shape: 'unused' })
+    expect(score(plain).contested).toBe(0)
+  })
+})

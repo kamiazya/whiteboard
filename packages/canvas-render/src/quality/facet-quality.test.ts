@@ -23,8 +23,31 @@ import { type FacetScore, scoreFacets } from './facet-score.js'
 const scores = new Map(DRAWING_CORPUS.map((c) => [c.name, scoreFacets(c.canvas)]))
 const of = (name: string) => scores.get(name) as FacetScore
 
-/** Every board reads this today: nothing spent, so nothing to tell apart. */
-const UNSPENT = { deficit: 0, overload: 0, excess: 0, distance: 0, treatments: 1, redundancy: 0 }
+/**
+ * Every board reads this today: nothing spent, so nothing to tell apart.
+ *
+ * The channel columns make that literal, and reading them across the whole
+ * corpus said something about the CORPUS rather than about any board in it:
+ * all eleven leave BOTH channels unused. These are geometry fixtures — not
+ * one of them is dressed — so the contested-channel case they were added for
+ * cannot arise here at all, and the constant's name has been accurate the
+ * whole time without anyone noticing how completely.
+ *
+ * Where that case does live is the eval lane, whose boards a model draws and
+ * colours. `facet-score.test.ts` holds the calibration; this file will keep
+ * reporting zero until the corpus gains a dressed board, and a zero here is
+ * therefore evidence of nothing.
+ */
+const UNSPENT = {
+  deficit: 0,
+  overload: 0,
+  excess: 0,
+  distance: 0,
+  treatments: 1,
+  redundancy: 0,
+  channels: { colour: 'unused', shape: 'unused' },
+  contested: 0,
+} as const
 
 describe('facet vocabulary across the corpus', () => {
   it('reports every board', () => {
