@@ -156,23 +156,10 @@ export function whiteboardDbName(): string {
  * shape. See `rekeyBrowserWorkspace` for why this cannot be a plain
  * rename-and-done.
  *
- * v18 -> v19: EMPTIES the `versions` store. A saved point now carries the
- * digest of the content it was taken of, which is how "has this document
- * changed?" stops being answered by the whole record's frontier — and a row
- * written before that cannot gain one, since a past checkpoint's content is
- * reachable only by checking the record out at its own frontier. Carrying
- * such rows would mean keeping the old, wrong comparison alive as a second
- * read path forever, so at 0.0.x they go instead (the daemon's migration
- * 0026 is the same decision on the same data). What a reader loses is the
- * ability to look back; a version is a frontier plus a row, never a copy of
- * content, so no document loses anything it holds now.
- *
- * `clear()` rather than a cursor deleting the digest-less rows, and the two
- * are equivalent here because EVERY existing row lacks one. That equivalence
- * is what makes it safe: the v18 note below refused a cursor rewrite of this
- * store precisely because a walk mis-ordered against the upgrade chain
- * deletes a reader's history while looking like a success. One `clear` has
- * no ordering to get wrong, and none of the chain's copies fill this store.
+ * v18 -> v19: EMPTIES the `versions` store, because a point saved before a
+ * row carried its content's digest can never gain one. The reasoning, and why
+ * it is a `clear()` rather than the cursor rewrite the v18 note below refuses,
+ * is at `sweepVersionsWrittenBeforeDigests`.
  */
 export const DB_VERSION = 19
 
@@ -236,13 +223,12 @@ export const VERSIONS_BY_DOCUMENT_INDEX = 'byDocument'
  * was baked light at save time and could never be anything else.
  *
  * The `hasThumbnail` boolean it left on existing version ROWS is gone at v19,
- * and not by the cursor rewrite this note refused. That refusal still stands
- * on its own terms — `versionRowSchema` is `.strict()` and its reader SKIPS a
- * row that fails to parse, so a walk mis-ordered against the upgrade chain
- * deletes a reader's bookmarked history without failing loudly. v19 empties
- * the store outright for an unrelated reason (see DB_VERSION's v18 -> v19
- * note), so every row carrying the flag goes with it and the field could be
- * dropped from the schema without any row ever being rewritten.
+ * and not by the cursor rewrite this note refused. That refusal still stands:
+ * `versionRowSchema` is `.strict()` and its reader SKIPS a row that fails to
+ * parse, so a walk mis-ordered against the upgrade chain deletes a reader's
+ * bookmarked history without failing loudly. v19 empties the store outright
+ * for its own reason, so every row carrying the flag went with it and the
+ * field left the schema without any row ever being rewritten.
  */
 const RETIRED_VERSION_THUMBNAILS_STORE = 'versionThumbnails'
 
@@ -684,22 +670,27 @@ export const VERSION_DIGEST_DB_VERSION = 19
  * v19's sweep: empty the `versions` store of every point written before a row
  * carried the digest of the content it was taken of.
  *
- * Exported and told which version it is upgrading FROM, rather than inlined in
- * the handler, because that bound is the whole correctness of it and is
- * otherwise untestable until a v20 exists. Every other step in the upgrade
- * handler is idempotent — "create it if absent", "delete it if present" — so
- * re-running one on a later upgrade costs nothing. This one is not: run again
- * at v19 -> v20 it would empty a store whose rows are, by then, exactly the
- * ones the digest was added to keep.
+ * Such a point can never gain one — a past checkpoint's content is reachable
+ * only by checking the record out at its own frontier — so carrying them would
+ * keep the old, workspace-scoped frontier comparison alive as a second read
+ * path forever. At 0.0.x they go instead; the daemon's migration 0026 is the
+ * same decision on the same data. A version is a frontier plus a row, never a
+ * copy of content, so what a reader loses is the ability to look back.
  *
- * `clear()` rather than a cursor deleting the digest-less rows, because every
- * row written before v19 lacks one and the two are therefore the same
- * operation — see this module's v18 note for why a cursor over this store in
- * particular is the dangerous way to write it.
+ * Exported and told which version it is upgrading FROM rather than inlined,
+ * because that bound is the whole correctness of it and is otherwise
+ * untestable until a v20 exists. Every other step in the handler is idempotent
+ * — "create it if absent", "delete it if present"; this one, run again at
+ * v19 -> v20, would empty a store whose rows are by then exactly the ones the
+ * digest was added to keep.
+ *
+ * `clear()` rather than a cursor deleting the digest-less rows: every row
+ * written before v19 lacks one, so the two are the same operation, and the v18
+ * note above says why a cursor over THIS store is the dangerous way to write
+ * it.
  */
 export function sweepVersionsWrittenBeforeDigests(tx: IDBTransaction, oldVersion: number): void {
-  // oldVersion 0 is a fresh install: the store was created empty moments ago,
-  // and there is nothing a sweep could mean.
+  // oldVersion 0 is a fresh install: nothing a sweep could mean.
   if (oldVersion === 0 || oldVersion >= VERSION_DIGEST_DB_VERSION) return
   tx.objectStore(VERSIONS_STORE).clear()
 }
