@@ -289,7 +289,12 @@ describe('tidy quality scoreboard', () => {
       // which boxes a frame holds. Every debt column above is unchanged;
       // this is a member settling where its own frame puts it rather than
       // being nudged again by the next tidy.
-      displacement: 125615,
+      // 125615 -> 125614 when `snapStaleAnchors` landed: a unit left
+      // off-grid by an alignment whose anchor the overlap pass then moved
+      // is put back on the grid. One pixel over 1956 moved nodes, and the
+      // three DEBT metrics did not move at all — the repair fires rarely
+      // and costs nothing when it does.
+      displacement: 125614,
     })
   })
 })
