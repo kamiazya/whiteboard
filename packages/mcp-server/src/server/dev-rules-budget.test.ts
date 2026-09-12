@@ -143,7 +143,18 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // measurements and the reproduction belong here, the prescription is one
   // sentence, and the two test files carry the rest at their own headers.
   // Leaves 330 characters of headroom, up from the 157 this file had.
-  '.claude/rules/integrator-flow.md': 15,
+  //
+  // 16 for the twelfth flake shape: a resize refused because the window is in
+  // fullscreen, which vitest reports as a 60s timeout naming the test that
+  // asked rather than the state that refused. Held to 645 characters, and it
+  // earns always-on space on the same argument the ninth, tenth and eleventh
+  // won on — the symptom names neither the cause nor the file that caused it,
+  // so a reader who cannot recognise it has nothing to search for. Two tests
+  // were written off as flakes on exactly that evidence. An `arch-lint` scan
+  // now prevents the known instance; this entry is for the next window state
+  // that is not fullscreen, which no scan can anticipate and which will
+  // present identically.
+  '.claude/rules/integrator-flow.md': 16,
   // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a

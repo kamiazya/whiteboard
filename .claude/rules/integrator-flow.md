@@ -185,6 +185,18 @@ imports. Start the run, then leave the working tree alone.
   instead of a message naming itself. Gate rather than shorten — the window
   is a CONDITION, and a duration can close before the action under test.
 
+- **A twelfth: resizing a window that is in fullscreen.** CDP refuses
+  (`Browser.setWindowBounds: ... restore it to normal state first`), vitest
+  never delivers the rejection, and the `await` does not settle — so the test
+  burns its whole 60s budget and reports `Test timed out in 60000ms`, naming
+  the test that asked rather than the state that refused, while the reason
+  arrives separately as an Unhandled Rejection belonging to no test. The
+  fullscreen is another FILE's, so the victim rotates, passes in isolation and
+  passes on a re-run of the same commit — two were written off as flakes on
+  that evidence. `apps/web/src/test-utils/viewport.ts` clears it at the top
+  document, which sees the owner whichever iframe it is; an `arch-lint` scan
+  keeps that the only way a test resizes.
+
 - **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
   the menu stays shut, so the failure reads as "the list does not contain this item" when no
   list was ever opened — and raising the query's timeout only buys a slower identical failure.

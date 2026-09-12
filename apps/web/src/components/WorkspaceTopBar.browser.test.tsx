@@ -1,8 +1,8 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
 import '../index.css'
+import { setViewport } from '../test-utils/viewport.js'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
@@ -97,7 +97,7 @@ afterEach(async () => {
   // Restore the shared browser instance's default viewport so later tests
   // in this file (and other files sharing the instance) aren't affected by
   // the collapse test's narrow viewport.
-  await page.viewport(1280, 900)
+  await setViewport(1280, 900)
 })
 
 describe('WorkspaceTopBar browser mode', () => {
@@ -108,7 +108,7 @@ describe('WorkspaceTopBar browser mode', () => {
   // left to hold is that the row keeps its height and its left-side group
   // at a phone width, with no second ⋯ growing back.
   it('keeps its height and the left-side group at 375px, with no second kebab', async () => {
-    await page.viewport(375, 900)
+    await setViewport(375, 900)
     renderTopBar()
 
     const header = screen.getByRole('banner')
