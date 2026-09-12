@@ -132,6 +132,25 @@ function renderBackdrop(run: TextRunNode): SvgChild {
 }
 
 function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
+  // The substitution is the PAINTER's alone — see `paints` on TextRunNode
+  // for why the run stays a run. Same attribute order and the same
+  // `<title>` accessible name as the block image below, so the two kinds
+  // describe themselves identically. `meet` rather than `slice`: an inline
+  // picture is sized to the line, and cropping it to fill a text box would
+  // cut the thing the author put there.
+  if (run.paints?.kind === 'image') {
+    const alt = run.text.trim()
+    return el(
+      'image',
+      {
+        ...rectAttrs(run.bbox),
+        href: run.paints.src,
+        preserveAspectRatio: 'xMidYMid meet',
+        role: alt === '' ? PRESENTATION : undefined,
+      },
+      alt === '' ? [] : [el('title', undefined, [alt])],
+    )
+  }
   const halo = run.appearance?.halo
   const glow = glowOf(run.appearance, tables)
   // A surface-colored pill under the whole text box (a glyph-outline halo

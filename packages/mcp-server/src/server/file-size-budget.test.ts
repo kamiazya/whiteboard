@@ -207,7 +207,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // paint helpers every element shares to `svg/paint.ts`. What is left is
   // the text, list, table, code, icon and edge cases plus the document
   // envelope.
-  'packages/canvas-render/src/svg/backend.ts': 831,
+  // +19 for the inline-image substitution: a run carrying `paints` draws
+  // its picture in the run's box instead of its glyphs. `renderTextRun` is
+  // the single funnel every block routes through, so one branch here is
+  // what reaches heading, paragraph and table cell alike.
+  'packages/canvas-render/src/svg/backend.ts': 850,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -295,7 +299,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // that forgot — the alternative was a seam per surface, which is the
   // reference-seams defect. The two comment lines that survived say what
   // only this site can: that `inlineCode` deliberately does not expand.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1678,
+  // +21 for `case 'image'`: an inline `![](...)` marks its run to paint
+  // the picture rather than emitting the alt words, and an alt-less one
+  // takes an atomic placeholder because the wrappable path trims a
+  // whitespace-only run out of existence.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1699,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //
