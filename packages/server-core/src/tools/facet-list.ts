@@ -31,8 +31,22 @@ const assetKindSchema = z.enum(['themes', 'icons', 'stencils'])
 
 export const facetListInputSchema = z
   .object({
-    /** Keeps only facets whose declared targets include this one. */
-    target: facetTargetSchema.optional(),
+    /**
+     * Described to pay C3, and NOT to steer: a clause telling the caller
+     * that filtering to `node` hides the board-wide scope was measured over
+     * three trials and changed nothing — the model filtered to `node` in all
+     * three, before and after, and the axis it needed stayed unseen
+     * (ADR-0031's fourteenth reading). The steering clause was withdrawn and
+     * the plain meaning kept, because a parameter a caller picks from an
+     * enum of four should say what it does either way.
+     *
+     * What the reading points at instead is structural, and this tool's own
+     * history already says it: a join the ANSWER carries is not a sentence a
+     * model may or may not act on.
+     */
+    target: facetTargetSchema
+      .optional()
+      .describe('Keeps only facets whose declared targets include this one.'),
     /**
      * Keeps only assets of this kind. It narrows the ASSETS and leaves the
      * facets alone — the two halves answer different questions, and a

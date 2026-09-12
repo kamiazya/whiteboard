@@ -62,6 +62,12 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
   }
 })
 
+/**
+ * The popup's chrome, for EVERY completion source the editors install — the
+ * `[[` one this module owns and the `:` one beside it. It lives here because
+ * that is where the first source was; a reader looking for why a shortcode
+ * row is styled the way it is has to come to this file.
+ */
 export const wikiLinkCompletionTheme = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete': {
     backgroundColor: 'var(--popover)',
@@ -70,6 +76,34 @@ export const wikiLinkCompletionTheme = EditorView.theme({
     borderRadius: 'var(--radius-md)',
     boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
     overflow: 'hidden',
+  },
+  // The heading a sectioned list draws. A custom element rather than a class
+  // — `.cm-completionSection` matches nothing — and unstyled it renders at
+  // the label's own size and colour, so a heading reads as loud as the rows
+  // it is grouping.
+  '.cm-tooltip.cm-tooltip-autocomplete completion-section': {
+    display: 'block',
+    padding: '0.375rem 0.5rem 0.125rem',
+    fontSize: '0.75rem',
+    fontWeight: '500',
+    color: 'var(--muted-foreground)',
+  },
+  // Says what KIND of thing a row is, so it must not compete with what the
+  // row is called.
+  '.cm-tooltip.cm-tooltip-autocomplete .cm-completionDetail': {
+    color: 'var(--muted-foreground)',
+    fontStyle: 'normal',
+    fontSize: '0.75rem',
+    marginLeft: '0.5rem',
+  },
+  // A drawn glyph in the row's gutter, sitting where an emoji row's
+  // character does. `inline-flex` so it shares the label's baseline box
+  // rather than the line box, which left it riding high.
+  '.cm-tooltip.cm-tooltip-autocomplete .cm-completionIcon-wb-icon': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    verticalAlign: 'text-bottom',
+    marginRight: '0.375rem',
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': {
     fontFamily: 'inherit',
