@@ -243,6 +243,30 @@ export const proposedChangeSchema = z.discriminatedUnion('op', [
       assumed: canvasEdgeSchema,
     })
     .strict(),
+  // Ink gets the same three arms as a relation, and for the reason the split
+  // exists: a line is CONTENT — it is part of what the document says — so it
+  // falls under propose-by-default like everything else a person would want
+  // to adopt or dismiss. Locks, comments, tidy and region.set bypass that
+  // because they are not content; ink is not in their company.
+  z.object({ ...changeIdentity, op: z.literal('line.add'), line: canvasLineSchema }).strict(),
+  z
+    .object({
+      ...changeIdentity,
+      op: z.literal('line.patch'),
+      lineId: nodeIdSchema,
+      patch: linePatchFieldsSchema,
+      assumed: linePatchFieldsSchema,
+    })
+    .strict()
+    .refine(declaresNoPriorOutsideItsChange, PRIOR_SCOPE_MESSAGE),
+  z
+    .object({
+      ...changeIdentity,
+      op: z.literal('line.remove'),
+      lineId: nodeIdSchema,
+      assumed: canvasLineSchema,
+    })
+    .strict(),
   bodyReplaceChangeSchema,
 ])
 

@@ -182,9 +182,15 @@ describe('what an errand costs in tool calls', () => {
       // any price. Calls unchanged, which is the axis this scoreboard is
       // actually about.
       'author a canvas of 8 nodes and 6 edges': {
+        // +48 response bytes on every canvas errand, and CALLS UNCHANGED at
+        // every row: ADR-0038 decision 2's line ops made `lines` a collection
+        // the result carries, so a board with no ink pays for two empty
+        // arrays (the snapshot's and `touched`'s). That is the shape to
+        // check on an addition — a new capability that cost a round trip
+        // would show here, and this one costs bytes a reader skips.
         calls: 2,
         requestBytes: 1592,
-        responseBytes: 3316,
+        responseBytes: 3364,
       },
       // A DISCOVERY errand (足場4b): learn what this workspace's own stencil
       // library defines, then wear one of its ids. Two calls, and the id is
@@ -216,7 +222,7 @@ describe('what an errand costs in tool calls', () => {
         // `wb_facet_list` (8,128 of the 9,130) rather than on the write.
         // A facet the product no longer has to call a plugin's is also one a
         // model no longer has to read past.
-        responseBytes: 9130,
+        responseBytes: 9178,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
@@ -288,7 +294,7 @@ describe('what an errand costs in tool calls', () => {
       'dress six boxes as six kinds': {
         calls: 1,
         requestBytes: 916,
-        responseBytes: 2086,
+        responseBytes: 2134,
       },
       // 2,060 -> 2,056 when an auto-placed box took the board's own width
       // instead of a flat 260. Four bytes, and what they are worth reading
@@ -303,7 +309,7 @@ describe('what an errand costs in tool calls', () => {
       'make a group hold exactly three boxes': {
         calls: 1,
         requestBytes: 549,
-        responseBytes: 2056,
+        responseBytes: 2104,
       },
     })
   })

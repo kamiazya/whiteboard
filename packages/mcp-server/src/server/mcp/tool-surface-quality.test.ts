@@ -168,9 +168,13 @@ describe('what the tool table costs to read', () => {
       //
       // The MCP Apps UI tool. Nearly all of its wire size is an OUTPUT
       // schema (the whole scene), which the model never reads.
+      //
+      // -1,241 wire when `CanvasColor` / `CanvasPoint` / `NodeEmbed` /
+      // `Bends` were named in zod's registry: a scene repeats all four, so
+      // this row is where the registration pays most.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 21741,
+        wireBytes: 20500,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -188,7 +192,13 @@ describe('what the tool table costs to read', () => {
       // keeps two columns for.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 20560,
+        // +1,396 wire, and it is the registration's PRICE rather than its
+        // saving: a named subschema costs a `$defs` entry plus a `$ref`
+        // wherever it is used, so a tool that uses one ONCE pays more than
+        // inlining it. Recorded rather than smoothed over — the lever is
+        // worth pulling on the table's total, and this row is what it costs
+        // to pull.
+        wireBytes: 21956,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -293,12 +303,21 @@ describe('what the tool table costs to read', () => {
       // `schema['~standard'].jsonSchema.input({ target })` and passes no
       // `reused` option, so `z.toJSONSchema(..., { reused: 'ref' })` never
       // reaches the published schema. A registry `id` does.
+      //
+      // +2,056 visible for ADR-0038 decision 2's three LINE ops (`line.add`,
+      // `line.patch`, `line.remove`) — what lets anything but the editor
+      // author ink. Inline they were +3,403 and the TABLE crossed 40,000;
+      // naming the four subschemas the new arms made repeat gave 1,543 back.
+      // `parameters` and `undescribed` rise with them, and the one
+      // description bought is on `line.add`'s draft: when to reach for ink
+      // over a relation, which is the only thing here a model cannot infer
+      // from JSON Canvas.
       wb_canvas_edit: {
-        visibleBytes: 13767,
-        wireBytes: 35135,
+        visibleBytes: 15823,
+        wireBytes: 38801,
         descriptionWords: 169,
-        parameters: 149,
-        undescribed: 117,
+        parameters: 165,
+        undescribed: 130,
         strays: 'refused',
         names: [],
       },
@@ -307,7 +326,11 @@ describe('what the tool table costs to read', () => {
       // the model nothing on every turn. Same for `canvas_view` above.
       wb_canvas_snapshot: {
         visibleBytes: 705,
-        wireBytes: 4229,
+        // +1,303 wire: the snapshot answers with `lines` now. It did not,
+        // which meant a model could write ink through `wb_canvas_edit` and
+        // had no way to read it back — a write with no read is half a
+        // capability, and the wire is where that costs.
+        wireBytes: 5532,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
@@ -558,10 +581,33 @@ describe('what the tool table costs to read', () => {
       // +274 for `workspaceId` on wb_facet_list (足場4b): the one parameter
       // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
       // once in the table and never per stencil.
-      visibleBytes: 36945,
-      wireBytes: 111174,
-      parameters: 273,
-      undescribed: 185,
+      //
+      // Then +2,056 on `wb_canvas_edit` for ADR-0038 decision 2's LINE ops —
+      // `line.add`, `line.patch` and `line.remove`, which are what let
+      // anything but the editor author ink. The model had held a line since
+      // the split and no tool could make one; the smoke asserted that gap
+      // rather than pretending it away.
+      //
+      // Inline it was +3,403 and the table read 40,348 — over ADR-0031 §5's
+      // ~40,000 for the second time in this branch's life. What gave 1,543 of
+      // it back is the same lever as last time, applied to what the new arms
+      // made repeat: `Bends` (four sites now, and its two SOURCE declarations
+      // were identical), `CanvasColor` (nine), `NodeEmbed` (four) and
+      // `CanvasPoint` (four) are named in zod's global registry, so each is
+      // emitted into `$defs` once. Measured per subschema before choosing
+      // them, by waste (occurrences-1 x bytes) rather than by size.
+      //
+      // The debt columns rise and that is not disguised: `parameters` 273 ->
+      // 289 and `undescribed` 185 -> 198 are the new element's own fields.
+      // One description was bought deliberately, on `line.add`'s draft, and
+      // it is the only one a model cannot infer from JSON Canvas: WHEN to
+      // reach for ink over a relation (C4). The rest are `id`, `color`,
+      // `label` and `facets`, which mean on a line exactly what they already
+      // mean on an edge.
+      visibleBytes: 39001,
+      wireBytes: 116298,
+      parameters: 289,
+      undescribed: 198,
     })
   })
 

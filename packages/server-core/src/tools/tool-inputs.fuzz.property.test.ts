@@ -246,6 +246,29 @@ function fitCanvasOp(op: Record<string, unknown>): Record<string, unknown> {
     case 'edge.remove':
     case 'edge.lock':
       return { ...targeted, id: 'e1' }
+    // Ink, steered exactly as an edge is: at the seeded line, with a drawn
+    // NODE end re-pointed at a node that exists and a POINT end left alone —
+    // a point names nothing, so there is nothing to correct. Without the
+    // steer these two arms only ever name an id the board has not got, and
+    // the ledger reports an op that answers as one that never does.
+    case 'line.patch': {
+      const patch = (op.patch ?? {}) as Record<string, unknown>
+      return {
+        ...targeted,
+        id: 'l1',
+        patch: {
+          ...patch,
+          ...(patch.from === undefined
+            ? {}
+            : { from: pointAt(patch.from) ?? { kind: 'node' as const, node: 'n1' } }),
+          ...(patch.to === undefined
+            ? {}
+            : { to: pointAt(patch.to) ?? { kind: 'node' as const, node: 'n2' } }),
+        },
+      }
+    }
+    case 'line.remove':
+      return { ...targeted, id: 'l1' }
     case 'edge.add': {
       const edge = (op.edge ?? {}) as Record<string, unknown>
       return {
@@ -339,6 +362,9 @@ const OP_REACH: Record<string, OpReach> = {
   'wb_canvas_edit/edge.add': 'answers',
   'wb_canvas_edit/edge.patch': 'answers',
   'wb_canvas_edit/edge.remove': 'answers',
+  'wb_canvas_edit/line.add': 'answers',
+  'wb_canvas_edit/line.patch': 'answers',
+  'wb_canvas_edit/line.remove': 'answers',
   'wb_canvas_edit/node.lock': 'answers',
   'wb_canvas_edit/edge.lock': 'answers',
   'wb_canvas_edit/tidy': 'answers',

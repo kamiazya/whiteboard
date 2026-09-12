@@ -81,6 +81,10 @@ describe('wb_canvas_snapshot tool', () => {
           label: 'leads to',
         },
       ],
+      // Present and empty on a board with no ink, not absent: a reader that
+      // has to tell "no lines" from "this server does not report lines"
+      // cannot, and an optional array is exactly that ambiguity.
+      lines: [],
       comments: [],
       nodeCount: 4,
       edgeCount: 1,

@@ -84,7 +84,7 @@ describe('wb_canvas_edit tool', () => {
     })
 
     expect(result.applied).toBe(3)
-    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], comments: [] })
+    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [], comments: [] })
     // The result carries the board AFTER the batch, so a caller never has
     // to spend a second round trip re-reading what it just wrote.
     expect(result.snapshot.nodes.map((n) => n.id)).toEqual(['a', 'b'])
@@ -216,7 +216,7 @@ describe('wb_canvas_edit tool', () => {
       ],
     })
 
-    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], comments: [] })
+    expect(result.touched).toEqual({ nodes: ['a', 'b'], edges: ['e'], lines: [], comments: [] })
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
     expect(canvas.nodes[0]).toMatchObject({ x: 7, color: '3' })
@@ -629,16 +629,22 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       for (const value of Object.values(node)) walk(value)
     }
     walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
-    // ONE, not four. The endpoint is named in zod's registry so it is emitted
-    // into `$defs` once and referenced at each of its four sites — which is
-    // what keeps the tool table under ADR-0031 §5's ceiling. The description
-    // still reaches every writer; it is stated once instead of four times,
-    // and this walk does not follow `$ref`.
+    // TWO, not eight. `EdgeEnd` and `LineEnd` are each named in zod's
+    // registry, so each is emitted into `$defs` ONCE and referenced at its
+    // four sites (`from` and `to`, on that element's `add` and `patch`) —
+    // which is what keeps the tool table under ADR-0031 §5's ceiling. The
+    // description still reaches every writer; it is stated once per element
+    // instead of four times, and this walk does not follow `$ref`.
+    //
+    // It was 1 while only an edge had a named end. The line ops made
+    // `LineEnd` reachable from the tool, so its node arm's `side` is the
+    // second — one description per NAMED end, which is the shape this count
+    // is pinning.
     //
     // A count rather than a bare `>= 1`, for the reason it was 4 before: a
     // walk that stopped matching would report zero, and zero is what a
     // description nobody writes also looks like.
-    expect(found).toHaveLength(1)
+    expect(found).toHaveLength(2)
     for (const line of found) expect(line, line).toMatch(/Omit/)
   })
 
@@ -904,7 +910,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     })
 
     expect(second.geometry).toEqual([])
-    expect(second.touched).toEqual({ nodes: [], edges: [], comments: [] })
+    expect(second.touched).toEqual({ nodes: [], edges: [], lines: [], comments: [] })
   })
 })
 
@@ -1038,7 +1044,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     })
 
     expect(activities).toHaveLength(1)
-    expect(activities[0].touched).toEqual({ nodes: [], edges: ['e'], comments: [] })
+    expect(activities[0].touched).toEqual({ nodes: [], edges: ['e'], lines: [], comments: [] })
     expect(viewports).toEqual([])
   })
 
@@ -2958,5 +2964,199 @@ describe('wb_canvas_edit — a node created without a width', () => {
     }
     const nodes = await addTo(board, [{ id: 'new', type: 'text', text: 'added' }])
     expect(widthOf(nodes, 'new')).toBe(200)
+  })
+})
+
+/**
+ * A LINE is ink, not a relation
+ * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
+ * decision 2), so it is the one element that may end nowhere. The model has
+ * held one since the split; these are the ops that let anything but the
+ * editor author one.
+ */
+describe('wb_canvas_edit — line ops', () => {
+  const ONE_BOX: SpatialCanvas = {
+    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' }],
+    edges: [],
+  }
+
+  test('line.add draws ink between two bare points, which no edge can express', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, ONE_BOX)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'line.add',
+          line: {
+            id: 'l1',
+            from: { kind: 'point', point: { x: 10, y: 10 } },
+            to: { kind: 'point', point: { x: 90, y: 90 } },
+          },
+        },
+      ],
+    })
+
+    expect(result.applied).toBe(1)
+    expect(result.touched.lines).toEqual(['l1'])
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines).toEqual([
+      {
+        id: 'l1',
+        from: { kind: 'point', point: { x: 10, y: 10 } },
+        to: { kind: 'point', point: { x: 90, y: 90 } },
+      },
+    ])
+  })
+
+  test('line.add may anchor one end to a node and leave the other free', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, ONE_BOX)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'line.add',
+          line: {
+            id: 'l1',
+            from: { kind: 'node', node: 'a' },
+            to: { kind: 'point', point: { x: 300, y: 300 } },
+          },
+        },
+      ],
+    })
+
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines?.[0]?.from).toEqual({ kind: 'node', node: 'a' })
+  })
+
+  test('a line end naming a node that is not on the canvas is refused', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, ONE_BOX)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'line.add',
+            line: {
+              id: 'l1',
+              from: { kind: 'node', node: 'ghost' },
+              to: { kind: 'point', point: { x: 1, y: 1 } },
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/ghost/)
+  })
+
+  test('line.patch moves an end, and line.remove takes the ink away', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      ...ONE_BOX,
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 1, y: 1 } },
+        },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'line.patch', id: 'l1', patch: { to: { kind: 'node', node: 'a' } } }],
+    })
+    const patched = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(patched?.lines?.[0]?.to).toEqual({ kind: 'node', node: 'a' })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'line.remove', id: 'l1' }],
+    })
+    const removed = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(removed?.lines ?? []).toEqual([])
+  })
+
+  test('removing a node takes the lines anchored to it, and leaves free ink alone', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      ...ONE_BOX,
+      lines: [
+        {
+          id: 'anchored',
+          from: { kind: 'node', node: 'a' },
+          to: { kind: 'point', point: { x: 5, y: 5 } },
+        },
+        {
+          id: 'free',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 1, y: 1 } },
+        },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.remove', id: 'a' }],
+    })
+
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines?.map((line) => line.id)).toEqual(['free'])
+  })
+})
+
+/**
+ * `writeSpatialCanvas` resyncs by OMISSION, so every collection the batch
+ * does not carry back is deleted. The canvas's facets and its untouched
+ * comments were already carried for that reason; `lines` was not, so the
+ * editor could draw ink (slice 3b) and the next tool call anywhere on the
+ * board erased it.
+ */
+describe('wb_canvas_edit — ink the batch never mentions', () => {
+  test('keeps a line a previous author drew, through an unrelated edit', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' }],
+      edges: [],
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 9, y: 9 } },
+        },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.patch', id: 'a', patch: { text: 'edited' } }],
+    })
+
+    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    expect(stored?.lines?.map((line) => line.id)).toEqual(['l1'])
   })
 })

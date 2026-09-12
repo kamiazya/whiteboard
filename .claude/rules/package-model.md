@@ -95,6 +95,14 @@ paths:
   node-or-point union is `lineEndSchema`, on `canvasLineSchema`, and `canvas.lines` is where ink
   lives. A line may join two nodes: that is the expressiveness the split buys, and where freehand
   lands rather than growing a third concept.
+  - **`bendsFieldSchema` is declared ONCE for both.** It was written out twice, identically, on the
+    edge and on the line — the drift this package exists to prevent, and it cost bytes twice over
+    because a tool emitting an `add` and a `patch` arm for each element spelled the same
+    description four times. It is registered as `Bends`, beside `CanvasPoint`, `CanvasColor` and
+    `NodeEmbed`: the four subschemas the LINE ops made repeat enough to be worth naming, chosen by
+    measuring waste (occurrences-1 x bytes) rather than by size. Registering costs a `$defs` entry
+    plus a `$ref` per site, so it is a LOSS on a schema used once — `wb_body_edit` pays 1,396 wire
+    bytes for it while `canvas_view` saves 1,241. Judge it on the table's total, not per tool.
   - **Two collections rather than one `kind`-tagged element, and the reason is measured.** zod v4's
     `discriminatedUnion` has no `.omit()` or `.partial()` AT ALL (probed), so a tagged element would
     force `edgePatchFieldsSchema` to be hand-written beside `canvasEdgeSchema` — the exact drift

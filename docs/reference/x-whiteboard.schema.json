@@ -73,48 +73,13 @@
                 "$ref": "#/$defs/LineEnd"
               },
               "color": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "1",
-                      "2",
-                      "3",
-                      "4",
-                      "5",
-                      "6"
-                    ]
-                  },
-                  {
-                    "type": "string",
-                    "pattern": "^#[0-9a-fA-F]{6}$"
-                  }
-                ]
+                "$ref": "#/$defs/CanvasColor"
               },
               "label": {
                 "type": "string"
               },
               "bends": {
-                "description": "Points to draw the line through, in order. Omit it: the route is computed around what is in the way.",
-                "minItems": 1,
-                "maxItems": 64,
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "x": {
-                      "type": "number"
-                    },
-                    "y": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "x",
-                    "y"
-                  ],
-                  "additionalProperties": false
-                }
+                "$ref": "#/$defs/Bends"
               },
               "facets": {
                 "type": "object",
@@ -143,6 +108,22 @@
       },
       "additionalProperties": false,
       "$defs": {
+        "CanvasPoint": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
         "LineEnd": {
           "oneOf": [
             {
@@ -190,21 +171,8 @@
                   "const": "point"
                 },
                 "point": {
-                  "type": "object",
-                  "properties": {
-                    "x": {
-                      "type": "number"
-                    },
-                    "y": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "x",
-                    "y"
-                  ],
-                  "additionalProperties": false,
-                  "description": "Where this end sits, in canvas coordinates."
+                  "description": "Where this end sits, in canvas coordinates.",
+                  "$ref": "#/$defs/CanvasPoint"
                 },
                 "end": {
                   "description": "The arrowhead drawn at this end.",
@@ -222,6 +190,33 @@
               "additionalProperties": false
             }
           ]
+        },
+        "CanvasColor": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            }
+          ]
+        },
+        "Bends": {
+          "minItems": 1,
+          "maxItems": 64,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CanvasPoint"
+          }
         }
       }
     },

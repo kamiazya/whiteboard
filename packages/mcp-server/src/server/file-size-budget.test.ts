@@ -179,7 +179,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +7 where two increments met: this file gained a workspace stencil
   // library's resolution from main and the endpoint helpers from the model
   // move, and neither alone crossed the line it was already over.
-  'packages/server-core/src/tools/canvas-edit.ts': 1112,
+  // 1112 -> 1180 for ADR-0038 decision 2's three LINE op executors plus the
+  // `lines` collection threaded through the working copy — including the
+  // sweep that takes ink anchored to a removed node and leaves free ink
+  // alone, which is the one place the two element kinds must differ.
+  'packages/server-core/src/tools/canvas-edit.ts': 1180,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -361,7 +365,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +8: `pullEdgeOntoOutlines` and `proposedEdgePath` each ask for a node
   // that may not be there, which is two lines apiece plus the sentence
   // saying a free end has no silhouette to be pulled onto.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2444,
+  // 2444 -> 2463: the proposal layer draws a proposed LINE. Without it the
+  // op stored a change nothing rendered — built but unwired, and every test
+  // green over a board that said nothing had happened.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2463,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor

@@ -16,8 +16,10 @@ import {
 import {
   type CanvasComment,
   type CanvasEdge,
+  type CanvasLine,
   canvasCommentSchema,
   canvasEdgeSchema,
+  canvasLineSchema,
   endIn,
   endNodes,
   type nodePatchFieldsSchema,
@@ -130,11 +132,13 @@ function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
   let tidied = false
   let resolvedComments = 0
   for (const op of ops) {
-    if (op.op === 'node.add' || op.op === 'edge.add') counts.added += 1
-    else if (op.op === 'node.patch' || op.op === 'edge.patch') counts.changed += 1
+    if (op.op === 'node.add' || op.op === 'edge.add' || op.op === 'line.add') counts.added += 1
+    else if (op.op === 'node.patch' || op.op === 'edge.patch' || op.op === 'line.patch')
+      counts.changed += 1
     else if (op.op === 'comment.add') counts.commented += 1
     else if (op.op === 'comment.resolve') resolvedComments += 1
-    else if (op.op === 'node.remove' || op.op === 'edge.remove') counts.removed += 1
+    else if (op.op === 'node.remove' || op.op === 'edge.remove' || op.op === 'line.remove')
+      counts.removed += 1
     else if (op.op === 'node.lock' || op.op === 'edge.lock') {
       if (op.locked) counts.locked += 1
       else counts.unlocked += 1
@@ -246,11 +250,13 @@ export function createCanvasEditTool(deps: ServerDeps) {
       // fallback as though the board had always used it.
       const boardWidth = prevailingWidth(canvas.nodes)
       let edges: CanvasEdge[] = [...canvas.edges]
+      let lines: CanvasLine[] = [...(canvas.lines ?? [])]
       let comments: CanvasComment[] = [...(canvas.comments ?? [])]
       const nodeLocks = new Set(readNodeLocks(doc))
       const edgeLocks = new Set(readEdgeLocks(doc))
       const touchedNodes = new Set<string>()
       const touchedEdges = new Set<string>()
+      const touchedLines = new Set<string>()
       const touchedComments = new Set<string>()
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
@@ -285,6 +291,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
       const nodeAt = (id: string) => nodes.find((node) => node.id === id)
       const edgeAt = (id: string) => edges.find((edge) => edge.id === id)
+      const lineAt = (id: string) => lines.find((line) => line.id === id)
 
       const groupNamed = (index: number, opName: string, id: string): SpatialNode => {
         const group = nodeAt(id)
@@ -702,6 +709,13 @@ export function createCanvasEditTool(deps: ServerDeps) {
               if (endIn(edge.from, ids) || endIn(edge.to, ids)) touchedEdges.add(edge.id)
             }
             edges = edges.filter((edge) => !endIn(edge.from, ids) && !endIn(edge.to, ids))
+            // Ink ANCHORED to a removed node goes with it for the same
+            // reason; ink anchored to nothing stays, because a free end names
+            // no node and so cannot dangle (ADR-0038 decision 2).
+            for (const line of lines) {
+              if (endIn(line.from, ids) || endIn(line.to, ids)) touchedLines.add(line.id)
+            }
+            lines = lines.filter((line) => !endIn(line.from, ids) && !endIn(line.to, ids))
             nodes = nodes.filter((node) => !ids.has(node.id))
             for (const id of ids) {
               nodeLocks.delete(id)
@@ -771,6 +785,57 @@ export function createCanvasEditTool(deps: ServerDeps) {
               edgeLocks.delete(id)
               touchedEdges.add(id)
             }
+            return
+          }
+
+          case 'line.add': {
+            const draft = op.line
+            const id = draft.id ?? mintId(new Set(lines.map((line) => line.id)), 'l')
+            if (lineAt(id) !== undefined) {
+              fail(
+                index,
+                op.op,
+                `line id "${id}" is already on the canvas; patch it or choose another id`,
+              )
+            }
+            for (const endpoint of endNodes(draft)) {
+              if (nodeAt(endpoint) === undefined) {
+                fail(
+                  index,
+                  op.op,
+                  `endpoint "${endpoint}" is not on the canvas; add that node first`,
+                )
+              }
+            }
+            const parsed = canvasLineSchema.safeParse({ ...draft, id })
+            if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            lines = [...lines, parsed.data]
+            touchedLines.add(id)
+            return
+          }
+
+          case 'line.patch': {
+            const line = lineAt(op.id)
+            if (line === undefined) fail(index, op.op, `line "${op.id}" is not on the canvas`)
+            const merged = { ...line, ...op.patch }
+            for (const endpoint of endNodes(merged)) {
+              if (nodeAt(endpoint) === undefined) {
+                fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
+              }
+            }
+            const parsed = canvasLineSchema.safeParse(merged)
+            if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            lines = lines.map((existing) => (existing.id === op.id ? parsed.data : existing))
+            touchedLines.add(op.id)
+            return
+          }
+
+          case 'line.remove': {
+            if (lineAt(op.id) === undefined) {
+              fail(index, op.op, `line "${op.id}" is not on the canvas`)
+            }
+            lines = lines.filter((line) => line.id !== op.id)
+            touchedLines.add(op.id)
             return
           }
 
@@ -997,6 +1062,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
         nodes,
         edges,
         ...(canvas.facets !== undefined && { facets: canvas.facets }),
+        ...(lines.length > 0 && { lines }),
         ...(comments.length > 0 && { comments }),
       }
       const parsed = spatialCanvasSchema.safeParse(candidate)
@@ -1042,6 +1108,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           touched: {
             nodes: [...touchedNodes].sort(),
             edges: [...touchedEdges].sort(),
+            lines: [...touchedLines].sort(),
             comments: [...touchedComments].sort(),
           },
           geometry: [...geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
@@ -1059,6 +1126,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const touched = {
         nodes: [...touchedNodes].sort(),
         edges: [...touchedEdges].sort(),
+        lines: [...touchedLines].sort(),
         comments: [...touchedComments].sort(),
       }
 

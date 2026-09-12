@@ -1,7 +1,9 @@
 import { readProposals, writeProposal } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type CanvasEdge,
+  type CanvasLine,
   edgePatchFieldsSchema,
+  linePatchFieldsSchema,
   nodePatchFieldsSchema,
   PROPOSED_CHANGE_OPS,
   type Proposal,
@@ -48,6 +50,7 @@ export function isProposableOp(op: string): boolean {
 
 const NODE_PATCH_FIELDS = Object.keys(nodePatchFieldsSchema.shape)
 const EDGE_PATCH_FIELDS = Object.keys(edgePatchFieldsSchema.shape)
+const LINE_PATCH_FIELDS = Object.keys(linePatchFieldsSchema.shape)
 
 /**
  * Thrown when the diff finds a difference the change vocabulary cannot
@@ -123,7 +126,7 @@ function patchBetween(
  * second opinion beside it — and it needs no minting, so two replicas
  * proposing the same edit agree on the key.
  */
-function changeIdFor(kind: 'node' | 'edge', elementId: string): string {
+function changeIdFor(kind: 'node' | 'edge' | 'line', elementId: string): string {
   return `${kind}:${elementId}`
 }
 
@@ -192,6 +195,42 @@ function proposedChangesFromDiff(before: SpatialCanvas, after: SpatialCanvas): P
       op: 'edge.remove',
       edgeId: id,
       assumed: edge satisfies CanvasEdge,
+    })
+  }
+
+  // Ink, diffed the same way (ADR-0038 decision 2). A line is content, so a
+  // batch that draws one is PROPOSED like any other content change rather
+  // than applied — the alternative would have been to put ink in the company
+  // of locks and tidy, which bypass the proposal precisely because they are
+  // not content.
+  const linesBefore = new Map((before.lines ?? []).map((line) => [line.id, line]))
+  const linesAfter = new Map((after.lines ?? []).map((line) => [line.id, line]))
+  for (const [id, line] of linesAfter) {
+    const prior = linesBefore.get(id)
+    if (prior === undefined) {
+      changes.push({ id: changeIdFor('line', id), status: 'open', op: 'line.add', line })
+      continue
+    }
+    const patched = patchBetween(prior as Fields, line as Fields, LINE_PATCH_FIELDS, id)
+    if (patched !== undefined) {
+      changes.push({
+        id: changeIdFor('line', id),
+        status: 'open',
+        op: 'line.patch',
+        lineId: id,
+        patch: patched.patch,
+        assumed: patched.assumed,
+      })
+    }
+  }
+  for (const [id, line] of linesBefore) {
+    if (linesAfter.has(id)) continue
+    changes.push({
+      id: changeIdFor('line', id),
+      status: 'open',
+      op: 'line.remove',
+      lineId: id,
+      assumed: line satisfies CanvasLine,
     })
   }
 

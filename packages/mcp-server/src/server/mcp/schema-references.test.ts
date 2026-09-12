@@ -89,7 +89,7 @@ describe('a published schema resolves its own references', () => {
     expect(seen, 'the table publishes references at all').toBeGreaterThan(0)
   })
 
-  it('references the edge end rather than inlining it, and publishes no LINE end yet', async () => {
+  it('references the edge end and the line end, each emitted once', async () => {
     const tools = await listTools()
     const edit = tools.find((tool) => tool.name === 'wb_canvas_edit')
     const document = edit?.inputSchema as Record<string, unknown>
@@ -108,12 +108,26 @@ describe('a published schema resolves its own references', () => {
     // Four sites: `from` and `to`, on `edge.add` and on `edge.patch`.
     expect(refsIn(document).filter((r) => r.ref === '#/$defs/EdgeEnd')).toHaveLength(4)
 
-    // And the GAP, recorded where someone will trip over it: the node-or-point
-    // union lives on a LINE now, and no tool can author one. The model can
-    // hold ink the tool surface cannot make. This fails the day a line op is
-    // registered, which is the right direction — whoever adds it asserts here
-    // that `LineEnd` resolves to the union it names, both arms by their
-    // discriminator.
-    expect(Object.keys(defs)).not.toContain('LineEnd')
+    // The gap this test used to RECORD is closed: the node-or-point union
+    // lives on a LINE, and `line.add`/`line.patch` are what make one
+    // authorable, so `LineEnd` is published too. What it asked its closer to
+    // assert is exactly this — that the name resolves to the union it names,
+    // both arms reachable by their discriminator.
+    expect(Object.keys(defs)).toContain('LineEnd')
+    // `oneOf`, not `anyOf`: a zod DISCRIMINATED union emits the stricter
+    // keyword, which is what tells a client's validator the two arms are
+    // mutually exclusive rather than merely both acceptable.
+    const lineEnd = defs.LineEnd as { oneOf?: readonly Record<string, unknown>[] } | undefined
+    const arms = (lineEnd?.oneOf ?? []).map((arm) => {
+      const properties = (arm.properties ?? {}) as Record<string, { const?: unknown }>
+      return properties.kind?.const
+    })
+    expect(arms.sort()).toEqual(['node', 'point'])
+
+    // Four sites for it too: `from` and `to`, on `line.add` and `line.patch`.
+    // The count is what says the union is REFERENCED rather than inlined at
+    // each one — the saving that kept the edge end under ADR-0031 §5's
+    // ceiling, claimed again for a strictly larger schema.
+    expect(refsIn(document).filter((r) => r.ref === '#/$defs/LineEnd')).toHaveLength(4)
   })
 })

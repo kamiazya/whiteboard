@@ -280,6 +280,15 @@ function describeChange(change: ProposedChange, canvas: SpatialCanvas): string {
       return 'Disconnect two nodes'
     case 'edge.patch':
       return 'Change a connection'
+    // A line is INK, so the words never say "connect": what it would do is
+    // put a stroke on the board, and whether it happens to touch two boxes
+    // is not a claim the document is making (ADR-0038 decision 2).
+    case 'line.add':
+      return 'Draw a line'
+    case 'line.remove':
+      return 'Erase a line'
+    case 'line.patch':
+      return 'Redraw a line'
     case 'body.replace':
       return 'Replace a passage'
   }

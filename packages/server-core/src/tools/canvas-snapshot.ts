@@ -6,6 +6,7 @@ import {
   canvasCommentSchema,
   documentIdSchema,
   edgeEndSchema,
+  lineEndSchema,
   nodeIdSchema,
   nodePositionSchema,
   nodeSizeSchema,
@@ -72,6 +73,24 @@ const canvasSnapshotNodeSchema = z
   })
   .strict()
 
+/**
+ * INK, read back. A line is not an edge (ADR-0038 decision 2), so it is its
+ * own array rather than a flag on the edge list — a reader counting relations
+ * must not have to subtract the strokes.
+ *
+ * It carries no `locked`: lines have no lock op, so a field that is always
+ * absent would be a promise the surface does not keep.
+ */
+const canvasSnapshotLineSchema = z
+  .object({
+    id: nodeIdSchema,
+    from: lineEndSchema,
+    to: lineEndSchema,
+    label: z.string().optional(),
+    color: canvasColorSchema.optional(),
+  })
+  .strict()
+
 const canvasSnapshotEdgeSchema = z
   .object({
     id: nodeIdSchema,
@@ -93,6 +112,12 @@ export const canvasSnapshotSchema = z
     documentId: documentIdSchema,
     nodes: z.array(canvasSnapshotNodeSchema),
     edges: z.array(canvasSnapshotEdgeSchema),
+    /**
+     * Every stroke on the board. Absent from a snapshot until the line ops
+     * landed, which meant a model could write ink through `wb_canvas_edit`
+     * and had no way to read it back.
+     */
+    lines: z.array(canvasSnapshotLineSchema),
     /**
      * The REAL totals on the board, not the returned lengths. A cap that
      * hides how much it dropped is worse than no cap: an agent reading a
@@ -213,6 +238,13 @@ export function projectCanvasSnapshot(
     documentId,
     nodes: projected.map((entry) => entry.node),
     edges,
+    lines: (canvas.lines ?? []).slice(0, SNAPSHOT_MAX_EDGES).map((line) => ({
+      id: line.id,
+      from: line.from,
+      to: line.to,
+      ...(line.label === undefined ? {} : { label: line.label }),
+      ...(line.color === undefined ? {} : { color: line.color }),
+    })),
     comments: canvas.comments ?? [],
     nodeCount: canvas.nodes.length,
     edgeCount: canvas.edges.length,

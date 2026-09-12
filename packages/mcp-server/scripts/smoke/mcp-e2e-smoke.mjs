@@ -727,16 +727,63 @@ async function main() {
   // field mapping, and echoed by `wb_canvas_snapshot`, whose `outputSchema`
   // the SDK validates at runtime. A union that round-trips in-process and
   // fails one of those three looks exactly like a working tool from here.
-  // A point-ended element is a LINE since ADR-0038 decision 2, and
-  // `wb_canvas_edit` has no line op yet — so the tool REFUSES a point end on
-  // an edge rather than accepting ink in a relation's shape.
-  //
-  // This asserts the gap, which is the honest thing to do with it: the model
-  // can hold ink no tool can author. It fails the day a line op is
-  // registered, which is the right direction — whoever adds it replaces this
-  // with the round trip the old free-end step used to make (write it, read it
-  // back through the snapshot, and check that a strict JSON Canvas export
-  // leaves the whole element out).
+  // A point-ended element is a LINE since ADR-0038 decision 2, and the line
+  // ops are what let anything but the editor author one. This is the round
+  // trip the gap this step used to record asked its closer to restore: write
+  // ink with a free end, read it back through the snapshot, and check that a
+  // strict JSON Canvas export leaves the whole element out.
+  await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      {
+        op: 'line.add',
+        line: {
+          id: 'loose',
+          from: { kind: 'node', node: 'lockable' },
+          to: { kind: 'point', point: { x: 420.5, y: -17.25 } },
+        },
+      },
+    ],
+  })
+  const withLine = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  const storedLine = (withLine.lines ?? []).find((entry) => entry.id === 'loose')
+  if (storedLine === undefined) {
+    throw new Error(
+      `the line did not survive the write/read round trip: ${JSON.stringify(withLine.lines)}`,
+    )
+  }
+  // The sub-pixel coordinate is the part only this trip can check: the model
+  // holds a real number and JSON Canvas holds whole pixels, so a projection
+  // leaking into the STORE would round it here and nothing in-process would
+  // notice (ADR-0037 slice 4).
+  if (storedLine.to?.kind !== 'point' || storedLine.to.point.x !== 420.5) {
+    throw new Error(`the free end did not round-trip: ${JSON.stringify(storedLine)}`)
+  }
+  if ((withLine.edges ?? []).some((entry) => entry.id === 'loose')) {
+    throw new Error('ink was reported as an edge; a line is not a relation')
+  }
+  // A strict JSON Canvas export leaves the WHOLE line out, because the format
+  // has no vocabulary for ink and this projection declines to lie about it by
+  // emitting an edge (ADR-0038 decision 2). The extended export keeps it on
+  // the extension key; only the strict reader loses it.
+  const strictExport = await readDocument(documentId, { strict: true })
+  if (/"loose"/.test(strictExport.content)) {
+    throw new Error('a strict JSON Canvas export carried ink the format cannot state')
+  }
+  const extendedExport = await readDocument(documentId)
+  if (!/"loose"/.test(extendedExport.content)) {
+    throw new Error('the extended export dropped a line it can carry on x-whiteboard')
+  }
+
+  // And the distinction the split exists to make, still refused from the
+  // other side: an EDGE is a relation, so it has no point arm and never
+  // grows one by accident. A refusal checked by REASON — one that arrives for
+  // another reason passes a bare try/catch and asserts nothing.
   const looseRefusal = await callToolExpectingError('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
@@ -745,9 +792,9 @@ async function main() {
       {
         op: 'edge.add',
         edge: {
-          id: 'loose',
+          id: 'not-ink',
           from: { node: 'lockable' },
-          to: { kind: 'point', point: { x: 420.5, y: -17.25 } },
+          to: { kind: 'point', point: { x: 1, y: 2 } },
         },
       },
     ],
@@ -757,6 +804,7 @@ async function main() {
       `wb_canvas_edit accepted a point end on an EDGE, or refused it for another reason: ${looseRefusal}`,
     )
   }
+  console.log('[e2e] wb_canvas_edit line.add → free end round-tripped through the snapshot')
 
   // The EDGE slot (ADR-0013 decision 5), through a real client so the SDK
   // validates the result against `facetSetOutputSchema` at runtime. Written

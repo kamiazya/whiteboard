@@ -11,6 +11,11 @@ export const canvasColorSchema = z.union([
   z.string().regex(/^#[0-9a-fA-F]{6}$/, 'must be a 6-digit hex color'),
 ])
 
+// Registered because it is the most-repeated subschema the canvas tools
+// publish — nine sites in `wb_canvas_edit` alone (every node arm's `add` and
+// `patch`, plus the edge and the line).
+z.globalRegistry.add(canvasColorSchema, { id: 'CanvasColor' })
+
 export type CanvasColor = z.infer<typeof canvasColorSchema>
 
 /**
@@ -33,6 +38,8 @@ export const nodeEmbedSchema = z.object({
   documentId: documentIdSchema,
   versionRef: z.string().min(1).optional(),
 })
+
+z.globalRegistry.add(nodeEmbedSchema, { id: 'NodeEmbed' })
 
 export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
 
@@ -129,6 +136,28 @@ export type SpatialNode = z.infer<typeof spatialNodeSchema>
 const MAX_BENDS = 64
 
 const canvasPointSchema = z.object({ x: nodePositionSchema, y: nodePositionSchema }).strict()
+z.globalRegistry.add(canvasPointSchema, { id: 'CanvasPoint' })
+
+/**
+ * Hand-placed waypoints, declared ONCE for both the relation and the ink that
+ * carry them. It was written out twice, identically, which is the drift this
+ * package exists to prevent — and it cost bytes twice over, since a tool
+ * emitting an `add` and a `patch` arm for each element spelled the same
+ * description four times.
+ *
+ * Named in zod's global registry for the reason `EdgeEnd` is: the SDK's
+ * conversion path inlines an unregistered subschema at every site, and this
+ * one has four.
+ */
+const bendsFieldSchema = z
+  .array(canvasPointSchema)
+  .min(1)
+  .max(MAX_BENDS)
+  .optional()
+  .describe(
+    'Points to draw the line through, in order. Omit it: the route is computed around what is in the way.',
+  )
+z.globalRegistry.add(bendsFieldSchema, { id: 'Bends' })
 
 export const edgeSideSchema = z.enum(['top', 'right', 'bottom', 'left'])
 
@@ -397,14 +426,7 @@ export const canvasEdgeSchema = z
      * Sub-pixel, like every other coordinate since this slice: the drag no
      * longer has to round before it writes.
      */
-    bends: z
-      .array(canvasPointSchema)
-      .min(1)
-      .max(MAX_BENDS)
-      .optional()
-      .describe(
-        'Points to draw the line through, in order. Omit it: the route is computed around what is in the way.',
-      ),
+    bends: bendsFieldSchema,
     /** Edge-target facets (ADR-0013 decision 5's edge slot). */
     facets: facetsFieldSchema,
   })
@@ -439,14 +461,7 @@ export const canvasLineSchema = z
     ),
     color: canvasColorSchema.optional(),
     label: z.string().optional(),
-    bends: z
-      .array(canvasPointSchema)
-      .min(1)
-      .max(MAX_BENDS)
-      .optional()
-      .describe(
-        'Points to draw the line through, in order. Omit it: the route is computed around what is in the way.',
-      ),
+    bends: bendsFieldSchema,
     facets: facetsFieldSchema,
   })
   .strict()

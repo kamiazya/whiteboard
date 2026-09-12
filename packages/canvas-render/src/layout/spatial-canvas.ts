@@ -37,6 +37,7 @@ import type {
   CommentThread,
   EdgeEnd,
   EdgeRoutingStyle,
+  LineEnd,
   Proposal,
   SpatialCanvas,
   SpatialNode,
@@ -2272,6 +2273,24 @@ function proposedEdgePath(
 ): readonly { x: number; y: number }[] | undefined {
   if (change.op === 'edge.patch' || change.op === 'edge.remove') {
     return edgePathOf(change.edgeId)
+  }
+  // Ink already on the board is traced the same way, and for the same
+  // reason: `composeEdgesAndLabels` routes lines through the edge pipeline,
+  // so a line's id is in the same path table (ADR-0038 decision 2).
+  if (change.op === 'line.patch' || change.op === 'line.remove') {
+    return edgePathOf(change.lineId)
+  }
+  if (change.op === 'line.add') {
+    const at = (end: LineEnd) => {
+      if (end.kind === 'point') return end.point
+      const node = canvas.nodes.find((candidate) => candidate.id === end.node)
+      return node === undefined
+        ? undefined
+        : { x: node.x + node.width / 2, y: node.y + node.height / 2 }
+    }
+    const from = at(change.line.from)
+    const to = at(change.line.to)
+    return from === undefined || to === undefined ? undefined : [from, to]
   }
   if (change.op !== 'edge.add') return undefined
   // A FREE end has no box to take a centre from, so a proposed edge carrying
