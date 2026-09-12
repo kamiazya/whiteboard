@@ -361,7 +361,7 @@ function kindOf(
   return 'text'
 }
 
-export function fromOcif(ocif: OcifDocument): SpatialCanvas {
+function fromOcif(ocif: OcifDocument): SpatialCanvas {
   const resources = new Map((ocif.resources ?? []).map((r) => [r.id, r]))
   const nodes: SpatialNode[] = []
   const edges: CanvasEdge[] = []
@@ -457,8 +457,14 @@ export function fromOcif(ocif: OcifDocument): SpatialCanvas {
 }
 
 /**
- * Read OCIF text as a document — the total parser this package's convention
- * requires (`CodecParseResult`, never a thrown `ZodError`), and the reason
+ * Read OCIF text as a document.
+ *
+ * The lift itself (`fromOcif`) is deliberately not exported: every caller
+ * arrives with bytes rather than with an already-validated `OcifDocument`, so
+ * the parser is the door and the wire schema is always crossed. Export it the
+ * day something really holds one.
+ *
+ * This is the total parser this package's convention requires (`CodecParseResult`, never a thrown `ZodError`), and the reason
  * `ocifDocumentSchema` exists rather than being a type written beside a cast.
  *
  * Foreign input is where the wire schema's looseness earns its keep: an

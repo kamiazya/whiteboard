@@ -140,6 +140,45 @@ rather than in a string, so joining its runs yields `tightenthis`.
   Mutation-checked, all four: dropping `subpath` or `versionRef` from the projection fails the
   round-trip property; calling an `extension` entry `native`, or a `native` entry `extension`,
   fails the behaviour comparison.
+- **A format is a REGISTRY ENTRY, not a file somebody remembered to test**
+  (`spatial/codecs.ts` + `spatial/codecs.property.test.ts`). A `SpatialCodec` is the four
+  answers a format owes — its projection ledger, `write`, `read`, and `writeForForeignReader`
+  — and every guard is `it.each`/`describe.each` over `SPATIAL_CODECS`, so a format added to
+  the registry is asked all of them without a line being written. The per-format copies are
+  GONE: `projection.test.ts` and `ocif-projection.test.ts` now hold only what is specific to
+  their format, and `round-trip.property.test.ts` was deleted outright (the registry's
+  idempotence property is the same statement, through text rather than through the object).
+  - **There is no "write with any codec, read with any codec" symmetry, and claiming one
+    would be false.** Only **7 of 45** positions are `native` in BOTH ledgers, so a property
+    over the intersection would be close to vacuous — measured before designing anything.
+    What is both true and checkable is **confluence**: whatever each format takes away,
+    taking them away in either ORDER leaves the same document. Plus a fixed point — once a
+    document has been through every format, passing it through any of them again costs
+    nothing — over a set derived from the registry rather than written down, so a third
+    format narrows it with nobody editing a list.
+  - **Two properties, and the measurement says neither is redundant.** Confluence is blind to
+    DELETION, which is the commonest loss and commutes with everything: removing OCIF's edge
+    label from the lift leaves it green. Round-trip COMPLETENESS (a faithful trip loses
+    exactly the positions the ledger calls `dropped`) catches that one and is blind to
+    non-commuting transforms: teaching OCIF its own precision rule (one decimal, against JSON
+    Canvas's integer) leaves IT green while confluence goes red — 0.46 rounds to 0 one way
+    and to 1 the other. Four mutations, each caught by exactly one property.
+  - **The registry's own coverage is held from two sides, in two places.** Inside the package:
+    every entry's ledger covers exactly the census, no two entries share a table, ids are
+    unique. The third direction — a projection table in the package that NO entry points at —
+    needs to read the package's source, and the only in-package way is `import.meta.glob`,
+    which means `vite/client` in codec's `types`, which drags the DOM lib into a package whose
+    tsconfig exists to keep it out. So it is `tools/arch-lint`'s `repo-coverage.test.ts`,
+    beside the repo's other "a file appeared and nothing classified it" scans, mutation-checked
+    in both directions (an unregistered table fails; a scan whose pattern stops matching fails
+    the count test rather than reporting everything as registered).
+  - `fullyPopulatedCanvas` (`test-utils/`) is ONE fixture for every format's ledger
+    comparison, and the registry file asserts it occupies every census position on every run.
+    Two fixtures were two chances for one to stop covering a position, which weakens an
+    equality in silence rather than breaking it.
+  - Measured, so a later reader is not guessing: 5000 runs of each property (25x the budget)
+    found no counterexample, and the worst per-test duration under the full `codec-node` suite
+    is 543ms against the 5000ms default.
 - **OCIF v0.7.0 is a THIRD projection** ([ADR-0036](../../docs/contributing/adr/0036-ocif-projection.md)):
   `spatial/ocif.ts` (the wire shape), `spatial/ocif-projection-io.ts`
   (`toOcif`/`fromOcif`/`parseOcif`) and `spatial/ocif-projection.ts` (the `OCIF_PROJECTION`

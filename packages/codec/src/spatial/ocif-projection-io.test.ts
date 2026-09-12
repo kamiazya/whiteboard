@@ -1,23 +1,12 @@
-// The OCIF projection's round trip, over the subset OCIF can express.
+// The OCIF projection's own shapes, by example.
 //
-// Stated as IDEMPOTENCE rather than equality with the input, for the reason
-// the JSON Canvas property is: a projection whose image is smaller than its
-// domain cannot return what it was given, and the image is what the promise
-// is about.
-import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
+// The round trip itself is `codecs.property.test.ts`'s, stated as idempotence
+// and asked of every registered format. What is here is what only OCIF has:
+// the edge/arrow branch, a text body as a resource, and explicit group members.
 import { describe, expect, it } from 'vitest'
-import { fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { fromOcif, parseOcif, toOcif } from './ocif-projection-io.js'
+import { parseOcif, toOcif } from './ocif-projection-io.js'
 
 describe('a document becomes OCIF and comes back', () => {
-  fcTest.prop([spatialCanvasArbitrary], withDefaults())(
-    'projecting twice is projecting once',
-    (canvas) => {
-      const once = toOcif(canvas)
-      expect(toOcif(fromOcif(once))).toEqual(once)
-    },
-  )
-
   it('writes the version URI the projection targets', () => {
     expect(toOcif({ nodes: [], edges: [] }).ocif).toContain('v0.7.0')
   })
