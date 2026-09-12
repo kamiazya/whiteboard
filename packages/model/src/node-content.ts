@@ -15,6 +15,7 @@
  * containment — so it is a separate decision from this one and wants its own
  * single reader when it is taken.
  */
+import type { ResourceKind } from './node-resource.js'
 import type { SpatialNode } from './spatial.js'
 
 /**
@@ -98,3 +99,20 @@ export const frameLabel = (node: SpatialNode): string | undefined =>
 /** The fragment inside the document a node points at, or `undefined`. */
 export const nodeSubpath = (node: SpatialNode): string | undefined =>
   node.type === 'file' ? node.subpath : undefined
+
+/**
+ * What KIND of thing a node is: one of the resource kinds, or the frame.
+ *
+ * The one accessor an exhaustive reader needs. `NodeKind` is closed — the
+ * registry's ids plus `'frame'` — so a `switch` over it narrows to `never`
+ * and a table written `satisfies Record<NodeKind, …>` fails to compile when
+ * the registry grows. That is the guard `searchable-texts.ts` asks for, kept
+ * across the dissolution rather than traded for indirection.
+ *
+ * Today it reads the stored discriminant. After the storage moves it reads
+ * `resourceKind(node.resource)`, and no caller changes.
+ */
+export type NodeKind = ResourceKind | 'frame'
+
+export const nodeKind = (node: SpatialNode): NodeKind =>
+  node.type === 'group' ? 'frame' : node.type
