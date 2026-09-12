@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
@@ -29,6 +30,14 @@ const { saveDocument } = await import('./document-store.js')
 async function seedDocuments(workspaceId: string, paths: string[]): Promise<void> {
   for (const path of paths) {
     await saveDocument(workspaceId, path, new LoroDoc(), { kind: 'spatial' })
+  }
+}
+
+/** A one-text-node canvas — the smallest content a digest can tell apart. */
+function textCanvas(id: string, text: string): SpatialCanvas {
+  return {
+    nodes: [{ id, type: 'text', text, x: 0, y: 0, width: 100, height: 40 }],
+    edges: [],
   }
 }
 
@@ -487,6 +496,81 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       expect(result.deletedCount).toBe(0)
       const remaining = (await store.list('sess-1', 'canvas-y')).map((v) => v.id).sort()
       expect(remaining).toEqual([a1.id, m1.id, a2.id].sort())
+    })
+  })
+
+  /**
+   * The question is about ONE document, so only that document's content may
+   * move the answer.
+   *
+   * A checkpoint's frontier is the WORKSPACE record's, and every document in
+   * a workspace shares that record — so a frontier comparison answers
+   * "somebody edited something here", not "this document changed". Measured
+   * before the fix: five sibling edits, five wrong answers, one per edit.
+   * The cost is not a stray checkpoint but a scheduler that cannot tell an
+   * untouched document from an edited one at all.
+   */
+  describe('isUnchangedSinceLastVersion', () => {
+    it('stays true while only a sibling document is edited', async () => {
+      await saveDocument('sess-1', 'canvas-a', makeSpatialDoc(textCanvas('a', 'mine')), {
+        kind: 'spatial',
+        overwrite: true,
+      })
+      await store.save('sess-1', 'canvas-a', new LoroDoc(), { auto: true })
+      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-a')).toBe(true)
+
+      for (const text of ['one', 'two', 'three', 'four', 'five']) {
+        await saveDocument('sess-1', 'canvas-b', makeSpatialDoc(textCanvas('b', text)), {
+          kind: 'spatial',
+          overwrite: true,
+        })
+        expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-a')).toBe(true)
+      }
+    })
+
+    /**
+     * Asserted beside the case above, and not as an afterthought: a store
+     * that answered a constant `true` would satisfy every sibling assertion
+     * there. This is the half that makes the answer mean something.
+     */
+    it('turns false once the document itself changes', async () => {
+      await saveDocument('sess-1', 'canvas-x', makeSpatialDoc(textCanvas('x', 'before')), {
+        kind: 'spatial',
+        overwrite: true,
+      })
+      await store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: true })
+      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-x')).toBe(true)
+
+      await saveDocument('sess-1', 'canvas-x', makeSpatialDoc(textCanvas('x', 'after')), {
+        kind: 'spatial',
+        overwrite: true,
+      })
+      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-x')).toBe(false)
+    })
+
+    /**
+     * There is no second read path, so a row that somehow held no digest must
+     * fall on the SAFE side of the one comparison: answering "changed" costs
+     * a checkpoint nobody needed, answering "unchanged" loses the point where
+     * somebody stopped. 0026 deleted every such row, which is why this reaches
+     * past the store to plant one — the column's `''` default is sqlite's
+     * requirement for a NOT NULL column, not a state this store can write.
+     */
+    it('answers changed for a row holding no digest, rather than reading the blank as a match', async () => {
+      await saveDocument('sess-1', 'canvas-y', makeSpatialDoc(textCanvas('y', 'mine')), {
+        kind: 'spatial',
+        overwrite: true,
+      })
+      await store.save('sess-1', 'canvas-y', new LoroDoc(), { auto: true })
+      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-y')).toBe(true)
+
+      await handle.db.updateTable('versions').set({ contentDigest: '' }).execute()
+      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-y')).toBe(false)
+    })
+
+    it('answers false where the document has no checkpoint, and where it does not exist', async () => {
+      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-z')).toBe(false)
+      expect(await store.isUnchangedSinceLastVersion('sess-1', 'no-such-document')).toBe(false)
     })
   })
 })

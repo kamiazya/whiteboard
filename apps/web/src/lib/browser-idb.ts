@@ -155,8 +155,13 @@ export function whiteboardDbName(): string {
  * nothing before this needed the two keepers' workspace ids to share a
  * shape. See `rekeyBrowserWorkspace` for why this cannot be a plain
  * rename-and-done.
+ *
+ * v18 -> v19: EMPTIES the `versions` store, because a point saved before a
+ * row carried its content's digest can never gain one. The reasoning, and why
+ * it is a `clear()` rather than the cursor rewrite the v18 note below refuses,
+ * is at `sweepVersionsWrittenBeforeDigests`.
  */
-export const DB_VERSION = 18
+export const DB_VERSION = 19
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -217,13 +222,13 @@ export const VERSIONS_BY_DOCUMENT_INDEX = 'byDocument'
  * draws the document itself in the reader's own theme, where the stored PNG
  * was baked light at save time and could never be anything else.
  *
- * The `hasThumbnail` boolean on existing version ROWS is deliberately left
- * where it is. `versionRowSchema` is `.strict()` and its reader SKIPS a row
- * that fails to parse, so a cursor rewrite that mis-ordered itself against
- * the upgrade chain's other walks would not fail loudly — it would delete a
- * reader's bookmarked history. Nothing reads the flag any more, so it costs
- * one inert boolean per row; the pictures, which are what took the space,
- * are what this deletes.
+ * The `hasThumbnail` boolean it left on existing version ROWS is gone at v19,
+ * and not by the cursor rewrite this note refused. That refusal still stands:
+ * `versionRowSchema` is `.strict()` and its reader SKIPS a row that fails to
+ * parse, so a walk mis-ordered against the upgrade chain deletes a reader's
+ * bookmarked history without failing loudly. v19 empties the store outright
+ * for its own reason, so every row carrying the flag went with it and the
+ * field left the schema without any row ever being rewritten.
  */
 const RETIRED_VERSION_THUMBNAILS_STORE = 'versionThumbnails'
 
@@ -658,6 +663,38 @@ function backfillDocumentIndex(tx: IDBTransaction, done: () => void): void {
   }
 }
 
+/** The version at which a saved point began carrying its content's digest. */
+export const VERSION_DIGEST_DB_VERSION = 19
+
+/**
+ * v19's sweep: empty the `versions` store of every point written before a row
+ * carried the digest of the content it was taken of.
+ *
+ * Such a point can never gain one — a past checkpoint's content is reachable
+ * only by checking the record out at its own frontier — so carrying them would
+ * keep the old, workspace-scoped frontier comparison alive as a second read
+ * path forever. At 0.0.x they go instead; the daemon's migration 0026 is the
+ * same decision on the same data. A version is a frontier plus a row, never a
+ * copy of content, so what a reader loses is the ability to look back.
+ *
+ * Exported and told which version it is upgrading FROM rather than inlined,
+ * because that bound is the whole correctness of it and is otherwise
+ * untestable until a v20 exists. Every other step in the handler is idempotent
+ * — "create it if absent", "delete it if present"; this one, run again at
+ * v19 -> v20, would empty a store whose rows are by then exactly the ones the
+ * digest was added to keep.
+ *
+ * `clear()` rather than a cursor deleting the digest-less rows: every row
+ * written before v19 lacks one, so the two are the same operation, and the v18
+ * note above says why a cursor over THIS store is the dangerous way to write
+ * it.
+ */
+export function sweepVersionsWrittenBeforeDigests(tx: IDBTransaction, oldVersion: number): void {
+  // oldVersion 0 is a fresh install: nothing a sweep could mean.
+  if (oldVersion === 0 || oldVersion >= VERSION_DIGEST_DB_VERSION) return
+  tx.objectStore(VERSIONS_STORE).clear()
+}
+
 function renameMetaKey(tx: IDBTransaction, from: string, to: string): void {
   const meta = tx.objectStore('meta')
   const req = meta.get(from)
@@ -671,7 +708,7 @@ function renameMetaKey(tx: IDBTransaction, from: string, to: string): void {
 export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(dbName, DB_VERSION)
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
       for (const [, to] of RENAMED_STORES) {
@@ -711,6 +748,9 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.
       const tx = req.transaction
       if (!tx) return
+      // Unordered against the chain below on purpose: it walks nothing, and no
+      // copy in that chain writes this store.
+      sweepVersionsWrittenBeforeDigests(tx, event.oldVersion)
       renameMetaKey(tx, 'defaultCanvasId', 'defaultDocumentId')
       // The discard runs only once every rename copy has drained, because it
       // walks the store those copies are still filling. Calling it beside them

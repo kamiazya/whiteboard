@@ -148,6 +148,8 @@ interface VersionRow {
   operatorWorkspaceId: string | null
   elementCount: number
   frontiers: string
+  // See db/schema.ts: '' means this row predates the digest.
+  contentDigest: string
   createdAt: number
   restoredFrom: string | null
   // The store hydrates this from the documents row at list time so callers
@@ -254,6 +256,9 @@ export class FileVersionStore implements VersionStore {
           operatorWorkspaceId: operator?.workspaceId ?? null,
           elementCount,
           frontiers,
+          // Free: `entry` is the resolve this save already did, and the
+          // digest is derived on that same read of the tree node.
+          contentDigest: entry.contentDigest,
           createdAt,
           restoredFrom: opts.restoredFrom ?? null,
         })
@@ -427,17 +432,25 @@ export class FileVersionStore implements VersionStore {
   }
 
   /**
-   * Both halves in this store's own space, which is what makes the answer
-   * mean anything: the frontier is read the same way `save` reads it, off
-   * the STORED workspace record, and compared against a row this same
-   * expression wrote.
+   * Answered on the document's CONTENT, because the question is about one
+   * document and a workspace-scoped frontier cannot be.
    *
-   * The frontier is the WORKSPACE record's, so an edit to a sibling
-   * document moves it too and this answers false for a document nothing
-   * touched. That costs at most one extra checkpoint, and only for a
-   * document that was signalled anyway — the error runs toward taking one,
-   * which is the safe direction for a question about whether to record
-   * where somebody stopped.
+   * Every document in a workspace lives in one record, so its frontier moves
+   * on any of them — five edits to a sibling produced five "changed" answers
+   * for a document nothing had touched. This is not a stray checkpoint here
+   * and there: on a workspace anybody is working in, the scheduler could not
+   * distinguish an untouched document from an edited one at all.
+   *
+   * The digest is a function of the MERGED content (`contentDigestOf`), not
+   * of a write stamp, so two replicas that converged agree on it — which is
+   * what makes it comparable across the boundary a frontier could not cross.
+   * Both halves stay in this store's own space: the digest is derived on the
+   * same read of the stored tree node that `save` derived the row's from.
+   *
+   * There is no second path for a row carrying no digest, because 0026 left
+   * none: every row written before the column went rather than being carried.
+   * None could be backfilled, and each would otherwise have kept the old,
+   * wrong comparison alive to answer it.
    */
   async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
     validateWorkspaceId(workspaceId)
@@ -447,21 +460,21 @@ export class FileVersionStore implements VersionStore {
       workspaceId,
     )
     if (storedWorkspace === null) return false
-    const documentId = resolveWorkspaceDocument(storedWorkspace, path)?.documentId
-    if (documentId === undefined) return false
+    const entry = resolveWorkspaceDocument(storedWorkspace, path)
+    if (entry === null) return false
     const row = await db
       .selectFrom('versions')
-      .select(['frontiers'])
+      .select(['contentDigest'])
       // Newest first, with the id as the tie-break the rest of this store
       // already orders by — two rows can share a millisecond.
       .where('workspaceId', '=', workspaceId)
-      .where('documentId', '=', documentId)
+      .where('documentId', '=', entry.documentId)
       .orderBy('createdAt', 'desc')
       .orderBy('id', 'desc')
       .limit(1)
       .executeTakeFirst()
     if (row === undefined) return false
-    return row.frontiers === bytesToBase64(encodeFrontiers(storedWorkspace.frontiers()))
+    return row.contentDigest === entry.contentDigest
   }
 
   async earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null> {
