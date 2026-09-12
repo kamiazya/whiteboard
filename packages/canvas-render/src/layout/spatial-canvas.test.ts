@@ -1,5 +1,6 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import type {
   HeadingBlockNode,
   Scene,
@@ -195,7 +196,10 @@ describe('layoutSpatialCanvas', () => {
     // the same containment the outline itself is drawn and hit-tested by.
     // The loop value is the facet PAYLOAD, which is a bare kind; the id the
     // outline is looked up by composes the namespace onto it.
-    for (const kind of ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const) {
+    // Derived, not written out: `shape-vocabulary.test.ts` pins that this
+    // enum and BUILT_IN_SHAPES hold the same set, so a sixth silhouette
+    // reaches this loop without anyone remembering to add it.
+    for (const kind of visualShapeFacetSchema.shape.kind.options) {
       const shapeId = `visual.${kind}`
       const bbox = { x: 0, y: 0, w: 200, h: 100 }
       const shaped = {
