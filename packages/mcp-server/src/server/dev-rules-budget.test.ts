@@ -126,7 +126,17 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // being discovered at session start rather than remembered. The file sat
   // 33 characters under the boundary, so the bucket is bought by one
   // sentence; the mechanism lives in the script's header, not here.
-  '.claude/rules/integrator-flow.md': 14,
+  //
+  // 15 for the eleventh flake shape: a `vi.mock` factory still resolving
+  // when the browser page closes, which fails the whole FILE while every
+  // test in it passed. It earns always-on space because the symptom names
+  // no test and no cause, so a reader who cannot recognise it has nothing
+  // to search for — the same argument the ninth and tenth entries won on.
+  // Held to 889 characters against a 1650-character first draft: the
+  // measurements and the reproduction belong here, the prescription is one
+  // sentence, and the two test files carry the rest at their own headers.
+  // Leaves 330 characters of headroom, up from the 157 this file had.
+  '.claude/rules/integrator-flow.md': 15,
   // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a

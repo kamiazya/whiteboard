@@ -172,6 +172,19 @@ imports. Start the run, then leave the working tree alone.
   was static, so hoisting fixes nothing. Vitest instantiates a static graph
   on demand and its tail was still loading at teardown; the file it names is
   a victim. Did not reproduce in three runs of CI's own shard command.
+- **An eleventh: a `vi.mock` factory that outlives its own test.**
+  `VITEST_BROWSER_CONNECTION_CLOSED`, `[birpc] rpc is closed, cannot call
+  "resolveManualMock"`, a stack through playwright's `_onRoute`. The ninth
+  and tenth's signature — every test PASSED, file exits 1 — with a third
+  cause: **`resolveManualMock` AWAITS the factory**, so it is in flight for
+  as long as the factory is, and a page closing under a live one blames no
+  test at all. Measured: a 1500ms factory in a body that finished in 1821ms,
+  last file in the shard, dead 25ms later. Reproduce by gating the factory
+  shut and failing one assertion. Resolve it INSIDE the test and await it,
+  and release it in `afterEach` too, or a failed assertion becomes this
+  instead of a message naming itself. Gate rather than shorten — the window
+  is a CONDITION, and a duration can close before the action under test.
+
 - **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
   the menu stays shut, so the failure reads as "the list does not contain this item" when no
   list was ever opened — and raising the query's timeout only buys a slower identical failure.

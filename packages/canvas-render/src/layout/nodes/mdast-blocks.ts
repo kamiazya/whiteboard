@@ -6,6 +6,7 @@ import type {
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
+import { expandEmojiShortcodes } from '@kamiazya/whiteboard-plugin-visual/emoji/shortcode'
 import type {
   Appearance,
   BlockquoteNode,
@@ -728,7 +729,9 @@ function layoutPhrasing(
     for (const child of nodes) {
       switch (child.type) {
         case 'text':
-          emit(child.value, {}, currentStyle)
+          // Every body-drawing surface comes through here; `inlineCode`
+          // below deliberately does not, a shortcode there being the subject.
+          emit(expandEmojiShortcodes(child.value), {}, currentStyle)
           break
         case 'inlineCode':
           emit(

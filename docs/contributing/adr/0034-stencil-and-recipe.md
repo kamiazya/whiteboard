@@ -506,9 +506,41 @@ size cannot fix this: a stencil is authored once for every board, so
 whatever size `lakehouse` declares will be wrong on the boards drawn at
 another scale. What the measurement points at instead is placement adopting
 the PREVAILING size of the board it is placing into — which fixes every
-auto-placed box rather than only the stencil-dressed ones. Recorded, not
-chased: it is a `wb_canvas_edit` question and this increment is a discovery
-one.
+auto-placed box rather than only the stencil-dressed ones.
+
+#### Chased, in the increment after (2026-09-11)
+
+Separating the axes first, because the reading above moved both at once and
+therefore could not say which mattered. It is entirely the WIDTH: at the same
+position, `width 200` alone clears the near miss and `height 80` alone does
+not. `nearMisses` judges the nearest of near edge, centre and far edge, so an
+odd width lands its left edge on the column and misses with the other two; a
+row anchor was never involved.
+
+So a coordinate-less box takes the board's commonest box width, and the flat
+260 survives only as the fallback for a board with no boxes. The height is
+untouched — it is already derived from the text AT the chosen width, so it
+follows rather than fights, and no text that fits can start being refused.
+
+The same three trials, after:
+
+| | before | after |
+|---|---|---|
+| pass^3 | 1 | 1 |
+| **debtFree pass^3** | **0** | **1** |
+| tool errors | 0 | 0 |
+| mean calls | 3 | 3.33 |
+
+Every board reads `no debt` now, where every board read `nearMisses 1`. The
+calls figure moved because one trial of the three also set the viewport,
+which is trial-to-trial variation rather than anything this change touches —
+the column is a diagnostic, not a gate.
+
+**A stencil default size is now redundant for this purpose and should not be
+implemented for it.** If one lands it will be for a different reason (a
+stencil that means a particular size, like a sticky note), and it would have
+to sit UNDER this rule rather than over it, or a library would start
+overriding the board its stencils are drawn on.
 
 ### Decided (user, 2026-09-11): a document facet, `visual.stencils/v0`
 

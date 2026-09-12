@@ -46,6 +46,7 @@ import {
   PLACEMENT_GUTTER_PX,
   PlacementCursor,
   placeWithin,
+  prevailingWidth,
   type Rect,
 } from './canvas-edit-placement.js'
 import { dressWithStencil } from './canvas-edit-stencil.js'
@@ -236,6 +237,12 @@ export function createCanvasEditTool(deps: ServerDeps) {
       // all-or-nothing — including the lock ops, which would otherwise
       // write through to the doc's sidecar map as they were applied.
       let nodes: SpatialNode[] = [...canvas.nodes]
+      // Read ONCE, off the board as it stood before this batch — the same
+      // anchoring `PlacementCursor` does, and for the same reason: re-reading
+      // it per node would have each addition chase the ones this batch is
+      // adding, so on an empty board the second box would inherit the first's
+      // fallback as though the board had always used it.
+      const boardWidth = prevailingWidth(canvas.nodes)
       let edges: CanvasEdge[] = [...canvas.edges]
       let comments: CanvasComment[] = [...(canvas['x-whiteboard']?.comments ?? [])]
       const nodeLocks = new Set(readNodeLocks(doc))
@@ -550,7 +557,8 @@ export function createCanvasEditTool(deps: ServerDeps) {
               )
             }
             const size = DEFAULT_SIZE[draft.type]
-            const width = draft.width ?? size.width
+            const width =
+              draft.width ?? (draft.type === 'group' ? size.width : (boardWidth ?? size.width))
             const height =
               draft.height ??
               (draft.type === 'text' && measure !== undefined
