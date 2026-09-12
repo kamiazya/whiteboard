@@ -10,6 +10,10 @@
       "types": "./src/api-client.ts",
       "import": "./src/api-client.ts"
     },
+    "./api-contracts/did-key": {
+      "types": "./src/api-contracts/did-key.ts",
+      "import": "./src/api-contracts/did-key.ts"
+    },
     "./api-contracts/document": {
       "types": "./src/api-contracts/document.ts",
       "import": "./src/api-contracts/document.ts"

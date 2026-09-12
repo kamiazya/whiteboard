@@ -24,6 +24,7 @@ import {
 } from 'node:crypto'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { ed25519PublicKeyToDidKey } from '@kamiazya/whiteboard-daemon-client/api-contracts/did-key'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
 
@@ -53,6 +54,8 @@ export interface DaemonIdentity {
   readonly alg: 'Ed25519'
   /** Raw 32-byte Ed25519 public key, base64url. */
   readonly publicKey: string
+  /** The same key as a `did:key`; a portable NAME for it, not a credential. */
+  readonly did: string
   /** Signs a domain-separated message; returns the signature base64url. */
   readonly sign: (parts: readonly string[]) => string
 }
@@ -124,9 +127,19 @@ export function createDaemonIdentity({ dataDir }: { dataDir: string }): DaemonId
     throw new Error('daemon identity public key export produced no key material')
   }
 
+  const did = ed25519PublicKeyToDidKey(publicKeyB64u)
+  if (did === null) {
+    // Same posture as the guard above: an Ed25519 JWK's `x` is always 32
+    // base64url-encoded bytes, so this is unreachable for a well-formed key
+    // and a broken one must fail at startup rather than advertise a name
+    // that does not decode to the key beside it.
+    throw new Error('daemon identity public key is not a 32-byte Ed25519 key')
+  }
+
   return {
     alg: 'Ed25519',
     publicKey: publicKeyB64u,
+    did,
     sign: (parts) =>
       cryptoSign(null, buildSignedPayload(parts), keys.privateKey).toString('base64url'),
   }
