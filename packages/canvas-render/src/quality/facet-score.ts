@@ -234,14 +234,14 @@ function channelUse(
   treatment: ReadonlyMap<string, Treatment>,
   partitions: readonly Partition[],
 ): ChannelUse {
-  const valueOf = (id: string) => read(treatment.get(id) ?? DEFAULT_TREATMENT)
+  const channelOf = (id: string) => read(treatment.get(id) ?? DEFAULT_TREATMENT)
   // One value everywhere is not a distinction, and checking it first is what
   // makes the second condition above implicit.
-  if (new Set(boxes.map((b) => valueOf(b.id))).size <= 1) return 'unused'
+  if (new Set(boxes.map((b) => channelOf(b.id))).size <= 1) return 'unused'
   const carried = partitions.some((partition) => {
     const perClass = new Map<string, Set<string>>()
     for (const [id, cls] of partition) {
-      perClass.set(cls, (perClass.get(cls) ?? new Set<string>()).add(valueOf(id)))
+      perClass.set(cls, (perClass.get(cls) ?? new Set<string>()).add(channelOf(id)))
     }
     return [...perClass.values()].every((seen) => seen.size === 1)
   })
