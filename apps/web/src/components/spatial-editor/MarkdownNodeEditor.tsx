@@ -160,13 +160,6 @@ export function MarkdownNodeEditor({
       doc: initialText,
       extensions: [
         markdown({ extensions: [GFM] }),
-        // The `:name:` completion, wired here as well as in the markdown
-        // editor's SourcePane — this editor is a second CodeMirror view, not
-        // that pane, so it inherits none of its extensions. A shortcode a
-        // person can type in a note and not in a node body would be the same
-        // syntax behaving differently on two surfaces.
-        autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
-        wikiLinkCompletionTheme,
         // The exit verbs outrank EVERYTHING, including the language
         // keymap's Enter continuation and the style keymap's Mod-Enter.
         Prec.highest(
@@ -203,6 +196,21 @@ export function MarkdownNodeEditor({
             },
           ]),
         ),
+        // AFTER the exit verbs, and that order is load-bearing rather than
+        // tidy. `autocompletion()` installs its own keymap at `Prec.highest`
+        // too, so within that precedence whichever is listed FIRST wins the
+        // key — and its Escape is `closeCompletion`, which answers true for a
+        // merely PENDING query, not only an open popup. Listed first it
+        // swallowed every Escape typed within the activation debounce, so a
+        // node's draft could not be abandoned at all: measured, the handler
+        // below never ran, and `markdown-node-editor.browser.test.tsx`'s
+        // Escape cases are what caught it.
+        //
+        // With the exit verbs first, the distinction they already draw is the
+        // one that applies — an ACTIVE popup takes the key, anything else
+        // abandons the edit.
+        autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
+        wikiLinkCompletionTheme,
         syntaxHighlighting(markdownHighlightStyle),
         history(),
         keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
