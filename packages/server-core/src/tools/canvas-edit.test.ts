@@ -75,8 +75,8 @@ describe('wb_canvas_edit tool', () => {
           op: 'edge.add',
           edge: {
             id: 'e',
-            from: { kind: 'node' as const, node: 'a' },
-            to: { kind: 'node' as const, node: 'b' },
+            from: { node: 'a' },
+            to: { node: 'b' },
             label: 'to',
           },
         },
@@ -198,8 +198,8 @@ describe('wb_canvas_edit tool', () => {
       edges: [
         {
           id: 'e',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
     })
@@ -236,8 +236,8 @@ describe('wb_canvas_edit tool', () => {
       edges: [
         {
           id: 'e',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
     })
@@ -344,8 +344,8 @@ describe('wb_canvas_edit tool', () => {
       edges: [
         {
           id: 'e',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
     })
@@ -476,8 +476,8 @@ describe('wb_canvas_edit tool', () => {
             op: 'edge.add',
             edge: {
               id: 'e',
-              from: { kind: 'node' as const, node: 'a' },
-              to: { kind: 'node' as const, node: 'missing' },
+              from: { node: 'a' },
+              to: { node: 'missing' },
             },
           },
         ],
@@ -501,8 +501,8 @@ describe('wb_canvas_edit tool', () => {
           op: 'edge.add',
           edge: {
             id: 'e',
-            from: { kind: 'node' as const, node: 'a' },
-            to: { kind: 'node' as const, node: 'b' },
+            from: { node: 'a' },
+            to: { node: 'b' },
           },
         },
       ],
@@ -702,11 +702,11 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       ops: [
         {
           op: 'edge.add',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
           edge: {
-            from: { kind: 'node' as const, node: 'a' },
-            to: { kind: 'node' as const, node: 'b' },
+            from: { node: 'a' },
+            to: { node: 'b' },
           },
         },
       ],
@@ -742,9 +742,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [
-        { op: 'edge.patch', id: 'e', patch: { to: { kind: 'node', node: 'b', end: 'triangle' } } },
-      ],
+      ops: [{ op: 'edge.patch', id: 'e', patch: { to: { node: 'b', end: 'triangle' } } }],
     })
     expect(parsed.success).toBe(false)
 
@@ -757,8 +755,8 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
           op: 'edge.patch',
           id: 'e',
           patch: {
-            to: { kind: 'node', node: 'b', end: 'arrow' },
-            from: { kind: 'node', node: 'a', end: 'none' },
+            to: { node: 'b', end: 'arrow' },
+            from: { node: 'a', end: 'none' },
           },
         },
       ],
@@ -776,8 +774,8 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       edges: [
         {
           id: 'e',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
     })
@@ -811,8 +809,8 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       edges: [
         {
           id: 'x',
-          from: { kind: 'node' as const, node: 'x' },
-          to: { kind: 'node' as const, node: 'y' },
+          from: { node: 'x' },
+          to: { node: 'y' },
         },
       ],
     })
@@ -1024,8 +1022,8 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
       edges: [
         {
           id: 'e',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
     })
@@ -1229,13 +1227,13 @@ describe('wb_canvas_edit — region.set', () => {
       edges: [
         {
           id: 'internal',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
         {
           id: 'leaving',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'far' },
+          from: { node: 'a' },
+          to: { node: 'far' },
         },
       ],
     })
@@ -1266,18 +1264,18 @@ describe('wb_canvas_edit — region.set', () => {
       edges: [
         {
           id: 'keep',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
         {
           id: 'drop',
-          from: { kind: 'node' as const, node: 'b' },
-          to: { kind: 'node' as const, node: 'a' },
+          from: { node: 'b' },
+          to: { node: 'a' },
         },
         {
           id: 'leaving',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'far' },
+          from: { node: 'a' },
+          to: { node: 'far' },
         },
       ],
     })
@@ -1463,8 +1461,8 @@ describe('wb_canvas_edit — region.set', () => {
           op: 'edge.add',
           edge: {
             id: 'outside',
-            from: { kind: 'node' as const, node: 'far1' },
-            to: { kind: 'node' as const, node: 'far2' },
+            from: { node: 'far1' },
+            to: { node: 'far2' },
           },
         },
         { op: 'region.set', within: 'g', nodes: [] },
@@ -1486,8 +1484,8 @@ describe('wb_canvas_edit — region.set', () => {
       edges: [
         {
           id: 'smuggled',
-          from: { kind: 'node' as const, node: 'in' },
-          to: { kind: 'node' as const, node: 'far' },
+          from: { node: 'in' },
+          to: { node: 'far' },
         },
       ],
     })
@@ -1836,13 +1834,13 @@ describe('wb_canvas_edit — tidy orders a row by its edges', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'apigw' },
-          to: { kind: 'node' as const, node: 'auth' },
+          from: { node: 'apigw' },
+          to: { node: 'auth' },
         },
         {
           id: 'e2',
-          from: { kind: 'node' as const, node: 'apigw' },
-          to: { kind: 'node' as const, node: 'search' },
+          from: { node: 'apigw' },
+          to: { node: 'search' },
         },
       ],
     })
@@ -2192,13 +2190,13 @@ describe('wb_canvas_edit — a selector where an id goes', () => {
     edges: [
       {
         id: 'ab',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'bfar',
-        from: { kind: 'node' as const, node: 'b' },
-        to: { kind: 'node' as const, node: 'far' },
+        from: { node: 'b' },
+        to: { node: 'far' },
       },
     ],
   }

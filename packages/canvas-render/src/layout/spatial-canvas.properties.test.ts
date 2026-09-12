@@ -1,6 +1,5 @@
 import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeEndpoint } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
@@ -112,8 +111,8 @@ function uniqueById(nodes: readonly SpatialNode[]): SpatialNode[] {
  * exercised alongside well-formed edges. */
 const edgeArb: fc.Arbitrary<CanvasEdge> = fc.record({
   id: idArb,
-  from: fc.constantFrom('a', 'b', 'c', 'ghost').map((node) => nodeEndpoint(node)),
-  to: fc.constantFrom('a', 'b', 'c', 'ghost').map((node) => nodeEndpoint(node)),
+  from: fc.constantFrom('a', 'b', 'c', 'ghost').map((node) => ({ node })),
+  to: fc.constantFrom('a', 'b', 'c', 'ghost').map((node) => ({ node })),
 })
 
 const spatialCanvasArb: fc.Arbitrary<SpatialCanvas> = fc
@@ -471,8 +470,8 @@ const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
   fc
     .record({
       id: fc.constant(`e${index}`),
-      from: fc.constantFrom(...denseIds).map((node) => nodeEndpoint(node)),
-      to: fc.constantFrom(...denseIds).map((node) => nodeEndpoint(node)),
+      from: fc.constantFrom(...denseIds).map((node) => ({ node })),
+      to: fc.constantFrom(...denseIds).map((node) => ({ node })),
       label: fc.option(fc.constant('flow'), { nil: undefined }),
       // The EDGE's own facets, off the registry like the nodes' and the
       // canvas's. An edge carries per-edge routing and the bends a

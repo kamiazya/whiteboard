@@ -21,8 +21,8 @@ function textNode(overrides: Partial<Extract<SpatialNode, { type: 'text' }>> = {
 function edge(overrides: Partial<CanvasEdge> = {}): CanvasEdge {
   return {
     id: 'e1',
-    from: { kind: 'node' as const, node: 'a' },
-    to: { kind: 'node' as const, node: 'b' },
+    from: { node: 'a' },
+    to: { node: 'b' },
     ...overrides,
   }
 }

@@ -58,19 +58,19 @@ it('never routes through a node body when a border-tracing route would avoid it'
   const edges: CanvasEdge[] = [
     {
       id: 'e_AB',
-      from: { kind: 'node' as const, node: 'A' },
-      to: { kind: 'node' as const, node: 'B' },
+      from: { node: 'A' },
+      to: { node: 'B' },
     },
     {
       id: 'e_TA',
-      from: { kind: 'node' as const, node: 'T' },
-      to: { kind: 'node' as const, node: 'A' },
+      from: { node: 'T' },
+      to: { node: 'A' },
       label: 'hoge',
     },
     {
       id: 'e_TB',
-      from: { kind: 'node' as const, node: 'T' },
-      to: { kind: 'node' as const, node: 'B' },
+      from: { node: 'T' },
+      to: { node: 'B' },
     },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')

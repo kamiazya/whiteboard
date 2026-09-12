@@ -34,13 +34,13 @@ const cross = (lineJumps?: 'none' | 'arc'): SpatialCanvas => ({
   edges: [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
     {
       id: 'e2',
-      from: { kind: 'node' as const, node: 'c' },
-      to: { kind: 'node' as const, node: 'd' },
+      from: { node: 'c' },
+      to: { node: 'd' },
     },
   ],
   ...(lineJumps !== undefined ? { facets: { 'visual.edges/v0': { lineJumps } } } : {}),
@@ -89,18 +89,18 @@ describe('line jumps', () => {
       edges: [
         {
           id: 'v1',
-          from: { kind: 'node' as const, node: 'c1' },
-          to: { kind: 'node' as const, node: 'd1' },
+          from: { node: 'c1' },
+          to: { node: 'd1' },
         },
         {
           id: 'v2',
-          from: { kind: 'node' as const, node: 'c2' },
-          to: { kind: 'node' as const, node: 'd2' },
+          from: { node: 'c2' },
+          to: { node: 'd2' },
         },
         {
           id: 'h',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
       facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
@@ -123,13 +123,13 @@ describe('line jumps', () => {
       edges: [
         {
           id: 'f1',
-          from: { kind: 'node' as const, node: 'hub' },
-          to: { kind: 'node' as const, node: 'p' },
+          from: { node: 'hub' },
+          to: { node: 'p' },
         },
         {
           id: 'f2',
-          from: { kind: 'node' as const, node: 'hub' },
-          to: { kind: 'node' as const, node: 'q' },
+          from: { node: 'hub' },
+          to: { node: 'q' },
         },
       ],
       facets: { 'visual.edges/v0': { lineJumps: 'arc' } },

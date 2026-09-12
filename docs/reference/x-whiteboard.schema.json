@@ -55,6 +55,83 @@
             "additionalProperties": false
           }
         },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "from": {
+                "description": "Where the line starts: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                "$ref": "#/$defs/LineEnd"
+              },
+              "to": {
+                "description": "Where the line ends: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                "$ref": "#/$defs/LineEnd"
+              },
+              "color": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "1",
+                      "2",
+                      "3",
+                      "4",
+                      "5",
+                      "6"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  }
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "bends": {
+                "description": "Points to draw the line through, in order. Omit it: the route is computed around what is in the way.",
+                "minItems": 1,
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "facets": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "id",
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          }
+        },
         "facets": {
           "type": "object",
           "propertyNames": {
@@ -64,7 +141,89 @@
           "additionalProperties": {}
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "$defs": {
+        "LineEnd": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "node"
+                },
+                "node": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The node this end attaches to."
+                },
+                "side": {
+                  "description": "The side of the node to attach to. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+                  "type": "string",
+                  "enum": [
+                    "top",
+                    "right",
+                    "bottom",
+                    "left"
+                  ]
+                },
+                "end": {
+                  "description": "The arrowhead drawn at this end.",
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "arrow"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "node"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "point"
+                },
+                "point": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Where this end sits, in canvas coordinates."
+                },
+                "end": {
+                  "description": "The arrowhead drawn at this end.",
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "arrow"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "point"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
     },
     "nodeExtension": {
       "anyOf": [

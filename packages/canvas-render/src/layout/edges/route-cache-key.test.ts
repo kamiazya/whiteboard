@@ -17,8 +17,8 @@ import { type EdgeAnchorPair, routeCacheKey } from './spatial-edges.js'
  */
 const edge: CanvasEdge = {
   id: 'e1',
-  from: { kind: 'node' as const, node: 'a' },
-  to: { kind: 'node' as const, node: 'b' },
+  from: { node: 'a' },
+  to: { node: 'b' },
 }
 const base: EdgeAnchorPair = {
   from: { x: 10, y: 20 },

@@ -145,13 +145,13 @@ it('orders a row by its edges: a hub at the end swaps with the nearest box it fa
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'hub' },
-        to: { kind: 'node' as const, node: 'near' },
+        from: { node: 'hub' },
+        to: { node: 'near' },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'hub' },
-        to: { kind: 'node' as const, node: 'far' },
+        from: { node: 'hub' },
+        to: { node: 'far' },
       },
     ],
   }

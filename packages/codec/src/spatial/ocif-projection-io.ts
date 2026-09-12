@@ -1,5 +1,12 @@
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { EXTENSION_FACET_KEY_PATTERN, endpointNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasEdge,
+  CanvasLine,
+  EdgeEnd,
+  LineEnd,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
+import { EXTENSION_FACET_KEY_PATTERN } from '@kamiazya/whiteboard-model'
 import { type CodecParseResult, codecFailure, codecSuccess } from '../errors.js'
 import {
   OCIF_TYPE,
@@ -169,77 +176,98 @@ function projectNode(
  * end is a node and the element has become a drawing rather than a relation. */
 const centreOf = (node: SpatialNode) => [node.x + node.width / 2, node.y + node.height / 2]
 
-/**
- * An edge, as the OCIF element it actually is.
- *
- * A relation (both ends on nodes) becomes `@ocif/edge`. Anything with a free
- * end becomes `@ocif/arrow` — a SHAPE — because OCIF edges must run between
- * two node ids. That branch is the conflation ADR-0036 decision 2 splits, and
- * it is visible here as the one place this function has to ask what an edge
- * IS before it can say what it becomes.
- */
-function projectEdge(edge: CanvasEdge, nodes: readonly SpatialNode[]): OcifNode {
-  const data: OcifExtension[] = [...facetEntries(edge.facets)]
-  const fromId = endpointNode(edge.from)
-  const toId = endpointNode(edge.to)
-
-  if (fromId !== undefined && toId !== undefined) {
-    data.push({
-      type: OCIF_TYPE.edge,
-      start: fromId,
-      end: toId,
-      // Per-end markers collapse into one boolean; the ends themselves are
-      // carried below so this projection's own round trip keeps them.
-      directed: (edge.to.end ?? 'arrow') !== 'none' || (edge.from.end ?? 'none') !== 'none',
-    })
-  } else {
-    const at = (end: CanvasEdge['from']): number[] => {
-      if (end.kind === 'point') return [end.point.x, end.point.y]
-      const node = nodes.find((n) => n.id === end.node)
-      return node === undefined ? [0, 0] : centreOf(node)
-    }
-    data.push({
-      type: OCIF_TYPE.arrow,
-      start: at(edge.from),
-      end: at(edge.to),
-      // The one element shape OCIF gives a per-end marker. Written only where
-      // the model states one, so the projection reports the document rather
-      // than inventing a default a foreign reader would then read back.
-      ...(edge.from.end === undefined ? {} : { startMarker: edge.from.end }),
-      ...(edge.to.end === undefined ? {} : { endMarker: edge.to.end }),
-    })
-  }
-
-  const ends = ours(OCIF_TYPE.edgeEnds, {
-    ...(edge.from.kind === 'node' && edge.from.side !== undefined
-      ? { fromSide: edge.from.side }
-      : {}),
-    ...(edge.to.kind === 'node' && edge.to.side !== undefined ? { toSide: edge.to.side } : {}),
-    ...(edge.from.end === undefined ? {} : { fromEnd: edge.from.end }),
-    ...(edge.to.end === undefined ? {} : { toEnd: edge.to.end }),
-    // The endpoint SHAPE, so a free end survives this projection's own round
-    // trip even though a foreign reader sees only an arrow.
-    fromKind: edge.from.kind,
-    toKind: edge.to.kind,
-    // The node an end names, carried here as well as on `@ocif/edge`, because
-    // an ARROW has no `start`/`end` node ids to read it back from — a line
-    // with one free end still attaches to a box at the other, and the round
-    // trip lost that box until the property said so.
-    ...(edge.from.kind === 'node' ? { fromNode: edge.from.node } : {}),
-    ...(edge.to.kind === 'node' ? { toNode: edge.to.node } : {}),
-    ...(edge.from.kind === 'point' ? { fromPoint: [edge.from.point.x, edge.from.point.y] } : {}),
-    ...(edge.to.kind === 'point' ? { toPoint: [edge.to.point.x, edge.to.point.y] } : {}),
-  })
-  if (ends !== undefined) data.push(ends)
-  if (edge.bends !== undefined) {
-    data.push({ type: OCIF_TYPE.bends, points: edge.bends.map((b) => [b.x, b.y]) })
+/** What every element of a line-ish kind carries beyond its ends. */
+function decorations(element: {
+  readonly label?: string
+  readonly color?: string
+  readonly bends?: readonly { readonly x: number; readonly y: number }[]
+  readonly facets?: Record<string, unknown>
+}): OcifExtension[] {
+  const data: OcifExtension[] = [...facetEntries(element.facets)]
+  if (element.bends !== undefined) {
+    data.push({ type: OCIF_TYPE.bends, points: element.bends.map((b) => [b.x, b.y]) })
   }
   const rest = ours(OCIF_TYPE.edgeLabel, {
-    ...(edge.label === undefined ? {} : { label: edge.label }),
-    ...(edge.color === undefined ? {} : { color: edge.color }),
+    ...(element.label === undefined ? {} : { label: element.label }),
+    ...(element.color === undefined ? {} : { color: element.color }),
   })
   if (rest !== undefined) data.push(rest)
+  return data
+}
+
+/**
+ * An EDGE is a relation, so it is always an `@ocif/edge` — `start` and `end`
+ * are node ids, which is what that extension requires and what an edge now is.
+ *
+ * This function used to ask whether both ends named a node before it could
+ * say what the element became, and that question was the conflation
+ * ADR-0036 decision 2 removed. The branch is gone: the two concepts are two
+ * functions, the way OCIF has two extensions.
+ */
+function projectEdge(edge: CanvasEdge): OcifNode {
+  const data = decorations(edge)
+  data.push({
+    type: OCIF_TYPE.edge,
+    start: edge.from.node,
+    end: edge.to.node,
+    // Per-end markers collapse into one boolean; the ends themselves are
+    // carried below so this projection's own round trip keeps them.
+    directed: (edge.to.end ?? 'arrow') !== 'none' || (edge.from.end ?? 'none') !== 'none',
+  })
+  const ends = ours(OCIF_TYPE.edgeEnds, {
+    ...(edge.from.side === undefined ? {} : { fromSide: edge.from.side }),
+    ...(edge.to.side === undefined ? {} : { toSide: edge.to.side }),
+    ...(edge.from.end === undefined ? {} : { fromEnd: edge.from.end }),
+    ...(edge.to.end === undefined ? {} : { toEnd: edge.to.end }),
+  })
+  if (ends !== undefined) data.push(ends)
   return { id: edge.id, data }
+}
+
+/**
+ * A LINE is ink, so it is always an `@ocif/arrow` — a SHAPE, with `start` and
+ * `end` as coordinates. A node end resolves to that node's centre for the
+ * foreign reader and is carried on an extension of ours so the trip home
+ * keeps the attachment.
+ */
+function projectLine(line: CanvasLine, nodes: readonly SpatialNode[]): OcifNode {
+  const data = decorations(line)
+  const at = (end: CanvasLine['from']): number[] => {
+    if (end.kind === 'point') return [end.point.x, end.point.y]
+    const node = nodes.find((n) => n.id === end.node)
+    return node === undefined ? [0, 0] : centreOf(node)
+  }
+  data.push({
+    type: OCIF_TYPE.arrow,
+    start: at(line.from),
+    end: at(line.to),
+    // The one element shape OCIF gives a per-end marker. Written only where
+    // the model states one, so the projection reports the document rather
+    // than inventing a default a foreign reader would then read back.
+    ...(line.from.end === undefined ? {} : { startMarker: line.from.end }),
+    ...(line.to.end === undefined ? {} : { endMarker: line.to.end }),
+  })
+  const ends = ours(OCIF_TYPE.lineEnds, {
+    ...(line.from.kind === 'node' && line.from.side !== undefined
+      ? { fromSide: line.from.side }
+      : {}),
+    ...(line.to.kind === 'node' && line.to.side !== undefined ? { toSide: line.to.side } : {}),
+    ...(line.from.end === undefined ? {} : { fromEnd: line.from.end }),
+    ...(line.to.end === undefined ? {} : { toEnd: line.to.end }),
+    // The end's SHAPE, so a free end survives this projection's own round
+    // trip even though a foreign reader sees only an arrow.
+    fromKind: line.from.kind,
+    toKind: line.to.kind,
+    // The node an end names. An arrow has no `start`/`end` node ids to read it
+    // back from — a line with one free end still attaches to a box at the
+    // other, and the round trip lost that box until the property said so.
+    ...(line.from.kind === 'node' ? { fromNode: line.from.node } : {}),
+    ...(line.to.kind === 'node' ? { toNode: line.to.node } : {}),
+    ...(line.from.kind === 'point' ? { fromPoint: [line.from.point.x, line.from.point.y] } : {}),
+    ...(line.to.kind === 'point' ? { toPoint: [line.to.point.x, line.to.point.y] } : {}),
+  })
+  if (ends !== undefined) data.push(ends)
+  return { id: line.id, data }
 }
 
 export function toOcif(canvas: SpatialCanvas): OcifDocument {
@@ -255,7 +283,8 @@ export function toOcif(canvas: SpatialCanvas): OcifDocument {
     ocif: OCIF_VERSION,
     nodes: [
       ...projected.map((entry) => entry.node),
-      ...canvas.edges.map((edge) => projectEdge(edge, canvas.nodes)),
+      ...canvas.edges.map((edge) => projectEdge(edge)),
+      ...(canvas.lines ?? []).map((line) => projectLine(line, canvas.nodes)),
     ],
     ...(resources.length === 0 ? {} : { resources }),
     ...(canvasData.length === 0 ? {} : { data: canvasData }),
@@ -282,31 +311,49 @@ const arrowhead = (value: unknown): { end?: 'none' | 'arrow' } =>
   value === 'none' || value === 'arrow' ? { end: value } : {}
 
 /**
- * An endpoint as a FOREIGN reader would recover it — from `@ocif/edge`'s node
- * ids or `@ocif/arrow`'s coordinates, with the arrowhead read off the one
- * boolean OCIF gives a relation.
- *
- * This is what the ledger's `degraded` entries promise, and the only code path
- * that can be compared against them: the faithful path below reads our own
- * extension and would make every entry look native.
+ * A RELATION's end. `@ocif/edge` already states the node id, so the only thing
+ * our own extension adds is the side and the per-end arrowhead — and when it
+ * is absent, `directed` is the whole of what OCIF says about the heads.
  */
-function foreignEndpoint(
+function liftEdgeEnd(
   which: 'from' | 'to',
+  ends: OcifExtension | undefined,
   edge: OcifExtension | undefined,
-  arrow: OcifExtension | undefined,
-): CanvasEdge['from'] {
-  const key = which === 'from' ? 'start' : 'end'
-  const named = edge?.[key]
-  if (typeof named === 'string') {
+): EdgeEnd {
+  const named = edge?.[which === 'from' ? 'start' : 'end']
+  const node = typeof named === 'string' ? named : ''
+  if (ends === undefined) {
     // `directed` says the line points at its `end` and says nothing per end,
     // so this is the whole of what OCIF states about a relation's arrowheads.
     const directed = edge?.directed
     const head =
       typeof directed !== 'boolean' ? {} : arrowhead(directed && which === 'to' ? 'arrow' : 'none')
-    return { kind: 'node', node: named, ...head }
+    return { node, ...head }
   }
-  const coordinates = arrow?.[key]
-  if (Array.isArray(coordinates)) {
+  const side = ends[`${which}Side`]
+  return {
+    node,
+    ...(typeof side === 'string' ? { side: side as 'top' } : {}),
+    ...arrowhead(ends[`${which}End`]),
+  }
+}
+
+/**
+ * A LINE's end — the one that can still be a bare point, and the only place
+ * this projection still has to ask what shape an end is.
+ *
+ * With our extension absent it reads `@ocif/arrow`'s coordinates, which is
+ * what the ledger's `degraded` entries promise and the only code path that can
+ * be compared against them: the faithful path reads our own extension and
+ * would make every entry look native.
+ */
+function liftLineEnd(
+  which: 'from' | 'to',
+  ends: OcifExtension | undefined,
+  arrow: OcifExtension | undefined,
+): LineEnd {
+  if (ends === undefined) {
+    const coordinates = arrow?.[which === 'from' ? 'start' : 'end']
     const [x, y] = pair(coordinates, 0)
     return {
       kind: 'point',
@@ -314,31 +361,19 @@ function foreignEndpoint(
       ...arrowhead(arrow?.[which === 'from' ? 'startMarker' : 'endMarker']),
     }
   }
-  return { kind: 'node', node: '' }
-}
-
-function liftEndpoint(
-  which: 'from' | 'to',
-  ends: OcifExtension | undefined,
-  edge: OcifExtension | undefined,
-  arrow: OcifExtension | undefined,
-): CanvasEdge['from'] {
-  if (ends === undefined) return foreignEndpoint(which, edge, arrow)
-  const kind = ends[`${which}Kind`]
-  const side = ends[`${which}Side`]
   const end = ends[`${which}End`]
-  const tail = {
-    ...(typeof side === 'string' ? { side: side as 'top' } : {}),
-    ...arrowhead(end),
-  }
-  if (kind === 'point') {
+  if (ends[`${which}Kind`] === 'point') {
     const [x, y] = pair(ends[`${which}Point`], 0)
     return { kind: 'point', point: { x, y }, ...arrowhead(end) }
   }
-  // `@ocif/edge` states it for a relation; our own extension states it for an
-  // arrow, which has nowhere else to put it.
-  const named = ends[`${which}Node`] ?? edge?.[which === 'from' ? 'start' : 'end']
-  return { kind: 'node', node: typeof named === 'string' ? named : '', ...tail }
+  const named = ends[`${which}Node`]
+  const side = ends[`${which}Side`]
+  return {
+    kind: 'node',
+    node: typeof named === 'string' ? named : '',
+    ...(typeof side === 'string' ? { side: side as 'top' } : {}),
+    ...arrowhead(end),
+  }
 }
 
 /**
@@ -365,26 +400,42 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
   const resources = new Map((ocif.resources ?? []).map((r) => [r.id, r]))
   const nodes: SpatialNode[] = []
   const edges: CanvasEdge[] = []
+  const lines: CanvasLine[] = []
 
   for (const entry of ocif.nodes ?? []) {
     const edgeExt = extensionOf(entry.data, OCIF_TYPE.edge)
     const arrowExt = extensionOf(entry.data, OCIF_TYPE.arrow)
     if (edgeExt !== undefined || arrowExt !== undefined) {
-      const ends = extensionOf(entry.data, OCIF_TYPE.edgeEnds)
       const rest = extensionOf(entry.data, OCIF_TYPE.edgeLabel)
       const bends = extensionOf(entry.data, OCIF_TYPE.bends)?.points
       const facets = facetsFrom(entry.data)
-      edges.push({
+      const shared = {
         id: entry.id,
-        from: liftEndpoint('from', ends, edgeExt, arrowExt),
-        to: liftEndpoint('to', ends, edgeExt, arrowExt),
         ...(typeof rest?.color === 'string' ? { color: rest.color } : {}),
         ...(typeof rest?.label === 'string' ? { label: rest.label } : {}),
         ...(Array.isArray(bends)
           ? { bends: bends.map((b) => ({ x: pair(b, 0)[0], y: pair(b, 0)[1] })) }
           : {}),
         ...(facets === undefined ? {} : { facets }),
-      } as CanvasEdge)
+      }
+      // WHICH extension it carries decides which collection it joins, and
+      // that is the whole of the read side of ADR-0036 decision 2. An
+      // `@ocif/edge` is a relation; anything else drawn as a line is ink.
+      if (edgeExt !== undefined) {
+        const ends = extensionOf(entry.data, OCIF_TYPE.edgeEnds)
+        edges.push({
+          ...shared,
+          from: liftEdgeEnd('from', ends, edgeExt),
+          to: liftEdgeEnd('to', ends, edgeExt),
+        } as CanvasEdge)
+      } else {
+        const ends = extensionOf(entry.data, OCIF_TYPE.lineEnds)
+        lines.push({
+          ...shared,
+          from: liftLineEnd('from', ends, arrowExt),
+          to: liftLineEnd('to', ends, arrowExt),
+        } as CanvasLine)
+      }
       continue
     }
 
@@ -451,6 +502,8 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
   return {
     nodes,
     edges,
+    // Omitted when empty, matching what the model canonicalises to.
+    ...(lines.length === 0 ? {} : { lines }),
     ...(canvasFacets === undefined ? {} : { facets: canvasFacets }),
     ...(Array.isArray(comments) ? { comments: comments as SpatialCanvas['comments'] } : {}),
   } as SpatialCanvas

@@ -46,13 +46,13 @@ const nodes = [
 const edges: CanvasEdge[] = [
   {
     id: 'e-orange',
-    from: { kind: 'node' as const, node: 'yellow' },
-    to: { kind: 'node' as const, node: 'red' },
+    from: { node: 'yellow' },
+    to: { node: 'red' },
   },
   {
     id: 'e-red',
-    from: { kind: 'node' as const, node: 'red' },
-    to: { kind: 'node' as const, node: 'cyan' },
+    from: { node: 'red' },
+    to: { node: 'cyan' },
   },
 ]
 
@@ -68,8 +68,8 @@ describe('stub lane depth for shared sides', () => {
     const pair = [node('a', 0, 0, 100, 100), node('b', 300, 300, 100, 100)]
     const e: CanvasEdge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     }
     const anchors = assignEdgeAnchors(pair, [e])
     const routed = routeEdge(pair, e, 'orthogonal', anchors.get('e1'))

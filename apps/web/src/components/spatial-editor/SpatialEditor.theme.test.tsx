@@ -24,8 +24,8 @@ function themed(theme: string): SpatialCanvas {
     edges: [
       {
         id: 'e',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ],
     facets: { 'visual.theme/v0': { theme } },

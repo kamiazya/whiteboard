@@ -160,7 +160,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // one value: it is one thing with one meaning, so last-writer-wins per key
   // is the whole merge story, and two peers re-attaching the same end
   // converge on an end one of them chose rather than on a half of each.
-  'packages/loro-adapter/src/loro-bridge.ts': 1012,
+  'packages/loro-adapter/src/loro-bridge.ts': 1083,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -352,7 +352,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +8: `pullEdgeOntoOutlines` and `proposedEdgePath` each ask for a node
   // that may not be there, which is two lines apiece plus the sentence
   // saying a free end has no silhouette to be pulled onto.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2440,
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2444,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -364,14 +364,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // any computed routing (ADR-0035 slice 4). The route itself is
   // `bend-route.ts`; what lives here is choosing it.
   // +11 net, and the shape is worth reading: the reshape HOISTED three
-  // `endpointNode` reads out of O(nodes) filters on the routing path (760k
+  // `endNode` reads out of O(nodes) filters on the routing path (760k
   // calls per clustered layout, per the profile this rule records) and moved
   // the map lookup to model's own `nodeAtEnd`, deleting the local copy. What
   // is left is those hoists and the comments on them.
   // +16 for `rectAtEnd`: a free end is a DEGENERATE box at its point, which
   // is the whole of what lets this file draw one without a second routing
   // path beside the one it has.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2167,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2170,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.

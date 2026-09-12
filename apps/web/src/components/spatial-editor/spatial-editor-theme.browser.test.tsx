@@ -32,8 +32,8 @@ function twoNodeCanvasWithEdge(): SpatialCanvas {
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ],
   }

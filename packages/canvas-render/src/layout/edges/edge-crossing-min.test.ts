@@ -51,13 +51,13 @@ describe('crossing minimization', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e-orange',
-        from: { kind: 'node' as const, node: 'yellow' },
-        to: { kind: 'node' as const, node: 'red' },
+        from: { node: 'yellow' },
+        to: { node: 'red' },
       },
       {
         id: 'e-red',
-        from: { kind: 'node' as const, node: 'red' },
-        to: { kind: 'node' as const, node: 'cyan' },
+        from: { node: 'red' },
+        to: { node: 'cyan' },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
@@ -77,13 +77,13 @@ describe('crossing minimization', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'c' },
-        to: { kind: 'node' as const, node: 'd' },
+        from: { node: 'c' },
+        to: { node: 'd' },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
@@ -106,13 +106,13 @@ describe('frozen side overrides', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e-orange',
-        from: { kind: 'node' as const, node: 'yellow' },
-        to: { kind: 'node' as const, node: 'red' },
+        from: { node: 'yellow' },
+        to: { node: 'red' },
       },
       {
         id: 'e-red',
-        from: { kind: 'node' as const, node: 'red' },
-        to: { kind: 'node' as const, node: 'cyan' },
+        from: { node: 'red' },
+        to: { node: 'cyan' },
       },
     ]
     // Freeze the pre-optimization arrangement (both via Red's bottom): the
@@ -140,13 +140,13 @@ describe('edgeSideOverrides through layoutSpatialEdges', () => {
       edges: [
         {
           id: 'e-orange',
-          from: { kind: 'node' as const, node: 'yellow' },
-          to: { kind: 'node' as const, node: 'red' },
+          from: { node: 'yellow' },
+          to: { node: 'red' },
         },
         {
           id: 'e-red',
-          from: { kind: 'node' as const, node: 'red' },
-          to: { kind: 'node' as const, node: 'cyan' },
+          from: { node: 'red' },
+          to: { node: 'cyan' },
         },
       ],
       facets: { 'visual.edges/v0': { routing: 'orthogonal' as const } },
@@ -179,13 +179,13 @@ describe('optimization gate', () => {
     edges: [
       {
         id: 'e-orange',
-        from: { kind: 'node' as const, node: 'yellow' },
-        to: { kind: 'node' as const, node: 'red' },
+        from: { node: 'yellow' },
+        to: { node: 'red' },
       },
       {
         id: 'e-red',
-        from: { kind: 'node' as const, node: 'red' },
-        to: { kind: 'node' as const, node: 'cyan' },
+        from: { node: 'red' },
+        to: { node: 'cyan' },
       },
     ] as CanvasEdge[],
   })
@@ -201,8 +201,8 @@ describe('optimization gate', () => {
       )
       edges.push({
         id: `pad${i}`,
-        from: { kind: 'node' as const, node: `pa${i}` },
-        to: { kind: 'node' as const, node: `pb${i}` },
+        from: { node: `pa${i}` },
+        to: { node: `pb${i}` },
       })
     }
     return { nodes, edges }

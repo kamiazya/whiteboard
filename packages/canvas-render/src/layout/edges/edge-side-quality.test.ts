@@ -81,18 +81,18 @@ describe('self-overlap (retrace) cost', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'hair',
-        from: { kind: 'node' as const, node: 'm2' },
-        to: { kind: 'node' as const, node: 'm1' },
+        from: { node: 'm2' },
+        to: { node: 'm1' },
       },
       {
         id: 'c1',
-        from: { kind: 'node' as const, node: 'x1' },
-        to: { kind: 'node' as const, node: 'x2' },
+        from: { node: 'x1' },
+        to: { node: 'x2' },
       },
       {
         id: 'c2',
-        from: { kind: 'node' as const, node: 'x3' },
-        to: { kind: 'node' as const, node: 'x4' },
+        from: { node: 'x3' },
+        to: { node: 'x4' },
       },
     ]
     const { path } = routed(nodes, edges, 'hair')
@@ -115,13 +115,13 @@ describe('realized-bend tie-break', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'main',
-        from: { kind: 'node' as const, node: 'src' },
-        to: { kind: 'node' as const, node: 'dst' },
+        from: { node: 'src' },
+        to: { node: 'dst' },
       },
       {
         id: 'vert',
-        from: { kind: 'node' as const, node: 'up' },
-        to: { kind: 'node' as const, node: 'down' },
+        from: { node: 'up' },
+        to: { node: 'down' },
       },
     ]
     const { path } = routed(nodes, edges, 'main')
@@ -140,8 +140,8 @@ describe('realized-bend tie-break', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'main',
-        from: { kind: 'node' as const, node: 'src' },
-        to: { kind: 'node' as const, node: 'dst' },
+        from: { node: 'src' },
+        to: { node: 'dst' },
       },
     ]
     const { sides } = routed(nodes, edges, 'main')

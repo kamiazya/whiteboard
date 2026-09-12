@@ -18,8 +18,8 @@ import {
   type CanvasEdge,
   canvasCommentSchema,
   canvasEdgeSchema,
-  endpointIn,
-  endpointNodes,
+  endIn,
+  endNodes,
   type nodePatchFieldsSchema,
   type SpatialCanvas,
   type SpatialNode,
@@ -486,7 +486,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           const group = groupNamed(index, opName, target.within)
           const inside = new Set(nodes.filter(enclosedBy(group)).map((node) => node.id))
           const ids = edges
-            .filter((edge) => endpointIn(edge.from, inside) && endpointIn(edge.to, inside))
+            .filter((edge) => endIn(edge.from, inside) && endIn(edge.to, inside))
             .map((edge) => edge.id)
           if (ids.length === 0) fail(index, opName, `no edge has both ends inside "${group.id}"`)
           return ids
@@ -691,9 +691,9 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // "apply exactly the op I was handed" would store a board that
             // cannot be loaded.
             for (const edge of edges) {
-              if (endpointIn(edge.from, ids) || endpointIn(edge.to, ids)) touchedEdges.add(edge.id)
+              if (endIn(edge.from, ids) || endIn(edge.to, ids)) touchedEdges.add(edge.id)
             }
-            edges = edges.filter((edge) => !endpointIn(edge.from, ids) && !endpointIn(edge.to, ids))
+            edges = edges.filter((edge) => !endIn(edge.from, ids) && !endIn(edge.to, ids))
             nodes = nodes.filter((node) => !ids.has(node.id))
             for (const id of ids) {
               nodeLocks.delete(id)
@@ -715,7 +715,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // A FREE end names no node, so there is nothing to be missing —
             // the existence check is about a reference, and a point is not one
             // (ADR-0035 slice 3).
-            for (const endpoint of endpointNodes(draft)) {
+            for (const endpoint of endNodes(draft)) {
               if (nodeAt(endpoint) === undefined) {
                 fail(
                   index,
@@ -738,7 +738,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               fail(index, op.op, `edge "${op.id}" is locked; unlock it with an edge.lock op first`)
             }
             const merged = { ...edge, ...op.patch }
-            for (const endpoint of endpointNodes(merged)) {
+            for (const endpoint of endNodes(merged)) {
               if (nodeAt(endpoint) === undefined) {
                 fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
               }
@@ -880,7 +880,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               for (const id of keep) {
                 const edge = edgeAt(id)
                 if (edge === undefined) fail(index, op.op, `edge "${id}" is not on the canvas`)
-                for (const endpoint of endpointNodes(edge)) {
+                for (const endpoint of endNodes(edge)) {
                   if (!members.has(endpoint)) {
                     fail(
                       index,
@@ -893,12 +893,11 @@ export function createCanvasEditTool(deps: ServerDeps) {
             }
             const removedEdges = new Set<string>()
             for (const edge of edges) {
-              const strandedBy =
-                endpointIn(edge.from, droppedIds) || endpointIn(edge.to, droppedIds)
+              const strandedBy = endIn(edge.from, droppedIds) || endIn(edge.to, droppedIds)
               const unlistedAmongMembers =
                 keep !== undefined &&
-                endpointIn(edge.from, members) &&
-                endpointIn(edge.to, members) &&
+                endIn(edge.from, members) &&
+                endIn(edge.to, members) &&
                 !keep.has(edge.id)
               if (strandedBy || unlistedAmongMembers) {
                 removedEdges.add(edge.id)

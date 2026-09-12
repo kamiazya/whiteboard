@@ -20,7 +20,7 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endpointIn } from '@kamiazya/whiteboard-model'
+import { endIn } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
@@ -345,7 +345,7 @@ export function useDragLayers({
     const carried = dragStatic.carried
     const carriedEdgeIds = new Set(
       canvas.edges
-        .filter((edge) => endpointIn(edge.from, carried) || endpointIn(edge.to, carried))
+        .filter((edge) => endIn(edge.from, carried) || endIn(edge.to, carried))
         .map((edge) => edge.id),
     )
     const frozenSides = new Map(

@@ -1,5 +1,5 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endpointNode } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 
 /**
  * The part of a canvas a `#fragment` names, as a canvas of its own.
@@ -37,8 +37,8 @@ export function selectCanvasFragment(
     // A fragment keeps an edge only when BOTH ends are inside it. A free end
     // names nothing to be inside, so an edge carrying one never travels.
     edges: canvas.edges.filter((edge) => {
-      const from = endpointNode(edge.from)
-      const to = endpointNode(edge.to)
+      const from = endNode(edge.from)
+      const to = endNode(edge.to)
       return from !== undefined && to !== undefined && ids.has(from) && ids.has(to)
     }),
   }

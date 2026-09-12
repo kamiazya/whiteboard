@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { canvasEdgeSchema, endpointNode, spatialNodeSchema } from './spatial.js'
+import { canvasEdgeSchema, endNode, spatialNodeSchema } from './spatial.js'
 
 /**
  * The typed clipboard envelope for copy/paste of canvas fragments
@@ -72,7 +72,7 @@ export const clipboardFragmentSchema = z
       // A point end names nothing, so it is never outside the fragment: it
       // travels with the edge exactly as a coordinate does.
       for (const side of ['from', 'to'] as const) {
-        const node = endpointNode(edge[side])
+        const node = endNode(edge[side])
         if (node === undefined || seen.has(node)) continue
         ctx.addIssue({
           code: 'custom',
@@ -84,7 +84,7 @@ export const clipboardFragmentSchema = z
     value.cut?.boundaryEdges.forEach((edge, index) => {
       // A boundary edge must CROSS the border: exactly one endpoint inside.
       const inFragment = (['from', 'to'] as const).filter((side) => {
-        const node = endpointNode(edge[side])
+        const node = endNode(edge[side])
         return node !== undefined && seen.has(node)
       }).length
       if (inFragment !== 1) {

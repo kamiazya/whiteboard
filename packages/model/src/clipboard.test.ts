@@ -17,8 +17,8 @@ describe('clipboardFragmentSchema', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n2' },
+          from: { node: 'n1' },
+          to: { node: 'n2' },
         },
       ],
       files: {
@@ -77,8 +77,8 @@ describe('clipboardFragmentSchema', () => {
         edges: [
           {
             id: 'e1',
-            from: { kind: 'node' as const, node: 'n1' },
-            to: { kind: 'node' as const, node: 'ghost' },
+            from: { node: 'n1' },
+            to: { node: 'ghost' },
           },
         ],
       }).success,
@@ -97,8 +97,8 @@ describe('clipboardFragmentSchema', () => {
         boundaryEdges: [
           {
             id: 'e-b',
-            from: { kind: 'node' as const, node: 'n1' },
-            to: { kind: 'node' as const, node: 'outside' },
+            from: { node: 'n1' },
+            to: { node: 'outside' },
           },
         ],
       },
@@ -116,8 +116,8 @@ describe('clipboardFragmentSchema', () => {
           boundaryEdges: [
             {
               id: 'e-b',
-              from: { kind: 'node' as const, node: 'n1' },
-              to: { kind: 'node' as const, node: 'n2' },
+              from: { node: 'n1' },
+              to: { node: 'n2' },
             },
           ],
         },
@@ -131,8 +131,8 @@ describe('clipboardFragmentSchema', () => {
           boundaryEdges: [
             {
               id: 'e-b',
-              from: { kind: 'node' as const, node: 'x' },
-              to: { kind: 'node' as const, node: 'y' },
+              from: { node: 'x' },
+              to: { node: 'y' },
             },
           ],
         },

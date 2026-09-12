@@ -6,7 +6,8 @@
 // contract lives in the engine only so that ADR-0013 decision 8 can build on
 // it without moving anything.
 import type { PaletteTokens, ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
@@ -131,7 +132,7 @@ export function createThemedAppearance(
     ...base,
     mode,
     resolveNode,
-    resolveEdge: (edge: CanvasEdge) => {
+    resolveEdge: (edge: RoutableElement) => {
       const resolved = base.resolveEdge(edge)
       return resolved === undefined ? undefined : { ...resolved, ...weight, ...glow }
     },

@@ -42,8 +42,8 @@ const canvas: SpatialCanvas = {
   edges: [
     {
       id: 'e',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
   ],
   comments: [{ id: 'k', x: 50, y: 30, text: 'note', targetNodeId: 'a' }],

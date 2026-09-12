@@ -18,18 +18,18 @@ const NODES: SpatialNode[] = [
 const EDGES: CanvasEdge[] = [
   {
     id: 'A-B',
-    from: { kind: 'node' as const, node: 'A' },
-    to: { kind: 'node' as const, node: 'B' },
+    from: { node: 'A' },
+    to: { node: 'B' },
   },
   {
     id: 'B-C',
-    from: { kind: 'node' as const, node: 'B' },
-    to: { kind: 'node' as const, node: 'C' },
+    from: { node: 'B' },
+    to: { node: 'C' },
   },
   {
     id: 'A-C',
-    from: { kind: 'node' as const, node: 'A' },
-    to: { kind: 'node' as const, node: 'C' },
+    from: { node: 'A' },
+    to: { node: 'C' },
   },
 ]
 

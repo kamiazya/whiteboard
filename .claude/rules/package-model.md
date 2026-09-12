@@ -88,6 +88,33 @@ paths:
   `mcp-server`'s `schema-references.test.ts` is what looks — no dangling or non-local reference
   anywhere in the table, and the endpoint resolving to the union it names rather than merely to
   something.
+- **An EDGE is a RELATION and a LINE is INK**
+  ([ADR-0036](../../docs/contributing/adr/0036-ocif-projection.md) decision 2). `canvasEdgeSchema`'s
+  ends are `edgeEndSchema` — `{ node, side?, end? }`, a plain object with no `kind`, because a
+  one-armed union discriminates nothing and would cost a key on every stored end. The
+  node-or-point union is `lineEndSchema`, on `canvasLineSchema`, and `canvas.lines` is where ink
+  lives. A line may join two nodes: that is the expressiveness the split buys, and where freehand
+  lands rather than growing a third concept.
+  - **Two collections rather than one `kind`-tagged element, and the reason is measured.** zod v4's
+    `discriminatedUnion` has no `.omit()` or `.partial()` AT ALL (probed), so a tagged element would
+    force `edgePatchFieldsSchema` to be hand-written beside `canvasEdgeSchema` — the exact drift
+    this package exists to prevent. `linePatchFieldsSchema` is derived the same way the edge one is.
+  - **`lines` is OPTIONAL, not `.default([])`.** The default makes the field required on the OUTPUT
+    type, and this repo builds 925 canvas literals across 295 files; every one would have gained a
+    `lines: []` saying nothing, and a diff a reviewer cannot read is a diff nobody reviews. Readers
+    spell `canvas.lines ?? []`, as they already do for `comments`.
+  - **Both end schemas are REGISTERED** (`EdgeEnd`, `LineEnd`), and the edge one had to be. Measured
+    when the split landed: leaving `edgeEndSchema` unregistered took the visible tool table
+    37,796 -> 38,317 bytes and `parameters` 273 -> 285 — a regression on a strictly simpler schema,
+    because the union it replaced had been carrying a `$defs` entry and a plain object does not.
+    Registered, the table came in at 36,945, BELOW where it started. The saving belongs to the
+    repetition, not to the shape.
+  - Ids are unique ACROSS both collections, not per collection: an anchor names an element id (a
+    comment's `targetEdgeId`, a proposal's change), so two elements answering to one id makes an
+    anchor ambiguous rather than merely untidy.
+  - Read either kind of end through `endNode` / `endNodes` / `endIn` / `endSide` / `nodeAtEnd` /
+    `isSelfLoop`, which all take `LineEnd | EdgeEnd` — a reader walking both collections should
+    never have to know which it is holding.
 - **This package no longer spells `x-whiteboard` anywhere.** ADR-0035 moved the interchange
   format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
   format's extension key is three ordinary fields:

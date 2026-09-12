@@ -29,8 +29,8 @@ it('re-pairs the arrival onto the axis the moved departure did not take', () => 
   const edges: CanvasEdge[] = [
     {
       id: 'e',
-      from: { kind: 'node' as const, node: 'n0' },
-      to: { kind: 'node' as const, node: 'n2' },
+      from: { node: 'n0' },
+      to: { node: 'n2' },
     },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')

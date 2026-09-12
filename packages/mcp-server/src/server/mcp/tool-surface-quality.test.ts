@@ -170,7 +170,7 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 18675,
+        wireBytes: 21741,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -188,7 +188,7 @@ describe('what the tool table costs to read', () => {
       // keeps two columns for.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 21775,
+        wireBytes: 20560,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -294,8 +294,8 @@ describe('what the tool table costs to read', () => {
       // `reused` option, so `z.toJSONSchema(..., { reused: 'ref' })` never
       // reaches the published schema. A registry `id` does.
       wb_canvas_edit: {
-        visibleBytes: 14618,
-        wireBytes: 37211,
+        visibleBytes: 13767,
+        wireBytes: 35135,
         descriptionWords: 169,
         parameters: 149,
         undescribed: 117,
@@ -307,7 +307,7 @@ describe('what the tool table costs to read', () => {
       // the model nothing on every turn. Same for `canvas_view` above.
       wb_canvas_snapshot: {
         visibleBytes: 705,
-        wireBytes: 4726,
+        wireBytes: 4229,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
@@ -558,8 +558,8 @@ describe('what the tool table costs to read', () => {
       // +274 for `workspaceId` on wb_facet_list (足場4b): the one parameter
       // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
       // once in the table and never per stencil.
-      visibleBytes: 37796,
-      wireBytes: 111896,
+      visibleBytes: 36945,
+      wireBytes: 111174,
       parameters: 273,
       undescribed: 185,
     })

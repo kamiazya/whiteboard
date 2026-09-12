@@ -27,12 +27,10 @@ const edge = (
 ): CanvasEdge => ({
   id: 'e1',
   from: {
-    kind: 'node' as const,
     node: from,
     ...(sides.fromSide === undefined ? {} : { side: sides.fromSide }),
   },
   to: {
-    kind: 'node' as const,
     node: to,
     ...(sides.toSide === undefined ? {} : { side: sides.toSide }),
   },

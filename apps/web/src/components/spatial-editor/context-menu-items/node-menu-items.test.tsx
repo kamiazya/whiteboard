@@ -199,8 +199,8 @@ describe('nodeMenuItems', () => {
       edges: [
         {
           id: 'ab',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
     }

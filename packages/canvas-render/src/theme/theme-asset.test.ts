@@ -134,8 +134,8 @@ describe('stroke width tokens', () => {
     expect(
       themed.resolveEdge({
         id: 'e',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       })?.strokeWidth,
     ).toBe(1.4)
     expect(themed.resolveLabel().strokeWidth).toBeUndefined()
@@ -179,8 +179,8 @@ describe('glow tokens', () => {
     expect(
       themed.resolveEdge({
         id: 'e',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       })?.glow,
     ).toEqual({
       radiusPx: 6,
@@ -206,8 +206,8 @@ describe('glow tokens', () => {
     expect(
       themed.resolveEdge({
         id: 'e',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       })?.glow,
     ).toBeUndefined()
   })

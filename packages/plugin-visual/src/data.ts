@@ -11,7 +11,6 @@ import {
   namespacedIdSchema,
 } from '@kamiazya/whiteboard-facet-engine'
 import type {
-  CanvasEdge,
   EdgeRoutingStyle,
   ExtensionFacets,
   LineJumps,
@@ -22,6 +21,7 @@ import {
   edgeRoutingStyleSchema,
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
+import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
@@ -555,7 +555,7 @@ export function resolveEffectiveCanvasEdgeStyle(
  */
 export function resolveEdgeStyle(
   canvas: SpatialCanvas,
-  edge: CanvasEdge,
+  edge: RoutableElement,
   registry: FacetRegistry = bundledFacetRegistry,
 ): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
   const own = resolveEdgeOwnStyle(edge, registry)
@@ -573,7 +573,9 @@ export function resolveEdgeStyle(
  * the edge actually holds, and a resolved value cannot say.
  */
 export function resolveEdgeOwnStyle(
-  edge: CanvasEdge,
+  // Either element: a LINE carries the same facet bucket an edge does, and
+  // what this reads is the bucket (ADR-0036 decision 2).
+  edge: RoutableElement,
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualEdgesFacet {
   const stored = edge.facets?.[VISUAL_EDGES_KEY]

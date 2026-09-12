@@ -2,7 +2,7 @@
 // menu's Duplicate item clone the selection as ONE batch command —
 // reminted ids, +16px offset, edge properties preserved, copies selected.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endpointIn } from '@kamiazya/whiteboard-model'
+import { endIn } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -19,8 +19,8 @@ const initial: SpatialCanvas = {
   edges: [
     {
       id: 'ab',
-      from: { kind: 'node' as const, node: 'a', side: 'right' as const },
-      to: { kind: 'node' as const, node: 'b', side: 'left' as const },
+      from: { node: 'a', side: 'right' as const },
+      to: { node: 'b', side: 'left' as const },
       label: 'kept-label',
       color: '3',
     },
@@ -105,8 +105,8 @@ it('duplicating a multi-selection keeps the connecting edge WITH its properties,
   const copyIds = new Set(latest.canvas.nodes.slice(2).map((n) => n.id))
   const copiedEdge = latest.canvas.edges[1]
   expect(copiedEdge.id).not.toBe('ab')
-  expect(endpointIn(copiedEdge.from, copyIds)).toBe(true)
-  expect(endpointIn(copiedEdge.to, copyIds)).toBe(true)
+  expect(endIn(copiedEdge.from, copyIds)).toBe(true)
+  expect(endIn(copiedEdge.to, copyIds)).toBe(true)
   // A pinned side rides ON the endpoint (ADR-0035 slice 3), so what the copy
   // must keep is the endpoint's own `side`, not a sibling key of the edge.
   expect(copiedEdge.from).toMatchObject({ side: 'right' })

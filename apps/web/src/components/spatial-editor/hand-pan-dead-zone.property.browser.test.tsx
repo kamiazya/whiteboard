@@ -86,8 +86,8 @@ const board: SpatialCanvas = {
   edges: [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 't1' },
-      to: { kind: 'node' as const, node: 't2' },
+      from: { node: 't1' },
+      to: { node: 't2' },
     },
   ],
 }

@@ -12,7 +12,7 @@
 // are written against that consequence rather than against the helper: what a
 // reader cares about is that the line reaches the point and stops there.
 
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasLine, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 
@@ -28,10 +28,10 @@ const box = (id: string, x: number, y: number): SpatialNode => ({
 
 const last = <T>(items: readonly T[]): T => items[items.length - 1] as T
 
-describe('an edge that ends at a point', () => {
+describe('a line that ends at a point', () => {
   it('draws a line that terminates exactly on the point', () => {
     const nodes = [box('a', 0, 0)]
-    const edge: CanvasEdge = {
+    const edge: CanvasLine = {
       id: 'e',
       from: { kind: 'node', node: 'a' },
       to: { kind: 'point', point: { x: 400, y: 30 } },
@@ -82,7 +82,7 @@ describe('an edge that ends at a point', () => {
     const routed = routeEdge([box('a', 0, 0)], {
       id: 'e',
       from: { kind: 'node', node: 'a' },
-      to: { kind: 'node', node: 'ghost' },
+      to: { node: 'ghost' },
     })
     expect(routed.path).toEqual([
       { x: 0, y: 0 },

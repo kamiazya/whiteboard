@@ -80,8 +80,8 @@ describe('parseViewerScene', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'missing' },
+          from: { node: 'a' },
+          to: { node: 'missing' },
         },
       ],
     }

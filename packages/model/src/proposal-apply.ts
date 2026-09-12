@@ -1,6 +1,6 @@
 import type { BodyProposedChange, SpatialProposedChange } from './proposal.js'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from './spatial.js'
-import { endpointNode } from './spatial.js'
+import { endNode } from './spatial.js'
 
 /**
  * What adopting a proposed change MEANS, and whether it still fits (ADR-0029
@@ -61,8 +61,7 @@ export function applyCanvasChange(
         ...canvas,
         nodes: canvas.nodes.filter((node) => node.id !== change.nodeId),
         edges: canvas.edges.filter(
-          (edge) =>
-            endpointNode(edge.from) !== change.nodeId && endpointNode(edge.to) !== change.nodeId,
+          (edge) => endNode(edge.from) !== change.nodeId && endNode(edge.to) !== change.nodeId,
         ),
       }
     }

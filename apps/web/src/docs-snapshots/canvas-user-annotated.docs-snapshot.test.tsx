@@ -35,8 +35,8 @@ const scene: SpatialCanvas = {
     ...ARCHITECTURE_SCENE.edges,
     {
       id: 'review-note-to-plugin-group',
-      from: { kind: 'node' as const, node: 'review-note' },
-      to: { kind: 'node' as const, node: 'plugin-group', end: 'arrow' as const },
+      from: { node: 'review-note' },
+      to: { node: 'plugin-group', end: 'arrow' as const },
       color: '1',
     },
   ],

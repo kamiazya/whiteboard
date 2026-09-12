@@ -40,8 +40,8 @@ const board = (routing: string | undefined): SpatialCanvas => ({
   edges: [
     {
       id: 'e',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
       ...(routing === undefined ? {} : { facets: { 'demo.route/v0': { name: routing } } }),
     },
   ],

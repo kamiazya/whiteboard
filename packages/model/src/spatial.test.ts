@@ -161,8 +161,8 @@ describe('canvasEdgeSchema', () => {
     expect(
       canvasEdgeSchema.safeParse({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'n1' },
-        to: { kind: 'node' as const, node: 'n2' },
+        from: { node: 'n1' },
+        to: { node: 'n2' },
       }).success,
     ).toBe(true)
   })
@@ -170,8 +170,8 @@ describe('canvasEdgeSchema', () => {
   it('accepts a full edge', () => {
     const result = canvasEdgeSchema.safeParse({
       id: 'e1',
-      from: { kind: 'node' as const, node: 'n1', side: 'top', end: 'none' as const },
-      to: { kind: 'node' as const, node: 'n2', side: 'bottom', end: 'arrow' as const },
+      from: { node: 'n1', side: 'top', end: 'none' as const },
+      to: { node: 'n2', side: 'bottom', end: 'arrow' as const },
       color: '1',
       label: 'connects',
     })
@@ -182,26 +182,22 @@ describe('canvasEdgeSchema', () => {
     expect(
       canvasEdgeSchema.safeParse({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'n1', side: 'north' },
-        to: { kind: 'node' as const, node: 'n2' },
+        from: { node: 'n1', side: 'north' },
+        to: { node: 'n2' },
       }).success,
     ).toBe(false)
     expect(
       canvasEdgeSchema.safeParse({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'n1' },
-        to: { kind: 'node' as const, node: 'n2', end: 'diamond' },
+        from: { node: 'n1' },
+        to: { node: 'n2', end: 'diamond' },
       }).success,
     ).toBe(false)
   })
 
   it('rejects a missing fromNode or toNode', () => {
-    expect(
-      canvasEdgeSchema.safeParse({ id: 'e1', to: { kind: 'node' as const, node: 'n2' } }).success,
-    ).toBe(false)
-    expect(
-      canvasEdgeSchema.safeParse({ id: 'e1', from: { kind: 'node' as const, node: 'n1' } }).success,
-    ).toBe(false)
+    expect(canvasEdgeSchema.safeParse({ id: 'e1', to: { node: 'n2' } }).success).toBe(false)
+    expect(canvasEdgeSchema.safeParse({ id: 'e1', from: { node: 'n1' } }).success).toBe(false)
   })
 })
 
@@ -215,8 +211,8 @@ describe('spatialCanvasSchema', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n2' },
+          from: { node: 'n1' },
+          to: { node: 'n2' },
         },
       ],
     })
@@ -237,13 +233,13 @@ describe('spatialCanvasSchema', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n2' },
+          from: { node: 'n1' },
+          to: { node: 'n2' },
         },
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n2' },
-          to: { kind: 'node' as const, node: 'n1' },
+          from: { node: 'n2' },
+          to: { node: 'n1' },
         },
       ],
     })
@@ -280,8 +276,8 @@ describe('spatialCanvasSchema', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n2' },
+          from: { node: 'n1' },
+          to: { node: 'n2' },
         },
       ],
     })
@@ -292,8 +288,8 @@ describe('spatialCanvasSchema', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n2' },
+          from: { node: 'n1' },
+          to: { node: 'n2' },
         },
       ],
     })

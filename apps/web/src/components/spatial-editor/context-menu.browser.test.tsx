@@ -1,4 +1,4 @@
-import { endpointSide } from '@kamiazya/whiteboard-model'
+import { endSide } from '@kamiazya/whiteboard-model'
 // The OOUI object-action surface: right-click a node for its actions,
 // right-click empty space to create "here". Real pointer input throughout —
 // synthetic-event-only coverage is how this editor's first-touch bugs
@@ -160,8 +160,8 @@ const edgeStart: SpatialCanvas = {
   edges: [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
       label: 'link',
     },
   ],
@@ -297,12 +297,12 @@ it('the side option rows pin an endpoint directly, without cycling', async () =>
 
   // Direct pick inside the "From side" group — one tap to any side.
   clickOption(container, 'From side', 'Bottom')
-  await vi.waitFor(() => expect(endpointSide(latest.canvas.edges[0].from)).toBe('bottom'))
+  await vi.waitFor(() => expect(endSide(latest.canvas.edges[0].from)).toBe('bottom'))
   expect(latest.commands).toContain('set-edge-side')
 
   // Menu is still open — pin the other endpoint in the same visit.
   clickOption(container, 'To side', 'Top')
-  await vi.waitFor(() => expect(endpointSide(latest.canvas.edges[0].to)).toBe('top'))
+  await vi.waitFor(() => expect(endSide(latest.canvas.edges[0].to)).toBe('top'))
 
   // And back to auto removes the pin.
   clickOption(container, 'From side', 'Auto')
@@ -474,13 +474,13 @@ it('the Color row from a multi-selection recolors every member and the edges bet
     edges: [
       {
         id: 'ab',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'bc',
-        from: { kind: 'node' as const, node: 'b' },
-        to: { kind: 'node' as const, node: 'c' },
+        from: { node: 'b' },
+        to: { node: 'c' },
       },
     ],
   }

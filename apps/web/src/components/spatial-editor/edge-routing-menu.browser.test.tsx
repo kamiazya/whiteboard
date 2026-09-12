@@ -29,8 +29,8 @@ const initial: SpatialCanvas = {
   edges: [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
   ],
 }
@@ -161,13 +161,13 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'c' },
-        to: { kind: 'node' as const, node: 'd' },
+        from: { node: 'c' },
+        to: { node: 'd' },
       },
     ],
   }

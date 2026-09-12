@@ -40,12 +40,14 @@ describe('censusSpatialModel', () => {
 
   it('names every field position the model can hold', () => {
     expect(census.paths).toContain('nodes[].x')
-    // BOTH arms of the endpoint union: the census's whole job on a union is
-    // to report the positions a document can hold across every branch, and a
-    // walk that stopped at the first arm would under-report the model by
-    // exactly the arm ADR-0035 slice 3 added.
+    // An edge's end is a node and nothing else since ADR-0036 decision 2.
     expect(census.paths).toContain('edges[].from.node')
-    expect(census.paths).toContain('edges[].from.point.x')
+    // BOTH arms of a LINE's end union, which is where the choice now lives:
+    // the census's whole job on a union is to report the positions a document
+    // can hold across every branch, and a walk that stopped at the first arm
+    // would under-report the model by exactly the arm that makes ink ink.
+    expect(census.paths).toContain('lines[].from.node')
+    expect(census.paths).toContain('lines[].from.point.x')
     expect(census.paths).toContain('comments[].text')
     expect(census.paths).toContain('nodes[].embed.documentId')
   })
@@ -57,7 +59,12 @@ describe('censusSpatialModel', () => {
   })
 
   it('leaves the facet buckets unexpanded when no plugin is supplied', () => {
-    expect(census.facetBuckets).toEqual(['edges[].facets/*', 'facets/*', 'nodes[].facets/*'])
+    expect(census.facetBuckets).toEqual([
+      'edges[].facets/*',
+      'facets/*',
+      'lines[].facets/*',
+      'nodes[].facets/*',
+    ])
     expect(census.facet).toEqual([])
   })
 

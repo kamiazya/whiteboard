@@ -66,7 +66,7 @@
  * follow); out-of-scope units likewise.
  */
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
-import { endpointNode } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 import {
   buildUnits,
   overlapsWithMargin,
@@ -305,10 +305,10 @@ function orderRowsByEdges(units: Unit[], edges: readonly Pick<CanvasEdge, 'from'
     const along: Unit[] = []
     for (const edge of edges) {
       const otherId =
-        endpointNode(edge.from) === hub.rootId
-          ? endpointNode(edge.to)
-          : endpointNode(edge.to) === hub.rootId
-            ? endpointNode(edge.from)
+        endNode(edge.from) === hub.rootId
+          ? endNode(edge.to)
+          : endNode(edge.to) === hub.rootId
+            ? endNode(edge.from)
             : undefined
       if (otherId === undefined) continue
       const other = unitOf.get(otherId)

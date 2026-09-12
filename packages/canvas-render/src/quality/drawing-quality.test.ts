@@ -403,8 +403,14 @@ describe('drawing quality across the corpus', () => {
       ...unpinned.canvas,
       edges: unpinned.canvas.edges.map((edge) => ({
         ...edge,
-        from: edge.from.kind === 'node' ? { ...edge.from, side: undefined } : edge.from,
-        to: edge.to.kind === 'node' ? { ...edge.to, side: undefined } : edge.to,
+        from:
+          ('kind' in edge.from ? edge.from.kind : 'node') === 'node'
+            ? { ...edge.from, side: undefined }
+            : edge.from,
+        to:
+          ('kind' in edge.to ? edge.to.kind : 'node') === 'node'
+            ? { ...edge.to, side: undefined }
+            : edge.to,
       })),
     }
     const free = scoreDrawing(

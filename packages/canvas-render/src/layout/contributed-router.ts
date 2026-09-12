@@ -5,14 +5,15 @@
  * are a plugin's, and what selects one is the contribution set the composer
  * resolved, which the edge cluster deliberately knows nothing about.
  */
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endpointNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 import type {
   BoundingBox,
   EdgeRouteRequest,
   EdgeRouter,
   RenderContribution,
   ResolvedEdgeNode,
+  RoutableElement,
 } from '@kamiazya/whiteboard-scene'
 import type { EdgeAnchorPair } from './edges/spatial-edges.js'
 
@@ -60,21 +61,21 @@ const boxOf = (node: SpatialNode): BoundingBox => ({
  */
 export function contributedRoute(
   canvas: SpatialCanvas,
-  edge: CanvasEdge,
+  edge: RoutableElement,
   resolution: RouterResolution,
   anchors: EdgeAnchorPair | undefined,
 ): ResolvedEdgeNode | undefined {
   const router = routerFor(canvas, edge, resolution)
   if (router === undefined) return undefined
-  const from = canvas.nodes.find((node) => node.id === endpointNode(edge.from))
-  const to = canvas.nodes.find((node) => node.id === endpointNode(edge.to))
+  const from = canvas.nodes.find((node) => node.id === endNode(edge.from))
+  const to = canvas.nodes.find((node) => node.id === endNode(edge.to))
   if (from === undefined || to === undefined) return undefined
   const request: EdgeRouteRequest = {
     edge,
     from: boxOf(from),
     to: boxOf(to),
     obstacles: canvas.nodes
-      .filter((node) => node.id !== endpointNode(edge.from) && node.id !== endpointNode(edge.to))
+      .filter((node) => node.id !== endNode(edge.from) && node.id !== endNode(edge.to))
       .map(boxOf),
     // Passed only when BOTH sides resolved, so the contract can promise a
     // router that anchors means sides. A half-answer would make every router
@@ -112,7 +113,7 @@ export function contributedRoute(
  */
 function routerFor(
   canvas: SpatialCanvas,
-  edge: CanvasEdge,
+  edge: RoutableElement,
   resolution: RouterResolution,
 ): EdgeRouter | undefined {
   for (const contribution of resolution.contributions) {

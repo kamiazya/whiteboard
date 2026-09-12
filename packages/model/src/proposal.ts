@@ -2,7 +2,12 @@ import { z } from 'zod'
 import { annotationIdSchema, textAnchorSchema } from './annotation.js'
 import { nodeIdSchema } from './ids.js'
 import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
-import { canvasColorSchema, canvasEdgeSchema, spatialNodeSchema } from './spatial.js'
+import {
+  canvasColorSchema,
+  canvasEdgeSchema,
+  canvasLineSchema,
+  spatialNodeSchema,
+} from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
 /**
@@ -92,7 +97,21 @@ export type NodePatchFields = z.infer<typeof nodePatchFieldsSchema>
  */
 export const edgePatchFieldsSchema = canvasEdgeSchema.omit({ id: true }).partial().strict()
 
+/**
+ * The same, for a LINE (ADR-0036 decision 2). Derived rather than written
+ * beside `canvasLineSchema`, for the reason the edge one is: a proposal
+ * STORES a patch, so a second hand-written declaration is the drift this
+ * package exists to prevent.
+ *
+ * It is a separate schema rather than one union over both because zod v4's
+ * `discriminatedUnion` has no `.omit()` or `.partial()` at all — measured, and
+ * the reason the split is two collections rather than one tagged element.
+ */
+export const linePatchFieldsSchema = canvasLineSchema.omit({ id: true }).partial().strict()
+
 export type EdgePatchFields = z.infer<typeof edgePatchFieldsSchema>
+
+export type LinePatchFields = z.infer<typeof linePatchFieldsSchema>
 
 /**
  * Where one change stands. The DECISION is per change (ADR-0029 decision 4),

@@ -32,19 +32,19 @@ const overlappingPair = (name: string, bx: number, by: number): RoutingCase => (
   edges: [
     {
       id: 'e_AB',
-      from: { kind: 'node' as const, node: 'A' },
-      to: { kind: 'node' as const, node: 'B' },
+      from: { node: 'A' },
+      to: { node: 'B' },
     },
     {
       id: 'e_TA',
-      from: { kind: 'node' as const, node: 'T' },
-      to: { kind: 'node' as const, node: 'A' },
+      from: { node: 'T' },
+      to: { node: 'A' },
       label: 'hoge',
     },
     {
       id: 'e_TB',
-      from: { kind: 'node' as const, node: 'T' },
-      to: { kind: 'node' as const, node: 'B' },
+      from: { node: 'T' },
+      to: { node: 'B' },
     },
   ],
 })
@@ -66,8 +66,8 @@ export const ROUTING_CORPUS: readonly RoutingCase[] = [
     edges: [
       {
         id: 'e_inner',
-        from: { kind: 'node' as const, node: 'inner1' },
-        to: { kind: 'node' as const, node: 'inner2' },
+        from: { node: 'inner1' },
+        to: { node: 'inner2' },
       },
     ],
   },
@@ -77,8 +77,8 @@ export const ROUTING_CORPUS: readonly RoutingCase[] = [
     edges: [
       {
         id: 'e_LR',
-        from: { kind: 'node' as const, node: 'L' },
-        to: { kind: 'node' as const, node: 'R' },
+        from: { node: 'L' },
+        to: { node: 'R' },
       },
     ],
   },
@@ -120,8 +120,8 @@ export function syntheticLayouts(count: number): readonly RoutingCase[] {
         if (int(2) === 1)
           edges.push({
             id: `e${a}_${b}`,
-            from: { kind: 'node' as const, node: `n${a}` },
-            to: { kind: 'node' as const, node: `n${b}` },
+            from: { node: `n${a}` },
+            to: { node: `n${b}` },
           })
       }
     }
@@ -183,8 +183,8 @@ export function clusteredLayout(options: {
     seen.add(key)
     edges.push({
       id: `e${edges.length}`,
-      from: { kind: 'node' as const, node: from },
-      to: { kind: 'node' as const, node: to },
+      from: { node: from },
+      to: { node: to },
     })
   }
   for (let c = 0; c < clusters; c++) {

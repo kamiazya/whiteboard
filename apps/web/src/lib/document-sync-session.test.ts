@@ -1186,8 +1186,8 @@ describe('createDocumentSyncSession', () => {
       edges: [
         {
           id: 'e-existing',
-          from: { kind: 'node' as const, node: 'n-a' },
-          to: { kind: 'node' as const, node: 'n-b' },
+          from: { node: 'n-a' },
+          to: { node: 'n-b' },
         },
       ],
     }
@@ -1258,8 +1258,8 @@ describe('createDocumentSyncSession', () => {
       edges: [
         {
           id: 'e-1',
-          from: { kind: 'node' as const, node: 'n-a' },
-          to: { kind: 'node' as const, node: 'n-b' },
+          from: { node: 'n-a' },
+          to: { node: 'n-b' },
         },
       ],
     }

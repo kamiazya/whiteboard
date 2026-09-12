@@ -39,27 +39,27 @@ const withKind = (kind: FieldProjection['kind']) =>
   positions.filter((path) => kindOf(path) === kind)
 
 describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () => {
-  it("states 21 of the model's field positions exactly", () => {
-    // 19 -> 21 with ADR-0035 slice 3: an END is one object rather than three
-    // flat keys, and the object's `kind` is a position of its own on each
-    // side. The format states it in the only sense that matters — every JSON
-    // Canvas edge runs between two nodes, so `kind` crossing means the lift
-    // builds the node arm and nothing is lost.
-    expect(withKind('native')).toHaveLength(21)
+  it("states 19 of the model's field positions exactly", () => {
+    // 19 -> 21 with ADR-0035 slice 3 (an END became one object, and its `kind`
+    // was a position of its own per side), and 21 -> 19 with ADR-0036
+    // decision 2, which took those two `kind` positions off an edge again: an
+    // edge's end names a node and nothing else, so there is no discriminator
+    // left to state.
+    expect(withKind('native')).toHaveLength(19)
   })
 
-  it('cannot state 4 at all — a free end, which takes its whole edge with it', () => {
-    // The ledger's first `dropped` entries, and the first loss whose UNIT is
-    // the element rather than the field: JSON Canvas requires `fromNode` and
-    // `toNode`, so an edge with a free end is omitted from BOTH modes. It is
-    // named here rather than left to the loss table because a `dropped` kind
-    // appearing at all is the thing to read in a diff.
-    expect([...withKind('dropped')].sort()).toEqual([
-      'edges[].from.point.x',
-      'edges[].from.point.y',
-      'edges[].to.point.x',
-      'edges[].to.point.y',
-    ])
+  it('cannot state NOTHING at all any more, which is what the split bought', () => {
+    // The ledger's `dropped` column is EMPTY, and it is the most surprising
+    // consequence of ADR-0036 decision 2. It held four entries — an edge's
+    // point ends, the only loss whose unit was the ELEMENT rather than the
+    // field, because JSON Canvas requires `fromNode` and `toNode` and omitted
+    // such an edge from both modes.
+    //
+    // Splitting the relation from the ink did not teach the format anything.
+    // It stopped asking the format to carry ink as a relation: a line is a
+    // line now, the whole collection rides the extension key, and what a
+    // strict reader loses is ink rather than a malformed edge.
+    expect([...withKind('dropped')].sort()).toEqual([])
   })
 
   it('states 4 more only to the nearest whole pixel — a node box', () => {
@@ -75,9 +75,14 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     ])
   })
 
-  it('leaves 16 to the extension key — 13 named fields and 3 facet buckets', () => {
-    expect(withKind('extension')).toHaveLength(16)
-    expect(census.facetBuckets).toHaveLength(3)
+  it('leaves 34 to the extension key — 30 named fields and 4 facet buckets', () => {
+    // 16 -> 34, and almost all of it is one collection: a LINE's 18 positions
+    // all ride `x-whiteboard.lines`. A line between two nodes COULD be emitted
+    // as a JSON Canvas edge and read better in a foreign tool; that is the lie
+    // the split removes, since the format's edge asserts a connection the line
+    // deliberately does not claim.
+    expect(withKind('extension')).toHaveLength(34)
+    expect(census.facetBuckets).toHaveLength(4)
   })
 
   it('carries 14 further field positions inside those buckets, from one bundled plugin', () => {
@@ -90,24 +95,22 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     expect(census.facet).toHaveLength(14)
   })
 
-  it('so 34 of the 59 positions a document can hold are outside the format', () => {
-    // 29/52 -> 33/58 with ADR-0035 slice 3, and the two numbers move for
-    // DIFFERENT reasons, which is the reading. The denominator grew by six
-    // because an endpoint object has positions three flat keys did not (a
-    // `kind` and a `point`'s two coordinates, per end). The numerator grew by
-    // four because all four point coordinates are `dropped`.
+  it('so 48 of the 71 positions a document can hold are outside the format', () => {
+    // Both numbers move for DIFFERENT reasons, which is the reading.
     //
-    // So the share outside went 55.8% -> 56.9%, and what actually changed is
-    // not that the format reaches less far — it is that the model now holds
-    // something the format has no vocabulary for at all, where before it held
-    // only things the format could state or the extension key could carry.
-    // That is the first position of its kind since ADR-0035 was accepted.
+    // The denominator grew by 14 because a LINE is a new element with its own
+    // 18 positions, while an EDGE lost 6 (two `kind` discriminators and four
+    // point coordinates). The numerator grew by 14 because every one of the
+    // line's positions is `extension` and the four `dropped` ones are gone.
+    //
+    // So the share outside went 57.6% -> 65.8%, and what changed is NOT that
+    // the format reaches less far into what it can state. It is that the model
+    // grew a concept the format has no vocabulary for — ink that is not a
+    // relation — and put it where a strict reader loses it cleanly instead of
+    // where the format refused the whole element. `dropped` going to zero in
+    // the same move is the other half of that sentence.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    // 33/58 -> 34/59 with ADR-0034's stencil facet, which lands INSIDE a
-    // bucket: the format could already say nothing about what a bucket holds,
-    // so the share outside moves 56.9% -> 57.6% on a position the format was
-    // never going to reach.
-    expect(outside).toBe(34)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(59)
+    expect(outside).toBe(48)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(71)
   })
 })

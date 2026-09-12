@@ -111,8 +111,8 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
           op: 'edge.add',
           edge: {
             id: `e${i}`,
-            from: { kind: 'node' as const, node: `n${i}` },
-            to: { kind: 'node' as const, node: `n${i + 1}` },
+            from: { node: `n${i}` },
+            to: { node: `n${i + 1}` },
           },
         })),
       ]

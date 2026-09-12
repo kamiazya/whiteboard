@@ -22,20 +22,6 @@ const EXTENSION = { kind: 'extension' } as const
 const ROUNDED = { kind: 'degraded', to: 'the nearest integer pixel' } as const
 
 /**
- * A free end takes the whole EDGE with it, which is why this reads as a
- * sentence about the edge rather than about the coordinate.
- *
- * JSON Canvas requires `fromNode` and `toNode`: an edge runs between two
- * nodes or it is not an edge. So unlike every other entry here, what a reader
- * loses is not a field on something that still arrives — the element itself
- * is absent, in BOTH modes, and no extension key can carry it back.
- */
-const FREE_END = {
-  kind: 'dropped',
-  why: 'JSON Canvas requires an edge to run between two nodes, so an edge with a free end is omitted from both export modes — the whole edge, not just this field',
-} as const
-
-/**
  * Every field position the model can hold, and what projecting it onto JSON
  * Canvas costs. The model no longer spells the format's key anywhere, so this
  * table is the ONLY place that says which side of the line a field is on.
@@ -69,22 +55,47 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   'nodes[].background': NATIVE,
   'nodes[].backgroundStyle': NATIVE,
   'edges[].id': NATIVE,
-  // An endpoint is one object in the model and three flat keys in the format
-  // (ADR-0035 slice 3); the projection folds one into the other.
-  'edges[].from.kind': NATIVE,
+  // An end is one object in the model and three flat keys in the format
+  // (ADR-0035 slice 3); the projection folds one into the other. Every edge
+  // crosses now — the element that could not was ink wearing a relation's
+  // shape, and ADR-0036 decision 2 made it a LINE.
   'edges[].from.node': NATIVE,
   'edges[].from.side': NATIVE,
   'edges[].from.end': NATIVE,
-  'edges[].to.kind': NATIVE,
   'edges[].to.node': NATIVE,
   'edges[].to.side': NATIVE,
   'edges[].to.end': NATIVE,
-  'edges[].from.point.x': FREE_END,
-  'edges[].from.point.y': FREE_END,
-  'edges[].to.point.x': FREE_END,
-  'edges[].to.point.y': FREE_END,
   'edges[].color': NATIVE,
   'edges[].label': NATIVE,
+
+  // ── Lines (ADR-0036 decision 2) ──────────────────────────────────────
+  // The whole collection rides `x-whiteboard.lines`, so every position here
+  // is `extension` and none is `dropped`. A line between two nodes COULD be
+  // emitted as a JSON Canvas edge and would read better in a foreign tool —
+  // and that is the lie this split removes: the format's edge asserts that two
+  // things are connected, which is exactly the claim a line does not make.
+  //
+  // This is also where the `dropped` column went to ZERO. The four rows it
+  // held were an edge's point ends, which the format was right to refuse and
+  // which are no longer an edge's to have.
+  'lines[].id': EXTENSION,
+  'lines[].from.kind': EXTENSION,
+  'lines[].from.node': EXTENSION,
+  'lines[].from.side': EXTENSION,
+  'lines[].from.end': EXTENSION,
+  'lines[].from.point.x': EXTENSION,
+  'lines[].from.point.y': EXTENSION,
+  'lines[].to.kind': EXTENSION,
+  'lines[].to.node': EXTENSION,
+  'lines[].to.side': EXTENSION,
+  'lines[].to.end': EXTENSION,
+  'lines[].to.point.x': EXTENSION,
+  'lines[].to.point.y': EXTENSION,
+  'lines[].color': EXTENSION,
+  'lines[].label': EXTENSION,
+  'lines[].bends[].x': EXTENSION,
+  'lines[].bends[].y': EXTENSION,
+  'lines[].facets/*': EXTENSION,
 
   // An embedded document: the one piece of CONTENT the format cannot hold, so
   // a strict reader sees the node and not what it shows.
@@ -198,11 +209,12 @@ function walkValue(value: unknown, path: string, out: string[]): void {
 export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
   const extension = {
     ...(canvas.comments !== undefined && { comments: canvas.comments }),
+    ...(canvas.lines !== undefined && { lines: canvas.lines }),
     ...(canvas.facets !== undefined && { facets: canvas.facets }),
   }
   return {
     nodes: canvas.nodes.map(projectNode),
-    edges: canvas.edges.map(projectEdge).filter((edge) => edge !== undefined),
+    edges: canvas.edges.map(projectEdge),
     // An extension object with nothing in it is not emitted. That is a
     // canonicalisation, not a loss — `x-whiteboard: {}` says exactly what its
     // absence says — and it is the one place the wire round-trip normalises
@@ -225,6 +237,7 @@ export function fromJsonCanvas(wire: JsonCanvasDocument): SpatialCanvas {
     nodes: wire.nodes.map(liftNode),
     edges: wire.edges.map(liftEdge),
     ...(extension?.comments !== undefined && { comments: extension.comments }),
+    ...(extension?.lines !== undefined && { lines: extension.lines }),
     ...(extension?.facets !== undefined && { facets: extension.facets }),
   }
 }
@@ -324,14 +337,12 @@ function projectNode(node: SpatialNode): JsonCanvasNode {
  * way to say it.
  *
  * The format requires `fromNode` and `toNode` — an edge runs between two
- * NODES or it is not an edge — so an edge with a free end cannot cross at
- * all, in either mode. It is omitted rather than anchored to something
- * invented: a zero-size node at the point would make the export a document
- * with a node the author never drew, which is a worse lie than an absence
- * the loss table names.
+ * NODES or it is not an edge — and since ADR-0036 decision 2 that is what an
+ * edge IS, so every edge crosses. The element that could not cross was ink
+ * wearing a relation's shape; it is a LINE now, and it rides the canvas's
+ * extension key whole.
  */
-function projectEdge(edge: CanvasEdge): JsonCanvasEdge | undefined {
-  if (edge.from.kind !== 'node' || edge.to.kind !== 'node') return undefined
+function projectEdge(edge: CanvasEdge): JsonCanvasEdge {
   return {
     id: edge.id,
     fromNode: edge.from.node,
@@ -353,7 +364,6 @@ function liftEndpoint(
   end: JsonCanvasEdge['fromEnd'],
 ): CanvasEdge['from'] {
   return {
-    kind: 'node',
     node,
     ...(side !== undefined && { side }),
     ...(end !== undefined && { end }),

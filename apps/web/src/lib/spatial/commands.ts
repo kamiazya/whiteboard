@@ -30,11 +30,10 @@ import {
   type CommentThreadStatus,
   canvasCommentFromThread,
   type EdgeRoutingStyle,
-  endpointIn,
-  endpointNode,
+  endIn,
+  endNode,
   isSelfLoop,
   type LineJumps,
-  nodeEndpoint,
   type ProposedChange,
   type ProposedChangeStatus,
   type SpatialCanvas,
@@ -413,7 +412,7 @@ function connectNodes(
   // fail validation downstream.
   const edgeIdExists = canvas.edges.some((edge) => edge.id === edgeId)
   if (edgeIdExists) return canvas
-  const edge: CanvasEdge = { id: edgeId, from: nodeEndpoint(fromNode), to: nodeEndpoint(toNode) }
+  const edge: CanvasEdge = { id: edgeId, from: { node: fromNode }, to: { node: toNode } }
   return { ...canvas, edges: [...canvas.edges, edge] }
 }
 
@@ -440,9 +439,7 @@ function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
   return {
     ...canvas,
     nodes: canvas.nodes.filter((node) => node.id !== id),
-    edges: canvas.edges.filter(
-      (edge) => endpointNode(edge.from) !== id && endpointNode(edge.to) !== id,
-    ),
+    edges: canvas.edges.filter((edge) => endNode(edge.from) !== id && endNode(edge.to) !== id),
   }
 }
 
@@ -725,11 +722,10 @@ function setEdgeSide(
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      // Only a NODE end has a side to pin; a free end has no sides to
-      // choose between, so the write is a no-op on one.
-      const end = edge[endpoint]
-      if (end.kind !== 'node') return edge
-      const { side: _removed, ...rest } = end
+      // An EDGE's end always names a node since ADR-0036 decision 2, so the
+      // narrowing the free arm used to need is gone. Pinning a side on a LINE
+      // is its own command when the editor grows one.
+      const { side: _removed, ...rest } = edge[endpoint]
       return { ...edge, [endpoint]: side === undefined ? rest : { ...rest, side } }
     }),
   }
@@ -900,7 +896,7 @@ function createEdge(canvas: SpatialCanvas, edge: CanvasEdge): SpatialCanvas {
   if (canvas.edges.some((existing) => existing.id === edge.id)) return canvas
   if (isSelfLoop(edge)) return canvas
   const nodeIds = new Set(canvas.nodes.map((node) => node.id))
-  if (!endpointIn(edge.from, nodeIds) || !endpointIn(edge.to, nodeIds)) return canvas
+  if (!endIn(edge.from, nodeIds) || !endIn(edge.to, nodeIds)) return canvas
   return { ...canvas, edges: [...canvas.edges, edge] }
 }
 
@@ -1032,8 +1028,8 @@ export function buildFragmentInsertCommand(
     // A boundary edge crosses the cut, so exactly one end is being re-minted
     // and the other must already be on the canvas. A FREE end is neither, so
     // an edge carrying one is never a boundary edge.
-    const fromId = endpointNode(edge.from)
-    const toId = endpointNode(edge.to)
+    const fromId = endNode(edge.from)
+    const toId = endNode(edge.to)
     if (fromId === undefined || toId === undefined) return []
     const from = reminted.idMap.get(fromId)
     const to = reminted.idMap.get(toId)

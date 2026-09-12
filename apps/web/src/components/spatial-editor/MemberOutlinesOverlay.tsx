@@ -1,5 +1,5 @@
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
-import { endpointIn } from '@kamiazya/whiteboard-model'
+import { endIn } from '@kamiazya/whiteboard-model'
 /**
  * Which nodes are in the selection. The selection overlay outlines the
  * region the handles act on, which says nothing about membership —
@@ -51,7 +51,7 @@ export function MemberOutlinesOverlay({
       {(() => {
         const memberIds = new Set(selectionMembers.map((member) => member.id))
         return edges
-          .filter((edge) => endpointIn(edge.from, memberIds) && endpointIn(edge.to, memberIds))
+          .filter((edge) => endIn(edge.from, memberIds) && endIn(edge.to, memberIds))
           .flatMap((edge) => {
             const routed = edgePaths.find((entry) => entry.id === edge.id)
             return routed === undefined ? [] : [{ id: edge.id, path: routed.path }]

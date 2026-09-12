@@ -35,8 +35,8 @@ const BOARD: SpatialCanvas = {
   edges: [
     {
       id: 'e',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
   ],
 }
@@ -142,8 +142,8 @@ describe('drawing a proposal in place', () => {
           edgeId: 'e',
           assumed: {
             id: 'e',
-            from: { kind: 'node' as const, node: 'a' },
-            to: { kind: 'node' as const, node: 'b' },
+            from: { node: 'a' },
+            to: { node: 'b' },
           },
         },
       ]),
@@ -161,8 +161,8 @@ describe('drawing a proposal in place', () => {
           op: 'edge.add',
           edge: {
             id: 'new',
-            from: { kind: 'node' as const, node: 'a' },
-            to: { kind: 'node' as const, node: 'b' },
+            from: { node: 'a' },
+            to: { node: 'b' },
           },
         },
       ]),

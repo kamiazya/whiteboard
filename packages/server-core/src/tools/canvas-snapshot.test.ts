@@ -51,8 +51,8 @@ describe('wb_canvas_snapshot tool', () => {
         edges: [
           {
             id: 'e1',
-            from: { kind: 'node' as const, node: 'n1' },
-            to: { kind: 'node' as const, node: 'n3' },
+            from: { node: 'n1' },
+            to: { node: 'n3' },
             label: 'leads to',
           },
         ],
@@ -76,8 +76,8 @@ describe('wb_canvas_snapshot tool', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n3' },
+          from: { node: 'n1' },
+          to: { node: 'n3' },
           label: 'leads to',
         },
       ],
@@ -100,13 +100,13 @@ describe('wb_canvas_snapshot tool', () => {
         edges: [
           {
             id: 'e1',
-            from: { kind: 'node' as const, node: 'n1' },
-            to: { kind: 'node' as const, node: 'n2' },
+            from: { node: 'n1' },
+            to: { node: 'n2' },
           },
           {
             id: 'e2',
-            from: { kind: 'node' as const, node: 'n2' },
-            to: { kind: 'node' as const, node: 'n1' },
+            from: { node: 'n2' },
+            to: { node: 'n1' },
           },
         ],
       })
@@ -183,8 +183,8 @@ describe('wb_canvas_snapshot tool', () => {
     const store = new FakeDocumentStore()
     const edges = Array.from({ length: SNAPSHOT_MAX_EDGES + 3 }, (_, i) => ({
       id: `e${i}`,
-      from: { kind: 'node' as const, node: 'n1' },
-      to: { kind: 'node' as const, node: 'n2' },
+      from: { node: 'n1' },
+      to: { node: 'n2' },
     }))
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {

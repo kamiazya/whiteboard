@@ -16,8 +16,7 @@
  * built stays: it is a published contract, and it was the right seam even
  * though the concept it first carried turned out to be core.
  */
-import type { CanvasEdge } from '@kamiazya/whiteboard-model'
-import type { ScenePoint } from '@kamiazya/whiteboard-scene'
+import type { RoutableElement, ScenePoint } from '@kamiazya/whiteboard-scene'
 import { sidePoint } from './edge-geometry.js'
 import type { Rect, Side } from './edge-rules.js'
 
@@ -77,7 +76,7 @@ export interface BendRouteEnds {
  * the overwhelmingly common case, and the caller's signal to compute one.
  */
 export function bendRoute(
-  edge: CanvasEdge,
+  edge: RoutableElement,
   fromRect: Rect,
   toRect: Rect,
   ends: BendRouteEnds,

@@ -11,8 +11,8 @@ import { edgeMenuItems } from './edge-menu-items.js'
 
 const baseEdge: CanvasEdge = {
   id: 'e1',
-  from: { kind: 'node' as const, node: 'a' },
-  to: { kind: 'node' as const, node: 'b' },
+  from: { node: 'a' },
+  to: { node: 'b' },
 }
 
 function labelsOf(items: readonly ContextMenuItem[]): string[] {

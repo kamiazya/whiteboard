@@ -30,8 +30,8 @@ const BOARD: SpatialCanvas = {
   edges: [
     {
       id: 'e',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
   ],
 }
@@ -138,8 +138,8 @@ describe('wb_canvas_edit in propose mode', () => {
         edgeId: 'e',
         assumed: {
           id: 'e',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       },
     ])
@@ -400,8 +400,8 @@ describe('elements whose fields hold objects', () => {
     edges: [
       {
         id: 'e',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
         facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
     ],

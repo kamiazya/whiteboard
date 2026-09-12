@@ -17,8 +17,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', side: 'right' as const },
-        to: { kind: 'node' as const, node: 'b', side: 'left' as const },
+        from: { node: 'a', side: 'right' as const },
+        to: { node: 'b', side: 'left' as const },
       }),
     )
     expect(result.fromSide).toBe('right')
@@ -33,8 +33,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       }),
     )
     expect(result.fromSide).toBe('right')
@@ -47,8 +47,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       }),
     )
     expect(result.fromSide).toBe('bottom')
@@ -61,8 +61,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       }),
     )
     expect(result.fromSide).toBe('left')
@@ -75,8 +75,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       }),
     )
     expect(result.fromSide).toBe('top')
@@ -89,8 +89,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       }),
     )
     expect(result.fromEnd).toBe('none')
@@ -103,8 +103,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', end: 'arrow' as const },
-        to: { kind: 'node' as const, node: 'b', end: 'none' as const },
+        from: { node: 'a', end: 'arrow' as const },
+        to: { node: 'b', end: 'none' as const },
       }),
     )
     expect(result.fromEnd).toBe('arrow')
@@ -116,8 +116,8 @@ describe('routeEdge', () => {
       [],
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'ghost-a' },
-        to: { kind: 'node' as const, node: 'ghost-b' },
+        from: { node: 'ghost-a' },
+        to: { node: 'ghost-b' },
       }),
     )
     expect(result.fromEnd).toBe('none')
@@ -130,8 +130,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'a' },
+        from: { node: 'a' },
+        to: { node: 'a' },
       }),
     )
     expect(result.path.length).toBeGreaterThan(1)
@@ -145,8 +145,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', side: 'right' as const },
-        to: { kind: 'node' as const, node: 'a', side: 'right' as const },
+        from: { node: 'a', side: 'right' as const },
+        to: { node: 'a', side: 'right' as const },
       }),
     )
     // The right side's outward normal is +x, so the loop control points must
@@ -162,8 +162,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', side: 'left' as const },
-        to: { kind: 'node' as const, node: 'a', side: 'left' as const },
+        from: { node: 'a', side: 'left' as const },
+        to: { node: 'a', side: 'left' as const },
       }),
     )
     // The left side's outward normal is -x, so the loop control points must
@@ -179,8 +179,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', side: 'top' as const },
-        to: { kind: 'node' as const, node: 'a', side: 'top' as const },
+        from: { node: 'a', side: 'top' as const },
+        to: { node: 'a', side: 'top' as const },
       }),
     )
     // The top side's outward normal is -y, so the loop control points must
@@ -196,8 +196,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', side: 'bottom' as const },
-        to: { kind: 'node' as const, node: 'a', side: 'bottom' as const },
+        from: { node: 'a', side: 'bottom' as const },
+        to: { node: 'a', side: 'bottom' as const },
       }),
     )
     // The bottom side's outward normal is +y, so the loop control points
@@ -213,8 +213,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       }),
     )
     expect(result.path).toHaveLength(2)
@@ -227,8 +227,8 @@ describe('routeEdge', () => {
       nodes,
       edge({
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'missing' },
+        from: { node: 'a' },
+        to: { node: 'missing' },
       }),
     )
     expect(result.path).toHaveLength(2)
@@ -239,8 +239,8 @@ describe('routeEdge', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 300, 0, 100, 100)]
     const e = edge({
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     })
     expect(routeEdge(nodes, e)).toEqual(routeEdge(nodes, e))
   })

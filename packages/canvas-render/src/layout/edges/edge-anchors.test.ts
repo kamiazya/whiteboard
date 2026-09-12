@@ -38,13 +38,13 @@ describe('assignEdgeAnchors', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'c', side: 'right' as const },
+        from: { node: 'a' },
+        to: { node: 'c', side: 'right' as const },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'b' },
-        to: { kind: 'node' as const, node: 'c', side: 'right' as const },
+        from: { node: 'b' },
+        to: { node: 'c', side: 'right' as const },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
@@ -64,8 +64,8 @@ describe('assignEdgeAnchors', () => {
     const anchors = assignEdgeAnchors(nodes, [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ])
     expect(anchors.get('e1')?.from).toEqual({ x: 100, y: 50 })
@@ -77,13 +77,13 @@ describe('assignEdgeAnchors', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'b' },
-        to: { kind: 'node' as const, node: 'a' },
+        from: { node: 'b' },
+        to: { node: 'a' },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
@@ -101,13 +101,13 @@ describe('assignEdgeAnchors', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'c', side: 'top' as const },
+        from: { node: 'a' },
+        to: { node: 'c', side: 'top' as const },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'b' },
-        to: { kind: 'node' as const, node: 'c', side: 'top' as const },
+        from: { node: 'b' },
+        to: { node: 'c', side: 'top' as const },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
@@ -124,13 +124,13 @@ describe('assignEdgeAnchors', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'ghost',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'nope' },
+        from: { node: 'a' },
+        to: { node: 'nope' },
       },
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
@@ -146,13 +146,13 @@ describe('anchor fan-out through layoutSpatialCanvas', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
         {
           id: 'e2',
-          from: { kind: 'node' as const, node: 'b' },
-          to: { kind: 'node' as const, node: 'a' },
+          from: { node: 'b' },
+          to: { node: 'a' },
         },
       ],
     }

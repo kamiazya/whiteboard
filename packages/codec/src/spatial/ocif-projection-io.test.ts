@@ -11,18 +11,18 @@ describe('a document becomes OCIF and comes back', () => {
     expect(toOcif({ nodes: [], edges: [] }).ocif).toContain('v0.7.0')
   })
 
-  it('makes a relation an @ocif/edge and a free end an @ocif/arrow', () => {
-    // The decision ADR-0036 takes, visible as the one branch this projection
-    // has: an edge is not one element in OCIF, it is two, and which one it is
-    // depends on whether both of its ends name a node.
+  it('makes an edge an @ocif/edge and a line an @ocif/arrow', () => {
+    // The decision ADR-0036 took, and what it bought this file: the branch
+    // that used to ask whether both ends named a node is gone, because the
+    // collection an element is in already answers it.
     const nodes = [
       { id: 'a', type: 'text' as const, text: 'a', x: 0, y: 0, width: 10, height: 10 },
       { id: 'b', type: 'text' as const, text: 'b', x: 90, y: 0, width: 10, height: 10 },
     ]
     const projected = toOcif({
       nodes,
-      edges: [
-        { id: 'rel', from: { kind: 'node', node: 'a' }, to: { kind: 'node', node: 'b' } },
+      edges: [{ id: 'rel', from: { node: 'a' }, to: { node: 'b' } }],
+      lines: [
         {
           id: 'ink',
           from: { kind: 'node', node: 'a' },
@@ -43,7 +43,8 @@ describe('a document becomes OCIF and comes back', () => {
     // gets a line between two points and no relation at all.
     const projected = toOcif({
       nodes: [{ id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 40 }],
-      edges: [
+      edges: [],
+      lines: [
         {
           id: 'ink',
           from: { kind: 'node', node: 'a' },
@@ -94,9 +95,10 @@ describe('parseOcif reads foreign OCIF text', () => {
     // lanes make of every tool answer, made of this projection's output.
     const canvas = {
       nodes: [{ id: 'n', type: 'text' as const, text: 'hi', x: 0.5, y: -2, width: 10, height: 10 }],
-      edges: [
+      edges: [],
+      lines: [
         {
-          id: 'e',
+          id: 'l',
           from: { kind: 'node' as const, node: 'n' },
           to: { kind: 'point' as const, point: { x: 9, y: 9 } },
         },

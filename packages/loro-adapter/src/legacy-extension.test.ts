@@ -42,8 +42,8 @@ function docWithLegacyShape(): LoroDoc {
   })
   doc.getMap('edges').set('e1', {
     id: 'e1',
-    from: { kind: 'node' as const, node: 'n1' },
-    to: { kind: 'node' as const, node: 'n2' },
+    from: { node: 'n1' },
+    to: { node: 'n2' },
     'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } },
   })
   doc.getMap('canvas').set('x-whiteboard', {

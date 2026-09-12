@@ -4,7 +4,6 @@
 // the score can be believed there — an instrument trusted before it is
 // calibrated is how `worstStallMs` reported 0.3ms for a 200ms stall.
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeEndpoint } from '@kamiazya/whiteboard-model'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
@@ -41,8 +40,8 @@ const group = (
 ): SpatialNode => ({ id, type: 'group', x, y, width, height, label })
 const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge => ({
   id,
-  from: nodeEndpoint(fromNode),
-  to: nodeEndpoint(toNode),
+  from: { node: fromNode },
+  to: { node: toNode },
   ...(label === undefined ? {} : { label }),
 })
 const canvasOf = (nodes: SpatialNode[], edges: CanvasEdge[] = []): SpatialCanvas => ({
@@ -560,13 +559,13 @@ describe('scoreDrawing: flow', () => {
       canvasOf(column, [
         {
           id: 'ab',
-          from: { kind: 'node' as const, node: 'a', end: 'arrow' as const },
-          to: { kind: 'node' as const, node: 'b', end: 'none' as const },
+          from: { node: 'a', end: 'arrow' as const },
+          to: { node: 'b', end: 'none' as const },
         },
         {
           id: 'bc',
-          from: { kind: 'node' as const, node: 'b', end: 'arrow' as const },
-          to: { kind: 'node' as const, node: 'c', end: 'none' as const },
+          from: { node: 'b', end: 'arrow' as const },
+          to: { node: 'c', end: 'none' as const },
         },
       ]),
     )
@@ -574,8 +573,8 @@ describe('scoreDrawing: flow', () => {
       canvasOf(column, [
         {
           id: 'ab',
-          from: { kind: 'node' as const, node: 'a', end: 'none' as const },
-          to: { kind: 'node' as const, node: 'b', end: 'none' as const },
+          from: { node: 'a', end: 'none' as const },
+          to: { node: 'b', end: 'none' as const },
         },
       ]),
     )
@@ -583,8 +582,8 @@ describe('scoreDrawing: flow', () => {
       canvasOf(column, [
         {
           id: 'ab',
-          from: { kind: 'node' as const, node: 'a', end: 'arrow' as const },
-          to: { kind: 'node' as const, node: 'b', end: 'arrow' as const },
+          from: { node: 'a', end: 'arrow' as const },
+          to: { node: 'b', end: 'arrow' as const },
         },
       ]),
     )

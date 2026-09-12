@@ -89,28 +89,31 @@ describe('a published schema resolves its own references', () => {
     expect(seen, 'the table publishes references at all').toBeGreaterThan(0)
   })
 
-  it('resolves the edge endpoint to the union it names, not to something else', async () => {
+  it('references the edge end rather than inlining it, and publishes no LINE end yet', async () => {
     const tools = await listTools()
     const edit = tools.find((tool) => tool.name === 'wb_canvas_edit')
     const document = edit?.inputSchema as Record<string, unknown>
-    const defs = document?.$defs as Record<string, unknown> | undefined
-    const endpoint = defs?.EdgeEndpoint as Record<string, unknown> | undefined
-    expect(Object.keys(defs ?? {})).toContain('EdgeEndpoint')
+    const defs = (document?.$defs as Record<string, unknown>) ?? {}
 
-    // The point of the check: a `$ref` that resolves is not yet a `$ref` that
-    // resolves to the RIGHT thing. Both arms, by their discriminator.
-    const arms = (endpoint?.oneOf ?? endpoint?.anyOf) as Array<Record<string, unknown>> | undefined
-    const kinds = (arms ?? [])
-      .map(
-        (arm) => (arm.properties as Record<string, { const?: unknown }> | undefined)?.kind?.const,
-      )
-      .sort()
-    expect(kinds).toEqual(['node', 'point'])
+    // ADR-0036 decision 2 narrowed an edge's end to a node reference, so what
+    // is registered here is a small flat object rather than the old
+    // node-or-point union. Registering it is still the saving: measured,
+    // leaving it out took the visible table 37,796 -> 38,317 bytes on a
+    // strictly SIMPLER schema, because the saving belongs to the repetition
+    // and not to the shape.
+    expect(Object.keys(defs)).toContain('EdgeEnd')
+    const end = defs.EdgeEnd as { properties?: Record<string, unknown> } | undefined
+    expect(Object.keys(end?.properties ?? {}).sort()).toEqual(['end', 'node', 'side'])
 
-    // And that the sites really reference it rather than inlining it, which
-    // is the whole saving: four sites, `from` and `to` on edge.add and
-    // edge.patch.
-    const toEndpoint = refsIn(document).filter((r) => r.ref === '#/$defs/EdgeEndpoint')
-    expect(toEndpoint.length).toBe(4)
+    // Four sites: `from` and `to`, on `edge.add` and on `edge.patch`.
+    expect(refsIn(document).filter((r) => r.ref === '#/$defs/EdgeEnd')).toHaveLength(4)
+
+    // And the GAP, recorded where someone will trip over it: the node-or-point
+    // union lives on a LINE now, and no tool can author one. The model can
+    // hold ink the tool surface cannot make. This fails the day a line op is
+    // registered, which is the right direction — whoever adds it asserts here
+    // that `LineEnd` resolves to the union it names, both arms by their
+    // discriminator.
+    expect(Object.keys(defs)).not.toContain('LineEnd')
   })
 })

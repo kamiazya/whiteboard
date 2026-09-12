@@ -28,8 +28,8 @@ const start: SpatialCanvas = {
   edges: [
     {
       id: 'e0',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
   ],
 }

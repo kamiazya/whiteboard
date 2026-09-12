@@ -239,19 +239,19 @@ const LOOK_CANVAS: SpatialCanvas = {
   edges: [
     {
       id: 'across',
-      from: { kind: 'node' as const, node: 'preset' },
-      to: { kind: 'node' as const, node: 'plain', end: 'arrow' as const },
+      from: { node: 'preset' },
+      to: { node: 'plain', end: 'arrow' as const },
     },
     // The two diagonals of the four content nodes, so one hops the other.
     {
       id: 'falling',
-      from: { kind: 'node' as const, node: 'preset', side: 'bottom' as const },
-      to: { kind: 'node' as const, node: 'oval', side: 'top' as const },
+      from: { node: 'preset', side: 'bottom' as const },
+      to: { node: 'oval', side: 'top' as const },
     },
     {
       id: 'rising',
-      from: { kind: 'node' as const, node: 'sink', side: 'top' as const },
-      to: { kind: 'node' as const, node: 'plain', side: 'bottom' as const },
+      from: { node: 'sink', side: 'top' as const },
+      to: { node: 'plain', side: 'bottom' as const },
     },
   ],
   // Jump arcs are off unless a canvas asks for them, and a hop is one of the

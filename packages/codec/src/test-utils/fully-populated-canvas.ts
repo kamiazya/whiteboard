@@ -45,21 +45,43 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node', node: 'n1', side: 'right', end: 'none' },
-        to: { kind: 'node', node: 'n2', side: 'left', end: 'arrow' },
+        from: { node: 'n1', side: 'right', end: 'none' },
+        to: { node: 'n2', side: 'left', end: 'arrow' },
         color: '2',
         label: 'l',
         bends: [{ x: 1, y: 1 }],
         facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
-      // The free-ended edge, and the only way to occupy the four `point`
-      // positions. A SECOND edge rather than a change to the first because the
-      // comparisons need both: one the format can state, so its native
-      // positions survive, and one it cannot, so the lost ones really are lost.
+    ],
+    lines: [
+      // The free-ended element, and the only way to occupy the four `point`
+      // positions. It is a LINE since ADR-0036 decision 2 — it was an edge
+      // with a point end, which is ink wearing a relation's shape.
       {
-        id: 'e2',
+        id: 'l1',
         from: { kind: 'point', point: { x: 42, y: -7 } },
         to: { kind: 'point', point: { x: 43, y: -8 } },
+        color: '3',
+        label: 'ink',
+        bends: [{ x: 2, y: 2 }],
+        facets: { 'visual.edges/v0': { routing: 'curved' } },
+      },
+      // One end on a node and one in space: what the editor's connect gesture
+      // released in empty space makes, and the shape every reader of an end
+      // has to handle.
+      {
+        id: 'l2',
+        from: { kind: 'node', node: 'n3', side: 'top', end: 'none' },
+        to: { kind: 'point', point: { x: 9, y: 9 }, end: 'arrow' },
+      },
+      // The mirror of l2, so both ENDS occupy both arms. An end's positions
+      // are per side (`from` and `to` are separate rows in every ledger), so a
+      // fixture that only ever attached its `from` would leave four of them
+      // uncovered and weaken the comparisons in silence.
+      {
+        id: 'l3',
+        from: { kind: 'point', point: { x: 4, y: 4 } },
+        to: { kind: 'node', node: 'n1', side: 'bottom' },
       },
     ],
     comments: [

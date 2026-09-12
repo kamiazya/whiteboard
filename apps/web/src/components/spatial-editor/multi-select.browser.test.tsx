@@ -300,13 +300,13 @@ it('member outlines include the edges between members, not edges leaving the are
     edges: [
       {
         id: 'ab',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'bc',
-        from: { kind: 'node' as const, node: 'b' },
-        to: { kind: 'node' as const, node: 'c' },
+        from: { node: 'b' },
+        to: { node: 'c' },
       },
     ],
   }

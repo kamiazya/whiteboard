@@ -19,7 +19,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { clipboardFragmentSchema, endpointIn, endpointNode } from '@kamiazya/whiteboard-model'
+import { clipboardFragmentSchema, endIn, endNode } from '@kamiazya/whiteboard-model'
 
 /**
  * Our fragment parsed out of clipboard TEXT, or null for anything else —
@@ -45,7 +45,7 @@ export function extractClipboardFragment(
   const nodes = canvas.nodes.filter((node) => selectedIds.has(node.id))
   const included = new Set(nodes.map((node) => node.id))
   const edges = canvas.edges.filter(
-    (edge) => endpointIn(edge.from, included) && endpointIn(edge.to, included),
+    (edge) => endIn(edge.from, included) && endIn(edge.to, included),
   )
   const base = { type: 'whiteboard/clipboard', version: 1, nodes, edges } as const
   if (options?.cutId === undefined) return base
@@ -53,7 +53,7 @@ export function extractClipboardFragment(
   // endpoint selected) — so a same-canvas paste can reconnect them. The
   // fragment proper stays self-contained; peers live only on the source.
   const boundaryEdges = canvas.edges.filter(
-    (edge) => endpointIn(edge.from, included) !== endpointIn(edge.to, included),
+    (edge) => endIn(edge.from, included) !== endIn(edge.to, included),
   )
   return { ...base, cut: { id: options.cutId, boundaryEdges } }
 }
@@ -90,8 +90,8 @@ export function remintClipboardFragment(
   // and an edge with a free end is not pasted at all, the same answer a
   // dangling reference already got.
   const edges = fragment.edges.flatMap((edge) => {
-    const from = endpointNode(edge.from)
-    const to = endpointNode(edge.to)
+    const from = endNode(edge.from)
+    const to = endNode(edge.to)
     if (from === undefined || to === undefined) return []
     const fromNode = idMap.get(from)
     const toNode = idMap.get(to)

@@ -41,8 +41,8 @@ describe('orthogonal elbow tie-break', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', side: 'top' as const },
-        to: { kind: 'node' as const, node: 'b', side: 'right' as const },
+        from: { node: 'a', side: 'top' as const },
+        to: { node: 'b', side: 'right' as const },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
@@ -64,8 +64,8 @@ describe('orthogonal elbow tie-break', () => {
     const edges: CanvasEdge[] = [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a', side: 'top' as const },
-        to: { kind: 'node' as const, node: 'b', side: 'right' as const },
+        from: { node: 'a', side: 'top' as const },
+        to: { node: 'b', side: 'right' as const },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)

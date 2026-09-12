@@ -5,7 +5,7 @@ import {
   canvasColorSchema,
   canvasCommentSchema,
   documentIdSchema,
-  edgeEndpointSchema,
+  edgeEndSchema,
   nodeIdSchema,
   nodePositionSchema,
   nodeSizeSchema,
@@ -80,8 +80,8 @@ const canvasSnapshotEdgeSchema = z
     // slice 3). Reusing the model's schema rather than restating it is what
     // keeps a reader of this payload and a writer of `wb_canvas_edit` talking
     // about the same thing.
-    from: edgeEndpointSchema,
-    to: edgeEndpointSchema,
+    from: edgeEndSchema,
+    to: edgeEndSchema,
     label: z.string().optional(),
     color: canvasColorSchema.optional(),
     locked: z.literal(true).optional(),

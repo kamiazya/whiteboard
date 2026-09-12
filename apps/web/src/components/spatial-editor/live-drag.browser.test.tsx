@@ -20,8 +20,8 @@ const start: SpatialCanvas = {
   edges: [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
   ],
 }
@@ -130,8 +130,8 @@ it('re-routes a bystander edge live when the dragged node lands on its path', as
     edges: [
       {
         id: 'e-cd',
-        from: { kind: 'node' as const, node: 'c' },
-        to: { kind: 'node' as const, node: 'd' },
+        from: { node: 'c' },
+        to: { node: 'd' },
       },
     ],
   }
@@ -170,13 +170,13 @@ it('recomputes line jumps live while the drag is in flight', async () => {
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'c' },
-        to: { kind: 'node' as const, node: 'd' },
+        from: { node: 'c' },
+        to: { node: 'd' },
       },
     ],
     facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
@@ -202,8 +202,8 @@ it('keeps a touched edge label visible and centered during the drag', async () =
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
         label: 'flow',
       },
     ],
@@ -285,13 +285,13 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
     edges: [
       {
         id: 'e-orange',
-        from: { kind: 'node' as const, node: 'yellow' },
-        to: { kind: 'node' as const, node: 'red' },
+        from: { node: 'yellow' },
+        to: { node: 'red' },
       },
       {
         id: 'e-red',
-        from: { kind: 'node' as const, node: 'red' },
-        to: { kind: 'node' as const, node: 'cyan' },
+        from: { node: 'red' },
+        to: { node: 'cyan' },
       },
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
@@ -367,8 +367,8 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
       edges: [
         {
           id: 'bystander',
-          from: { kind: 'node' as const, node: 'p' },
-          to: { kind: 'node' as const, node: 'q' },
+          from: { node: 'p' },
+          to: { node: 'q' },
         },
       ],
     })
@@ -451,13 +451,13 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
     edges: [
       {
         id: 'e-a',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'hub' },
+        from: { node: 'a' },
+        to: { node: 'hub' },
       },
       {
         id: 'e-c',
-        from: { kind: 'node' as const, node: 'c' },
-        to: { kind: 'node' as const, node: 'hub' },
+        from: { node: 'c' },
+        to: { node: 'hub' },
       },
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },

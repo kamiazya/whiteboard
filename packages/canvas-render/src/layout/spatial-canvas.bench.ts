@@ -77,13 +77,13 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
   const edges: CanvasEdge[] = [
     {
       id: 'e0',
-      from: { kind: 'node' as const, node: 'n0' },
-      to: { kind: 'node' as const, node: `n${Math.min(1, nodeCount - 1)}` },
+      from: { node: 'n0' },
+      to: { node: `n${Math.min(1, nodeCount - 1)}` },
     },
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: `n${nodeCount - 1}` },
-      to: { kind: 'node' as const, node: 'n0' },
+      from: { node: `n${nodeCount - 1}` },
+      to: { node: 'n0' },
     },
   ]
   return { nodes, edges }
@@ -116,8 +116,8 @@ function labelledCanvasOf(nodeCount: number, label = OVERFLOWING_LABEL): Spatial
   const edges: CanvasEdge[] = [
     {
       id: 'e0',
-      from: { kind: 'node' as const, node: 'g0' },
-      to: { kind: 'node' as const, node: `g${Math.min(1, nodeCount - 1)}` },
+      from: { node: 'g0' },
+      to: { node: `g${Math.min(1, nodeCount - 1)}` },
     },
   ]
   return { nodes, edges }

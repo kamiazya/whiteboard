@@ -293,8 +293,8 @@ describe('SpatialEditor (browser)', () => {
     expect(next.edges).toEqual([
       {
         id: 'edge-1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ])
   })
@@ -393,8 +393,8 @@ describe('SpatialEditor (browser)', () => {
     expect(next.edges).toEqual([
       {
         id: 'edge-2',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ])
   })
@@ -971,8 +971,8 @@ describe('SpatialEditor (browser)', () => {
     expect(next.edges).toEqual([
       {
         id: 'edge-preview',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ])
   })
@@ -1624,8 +1624,8 @@ describe('SpatialEditor (browser)', () => {
     const edgeId = canvas.edges[0]!.id
     expect(canvas.edges[0]).toEqual({
       id: edgeId,
-      from: { kind: 'node' as const, node: node1Box.id },
-      to: { kind: 'node' as const, node: node2Box.id },
+      from: { node: node1Box.id },
+      to: { node: node2Box.id },
     })
 
     // Give the double-press window time to lapse: the press that started
@@ -1812,8 +1812,8 @@ function fourDefectCanvas(): SpatialCanvas {
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'heading-node' },
-        to: { kind: 'node' as const, node: 'list-node' },
+        from: { node: 'heading-node' },
+        to: { node: 'list-node' },
         label: 'edge label',
       },
     ],

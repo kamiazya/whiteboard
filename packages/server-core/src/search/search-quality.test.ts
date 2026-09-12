@@ -93,8 +93,8 @@ beforeAll(async () => {
           op: 'edge.add' as const,
           edge: {
             id: e.id,
-            from: { kind: 'node' as const, node: e.from },
-            to: { kind: 'node' as const, node: e.to },
+            from: { node: e.from },
+            to: { node: e.to },
             label: e.label,
           },
         })),

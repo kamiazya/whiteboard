@@ -5,7 +5,7 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  */
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
-import { endpointSide } from '@kamiazya/whiteboard-model'
+import { endSide } from '@kamiazya/whiteboard-model'
 import {
   Lock as LockIcon,
   LockOpen,
@@ -95,7 +95,7 @@ export function edgeMenuItems({
     { label: 'left', ariaLabel: 'Left', icon: <PanelLeft />, side: 'left' },
   ] as const
   const sideRow = (endpoint: 'from' | 'to') => {
-    const current = endpointSide(endpoint === 'from' ? edge.from : edge.to)
+    const current = endSide(endpoint === 'from' ? edge.from : edge.to)
     return {
       kind: 'options' as const,
       label: endpoint === 'from' ? 'From side' : 'To side',

@@ -59,8 +59,8 @@ const layout = fc
     }))
     const edges: CanvasEdge[] = links.map((l, i) => ({
       id: `e${i}`,
-      from: { kind: 'node' as const, node: `n${l.from % nodeCount}` },
-      to: { kind: 'node' as const, node: `n${l.to % nodeCount}` },
+      from: { node: `n${l.from % nodeCount}` },
+      to: { node: `n${l.to % nodeCount}` },
     }))
     const sides = new Map<string, { fromSide: Side; toSide: Side }>(
       links.map((l, i) => [`e${i}`, { fromSide: l.fromSide, toSide: l.toSide }]),

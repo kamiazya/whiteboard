@@ -5,7 +5,7 @@ import type {
   ProposedChange,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { endpointNode, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import { endNode, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
 
@@ -70,8 +70,8 @@ describe('applyCommand', () => {
     expect(next.edges).toEqual([
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ])
   })
@@ -115,8 +115,8 @@ describe('applyCommand', () => {
     expect(next.edges).toEqual([
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ])
     expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
@@ -606,8 +606,8 @@ describe('batch', () => {
     expect(next.edges).toEqual([
       {
         id: 'e9',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
     ])
     expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
@@ -634,8 +634,8 @@ describe('batch', () => {
 describe('create-edge', () => {
   const fullEdge = {
     id: 'e-dup',
-    from: { kind: 'node' as const, node: 'a', side: 'right', end: 'arrow' as const },
-    to: { kind: 'node' as const, node: 'b', side: 'left' as const },
+    from: { node: 'a', side: 'right', end: 'arrow' as const },
+    to: { node: 'b', side: 'left' as const },
     label: 'kept',
     color: '3',
   } as const
@@ -654,7 +654,7 @@ describe('create-edge', () => {
     expect(
       applyCommand(canvas, {
         kind: 'create-edge',
-        edge: { ...fullEdge, id: 'x', to: { kind: 'node' as const, node: 'ghost' } },
+        edge: { ...fullEdge, id: 'x', to: { node: 'ghost' } },
       }),
     ).toBe(canvas)
     expect(
@@ -663,8 +663,8 @@ describe('create-edge', () => {
         edge: {
           ...fullEdge,
           id: 'y',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'a' },
+          from: { node: 'a' },
+          to: { node: 'a' },
         },
       }),
     ).toBe(canvas)
@@ -774,8 +774,8 @@ describe('set-edge-routing', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'a' },
+          from: { node: 'a' },
+          to: { node: 'a' },
         },
       ],
     }
@@ -879,8 +879,8 @@ describe('buildFragmentInsertCommand', () => {
     edges: [
       {
         id: 'src-e',
-        from: { kind: 'node' as const, node: 'src-a' },
-        to: { kind: 'node' as const, node: 'src-b' },
+        from: { node: 'src-a' },
+        to: { node: 'src-b' },
         label: 'link',
       },
     ],
@@ -903,15 +903,15 @@ describe('buildFragmentInsertCommand', () => {
         boundaryEdges: [
           {
             id: 'src-boundary',
-            from: { kind: 'node' as const, node: 'src-b' },
-            to: { kind: 'node' as const, node: 'peer' },
+            from: { node: 'src-b' },
+            to: { node: 'peer' },
             label: 'kept',
           },
           // This peer is gone (cross-canvas, or deleted since): silently dropped.
           {
             id: 'src-gone',
-            from: { kind: 'node' as const, node: 'src-a' },
-            to: { kind: 'node' as const, node: 'vanished' },
+            from: { node: 'src-a' },
+            to: { node: 'vanished' },
           },
         ],
       },
@@ -925,11 +925,11 @@ describe('buildFragmentInsertCommand', () => {
     expect(remintedB).toBeDefined()
     const boundary = edgeCommands.find((c) => c.edge.label === 'kept')?.edge
     expect(boundary).toMatchObject({
-      from: { kind: 'node' as const, node: remintedB },
-      to: { kind: 'node' as const, node: 'peer' },
+      from: { node: remintedB },
+      to: { node: 'peer' },
     })
     expect(boundary?.id).not.toBe('src-boundary')
-    expect(edgeCommands.some((c) => endpointNode(c.edge.to) === 'vanished')).toBe(false)
+    expect(edgeCommands.some((c) => endNode(c.edge.to) === 'vanished')).toBe(false)
   })
 
   it('never reconnects a boundary edge whose original still exists — a lifted cut was not severed', () => {
@@ -943,8 +943,8 @@ describe('buildFragmentInsertCommand', () => {
       edges: [
         {
           id: 'src-boundary',
-          from: { kind: 'node' as const, node: 'src-b' },
-          to: { kind: 'node' as const, node: 'peer' },
+          from: { node: 'src-b' },
+          to: { node: 'peer' },
         },
       ],
     }
@@ -955,8 +955,8 @@ describe('buildFragmentInsertCommand', () => {
         boundaryEdges: [
           {
             id: 'src-boundary',
-            from: { kind: 'node' as const, node: 'src-b' },
-            to: { kind: 'node' as const, node: 'peer' },
+            from: { node: 'src-b' },
+            to: { node: 'peer' },
           },
         ],
       },
@@ -964,7 +964,7 @@ describe('buildFragmentInsertCommand', () => {
     const command = buildFragmentInsertCommand(canvas, cutFragment, sequentialIds())
     if (command?.kind !== 'batch') throw new Error('expected a batch command')
     const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
-    expect(edgeCommands.some((c) => endpointNode(c.edge.to) === 'peer')).toBe(false)
+    expect(edgeCommands.some((c) => endNode(c.edge.to) === 'peer')).toBe(false)
   })
 
   it('returns undefined for an empty-node fragment', () => {
@@ -1011,8 +1011,8 @@ describe('buildFragmentInsertCommand', () => {
     const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
     expect(edgeCommands).toHaveLength(1)
     expect(edgeCommands[0].edge.label).toBe('link')
-    expect(nodeIds).toContain(endpointNode(edgeCommands[0].edge.from))
-    expect(nodeIds).toContain(endpointNode(edgeCommands[0].edge.to))
+    expect(nodeIds).toContain(endNode(edgeCommands[0].edge.from))
+    expect(nodeIds).toContain(endNode(edgeCommands[0].edge.to))
   })
 
   it('reminted ids are disjoint from existing canvas node+edge ids', () => {
@@ -1044,8 +1044,8 @@ describe('buildFragmentInsertCommand', () => {
       edges: [
         {
           id: 'src-e',
-          from: { kind: 'node' as const, node: 'src-a' },
-          to: { kind: 'node' as const, node: 'not-included' },
+          from: { node: 'src-a' },
+          to: { node: 'not-included' },
         },
       ],
     }
@@ -1266,13 +1266,13 @@ describe('set-edge-facet', () => {
     edges: [
       {
         id: 'e1',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'e2',
-        from: { kind: 'node' as const, node: 'b' },
-        to: { kind: 'node' as const, node: 'a' },
+        from: { node: 'b' },
+        to: { node: 'a' },
       },
     ],
   })

@@ -21,19 +21,19 @@ const NODES: SpatialNode[] = [
 const EDGES: CanvasEdge[] = [
   {
     id: 'B-C',
-    from: { kind: 'node' as const, node: 'B' },
-    to: { kind: 'node' as const, node: 'C' },
+    from: { node: 'B' },
+    to: { node: 'C' },
   },
   {
     id: 'A-B',
-    from: { kind: 'node' as const, node: 'A' },
-    to: { kind: 'node' as const, node: 'B' },
+    from: { node: 'A' },
+    to: { node: 'B' },
     label: 'hoge',
   },
   {
     id: 'A-C',
-    from: { kind: 'node' as const, node: 'A' },
-    to: { kind: 'node' as const, node: 'C' },
+    from: { node: 'A' },
+    to: { node: 'C' },
   },
 ]
 
@@ -48,8 +48,8 @@ describe('interpenetrating boxes', () => {
     ]
     const edge: CanvasEdge = {
       id: 'B-C',
-      from: { kind: 'node' as const, node: 'B' },
-      to: { kind: 'node' as const, node: 'C' },
+      from: { node: 'B' },
+      to: { node: 'C' },
     }
     const anchors = assignEdgeAnchors(nodes, [edge], 'orthogonal')
     const bc = anchors.get('B-C')

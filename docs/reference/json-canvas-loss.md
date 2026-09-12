@@ -8,8 +8,8 @@ A whiteboard document is not a JSON Canvas file. JSON Canvas 1.0 is a **projecti
 tested projection rather than an identity: a round-trip property over the expressible subset,
 and this table for everything else.
 
-The model can hold **45** field positions. **25** of them are something the format
-can state; **20** reach a reader only through the single extension key, or not at all.
+The model can hold **57** field positions. **23** of them are something the format
+can state; **34** reach a reader only through the single extension key, or not at all.
 
 Two export modes, and the difference between them is exactly the `x-whiteboard` rows below:
 
@@ -18,7 +18,7 @@ Two export modes, and the difference between them is exactly the `x-whiteboard` 
 - **`strict`** — plain JSON Canvas 1.0, the extension key removed entirely
   (`wb_document_get` with `options.strict: true`).
 
-## Stated by JSON Canvas 1.0 — 21
+## Stated by JSON Canvas 1.0 — 19
 
 Every reader of the format gets these, in both export modes. Nothing is lost and nothing needs the extension key.
 
@@ -26,13 +26,11 @@ Every reader of the format gets these, in both export modes. Nothing is lost and
 | --- | --- |
 | `edges[].color` | survives both modes |
 | `edges[].from.end` | survives both modes |
-| `edges[].from.kind` | survives both modes |
 | `edges[].from.node` | survives both modes |
 | `edges[].from.side` | survives both modes |
 | `edges[].id` | survives both modes |
 | `edges[].label` | survives both modes |
 | `edges[].to.end` | survives both modes |
-| `edges[].to.kind` | survives both modes |
 | `edges[].to.node` | survives both modes |
 | `edges[].to.side` | survives both modes |
 | `nodes[].background` | survives both modes |
@@ -57,7 +55,7 @@ The format has the field and cannot hold the value. What a reader gets instead i
 | `nodes[].x` | crosses as the nearest integer pixel |
 | `nodes[].y` | crosses as the nearest integer pixel |
 
-## Carried on `x-whiteboard` — 16
+## Carried on `x-whiteboard` — 34
 
 Survives the `extended` export and disappears from the `strict` one, which emits plain JSON Canvas 1.0. A reader that drops the key keeps the whole of what the format can state.
 
@@ -76,20 +74,33 @@ Survives the `extended` export and disappears from the `strict` one, which emits
 | `edges[].bends[].y` | dropped by `strict` |
 | `edges[].facets/*` | dropped by `strict` |
 | `facets/*` | dropped by `strict` |
+| `lines[].bends[].x` | dropped by `strict` |
+| `lines[].bends[].y` | dropped by `strict` |
+| `lines[].color` | dropped by `strict` |
+| `lines[].facets/*` | dropped by `strict` |
+| `lines[].from.end` | dropped by `strict` |
+| `lines[].from.kind` | dropped by `strict` |
+| `lines[].from.node` | dropped by `strict` |
+| `lines[].from.point.x` | dropped by `strict` |
+| `lines[].from.point.y` | dropped by `strict` |
+| `lines[].from.side` | dropped by `strict` |
+| `lines[].id` | dropped by `strict` |
+| `lines[].label` | dropped by `strict` |
+| `lines[].to.end` | dropped by `strict` |
+| `lines[].to.kind` | dropped by `strict` |
+| `lines[].to.node` | dropped by `strict` |
+| `lines[].to.point.x` | dropped by `strict` |
+| `lines[].to.point.y` | dropped by `strict` |
+| `lines[].to.side` | dropped by `strict` |
 | `nodes[].embed.documentId` | dropped by `strict` |
 | `nodes[].embed.versionRef` | dropped by `strict` |
 | `nodes[].facets/*` | dropped by `strict` |
 
-## Cannot cross at all — 4
+## Cannot cross at all — 0
 
 Named here so the absence is a decision rather than a surprise.
 
-| field | what a reader gets |
-| --- | --- |
-| `edges[].from.point.x` | JSON Canvas requires an edge to run between two nodes, so an edge with a free end is omitted from both export modes — the whole edge, not just this field |
-| `edges[].from.point.y` | JSON Canvas requires an edge to run between two nodes, so an edge with a free end is omitted from both export modes — the whole edge, not just this field |
-| `edges[].to.point.x` | JSON Canvas requires an edge to run between two nodes, so an edge with a free end is omitted from both export modes — the whole edge, not just this field |
-| `edges[].to.point.y` | JSON Canvas requires an edge to run between two nodes, so an edge with a free end is omitted from both export modes — the whole edge, not just this field |
+_None today._
 
 ## What this table does not cover
 

@@ -21,8 +21,8 @@ describe('searchableTexts', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'g1' },
+          from: { node: 'n1' },
+          to: { node: 'g1' },
           label: 'blocks',
         },
       ],
@@ -80,8 +80,8 @@ describe('searchableTexts', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'g1' },
-          to: { kind: 'node' as const, node: 'g1' },
+          from: { node: 'g1' },
+          to: { node: 'g1' },
         },
       ],
     }

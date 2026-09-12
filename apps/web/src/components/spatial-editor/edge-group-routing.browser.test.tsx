@@ -23,18 +23,18 @@ const canvas: SpatialCanvas = {
   edges: [
     {
       id: 'e-acc',
-      from: { kind: 'node' as const, node: 'acc' },
-      to: { kind: 'node' as const, node: 'sore' },
+      from: { node: 'acc' },
+      to: { node: 'sore' },
     },
     {
       id: 'e-left',
-      from: { kind: 'node' as const, node: 'left' },
-      to: { kind: 'node' as const, node: 'sore' },
+      from: { node: 'left' },
+      to: { node: 'sore' },
     },
     {
       id: 'e-members',
-      from: { kind: 'node' as const, node: 'sore' },
-      to: { kind: 'node' as const, node: 'are' },
+      from: { node: 'sore' },
+      to: { node: 'are' },
     },
   ],
 }

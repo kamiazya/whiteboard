@@ -50,14 +50,14 @@ function buildCanvas(): { canvas: SpatialCanvas; leafId: string; hubId: string }
     if (i + 1 < NODE_COUNT)
       edges.push({
         id: `e${i}a`,
-        from: { kind: 'node' as const, node: `n${i}` },
-        to: { kind: 'node' as const, node: `n${i + 1}` },
+        from: { node: `n${i}` },
+        to: { node: `n${i + 1}` },
       })
     if (i + COLS < NODE_COUNT && i % 2 === 0) {
       edges.push({
         id: `e${i}b`,
-        from: { kind: 'node' as const, node: `n${i}` },
-        to: { kind: 'node' as const, node: `n${i + COLS}` },
+        from: { node: `n${i}` },
+        to: { node: `n${i + COLS}` },
       })
     }
   }
@@ -66,8 +66,8 @@ function buildCanvas(): { canvas: SpatialCanvas; leafId: string; hubId: string }
   for (const target of ['n13', 'n21', 'n34']) {
     edges.push({
       id: `hub-${target}`,
-      from: { kind: 'node' as const, node: 'n0' },
-      to: { kind: 'node' as const, node: target },
+      from: { node: 'n0' },
+      to: { node: target },
     })
   }
   return { canvas: { nodes, edges }, leafId: 'n39', hubId: 'n0' }

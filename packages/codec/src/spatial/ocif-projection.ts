@@ -75,7 +75,7 @@ const AS_SHAPE = {
  */
 const AS_ARROW_SHAPE = {
   kind: 'degraded',
-  to: 'an @ocif/arrow shape — OCIF edges must run between two node ids, so a line to a bare point is a drawing rather than a relation',
+  to: "an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre",
 } as const
 
 /**
@@ -132,14 +132,8 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   // An OCIF edge is a NODE carrying `@ocif/edge`, so an edge's identity is a
   // node id.
   'edges[].id': NATIVE,
-  'edges[].from.kind': AS_SHAPE,
-  'edges[].to.kind': AS_SHAPE,
   'edges[].from.node': NATIVE,
   'edges[].to.node': NATIVE,
-  'edges[].from.point.x': AS_ARROW_SHAPE,
-  'edges[].from.point.y': AS_ARROW_SHAPE,
-  'edges[].to.point.x': AS_ARROW_SHAPE,
-  'edges[].to.point.y': AS_ARROW_SHAPE,
   // Which side of the box the line attaches to. `@ocif/ports` names NODES
   // that act as connection points, which is a different idea: a port is a
   // thing, a side is a face of a thing.
@@ -153,10 +147,51 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   // which is a structural change rather than a field, so it rides ours.
   'edges[].label': EXTENSION,
   // The points a person dragged. `@ocif/path` could hold them as a path
-  // string, but that turns the relation into a drawing — the same trade the
-  // free endpoint makes.
+  // string, but that turns the relation into a drawing — the same trade an
+  // arrow already makes.
   'edges[].bends[].x': EXTENSION,
   'edges[].bends[].y': EXTENSION,
+
+  // ── Lines (ADR-0036 decision 2) ──────────────────────────────────────
+  // A line is an `@ocif/arrow`: a SHAPE whose ends are coordinates. Reading
+  // this block beside the edge block above is the clearest statement of what
+  // the split bought — the two elements project onto the format's own two
+  // extensions, and each one's ends are native to exactly the extension it
+  // lands on. Under the old shape one element had to serve both, so its point
+  // coordinates were `degraded` for every edge and its arrowheads were
+  // `degraded` for every edge, whether or not that edge was ink.
+  'lines[].id': NATIVE,
+  // `@ocif/arrow`'s `start`/`end` ARE coordinates, so a free end crosses
+  // exactly. This is a position that was `degraded` while ink was an edge.
+  'lines[].from.point.x': NATIVE,
+  'lines[].from.point.y': NATIVE,
+  'lines[].to.point.x': NATIVE,
+  'lines[].to.point.y': NATIVE,
+  // And an arrow is the one element shape OCIF gives a PER-END marker, so
+  // these stop collapsing into `directed`.
+  'lines[].from.end': NATIVE,
+  'lines[].to.end': NATIVE,
+  'lines[].facets/*': NATIVE,
+  // What a foreign reader does not get: that this end was attached to a box
+  // rather than sitting at a coordinate that happens to be its centre.
+  //
+  // The two halves of that are different KINDS of loss, and the foreign-reader
+  // comparison is what made the difference visible — both were written
+  // `degraded` and one of them was wrong. `kind` really does degrade: the
+  // field is still there after the trip, saying `point` where it said `node`.
+  // `node` does not: the field is GONE, because the end it named became a
+  // coordinate. A position that disappears is `extension`, whatever the
+  // element around it did.
+  'lines[].from.kind': AS_ARROW_SHAPE,
+  'lines[].to.kind': AS_ARROW_SHAPE,
+  'lines[].from.node': EXTENSION,
+  'lines[].to.node': EXTENSION,
+  'lines[].from.side': EXTENSION,
+  'lines[].to.side': EXTENSION,
+  'lines[].color': EXTENSION,
+  'lines[].label': EXTENSION,
+  'lines[].bends[].x': EXTENSION,
+  'lines[].bends[].y': EXTENSION,
 
   // ── The annotation layer (ADR-0024) ──────────────────────────────────
   // OCIF has no comment concept, so these ride an extension of ours — but

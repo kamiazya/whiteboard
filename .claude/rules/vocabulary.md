@@ -12,10 +12,12 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Document** | the unit a workspace contains. Has a kind | a canvas |
 | **Facet** | a namespaced, versioned, schema'd attribute group attached to an object — key grammar `{namespace}.{name}/v{n}`, registered by a plugin at distribution time ([ADR-0013](../../docs/contributing/adr/0013-facet-system.md)). OKF core frontmatter (`type`, `tags`) stays a markdown-document concern | a runtime-definable schema, or anything with a privileged "core" namespace — no facet is core; only the engine is |
 | **Body** | an OKF document's markdown body | a spatial document's content |
-| **Node** / **Edge** | JSON Canvas elements | anything in an OKF document |
+| **Node** | a JSON Canvas element | anything in an OKF document |
 | **Canvas** | the spatial surface, and the JSON Canvas format | the container a workspace holds — that is a Document |
 | **OpenCanvas** | nothing. Retired — it was a working name for this project's document world, never a spec | the format (that is **JSON Canvas 1.0**) or the entity (that is a **Document**) |
 | **OCIF** / **Open Canvas** (OCWG's) | the Open Canvas Interchange Format and the working group that publishes it — a real external standard, and a third projection target ([ADR-0036](../../docs/contributing/adr/0036-ocif-projection.md)) | **OpenCanvas**, the retired working name one row above. They are one search apart and mean opposite things: one is a spec this project targets, the other is a word this project stopped using |
+| **Line** | [ADR-0036](../../docs/contributing/adr/0036-ocif-projection.md) decision 2's INK: a drawn stroke that may end nowhere, may attach to a node at either end, and asserts nothing about what is related to what | a relation — that is an Edge. A line between two boxes is decoration, not a claim that they are connected, and that is exactly the distinction the split exists to make |
+| **Edge** | a RELATION, node to node. What graph traversal and "what is connected to what" are about | ink. An edge cannot end in empty space: the element that could was a line wearing a relation's shape |
 | **Scene** | the laid-out projection of a spatial document (what `composeCanvasScene` produces) | stored content |
 | **Version** | a saved point in a document's history | a branch |
 | **Browser** / **Daemon** | who KEEPS a workspace — the browser's own storage, or the whiteboard daemon | a claim about network locality; both run on the same machine |

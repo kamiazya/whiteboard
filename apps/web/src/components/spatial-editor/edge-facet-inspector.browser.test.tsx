@@ -23,13 +23,13 @@ const initial: SpatialCanvas = {
   edges: [
     {
       id: 'ab',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
     {
       id: 'cb',
-      from: { kind: 'node' as const, node: 'c' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'c' },
+      to: { node: 'b' },
     },
   ],
 }

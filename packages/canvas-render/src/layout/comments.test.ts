@@ -293,8 +293,8 @@ describe('comment layer', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
         },
       ],
       comments: [{ id: 'c1', x: 250, y: 130, text: 'this link', targetEdgeId: 'e1' }],

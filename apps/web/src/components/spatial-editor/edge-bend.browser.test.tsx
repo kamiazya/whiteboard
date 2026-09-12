@@ -20,8 +20,8 @@ const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({
   edges: [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
       ...(bends === undefined ? {} : { bends }),
     },
   ],

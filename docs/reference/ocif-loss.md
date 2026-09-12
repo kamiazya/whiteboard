@@ -8,8 +8,8 @@ document ([ADR-0036](../contributing/adr/0036-ocif-projection.md)), beside JSON 
 OKF Markdown. The claim first-party support makes is the same one ADR-0035 made for JSON
 Canvas: a round-trip property over the expressible subset, and this table for everything else.
 
-The model can hold **45** field positions. **24** of them are something OCIF can
-state in its own vocabulary; the remaining **21** ride an extension of ours.
+The model can hold **57** field positions. **28** of them are something OCIF can
+state in its own vocabulary; the remaining **29** ride an extension of ours.
 
 **Nothing is dropped**, and that is the difference worth knowing before choosing a format.
 OCIF’s conformance rules require a reader to preserve an extension it does not understand, so a
@@ -19,7 +19,7 @@ with. A strict JSON Canvas export, by contrast, deletes its extension key outrig
 Read this beside [the JSON Canvas table](json-canvas-loss.md): the rows are the same positions,
 and where the two disagree is where the choice of format costs a reader something real.
 
-## Stated by OCIF v0.7.0 — 15
+## Stated by OCIF v0.7.0 — 23
 
 A conforming reader gets these and UNDERSTANDS them. A facet bucket is in here because OCIF’s `data[]` is the same mechanism — one ordinary extension per facet, keyed by the facet key — not because it is tolerated on a vendor key.
 
@@ -30,6 +30,14 @@ A conforming reader gets these and UNDERSTANDS them. A facet bucket is in here b
 | `edges[].id` | stated by the format |
 | `edges[].to.node` | stated by the format |
 | `facets/*` | stated by the format |
+| `lines[].facets/*` | stated by the format |
+| `lines[].from.end` | stated by the format |
+| `lines[].from.point.x` | stated by the format |
+| `lines[].from.point.y` | stated by the format |
+| `lines[].id` | stated by the format |
+| `lines[].to.end` | stated by the format |
+| `lines[].to.point.x` | stated by the format |
+| `lines[].to.point.y` | stated by the format |
 | `nodes[].embed.documentId` | stated by the format |
 | `nodes[].facets/*` | stated by the format |
 | `nodes[].file` | stated by the format |
@@ -41,23 +49,19 @@ A conforming reader gets these and UNDERSTANDS them. A facet bucket is in here b
 | `nodes[].x` | stated by the format |
 | `nodes[].y` | stated by the format |
 
-## Stated, but not in the same shape — 9
+## Stated, but not in the same shape — 5
 
 The format has somewhere to put the value and not the same shape for it. What a reader gets instead is named per row, and this projection reads it back the same way, so the row is what a round trip through a foreign tool really costs.
 
 | field | what a reader gets |
 | --- | --- |
 | `edges[].from.end` | crosses as @ocif/edge's single `directed` boolean — the format has no per-end marker on a relation |
-| `edges[].from.kind` | crosses as the node's resource and extensions — OCIF has no node type field, so what a node IS comes from what it shows and what it carries |
-| `edges[].from.point.x` | crosses as an @ocif/arrow shape — OCIF edges must run between two node ids, so a line to a bare point is a drawing rather than a relation |
-| `edges[].from.point.y` | crosses as an @ocif/arrow shape — OCIF edges must run between two node ids, so a line to a bare point is a drawing rather than a relation |
 | `edges[].to.end` | crosses as @ocif/edge's single `directed` boolean — the format has no per-end marker on a relation |
-| `edges[].to.kind` | crosses as the node's resource and extensions — OCIF has no node type field, so what a node IS comes from what it shows and what it carries |
-| `edges[].to.point.x` | crosses as an @ocif/arrow shape — OCIF edges must run between two node ids, so a line to a bare point is a drawing rather than a relation |
-| `edges[].to.point.y` | crosses as an @ocif/arrow shape — OCIF edges must run between two node ids, so a line to a bare point is a drawing rather than a relation |
+| `lines[].from.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
+| `lines[].to.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
 | `nodes[].type` | crosses as the node's resource and extensions — OCIF has no node type field, so what a node IS comes from what it shows and what it carries |
 
-## Carried on a `@whiteboard/*` extension — 21
+## Carried on a `@whiteboard/*` extension — 29
 
 A conforming reader must PRESERVE an extension it does not understand, so a round trip through a foreign tool deletes none of these. What is lost is comprehension, not data: the tool carries the bytes and cannot act on them. There is no second mode here that drops the key — that is JSON Canvas’s `strict`, and OCIF has no equivalent.
 
@@ -78,6 +82,14 @@ A conforming reader must PRESERVE an extension it does not understand, so a roun
 | `edges[].from.side` | preserved, not understood |
 | `edges[].label` | preserved, not understood |
 | `edges[].to.side` | preserved, not understood |
+| `lines[].bends[].x` | preserved, not understood |
+| `lines[].bends[].y` | preserved, not understood |
+| `lines[].color` | preserved, not understood |
+| `lines[].from.node` | preserved, not understood |
+| `lines[].from.side` | preserved, not understood |
+| `lines[].label` | preserved, not understood |
+| `lines[].to.node` | preserved, not understood |
+| `lines[].to.side` | preserved, not understood |
 | `nodes[].background` | preserved, not understood |
 | `nodes[].backgroundStyle` | preserved, not understood |
 | `nodes[].color` | preserved, not understood |

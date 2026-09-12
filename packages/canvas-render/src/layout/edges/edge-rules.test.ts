@@ -803,7 +803,7 @@ describe('endpoint-body-ink', () => {
     // reference — so the `other !== r` identity check does not itself
     // prevent the pair from being compared, exactly as `endpointRectsFor`
     // (spatial-edges.ts) builds two independent rect objects for a
-    // self-loop edge (endpointNode(edge.from) === endpointNode(edge.to)) or two same-size
+    // self-loop edge (endNode(edge.from) === endNode(edge.to)) or two same-size
     // fully-overlapping nodes.
     const rectA: Rect = { x: 0, y: 0, w: 50, h: 50 }
     const rectB: Rect = { x: 0, y: 0, w: 50, h: 50 }

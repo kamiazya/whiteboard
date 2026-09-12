@@ -1,5 +1,5 @@
 import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endpointIn } from '@kamiazya/whiteboard-model'
+import { endIn } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject } from 'react'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
@@ -231,7 +231,7 @@ export function useClipboardActions({
         cut.id,
         command.commands.flatMap((c) =>
           c.kind === 'create-edge' &&
-          (!endpointIn(c.edge.from, createdNodeIds) || !endpointIn(c.edge.to, createdNodeIds))
+          (!endIn(c.edge.from, createdNodeIds) || !endIn(c.edge.to, createdNodeIds))
             ? [c.edge.id]
             : [],
         ),

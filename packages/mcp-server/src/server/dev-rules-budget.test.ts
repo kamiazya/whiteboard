@@ -136,7 +136,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // is about to be built in, fixed here BEFORE the code so the naming is not
   // settled by whichever file happens to be written first — which is the one
   // thing this table is for, and what it costs is a bucket.
-  '.claude/rules/vocabulary.md': 17,
+  '.claude/rules/vocabulary.md': 18,
 }
 
 /**

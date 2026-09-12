@@ -15,8 +15,8 @@ describe('facing-pair anchor alignment', () => {
   ]
   const EDGE: CanvasEdge = {
     id: 'A-B',
-    from: { kind: 'node' as const, node: 'A' },
-    to: { kind: 'node' as const, node: 'B' },
+    from: { node: 'A' },
+    to: { node: 'B' },
   }
 
   it('slides both anchors to one coordinate inside the shared lane', () => {
@@ -46,8 +46,8 @@ describe('facing-pair anchor alignment', () => {
       EDGE,
       {
         id: 'A-C',
-        from: { kind: 'node' as const, node: 'A' },
-        to: { kind: 'node' as const, node: 'C' },
+        from: { node: 'A' },
+        to: { node: 'C' },
       },
     ]
     const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')

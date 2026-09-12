@@ -87,8 +87,18 @@ export const OCIF_TYPE = {
   group: '@ocif/group',
   /** Node chrome OCIF has no vocabulary for: a group's label and background. */
   groupChrome: '@whiteboard/group-chrome',
-  /** Which face of a box a line attaches to, and the per-end arrowheads. */
+  /** Which face of a box a RELATION attaches to, and the per-end arrowheads. */
   edgeEnds: '@whiteboard/edge-ends',
+  /**
+   * The same for a LINE, plus the shape of each end.
+   *
+   * A separate type from the relation's because the two carry different
+   * things and a reader has to know which it is holding: an `@ocif/arrow` is
+   * a shape whose ends are coordinates, so everything about what it ATTACHES
+   * to lives here, while a relation's ends are already node ids on
+   * `@ocif/edge` and only the side and the arrowhead are missing.
+   */
+  lineEnds: '@whiteboard/line-ends',
   /** The points a person dragged a line through. */
   bends: '@whiteboard/bends',
   /** An edge's on-canvas label, which OCIF models as a separate node. */

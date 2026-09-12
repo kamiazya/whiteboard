@@ -183,8 +183,8 @@ describe('what an errand costs in tool calls', () => {
       // actually about.
       'author a canvas of 8 nodes and 6 edges': {
         calls: 2,
-        requestBytes: 1760,
-        responseBytes: 3700,
+        requestBytes: 1592,
+        responseBytes: 3316,
       },
       // A DISCOVERY errand (足場4b): learn what this workspace's own stencil
       // library defines, then wear one of its ids. Two calls, and the id is

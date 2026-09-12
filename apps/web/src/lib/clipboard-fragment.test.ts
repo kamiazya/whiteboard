@@ -3,7 +3,7 @@
 // self-contained fragment from a selection, and remint ids on paste so a
 // fragment can land any number of times in any canvas without colliding.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { clipboardFragmentSchema, endpointIn, endpointNode } from '@kamiazya/whiteboard-model'
+import { clipboardFragmentSchema, endIn, endNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { extractClipboardFragment, remintClipboardFragment } from './clipboard-fragment.js'
@@ -17,13 +17,13 @@ const canvas: SpatialCanvas = {
   edges: [
     {
       id: 'ab',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
     {
       id: 'bc',
-      from: { kind: 'node' as const, node: 'b' },
-      to: { kind: 'node' as const, node: 'c' },
+      from: { node: 'b' },
+      to: { node: 'c' },
     },
   ],
 }
@@ -48,8 +48,8 @@ describe('extractClipboardFragment', () => {
       boundaryEdges: [
         {
           id: 'bc',
-          from: { kind: 'node' as const, node: 'b' },
-          to: { kind: 'node' as const, node: 'c' },
+          from: { node: 'b' },
+          to: { node: 'c' },
         },
       ],
     })
@@ -76,8 +76,8 @@ describe('remintClipboardFragment', () => {
     const { nodes, edges } = remintClipboardFragment(fragment, seq(), new Set(['a', 'b', 'c']))
     expect(nodes.map((node) => node.id)).toEqual(['minted-1', 'minted-2'])
     expect(edges).toHaveLength(1)
-    expect(endpointNode(edges[0].from)).toBe('minted-1')
-    expect(endpointNode(edges[0].to)).toBe('minted-2')
+    expect(endNode(edges[0].from)).toBe('minted-1')
+    expect(endNode(edges[0].to)).toBe('minted-2')
     expect(edges[0].id).not.toBe('ab')
     // Non-id fields survive untouched.
     expect(nodes[0]).toMatchObject({ type: 'text', text: 'a', x: 0, y: 0 })
@@ -100,8 +100,8 @@ describe('remintClipboardFragment', () => {
       edges: [
         {
           id: 'x',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'ghost' },
+          from: { node: 'a' },
+          to: { node: 'ghost' },
         },
       ],
     }
@@ -127,8 +127,8 @@ describe('remintClipboardFragment', () => {
       expect(minted.size).toBe(nodes.length)
       for (const id of minted) expect(['a', 'b', 'c']).not.toContain(id)
       for (const edge of edges) {
-        expect(endpointIn(edge.from, minted)).toBe(true)
-        expect(endpointIn(edge.to, minted)).toBe(true)
+        expect(endIn(edge.from, minted)).toBe(true)
+        expect(endIn(edge.to, minted)).toBe(true)
       }
     },
   )

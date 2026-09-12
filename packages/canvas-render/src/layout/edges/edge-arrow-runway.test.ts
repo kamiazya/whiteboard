@@ -32,8 +32,8 @@ describe('a same-side route leaves its arrowhead a runway', () => {
     ]
     const routed = route(nodes, {
       id: 'e',
-      from: { kind: 'node' as const, node: 'A', side: 'bottom' as const },
-      to: { kind: 'node' as const, node: 'B', side: 'bottom' as const },
+      from: { node: 'A', side: 'bottom' as const },
+      to: { node: 'B', side: 'bottom' as const },
     })
     expect(finalSegmentLength(routed.path)).toBeGreaterThanOrEqual(ARROW_LENGTH_PX)
     // The corridor moved; the route did not gain a bend to get there.
@@ -49,8 +49,8 @@ describe('a same-side route leaves its arrowhead a runway', () => {
     ]
     const routed = route(nodes, {
       id: 'e',
-      from: { kind: 'node' as const, node: 'A', side: 'bottom' as const },
-      to: { kind: 'node' as const, node: 'B', side: 'bottom' as const },
+      from: { node: 'A', side: 'bottom' as const },
+      to: { node: 'B', side: 'bottom' as const },
     })
     expect(finalSegmentLength(routed.path)).toBeGreaterThanOrEqual(ARROW_LENGTH_PX)
   })
@@ -64,8 +64,8 @@ describe('a same-side route leaves its arrowhead a runway', () => {
     ]
     const routed = route(nodes, {
       id: 'e',
-      from: { kind: 'node' as const, node: 'A', side: 'bottom' as const },
-      to: { kind: 'node' as const, node: 'B', side: 'bottom' as const },
+      from: { node: 'A', side: 'bottom' as const },
+      to: { node: 'B', side: 'bottom' as const },
     })
     expect(routed.path.map((p) => `${p.x},${p.y}`)).toEqual([
       '50,140',

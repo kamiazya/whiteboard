@@ -25,8 +25,8 @@ it('a named pair that forces a route through its own box is overruled', () => {
   const edges: CanvasEdge[] = [
     {
       id: 'e',
-      from: { kind: 'node' as const, node: 'api', side: 'bottom' as const },
-      to: { kind: 'node' as const, node: 'auth', side: 'top' as const },
+      from: { node: 'api', side: 'bottom' as const },
+      to: { node: 'auth', side: 'top' as const },
     },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'straight')
@@ -42,8 +42,8 @@ it('a named pair that routes cleanly is kept as named', () => {
   const edges: CanvasEdge[] = [
     {
       id: 'e',
-      from: { kind: 'node' as const, node: 'web', side: 'bottom' as const },
-      to: { kind: 'node' as const, node: 'api', side: 'top' as const },
+      from: { node: 'web', side: 'bottom' as const },
+      to: { node: 'api', side: 'top' as const },
     },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'straight')

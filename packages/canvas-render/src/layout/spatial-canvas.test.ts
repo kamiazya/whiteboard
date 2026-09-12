@@ -132,8 +132,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 10, y: 0, text: 'b' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     }
     const options = baseOptions()
 
@@ -152,8 +152,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     }
     const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
 
@@ -174,8 +174,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
       label: 'edge label',
     }
     const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
@@ -329,8 +329,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     }
     const scene = layoutSpatialCanvas(
       {
@@ -363,14 +363,14 @@ describe('layoutSpatialCanvas', () => {
           [
             {
               id: 'bent',
-              from: { kind: 'node' as const, node: 'a' },
-              to: { kind: 'node' as const, node: 'b' },
+              from: { node: 'a' },
+              to: { node: 'b' },
               facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
             },
             {
               id: 'plain',
-              from: { kind: 'node' as const, node: 'b' },
-              to: { kind: 'node' as const, node: 'c' },
+              from: { node: 'b' },
+              to: { node: 'c' },
             },
           ],
         ),
@@ -398,13 +398,13 @@ describe('layoutSpatialCanvas', () => {
     const crossing = [
       {
         id: 'first',
-        from: { kind: 'node' as const, node: 'a' },
-        to: { kind: 'node' as const, node: 'b' },
+        from: { node: 'a' },
+        to: { node: 'b' },
       },
       {
         id: 'second',
-        from: { kind: 'node' as const, node: 'c' },
-        to: { kind: 'node' as const, node: 'd' },
+        from: { node: 'c' },
+        to: { node: 'd' },
       },
     ]
     const jumpsOf = (edges: CanvasEdge[]) => {
@@ -444,8 +444,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
       label: 'L',
     }
     const scene = layoutSpatialCanvas(
@@ -490,8 +490,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     }
     const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
     expect(scene.nodes.some((n) => n.kind === 'textRun' && n.text === 'edge label')).toBe(false)
@@ -502,8 +502,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
       label: '',
     }
     const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
@@ -514,8 +514,8 @@ describe('layoutSpatialCanvas', () => {
     const a = textNode({ id: 'a' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'ghost' },
+      from: { node: 'a' },
+      to: { node: 'ghost' },
       label: 'edge label',
     }
     let scene!: ReturnType<typeof layoutSpatialCanvas>
@@ -531,8 +531,8 @@ describe('layoutSpatialCanvas', () => {
     const a = textNode({ id: 'a' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'ghost' },
+      from: { node: 'a' },
+      to: { node: 'ghost' },
     }
     // A throw here fails the test — the assertion below is on the degraded result.
     const scene = layoutSpatialCanvas(canvas([a], [edge]), baseOptions())
@@ -809,8 +809,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 500, text: 'file' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     }
     const options1 = baseOptions({ appearance: fakeAppearance })
     const options2 = baseOptions({ appearance: colorfulResolver })
@@ -834,8 +834,8 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 500, text: 'file' })
     const edge = {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
       label: 'link',
     }
     const built = canvas([a, b], [edge])
@@ -866,8 +866,8 @@ describe('edge routing style from the canvas', () => {
   const link: SpatialCanvas['edges'] = [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
   ]
 
@@ -975,14 +975,14 @@ describe('layoutSpatialEdges', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
           label: 'across',
         },
         {
           id: 'e2',
-          from: { kind: 'node' as const, node: 'c' },
-          to: { kind: 'node' as const, node: 'd' },
+          from: { node: 'c' },
+          to: { node: 'd' },
         },
       ],
       facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
@@ -1007,8 +1007,8 @@ describe('layoutSpatialEdges', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
           label: 'across',
         },
       ],

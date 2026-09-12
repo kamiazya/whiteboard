@@ -1,5 +1,4 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeEndpoint } from '@kamiazya/whiteboard-model'
 import { tidyNodes } from '../tidy.js'
 
 /**
@@ -60,8 +59,8 @@ const group = (
 })
 const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge => ({
   id,
-  from: nodeEndpoint(fromNode),
-  to: nodeEndpoint(toNode),
+  from: { node: fromNode },
+  to: { node: toNode },
   ...(label === undefined ? {} : { label }),
 })
 
@@ -223,8 +222,8 @@ const laneArchitecture: SpatialCanvas = {
     ] as const
   ).map(([id, fromNode, toNode]) => ({
     id,
-    from: { kind: 'node' as const, node: fromNode, side: 'bottom' as const },
-    to: { kind: 'node' as const, node: toNode, side: 'top' as const, end: 'arrow' as const },
+    from: { node: fromNode, side: 'bottom' as const },
+    to: { node: toNode, side: 'top' as const, end: 'arrow' as const },
   })),
 }
 
@@ -266,14 +265,14 @@ const laneInsert: SpatialCanvas = {
     ...fixtureArchitecture.edges.filter((e) => e.id !== 'db'),
     {
       id: 'daemon-cache',
-      from: { kind: 'node' as const, node: 'daemon' },
-      to: { kind: 'node' as const, node: 'cache', end: 'arrow' as const },
+      from: { node: 'daemon' },
+      to: { node: 'cache', end: 'arrow' as const },
       label: '',
     },
     {
       id: 'cache-sqlite',
-      from: { kind: 'node' as const, node: 'cache' },
-      to: { kind: 'node' as const, node: 'sqlite', end: 'arrow' as const },
+      from: { node: 'cache' },
+      to: { node: 'sqlite', end: 'arrow' as const },
       label: 'libsql',
     },
   ],

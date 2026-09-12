@@ -21,13 +21,13 @@ const canvas: SpatialCanvas = {
   edges: [
     {
       id: 'e1',
-      from: { kind: 'node' as const, node: 'a' },
-      to: { kind: 'node' as const, node: 'b' },
+      from: { node: 'a' },
+      to: { node: 'b' },
     },
     {
       id: 'e2',
-      from: { kind: 'node' as const, node: 'b' },
-      to: { kind: 'node' as const, node: 'c' },
+      from: { node: 'b' },
+      to: { node: 'c' },
     },
   ],
   facets: { 'visual.edges/v0': { routing: 'orthogonal' } },

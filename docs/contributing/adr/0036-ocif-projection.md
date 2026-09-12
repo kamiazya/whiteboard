@@ -26,6 +26,21 @@ what projecting it onto OCIF costs:
 | crosses as something else (`degraded`) | 4 | **11** |
 | cannot cross (`dropped`) | 4 | **2** |
 
+*Correction (2026-09-12, the same day): the OCIF column above was read off the
+specification, and writing the projection moved it to **native 15, extension
+21, degraded 9, dropped 0**. Five rows were wrong. `nodes[].color` and
+`edges[].color` are not degraded — resolving a preset needs a palette, and a
+palette belongs to `canvas-render`, which depends on codec rather than the
+reverse, so the colour crosses as authored on an extension of ours.
+`nodes[].subpath` and `nodes[].embed.versionRef` are not dropped — what the
+FORMAT cannot state and what this PROJECTION cannot carry are different
+questions. And the three facet buckets were `native` in the table while the
+code carried them on a vendor key, which the foreign-reader comparison caught;
+they are ordinary OCIF extensions now. The original numbers are left above
+because the argument below was made on them, and because a measurement taken
+by reading is exactly what this correction is evidence about. **Nothing is
+dropped** is the stronger form of the claim the next paragraph makes.*
+
 **`native` falls, and that reading is the opposite of what it looks like.**
 The eight positions OCIF states that JSON Canvas cannot are the ones that
 matter: `x`/`y`/`width`/`height` cross **unrounded** (OCIF's coordinates are
@@ -34,8 +49,9 @@ survives), an embedded document crosses **natively** (OCIF nests canvases by
 letting a node reference an OCIF document as a resource), and **all three
 facet buckets** cross natively — because OCIF's `data[]` extension mechanism
 *is* ADR-0013's facet system: a namespaced, versioned, schema'd attribute
-group, declared in the file's own `schemas` array. `dropped` halves for the
-same reason.
+group, declared in the file's own `schemas` array. `dropped` goes to ZERO for the
+same reason — every position this model can hold reaches an OCIF document
+somehow, which JSON Canvas cannot say.
 
 `degraded` rising is OCIF **having distinctions this model lacks**:
 

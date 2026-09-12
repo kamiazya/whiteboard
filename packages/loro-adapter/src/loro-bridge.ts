@@ -2,11 +2,13 @@ import {
   type AnnotationAnchor,
   type CanvasComment,
   type CanvasEdge,
+  type CanvasLine,
   canvasEdgeSchema,
+  canvasLineSchema,
   type DocumentKind,
   documentKindSchema,
   type ExtensionFacets,
-  endpointNode,
+  endNode,
   extensionFacetsSchema,
   type SpatialCanvas,
   type SpatialNode,
@@ -29,6 +31,10 @@ import { minimalChange } from './minimal-change.js'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
+// Ink (ADR-0036 decision 2), in its own plane for the reason edges have one:
+// per-element keys, so two peers drawing concurrently both survive.
+const LINES_KEY = 'lines'
+
 /**
  * The canvas ENVELOPE — properties of the canvas rather than of anything on
  * it (today: the `x-whiteboard` rendering preferences).
@@ -197,6 +203,21 @@ function edgeToFields(edge: CanvasEdge): Fields {
   return fields
 }
 
+/**
+ * A LINE's fields. Identical in shape to an edge's, because the split is about
+ * what the element MEANS rather than what it is allowed to carry — the one
+ * difference is that an end may be a bare point, and an end is one value here
+ * either way.
+ */
+function lineToFields(line: CanvasLine): Fields {
+  const fields: Fields = { id: line.id, from: line.from, to: line.to }
+  if (line.color !== undefined) fields.color = line.color
+  if (line.label !== undefined) fields.label = line.label
+  if (line.bends !== undefined) fields.bends = line.bends
+  if (line.facets !== undefined) fields.facets = line.facets
+  return fields
+}
+
 function commentToFields(comment: CanvasComment): Fields {
   // Same loud refusal as nodeToFields: readSpatialCanvas round-trips every
   // comment through the Zod schema and silently drops failures, so a NaN
@@ -283,6 +304,15 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
     edgesMap.set(edge.id, edgeToFields(edge))
   }
 
+  const linesMap = doc.getMap(LINES_KEY)
+  const existingLineIds = new Set<string>(linesMap.keys())
+  const incomingLineIds = new Set<string>()
+
+  for (const line of canvas.lines ?? []) {
+    incomingLineIds.add(line.id)
+    linesMap.set(line.id, lineToFields(line))
+  }
+
   // A resync is the second removal path, alongside deleteSpatialNode/Edge —
   // so it owes the same lock cascade.
   for (const id of existingNodeIds) {
@@ -293,6 +323,14 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
   for (const id of existingEdgeIds) {
     if (incomingEdgeIds.has(id)) continue
     edgesMap.delete(id)
+    dropLockInto(doc, EDGE_LOCKS_KEY, id)
+  }
+  // Lines share the EDGE lock plane rather than getting one of their own: a
+  // lock is keyed by element id, ids are unique across both collections, and a
+  // second plane would be a second place for a lock to be orphaned.
+  for (const id of existingLineIds) {
+    if (incomingLineIds.has(id)) continue
+    linesMap.delete(id)
     dropLockInto(doc, EDGE_LOCKS_KEY, id)
   }
 }
@@ -322,8 +360,7 @@ function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean
     // A cascade follows NODE ends only: an edge with a free end names nothing
     // that can be deleted, so deleting a node never takes it with it.
     const touches =
-      parsed.success &&
-      (endpointNode(parsed.data.from) === nodeId || endpointNode(parsed.data.to) === nodeId)
+      parsed.success && (endNode(parsed.data.from) === nodeId || endNode(parsed.data.to) === nodeId)
     if (touches) {
       edgesMap.delete(edgeId)
       // The cascaded edges are removals too, so their own locks go with them.
@@ -632,6 +669,7 @@ export function setEdgeLock(doc: DocumentContainers, edgeId: string, locked: boo
 export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
+  const linesMap = doc.getMap(LINES_KEY)
 
   const nodes: SpatialNode[] = []
   for (const nodeId of nodesMap.keys()) {
@@ -647,6 +685,12 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
     if (parsed.success) edges.push(parsed.data)
   }
 
+  const lines: CanvasLine[] = []
+  for (const lineId of linesMap.keys()) {
+    const parsed = canvasLineSchema.safeParse(linesMap.get(lineId))
+    if (parsed.success) lines.push(parsed.data)
+  }
+
   const facets = readCanvasFacets(doc)
 
   // The annotation layer is document-level and format-agnostic, so reading it
@@ -660,6 +704,9 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   return {
     nodes,
     edges,
+    // Omitted when empty, matching what the model canonicalises to — an
+    // absent `lines` and an empty one say the same thing.
+    ...(lines.length > 0 && { lines }),
     ...(facets !== undefined && { facets }),
     ...(comments.length > 0 && { comments }),
   }
@@ -998,6 +1045,7 @@ export function readDocumentKind(doc: DocumentContainers): DocumentKind | undefi
 export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 'text' }> = [
   { key: NODES_KEY, kind: 'map' },
   { key: EDGES_KEY, kind: 'map' },
+  { key: LINES_KEY, kind: 'map' },
   { key: CANVAS_KEY, kind: 'map' },
   { key: COMMENTS_KEY, kind: 'map' },
   { key: THREADS_KEY, kind: 'map' },

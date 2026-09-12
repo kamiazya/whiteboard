@@ -44,8 +44,8 @@ export async function seededServer(): Promise<ReturnType<typeof createServer>> {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n2' },
+          from: { node: 'n1' },
+          to: { node: 'n2' },
         },
       ],
       comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }],

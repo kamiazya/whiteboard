@@ -18,13 +18,13 @@ const canvas: SpatialCanvas = {
   edges: [
     {
       id: 'e-in',
-      from: { kind: 'node' as const, node: 'in-launch' },
-      to: { kind: 'node' as const, node: 'g-inner' },
+      from: { node: 'in-launch' },
+      to: { node: 'g-inner' },
     },
     {
       id: 'e-out',
-      from: { kind: 'node' as const, node: 'in-launch' },
-      to: { kind: 'node' as const, node: 'outside' },
+      from: { node: 'in-launch' },
+      to: { node: 'outside' },
     },
   ],
 }

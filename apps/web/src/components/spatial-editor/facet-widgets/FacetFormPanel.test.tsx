@@ -468,8 +468,8 @@ describe('a registered editor is a COMPONENT, not a function the panel calls', (
 describe('the panel retargeted at an edge', () => {
   const edge = (facets?: Record<string, unknown>): CanvasEdge => ({
     id: 'e1',
-    from: { kind: 'node' as const, node: 'a' },
-    to: { kind: 'node' as const, node: 'b' },
+    from: { node: 'a' },
+    to: { node: 'b' },
     ...(facets === undefined ? {} : { facets }),
   })
 

@@ -1,4 +1,4 @@
-import type { CanvasEdge, EdgeEndpoint } from '@kamiazya/whiteboard-model'
+import type { CanvasLine, LineEnd } from '@kamiazya/whiteboard-model'
 import {
   canvasCommentArbitrary,
   extensionFacetsArbitrary,
@@ -53,13 +53,15 @@ const bendsNormalised = <T extends { bends?: readonly { x: number; y: number }[]
  * property on the day its field arrived, which is the argument for keeping
  * the property rather than only the three examples beside it.
  */
-const endpointNormalised = (end: EdgeEndpoint): EdgeEndpoint =>
+const endNormalised = (end: LineEnd): LineEnd =>
   end.kind === 'point' ? { ...end, point: zeroNormalised(end.point) } : end
 
-const edgePointsNormalised = (edge: CanvasEdge): CanvasEdge => ({
-  ...edge,
-  from: endpointNormalised(edge.from),
-  to: endpointNormalised(edge.to),
+// Only a LINE's ends can hold a coordinate since ADR-0036 decision 2, so this
+// is the only element shape that needs it. An edge's ends name a node.
+const linePointsNormalised = (line: CanvasLine): CanvasLine => ({
+  ...line,
+  from: endNormalised(line.from),
+  to: endNormalised(line.to),
 })
 
 describe('loro-bridge properties', () => {
@@ -74,8 +76,14 @@ describe('loro-bridge properties', () => {
       writeSpatialCanvas(doc, canvas)
       const result = readSpatialCanvas(doc)
       expect(byId(result.nodes)).toEqual(byId(canvas.nodes).map(zeroNormalised))
-      expect(byId(result.edges)).toEqual(
-        byId(canvas.edges).map(bendsNormalised).map(edgePointsNormalised),
+      expect(byId(result.edges)).toEqual(byId(canvas.edges).map(bendsNormalised))
+      // Ink travels its own plane (ADR-0036 decision 2), so it needs its own
+      // half of this equality — without it the whole collection could stop
+      // being written and the property would stay green.
+      expect(byId(result.lines ?? [])).toEqual(
+        byId(canvas.lines ?? [])
+          .map(bendsNormalised)
+          .map(linePointsNormalised),
       )
       // The envelope too — routing preferences and the canvas's facets —
       // because this bridge is the path the app saves through, and a JSON
@@ -112,8 +120,8 @@ describe('loro-bridge properties', () => {
       edges: [
         {
           id: 'e',
-          from: { kind: 'node' as const, node: 'a' },
-          to: { kind: 'node' as const, node: 'b' },
+          from: { node: 'a' },
+          to: { node: 'b' },
           bends: [{ x: -0, y: 2.5 }],
         },
       ],
@@ -123,22 +131,24 @@ describe('loro-bridge properties', () => {
     expect(bend?.y).toBe(2.5)
   })
 
-  it('normalises a negative zero in a free ENDPOINT the same way', () => {
+  it('normalises a negative zero in a free LINE end the same way', () => {
     // The third of the three, and the one with the shortest path from a
     // gesture: releasing a connect drag in empty space writes the pointer's
-    // rounded position straight into the endpoint (ADR-0035 slice 3).
+    // rounded position straight into the end. It is a LINE since ADR-0036
+    // decision 2 — an edge with a point end was ink wearing a relation's shape.
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 1, height: 1 }],
-      edges: [
+      edges: [],
+      lines: [
         {
-          id: 'e',
+          id: 'l',
           from: { kind: 'node' as const, node: 'a' },
           to: { kind: 'point' as const, point: { x: -0, y: 2.5 } },
         },
       ],
     })
-    const to = readSpatialCanvas(doc).edges[0]?.to
+    const to = readSpatialCanvas(doc).lines?.[0]?.to
     expect(to?.kind).toBe('point')
     expect(Object.is(to?.kind === 'point' ? to.point.x : undefined, 0)).toBe(true)
     expect(to?.kind === 'point' ? to.point.y : undefined).toBe(2.5)

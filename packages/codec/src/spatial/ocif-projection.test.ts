@@ -24,25 +24,28 @@ describe('what the two formats reach, read side by side', () => {
     return tally
   }
 
-  it('loses nothing this model holds, where JSON Canvas drops four positions', () => {
-    // The headline of the measurement, pinned so a later change to either
-    // ledger has to restate it. OCIF's `native` is wider because extensions
-    // are part of the format rather than one vendor key: facets, an embedded
-    // document and sub-pixel geometry are all things it can carry as itself.
+  it('leaves NEITHER format dropping anything, which is what the split bought', () => {
+    // The headline, pinned so a later change to either ledger has to restate
+    // it. Before ADR-0036 decision 2 this read `JSON Canvas dropped 4, OCIF
+    // dropped 0`; splitting the relation from the ink took JSON Canvas's four
+    // to zero as well — those rows WERE an edge's point ends, which the format
+    // was right to refuse and which are no longer an edge's to have.
+    //
+    // OCIF's `native` rose 15 -> 23 in the same move, because a line lands on
+    // `@ocif/arrow`, whose ends really are coordinates and which is the one
+    // element shape the format gives a per-end marker. Under the old shape one
+    // element served both meanings, so those positions were `degraded` for
+    // every edge whether or not that edge was ink.
     expect(kinds(JSON_CANVAS_PROJECTION)).toEqual({
-      native: 21,
-      extension: 16,
+      native: 19,
+      extension: 34,
       degraded: 4,
-      dropped: 4,
+      dropped: 0,
     })
     expect(kinds(OCIF_PROJECTION)).toEqual({
-      native: 15,
-      extension: 21,
-      degraded: 9,
-      // NOTHING is dropped. Every position this model can hold survives a
-      // round trip through OCIF — which JSON Canvas cannot say, and which is
-      // the headline of the measurement once the projection existed to
-      // correct the entries written from the spec alone.
+      native: 23,
+      extension: 29,
+      degraded: 5,
       dropped: 0,
     })
   })
@@ -55,6 +58,14 @@ describe('what the two formats reach, read side by side', () => {
     expect(gained.sort()).toEqual([
       'edges[].facets/*',
       'facets/*',
+      'lines[].facets/*',
+      'lines[].from.end',
+      'lines[].from.point.x',
+      'lines[].from.point.y',
+      'lines[].id',
+      'lines[].to.end',
+      'lines[].to.point.x',
+      'lines[].to.point.y',
       'nodes[].embed.documentId',
       'nodes[].facets/*',
       'nodes[].height',
@@ -72,11 +83,9 @@ describe('what the two formats reach, read side by side', () => {
     expect(lost.sort()).toEqual([
       'edges[].color',
       'edges[].from.end',
-      'edges[].from.kind',
       'edges[].from.side',
       'edges[].label',
       'edges[].to.end',
-      'edges[].to.kind',
       'edges[].to.side',
       'nodes[].background',
       'nodes[].backgroundStyle',

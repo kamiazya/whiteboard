@@ -4,8 +4,7 @@
 // cuts straight through that node. Picking an exposed side instead keeps
 // the route outside; authored sides and fully-covered nodes keep the old
 // behaviour.
-import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import { type EdgeSide, nodeEndpoint } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 
@@ -25,10 +24,8 @@ const edge = (
   sides: { readonly fromSide?: EdgeSide; readonly toSide?: EdgeSide } = {},
 ): CanvasEdge => ({
   id: 'e1',
-  from: nodeEndpoint(fromNode, {
-    ...(sides.fromSide === undefined ? {} : { side: sides.fromSide }),
-  }),
-  to: nodeEndpoint(toNode, { ...(sides.toSide === undefined ? {} : { side: sides.toSide }) }),
+  from: { node: fromNode, ...(sides.fromSide === undefined ? {} : { side: sides.fromSide }) },
+  to: { node: toNode, ...(sides.toSide === undefined ? {} : { side: sides.toSide }) },
 })
 
 describe('occlusion-aware default sides', () => {

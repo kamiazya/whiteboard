@@ -112,8 +112,8 @@ describe('GET /api/debug', () => {
       edges: [
         {
           id: 'e1',
-          from: { kind: 'node' as const, node: 'n1' },
-          to: { kind: 'node' as const, node: 'n2' },
+          from: { node: 'n1' },
+          to: { node: 'n2' },
         },
       ],
     })

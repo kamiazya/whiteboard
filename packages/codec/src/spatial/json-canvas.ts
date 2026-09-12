@@ -1,6 +1,7 @@
 import {
   canvasColorSchema,
   canvasCommentSchema,
+  canvasLineSchema,
   documentIdSchema,
   extensionFacetsSchema,
   integerSchema,
@@ -185,6 +186,22 @@ export type JsonCanvasEdge = z.infer<typeof jsonCanvasEdgeSchema>
  */
 export const canvasExtensionSchema = z.object({
   comments: z.array(canvasCommentSchema).optional().catch(undefined),
+  /**
+   * The ink an edge is not (ADR-0036 decision 2), carried whole rather than
+   * mapped onto the format's edges.
+   *
+   * A line between two nodes COULD be emitted as a JSON Canvas edge, and that
+   * would read better in a foreign tool — and it would be a lie of exactly the
+   * kind this split removes: the format's edge means "these are connected",
+   * which is the claim a line deliberately does not make. So the whole
+   * collection rides the extension key and a strict reader gets a board with
+   * the ink absent rather than a board with relations nobody asserted.
+   *
+   * `.catch(undefined)` per bucket, like the comments beside it: a malformed
+   * line must cost the ink, not the conversation, and neither may cost the
+   * board.
+   */
+  lines: z.array(canvasLineSchema).optional().catch(undefined),
   facets: extensionFacetsSchema.optional().catch(undefined),
 })
 

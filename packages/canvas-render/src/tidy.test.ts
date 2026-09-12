@@ -1,4 +1,3 @@
-import { nodeEndpoint } from '@kamiazya/whiteboard-model'
 // Tidy = deterministic normalization that respects the author's rough
 // topology: outermost-group units, fixed-first-anchor band alignment (no
 // running-mean chaining), bounded overlap resolution, locked nodes as
@@ -170,8 +169,8 @@ describe('row order by edges', () => {
   // answer, moved nothing in nine trials; tidy moves it.
   const edges = (pairs: readonly (readonly [string, string])[]) =>
     pairs.map(([fromNode, toNode]) => ({
-      from: nodeEndpoint(fromNode),
-      to: nodeEndpoint(toNode),
+      from: { node: fromNode },
+      to: { node: toNode },
     }))
 
   it('a box whose same-row connections all lie to one side swaps with the nearest of them', () => {
@@ -886,8 +885,8 @@ describe('tidy properties', () => {
     const edges = pairs
       .filter(([a, b]) => a !== b && a < nodes.length && b < nodes.length)
       .map(([a, b]) => ({
-        from: { kind: 'node' as const, node: `n${a}` },
-        to: { kind: 'node' as const, node: `n${b}` },
+        from: { node: `n${a}` },
+        to: { node: `n${b}` },
       }))
     const once = applyMoves(nodes, tidyNodes(nodes, { edges }))
     expect(tidyNodes(once, { edges })).toEqual([])
@@ -950,8 +949,8 @@ describe('tidy properties', () => {
         edges: pairs
           .filter(([a, b]) => a !== b && a < nodes.length && b < nodes.length)
           .map(([a, b]) => ({
-            from: nodeEndpoint(nodes[a]?.id as string),
-            to: nodeEndpoint(nodes[b]?.id as string),
+            from: { node: nodes[a]?.id as string },
+            to: { node: nodes[b]?.id as string },
           })),
       }
       const once = applyMoves(nodes, [...tidyNodes(nodes, options)])
