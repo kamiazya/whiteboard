@@ -1989,6 +1989,25 @@ function routeOrthogonal(
  * straight through a node reads as though it connects that node instead. The
  * two endpoint nodes are never obstacles — the edge has to reach them.
  */
+/**
+ * The box an end is anchored to — a node's, or the DEGENERATE box at a free
+ * point ([ADR-0035](../../../../../docs/contributing/adr/0035-model-and-format.md)
+ * slice 3b). `undefined` only for a reference to a node that is not here,
+ * which is a different thing and still degrades.
+ *
+ * A point as a zero-size rect is what lets the rest of this file stay
+ * unchanged: side choice reads centres and a degenerate box's centre IS the
+ * point, `sidePoint` answers that point for all four sides, and a point
+ * appears in no node list so it can never be its own obstacle or anyone
+ * else's. The alternative — a second routing path for "this end has no box" —
+ * would be a second producer of the geometry this package keeps to one.
+ */
+function rectAtEnd(nodes: readonly SpatialNode[], end: CanvasEdge['from']): Rect | undefined {
+  if (end.kind === 'point') return { x: end.point.x, y: end.point.y, w: 0, h: 0 }
+  const node = nodes.find((n) => n.id === end.node)
+  return node === undefined ? undefined : rectOf(node)
+}
+
 export function routeEdge(
   nodes: readonly SpatialNode[],
   edge: CanvasEdge,
@@ -2001,14 +2020,14 @@ export function routeEdge(
   // layout and this is the one O(nodes) list it can hand over intact.
   others?: readonly Rect[],
 ): ResolvedEdgeNode {
-  const fromNode = nodes.find((n) => n.id === endpointNode(edge.from))
-  const toNode = nodes.find((n) => n.id === endpointNode(edge.to))
+  const fromRect = rectAtEnd(nodes, edge.from)
+  const toRect = rectAtEnd(nodes, edge.to)
 
   // JSON Canvas 1.0 defaults: no source arrowhead, a destination arrowhead.
   const fromEnd = edge.from.end ?? 'none'
   const toEnd = edge.to.end ?? 'arrow'
 
-  if (!fromNode || !toNode) {
+  if (fromRect === undefined || toRect === undefined) {
     const origin = { x: 0, y: 0 }
     return {
       kind: 'edge',
@@ -2020,9 +2039,6 @@ export function routeEdge(
       toEnd,
     }
   }
-
-  const fromRect = rectOf(fromNode)
-  const toRect = rectOf(toNode)
 
   // Bends come FIRST, before the self-edge shape and before any computed
   // routing: the stored path is not one routing among the others, it is the

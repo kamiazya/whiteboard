@@ -368,7 +368,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // calls per clustered layout, per the profile this rule records) and moved
   // the map lookup to model's own `nodeAtEnd`, deleting the local copy. What
   // is left is those hoists and the comments on them.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2151,
+  // +16 for `rectAtEnd`: a free end is a DEGENERATE box at its point, which
+  // is the whole of what lets this file draw one without a second routing
+  // path beside the one it has.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2167,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
