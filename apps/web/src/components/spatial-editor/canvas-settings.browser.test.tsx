@@ -228,13 +228,19 @@ it('lets a person give the document its own mark, and take it back', async () =>
   // The entry point everything else this facet feeds depends on: the tab,
   // the file row and — where there is room — the overview all read what this
   // writes. The options come from the plugin's own DECLARATION, so the
-  // canvas offers exactly the set a node does.
+  // canvas offers exactly the set a node does — including the emoji arm,
+  // which is a search rather than a list because the facet accepts every
+  // grapheme and a definition cannot carry nineteen hundred of them.
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   await openPanel(container)
 
+  const picker = await openSymbolPicker(menu() as HTMLElement)
+  fireEvent.change(picker.querySelector('[aria-label="Search symbols"]') as HTMLInputElement, {
+    target: { value: 'star' },
+  })
   const pick = await vi.waitFor(() => {
-    const el = menu()?.querySelector('[aria-label="Emoji ⭐"]')
+    const el = picker.querySelector('[aria-label="star"]')
     expect(el).not.toBeNull()
     return el as HTMLElement
   })
@@ -246,7 +252,7 @@ it('lets a person give the document its own mark, and take it back', async () =>
     }),
   )
 
-  fireEvent.click(menu()?.querySelector('[aria-label="No symbol"]') as HTMLElement)
+  fireEvent.click(picker.querySelector('[aria-label="No symbol"]') as HTMLElement)
   // Removed without a trace: a canvas that chose and reverted serializes
   // like one that never chose.
   await vi.waitFor(() => expect(latest.canvas.facets?.['visual.symbol/v0']).toBeUndefined())
@@ -276,6 +282,25 @@ it('lets a person give the document its own mark, and take it back', async () =>
  * inspector, and holding every surface to one control is a scan's job, not
  * this file's.
  */
+/**
+ * Opens the Symbol picker's popover and answers the panel it drew.
+ *
+ * A catalog is hundreds of cells, so the row keeps one line and the picker
+ * opens over it. The popover stays where React put it in the DOM — the top
+ * layer is a rendering concept, not a move — so it is still inside the
+ * settings panel for a query, and only once it is open.
+ */
+async function openSymbolPicker(panel: HTMLElement): Promise<HTMLElement> {
+  fireEvent.click(panel.querySelector('[aria-label="Choose symbol"]') as HTMLElement)
+  return vi.waitFor(() => {
+    const popover = panel.querySelector('[role="dialog"][aria-label="Choose symbol"]')
+    // The CATALOG, not just the search box: this build's own icons are its
+    // first band now, so nothing but absence is on screen before it loads.
+    expect(popover?.querySelector('[aria-label="Symbol categories"]')).not.toBeNull()
+    return popover as HTMLElement
+  })
+}
+
 it('draws every row through the one selection control', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
@@ -285,20 +310,55 @@ it('draws every row through the one selection control', async () => {
   // Every row, facet-contributed or hand-written by this vessel. The SET,
   // not the order — which row comes first is the contribution point's
   // business and has its own test.
-  const groups = [...panel.querySelectorAll('[role="radiogroup"]')]
-  expect(groups.map((g) => g.getAttribute('aria-label')).sort()).toEqual([
-    'Edge routing',
-    'Line jumps',
-    'Symbol',
-    'Theme',
-  ])
+  //
+  // Symbol contributes THREE bands rather than one, and each is named for
+  // what it is: the listed options, the categories chooser, and the
+  // category on screen. Two bands both called "Symbol" would tell a
+  // screen-reader user nothing about which of them they had landed in. The
+  // last two arrive with the catalog's dynamic import, so the set is waited
+  // for rather than read once — read too early it is a SHORTER list, which
+  // reads exactly like a row that went missing.
+  const labels = () =>
+    [...panel.querySelectorAll('[role="radiogroup"]')]
+      .map((group) => group.getAttribute('aria-label'))
+      .sort()
+  // Closed, Symbol contributes a TRIGGER rather than a row: a catalog is
+  // hundreds of cells and a property row is one line.
+  expect(labels()).toEqual(['Edge routing', 'Line jumps', 'Theme'])
+
+  // Opened, its bands appear — and each is named for what it is. Two bands
+  // both called "Symbol" would tell a screen-reader user nothing about
+  // which of the two they had landed in. The last two arrive with the
+  // catalog's dynamic import, so the set is waited for rather than read
+  // once: read too early it is a SHORTER list, which reads exactly like a
+  // row that went missing.
+  await openSymbolPicker(panel)
+  await vi.waitFor(() =>
+    expect(labels()).toEqual([
+      'Edge routing',
+      'Line jumps',
+      'Symbol',
+      'Symbol categories',
+      'Symbol: Icons',
+      'Theme',
+    ]),
+  )
 
   // Every option in every group is the same thing: a real radio (so arrow
   // keys work, which the button rows never had), visually hidden, inside a
   // label that carries the accessible name.
-  for (const group of groups) {
+  for (const group of panel.querySelectorAll('[role="radiogroup"]')) {
     const options = [...group.querySelectorAll('label')]
-    expect(options.length).toBeGreaterThan(1)
+    // More than one, because a control offering one thing is not a choice —
+    // except the band that holds ABSENCE alone. Everything else `Symbol`
+    // once listed moved into the catalog when the icons became its first
+    // category, and "no symbol" belongs to no category, so it is the one
+    // band that is legitimately a single cell.
+    const floor = group.getAttribute('aria-label') === 'Symbol' ? 1 : 2
+    expect(
+      options.length,
+      `${group.getAttribute('aria-label')} offers too few`,
+    ).toBeGreaterThanOrEqual(floor)
     for (const option of options) {
       const input = option.querySelector('input[type="radio"]')
       expect(input, `${option.getAttribute('title') ?? '?'} is not a radio`).not.toBeNull()
@@ -334,6 +394,10 @@ it('draws every option as a picture, in the layout its row declares', async () =
   const { container } = render(<Host />)
   await openPanel(container)
   const panel = menu() as HTMLElement
+  // Symbol's chips are behind its trigger now, and they are half of what
+  // this case is about — so it opens them rather than quietly checking the
+  // three rows that stayed.
+  await openSymbolPicker(panel)
 
   const options = [...panel.querySelectorAll('[role="radiogroup"] label')]
   // A count, so a selector that stops matching cannot report itself as a
@@ -357,6 +421,8 @@ it('draws every option as a picture, in the layout its row declares', async () =
       `${label}: ${name} repeats its word in a tooltip`,
     ).toBeNull()
   }
+  // The LISTED band, which is the one labelled with the facet's own name;
+  // the catalog's grids beside it are named for the category they show.
   for (const option of [...rowOf('Symbol').querySelectorAll('label')]) {
     const name = option.querySelector('input')?.getAttribute('aria-label') ?? '?'
     // The clipped radio contributes no text, so what is left is what shows.

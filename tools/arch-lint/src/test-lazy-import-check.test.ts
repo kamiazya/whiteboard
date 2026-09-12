@@ -82,6 +82,27 @@ const LITERAL_DYNAMIC_IMPORT = /await import\(\s*(?:\/\*.*\*\/\s*)?['"`]/
 
 const MARKER = 'lazy-import:'
 
+/**
+ * A line that is ENTIRELY a comment, which is the one place `await import(`
+ * appears without being one.
+ *
+ * Deliberately the whole-line shape rather than "anything after `//`": a
+ * prefix test would read the `//` inside a string (`'http://x'`) as the
+ * start of a comment and silently excuse a real import later on that line,
+ * which is the wrong direction for a guard to be wrong in. A real dynamic
+ * import never begins its line with a comment opener.
+ *
+ * It exists because prose about this rule tripped it. A comment in
+ * `FacetFormPanel.test.tsx` explaining why a module is imported statically
+ * — naming the very call it is avoiding — was reported as an offender, and
+ * the only ways to satisfy the scan were to weaken the comment or to claim
+ * an exemption that was not true (the file has no dynamic import at all,
+ * in code or in a fixture). Both teach writing around the scan instead of
+ * writing what is true, which is the trap `.claude/rules/coverage-ledger.md`
+ * records for its own scans.
+ */
+const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/
+
 function listTestFiles(dir: string): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -107,6 +128,9 @@ function offendingLines(source: string): Array<{ line: number; text: string }> {
   // excuse an import that has drifted away from it.
   let previousLineWasCovered = false
   for (const [index, line] of lines.entries()) {
+    // Prose is not code. Skipped WITHOUT clearing the run flag, so a comment
+    // between two imports a marker covers does not end their run.
+    if (COMMENT_LINE.test(line)) continue
     // The `await import(` has to be on THIS line: the join is only there to
     // reach a specifier that spilled onto the next one. Without this the
     // line BEFORE an import matches too, and the report names it.
@@ -168,6 +192,18 @@ describe('literal dynamic import in test files', () => {
     ).toEqual([{ line: 6, text: "const d = await import('./d.js')" }])
     // Computed and split across lines: still legitimate.
     expect(offendingLines(`const m = await import(\n  pathToFileURL(p).href,\n)`)).toHaveLength(0)
+    // Prose ABOUT the pattern is not the pattern — in either comment style.
+    expect(
+      offendingLines(
+        `// hoisted, because \`await import('./y.js')\` would be charged to the query`,
+      ),
+    ).toHaveLength(0)
+    expect(offendingLines(` * see \`await import('./y.js')\``)).toHaveLength(0)
+    // And a real import with a comment AFTER it is still an offender: the
+    // test is the whole line's shape, never "there is a // somewhere".
+    expect(offendingLines(`const y = await import('./y.js') // why`)).toHaveLength(1)
+    // The `//` inside a string does not turn the line into prose.
+    expect(offendingLines(`const u = 'http://x'\nconst y = await import('./y.js')`)).toHaveLength(1)
   })
 
   it('every literal await import is mocked, marked, or hoisted', () => {

@@ -60,7 +60,7 @@ describe('a shipped facet that names an asset offers a picker', () => {
   it('every picker option names an asset this build actually registers', () => {
     const unregistered = bundledPlugins.flatMap((plugin) =>
       plugin.facets.flatMap((facet) =>
-        (facet.editor?.picker?.options ?? []).flatMap((option) =>
+        pickerOptions(plugin.id, facet).flatMap((option) =>
           Object.entries(facet.assetRefs ?? {}).flatMap(([field, kind]) => {
             const id = (option.payload as Record<string, unknown> | null)?.[field]
             if (typeof id !== 'string') return []
@@ -77,9 +77,17 @@ describe('a shipped facet that names an asset offers a picker', () => {
   it('finds the picker options it is judging, so an empty pass is not a broken scan', () => {
     // The companion to the field count below: a picker whose options stopped
     // being read would report zero unregistered ids forever.
+    //
+    // It fired, which is why these scans read the derived FORM and no longer
+    // the declaration. `visual.theme` stopped writing its options out (足場
+    // 3b) and the registry fills them instead, so a scan over
+    // `editor.picker.options` went from two payloads to none — and the
+    // unregistered check above would have passed over an empty set forever.
+    // The two payloads below are unchanged by that move, which is the point:
+    // same cards, produced somewhere else.
     const judged = bundledPlugins.flatMap((plugin) =>
       plugin.facets.flatMap((facet) =>
-        (facet.editor?.picker?.options ?? [])
+        pickerOptions(plugin.id, facet)
           .filter((option) =>
             Object.keys(facet.assetRefs ?? {}).some(
               (field) => (option.payload as Record<string, unknown> | null)?.[field] !== undefined,
@@ -127,6 +135,16 @@ describe('a shipped facet that names an asset offers a picker', () => {
     expect(options.find((option) => option.value === 'pack.bucket')?.label).toBe('Bucket')
   })
 })
+
+/**
+ * The options a facet's picker actually OFFERS, which is not always what it
+ * declares: a picker naming a `specimenIcon` leaves its list to the
+ * registry, so the declaration is empty and the form is where the cards are.
+ */
+function pickerOptions(pluginId: string, facet: { name: string; version: string }) {
+  const form = bundledFacetRegistry.facetForm(`${pluginId}.${facet.name}/${facet.version}`)
+  return form.kind === 'picker' ? form.options : []
+}
 
 /** The options a segmented field actually offers, or a throw naming why not. */
 function segmentedOptions(

@@ -290,10 +290,20 @@ describe('what an errand costs in tool calls', () => {
         requestBytes: 916,
         responseBytes: 2086,
       },
+      // 2,060 -> 2,056 when an auto-placed box took the board's own width
+      // instead of a flat 260. Four bytes, and what they are worth reading
+      // for is what nearly happened instead: this errand's group was 700
+      // wide "too narrow for three boxes in a row on purpose", and at the
+      // harness's 120-wide seeded box all three suddenly FITTED. The group
+      // stopped growing, the errand stopped pricing the growth it exists to
+      // price, and the row would have read 1,952 — a 108-byte saving that
+      // was really a case no longer reached. The group is 300 now, sized
+      // against the board's box width rather than a constant, and the
+      // remaining 4 bytes are the grown group's new dimensions.
       'make a group hold exactly three boxes': {
         calls: 1,
         requestBytes: 549,
-        responseBytes: 2060,
+        responseBytes: 2056,
       },
     })
   })

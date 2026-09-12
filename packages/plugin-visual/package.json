@@ -12,6 +12,18 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./emoji": {
+      "types": "./src/emoji/index.ts",
+      "import": "./src/emoji/index.ts"
+    },
+    "./emoji/search": {
+      "types": "./src/emoji/search.ts",
+      "import": "./src/emoji/search.ts"
+    },
+    "./emoji/shortcode": {
+      "types": "./src/emoji/shortcode.ts",
+      "import": "./src/emoji/shortcode.ts"
+    },
     "./package.json": "./package.json",
     "./render": {
       "types": "./src/render.ts",

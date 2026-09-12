@@ -1,9 +1,4 @@
-import type {
-  FacetPickerOption,
-  FacetRegistry,
-  FacetSegmentedOption,
-  IconAsset,
-} from '@kamiazya/whiteboard-facet-engine'
+import type { FacetRegistry, IconAsset } from '@kamiazya/whiteboard-facet-engine'
 import {
   createFacetRegistry,
   defineFacet,
@@ -23,6 +18,13 @@ import {
 } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
+import {
+  EDGE_ROUTING_OPTIONS,
+  LINE_JUMP_OPTIONS,
+  SYMBOL_CATALOG,
+  SYMBOL_PICKER_OPTIONS,
+} from './editors.js'
+import { CATEGORY_GLYPHS } from './icons/category-glyphs.js'
 import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
 import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
@@ -168,8 +170,12 @@ const VISUAL_ICON_ASSETS: Readonly<Record<string, IconAsset>> = Object.fromEntri
     // Beside the vendored set, not inside it: `BUILT_IN_ICON_NAMES` is what
     // a NODE may wear as a badge, and the symbol picker derives its options
     // from that list. A picture of a routing style is not a badge, so it is
-    // registered geometry without being a symbol anyone can choose.
+    // registered geometry without being a symbol anyone can choose. Nor is
+    // a picture of an emoji CATEGORY — that one is chrome, drawn in the
+    // panel's own stroke language so the row that browses does not read as
+    // a spilled sample of what it browses.
     ...Object.entries(EDGE_GLYPHS),
+    ...Object.entries(CATEGORY_GLYPHS),
   ].map(([name, geometry]) => [name, { geometry: [...geometry] }]),
 )
 
@@ -182,57 +188,6 @@ const VISUAL_ASSET_ICONS: Readonly<Record<string, IconAsset>> = {
   ...VISUAL_ICON_ASSETS,
   signature: { viewBox: SIGNATURE_VIEWBOX, geometry: [...SIGNATURE_GEOMETRY] },
 }
-
-/**
- * A small starter set of character symbols beside the icons. Free entry is
- * a job for a form, not a picker; what a picker owes is a set somebody can
- * choose from in one press.
- */
-const SYMBOL_CHARS = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
-
-/**
- * Derived from the vendored set rather than listed, so an icon added to
- * `LUCIDE_ICONS` reaches the picker with no second edit — the drift that
- * put a name in one place and not the other cannot happen.
- */
-const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
-  { payload: null, label: 'No symbol', glyph: { kind: 'shape', name: 'none' } },
-  ...BUILT_IN_ICON_NAMES.map((name) => ({
-    payload: { kind: 'icon' as const, name },
-    label: `Icon ${name}`,
-    glyph: { kind: 'asset' as const, id: `visual.${name}` },
-  })),
-  ...SYMBOL_CHARS.map((char) => ({
-    payload: { kind: 'emoji' as const, char },
-    label: `Emoji ${char}`,
-    glyph: { kind: 'char' as const, value: char },
-  })),
-]
-
-/**
- * `visual.edges/v0`'s two rows, as data.
- *
- * Every value here is a stored one — neither row offers `value: null`,
- * because neither axis has an "absent" a person picks. Absence means "let
- * the theme decide", and the way back to it is picking the value the theme
- * already has: the write path canonicalises a pick equal to the effective
- * default down to no stored facet, so the row returns to following the
- * theme without a separate control saying so.
- */
-const EDGE_ROUTING_OPTIONS: readonly FacetSegmentedOption[] = [
-  { value: 'straight', label: 'Straight', glyph: { kind: 'asset', id: 'visual.edge-straight' } },
-  {
-    value: 'orthogonal',
-    label: 'Orthogonal',
-    glyph: { kind: 'asset', id: 'visual.edge-orthogonal' },
-  },
-  { value: 'curved', label: 'Curved', glyph: { kind: 'asset', id: 'visual.edge-curved' } },
-]
-
-const LINE_JUMP_OPTIONS: readonly FacetSegmentedOption[] = [
-  { value: 'none', label: 'Off', glyph: { kind: 'asset', id: 'visual.line-jumps-off' } },
-  { value: 'arc', label: 'On', glyph: { kind: 'asset', id: 'visual.line-jumps-on' } },
-]
 
 /**
  * The bundled plugin. Deliberately ordinary (ADR-0013 decision 3): it goes
@@ -357,38 +312,15 @@ export const visualPlugin = definePlugin({
           // give the specimen room to be seen. A chip-sized swatch of the
           // same mark reads as a smudge.
           layout: 'cards',
-          // The SAME mark three times, drawn three ways: plain for the
-          // bundled look, and once per theme through that theme's own
-          // `ink` and `glow`. So registering a theme needs no new SWATCH —
-          // the picture follows from the tokens the asset already carries,
-          // which is what ADR-0030 decision 2 promises.
-          //
-          // The OPTION LIST is still written out here, and that is a real
-          // gap rather than the promise: a deployment registering a third
-          // theme gets a picker that does not offer it, exactly as stencils
-          // did before `assetRefs` drove their options. This picker takes a
-          // different road — cards carrying a per-option GLYPH spec, not the
-          // plain `fields`/`segmented` shape the registry now fills — so
-          // closing it means deciding what glyph a theme nobody wrote a
-          // spec for should draw. Named so the next reader finds it rather
-          // than trusting the sentence above.
-          options: [
-            {
-              payload: null,
-              label: 'Default',
-              glyph: { kind: 'asset', id: 'visual.signature' },
-            },
-            {
-              payload: { theme: 'visual.sketch' },
-              label: 'Sketch',
-              glyph: { kind: 'theme', id: 'visual.sketch', icon: 'visual.signature' },
-            },
-            {
-              payload: { theme: 'visual.neon' },
-              label: 'Neon',
-              glyph: { kind: 'theme', id: 'visual.neon', icon: 'visual.signature' },
-            },
-          ],
+          // The SAME mark once per registered theme, drawn through that
+          // theme's own `ink` and `glow`, plus a plain one for the bundled
+          // look. The mark is named here because it belongs to this plugin;
+          // the IDS come from the registry, so a deployment registering a
+          // third theme gets a third card and this file does not change.
+          // That is ADR-0030 decision 2's promise, and it was prose until
+          // 足場3b (user decision, 2026-09-12) — this list was written out
+          // by hand, so a registered theme was applicable and unselectable.
+          specimenIcon: 'visual.signature',
         },
       },
     }),
@@ -402,16 +334,21 @@ export const visualPlugin = definePlugin({
       // attach, never to the payload — so the version does not move.
       targets: ['node', 'canvas', 'document'],
       schema: visualSymbolFacetSchema,
-      // The facet that broke the ladder, now declared like the rest.
+      // The facet that broke the ladder, now declared like the rest — and
+      // the one that then broke it a second way.
       //
-      // Its twelve choices straddle both schema arms, which a field-level
-      // control cannot express — so this one had a hand-written React
-      // component, and a hand-written component has no styling contract.
-      // The picker writes whole payloads, so the arms stop mattering, and
-      // the icon options name REGISTERED GEOMETRY (below) rather than
-      // shipping a drawing. Both halves are what let this facet come back
-      // inside the vocabulary.
-      editor: { picker: { options: SYMBOL_PICKER_OPTIONS } },
+      // Its choices straddle both schema arms, which a field-level control
+      // cannot express, so this facet had a hand-written React component
+      // and a hand-written component has no styling contract. The picker
+      // writes whole payloads, so the arms stop mattering, and the icon
+      // options name REGISTERED GEOMETRY rather than shipping a drawing.
+      //
+      // What that still could not say was "and anything else": a listed
+      // option is a listed option, so the emoji arm — open by schema since
+      // day one — was five characters wide. The catalog and its free entry
+      // are the vocabulary widened again rather than the escape hatch
+      // reopened.
+      editor: { picker: { options: SYMBOL_PICKER_OPTIONS, catalog: SYMBOL_CATALOG } },
     }),
     defineFacet({
       name: 'stencil',

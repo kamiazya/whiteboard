@@ -253,6 +253,49 @@ this one. Reaching for it stays the exception, and the reason is now
 recorded rather than implied: what pushed the last user through it was the
 vocabulary, so a next user is evidence the vocabulary is short again.
 
+**2026-09-11, amended again — a picker may be OPEN.** The repair above made
+a picker able to write any payload the plugin LISTED, and left one thing
+unsayable: a facet whose schema accepts more values than a definition can
+carry. `visual.symbol`'s emoji arm has accepted any single grapheme since
+it shipped and the picker offered five, so the control said no to nineteen
+hundred values the facet said yes to. Listing them was not the fix — a
+facet definition is loaded wherever a document is READ (the SVG renderer,
+the layout worker, the MCP server), and none of those draws a picker.
+
+Two declarations close it, both data:
+
+- **A `catalog`** — sections of options behind a `load()` the picker calls
+  when it is drawn, so the rows can be a dynamic import and stay out of
+  every graph that never opens one. The cost is honest and stated: these
+  options are NOT parsed at `defineFacet` time the way listed ones are, so
+  a plugin shipping a catalog owes its own test that every row parses.
+  `plugin-visual` has one over all 1914.
+- **Free `entry`** — a payload TEMPLATE plus the field the typed text
+  fills. What DRAWS it is the vessel's business and it is not a second
+  control: `facet-ui` offers the typed text as the leading search result
+  when the catalog does not already hold it, so the declaration says what a
+  typed value BECOMES and nothing about where it is typed. `{ payload: { kind: 'emoji' }, field: 'char' }` says what the text
+  becomes without the plugin shipping a parser and without the engine
+  learning what an emoji is. What a value may BE stays the schema's answer
+  at the write boundary — which is the whole reason free entry can be
+  offered at all: the control has no rule of its own and therefore cannot
+  have a laxer one.
+
+Definition time still checks what it can, and each check is a control that
+would otherwise do nothing visible: a template already filling its own
+field has two sources for one key, and a template the schema ALREADY
+accepts writes the moment it is drawn, before anybody has typed.
+
+The control that renders it is deliberately NOT a facet component.
+`facet-ui`'s `CatalogPicker` takes loaded sections, a selected key and a
+callback and knows nothing about facets; `FacetCatalogPicker` is the thin
+adapter that loads what a definition declares and routes free entry through
+`validateFacetWrite`. That split is the ladder's own principle applied one
+level up: the vocabulary a plugin DECLARES is the facet system's, and the
+control that draws it is a library any surface may use — the markdown
+editor's `:name:` popup being the next one, over the same catalog rather
+than a second copy of it.
+
 ## This increment
 
 This ADR lands together with decision 2's mechanical half only: the key

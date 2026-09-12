@@ -165,6 +165,44 @@ function themeGlyph(
 }
 
 /**
+ * The faces that draw an emoji IN COLOUR, named explicitly because the
+ * fallback does not.
+ *
+ * An emoji left to the inherited UI stack is drawn by whichever installed
+ * font claims its codepoint first, and several ordinary text faces claim
+ * the common ones as MONOCHROME OUTLINES. Measured in this repo's own
+ * headless Chromium: `fc-match sans-serif` answers DejaVu Sans, which
+ * covers U+1F600 and friends, so 😀 😃 🙂 😉 ☺️ ♠️ 🏁 came out as grey
+ * line drawings while 🤣 🥰 ⭐ 🔥 — codepoints DejaVu lacks — fell through
+ * to Noto Color Emoji and came out in colour. One grid, two kinds of
+ * picture, and nothing in the data to explain it.
+ *
+ * It is not only this container: the same split happens on any machine
+ * whose UI font covers part of the emoji block, and which part depends on
+ * the machine. Naming the colour faces is what makes the answer the same
+ * everywhere one exists.
+ *
+ * Four faces and then the generic: macOS/iOS, Windows, Linux/Android/
+ * ChromeOS, and Firefox's own bundle. `Segoe UI Symbol` is deliberately
+ * absent — it is Windows's MONOCHROME emoji face, and listing it is how a
+ * stack meant to force colour quietly reintroduces the outlines.
+ */
+export const EMOJI_FONT_STACK =
+  '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Twemoji Mozilla", sans-serif'
+
+/**
+ * One character, drawn by a font that has it in colour.
+ *
+ * Exported because every surface that draws a stored emoji needs it and
+ * they are in different packages — the picker's cells here, a node's mark
+ * on the minimap through `plugin-visual`'s `SymbolMark`. Two copies of a
+ * font stack is two places for it to drift.
+ */
+export function EmojiText({ value }: { readonly value: string }): ReactNode {
+  return <span style={{ fontFamily: EMOJI_FONT_STACK }}>{value}</span>
+}
+
+/**
  * @param registry needed only by the `asset` arm — a caller with no
  * registry simply draws no asset glyphs, which is the same degradation as
  * an unknown id.
@@ -172,7 +210,7 @@ function themeGlyph(
 export function glyphIcon(glyph?: FacetGlyph, registry?: FacetRegistry): ReactNode | undefined {
   if (glyph === undefined) return undefined
   if (glyph.kind === 'shape') return shapeGlyph(glyph.name)
-  if (glyph.kind === 'char') return glyph.value
+  if (glyph.kind === 'char') return <EmojiText value={glyph.value} />
   if (glyph.kind === 'theme') return themeGlyph(glyph.id, glyph.icon, registry)
   return assetGlyph(glyph.id, registry)
 }

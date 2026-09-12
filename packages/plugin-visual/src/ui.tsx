@@ -7,7 +7,7 @@
  * and this one behind `/ui`. What the core supplies is a library
  * (`facet-ui`), not the components.
  */
-import { definePluginUi } from '@kamiazya/whiteboard-facet-ui'
+import { definePluginUi, EmojiText } from '@kamiazya/whiteboard-facet-ui'
 import { createElement, type ReactNode } from 'react'
 import type { VisualSymbolFacet } from './data.js'
 import type { LucideIconElement } from './icons/icons.js'
@@ -55,7 +55,11 @@ function BuiltInIcon({ name }: { readonly name: string }) {
  * nothing.
  */
 export function SymbolMark({ symbol }: { readonly symbol: VisualSymbolFacet }): ReactNode {
-  if (symbol.kind === 'emoji') return symbol.char
+  // Through `EmojiText`, because a bare character is drawn by whichever
+  // installed font claims its codepoint first and several ordinary text
+  // faces claim the common emoji as monochrome outlines. The minimap and
+  // the picker are then the same mark rather than two.
+  if (symbol.kind === 'emoji') return <EmojiText value={symbol.char} />
   return geometryOf(symbol) === undefined ? null : <BuiltInIcon name={symbol.name} />
 }
 

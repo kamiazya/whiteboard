@@ -24,6 +24,7 @@ order effects.
 | a `web-browser` test fails saying it logged a failure and carried on | Exactly what it says: something was caught and swallowed. The record is in the message; the assertion that would have broken is elsewhere. Claim it with `expectLoggedFailures()` only if the test provokes it on purpose |
 | a test times out only under the full suite | An `await import()` of a heavy module inside a test body, or a `React.lazy` page racing a `findBy*` (testing-library's budget is 1000ms). Hoist the import |
 | an assertion on a global counter or a "most recent" handle | Another test's `SharedWorker` is still alive. Scope every assertion to a handle the test itself minted |
+| every test PASSED and the file exits 1, `VITEST_BROWSER_CONNECTION_CLOSED` / `cannot call "resolveManualMock"` | A `vi.mock` factory still resolving when the page closed — `resolveManualMock` awaits the factory. Resolve it inside the test and again in `afterEach`; never by shortening the delay |
 | a page reports `This canvas's data could not be read.` as the lone failure | Not the page. A cleanup resolved while its `deleteDatabase` was still `blocked`, so this file started on the previous one's rows. Went through `rename` and twice through `delete-confirm` reading as a missing kebab menu. Fix and measurements: `testing-techniques/resources/isolation-and-state.md` |
 
 ## Property tests

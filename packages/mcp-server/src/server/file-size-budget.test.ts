@@ -298,7 +298,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
   // entered this file.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1675,
+  //
+  // +3 for the `:name:` shortcode projection, and the shape is the same: one
+  // import and one call, with the vocabulary and every word of its rationale
+  // in `plugin-visual`'s `emoji/shortcode.ts`. It lands HERE because the
+  // `case 'text'` below is the one place a text node's string reaches
+  // layout, so every body-drawing surface gets it and none can be the one
+  // that forgot — the alternative was a seam per surface, which is the
+  // reference-seams defect. The two comment lines that survived say what
+  // only this site can: that `inlineCode` deliberately does not expand.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1678,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

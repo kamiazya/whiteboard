@@ -12,10 +12,18 @@
  * properties, never utility class names — a class named inside a workspace
  * package is never generated and fails silently.
  */
-import type { FacetForm, FacetFormField, FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import type {
+  FacetForm,
+  FacetFormField,
+  FacetPickerCatalogSpec,
+  FacetPickerOption,
+  FacetRegistry,
+} from '@kamiazya/whiteboard-facet-engine'
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
-import { type CSSProperties, useState } from 'react'
-import { glyphIcon } from './glyph.js'
+import { type CSSProperties, type ReactNode, useState } from 'react'
+import { CatalogPopover } from './catalog-popover.js'
+import { FacetCatalogPicker } from './facet-catalog-picker.js'
+import { EmojiText, glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
 
 /** The host supplies these; the literal is what a bare page falls back to. */
@@ -61,6 +69,15 @@ const BUTTON: CSSProperties = {
   cursor: 'pointer',
 }
 const GHOST: CSSProperties = { ...BUTTON, border: '1px solid transparent', color: MUTED }
+/** A trigger's picture has a chevron beside it, so it gets a box of its own. */
+const TRIGGER_GLYPH: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '1rem',
+  height: '1rem',
+  flex: 'none',
+}
 
 type Draft = Record<string, unknown>
 
@@ -264,6 +281,43 @@ export function DerivedFacetForm({
     // has no reason to match this declaration's. Compared raw, such a value
     // matches no option and the picker draws with nothing selected.
     const current = facetPayloadKey(stored)
+
+    /**
+     * A CATALOG opens in a popover, and the row keeps one line.
+     *
+     * Inline, `visual.symbol`'s grid was taller than every other facet in
+     * the panel put together and pushed the rows under it off screen. So
+     * the row shows what is CHOSEN and the choosing happens over the top —
+     * which is also what lets the catalog's chunk stay unfetched until
+     * somebody opens it.
+     */
+    if (form.catalog !== undefined) {
+      const catalog = form.catalog
+      return (
+        <div style={ROW}>
+          <span style={{ color: MUTED }}>{title}</span>
+          <CatalogPopover
+            label={`Choose ${title.toLowerCase()}`}
+            current={triggerFace(form.options, catalog, stored, current, registry)}
+          >
+            <FacetCatalogPicker
+              facetKey={facetKey}
+              title={title}
+              catalog={catalog}
+              registry={registry}
+              listed={form.options}
+              listedLayout={form.layout}
+              selectedKey={current}
+              // Straight through the same door every other control here
+              // takes: `null` clears, anything else is validated before it
+              // is stored.
+              onPick={(payload) => onWrite(facetKey, payload === null ? undefined : payload)}
+            />
+          </CatalogPopover>
+        </div>
+      )
+    }
+
     // The same shape a field of the same layout takes, so a panel holding
     // both does not lay out two rows two ways: a CHIP row is name-left /
     // options-right, and a CARD row is a full-width grid under its name,
@@ -423,4 +477,37 @@ export function DerivedFacetForm({
       </span>
     </div>
   )
+}
+
+/**
+ * What the popover's trigger draws for the value that is stored.
+ *
+ * Three answers, in order, and the middle one is the interesting one: a
+ * catalog's rows are not loaded until the popover opens, so a stored emoji
+ * cannot be looked up to find its picture. It does not need to be. Free
+ * entry already DECLARES which field holds the value a person typed, so
+ * that field of the stored payload is the value itself — `⭐` for
+ * `{kind:'emoji', char:'⭐'}` — and drawing it needs no catalog at all.
+ */
+function triggerFace(
+  listed: readonly FacetPickerOption[],
+  catalog: FacetPickerCatalogSpec,
+  stored: unknown,
+  currentKey: string,
+  registry: FacetRegistry,
+): ReactNode {
+  const match = listed.find((option) => facetPayloadKey(option.payload) === currentKey)
+  if (match !== undefined) {
+    const glyph = glyphIcon(match.glyph, registry)
+    return glyph === undefined ? match.label : <span style={TRIGGER_GLYPH}>{glyph}</span>
+  }
+  const field = catalog.entry?.field
+  if (field !== undefined && typeof stored === 'object' && stored !== null) {
+    const value = (stored as Record<string, unknown>)[field]
+    if (typeof value === 'string' && value !== '') return <EmojiText value={value} />
+  }
+  // Nothing stored, or a payload no option and no template accounts for.
+  // A word rather than a guessed picture: a wrong picture reads as a value
+  // this facet holds, and it does not hold one.
+  return <span style={{ color: MUTED, fontSize: '0.75rem' }}>Choose</span>
 }
