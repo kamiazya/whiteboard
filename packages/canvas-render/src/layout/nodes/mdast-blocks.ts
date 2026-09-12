@@ -34,7 +34,7 @@ import { LineBreaker } from 'css-line-break'
 import { selectCanvasFragment } from '../../canvas-fragment.js'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
-import { type ReferenceSeams, withReferenceSeams } from '../../references/seams.js'
+import { type ReferenceSeams, referenceFor, withReferenceSeams } from '../../references/seams.js'
 import { escapeXmlText } from '../../svg/format.js'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'
@@ -797,9 +797,16 @@ function layoutPhrasing(
           // WITH an alt stays wrappable, because an alt is prose.
           {
             const alt = child.alt === undefined || child.alt === '' ? undefined : child.alt
+            // Where the picture actually loads from is the CALLER's, the
+            // same way a file node's is — a written path may be a
+            // workspace attachment. An unresolved one keeps what the
+            // markdown said, so an absolute URL still works.
+            const src =
+              referenceFor(child.url, options.references?.resolveReference)?.image?.href ??
+              child.url
             emit(
               alt ?? IMAGE_PLACEHOLDER,
-              { paints: { kind: 'image', src: child.url } },
+              { paints: { kind: 'image', src } },
               currentStyle,
               alt !== undefined,
             )

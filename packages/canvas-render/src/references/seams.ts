@@ -192,3 +192,26 @@ export function withReferenceSeams<
     resolveTitle: options.resolveTitle ?? seams.resolveTitle,
   }
 }
+
+/**
+ * One reference resolved through the caller's seam, guarded to the
+ * never-throw rule.
+ *
+ * Here rather than beside either caller because there are two now — a
+ * canvas's file node and a body's inline image — and the guard's whole
+ * value is that it is the SINGLE place `resolveReference` is invoked, so
+ * every caller gets the same total behaviour without repeating a
+ * try/catch. A second copy is a second answer to "what does a throwing
+ * seam do".
+ */
+export function referenceFor(
+  ref: string,
+  resolve: ReferenceSeams['resolveReference'] | undefined,
+): ResolvedReference | undefined {
+  if (resolve === undefined) return undefined
+  try {
+    return resolve(ref)
+  } catch {
+    return undefined
+  }
+}
