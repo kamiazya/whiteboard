@@ -9,7 +9,9 @@
 // `data-editor-overlay` so the editor root can skip hit-testing it, and that
 // marker is what this test collects. A future overlay joins the matrix by
 // existing — nobody has to remember to add it here.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -22,8 +24,8 @@ afterEach(cleanup)
 /** Spread out, so the overview has real content to draw and cannot opt out. */
 const canvas0: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 80, text: 'A' },
-    { id: 'b', type: 'text', x: 900, y: 700, width: 120, height: 80, text: 'B' },
+    textNode({ id: 'a', x: 0, y: 0, width: 120, height: 80, text: 'A' }),
+    textNode({ id: 'b', x: 900, y: 700, width: 120, height: 80, text: 'B' }),
   ],
   edges: [],
 }

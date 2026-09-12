@@ -22,6 +22,7 @@ import {
   ensureViewerFontLoaded,
 } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import type {
   LayoutRequest,
@@ -36,34 +37,17 @@ import { renderCanvasToSvg } from './spatial/scene-render.js'
 // differences show up in wrapped-line counts, not in a single short word.
 const canvas: SpatialCanvas = {
   nodes: [
-    {
+    textNode({
       id: 'a',
-      type: 'text',
       x: 0,
       y: 0,
       width: 220,
       height: 140,
       text: 'The quick brown fox jumps over the lazy dog, and then it keeps going.',
-    },
-    {
-      id: 'b',
-      type: 'text',
-      x: 320,
-      y: 40,
-      width: 200,
-      height: 120,
-      text: 'あいうえお かきくけこ',
-    },
-    {
-      id: 'c',
-      type: 'text',
-      x: 120,
-      y: 280,
-      width: 240,
-      height: 110,
-      text: 'Wide WWW vs narrow iii',
-    },
-    { id: 'g', type: 'group', x: -20, y: -20, width: 580, height: 440, label: 'group' },
+    }),
+    textNode({ id: 'b', x: 320, y: 40, width: 200, height: 120, text: 'あいうえお かきくけこ' }),
+    textNode({ id: 'c', x: 120, y: 280, width: 240, height: 110, text: 'Wide WWW vs narrow iii' }),
+    groupNode({ id: 'g', x: -20, y: -20, width: 580, height: 440, label: 'group' }),
   ],
   edges: [
     {
@@ -131,7 +115,7 @@ it('the worker scene is deeply equal to the main-thread scene', async () => {
 
 it('carries the file-label seam across the wire', async () => {
   const withFile: SpatialCanvas = {
-    nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 200, height: 100, file: 'doc-1' }],
+    nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 200, height: 100, file: 'doc-1' })],
     edges: [],
   } as SpatialCanvas
   const labels = [{ file: 'doc-1', label: 'Readable name' }]
@@ -162,8 +146,8 @@ it('draws what a text node embeds and what a file node shows from one wire on bo
   const withEmbed: SpatialCanvas = {
     nodes: [
       // Its own paragraph: an embed resolves at block level, as in a note.
-      { id: 't', type: 'text', x: 0, y: 0, width: 300, height: 200, text: `See\n\n![[${NOTE}]]` },
-      { id: 'f', type: 'file', x: 400, y: 0, width: 300, height: 200, file: NOTE },
+      textNode({ id: 't', x: 0, y: 0, width: 300, height: 200, text: `See\n\n![[${NOTE}]]` }),
+      fileNode({ id: 'f', x: 400, y: 0, width: 300, height: 200, file: NOTE }),
     ],
     edges: [],
   } as SpatialCanvas
@@ -207,15 +191,14 @@ it('parses markdown itself — no pre-parsed bodies cross the wire', async () =>
   expect(await ensureViewerFontLoaded()).toBe('loaded')
   const withMarkdown: SpatialCanvas = {
     nodes: [
-      {
+      textNode({
         id: 'm',
-        type: 'text',
         x: 0,
         y: 0,
         width: 240,
         height: 140,
         text: '# Ampersands &amp; entities\n\nSome *emphasis* to lay out.',
-      },
+      }),
     ],
     edges: [],
   } as SpatialCanvas

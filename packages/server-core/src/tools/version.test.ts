@@ -1,4 +1,5 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import type { RestoreProgressEvent } from '../operations/restore-version.js'
@@ -29,7 +30,7 @@ const PATH = 'notes/plan'
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text })],
     edges: [],
   })
   return doc
@@ -61,7 +62,7 @@ async function addDocument(deps: ServerDeps, documentId: string, path: string): 
   await registerDocumentInWorkspace(store, WORKSPACE_ID, documentId, path)
   await seedDoc(store, documentId, (doc) => {
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'other' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'other' })],
       edges: [],
     })
   })
@@ -73,7 +74,7 @@ async function setup(text = 'original') {
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID, PATH)
   await seedDoc(store, DOCUMENT_ID, (doc) => {
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text })],
       edges: [],
     })
   })
@@ -219,7 +220,7 @@ describe('wb_version_restore', () => {
     const liveDoc = textDoc('original')
     live.docs.set(PATH, liveDoc)
     writeSpatialCanvas(liveDoc, {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'modified' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'modified' })],
       edges: [],
     })
     liveDoc.commit()

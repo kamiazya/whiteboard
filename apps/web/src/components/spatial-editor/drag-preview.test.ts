@@ -1,5 +1,7 @@
 // @vitest-environment node
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { carriedWithDrag, computeDragPreview, isInFlightGesture } from './drag-preview.js'
@@ -83,7 +85,7 @@ describe('computeDragPreview — connecting', () => {
   const boxes: readonly NodeBox[] = [{ id: 'n1', box: { x: 0, y: 0, width: 100, height: 50 } }]
   const connect = {
     canvas: {
-      nodes: [{ id: 'n1', type: 'text' as const, x: 0, y: 0, width: 100, height: 50, text: '' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: '' })],
       edges: [],
     },
     selectableBoxes: boxes,
@@ -186,10 +188,10 @@ describe('carriedWithDrag', () => {
   const gesture = { nodeId: 'g1', startX: 80, startY: 80 }
   const canvas: SpatialCanvas = {
     nodes: [
-      { id: 'g1', type: 'group', x: 80, y: 80, width: 300, height: 200 },
-      { id: 'in', type: 'text', x: 100, y: 100, width: 50, height: 40, text: 'in' },
-      { id: 'locked', type: 'text', x: 200, y: 100, width: 50, height: 40, text: 'l' },
-      { id: 'out', type: 'text', x: 500, y: 100, width: 50, height: 40, text: 'out' },
+      groupNode({ id: 'g1', x: 80, y: 80, width: 300, height: 200 }),
+      textNode({ id: 'in', x: 100, y: 100, width: 50, height: 40, text: 'in' }),
+      textNode({ id: 'locked', x: 200, y: 100, width: 50, height: 40, text: 'l' }),
+      textNode({ id: 'out', x: 500, y: 100, width: 50, height: 40, text: 'out' }),
     ],
     edges: [],
   }

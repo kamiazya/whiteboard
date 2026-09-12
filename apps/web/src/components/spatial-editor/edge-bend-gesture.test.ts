@@ -7,13 +7,14 @@
 // dispatches the list with the new point already inserted.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createIdleState, reduceGesture } from './gestures.js'
 
 const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-    { id: 'b', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+    textNode({ id: 'b', x: 400, y: 0, width: 100, height: 50, text: 'b' }),
   ],
   edges: [
     {

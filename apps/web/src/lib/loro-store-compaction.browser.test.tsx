@@ -5,8 +5,10 @@
  * a fresh open replays stop growing — which is only observable once both are
  * real.
  */
+
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { COMPACT_DELTA_BYTES, chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -17,15 +19,16 @@ import { LoroStore } from './loro-store.js'
 
 function canvasWith(n: number, nudge = 0): SpatialCanvas {
   return {
-    nodes: Array.from({ length: n }, (_, i) => ({
-      id: `n${i}`,
-      type: 'text' as const,
-      x: (i % 10) * 220 + nudge,
-      y: Math.floor(i / 10) * 140,
-      width: 200,
-      height: 120,
-      text: `Node ${i} — a line of text long enough to be realistic.`,
-    })),
+    nodes: Array.from({ length: n }, (_, i) =>
+      textNode({
+        id: `n${i}`,
+        x: (i % 10) * 220 + nudge,
+        y: Math.floor(i / 10) * 140,
+        width: 200,
+        height: 120,
+        text: `Node ${i} — a line of text long enough to be realistic.`,
+      }),
+    ),
     edges: [],
   } as SpatialCanvas
 }

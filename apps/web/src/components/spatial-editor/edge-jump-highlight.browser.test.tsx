@@ -1,7 +1,9 @@
 // The selection highlight follows the DRAWN line — including line-jump
 // hops. A highlight built from the raw waypoints cuts straight through
 // every hop the ink arcs over.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -11,10 +13,10 @@ afterEach(cleanup)
 // Two crossing edges with lineJumps: the later edge hops over the first.
 const doc: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 60, y: 200, width: 120, height: 60, text: 'a' },
-    { id: 'b', type: 'text', x: 520, y: 200, width: 120, height: 60, text: 'b' },
-    { id: 'c', type: 'text', x: 300, y: 40, width: 120, height: 60, text: 'c' },
-    { id: 'd', type: 'text', x: 300, y: 400, width: 120, height: 60, text: 'd' },
+    textNode({ id: 'a', x: 60, y: 200, width: 120, height: 60, text: 'a' }),
+    textNode({ id: 'b', x: 520, y: 200, width: 120, height: 60, text: 'b' }),
+    textNode({ id: 'c', x: 300, y: 40, width: 120, height: 60, text: 'c' }),
+    textNode({ id: 'd', x: 300, y: 400, width: 120, height: 60, text: 'd' }),
   ],
   edges: [
     {

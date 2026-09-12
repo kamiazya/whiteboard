@@ -2,7 +2,9 @@
 // align.test.ts; this pins the wiring: which selections get the affordance,
 // that one action is one undo step, and that a locked node is never moved
 // by it.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -15,9 +17,9 @@ afterEach(cleanup)
 // from the top-left can sweep all three.
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 220, y: 160, width: 80, height: 100, text: 'B' },
-    { id: 'c', type: 'text', x: 420, y: 260, width: 60, height: 40, text: 'C' },
+    textNode({ id: 'a', x: 40, y: 40, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 220, y: 160, width: 80, height: 100, text: 'B' }),
+    textNode({ id: 'c', x: 420, y: 260, width: 60, height: 40, text: 'C' }),
   ],
   edges: [],
 }

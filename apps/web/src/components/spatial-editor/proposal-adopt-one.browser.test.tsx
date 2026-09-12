@@ -7,7 +7,9 @@
 // decides exactly the change it names. That the write then closes that one
 // change and leaves its sibling open is the session's half, covered by
 // document-sync-session.test.ts.
+
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -19,8 +21,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'n1', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'the plan' },
-    { id: 'n2', type: 'text', x: 0, y: 200, width: 120, height: 60, text: 'the risk' },
+    textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 60, text: 'the plan' }),
+    textNode({ id: 'n2', x: 0, y: 200, width: 120, height: 60, text: 'the risk' }),
   ],
   edges: [],
 }

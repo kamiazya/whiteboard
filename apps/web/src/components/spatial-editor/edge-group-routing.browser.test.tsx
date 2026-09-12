@@ -3,7 +3,9 @@
 // detour can ever clear a rect that contains the edge's endpoints, the router
 // fell back to the shortest detour AROUND the whole frame — a hairpin dipping
 // below the group.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -14,11 +16,11 @@ afterEach(cleanup)
 // node above the group and one to its left, each wired to the upper member.
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'g', type: 'group', x: 200, y: 170, width: 400, height: 380, label: 'あああ' },
-    { id: 'sore', type: 'text', x: 330, y: 210, width: 180, height: 140, text: 'それ' },
-    { id: 'are', type: 'text', x: 350, y: 420, width: 160, height: 90, text: 'あれ' },
-    { id: 'acc', type: 'text', x: 330, y: 20, width: 180, height: 90, text: 'acc' },
-    { id: 'left', type: 'text', x: 20, y: 250, width: 140, height: 90, text: 'left' },
+    groupNode({ id: 'g', x: 200, y: 170, width: 400, height: 380, label: 'あああ' }),
+    textNode({ id: 'sore', x: 330, y: 210, width: 180, height: 140, text: 'それ' }),
+    textNode({ id: 'are', x: 350, y: 420, width: 160, height: 90, text: 'あれ' }),
+    textNode({ id: 'acc', x: 330, y: 20, width: 180, height: 90, text: 'acc' }),
+    textNode({ id: 'left', x: 20, y: 250, width: 140, height: 90, text: 'left' }),
   ],
   edges: [
     {

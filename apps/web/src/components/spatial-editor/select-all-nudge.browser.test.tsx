@@ -2,7 +2,9 @@
 // completeness slice 6). The nudge fix closes a latent bug select-all
 // makes immediately visible: arrow keys moved only the PRIMARY node,
 // tearing a multi-selection apart.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -13,9 +15,9 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
-    { id: 'b', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'B' },
-    { id: 'c', type: 'text', x: 40, y: 240, width: 160, height: 80, text: 'C' },
+    textNode({ id: 'a', x: 40, y: 40, width: 160, height: 80, text: 'A' }),
+    textNode({ id: 'b', x: 320, y: 40, width: 160, height: 80, text: 'B' }),
+    textNode({ id: 'c', x: 40, y: 240, width: 160, height: 80, text: 'C' }),
   ],
   edges: [],
 }

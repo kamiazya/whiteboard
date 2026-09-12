@@ -13,7 +13,9 @@
  * stores carries one text and cannot know how many messages there are, so a
  * count on the canvas is a claim about the wiring, not about the renderer.
  */
+
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -24,7 +26,7 @@ const BUSY: CanvasComment = { id: 'thread-busy', x: 600, y: 450, text: 'does thi
 const LONE: CanvasComment = { id: 'thread-lone', x: 200, y: 200, text: 'one remark' }
 
 const CANVAS: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [BUSY, LONE],
 }

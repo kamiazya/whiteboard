@@ -6,6 +6,7 @@
  * frontmatter, a document facet and a body naming the board; one saved
  * version of the board.
  */
+
 import {
   writeCoreFacets,
   writeDocumentKind,
@@ -13,6 +14,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { LoroDoc } from 'loro-crdt'
 import { createServer } from '../create-server.js'
 import { FakeDocumentStore, seedDoc } from './fake-document-store.js'
@@ -37,9 +39,9 @@ export async function seededServer(): Promise<ReturnType<typeof createServer>> {
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
       nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'one\ntwo\nthree' },
-        { id: 'n2', type: 'text', x: 400, y: 0, width: 200, height: 80, text: 'two' },
-        { id: 'g1', type: 'group', x: -20, y: 200, width: 640, height: 200, label: 'later' },
+        textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 80, text: 'one\ntwo\nthree' }),
+        textNode({ id: 'n2', x: 400, y: 0, width: 200, height: 80, text: 'two' }),
+        groupNode({ id: 'g1', x: -20, y: 200, width: 640, height: 200, label: 'later' }),
       ],
       edges: [
         {

@@ -1,7 +1,9 @@
 // The session override crosses to the worker as data: a layout request
 // carrying `style` is laid out in that look, and one without it in the
 // document's — the same default the main thread's composition takes.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, expect, it } from 'vitest'
 import type { LayoutRequest, LayoutResponse } from './layout-worker-protocol.js'
 
@@ -9,8 +11,8 @@ const BODY = 'A body long enough to wrap over a couple of lines inside the box.'
 
 const neon: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 240, height: 160, text: BODY },
-    { id: 'b', type: 'text', x: 300, y: 200, width: 120, height: 60, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 240, height: 160, text: BODY }),
+    textNode({ id: 'b', x: 300, y: 200, width: 120, height: 60, text: 'b' }),
   ],
   edges: [
     {

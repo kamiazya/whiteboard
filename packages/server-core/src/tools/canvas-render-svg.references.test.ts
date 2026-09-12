@@ -8,6 +8,7 @@
 // that analysis usable as a change signal at all.
 
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -53,7 +54,7 @@ async function seedWorkspace(store: FakeDocumentStore, ref: string) {
   await seedDoc(store, DOCUMENT_ID, (doc) => {
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'f1', type: 'file', x: 0, y: 0, width: 400, height: 300, file: ref }],
+      nodes: [fileNode({ id: 'f1', x: 0, y: 0, width: 400, height: 300, file: ref })],
       edges: [],
     })
   })
@@ -61,15 +62,14 @@ async function seedWorkspace(store: FakeDocumentStore, ref: string) {
     writeDocumentKind(doc, 'markdown')
     writeSpatialCanvas(doc, {
       nodes: [
-        {
+        textNode({
           id: 'okf-body',
-          type: 'text',
           x: 0,
           y: 0,
           width: 600,
           height: 400,
           text: '# Weekly notes\n\nShipped the markdown file node.',
-        },
+        }),
       ],
       edges: [],
     })
@@ -145,7 +145,7 @@ describe('wb_scene_render reference resolution', () => {
     await seedDoc(store, DIAGRAM_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'INNER' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'INNER' })],
         edges: [],
       })
     })
@@ -270,15 +270,14 @@ describe('wb_canvas_snapshot({ layout: true })', () => {
       writeDocumentKind(doc, 'markdown')
       writeSpatialCanvas(doc, {
         nodes: [
-          {
+          textNode({
             id: 'okf-body',
-            type: 'text',
             x: 0,
             y: 0,
             width: 600,
             height: 400,
             text: '# Rewritten\n\nCompletely different content now.',
-          },
+          }),
         ],
         edges: [],
       })

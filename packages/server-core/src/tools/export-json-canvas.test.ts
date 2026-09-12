@@ -1,4 +1,5 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -9,16 +10,15 @@ import { exportJsonCanvas } from './export-json-canvas.js'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-const NODE_WITH_EXTENSION = {
+const NODE_WITH_EXTENSION = textNode({
   id: 'n1',
-  type: 'text' as const,
   x: 0,
   y: 0,
   width: 100,
   height: 50,
   text: 'hi',
   embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' as const },
-}
+})
 
 function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
   return makeTestDeps({

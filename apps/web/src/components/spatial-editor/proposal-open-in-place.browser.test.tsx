@@ -5,7 +5,9 @@
 // board. That is one seam (`SpatialEditorHandle.openProposal`) doing two
 // things a page cannot do from outside: move the viewport onto the chrome,
 // and open the card that sits there.
+
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useRef } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -19,8 +21,8 @@ afterEach(cleanup)
 // cannot have the chrome centred by accident — the pan has to be real.
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'near', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'here' },
-    { id: 'far', type: 'text', x: 4000, y: 3000, width: 120, height: 60, text: 'over there' },
+    textNode({ id: 'near', x: 0, y: 0, width: 120, height: 60, text: 'here' }),
+    textNode({ id: 'far', x: 4000, y: 3000, width: 120, height: 60, text: 'over there' }),
   ],
   edges: [],
 }

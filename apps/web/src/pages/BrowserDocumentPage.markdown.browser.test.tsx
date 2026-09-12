@@ -1,3 +1,4 @@
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { listLocalDocuments } from '../lib/local-document-summary.js'
@@ -731,15 +732,14 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     const boardDoc = new Loro()
     writeSpatialCanvas(boardDoc, {
       nodes: [
-        {
+        textNode({
           id: 'b1',
-          type: 'text',
           x: 0,
           y: 0,
           width: 300,
           height: 120,
           text: 'unmistakable canvas node text',
-        },
+        }),
       ],
       edges: [],
     })
@@ -778,25 +778,9 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     const boardDoc = new Loro()
     writeSpatialCanvas(boardDoc, {
       nodes: [
-        { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 200, label: 'Launch' },
-        {
-          id: 'in',
-          type: 'text',
-          x: 10,
-          y: 10,
-          width: 300,
-          height: 100,
-          text: 'launch group text',
-        },
-        {
-          id: 'out',
-          type: 'text',
-          x: 900,
-          y: 900,
-          width: 300,
-          height: 100,
-          text: 'elsewhere text',
-        },
+        groupNode({ id: 'g', x: 0, y: 0, width: 400, height: 200, label: 'Launch' }),
+        textNode({ id: 'in', x: 10, y: 10, width: 300, height: 100, text: 'launch group text' }),
+        textNode({ id: 'out', x: 900, y: 900, width: 300, height: 100, text: 'elsewhere text' }),
       ],
       edges: [],
     })
@@ -837,15 +821,14 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       const doc = new Loro()
       writeSpatialCanvas(doc, {
         nodes: [
-          {
+          textNode({
             id: MARKDOWN_BODY_NODE_ID,
-            type: 'text',
             x: 0,
             y: 0,
             width: 600,
             height: 400,
             text: LEGACY_BODY,
-          },
+          }),
         ],
         edges: [],
       })

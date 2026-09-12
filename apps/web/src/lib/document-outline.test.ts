@@ -1,6 +1,8 @@
 // @vitest-environment node
+
 import type { Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { outlineFromScene, outlineFromSpatial } from './document-outline.js'
 
@@ -11,8 +13,8 @@ describe('outlineFromSpatial', () => {
     expect(
       outlineFromSpatial(
         spatial([
-          { id: 'a', type: 'text', x: 10, y: 20, width: 100, height: 40, text: 'hi' },
-          { id: 'b', type: 'text', x: -5, y: 0, width: 60, height: 30, text: 'yo', color: '1' },
+          textNode({ id: 'a', x: 10, y: 20, width: 100, height: 40, text: 'hi' }),
+          textNode({ id: 'b', x: -5, y: 0, width: 60, height: 30, text: 'yo', color: '1' }),
         ]),
       ),
     ).toEqual([

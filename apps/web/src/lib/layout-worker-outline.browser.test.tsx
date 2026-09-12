@@ -10,8 +10,10 @@
 // imports lazily for the snapshot arm, and the font gate in front of the
 // markdown arm — a body measured with a system face lays its blocks out
 // somewhere else.
+
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from './layout-worker-pool.js'
@@ -19,8 +21,8 @@ import type { OutlineResponse } from './layout-worker-protocol.js'
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 220, height: 120, text: 'first node' },
-    { id: 'b', type: 'text', x: 400, y: 220, width: 220, height: 120, text: 'second node' },
+    textNode({ id: 'a', x: 0, y: 0, width: 220, height: 120, text: 'first node' }),
+    textNode({ id: 'b', x: 400, y: 220, width: 220, height: 120, text: 'second node' }),
   ],
   edges: [],
 }

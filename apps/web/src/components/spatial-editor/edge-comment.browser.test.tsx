@@ -2,7 +2,9 @@
 // this", the compose bubble opens ON the edge's routed path, and the comment
 // it commits names the edge — so the pin rides the edge through a reroute
 // rather than standing where the line used to be.
+
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -15,8 +17,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 100, width: 120, height: 60, text: 'B' }),
   ],
   edges: [
     {

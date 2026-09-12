@@ -3,7 +3,9 @@
 // from the drop result (derived sides + anchor fan-out). The preview now
 // routes a tentative edge through the same producer the drop uses, so what
 // travels with the pointer IS what lands.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -14,8 +16,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 300, y: 250, width: 160, height: 80, text: 'from' },
-    { id: 'b', type: 'text', x: 60, y: 250, width: 120, height: 80, text: 'to-left' },
+    textNode({ id: 'a', x: 300, y: 250, width: 160, height: 80, text: 'from' }),
+    textNode({ id: 'b', x: 60, y: 250, width: 120, height: 80, text: 'to-left' }),
   ],
   edges: [],
 }

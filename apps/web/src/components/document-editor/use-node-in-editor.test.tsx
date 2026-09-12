@@ -1,10 +1,11 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useNodeInEditor } from './use-node-in-editor.js'
 
 const canvas: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'before' }],
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'before' })],
   edges: [],
 }
 

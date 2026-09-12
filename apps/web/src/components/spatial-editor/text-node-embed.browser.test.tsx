@@ -11,35 +11,37 @@
  * `postMessage`, so the worker drew a placeholder, and for parity the main
  * thread did too.
  */
+
 import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
 
 const NOTE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-const embeddingNode: SpatialNode = {
+const embeddingNode: SpatialNode = textNode({
   id: 't',
-  type: 'text',
   x: 40,
   y: 40,
   width: 320,
   height: 220,
   text: `Plan:\n\n![[${NOTE}]]`,
-}
+})
 
 /** Enough bystanders to cross the worker's offload threshold (12 elements). */
 const bystanders = (count: number): SpatialNode[] =>
-  Array.from({ length: count }, (_, i) => ({
-    id: `b${i}`,
-    type: 'text' as const,
-    x: 500,
-    y: 40 + i * 60,
-    width: 120,
-    height: 40,
-    text: `bystander ${i}`,
-  }))
+  Array.from({ length: count }, (_, i) =>
+    textNode({
+      id: `b${i}`,
+      x: 500,
+      y: 40 + i * 60,
+      width: 120,
+      height: 40,
+      text: `bystander ${i}`,
+    }),
+  )
 
 const references = referenceWire(
   new Map([[NOTE, { documentId: NOTE, name: 'Note', body: 'PROSE FROM THE NOTE' }]]),

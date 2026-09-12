@@ -26,6 +26,7 @@ import {
   writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -101,15 +102,10 @@ function editAsSession(snapshotBytes: Uint8Array, documentId: string, nodeId: st
   const doc = new LoroDoc()
   doc.import(snapshotBytes)
   const from = doc.version()
-  writeSpatialNode(documentContainers(doc, documentId), {
-    id: nodeId,
-    type: 'text',
-    x: 0,
-    y: 0,
-    width: 80,
-    height: 40,
-    text: nodeId,
-  })
+  writeSpatialNode(
+    documentContainers(doc, documentId),
+    textNode({ id: nodeId, x: 0, y: 0, width: 80, height: 40, text: nodeId }),
+  )
   return doc.export({ mode: 'update', from })
 }
 
@@ -161,7 +157,7 @@ describe('BrowserBackend', () => {
   it('a readable legacy per-document record is folded in and served from the tree', async () => {
     const legacy = new Loro()
     writeSpatialCanvas(legacy, {
-      nodes: [{ id: 'n-old', type: 'text', x: 1, y: 2, width: 80, height: 40, text: 'kept' }],
+      nodes: [textNode({ id: 'n-old', x: 1, y: 2, width: 80, height: 40, text: 'kept' })],
       edges: [],
     })
     await seedSyncDocument(ID_B, { snapshot: legacy.export({ mode: 'snapshot' }) }, ISOLATED_DB)
@@ -390,26 +386,16 @@ describe('BrowserBackend', () => {
     const doc = new LoroDoc()
     doc.import(base)
     const v0 = doc.version()
-    writeSpatialNode(documentContainers(doc, ID_C), {
-      id: 'n-1',
-      type: 'text',
-      x: 0,
-      y: 0,
-      width: 80,
-      height: 40,
-      text: 'one',
-    })
+    writeSpatialNode(
+      documentContainers(doc, ID_C),
+      textNode({ id: 'n-1', x: 0, y: 0, width: 80, height: 40, text: 'one' }),
+    )
     const delta1 = doc.export({ mode: 'update', from: v0 })
     const v1 = doc.version()
-    writeSpatialNode(documentContainers(doc, ID_C), {
-      id: 'n-2',
-      type: 'text',
-      x: 100,
-      y: 0,
-      width: 80,
-      height: 40,
-      text: 'two',
-    })
+    writeSpatialNode(
+      documentContainers(doc, ID_C),
+      textNode({ id: 'n-2', x: 100, y: 0, width: 80, height: 40, text: 'two' }),
+    )
     const delta2 = doc.export({ mode: 'update', from: v1 })
 
     await Promise.all([backend.pushLocalUpdate(delta1), backend.pushLocalUpdate(delta2)])
@@ -441,15 +427,10 @@ describe('BrowserBackend', () => {
     const doc = new LoroDoc()
     doc.import(deliveredSnapshot(handlers))
     const v0 = doc.version()
-    writeSpatialNode(documentContainers(doc, ID_C), {
-      id: 'n-late',
-      type: 'text',
-      x: 0,
-      y: 0,
-      width: 80,
-      height: 40,
-      text: 'late',
-    })
+    writeSpatialNode(
+      documentContainers(doc, ID_C),
+      textNode({ id: 'n-late', x: 0, y: 0, width: 80, height: 40, text: 'late' }),
+    )
     const delta = doc.export({ mode: 'update', from: v0 })
 
     // Deliberately NOT awaited before disconnecting — that ordering is the
@@ -494,15 +475,10 @@ describe('BrowserBackend', () => {
     const doc = new LoroDoc()
     doc.import(deliveredSnapshot(handlers))
     const v0 = doc.version()
-    writeSpatialNode(documentContainers(doc, ID_C), {
-      id: 'n-origin',
-      type: 'text',
-      x: 0,
-      y: 0,
-      width: 80,
-      height: 40,
-      text: 'origin',
-    })
+    writeSpatialNode(
+      documentContainers(doc, ID_C),
+      textNode({ id: 'n-origin', x: 0, y: 0, width: 80, height: 40, text: 'origin' }),
+    )
     const delta = doc.export({ mode: 'update', from: v0 })
 
     const pending = backend.pushLocalUpdate(delta)

@@ -4,7 +4,9 @@
 // text fell back to the UA default black. On the dark canvas that is
 // invisible: the node reads as empty for the whole drag and its content
 // "returns" only when the committed scene takes it back on release.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -13,7 +15,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 100, y: 100, width: 220, height: 100, text: 'hello resize' }],
+  nodes: [textNode({ id: 'a', x: 100, y: 100, width: 220, height: 100, text: 'hello resize' })],
   edges: [],
 }
 

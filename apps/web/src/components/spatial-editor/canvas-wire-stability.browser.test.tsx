@@ -6,8 +6,10 @@
  * memoizes on the seams' identity, the same identity the worker request
  * and the content cache key on.
  */
+
 import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as sceneRender from '../../lib/spatial/scene-render.js'
@@ -23,7 +25,7 @@ afterEach(cleanup)
 const NOTE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 't', type: 'text', x: 40, y: 40, width: 320, height: 200, text: `Plan:\n\n![[${NOTE}]]` },
+    textNode({ id: 't', x: 40, y: 40, width: 320, height: 200, text: `Plan:\n\n![[${NOTE}]]` }),
   ],
   edges: [],
 }

@@ -1,7 +1,9 @@
 // The panel is centred, so a box wider than the editor spills off BOTH
 // edges — and the controls nearest each edge become untappable. Only a real
 // browser has the layout to measure that.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -10,7 +12,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 60, y: 60, width: 140, height: 80, text: 'A' }],
+  nodes: [textNode({ id: 'a', x: 60, y: 60, width: 140, height: 80, text: 'A' })],
   edges: [],
 }
 

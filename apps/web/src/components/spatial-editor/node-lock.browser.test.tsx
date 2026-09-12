@@ -3,7 +3,9 @@
 // (it lives in the Loro doc's sidecar map), so the editor takes it as a
 // prop and reports toggles through a callback — the same seam shape as
 // the file/image resolvers.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -13,8 +15,8 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'locked', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'L' },
-    { id: 'free', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'F' },
+    textNode({ id: 'locked', x: 40, y: 40, width: 160, height: 80, text: 'L' }),
+    textNode({ id: 'free', x: 320, y: 40, width: 160, height: 80, text: 'F' }),
   ],
   edges: [],
 }
@@ -221,9 +223,9 @@ it('a lock arriving AFTER selection drops it, so keyboard edits cannot reach the
 it('dragging a group leaves a locked member behind', () => {
   const grouped: SpatialCanvas = {
     nodes: [
-      { id: 'frame', type: 'group', x: 40, y: 40, width: 400, height: 300, label: 'G' },
-      { id: 'child-free', type: 'text', x: 60, y: 200, width: 100, height: 60, text: 'A' },
-      { id: 'child-locked', type: 'text', x: 200, y: 200, width: 100, height: 60, text: 'B' },
+      groupNode({ id: 'frame', x: 40, y: 40, width: 400, height: 300, label: 'G' }),
+      textNode({ id: 'child-free', x: 60, y: 200, width: 100, height: 60, text: 'A' }),
+      textNode({ id: 'child-locked', x: 200, y: 200, width: 100, height: 60, text: 'B' }),
     ],
     edges: [],
   }

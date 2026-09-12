@@ -9,7 +9,9 @@
  * Before the draft crossed, the wire held only what the CANVAS named, so a
  * new link stayed literal until the commit put it on the canvas.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { useMemo, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -34,7 +36,7 @@ const targets = [
 const stampOf = new Map<string, string>()
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 't', type: 'text', x: 40, y: 40, width: 320, height: 200, text: 'Plan:' }],
+  nodes: [textNode({ id: 't', x: 40, y: 40, width: 320, height: 200, text: 'Plan:' })],
   edges: [],
 }
 

@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { type ReferenceLoader, useReferenceSeams } from './use-reference-seams.js'
@@ -24,7 +25,7 @@ describe('useReferenceSeams', () => {
 
   it('a canvas target is answered as a canvas, unparsed', async () => {
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'board node' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 100, text: 'board node' })],
       edges: [],
     }
     const load = vi.fn<ReferenceLoader>(async (_target, id) =>

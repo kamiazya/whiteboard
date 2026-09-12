@@ -1,4 +1,5 @@
 import { endSide } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 // The OOUI object-action surface: right-click a node for its actions,
 // right-click empty space to create "here". Real pointer input throughout —
 // synthetic-event-only coverage is how this editor's first-touch bugs
@@ -18,7 +19,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
 }
 
@@ -154,8 +155,8 @@ it('Escape closes the menu without acting', async () => {
 
 const edgeStart: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 100, width: 120, height: 60, text: 'B' }),
   ],
   edges: [
     {
@@ -467,9 +468,9 @@ it('the edge Color row recolors the stroke via the palette preset', async () => 
 it('the Color row from a multi-selection recolors every member and the edges between them', async () => {
   const areaStart: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 300, y: 100, width: 120, height: 60, text: 'B' },
-      { id: 'c', type: 'text', x: 500, y: 300, width: 120, height: 60, text: 'C' },
+      textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 300, y: 100, width: 120, height: 60, text: 'B' }),
+      textNode({ id: 'c', x: 500, y: 300, width: 120, height: 60, text: 'C' }),
     ],
     edges: [
       {

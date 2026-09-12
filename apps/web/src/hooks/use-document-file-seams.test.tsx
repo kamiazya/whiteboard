@@ -7,6 +7,7 @@ import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard
  * hand-written copy is exactly what should not happen.
  */
 import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
@@ -175,9 +176,7 @@ describe('useDocumentFileSeams', () => {
 describe('useDocumentFileSeams reaches what a text node embeds', () => {
   const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
   const canvasEmbedding = (target: string): SpatialCanvas => ({
-    nodes: [
-      { id: 't', type: 'text', x: 0, y: 0, width: 300, height: 200, text: `see ![[${target}]]` },
-    ],
+    nodes: [textNode({ id: 't', x: 0, y: 0, width: 300, height: 200, text: `see ![[${target}]]` })],
     edges: [],
   })
 

@@ -5,7 +5,9 @@
 // pointerdown and the live layer appeared 65ms later. Hold a handle without
 // moving and the box stays empty for as long as you hold, which reads as the
 // content being lost rather than as a gesture starting.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -14,7 +16,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 100, y: 100, width: 220, height: 100, text: 'hello resize' }],
+  nodes: [textNode({ id: 'a', x: 100, y: 100, width: 220, height: 100, text: 'hello resize' })],
   edges: [],
 }
 

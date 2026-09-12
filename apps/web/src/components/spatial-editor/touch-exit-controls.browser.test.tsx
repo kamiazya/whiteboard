@@ -3,7 +3,9 @@
 // moved focus to the button would commit before the click could cancel —
 // Cancel would silently mean Done. The buttons claim pointerdown so focus
 // never leaves the editor, and the click then routes to the right verb.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -90,7 +92,7 @@ function Host({ start }: { start: SpatialCanvas }) {
 
 it('inside the spatial editor, tapping Cancel drops the draft and closes the editor', async () => {
   const start: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'kept' }],
+    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'kept' })],
     edges: [],
   }
   const { container } = render(<Host start={start} />)

@@ -2,7 +2,9 @@
  * Real-browser interaction coverage — pointer capture, drag-to-move, and
  * unmount-mid-gesture are exactly what jsdom cannot exercise faithfully.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -23,8 +25,8 @@ function fakeMeasure() {
 function twoNodeCanvas(): SpatialCanvas {
   return {
     nodes: [
-      { id: 'a', type: 'text', x: 20, y: 20, width: 100, height: 60, text: 'hello' },
-      { id: 'b', type: 'file', x: 250, y: 20, width: 80, height: 40, file: 'x.png' },
+      textNode({ id: 'a', x: 20, y: 20, width: 100, height: 60, text: 'hello' }),
+      fileNode({ id: 'b', x: 250, y: 20, width: 80, height: 40, file: 'x.png' }),
     ],
     edges: [],
   }
@@ -140,15 +142,9 @@ describe('SpatialEditor (browser)', () => {
     expect(command).toEqual({ kind: 'move-node', id: 'a', x: 49, y: 49 })
     expect(next.nodes[1]).toEqual(canvasValue.nodes[1])
     // input untouched
-    expect(canvasValue.nodes[0]).toEqual({
-      id: 'a',
-      type: 'text',
-      x: 20,
-      y: 20,
-      width: 100,
-      height: 60,
-      text: 'hello',
-    })
+    expect(canvasValue.nodes[0]).toEqual(
+      textNode({ id: 'a', x: 20, y: 20, width: 100, height: 60, text: 'hello' }),
+    )
   })
 
   it('click on empty space clears selection without throwing', async () => {
@@ -1781,33 +1777,30 @@ describe('SpatialEditor (browser)', () => {
 function fourDefectCanvas(): SpatialCanvas {
   return {
     nodes: [
-      {
+      textNode({
         id: 'heading-node',
-        type: 'text',
         x: 20,
         y: 20,
         width: 220,
         height: 110,
         text: '# Heading\n\nSome body text.',
-      },
-      {
+      }),
+      textNode({
         id: 'list-node',
-        type: 'text',
         x: 280,
         y: 20,
         width: 220,
         height: 110,
         text: 'Second node\n\n- list item\n- another',
-      },
-      {
+      }),
+      textNode({
         id: 'overflow-node',
-        type: 'text',
         x: 20,
         y: 170,
         width: 160,
         height: 90,
         text: 'This is a long line of text that should wrap inside its node instead of overflowing the right edge',
-      },
+      }),
     ],
     edges: [
       {
@@ -2051,15 +2044,14 @@ describe('SpatialEditor (browser) — CJK text layout', () => {
   it('wraps a Japanese note inside its node instead of painting past the border', async () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        {
+        textNode({
           id: 'ja-node',
-          type: 'text',
           x: 20,
           y: 20,
           width: 200,
           height: 160,
           text: 'これは日本語の長い文章です。ノードの幅を超えても、枠の内側で折り返されなければなりません。',
-        },
+        }),
       ],
       edges: [],
     }
@@ -2103,15 +2095,14 @@ describe('SpatialEditor (browser) — CJK text layout', () => {
     // counting definitions.
     const canvas: SpatialCanvas = {
       nodes: [
-        {
+        fileNode({
           id: 'file-node',
-          type: 'file',
           x: 20,
           y: 20,
           width: 160,
           height: 60,
           file: 'とても長い日本語のファイル名です.md',
-        },
+        }),
       ],
       edges: [],
     }

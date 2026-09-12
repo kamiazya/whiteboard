@@ -4,7 +4,9 @@
 // from the web without a delete anywhere. Real browser: the verbs live on
 // the context menu over hit-tested chrome, and the toggle crosses to the
 // layout worker on a large canvas.
+
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -31,7 +33,7 @@ const DONE: CanvasComment = {
   resolved: true,
 }
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [OPEN, DONE],
 }
@@ -146,15 +148,16 @@ it('"Show resolved comments" draws resolved ones muted, and "Reopen" brings one 
 // Twelve or more elements send layout to the worker: the toggle has to
 // cross the wire as plain data, or a large canvas silently never shows a
 // resolved comment.
-const FILLER = Array.from({ length: 12 }, (_, i) => ({
-  id: `f${i}`,
-  type: 'text' as const,
-  x: 20 + (i % 4) * 60,
-  y: 520 + Math.floor(i / 4) * 30,
-  width: 50,
-  height: 24,
-  text: `${i}`,
-}))
+const FILLER = Array.from({ length: 12 }, (_, i) =>
+  textNode({
+    id: `f${i}`,
+    x: 20 + (i % 4) * 60,
+    y: 520 + Math.floor(i / 4) * 30,
+    width: 50,
+    height: 24,
+    text: `${i}`,
+  }),
+)
 
 it('the toggle reaches the layout worker on a large canvas', async () => {
   const { Host } = makeHost({ ...start, nodes: [...start.nodes, ...FILLER] })
