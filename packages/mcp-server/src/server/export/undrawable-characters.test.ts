@@ -26,6 +26,21 @@ describe('undrawableCharacters', () => {
     expect(missing).toEqual(['こ', 'ん', 'に', 'ち', 'は'])
   })
 
+  /**
+   * A shortcode is ASCII and every export font draws it; the emoji it is
+   * DRAWN AS is what none of them has a glyph for. So the scan has to read
+   * the text as the layout draws it, not as the document stores it —
+   * otherwise this report goes blind on exactly the characters the
+   * projection introduces, and a tofu box in the PNG has nothing saying so.
+   */
+  test('names the emoji a shortcode draws as, which the stored text does not contain', async () => {
+    expect(await undrawableCharacters(CANVAS('ship it :rocket:'))).toEqual(['\u{1F680}'])
+  })
+
+  test('still says nothing about a colon pair that names no emoji', async () => {
+    expect(await undrawableCharacters(CANVAS('see :something: here'))).toEqual([])
+  })
+
   test('reports each character once, in first-seen order, across every node', async () => {
     const missing = await undrawableCharacters({
       nodes: [
