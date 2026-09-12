@@ -66,3 +66,35 @@ export const isFrame = (node: SpatialNode): boolean => node.type === 'group'
  */
 export const withNodeText = (node: SpatialNode, text: string): SpatialNode =>
   node.type === 'text' ? { ...node, text } : node
+
+/**
+ * The same node pointing at a different document.
+ *
+ * Drops `subpath` with the old reference, because a fragment identifies a
+ * place inside the document it came from and means nothing in another one —
+ * the behaviour `commands.ts` already had, moved here so the storage flip
+ * finds it in one place.
+ */
+export const withNodeFile = (node: SpatialNode, file: string): SpatialNode => {
+  if (node.type !== 'file') return node
+  const { subpath: _dropped, ...rest } = node
+  return { ...rest, file }
+}
+
+/** The same node pointing at a different address. */
+export const withNodeUrl = (node: SpatialNode, url: string): SpatialNode =>
+  node.type === 'link' ? { ...node, url } : node
+
+/**
+ * A frame's own label, or `undefined` when this node is not a frame.
+ *
+ * On the frame axis rather than the content one, and here for the same reason
+ * `isFrame` is: a caller reading it otherwise has to narrow through `type`,
+ * which is the spelling both axes are moving away from.
+ */
+export const frameLabel = (node: SpatialNode): string | undefined =>
+  node.type === 'group' ? node.label : undefined
+
+/** The fragment inside the document a node points at, or `undefined`. */
+export const nodeSubpath = (node: SpatialNode): string | undefined =>
+  node.type === 'file' ? node.subpath : undefined

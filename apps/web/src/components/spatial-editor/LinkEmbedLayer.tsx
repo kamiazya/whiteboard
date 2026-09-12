@@ -16,7 +16,9 @@
  * auto-degrade; the "open in new tab" affordance next to the collapse
  * control is the escape hatch when a site refuses to render.
  */
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeUrl } from '@kamiazya/whiteboard-model'
 import { ExternalLink, Play, X } from 'lucide-react'
 import { useState } from 'react'
 import { isFollowableUrl } from './followable-url.js'
@@ -26,7 +28,12 @@ const MAX_LIVE_IFRAMES = 3
 export interface LinkEmbedLayerProps {
   readonly canvas: SpatialCanvas
   /** The LOD gate: only link nodes this returns true for offer the facade. */
-  readonly shouldOffer: (node: Extract<SpatialNode, { type: 'link' }>) => boolean
+  /**
+   * Takes any node, not the link arm. The arm type is what ADR-0038 decision
+   * 3 removes, and a prop declaring it is a prop the flip has to visit; the
+   * layer has already established this node has a url before it asks.
+   */
+  readonly shouldOffer: (node: SpatialNode) => boolean
   /**
    * False while the editor's tool is navigation-only (the hand tool), where
    * every press has to pan — including one that lands on this layer.
@@ -44,10 +51,13 @@ export function LinkEmbedLayer({ canvas, shouldOffer, interactive }: LinkEmbedLa
   // Activation order doubles as the LRU: first entry is the oldest.
   const [liveIds, setLiveIds] = useState<readonly string[]>([])
 
-  const linkNodes = canvas.nodes.filter(
-    (node): node is Extract<SpatialNode, { type: 'link' }> =>
-      node.type === 'link' && isFollowableUrl(node.url) && shouldOffer(node),
-  )
+  // The url travels BESIDE the node rather than being read off it again in
+  // the markup. Narrowing to the link arm is what the ADR-0038 decision 3
+  // flip removes, and every `url` below would have had to move with it.
+  const linkNodes = canvas.nodes.flatMap((node) => {
+    const url = nodeUrl(node)
+    return url !== undefined && isFollowableUrl(url) && shouldOffer(node) ? [{ node, url }] : []
+  })
   const liveSet = new Set(liveIds)
 
   const activate = (id: string) => {
@@ -62,7 +72,7 @@ export function LinkEmbedLayer({ canvas, shouldOffer, interactive }: LinkEmbedLa
 
   return (
     <>
-      {linkNodes.map((node) =>
+      {linkNodes.map(({ node, url }) =>
         liveSet.has(node.id) ? (
           <div
             key={node.id}
@@ -79,8 +89,8 @@ export function LinkEmbedLayer({ canvas, shouldOffer, interactive }: LinkEmbedLa
             className="overflow-hidden rounded-md border bg-background shadow-sm"
           >
             <iframe
-              src={node.url}
-              title={node.url}
+              src={url}
+              title={url}
               // No allow-same-origin: the embedded page runs in an opaque
               // origin and cannot reach this app's storage or DOM.
               sandbox="allow-scripts allow-popups"
@@ -90,7 +100,7 @@ export function LinkEmbedLayer({ canvas, shouldOffer, interactive }: LinkEmbedLa
             />
             <span className="absolute top-1 right-1 flex gap-1">
               <a
-                href={node.url}
+                href={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Open in new tab"
@@ -114,7 +124,7 @@ export function LinkEmbedLayer({ canvas, shouldOffer, interactive }: LinkEmbedLa
             type="button"
             data-editor-overlay
             data-testid="link-embed-facade"
-            aria-label={`Load ${node.url}`}
+            aria-label={`Load ${url}`}
             onClick={() => activate(node.id)}
             style={{
               position: 'absolute',

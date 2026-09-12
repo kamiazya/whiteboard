@@ -8,7 +8,7 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endIn } from '@kamiazya/whiteboard-model'
+import { endIn, nodeFile, nodeSubpath, nodeText } from '@kamiazya/whiteboard-model'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -217,16 +217,17 @@ export function nodeMenuItems({
         }),
     })
   }
-  if (node.type === 'file' && isImageFileRef?.(node.file) !== true) {
+  const fileRef = nodeFile(node)
+  if (fileRef !== undefined && isImageFileRef?.(fileRef) !== true) {
     // A missing target makes Open a dead end (worse: the daemon's
     // path routes lazily create, so following would mint an empty
     // canvas under the dangling ref). Change target stays — it is
     // the repair affordance.
-    if (onOpenFileRef !== undefined && missingFileRef?.(node.file) !== true) {
+    if (onOpenFileRef !== undefined && missingFileRef?.(fileRef) !== true) {
       verbs.push({
         label: 'Open canvas',
         icon: <ExternalLink />,
-        onSelect: () => onOpenFileRef(node.file, node.subpath),
+        onSelect: () => onOpenFileRef(fileRef, nodeSubpath(node)),
       })
     }
     if (fileRefOptions !== undefined) {
@@ -249,7 +250,8 @@ export function nodeMenuItems({
       onSelect: () => setLinkDialog({ mode: 'edit', nodeId: node.id }),
     })
   }
-  if (node.type === 'text') {
+  const ownText = nodeText(node)
+  if (ownText !== undefined) {
     verbs.push({
       label: 'Edit text',
       icon: <Pencil />,
@@ -258,7 +260,7 @@ export function nodeMenuItems({
           reduceGesture(gestureState, canvas, {
             type: 'start-text-edit',
             nodeId: node.id,
-            text: node.text,
+            text: ownText,
           }),
         )
       },
