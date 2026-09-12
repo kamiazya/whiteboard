@@ -95,7 +95,7 @@ describe('versionSaveOutputSchema', () => {
     expect(
       versionEntryForAgent({
         ...VALID_ENTRY,
-        operator: { kind: 'ai', peerId: 'p1', agentId: 'a1', displayName: 'Claude' },
+        operator: { kind: 'ai', actor: 'process:p1', agentId: 'a1', displayName: 'Claude' },
       }),
     ).toEqual({
       id: 'ver-1',

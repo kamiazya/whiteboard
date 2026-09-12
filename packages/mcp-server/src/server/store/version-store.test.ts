@@ -192,7 +192,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       label: 'manual',
       operator: {
         kind: 'ai',
-        peerId: 'peer-ai',
+        actor: 'process:peer-ai',
         displayName: 'Assistant',
         agentId: 'agent-1',
         workspaceId: 'session-1',
@@ -201,7 +201,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
     expect(entry.operator).toEqual({
       kind: 'ai',
-      peerId: 'peer-ai',
+      actor: 'process:peer-ai',
       displayName: 'Assistant',
       agentId: 'agent-1',
       workspaceId: 'session-1',

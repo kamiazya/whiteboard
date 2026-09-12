@@ -113,7 +113,7 @@ describe('createDaemonIdentity', () => {
     const capture = captureLogsForTests('debug')
     try {
       const identity = createDaemonIdentity({ dataDir: dir })
-      expect(Object.keys(identity).sort()).toEqual(['alg', 'publicKey', 'sign'])
+      expect(Object.keys(identity).sort()).toEqual(['alg', 'did', 'publicKey', 'sign'])
       const raw = readFileSync(join(dir, 'daemon-identity.json'), 'utf8')
       const privateD = JSON.parse(raw).privateJwk.d
       expect(typeof privateD).toBe('string')

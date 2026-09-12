@@ -9,9 +9,14 @@ import { z } from 'zod'
 // publicKey is the raw Ed25519 public key, base64url. Advertising it is safe:
 // trust comes from the web app PINNING the key at /pair consent time and
 // verifying signatures against the pin, never from the advertisement itself.
+// `did` is the same key under the name the rest of the world uses for one
+// (ADR-0035 decision 1) — derived from publicKey, never a second credential,
+// and never what a pin is taken on. Optional for the same wire-compat reason
+// `identity` itself is: a daemon predating it advertises the key alone.
 export const daemonIdentitySchema = z.object({
   alg: z.literal('Ed25519'),
   publicKey: z.string().min(1),
+  did: z.string().startsWith('did:key:').optional(),
 })
 
 export type DaemonIdentityInfo = z.infer<typeof daemonIdentitySchema>

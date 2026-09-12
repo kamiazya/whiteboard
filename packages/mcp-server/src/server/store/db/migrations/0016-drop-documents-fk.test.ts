@@ -72,7 +72,18 @@ async function seedDocument(db: Handle['db']): Promise<void> {
     .execute()
 }
 
-async function seedVersion(db: Handle['db']): Promise<void> {
+/**
+ * The operator column is named per STAGE, not once: 0025 renamed
+ * `operatorPeerId` to `operatorActor`, and a fixture that seeds a
+ * pre-0016 database has to spell the name as it stood there — the
+ * post-0016 case below is migrated to head and gets the current one.
+ * One helper with the column as a parameter, so neither caller can
+ * quietly drift onto the other's name.
+ */
+async function seedVersion(
+  db: Handle['db'],
+  operatorColumn: 'operatorPeerId' | 'operatorActor',
+): Promise<void> {
   await db
     .insertInto('versions')
     .values({
@@ -83,7 +94,7 @@ async function seedVersion(db: Handle['db']): Promise<void> {
       auto: 1,
       label: null,
       operatorKind: 'system',
-      operatorPeerId: '',
+      [operatorColumn]: '',
       operatorDisplayName: null,
       operatorAgentId: null,
       operatorWorkspaceId: null,
@@ -134,7 +145,7 @@ describe('0016-drop-documents-fk', () => {
       .execute()
 
     // No documents row at all — the insert must succeed post-0016.
-    await seedVersion(handle.db)
+    await seedVersion(handle.db, 'operatorActor')
 
     const versions = await handle.db.selectFrom('versions').select(['id']).execute()
     expect(versions).toEqual([{ id: 'v-a' }])
@@ -144,7 +155,7 @@ describe('0016-drop-documents-fk', () => {
     const handle = await openDb()
     await handle.migrateTo(PRE_0016)
     await seedDocument(handle.db)
-    await seedVersion(handle.db)
+    await seedVersion(handle.db, 'operatorPeerId')
     await seedBranch(handle.db)
 
     // This is 0016's own migration test: migrate to exactly the stage it

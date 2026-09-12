@@ -2,7 +2,14 @@ import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import {
+  didKeyToEd25519PublicKey,
+  ed25519PublicKeyToDidKey,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/did-key'
+import {
+  daemonPingResponseSchema,
+  runtimeVerifyResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
@@ -103,7 +110,11 @@ describe('runtime routes', () => {
     await expect(res.json()).resolves.toEqual({
       ok: true,
       instanceId: 'test-instance-id',
-      identity: { alg: 'Ed25519', publicKey: testIdentity.publicKey },
+      identity: {
+        alg: 'Ed25519',
+        publicKey: testIdentity.publicKey,
+        did: ed25519PublicKeyToDidKey(testIdentity.publicKey),
+      },
     })
   })
 
@@ -315,8 +326,23 @@ describe('daemon identity surfaces', () => {
     const { app } = createApp()
     const res = await app.request('/api/runtime/ping')
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { identity?: { alg: string; publicKey: string } }
-    expect(body.identity).toEqual({ alg: 'Ed25519', publicKey: testIdentity.publicKey })
+    const body = daemonPingResponseSchema.parse(await res.json())
+    expect(body.identity?.alg).toBe('Ed25519')
+    expect(body.identity?.publicKey).toBe(testIdentity.publicKey)
+  })
+
+  // The did is a NAME for the key already advertised, not a second
+  // credential (ADR-0035 decision 1). So the check that matters is that the
+  // two agree: decoding the did has to give back the very bytes a pinning
+  // browser would verify against, or the daemon is publishing two identities.
+  it('ping names the same key as a did:key', async () => {
+    const { app } = createApp()
+    const res = await app.request('/api/runtime/ping')
+    const body = daemonPingResponseSchema.parse(await res.json())
+    const did = body.identity?.did
+    expect(did).toMatch(/^did:key:z6Mk/)
+    expect(didKeyToEd25519PublicKey(did as string)).toBe(testIdentity.publicKey)
+    expect(did).toBe(ed25519PublicKeyToDidKey(testIdentity.publicKey))
   })
 
   it('verify answers an unauthenticated challenge with a signature binding nonce + origin', async () => {
