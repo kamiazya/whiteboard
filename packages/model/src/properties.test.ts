@@ -1,3 +1,4 @@
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { documentKindSchema } from './document-kind.js'
 import {
@@ -230,15 +231,9 @@ describe('JSON Canvas 1.0 conformance invariants', () => {
     [fc.float({ noNaN: true, noDefaultInfinity: true }).filter((n) => !Number.isInteger(n))],
     withDefaults(),
   )('a sub-pixel coordinate is accepted, and kept', (x) => {
-    const parsed = spatialNodeSchema.safeParse({
-      id: 'n',
-      x,
-      y: 0,
-      width: 1,
-      height: 1,
-      type: 'text',
-      text: '',
-    })
+    const parsed = spatialNodeSchema.safeParse(
+      textNode({ id: 'n', x, y: 0, width: 1, height: 1, text: '' }),
+    )
     expect(parsed.success && parsed.data.x).toBe(x)
   })
 

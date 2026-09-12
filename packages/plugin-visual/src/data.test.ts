@@ -1,6 +1,7 @@
 import { createFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { extensionFacetsSchema } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   bundledPlugins,
@@ -149,9 +150,8 @@ describe('visual.shape/v0', () => {
 
 describe('resolveNodeShape', () => {
   const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
-    ({
+    textNode({
       id: 'n1',
-      type: 'text',
       text: '',
       x: 0,
       y: 0,

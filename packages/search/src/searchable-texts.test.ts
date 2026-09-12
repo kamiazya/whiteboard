@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fullTextSearch } from './full-text.js'
 import { searchableTexts } from './searchable-texts.js'
@@ -15,8 +16,8 @@ describe('searchableTexts', () => {
   it('gives a canvas its node texts, group labels and edge labels', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'n1', type: 'text', text: 'Auth flow', x: 0, y: 0, width: 100, height: 40 },
-        { id: 'g1', type: 'group', label: 'Backlog', x: 0, y: 0, width: 200, height: 200 },
+        textNode({ id: 'n1', text: 'Auth flow', x: 0, y: 0, width: 100, height: 40 }),
+        groupNode({ id: 'g1', label: 'Backlog', x: 0, y: 0, width: 200, height: 200 }),
       ],
       edges: [
         {
@@ -59,15 +60,7 @@ describe('searchableTexts', () => {
   it('leaves a file node out, because its readable label is not in the content', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        {
-          id: 'f1',
-          type: 'file',
-          file: '01JBQ7Z2K3M4N5P6Q7R8S9T0V1',
-          x: 0,
-          y: 0,
-          width: 1,
-          height: 1,
-        },
+        fileNode({ id: 'f1', file: '01JBQ7Z2K3M4N5P6Q7R8S9T0V1', x: 0, y: 0, width: 1, height: 1 }),
       ],
       edges: [],
     }
@@ -76,7 +69,7 @@ describe('searchableTexts', () => {
 
   it('leaves out what carries no label', () => {
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'g1', type: 'group', x: 0, y: 0, width: 10, height: 10 }],
+      nodes: [groupNode({ id: 'g1', x: 0, y: 0, width: 10, height: 10 })],
       edges: [
         {
           id: 'e1',

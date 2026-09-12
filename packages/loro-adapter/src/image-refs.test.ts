@@ -1,3 +1,4 @@
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { collectImageRefIds } from './image-refs.js'
@@ -7,16 +8,10 @@ function seed(files: string[]): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
     nodes: [
-      { id: 'n-text', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'no ref' },
-      ...files.map((file, i) => ({
-        id: `n-file-${i}`,
-        type: 'file' as const,
-        x: 0,
-        y: (i + 1) * 50,
-        width: 100,
-        height: 40,
-        file,
-      })),
+      textNode({ id: 'n-text', x: 0, y: 0, width: 100, height: 40, text: 'no ref' }),
+      ...files.map((file, i) =>
+        fileNode({ id: `n-file-${i}`, x: 0, y: (i + 1) * 50, width: 100, height: 40, file }),
+      ),
     ],
     edges: [],
   })

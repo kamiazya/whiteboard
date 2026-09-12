@@ -23,6 +23,7 @@
  *   and version retention plus branch tips bound how much of it compaction
  *   may take.
  */
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeSpatialCanvas } from './loro-bridge.js'
@@ -59,7 +60,7 @@ function build(docCount: number, editsPerDoc: number): GrowthNumbers {
       const from = ws.oplogVersion()
       writeSpatialCanvas(documentContainers(ws, id), {
         nodes: [
-          { id: 'n1', type: 'text', x: e, y: 0, width: 80, height: 40, text: `edit ${e} of ${d}` },
+          textNode({ id: 'n1', x: e, y: 0, width: 80, height: 40, text: `edit ${e} of ${d}` }),
         ],
         edges: [],
       })
