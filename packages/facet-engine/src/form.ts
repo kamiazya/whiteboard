@@ -532,6 +532,13 @@ function normalizePicker(
     if (picker.specimenIcon === undefined) {
       throw new Error(`facet "${facetName}" declares a picker with no options`)
     }
+    // The catalog check lives at the END of this function, past the options
+    // loop a specimen picker never enters — so without this line a specimen
+    // picker was the one place a blank catalog label was accepted, and a
+    // blank label reaches a person as a control that does nothing.
+    if (picker.catalog !== undefined) {
+      assertCatalogFits(facetName, schema, picker.catalog)
+    }
     return picker
   }
   if (picker.options.length === 0) {

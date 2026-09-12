@@ -310,11 +310,130 @@ describe('a themed picker draws one specimen per registered theme', () => {
         id: 'paint',
         displayName: 'Paint',
         facets: [fixed],
-        assets: { themes: { chalk: SAMPLE_THEME_TOKENS, ember: SAMPLE_THEME_TOKENS } },
+        assets: {
+          themes: { chalk: SAMPLE_THEME_TOKENS, ember: SAMPLE_THEME_TOKENS },
+          // Registered because the registry now refuses a specimen mark no
+          // plugin holds — this fixture declared one and shipped none.
+          icons: { squiggle: { geometry: [{ tag: 'path', d: 'M2 12 L 22 12' }] } },
+        },
       }),
     ])
     const form = registry.facetForm('paint.fixed/v0')
     if (form.kind !== 'picker') throw new Error(`expected a picker form, got ${form.kind}`)
     expect(form.options.map((option) => option.label)).toEqual(['Only chalk'])
+  })
+})
+
+// What the specimen path was skipping that the DECLARED path has (CodeRabbit,
+// PR #1568). One root: `normalizePicker` guards a written-out list, and a
+// specimen picker returns before reaching most of it.
+describe('a specimen picker is held to what a declared one is held to', () => {
+  const iconPlugin = (facets: Parameters<typeof definePlugin>[0]['facets']) =>
+    definePlugin({
+      id: 'paint',
+      displayName: 'Paint',
+      facets,
+      assets: {
+        themes: { chalk: SAMPLE_THEME_TOKENS },
+        icons: { squiggle: { geometry: [{ tag: 'path', d: 'M2 12 L 22 12' }] } },
+      },
+    })
+
+  it('validates a catalog it declares beside the specimen', () => {
+    // `assertCatalogFits` runs at the END of `normalizePicker`, after the
+    // options loop a specimen picker never enters — so a blank catalog label
+    // was accepted here and refused everywhere else. A blank label reaches a
+    // person as a control that does nothing, which is what that check exists
+    // to stop.
+    expect(() =>
+      defineFacet({
+        name: 'look',
+        displayName: 'Look',
+        version: 'v0',
+        targets: ['canvas'],
+        schema: z.object({ theme: z.string().min(1) }),
+        assetRefs: { theme: 'themes' },
+        editor: {
+          picker: {
+            layout: 'cards',
+            specimenIcon: SPECIMEN,
+            catalog: { label: '   ', load: async () => [] },
+          },
+        },
+      }),
+    ).toThrow(/non-blank catalog label/)
+  })
+
+  it('refuses a facet whose schema needs more than the ref field', () => {
+    // The registry builds `{ [field]: id }` and nothing else. A schema
+    // wanting a second required field would get cards that `validateFacetWrite`
+    // then refuses — every one of them, so the picker offers a row of
+    // controls that do nothing. Refused at definition time, where it is a
+    // declaration mistake rather than a mystery in the panel.
+    expect(() =>
+      defineFacet({
+        name: 'needy',
+        displayName: 'Needy',
+        version: 'v0',
+        targets: ['canvas'],
+        schema: z.object({ theme: z.string().min(1), density: z.number() }),
+        assetRefs: { theme: 'themes' },
+        editor: { picker: { layout: 'cards', specimenIcon: SPECIMEN } },
+      }),
+    ).toThrow(/cannot fill/)
+  })
+
+  it('carries a schema default onto every generated card', () => {
+    // `normalizePicker` retains the PARSED payload for a declared option, and
+    // says why: a declaration compared against an unparsed value matches no
+    // stored payload, so the picker draws with nothing selected. A generated
+    // card is the same payload by another route and needs the same parse.
+    const withDefault = defineFacet({
+      name: 'defaulted',
+      displayName: 'Defaulted',
+      version: 'v0',
+      targets: ['canvas'],
+      schema: z.object({ theme: z.string().min(1), intensity: z.number().default(1) }),
+      assetRefs: { theme: 'themes' },
+      editor: { picker: { layout: 'cards', specimenIcon: SPECIMEN } },
+    })
+    const registry = createFacetRegistry([iconPlugin([withDefault])])
+    const form = registry.facetForm('paint.defaulted/v0')
+    if (form.kind !== 'picker') throw new Error(`expected a picker, got ${form.kind}`)
+    expect(form.options[1]?.payload).toEqual({ theme: 'paint.chalk', intensity: 1 })
+  })
+
+  it('refuses a specimenIcon no plugin registers', () => {
+    // The engine's own words for why: a picker whose cards are empty boxes is
+    // worse than a plugin that does not load. An unregistered id makes
+    // `iconAsset` answer undefined and the glyph is dropped, so every card
+    // draws blank. `defineFacet` cannot see this — a facet is defined before
+    // any registry exists — so the registry is where it is caught.
+    const unknownMark = defineFacet({
+      name: 'look',
+      displayName: 'Look',
+      version: 'v0',
+      targets: ['canvas'],
+      schema: z.object({ theme: z.string().min(1) }),
+      assetRefs: { theme: 'themes' },
+      editor: { picker: { layout: 'cards', specimenIcon: 'paint.nosuchmark' } },
+    })
+    expect(() => createFacetRegistry([iconPlugin([unknownMark])])).toThrow(/paint\.nosuchmark/)
+  })
+
+  it('accepts the specimen a plugin does register', () => {
+    const good = defineFacet({
+      name: 'look',
+      displayName: 'Look',
+      version: 'v0',
+      targets: ['canvas'],
+      schema: z.object({ theme: z.string().min(1) }),
+      assetRefs: { theme: 'themes' },
+      editor: { picker: { layout: 'cards', specimenIcon: 'paint.squiggle' } },
+    })
+    const registry = createFacetRegistry([iconPlugin([good])])
+    const form = registry.facetForm('paint.look/v0')
+    if (form.kind !== 'picker') throw new Error(`expected a picker, got ${form.kind}`)
+    expect(form.options.map((o) => o.label)).toEqual(['Default', 'Chalk'])
   })
 })

@@ -123,7 +123,7 @@ export function defineFacet<S extends z.ZodTypeAny>(
     assertAssetRefsFit(definition.name, definition.schema, definition.assetRefs)
   }
   if (editor?.picker?.specimenIcon !== undefined) {
-    assertSpecimenPickerFits(definition.name, definition.assetRefs)
+    assertSpecimenPickerFits(definition.name, definition.schema, definition.assetRefs)
   }
   for (const tag of Object.keys(definition.compat ?? {})) {
     if (!VERSION_PATTERN.test(tag)) {
@@ -265,12 +265,24 @@ function assertAssetName(pluginId: string, name: string): void {
  */
 function assertSpecimenPickerFits(
   facetName: string,
+  schema: z.ZodTypeAny,
   assetRefs: Readonly<Record<string, AssetKind>> | undefined,
 ): void {
   const refs = Object.entries(assetRefs ?? {})
   if (refs.length !== 1 || refs[0]?.[1] !== 'themes') {
     throw new Error(
       `facet "${facetName}" declares a picker specimenIcon, which needs exactly one assetRefs field of kind "themes"`,
+    )
+  }
+  // A generated card is `{ [field]: id }` and NOTHING else, so a schema
+  // wanting a second required field gets cards `validateFacetWrite` refuses —
+  // every one of them, leaving a row of controls that do nothing. Probed with
+  // a syntactically valid id rather than reasoned about, since only the
+  // schema knows what it requires.
+  const field = refs[0]?.[0] as string
+  if (!schema.safeParse({ [field]: 'probe.probe' }).success) {
+    throw new Error(
+      `facet "${facetName}" declares a picker specimenIcon, but its schema refuses a payload of "${field}" alone — the registry cannot fill the other fields`,
     )
   }
 }
@@ -421,6 +433,23 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   }
   // The half `definePlugin` could not do: a stencil's facet payloads judged
   // by the plugins that own those facets, now that every plugin is present.
+  // A specimen picker's MARK, checked here for the reason the stencil check
+  // below is here and not at `defineFacet`: a facet is defined before any
+  // registry exists, so the facet cannot know what icons a deployment holds.
+  // An unregistered id makes `iconAsset` answer undefined and every card's
+  // glyph is dropped — a row of empty boxes, which the specimen mechanism's
+  // own contract calls worse than a plugin that does not load.
+  for (const plugin of plugins) {
+    for (const definition of plugin.facets) {
+      const specimen = definition.editor?.picker?.specimenIcon
+      if (specimen === undefined || icons.has(specimen)) continue
+      const known = [...icons.keys()].join(', ')
+      throw new Error(
+        `facet "${plugin.id}.${definition.name}" names specimen icon "${specimen}", which no plugin registered — registered: ${known === '' ? '(none)' : known}`,
+      )
+    }
+  }
+
   // A stencil is a vocabulary shipped once and applied to many nodes, so an
   // invalid payload here is not one bad write — it is every write that names
   // this stencil, in a deployment, refused one at a time with the author
@@ -490,15 +519,33 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     if (specimen === undefined || form.options.length > 0) return form
     // Exactly one `themes` ref, held by `assertSpecimenPickerFits`.
     const field = Object.keys(refs)[0] as string
+    // PARSED, and the parsed value kept — the same rule `normalizePicker`
+    // applies to a declared option, for the same reason it gives: a payload
+    // compared against an unparsed declaration matches no stored value, so
+    // the picker draws with nothing selected. A generated card is that
+    // payload by another route.
+    //
+    // A card the schema refuses is DROPPED rather than offered. It cannot be
+    // the common case — `assertSpecimenPickerFits` has already refused a
+    // facet whose schema needs more than this field — so what is left is a
+    // schema constraining the id itself, where "this facet cannot name that
+    // asset" is the honest answer and a control that does nothing is not.
+    const cards = [...tableOf('themes').keys()].flatMap((id) => {
+      const parsed = definition.schema.safeParse({ [field]: id })
+      if (!parsed.success) return []
+      return [
+        {
+          payload: parsed.data,
+          label: assetLabel(id, undefined),
+          glyph: { kind: 'theme' as const, id, icon: specimen },
+        },
+      ]
+    })
     return {
       ...form,
       options: [
         { payload: null, label: 'Default', glyph: { kind: 'asset', id: specimen } },
-        ...[...tableOf('themes').keys()].map((id) => ({
-          payload: { [field]: id },
-          label: assetLabel(id, undefined),
-          glyph: { kind: 'theme' as const, id, icon: specimen },
-        })),
+        ...cards,
       ],
     }
   }
