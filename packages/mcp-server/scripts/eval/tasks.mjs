@@ -78,17 +78,27 @@ const firstOverlap = (nodes) => {
   return undefined
 }
 /**
- * The node an edge end sits on, or undefined for a free point.
+ * The node an edge end sits on.
  *
- * An end is an OBJECT on the snapshot, not a flat `fromNode` key. Reading the
- * flat key here answered `undefined` for every edge, so every "is A connected
- * to B" check said no — and a write task's verifier that can never pass looks
- * exactly like one that correctly fails, because `--dry-run` asserts only
- * that write verifiers FAIL on the unseeded fixture. Found by running the
- * lane against a real model: eight `edge.add` calls, zero tool errors, and
- * "not connected" for all eight.
+ * An end is an OBJECT on the snapshot, not a flat `fromNode` key, and it
+ * names its node DIRECTLY: ADR-0038 decision 2 narrowed an edge end to
+ * `{ node, side?, end? }`, because an edge is a relation and cannot end in
+ * empty space. Ink that can is a LINE, whose ends are a discriminated union
+ * in its own `lines` array — so a `kind` test here reads a key no edge
+ * carries.
+ *
+ * This line has now been wrong in both directions, with the same symptom
+ * each time: first reading a flat `fromNode` key, then testing a `kind` the
+ * schema retired. Both answered `undefined` for every edge, so every "is A
+ * connected to B" check said no. A write verifier that can NEVER pass looks
+ * exactly like one that correctly fails — `--dry-run` asserts only that write
+ * verifiers FAIL on the unseeded fixture — so both were found by running the
+ * lane against a real model and reading "not connected" beside `edge.add`
+ * calls that reported zero tool errors. What catches the third is
+ * `tasks.test.ts`, whose fixture now builds its ends through `edgeEndSchema`
+ * instead of spelling them out.
  */
-const endNode = (end) => (end?.kind === 'node' ? end.node : undefined)
+const endNode = (end) => end?.node
 const linked = (board, a, b) =>
   board.edges.some(
     (e) =>
