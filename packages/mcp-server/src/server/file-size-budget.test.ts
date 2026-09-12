@@ -323,7 +323,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the picture rather than emitting the alt words, and an alt-less one
   // takes an atomic placeholder because the wrappable path trims a
   // whitespace-only run out of existence.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1699,
+  // +7: that image asks the caller WHERE its picture is, through the
+  // `resolveReference` seam a body already carries — so a written path can
+  // be a workspace attachment instead of only an absolute URL.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1706,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

@@ -105,3 +105,68 @@ describe('a comment can still be anchored across an inline image', () => {
     expect(passageBoxes(runs, { exact: 'a diagram' }, options.measure).length).toBeGreaterThan(0)
   })
 })
+
+/**
+ * The URL a picture actually loads from is the CALLER's to decide, the same
+ * way a file node's is. Shipped without this, an inline image drew whatever
+ * the markdown said — so an absolute URL worked and a relative path or a
+ * workspace attachment did not, which is most of them.
+ *
+ * No new seam: `resolveReference` is one of the four `referenceSeams`
+ * produces, and `MdastLayoutOptions` already carries the whole bundle
+ * (a canvas embedded in a note has file nodes that read it). The inline
+ * image case just stops being the one thing in a body that never asks.
+ */
+describe('an inline image asks the caller where its picture is', () => {
+  const withSeam = (url: string, href: string | undefined) =>
+    layoutMdastBlocks(paragraph([{ type: 'image', url, alt: 'a diagram' }]), {
+      ...options,
+      references: {
+        resolveAlias: () => null,
+        resolveTitle: () => undefined,
+        resolveEmbed: () => undefined,
+        resolveReference: (ref: string) =>
+          ref === url && href !== undefined ? { image: { href } } : undefined,
+      },
+    }).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
+
+  it('paints the resolved href rather than the written path', () => {
+    const runs = withSeam('attachments/plan.png', 'blob:local/abc')
+    expect(runs.find((run) => run.paints !== undefined)?.paints).toEqual({
+      kind: 'image',
+      src: 'blob:local/abc',
+    })
+  })
+
+  /**
+   * A reference nothing resolves keeps the written URL rather than drawing
+   * nothing: an absolute `https://` one needs no resolution and worked
+   * before this, and losing it would be a regression dressed as a feature.
+   */
+  it('falls back to the written URL when nothing resolves it', () => {
+    const runs = withSeam('https://example.com/x.png', undefined)
+    expect(runs.find((run) => run.paints !== undefined)?.paints).toEqual({
+      kind: 'image',
+      src: 'https://example.com/x.png',
+    })
+  })
+
+  /** A seam that throws is a seam, not a crash — the never-throw rule. */
+  it('keeps the written URL when the seam throws', () => {
+    const runs = layoutMdastBlocks(paragraph([{ type: 'image', url: 'x.png', alt: 'a' }]), {
+      ...options,
+      references: {
+        resolveAlias: () => null,
+        resolveTitle: () => undefined,
+        resolveEmbed: () => undefined,
+        resolveReference: () => {
+          throw new Error('boom')
+        },
+      },
+    }).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
+    expect(runs.find((run) => run.paints !== undefined)?.paints).toEqual({
+      kind: 'image',
+      src: 'x.png',
+    })
+  })
+})
