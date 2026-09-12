@@ -223,6 +223,30 @@ describe('the generated emoji catalog', () => {
     expect(emojiSlug('keycap: *')).toBe('keycap_asterisk')
   })
 
+  /**
+   * The INVARIANT the trim relies on, rather than a timing claim.
+   *
+   * CodeQL flagged `/^_+|_+$/` as polynomial: `_+$` re-scans from every
+   * position of a `_`-heavy string that does not end in one. It was not
+   * reachable through `emojiSlug` — the collapse runs first, so the
+   * pathological input never arrives — and the fix is the unquantified
+   * `^_` / `_$`, which is EXACT because every run of non-alphanumerics has
+   * already become exactly one `_`. This is what pins that, so a later edit
+   * moving or weakening the collapse fails here rather than silently making
+   * the trim wrong.
+   */
+  it('collapses every run of separators, so at most one underscore is left at each end', () => {
+    expect(emojiSlug('___a___b___')).toBe('a_b')
+    expect(emojiSlug('!!! hello !!!')).toBe('hello')
+    expect(emojiSlug('_'.repeat(1000))).toBe('')
+    expect(emojiSlug(`a${'_'.repeat(1000)}b`)).toBe('a_b')
+    // And no generated slug leans on it by accident.
+    const leaning = options
+      .map((option) => emojiSlug(option.label))
+      .filter((slug) => slug.startsWith('_') || slug.endsWith('_') || slug.includes('__'))
+    expect(leaning).toEqual([])
+  })
+
   it('makes the shortcode findable, since a search splits on whitespace', () => {
     const thumbsUp = options.find(
       (option) => option.glyph?.kind === 'char' && option.glyph.value === '\u{1F44D}',

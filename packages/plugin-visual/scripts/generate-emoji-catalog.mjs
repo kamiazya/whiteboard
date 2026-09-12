@@ -76,12 +76,22 @@ async function read(url, flag) {
  */
 function annotations(text) {
   const found = new Map()
+  // ONE pass over one alternation, never four passes in sequence: unescaping
+  // `&amp;` first turns `&amp;lt;` into `&lt;` and the next replace turns
+  // that into `<`, which is a double-unescape — the text said `&lt;` and the
+  // parser produced a tag delimiter. CodeQL flags exactly this shape, and a
+  // single pass cannot re-read its own output.
+  const ENTITY = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
   const decode = (value) =>
-    value
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
+    value.replace(
+      /&(?:(amp|lt|gt|quot|apos)|#(\d+)|#x([0-9a-fA-F]+));/g,
+      (whole, name, dec, hex) => {
+        if (name !== undefined) return ENTITY[name]
+        if (dec !== undefined) return String.fromCodePoint(Number(dec))
+        if (hex !== undefined) return String.fromCodePoint(Number.parseInt(hex, 16))
+        return whole
+      },
+    )
   for (const m of text.matchAll(
     /<annotation cp="([^"]*)"(\s+type="tts")?>([^<]*)<\/annotation>/g,
   )) {

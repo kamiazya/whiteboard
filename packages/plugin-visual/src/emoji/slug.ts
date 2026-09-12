@@ -40,6 +40,18 @@ export function emojiSlug(name: string): string {
       .replace(/[’']/g, '')
       .replace(/[#*&+]/g, (char) => ` ${SYMBOL[char]} `)
       .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
+      // Unquantified on purpose. The collapse above turns EVERY run of
+      // non-alphanumerics into exactly one `_`, so at most one can be at
+      // each end and `_+` has nothing more to match — while `/^_+|_+$/`
+      // is the polynomial shape CodeQL flags, since `_+$` re-scans from
+      // every position of a `_`-heavy string that does not end in one.
+      //
+      // Reachable through this function? No: the collapse runs first, so
+      // the pathological input never arrives. The safer form is taken
+      // anyway — it is exact rather than merely adequate, and `emojiSlug`
+      // is exported, so the next caller does not inherit a regex that is
+      // only safe because of the line above it.
+      .replace(/^_/, '')
+      .replace(/_$/, '')
   )
 }
