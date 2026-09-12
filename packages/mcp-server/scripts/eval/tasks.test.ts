@@ -9,6 +9,7 @@
 // Only the kinds task is covered. A verifier earns a case here when
 // something about it has been got wrong, not on principle — every task in
 // the file would be a fixture pile that nobody reads.
+import { type EdgeEnd, edgeEndSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { TASKS } from './tasks.mjs'
 
@@ -23,13 +24,25 @@ type Node = {
   width: number
   height: number
 }
-// An END is an object, not a flat key (ADR-0037 slice 3). Spelled out here
-// rather than imported because this fixture stands in for what the snapshot
-// hands a verifier, and a fixture that drifts from that shape is how a
-// POSITIVE control stops controlling anything.
-type End = { kind: 'node'; node: string }
+// An END is an object, not a flat key (ADR-0037 slice 3), and it is BUILT
+// THROUGH the model's own schema rather than spelled out here.
+//
+// The previous version of this line spelled it out, under a comment warning
+// that "a fixture that drifts from that shape is how a POSITIVE control stops
+// controlling anything" — and then did exactly that. ADR-0038 decision 2
+// narrowed an edge end from a `{ kind: 'node', node }` union to a plain
+// `{ node, side?, end? }`, because an edge is a relation and cannot end in
+// empty space. The hand-written fixture did not move, so every test below
+// kept passing against a shape no tool answers any more, while the real lane
+// failed 6 of 6 trials with "not connected" on boards whose edges were
+// written with zero tool errors.
+//
+// `.parse` rather than a cast, and `edgeEndSchema` is `.strict()`: a fixture
+// carrying a key the schema retired now THROWS here instead of quietly
+// standing in for a payload nobody sends.
+type End = EdgeEnd
 type Edge = { id: string; from: End; to: End }
-const at = (node: string): End => ({ kind: 'node', node })
+const at = (node: string): End => edgeEndSchema.parse({ node })
 type Board = { nodes: Node[]; edges: Edge[] }
 
 /** A board the fixture agent would be passed for `boards/checkout`. */
