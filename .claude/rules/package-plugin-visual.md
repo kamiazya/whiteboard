@@ -218,6 +218,15 @@ renderer and the MCP server alike — and a promise cannot be awaited inside a
 synchronous inline walk. The MAP is still lazy and gated on a candidate, so
 a body with no `:x:` in it never builds it.
 
+`emojiShortcodeRanges(text)` is the single definition of WHERE a shortcode
+is, and `expandEmojiShortcodes` is written over it. That is not tidiness: the
+markdown editor draws a widget over the same ranges
+(`apps/web`'s `emoji-shortcode-marks.ts`), so a second scanner there would
+make the pane a preview of something the renderer does not do — the worst
+shape available, worse than either behaviour on its own. One scanner, two
+readers, and `shortcode.test.ts` rebuilds the string from the ranges and
+asserts it equals what the expander produced.
+
 It derives from the SAME `EMOJI_GROUPS` through the same `emojiSlug` rather
 than from a generated reverse index. Measured: a slug-only table is 39.2KB
 against the 69.5KB this costs, so a second table buys 30KB and pays with a
