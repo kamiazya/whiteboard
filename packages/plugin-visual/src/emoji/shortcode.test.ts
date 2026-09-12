@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { EMOJI_GROUPS } from './catalog-data.js'
-import { emojiForShortcode, expandEmojiShortcodes } from './shortcode.js'
+import { emojiForShortcode, emojiShortcodeRanges, expandEmojiShortcodes } from './shortcode.js'
 import { emojiSlug } from './slug.js'
 
 const rows = EMOJI_GROUPS.flatMap(([, block]) =>
@@ -82,5 +82,58 @@ describe('expanding a body replaces shortcodes and leaves prose alone', () => {
   it('returns the same string it was given when there is nothing to do', () => {
     const text = 'an ordinary paragraph with no shortcodes in it'
     expect(expandEmojiShortcodes(text)).toBe(text)
+  })
+})
+
+/**
+ * The RANGES, which exist so the editor and the renderer cannot disagree.
+ *
+ * A decoration showing 🚀 where the render will draw `:rocket:` — or the
+ * reverse — is a worse defect than either behaviour alone, because the
+ * editor stops being a preview of anything. So both read this.
+ */
+describe('where a shortcode is, as one definition', () => {
+  it('reports each one with its bounds and the character it draws', () => {
+    expect([...emojiShortcodeRanges('ship it :rocket: today')]).toEqual([
+      { from: 8, to: 16, char: '\u{1F680}' },
+    ])
+  })
+
+  it('reports several, in order, with no gap between adjacent ones', () => {
+    expect([...emojiShortcodeRanges(':rocket::fire:')]).toEqual([
+      { from: 0, to: 8, char: '\u{1F680}' },
+      { from: 8, to: 14, char: '\u{1F525}' },
+    ])
+  })
+
+  it('reports nothing for a colon pair that names no emoji', () => {
+    expect([...emojiShortcodeRanges('see :something: at 10:30:')]).toEqual([])
+    expect([...emojiShortcodeRanges('no colons at all')]).toEqual([])
+  })
+
+  /**
+   * The agreement itself, over text that mixes every case: replacing each
+   * reported range with its character has to produce exactly what
+   * `expandEmojiShortcodes` produces. A second scanner would drift from this
+   * silently, which is the whole reason there is one.
+   */
+  it('agrees with the expansion, range for range', () => {
+    for (const text of [
+      'ship it :rocket: today',
+      ':rocket::fire:',
+      'see :something: here',
+      'a :fire: and :rocket: and :nope: mixed',
+      'from 10:30: onwards',
+      '',
+    ]) {
+      let rebuilt = ''
+      let at = 0
+      for (const range of emojiShortcodeRanges(text)) {
+        rebuilt += text.slice(at, range.from) + range.char
+        at = range.to
+      }
+      rebuilt += text.slice(at)
+      expect(rebuilt).toBe(expandEmojiShortcodes(text))
+    }
   })
 })

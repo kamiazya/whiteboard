@@ -20,6 +20,7 @@ import {
   setActiveMarkdownEditor,
 } from './active-markdown-editor.js'
 import { markdownStyleKeymap } from './editor-verbs.js'
+import { emojiShortcodeMarks } from './emoji-shortcode-marks.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { headingLevelAt } from './line-prefix.js'
 import { rangeToActOn } from './word-at.js'
@@ -263,6 +264,13 @@ export function SourcePane({
         // continuation runs as usual.
         Prec.highest(keymap.of([{ key: 'Enter', run: exitEmptyListItem }])),
         syntaxHighlighting(markdownHighlightStyle),
+        // `:rocket:` drawn as 🚀 once the caret leaves it. Unconditional,
+        // because every surface this pane serves — the document editor, a
+        // comment composer, a comment card — is drawn by the same
+        // `mdast-blocks` walk that expands the shortcode. A pane that showed
+        // the source where the render shows the character would be previewing
+        // something that does not happen.
+        emojiShortcodeMarks(),
         history(),
         // styleKeymap precedes defaultKeymap so Mod-b/Mod-i win over any
         // default binding; it also owns Tab (indent / outdent) and keeps it
