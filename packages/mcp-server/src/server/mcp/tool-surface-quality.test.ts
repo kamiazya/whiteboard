@@ -222,28 +222,10 @@ describe('what the tool table costs to read', () => {
       // lane trial that then spent seventeen calls recovering by hand.
       // -6 dropping `badge` from the stencil field's description: the
       // bundled set writes one, and a board draws none.
-      //
-      // +133 for one sentence pointing a model that wants a visual
-      // distinction at `stencil` rather than a bare `color`. Round 13 of
-      // the lane measured what it is for: on `deploy-flow` the model painted
-      // yellow step / cyan decision / green terminal — a drawing a person
-      // reads correctly — and declared no partition, so the facet score read
-      // `constructs 0, treatments 3, excess 3`. The colour carried a meaning
-      // the DOCUMENT does not record, and the user's criterion is that
-      // meaning be shared with a model reading it back, so that is a defect
-      // rather than a matter of taste.
-      //
-      // In the TOOL description, which is emitted once. The same sentence on
-      // the `color` field would have cost 7x that — measured with a marker
-      // description: `color` is emitted 7 times in this tool's schema and
-      // nowhere else, at 17 bytes of `"description":` overhead each. Whether
-      // a model actually follows it is rung 3's to answer and this lane has
-      // refuted two prose attempts already (#37, #38), so the reading is
-      // taken, not assumed.
       wb_canvas_edit: {
-        visibleBytes: 13745,
-        wireBytes: 37535,
-        descriptionWords: 195,
+        visibleBytes: 13612,
+        wireBytes: 37402,
+        descriptionWords: 169,
         parameters: 153,
         undescribed: 123,
         strays: 'refused',
@@ -483,8 +465,8 @@ describe('what the tool table costs to read', () => {
       // +274 for `workspaceId` on wb_facet_list (足場4b): the one parameter
       // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
       // once in the table and never per stencil.
-      visibleBytes: 36923,
-      wireBytes: 111640,
+      visibleBytes: 36790,
+      wireBytes: 111507,
       parameters: 277,
       undescribed: 191,
     })
