@@ -297,9 +297,32 @@ describe('what the tool table costs to read', () => {
       // stay out of every schema for the reason the assets half of this
       // tool exists (+4838 to `wb_canvas_edit` at 120 stencils). A library
       // that grows to a hundred adds nothing to what a model reads.
+      //
+      // +142 WIRE bytes and ZERO visible for `assetRefs` — which of a
+      // facet's fields takes a registered asset id, and of what kind. It
+      // lands in the OUTPUT schema, so C1, the budget a model pays on every
+      // turn, does not move at all; that asymmetry is the point of putting
+      // the join here rather than in a description.
+      //
+      // What it buys is C5. The answer already carried both halves of a
+      // join and not the join: `facets` publishes `visual.stencil/v0` as a
+      // pattern-checked string, `assets` publishes the stencil ids, and
+      // nothing said the first is where the second goes. Round 13 measured
+      // the consequence — a model asked this tool for `assetKind:
+      // 'stencils'`, the right question, then wrote `visual.shape/v0` with
+      // `{kind: 'diamond'}`: a registered facet, a successful write, and a
+      // silhouette rather than a kind. The shape facet publishes an enum
+      // holding the word it wanted; the stencil facet published a regex. It
+      // acted on the one it could act on.
+      //
+      // The preceding attempt at the same defect spent 133 VISIBLE bytes on
+      // a sentence in `wb_canvas_edit` and was withdrawn on its own reading
+      // (branch `kind-sentence`): the sentence was followed, to this same
+      // wrong facet. A join the answer carries is not a sentence a model
+      // may or may not act on.
       wb_facet_list: {
         visibleBytes: 927,
-        wireBytes: 1897,
+        wireBytes: 2039,
         descriptionWords: 63,
         parameters: 3,
         undescribed: 1,
@@ -466,7 +489,7 @@ describe('what the tool table costs to read', () => {
       // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
       // once in the table and never per stencil.
       visibleBytes: 36790,
-      wireBytes: 111507,
+      wireBytes: 111649,
       parameters: 277,
       undescribed: 191,
     })
