@@ -1,4 +1,4 @@
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { JsonCanvasDocument, JsonCanvasEdge, JsonCanvasNode } from './json-canvas.js'
 
 /** What a field position costs when a document is projected onto JSON Canvas. */
@@ -209,7 +209,7 @@ function walkValue(value: unknown, path: string, out: string[]): void {
 export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
   const extension = {
     ...(canvas.comments !== undefined && { comments: canvas.comments }),
-    ...(canvas.lines !== undefined && { lines: canvas.lines }),
+    ...(canvas.lines !== undefined && { lines: canvas.lines.map(projectLine) }),
     ...(canvas.facets !== undefined && { facets: canvas.facets }),
   }
   return {
@@ -395,6 +395,46 @@ function edgeExtension(edge: CanvasEdge): JsonCanvasEdge['x-whiteboard'] {
  */
 function roundPixel(value: number): number {
   return Math.round(value) + 0
+}
+
+/**
+ * A model coordinate as JSON TEXT can carry it back.
+ *
+ * `-0` is the one number JSON loses: `JSON.stringify(-0)` is `"0"` and
+ * `JSON.parse` never yields `-0`, so emitting one writes a value the very
+ * next read cannot return — the same trap `roundPixel`'s `+ 0` avoids. A
+ * line's coordinates do not go through `roundPixel`, and must not: ink is
+ * sub-pixel by nature, which is what ADR-0035 widened the model for, and the
+ * whole collection rides the extension key rather than the format's integer
+ * geometry. So they take the normalisation alone. `-0` and `0` are the same
+ * point, so this canonicalises rather than degrades, and the ledger's
+ * `extension` on every line position stays true.
+ */
+function jsonZero(value: number): number {
+  return value + 0
+}
+
+const jsonZeroPoint = (point: { x: number; y: number }) => ({
+  x: jsonZero(point.x),
+  y: jsonZero(point.y),
+})
+
+const jsonZeroEnd = (end: CanvasLine['from']): CanvasLine['from'] =>
+  end.kind === 'point' ? { ...end, point: jsonZeroPoint(end.point) } : end
+
+/**
+ * A line as the extension key carries it: unchanged but for the one number
+ * the wire cannot carry back. Every other field rides verbatim, which is the
+ * point of the collection living on the extension rather than being mapped
+ * onto the format's edges (ADR-0036 decision 2).
+ */
+function projectLine(line: CanvasLine): CanvasLine {
+  return {
+    ...line,
+    from: jsonZeroEnd(line.from),
+    to: jsonZeroEnd(line.to),
+    ...(line.bends !== undefined && { bends: line.bends.map(jsonZeroPoint) }),
+  }
 }
 
 /**
