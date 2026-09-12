@@ -59,17 +59,25 @@ const nodeFacetsAt = async (wb, ids, path, match) => {
   return node === undefined ? undefined : (node['x-whiteboard']?.facets ?? {})
 }
 
-const text = (n) => (n.text ?? '').trim()
-const byText = (board, t) => board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
-const strictlyInside = (n, g) =>
+// EXPORTED for `snapshot-shape.test.ts`, which drives each of these with a
+// recording proxy to check that every field they read is one the snapshot
+// answers. Do not make them private again: running the verifiers alone does
+// not reach them — measured, `firstOverlap` is called LAST by every verifier
+// that calls it, after its boxes and flows check out, so no generic probe
+// board gets that far and a rename of the field `boxesOverlap` reads went
+// undetected until they were driven directly.
+export const text = (n) => (n.text ?? '').trim()
+export const byText = (board, t) =>
+  board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
+export const strictlyInside = (n, g) =>
   n.id !== g.id &&
   n.x >= g.x &&
   n.y >= g.y &&
   n.x + n.width <= g.x + g.width &&
   n.y + n.height <= g.y + g.height
-const boxesOverlap = (a, b) =>
+export const boxesOverlap = (a, b) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
-const firstOverlap = (nodes) => {
+export const firstOverlap = (nodes) => {
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       if (boxesOverlap(nodes[i], nodes[j])) return [nodes[i], nodes[j]]
@@ -98,16 +106,16 @@ const firstOverlap = (nodes) => {
  * `tasks.test.ts`, whose fixture now builds its ends through `edgeEndSchema`
  * instead of spelling them out.
  */
-const endNode = (end) => end?.node
-const linked = (board, a, b) =>
+export const endNode = (end) => end?.node
+export const linked = (board, a, b) =>
   board.edges.some(
     (e) =>
       (endNode(e.from) === a.id && endNode(e.to) === b.id) ||
       (endNode(e.from) === b.id && endNode(e.to) === a.id),
   )
-const linkedFrom = (board, a, b) =>
+export const linkedFrom = (board, a, b) =>
   board.edges.some((e) => endNode(e.from) === a.id && endNode(e.to) === b.id)
-const centreX = (n) => n.x + n.width / 2
+export const centreX = (n) => n.x + n.width / 2
 
 /** @type {readonly Task[]} */
 export const TASKS = [
