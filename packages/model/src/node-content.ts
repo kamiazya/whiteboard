@@ -52,3 +52,17 @@ export const nodeUrl = (node: SpatialNode): string | undefined =>
  * whatever its rectangle contains.
  */
 export const isFrame = (node: SpatialNode): boolean => node.type === 'group'
+
+/**
+ * The same node showing different text.
+ *
+ * The write counterpart, and it exists for the reason the readers do: today
+ * this is `{ ...node, text }`, and under decision 3 it becomes a write into
+ * the node's resource. A caller that spells the field is a caller the storage
+ * flip has to visit.
+ *
+ * Answers the node unchanged when it shows no text, so a caller rewriting
+ * every node on a canvas needs no `type` check of its own.
+ */
+export const withNodeText = (node: SpatialNode, text: string): SpatialNode =>
+  node.type === 'text' ? { ...node, text } : node

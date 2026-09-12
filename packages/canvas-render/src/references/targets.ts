@@ -1,5 +1,5 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
-import { isImageRef, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isImageRef, nodeFile, nodeText, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 
 /**
@@ -49,10 +49,12 @@ export function referenceTargets(seeds: {
   }
   const addCanvas = (canvas: SpatialCanvas, depth: number) => {
     for (const node of canvas.nodes) {
-      if (node.type === 'file' && !isImageRef(node.file)) add(node.file, depth)
+      const file = nodeFile(node)
+      const text = nodeText(node)
+      if (file !== undefined && !isImageRef(file)) add(file, depth)
       // A text node's body is markdown the composer lays out with the same
       // seams a note gets, so what it embeds and links has to load too.
-      else if (node.type === 'text') addBody(node.text, depth)
+      else if (text !== undefined) addBody(text, depth)
     }
   }
   const addEntry = (entry: LoadedReference, depth: number) => {

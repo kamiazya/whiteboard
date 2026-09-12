@@ -5,7 +5,9 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
+  nodeText,
   spatialCanvasSchema,
+  withNodeText,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -109,10 +111,11 @@ export async function linkifyMentions(
 
   let linked = 0
   const nodes = readSpatialCanvas(doc).nodes.map((node) => {
-    if (node.type !== 'text') return node
-    const result = rewrite(node.text, name, markup)
+    const text = nodeText(node)
+    if (text === undefined) return node
+    const result = rewrite(text, name, markup)
     linked += result.count
-    return result.count === 0 ? node : { ...node, text: result.text }
+    return result.count === 0 ? node : withNodeText(node, result.text)
   })
   if (linked === 0) return { linked: 0 }
   const candidate = spatialCanvasSchema.parse({ nodes, edges: canvas.edges })
