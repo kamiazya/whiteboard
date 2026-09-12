@@ -1,7 +1,19 @@
 # ADR-0035: A key belongs to a device, and a server keeps rather than vouches
 
-**Status:** Accepted — design of record (2026-09-12); nothing implemented yet. Extends
-[ADR-0016](0016-okf-trust-family.md)'s self-report admission and
+**Status:** Accepted (2026-09-12). Decisions 1 and 2 are implemented for the
+DAEMON: it derives a `did:key` from the keypair it already had, advertises it
+on `/api/runtime/ping` beside the raw key it is bound to, and stamps it as the
+`actor` on every version row it saves — manual, automatic and agent alike, the
+last threaded from every composition root. The three "who" vocabularies now
+share one notation, OKF §7's actor.
+
+Not implemented, and each says below what triggers it: a **browser profile's
+own keypair** (until then a browser records its operator kind and no actor),
+**checkpoint signatures** (decision 3), **sharing and membership** under the
+keeper (decision 4), **end-to-end encryption**, and the **user DID's method**.
+Decision 5 is a standing prose rule with nothing mechanical behind it.
+
+Extends [ADR-0016](0016-okf-trust-family.md)'s self-report admission and
 [ADR-0023](0023-replica-model.md)'s keeper model.
 
 ## Context
