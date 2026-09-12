@@ -154,24 +154,47 @@ describe('the backup-in-progress marker', () => {
    * 9504 at the 30ms one the case above uses — which is what made that case
    * fail on CI, twice, through two rewrites that only moved its timing
    * around.
+   *
+   * Bounded by a READ COUNT, never by a duration. A time-boxed loop makes the
+   * slower machine do fewer reads, which is the third time this file has been
+   * bitten by a test measuring the runner's load: the first version of THIS
+   * case asked for 100 reads in 300ms and got 28 on CI. A fixed count errs the
+   * safe way, because a slower reader has MORE rewrites landing between its
+   * reads, not fewer.
    */
   it('is never read as absent while a refresh is rewriting it', async () => {
-    let reads = 0
+    const READS = 300
     let absent = 0
+    let rewrites = 0
     await withBackupMarker(
       dir,
       async () => {
-        const deadline = Date.now() + 300
-        while (Date.now() < deadline) {
-          reads += 1
+        // Retries a torn read, for the reason the case above does: this
+        // helper is scaffolding, and letting it throw would make the failure
+        // read as a JSON problem instead of naming the atomicity it is here
+        // to measure.
+        const deadlineOf = async (): Promise<number> => {
+          for (;;) {
+            try {
+              return JSON.parse(await readFile(join(dir, 'backup-in-progress.json'), 'utf8'))
+                .expiresAt as number
+            } catch {
+              await new Promise((r) => setTimeout(r, 1))
+            }
+          }
+        }
+        const before = await deadlineOf()
+        for (let i = 0; i < READS; i += 1) {
           if (!(await backupIsInProgress(dir, Date.now()))) absent += 1
         }
+        // Proves rewrites really overlapped the reads, rather than asserting
+        // a read count that only says how fast the machine is. Read after the
+        // loop, so it cannot be satisfied by a refresh that landed before it.
+        rewrites = (await deadlineOf()) > before ? 1 : 0
       },
       { ttlMs: 60_000, refreshEveryMs: 1 },
     )
-    // The subject has to be present: a loop that barely ran would report
-    // zero failures without having overlapped a single rewrite.
-    expect(reads).toBeGreaterThan(100)
+    expect(rewrites).toBe(1)
     expect(absent).toBe(0)
   })
 
