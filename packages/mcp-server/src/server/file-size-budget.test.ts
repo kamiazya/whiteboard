@@ -179,7 +179,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +7 where two increments met: this file gained a workspace stencil
   // library's resolution from main and the endpoint helpers from the model
   // move, and neither alone crossed the line it was already over.
-  'packages/server-core/src/tools/canvas-edit.ts': 1105,
+  'packages/server-core/src/tools/canvas-edit.ts': 1112,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
