@@ -58,11 +58,11 @@ import {
 } from '../markdown-editor/annotation-decorations.js'
 import { completionOnDelete } from '../markdown-editor/completion-on-delete.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
-import { emojiCompletionSource } from '../markdown-editor/emoji-completion.js'
 import { emojiShortcodeMarks } from '../markdown-editor/emoji-shortcode-marks.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
+import { shortcodeCompletionSource } from '../markdown-editor/shortcode-completion.js'
 import { wikiLinkCompletionTheme } from '../markdown-editor/wiki-link-completion.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
@@ -211,7 +211,7 @@ export function MarkdownNodeEditor({
         // With the exit verbs first, the distinction they already draw is the
         // one that applies — an ACTIVE popup takes the key, anything else
         // abandons the edit.
-        autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
+        autocompletion({ override: [shortcodeCompletionSource], interactionDelay: 0 }),
         // Same reason as the document editor: nothing reopens a list after a
         // deletion, so a name finished long ago could not be corrected with
         // the list that wrote it.

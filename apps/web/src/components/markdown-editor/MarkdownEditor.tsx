@@ -42,7 +42,6 @@ import { useAnnotationEntry } from './annotation-scope.js'
 import { completionOnDelete } from './completion-on-delete.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
-import { emojiCompletionSource } from './emoji-completion.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PassageProposalCard } from './PassageProposalCard.js'
@@ -55,6 +54,7 @@ import {
   railScrollable,
 } from './preview-width.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
+import { shortcodeCompletionSource } from './shortcode-completion.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
@@ -378,7 +378,10 @@ export function MarkdownEditor({
       autocompletion({
         // Both sources in ONE `autocompletion()`: `override` replaces the
         // whole list, so a second call beside this would kill the `[[` one.
-        override: [wikiLinkCompletionSource(() => linkTargetsRef.current), emojiCompletionSource],
+        override: [
+          wikiLinkCompletionSource(() => linkTargetsRef.current),
+          shortcodeCompletionSource,
+        ],
         // The upstream default (75ms) rejects an Enter that lands too soon
         // after the popup (re)opens, to protect a popup that appeared under
         // an Enter meant as a newline. These completions only ever open

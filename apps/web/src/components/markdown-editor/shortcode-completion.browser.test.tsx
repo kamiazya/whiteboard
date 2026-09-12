@@ -1,6 +1,6 @@
 /**
  * The `:name:` completion driven through a real CodeMirror view, which is
- * the half `emoji-completion.test.ts` cannot reach: that one calls the
+ * the half `shortcode-completion.test.ts` cannot reach: that one calls the
  * source directly, and what breaks here is the WIRING — a source that never
  * reaches the plugin's `override` array, or an Enter binding that outranks
  * the popup and puts a newline under a visible option list.
@@ -13,7 +13,7 @@ import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { emojiCompletionSource } from './emoji-completion.js'
+import { shortcodeCompletionSource } from './shortcode-completion.js'
 
 let view: EditorView | undefined
 
@@ -31,7 +31,7 @@ function open(doc: string): EditorView {
     state: EditorState.create({
       doc,
       extensions: [
-        autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
+        autocompletion({ override: [shortcodeCompletionSource], interactionDelay: 0 }),
         // Both hosts install this: while the popup is open Enter is
         // accept-or-nothing, never a newline under a visible list.
         Prec.highest(
@@ -106,5 +106,51 @@ describe('typing a name after a colon offers the emoji', () => {
     type(target, ':30')
     await vi.waitFor(() => expect(target.state.doc.toString()).toBe('meet at 10:30'))
     expect(popup()).toBeNull()
+  })
+})
+
+/**
+ * The icon half, through the same real view — and the half that CANNOT be
+ * checked by calling the source.
+ *
+ * Measured: with the rows ordered by `boost` the source returned the icon
+ * FIRST and the popup did not show it at all, because CodeMirror scores an
+ * option as `match.score + boost` and charges -700 for a pattern matching
+ * anywhere but the label's start. A unit test on the source's array was
+ * green over a list a person could not see the row in.
+ */
+describe('an icon offered under the same colon', () => {
+  it('is shown, first, under its own heading', async () => {
+    const target = open('mark it ')
+    type(target, ':st')
+    await vi.waitFor(() => expect(completionStatus(target.state)).toBe('active'))
+    const labels = [...document.querySelectorAll('.cm-completionLabel')].map((n) => n.textContent)
+    expect(labels[0]).toBe('icon-star')
+    expect(popup()?.textContent).toContain('Icons')
+    // The emoji are still there, under their own heading. Asserted by
+    // COUNT rather than by naming one: a row renders its `displayLabel`,
+    // which for an emoji is the character plus the name, so naming `star`
+    // was an assertion about CLDR spelling rather than about the list.
+    expect(popup()?.textContent).toContain('Emoji')
+    expect(labels.filter((l) => !l?.startsWith('icon-')).length).toBeGreaterThan(1)
+  })
+
+  it('keeps the list open once the hyphen is typed', async () => {
+    const target = open('mark it ')
+    type(target, ':icon')
+    await vi.waitFor(() => expect(completionStatus(target.state)).toBe('active'))
+    type(target, '-')
+    await vi.waitFor(() => {
+      expect(completionStatus(target.state)).toBe('active')
+      expect(popup()?.textContent).toContain('icon-star')
+    })
+  })
+
+  it('accepting writes the shortcode the renderer resolves', async () => {
+    const target = open('mark it ')
+    type(target, ':icon-st')
+    await vi.waitFor(() => expect(completionStatus(target.state)).toBe('active'))
+    acceptCompletion(target)
+    await vi.waitFor(() => expect(target.state.doc.toString()).toBe('mark it :icon-star:'))
   })
 })

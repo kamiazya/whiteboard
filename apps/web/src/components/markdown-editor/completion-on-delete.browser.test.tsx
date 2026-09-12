@@ -27,8 +27,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { SpatialEditor } from '../spatial-editor/SpatialEditor.js'
 import { completionOnDelete } from './completion-on-delete.js'
-import { emojiCompletionSource } from './emoji-completion.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
+import { shortcodeCompletionSource } from './shortcode-completion.js'
 import { wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 let view: EditorView | undefined
@@ -60,7 +60,7 @@ function open(
               wikiLinkCompletionSource(() => [
                 { id: 'd1', name: 'Rocket notes', path: 'rocket-notes' },
               ]),
-            ...(options.source === undefined ? [emojiCompletionSource] : []),
+            ...(options.source === undefined ? [shortcodeCompletionSource] : []),
           ],
           interactionDelay: 0,
           ...(options.activateOnTyping === undefined
@@ -90,7 +90,7 @@ const popup = () => document.querySelector('.cm-tooltip-autocomplete')
 /**
  * A synchronous stand-in for a real source, counting what it is asked.
  *
- * Synchronous on purpose: `emojiCompletionSource` reaches its index through
+ * Synchronous on purpose: `shortcodeCompletionSource` reaches its index through
  * a dynamic import, and a promise resolving between two timer advances makes
  * a COUNT read as timing rather than as behaviour. What these two cases are
  * about is when the plugin asks, not what any source answers.

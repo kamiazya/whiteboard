@@ -2,7 +2,7 @@ import { CompletionContext, type CompletionResult } from '@codemirror/autocomple
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
-import { emojiCompletionSource } from './emoji-completion.js'
+import { shortcodeCompletionSource } from './shortcode-completion.js'
 
 /**
  * The `:` half of the shortcode feature: what opens the list, what it
@@ -13,7 +13,7 @@ import { emojiCompletionSource } from './emoji-completion.js'
  * `vi.mock`: the import is the thing under test.
  */
 function complete(doc: string, pos = doc.length) {
-  return emojiCompletionSource(new CompletionContext(EditorState.create({ doc }), pos, false))
+  return shortcodeCompletionSource(new CompletionContext(EditorState.create({ doc }), pos, false))
 }
 
 /**
@@ -124,5 +124,58 @@ describe('what it offers and what accepting writes', () => {
     expect(accept(doc, result as CompletionResult, 0, 'moved on entirely')).toBe(
       'moved on entirely',
     )
+  })
+})
+
+/**
+ * Icons in the same list, under the same `:`.
+ *
+ * The vocabulary landed with no way to reach it: a person had to know the
+ * spelling, and the trigger could not even see it — `[a-z0-9_]{2,}` rejects
+ * the hyphen in `icon-`, so the popup DISAPPEARED at the moment they typed
+ * it. Offering icons under their bare name too is what makes `:st` a way to
+ * find one without knowing the prefix exists.
+ */
+describe('an icon is offered under the same colon', () => {
+  const iconRows = (result: CompletionResult | null) =>
+    (result?.options ?? []).filter((o) => o.label.startsWith('icon-')).map((o) => o.label)
+
+  it('offers it under its bare name, so the prefix need not be known', async () => {
+    expect(iconRows(await complete('a :star'))).toContain('icon-star')
+  })
+
+  it('keeps the list open once the prefix is typed, and narrows it', async () => {
+    expect(iconRows(await complete('a :icon-'))).toEqual(
+      expect.arrayContaining(['icon-star', 'icon-lock']),
+    )
+    expect(iconRows(await complete('a :icon-st'))).toEqual(['icon-star'])
+  })
+
+  it('writes the shortcode the renderer resolves', async () => {
+    const result = await complete('a :icon-st')
+    const index = (result?.options ?? []).findIndex((o) => o.label === 'icon-star')
+    expect(index).toBeGreaterThanOrEqual(0)
+    expect(accept('a :icon-st', result as CompletionResult, index)).toBe('a :icon-star:')
+  })
+
+  /**
+   * Six names against 1914 rows: ordered by score they would be buried, and
+   * an icon is the answer a person cannot get any other way — the emoji they
+   * are also offered is a character they could have pasted.
+   *
+   * The emoji half is asserted as "still there" rather than by naming a
+   * shortcode: the first version of this case expected `lock` beside
+   * `icon-lock` and the vocabulary spells it `locked`, so the assertion was
+   * about CLDR rather than about ordering.
+   */
+  it('offers icons before the 1914 emoji, without crowding them out', async () => {
+    const labels = (await complete('a :lock'))?.options.map((o) => o.label) ?? []
+    expect(labels[0]).toBe('icon-lock')
+    expect(labels.filter((l) => !l.startsWith('icon-')).length).toBeGreaterThan(1)
+  })
+
+  /** The prose guard still holds — a hyphen must not open a list in a date. */
+  it('stays shut where the colon is punctuation', async () => {
+    expect(await complete('from 10:30-11')).toBeNull()
   })
 })
