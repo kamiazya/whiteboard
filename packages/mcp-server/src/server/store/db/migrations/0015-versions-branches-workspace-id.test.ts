@@ -186,7 +186,11 @@ describe('0015-versions-branches-workspace-id', () => {
     await seedVersionRow(handle.db, 'v-scoped', DOC_A)
     await seedVersionRow(handle.db, 'v-legacy', DOC_A, 0)
 
-    await handle.migrateToHead()
+    // Pinned AT 0015, for the same reason the cascade case below is: which
+    // rows THIS migration sweeps is the subject, and 0026 later sweeps every
+    // version row deliberately. Run to head, both ids would be gone and the
+    // assertion could no longer tell a working sweep from a broken one.
+    await handle.migrateTo0015()
 
     const ids = (await handle.db.selectFrom('versions').select(['id']).execute()).map((r) => r.id)
     expect(ids).toEqual(['v-scoped'])

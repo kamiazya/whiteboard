@@ -31,6 +31,7 @@
 
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import { test } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
@@ -46,7 +47,7 @@ const OPTIONS: SpatialLayoutOptions = {
 
 // Cycled rather than random: a bench whose input changes between runs is
 // measuring two things at once.
-const SHAPES = ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const
+const SHAPES = visualShapeFacetSchema.shape.kind.options
 const ALIGNS = ['top', 'middle'] as const
 
 function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {

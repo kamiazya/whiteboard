@@ -17,8 +17,8 @@ import { edgeArrowPolygons } from '../edge-arrows.js'
 import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
 import { SKETCH_PASSES, sketchEdge, sketchShape } from '../layout/ink/sketch.js'
 import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
-import type { IconTable } from './backend.js'
 import { formatCoord } from './format.js'
+import type { IconTable } from './icon.js'
 import {
   appearanceAttrs,
   DROP_SHADOW_DEFS,

@@ -7,6 +7,7 @@ import type {
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
 import { expandEmojiShortcodes } from '@kamiazya/whiteboard-plugin-visual/emoji/shortcode'
+import { iconShortcodeRanges } from '@kamiazya/whiteboard-plugin-visual/icons/shortcode'
 import type {
   Appearance,
   BlockquoteNode,
@@ -42,6 +43,26 @@ import { Parser } from '../../vendor/budoux/parser.js'
 import { selectMarkdownSection } from './mdast-section.js'
 import { checkboxMarker } from './task-checkbox.js'
 import { fitToWidth } from './truncate.js'
+
+/**
+ * What an alt-less inline image reads as. A box has to exist for the
+ * picture to go in, and an empty string measures to zero width — so this is
+ * a width, not a label. One en-space rather than a word: it is not text
+ * anybody wrote, and a reader who has the image does not need telling.
+ */
+const IMAGE_PLACEHOLDER = '\u2002'
+/**
+ * An EM space, which a font defines as one em — so the run's box is a body-
+ * sized square WIDE, and as tall as the line. A `<symbol>` letterboxes
+ * rather than stretches, so the icon draws at the smaller side (the width)
+ * and is centred in the line box: body-sized, on the prose's optical
+ * centre. The EN space the image placeholder uses would halve it.
+ *
+ * Measured in a real browser rather than reasoned: the layout's own fake
+ * measurer charges 0.6em per character whatever the character is, so it
+ * reports a narrower box than any real face gives this one.
+ */
+const ICON_PLACEHOLDER = '\u2003'
 
 /**
  * Every layout constant comes from ONE theme object (theme/markdown-theme.ts),
@@ -722,6 +743,39 @@ function layoutPhrasing(
     }
   }
 
+  /**
+   * One text node's string, with both shortcode vocabularies applied.
+   *
+   * They cannot be applied the same way. An emoji is a CHARACTER, so it is
+   * substituted into the string and the run never knows; an icon is drawn
+   * geometry, so it needs a run of its own carrying `paints` for the
+   * painter. Icons are therefore split out FIRST, off offsets taken from
+   * the raw string, and the emoji expansion runs within each surviving
+   * segment — expanding first would move every offset after the first
+   * emoji.
+   *
+   * The icon run is ATOMIC (`wrappable: false`) for the reason the alt-less
+   * image placeholder is: the wrappable path collapses `text.trim()`, which
+   * erases a whitespace placeholder and the run with it.
+   */
+  const emitWithIcons = (
+    value: string,
+    currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+  ) => {
+    let at = 0
+    for (const range of iconShortcodeRanges(value)) {
+      if (range.from > at)
+        emit(expandEmojiShortcodes(value.slice(at, range.from)), {}, currentStyle)
+      emit(ICON_PLACEHOLDER, { paints: { kind: 'icon', name: range.name } }, currentStyle, false)
+      at = range.to
+    }
+    if (at === 0) {
+      emit(expandEmojiShortcodes(value), {}, currentStyle)
+      return
+    }
+    if (at < value.length) emit(expandEmojiShortcodes(value.slice(at)), {}, currentStyle)
+  }
+
   const walk = (
     nodes: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
     currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
@@ -731,7 +785,7 @@ function layoutPhrasing(
         case 'text':
           // Every body-drawing surface comes through here; `inlineCode`
           // below deliberately does not, a shortcode there being the subject.
-          emit(expandEmojiShortcodes(child.value), {}, currentStyle)
+          emitWithIcons(child.value, currentStyle)
           break
         case 'inlineCode':
           emit(
@@ -782,7 +836,20 @@ function layoutPhrasing(
           break
         }
         case 'image':
-          emit(child.alt ?? '', {}, currentStyle)
+          // The run stays a RUN, `text` the alt — see `paints` on
+          // TextRunNode. An alt-less one takes a placeholder ATOMICALLY:
+          // the wrappable path collapses `text.trim()`, which erases a
+          // whitespace placeholder and the run with it (measured). One
+          // WITH an alt stays wrappable, because an alt is prose.
+          {
+            const alt = child.alt === undefined || child.alt === '' ? undefined : child.alt
+            emit(
+              alt ?? IMAGE_PLACEHOLDER,
+              { paints: { kind: 'image', src: child.url } },
+              currentStyle,
+              alt !== undefined,
+            )
+          }
           break
         case 'imageReference':
           emit(child.alt ?? child.identifier, {}, currentStyle)

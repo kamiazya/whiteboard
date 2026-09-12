@@ -225,13 +225,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 1165: the fold recreates a nested text or list container instead of
   // handing it to `LoroMap.set`.
   'packages/loro-adapter/src/workspace-tree.ts': 1165,
-  // Shrunk from 991 while the theme layer added its glow filter and pencil
-  // passes: the shape and edge renderers (crisp and sketched, with the
-  // halo either takes) moved to `svg/shapes.ts`, and the presence-only
-  // paint helpers every element shares to `svg/paint.ts`. What is left is
-  // the text, list, table, code, icon and edge cases plus the document
-  // envelope.
-  'packages/canvas-render/src/svg/backend.ts': 831,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -319,7 +312,19 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // that forgot — the alternative was a seam per surface, which is the
   // reference-seams defect. The two comment lines that survived say what
   // only this site can: that `inlineCode` deliberately does not expand.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1678,
+  // +21 for `case 'image'`: an inline `![](...)` marks its run to paint
+  // the picture rather than emitting the alt words, and an alt-less one
+  // takes an atomic placeholder because the wrappable path trims a
+  // whitespace-only run out of existence.
+  // +46 for `emitWithIcons`, the icon half of the same idea and the one
+  // place it could go. An emoji shortcode is a CHARACTER, substituted into
+  // the string before the run is built; an icon is geometry, so a text node
+  // has to be SPLIT into prose runs and icon runs — and the offsets that
+  // split it are taken off the raw string, which only the site holding both
+  // vocabularies can do. Its comment is most of the 46 and says exactly
+  // that, because applying the two in the other order silently moves every
+  // offset after the first emoji.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1745,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

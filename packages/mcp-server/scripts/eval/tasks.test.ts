@@ -9,6 +9,8 @@
 // Only the kinds task is covered. A verifier earns a case here when
 // something about it has been got wrong, not on principle — every task in
 // the file would be a fixture pile that nobody reads.
+
+import { type EdgeEnd, edgeEndSchema } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { TASKS } from './tasks.mjs'
@@ -24,13 +26,25 @@ type Node = {
   width: number
   height: number
 }
-// An END is an object, not a flat key (ADR-0037 slice 3). Spelled out here
-// rather than imported because this fixture stands in for what the snapshot
-// hands a verifier, and a fixture that drifts from that shape is how a
-// POSITIVE control stops controlling anything.
-type End = { kind: 'node'; node: string }
+// An END is an object, not a flat key (ADR-0037 slice 3), and it is BUILT
+// THROUGH the model's own schema rather than spelled out here.
+//
+// The previous version of this line spelled it out, under a comment warning
+// that "a fixture that drifts from that shape is how a POSITIVE control stops
+// controlling anything" — and then did exactly that. ADR-0038 decision 2
+// narrowed an edge end from a `{ kind: 'node', node }` union to a plain
+// `{ node, side?, end? }`, because an edge is a relation and cannot end in
+// empty space. The hand-written fixture did not move, so every test below
+// kept passing against a shape no tool answers any more, while the real lane
+// failed 6 of 6 trials with "not connected" on boards whose edges were
+// written with zero tool errors.
+//
+// `.parse` rather than a cast, and `edgeEndSchema` is `.strict()`: a fixture
+// carrying a key the schema retired now THROWS here instead of quietly
+// standing in for a payload nobody sends.
+type End = EdgeEnd
 type Edge = { id: string; from: End; to: End }
-const at = (node: string): End => ({ kind: 'node', node })
+const at = (node: string): End => edgeEndSchema.parse({ node })
 type Board = { nodes: Node[]; edges: Edge[] }
 
 /** A board the fixture agent would be passed for `boards/checkout`. */
@@ -128,9 +142,11 @@ describe('the workspace-vocabulary verifier', () => {
   // Earns its cases the way this file's header asks: not on principle, but
   // because the verifier was WRITTEN around a specific way of being wrong.
   // Grading a stencil by the box's COLOUR is the obvious shortcut and it
-  // passes the wrong board — `visual.gateway` is colour 3 and so is this
-  // workspace's `lakehouse`. What stops a later simplification back to that
-  // is a test that fails on it.
+  // passes the wrong board. It did when this was written, because
+  // `visual.gateway` was colour 3 and so is this workspace's `lakehouse`;
+  // since ADR-0036 §5 no bundled stencil carries a colour at all, so the
+  // shortcut is worse still. What stops a later simplification back to it is
+  // a test that fails on it.
   const DRESS = TASKS.find((t) => t.name === 'dress a box with a style this workspace defines')
 
   /** The document the verifier reads, with one box dressed however given. */
@@ -171,9 +187,10 @@ describe('the workspace-vocabulary verifier', () => {
   })
 
   it('refuses a BUILT-IN stencil of the same colour, which a colour check would pass', async () => {
-    // The whole reason the verifier reads the stored facet. `visual.gateway`
-    // is colour 3, so a box dressed with it is indistinguishable from the
-    // right answer by appearance alone — and it is the plausible wrong
+    // The whole reason the verifier reads the stored facet. The colour is
+    // supplied here by hand — no bundled stencil writes one since ADR-0036
+    // §5 — so a box dressed with a built-in is indistinguishable from the
+    // right answer by appearance alone, and it is the plausible wrong
     // answer, since a model that never found the library still has to dress
     // the box with something.
     await expect(verify(dressed('visual.gateway', '3'))).resolves.toMatchObject({ ok: false })

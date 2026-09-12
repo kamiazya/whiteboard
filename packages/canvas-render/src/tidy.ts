@@ -393,6 +393,63 @@ function resolveOverlaps(units: Unit[], origin: Point): void {
 }
 
 /**
+ * An off-grid position is only earned while the neighbour it lines up with
+ * is still there. This puts back the ones that are not.
+ *
+ * `alignBands` may leave a unit off the grid deliberately — lined up on a
+ * neighbour's centre or far edge, which is what a reader calls aligned and
+ * the grid cannot express. The passes above then run `resolveOverlaps`,
+ * which can move THAT NEIGHBOUR, and the unit is left off-grid lined up
+ * with nothing: an alignment to a box that is no longer where it was.
+ *
+ * `clearAfter` guards the neighbouring family and cannot see this one — it
+ * asks whether the SNAPPED unit would overlap, and here it is the ANCHOR
+ * that moves. The two are worth keeping apart: that guard prevents a bad
+ * snap, this repairs a good snap whose reason expired.
+ *
+ * Measured on the counterexample the grid property found: a unit sat at
+ * x=279 because a 140-wide neighbour at 240 ended at 380, and the overlap
+ * pass then moved that neighbour to 256. The neighbour oscillates between
+ * the two phases every pass, so the settle loop still reaches a repeated
+ * state — idempotence held, and only the grid invariant broke, which is why
+ * nothing else saw it.
+ *
+ * A snap that would put the unit inside a neighbour's margin is skipped, on
+ * the same reasoning `clearAfter` uses: separation is a promise and the
+ * grid is a preference.
+ */
+function snapStaleAnchors(units: Unit[], origin: Point): void {
+  for (const unit of units) {
+    if (!unit.movable) continue
+    const others = units.filter((o) => o !== unit)
+    // The same anchors `alignBands` aligns TO, read off where the units
+    // actually ended up rather than from a second notion of "lined up".
+    const anchored = (axis: 'x' | 'y'): boolean =>
+      others.some((o) =>
+        axis === 'x'
+          ? onSomeAnchor(unit.bbox.x, [o.bbox.x, o.bbox.x + o.bbox.w / 2, o.bbox.x + o.bbox.w]) ||
+            onSomeAnchor(unit.bbox.x + unit.bbox.w / 2, [o.bbox.x + o.bbox.w / 2]) ||
+            onSomeAnchor(unit.bbox.x + unit.bbox.w, [o.bbox.x + o.bbox.w])
+          : onSomeAnchor(unit.bbox.y, [o.bbox.y, o.bbox.y + o.bbox.h / 2, o.bbox.y + o.bbox.h]) ||
+            onSomeAnchor(unit.bbox.y + unit.bbox.h / 2, [o.bbox.y + o.bbox.h / 2]),
+      )
+    for (const axis of ['x', 'y'] as const) {
+      const at = axis === 'x' ? unit.bbox.x : unit.bbox.y
+      const from = axis === 'x' ? origin.x : origin.y
+      const snapped = roundToGrid(at, from)
+      if (snapped === at || anchored(axis)) continue
+      if (axis === 'x') {
+        unit.dx += snapped - unit.bbox.x
+        unit.bbox.x = snapped
+      } else {
+        unit.dy += snapped - unit.bbox.y
+        unit.bbox.y = snapped
+      }
+    }
+  }
+}
+
+/**
  * The smallest box holding `frame` and every rect with the margin around
  * it: growth only, so a frame drawn roomier than it needs stays as drawn.
  */
@@ -545,6 +602,7 @@ function tidyLevel(
     if (seen.has(now)) break
     seen.add(now)
   }
+  snapStaleAnchors(units, origin)
   for (const unit of units) {
     if (!unit.movable || (unit.dx === 0 && unit.dy === 0)) continue
     for (const id of unit.movableIds) {

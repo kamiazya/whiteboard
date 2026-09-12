@@ -120,7 +120,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // see by reading a diff" list and the review workflow gained its opt-in
   // tool-surface dimension; the entry is trimmed to the pointer, and the
   // detail is the skill's.
-  '.claude/rules/dev-flow.md': 28,
+  //
+  // 29 since `arch-lint-node` joined the pre-push gate. The file sat 60
+  // characters under the boundary, so ANY addition bought this bucket — the
+  // entry is the fact, the criterion it met and a pointer, and the timings,
+  // the mutation checks and the scoping argument are `lefthook.yml`'s comment
+  // and `pre-push-entry.test.ts`, which is where someone editing the gate
+  // reads them. The first draft put all of that here and cost two buckets.
+  '.claude/rules/dev-flow.md': 29,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat

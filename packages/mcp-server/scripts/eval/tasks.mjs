@@ -39,8 +39,14 @@ const boardAt = async (wb, path) => {
 
 /**
  * A node's stored facets, which `wb_canvas_snapshot` does not carry — it
- * answers geometry and text. The document's own content does, under
- * `x-whiteboard`, which is also where the drawing score reads them.
+ * answers geometry and text. The document's own content does.
+ *
+ * Under `x-whiteboard`, because `wb_document_get` answers the JSON CANVAS
+ * PROJECTION (ADR-0037: the model is native, JSON Canvas is a projection) and
+ * the extension is where that projection puts a facet. The native model — and
+ * so `scoreFacets`, which reads it directly — spells the same thing
+ * `node.facets`. Two shapes for one idea, and this path is deliberately on
+ * the projection side because it reads what the TOOL answers.
  */
 const nodeFacetsAt = async (wb, ids, path, match) => {
   const read = await wb.call('wb_document_get', {
@@ -53,17 +59,25 @@ const nodeFacetsAt = async (wb, ids, path, match) => {
   return node === undefined ? undefined : (node['x-whiteboard']?.facets ?? {})
 }
 
-const text = (n) => (n.text ?? '').trim()
-const byText = (board, t) => board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
-const strictlyInside = (n, g) =>
+// EXPORTED for `snapshot-shape.test.ts`, which drives each of these with a
+// recording proxy to check that every field they read is one the snapshot
+// answers. Do not make them private again: running the verifiers alone does
+// not reach them — measured, `firstOverlap` is called LAST by every verifier
+// that calls it, after its boxes and flows check out, so no generic probe
+// board gets that far and a rename of the field `boxesOverlap` reads went
+// undetected until they were driven directly.
+export const text = (n) => (n.text ?? '').trim()
+export const byText = (board, t) =>
+  board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
+export const strictlyInside = (n, g) =>
   n.id !== g.id &&
   n.x >= g.x &&
   n.y >= g.y &&
   n.x + n.width <= g.x + g.width &&
   n.y + n.height <= g.y + g.height
-const boxesOverlap = (a, b) =>
+export const boxesOverlap = (a, b) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
-const firstOverlap = (nodes) => {
+export const firstOverlap = (nodes) => {
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       if (boxesOverlap(nodes[i], nodes[j])) return [nodes[i], nodes[j]]
@@ -72,26 +86,36 @@ const firstOverlap = (nodes) => {
   return undefined
 }
 /**
- * The node an edge end sits on, or undefined for a free point.
+ * The node an edge end sits on.
  *
- * An end is an OBJECT on the snapshot, not a flat `fromNode` key. Reading the
- * flat key here answered `undefined` for every edge, so every "is A connected
- * to B" check said no — and a write task's verifier that can never pass looks
- * exactly like one that correctly fails, because `--dry-run` asserts only
- * that write verifiers FAIL on the unseeded fixture. Found by running the
- * lane against a real model: eight `edge.add` calls, zero tool errors, and
- * "not connected" for all eight.
+ * An end is an OBJECT on the snapshot, not a flat `fromNode` key, and it
+ * names its node DIRECTLY: ADR-0038 decision 2 narrowed an edge end to
+ * `{ node, side?, end? }`, because an edge is a relation and cannot end in
+ * empty space. Ink that can is a LINE, whose ends are a discriminated union
+ * in its own `lines` array — so a `kind` test here reads a key no edge
+ * carries.
+ *
+ * This line has now been wrong in both directions, with the same symptom
+ * each time: first reading a flat `fromNode` key, then testing a `kind` the
+ * schema retired. Both answered `undefined` for every edge, so every "is A
+ * connected to B" check said no. A write verifier that can NEVER pass looks
+ * exactly like one that correctly fails — `--dry-run` asserts only that write
+ * verifiers FAIL on the unseeded fixture — so both were found by running the
+ * lane against a real model and reading "not connected" beside `edge.add`
+ * calls that reported zero tool errors. What catches the third is
+ * `tasks.test.ts`, whose fixture now builds its ends through `edgeEndSchema`
+ * instead of spelling them out.
  */
-const endNode = (end) => (end?.kind === 'node' ? end.node : undefined)
-const linked = (board, a, b) =>
+export const endNode = (end) => end?.node
+export const linked = (board, a, b) =>
   board.edges.some(
     (e) =>
       (endNode(e.from) === a.id && endNode(e.to) === b.id) ||
       (endNode(e.from) === b.id && endNode(e.to) === a.id),
   )
-const linkedFrom = (board, a, b) =>
+export const linkedFrom = (board, a, b) =>
   board.edges.some((e) => endNode(e.from) === a.id && endNode(e.to) === b.id)
-const centreX = (n) => n.x + n.width / 2
+export const centreX = (n) => n.x + n.width / 2
 
 /** @type {readonly Task[]} */
 export const TASKS = [
@@ -702,10 +726,13 @@ export const TASKS = [
     // so a model reaching for the built-in would not have been wrong and
     // the task would have measured nothing.
     //
-    // Graded on the STORED facet rather than on the colour: `visual.gateway`
-    // is also colour 3, so a colour check would pass a board dressed with
-    // the wrong stencil. ADR-0034 records the id on the node for exactly
-    // this reason — what a box IS survives, not only how it looks.
+    // Graded on the STORED facet rather than on the colour, and the reason
+    // got stronger rather than weaker: when this was written `visual.gateway`
+    // was also colour 3, so a colour check passed a board dressed with the
+    // wrong stencil. Since ADR-0036 §5 the bundled set spends no colour at
+    // all, so a colour check would pass a box wearing ANY built-in stencil,
+    // or none. ADR-0034 records the id on the node for exactly this reason —
+    // what a box IS survives, not only how it looks.
     name: 'dress a box with a style this workspace defines',
     boards: ['boards/architecture'],
     prompt:

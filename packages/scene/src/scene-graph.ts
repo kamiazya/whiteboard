@@ -119,6 +119,34 @@ export interface TextRunNode {
   readonly overflows?: true
   readonly appearance?: Appearance
   /**
+   * Paint this INSTEAD of the run's glyphs, in the run's own box. An
+   * inline `![](...)` in a body is the first user.
+   *
+   * A substitution rather than a scene node of its own, and that is the
+   * decision rather than a shortcut. Measured first the other way: a
+   * `TextRunNode | InlineImageNode` union on every `runs` field costs 7
+   * production sites across 6 files and ~37 test sites, and what it buys
+   * is that a reader cannot skip the new kind silently. But the skip it
+   * prevents IS the behaviour every reader has today — an inline image
+   * draws as its alt text — so the union buys a typecheck error over a
+   * safe degradation, at that price.
+   *
+   * What the run keeps is the part everything else depends on: `text`
+   * stays the alt, so passage anchoring matches the same quotes it always
+   * did, the outline reads the same words, and a surface that has not
+   * heard of this field renders exactly what it rendered before. Only the
+   * painter looks at it.
+   *
+   * A closed union, so a reader handles both kinds or neither. The `icon`
+   * arm names a REGISTERED icon rather than carrying geometry: the painter
+   * already resolves that name through its icon table for `IconSceneNode`,
+   * and a scene that inlined the paths would say the same picture twice and
+   * be unable to follow a deployment that contributes its own set.
+   */
+  readonly paints?:
+    | { readonly kind: 'image'; readonly src: string }
+    | { readonly kind: 'icon'; readonly name: string }
+  /**
    * A filled box painted BEHIND this run, inset from `bbox` by
    * `backdropPadXPx`. Inline code's tinted panel is the only user today.
    * Separate from `appearance` because that one paints the glyphs: a run
