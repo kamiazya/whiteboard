@@ -5,7 +5,7 @@ import {
   spatialCanvasArbitrary,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   deleteCanvasComment,
   deleteSpatialEdge,
@@ -19,6 +19,31 @@ import {
   writeSpatialNode,
 } from './loro-bridge.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+
+// A CEILING sized on a measurement, not a delay — and it records a cost this
+// branch ADDED rather than one it found.
+//
+// `spatialCanvasArbitrary` now draws up to three LINES beside its five edges
+// (ADR-0038 decision 2), so every generated canvas carries more to write, read
+// and merge. Measured as three rounds a side of CI's own repeat command
+// (`vitest run --repeats=3 --fsModuleCache`), medians over the three repeats:
+//
+//   two peers, DIFFERENT comment      2461ms -> 3209ms   +30%
+//   peer 1 resolves A / peer 2 adds B 3277ms -> 4223ms   +29%
+//   one batch = sequential helpers    2250ms -> 3540ms   +57%
+//
+// Three rounds each side, no overlap between the two sets, so it is the
+// generator and not the draw. The worst then sits at 4223ms of vitest's
+// 5000ms default ON AN IDLE MACHINE — 84% — and `stress-changed-tests` charges
+// the SUM of the three repeats against that one budget, which is what tipped
+// all three over on CI.
+//
+// The density is kept rather than trimmed: a free line end is what this split
+// exists for, and drawing fewer would leave the arm barely exercised — it is
+// also what found the `-0` the JSON Canvas projection was emitting.
+// `tool-inputs.fuzz.property.test.ts` carries a ceiling for the same reason.
+// The remedy is never a pinned seed.
+vi.setConfig({ testTimeout: 60_000 })
 
 function byId<T extends { id: string }>(items: readonly T[]): T[] {
   return [...items].sort((a, b) => a.id.localeCompare(b.id))
