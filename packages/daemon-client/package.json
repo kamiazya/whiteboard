@@ -103,6 +103,7 @@
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-server-core": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
+    "multiformats": "^14.0.5",
     "zod": "catalog:"
   },
   "devDependencies": {
