@@ -136,8 +136,13 @@ interface VersionRow {
   branchName: string
   auto: number
   label: string | null
-  operatorKind: 'ai' | 'human' | 'system'
-  operatorPeerId: string
+  // '' means the row records no operator at all. It has to be spelled on
+  // the KIND now that the actor is optional: the actor's emptiness used to
+  // carry both meanings ("nobody saved this" and "we do not know who"), and
+  // those separated the moment a keeper without an identity could legally
+  // name a kind and no actor.
+  operatorKind: '' | 'ai' | 'human' | 'system'
+  operatorActor: string
   operatorDisplayName: string | null
   operatorAgentId: string | null
   operatorWorkspaceId: string | null
@@ -152,10 +157,10 @@ interface VersionRow {
 
 function rowToEntry(row: VersionRow): VersionEntry {
   const operator: OperatorInfo | undefined =
-    row.operatorPeerId.length > 0
+    row.operatorKind !== ''
       ? {
           kind: row.operatorKind,
-          peerId: row.operatorPeerId,
+          ...(row.operatorActor.length > 0 ? { actor: row.operatorActor } : {}),
           ...(row.operatorDisplayName !== null ? { displayName: row.operatorDisplayName } : {}),
           ...(row.operatorAgentId !== null ? { agentId: row.operatorAgentId } : {}),
           ...(row.operatorWorkspaceId !== null ? { workspaceId: row.operatorWorkspaceId } : {}),
@@ -242,8 +247,8 @@ export class FileVersionStore implements VersionStore {
           branchName,
           auto: opts.auto ? 1 : 0,
           label: opts.label ?? null,
-          operatorKind: operator?.kind ?? 'system',
-          operatorPeerId: operator?.peerId ?? '',
+          operatorKind: operator?.kind ?? '',
+          operatorActor: operator?.actor ?? '',
           operatorDisplayName: operator?.displayName ?? null,
           operatorAgentId: operator?.agentId ?? null,
           operatorWorkspaceId: operator?.workspaceId ?? null,

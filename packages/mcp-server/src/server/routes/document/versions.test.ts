@@ -25,6 +25,11 @@ const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
 const { createVersionsRouter } = await import('./versions.js')
 const { createDocumentRouter } = await import('../document.js')
 
+// A real published did:key — what a daemon's identity answers with. The
+// value is opaque to this route; what matters is that the route stamps the
+// one it was given rather than minting something per call.
+const TEST_DAEMON_ACTOR = 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVtZxP'
+
 describe('versions router', () => {
   it('returns a Hono instance', () => {
     const versionStore = { listVersions: vi.fn(), saveVersion: vi.fn() }
@@ -100,7 +105,7 @@ describe('versions API', () => {
         label: 'ai save',
         operator: {
           kind: 'ai',
-          peerId: 'peer-ai',
+          actor: 'process:peer-ai',
           displayName: 'Assistant',
           agentId: 'agent-1',
         },
@@ -110,12 +115,12 @@ describe('versions API', () => {
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       version: {
-        operator?: { kind: string; peerId: string; displayName?: string; agentId?: string }
+        operator?: { kind: string; actor?: string; displayName?: string; agentId?: string }
       }
     }
     expect(body.version.operator).toEqual({
       kind: 'ai',
-      peerId: 'peer-ai',
+      actor: 'process:peer-ai',
       displayName: 'Assistant',
       agentId: 'agent-1',
     })
@@ -123,7 +128,7 @@ describe('versions API', () => {
     const listRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
     const listBody = (await listRes.json()) as {
       versions: Array<{
-        operator?: { kind: string; peerId: string; displayName?: string; agentId?: string }
+        operator?: { kind: string; actor?: string; displayName?: string; agentId?: string }
       }>
     }
     expect(listBody.versions[0]?.operator).toEqual(body.version.operator)
@@ -139,11 +144,47 @@ describe('versions API', () => {
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
-      version: { operator?: { kind: string; peerId: string; displayName?: string } }
+      version: { operator?: { kind: string; actor?: string; displayName?: string } }
     }
     expect(body.version.operator?.kind).toBe('human')
-    expect(body.version.operator?.peerId).toMatch(/\S+/)
+    // No daemonActor was given to this composition, so the row names no
+    // actor. `toMatch(/\S+/)` stood here and passed over a fresh Loro peer
+    // id every time — an assertion that the field was non-blank could not
+    // tell an identity from a random number.
+    expect(body.version.operator?.actor).toBeUndefined()
     expect(body.version.operator?.displayName).toBe(userInfo().username)
+  })
+
+  // The operator's `actor` is the one thing in a version row that has to
+  // survive the daemon restarting — it is the record of WHO saved this, and
+  // a value that changes on its own says nothing. Loro mints a fresh peer id
+  // on every load of the same document (measured: three loads, three
+  // numbers), so stamping one here recorded noise as identity, and a test
+  // asserting only that the field was non-blank passed over it.
+  it('POST /versions stamps the daemon actor, unchanged across a document reload', async () => {
+    const app = createDocumentRouter({
+      autoVersionQuietMs: 60_000,
+      daemonActor: TEST_DAEMON_ACTOR,
+    })
+    const save = async () => {
+      const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const body = (await res.json()) as { version: { operator?: { actor?: string } } }
+      return body.version.operator
+    }
+
+    const first = await save()
+    // Drop the cached LoroDoc so the second save reads the document back off
+    // disk — the state a restarted daemon is always in.
+    clearCache()
+    _clearWorkspaceDocCacheForTests()
+    const second = await save()
+
+    expect(first?.actor).toBe(TEST_DAEMON_ACTOR)
+    expect(second?.actor).toBe(TEST_DAEMON_ACTOR)
   })
 
   it('POST /update auto-version persists system/auto-save operator', async () => {
@@ -167,13 +208,13 @@ describe('versions API', () => {
 
     const resList = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
     const body = (await resList.json()) as {
-      versions: Array<{ operator?: { kind: string; peerId: string; displayName?: string } }>
+      versions: Array<{ operator?: { kind: string; actor?: string; displayName?: string } }>
     }
     expect(body.versions[0]?.operator).toMatchObject({
       kind: 'system',
       displayName: 'auto-save',
     })
-    expect(body.versions[0]?.operator?.peerId).toMatch(/\S+/)
+    expect(body.versions[0]?.operator?.actor).toBeUndefined()
   })
 
   it('filters GET /versions by path and returns newest first', async () => {

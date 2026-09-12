@@ -111,7 +111,7 @@ describe('DaemonDocumentPage agent-activity wiring', () => {
 
     await act(async () => {
       backend?.handlers?.onAgentActivity?.({
-        operator: { kind: 'ai', peerId: 'daemon-1' },
+        operator: { kind: 'ai', actor: 'process:daemon-1' },
         touched: { nodes: ['a'], edges: [] },
         summary: 'added 3, tidied the layout',
       })
@@ -134,7 +134,7 @@ describe('DaemonDocumentPage agent-activity wiring', () => {
 
     await act(async () => {
       backend?.handlers?.onAgentActivity?.({
-        operator: { kind: 'ai', peerId: 'daemon-1' },
+        operator: { kind: 'ai', actor: 'process:daemon-1' },
         touched: { nodes: ['a'], edges: [] },
         summary: 'added 1',
       })

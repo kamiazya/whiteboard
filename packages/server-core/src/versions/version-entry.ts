@@ -1,3 +1,4 @@
+import { okfActorSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -5,10 +6,23 @@ import { z } from 'zod'
  * boundaries under one shape: the daemon's HTTP save route accepts it, the
  * `version_created` WebSocket message carries it, and the MCP version tools
  * answer with it. `server-core` is the lowest package all three can import.
+ *
+ * `actor` is an OKF §7 actor, the SAME vocabulary the trust family's
+ * `generated.by` / `verified.by` use — so a document's provenance and its
+ * version history name a party the same way instead of two ways
+ * (ADR-0035). A `did:key` is a legal actor string, which is how a device
+ * identity rides on this rather than becoming a fourth notation.
+ *
+ * OPTIONAL, because a keeper with no identity to give must be able to say
+ * nothing. Saying nothing is the honest answer and an invented one is not:
+ * the field previously held whatever each call site had lying around — a
+ * Loro peer id (fresh on every load of the same document), a per-process
+ * nanoid, or the literal `browser` — and nothing read it, so nothing
+ * noticed.
  */
 export const operatorInfoSchema = z.object({
   kind: z.enum(['ai', 'human', 'system']),
-  peerId: z.string().min(1),
+  actor: okfActorSchema.optional(),
   displayName: z.string().optional(),
   agentId: z.string().optional(),
   workspaceId: z.string().optional(),

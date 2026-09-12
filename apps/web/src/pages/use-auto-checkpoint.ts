@@ -46,7 +46,7 @@ export function useAutoCheckpoint(
         versionStore.save(workspaceId, path, {
           auto: true,
           // The person at this browser is not who took this one.
-          operator: { kind: 'system', peerId: 'browser', displayName: 'auto-save' },
+          operator: { kind: 'system', displayName: 'auto-save' },
         }),
       onError: (err) => log.warn('automatic checkpoint failed', err),
     })

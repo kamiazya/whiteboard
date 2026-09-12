@@ -30,7 +30,7 @@ describe('versionCreatedMessageSchema', () => {
       version: {
         ...VALID_VERSION_CREATED.version,
         label: 'snapshot',
-        operator: { kind: 'ai', peerId: 'agent-1' },
+        operator: { kind: 'ai', actor: 'process:agent-1' },
       },
     })
     expect(result.success).toBe(true)

@@ -21,13 +21,19 @@ import { onDocumentsRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
   versionStore: VersionStore
+  /**
+   * This daemon as an OKF actor — its `did:key` (ADR-0035 decision 2).
+   * Optional so a composition without an identity records no actor rather
+   * than an invented one; `app.ts` always passes it.
+   */
+  daemonActor?: string
 }
 
 // GET /api/workspaces/:workspaceId/documents/:path/versions
 // POST /api/workspaces/:workspaceId/documents/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
   const app = new Hono()
-  const { versionStore } = options
+  const { versionStore, daemonActor } = options
 
   // List versions for one canvas in reverse chronological order.
   onDocumentsRoute(app, 'get', ['versions'], async (c, workspaceId, path) => {
@@ -118,7 +124,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const doc = await getDoc(workspaceId, path)
       const nextOperator = operator ?? {
         kind: 'human' as const,
-        peerId: doc.peerIdStr,
+        ...(daemonActor === undefined ? {} : { actor: daemonActor }),
         displayName: defaultHumanDisplayName(),
       }
       const entry = await versionStore.save(workspaceId, path, doc, {
