@@ -34,6 +34,7 @@ import { wikiLinkCompletionSource } from './wiki-link-completion.js'
 let view: EditorView | undefined
 
 afterEach(() => {
+  vi.useRealTimers()
   cleanup()
   view?.destroy()
   view = undefined
@@ -86,6 +87,42 @@ function backspace(target: EditorView): void {
 
 const popup = () => document.querySelector('.cm-tooltip-autocomplete')
 
+/**
+ * A synchronous stand-in for a real source, counting what it is asked.
+ *
+ * Synchronous on purpose: `emojiCompletionSource` reaches its index through
+ * a dynamic import, and a promise resolving between two timer advances makes
+ * a COUNT read as timing rather than as behaviour. What these two cases are
+ * about is when the plugin asks, not what any source answers.
+ */
+function countingSource(asked: { calls: number }): CompletionSource {
+  return (context) => {
+    const match = context.matchBefore(/:[a-z0-9_]{2,}$/)
+    if (match === null) return null
+    asked.calls += 1
+    return {
+      from: match.from + 1,
+      options: [{ label: 'rocket' }],
+      validFor: /^[a-z0-9_]*$/,
+    }
+  }
+}
+
+/**
+ * Past `activateOnTypingDelay` (the plugin documents 100ms), on FAKE timers.
+ *
+ * The separation is load-bearing rather than incidental: CodeMirror
+ * coalesces activations that land in one tick, so three back-to-back
+ * backspaces are a single query and a count over them says nothing. An
+ * earlier version of these two cases dispatched without any separation and
+ * both mutations came back green — the tests were vacuous, and looked
+ * exactly like tests that checked. Fake timers rather than sleeps because
+ * the thing being waited on IS a timer.
+ */
+async function pastActivation(): Promise<void> {
+  await vi.advanceTimersByTimeAsync(150)
+}
+
 describe('deleting back into a name offers the list again', () => {
   it('reopens on a shortcode that was already finished', async () => {
     const target = open('ship it :rocket:')
@@ -127,19 +164,33 @@ describe('deleting back into a name offers the list again', () => {
    * over an extension that reacted to everything.
    */
   it('does not react to an insertion', async () => {
-    const target = open('ship it ', { activateOnTyping: false })
+    // A negative claim has nothing of its own to wait for, so it is measured
+    // against a CONTROL rather than against a duration: type (which must not
+    // ask), then delete (which must), and wait on the deletion's own
+    // activation. One source call means the insertion produced none.
+    //
+    // The plugin's own typing activation is turned OFF for it, the one
+    // arrangement where the two can be told apart — with it on, an insertion
+    // asks either way and the case would pass over an extension that reacted
+    // to everything.
+    const asked = { calls: 0 }
+    vi.useFakeTimers()
+    const target = open('ship it ', { activateOnTyping: false, source: countingSource(asked) })
+
     const at = target.state.selection.main.head
     target.dispatch({
       changes: { from: at, insert: ':rocke' },
       selection: { anchor: at + 6 },
       userEvent: 'input.type',
     })
-    // A negative claim has no condition to wait for, so this is a CEILING
-    // rather than a delay: 2.5x `activateOnTypingDelay`, whose default the
-    // plugin documents as 100ms — the window an activation would land in.
-    await new Promise((resolve) => setTimeout(resolve, 250))
-    expect(completionStatus(target.state)).toBeNull()
-    expect(popup()).toBeNull()
+    await pastActivation()
+    expect(asked.calls).toBe(0)
+
+    // The control: a deletion in the same place MUST ask, so the zero above
+    // is this extension declining an insertion rather than nothing working.
+    backspace(target)
+    await pastActivation()
+    expect(asked.calls).toBe(1)
   })
 
   /**
@@ -150,26 +201,24 @@ describe('deleting back into a name offers the list again', () => {
    * the 1914-row emoji index.
    */
   it('does not re-run a source while its list is already open', async () => {
-    let calls = 0
-    const target = open('ship it :rocket', {
-      source: (context) => {
-        calls += 1
-        return emojiCompletionSource(context)
-      },
-    })
+    const asked = { calls: 0 }
+    vi.useFakeTimers()
+    const target = open('ship it :rocket', { source: countingSource(asked) })
     startCompletion(target)
-    await vi.waitFor(() => expect(completionStatus(target.state)).toBe('active'))
-    const afterOpen = calls
+    await pastActivation()
+    expect(asked.calls).toBe(1)
 
-    for (let n = 0; n < 4; n += 1) {
+    // Three backspaces an OPEN list absorbs through `validFor`, each given
+    // its own activation window so the plugin cannot coalesce them.
+    for (let n = 0; n < 3; n += 1) {
       backspace(target)
-      // Past `activateOnTypingDelay`'s documented 100ms default, so a
-      // restart this extension caused would have run its source by now.
-      await new Promise((resolve) => setTimeout(resolve, 120))
+      await pastActivation()
     }
-    // `validFor` re-queries once as the grammar ends; anything beyond that
-    // would be this extension restarting a query that owns itself.
-    expect(calls - afterOpen).toBeLessThanOrEqual(1)
+
+    // The open, and nothing since. Without the guard each backspace restarts
+    // the query and this reads 4 — every one of them a scan of the 1914-row
+    // emoji index in the real source this stands in for.
+    expect(asked.calls).toBe(1)
   })
 
   /** Deleting at the very start of a document must not read past position 0. */
