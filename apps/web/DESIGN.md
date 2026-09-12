@@ -1036,6 +1036,28 @@ annotation entry. The verbs return the moment that bar goes (a desktop, or
 a caret outside the editor), so the swap costs nothing and the duplicate
 row is spent on the one affordance that had no button anywhere.
 
+## A shortcode is drawn as its emoji while you write
+
+`:rocket:` is what the document stores, and 🚀 is what every surface that
+draws a body makes of it. The two places a person WRITES markdown — the
+note's source pane and a canvas node's editor — draw it too, so what is on
+screen while typing is what the render will produce.
+
+The rule is "once you have finished writing it": a shortcode the caret is
+inside stays text, so the name can be edited at all, and the caret counts as
+inside while it sits ON the closing colon — otherwise the emoji appears under
+the cursor the instant the name completes, on the keystroke that finished it.
+A shortcode inside a code span or a fence stays text on both sides, because
+there the name is the subject.
+
+**The ranges come from the renderer's own scanner** (`emojiShortcodeRanges`),
+not from a second one here. An editor that previewed something the renderer
+does not do would be worse than either behaviour alone, and two scanners are
+how that happens. What the pane cannot fix is a name the vocabulary does not
+have: `:white_check_mark:` is GitHub's spelling and CLDR calls it
+`check_mark_button`, so it stays literal in the editor exactly as it stays
+literal in the render — honest rather than helpful.
+
 ## Pick one of N is one control
 
 A control that chooses AMONG ALTERNATIVES — edge routing, a theme, a

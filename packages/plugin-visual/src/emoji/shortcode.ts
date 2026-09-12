@@ -79,6 +79,40 @@ export function emojiForShortcode(slug: string): string | undefined {
   return shortcodes().get(slug)
 }
 
+/** One shortcode found in a run of text: where it sits, and what it draws. */
+export interface EmojiShortcodeRange {
+  /** Index of the opening colon. */
+  readonly from: number
+  /** Index just past the closing colon. */
+  readonly to: number
+  readonly char: string
+}
+
+/**
+ * Every `:name:` a run of text actually resolves, in order.
+ *
+ * This exists so that WHERE a shortcode is has one definition. The renderer
+ * replaces these ranges while drawing; the editor draws a widget over the
+ * same ones so a person sees, in the source, exactly what the render will
+ * make of it. Two scanners would drift, and the drift would be the worst
+ * shape available — an editor that previews something the renderer does not
+ * do.
+ *
+ * A colon pair naming no emoji is not a range: what protects prose is this
+ * lookup failing, the same as it always was.
+ */
+export function* emojiShortcodeRanges(text: string): Generator<EmojiShortcodeRange> {
+  // Cheaper than the regex on the overwhelmingly common no-colon body, and
+  // it is the gate that keeps the table unbuilt for those.
+  if (!text.includes(':')) return
+  for (const match of text.matchAll(CANDIDATE)) {
+    const char = shortcodes().get(match[1] as string)
+    if (char === undefined) continue
+    const from = match.index
+    yield { from, to: from + match[0].length, char }
+  }
+}
+
 /**
  * Every `:name:` in a run of text replaced by its character, and everything
  * else — including a colon pair that names no emoji — returned untouched.
@@ -87,13 +121,11 @@ export function emojiForShortcode(slug: string): string | undefined {
  * case and the reason the table is not built until a candidate appears.
  */
 export function expandEmojiShortcodes(text: string): string {
-  // Cheaper than the regex on the overwhelmingly common no-colon body, and
-  // it is the gate that keeps the table unbuilt for those.
-  if (!text.includes(':')) return text
-  // One pass, and the callback runs only on a candidate — so a body full of
-  // times and ratios still never builds the table. A replacement FUNCTION
-  // also means the character is inserted literally: `$&` and friends carry
-  // no meaning here, which matters because the text being substituted in is
-  // data rather than a pattern the caller wrote.
-  return text.replace(CANDIDATE, (whole, slug: string) => shortcodes().get(slug) ?? whole)
+  let expanded: string | undefined
+  let at = 0
+  for (const range of emojiShortcodeRanges(text)) {
+    expanded = (expanded ?? '') + text.slice(at, range.from) + range.char
+    at = range.to
+  }
+  return expanded === undefined ? text : expanded + text.slice(at)
 }

@@ -58,6 +58,7 @@ import {
 } from '../markdown-editor/annotation-decorations.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { emojiCompletionSource } from '../markdown-editor/emoji-completion.js'
+import { emojiShortcodeMarks } from '../markdown-editor/emoji-shortcode-marks.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
@@ -212,6 +213,10 @@ export function MarkdownNodeEditor({
         autocompletion({ override: [emojiCompletionSource], interactionDelay: 0 }),
         wikiLinkCompletionTheme,
         syntaxHighlighting(markdownHighlightStyle),
+        // The node behind this editor draws its body with the shortcode
+        // expanded, so the draft over it does too — otherwise committing
+        // changes the picture for a reason nothing on screen explains.
+        emojiShortcodeMarks(),
         history(),
         keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
