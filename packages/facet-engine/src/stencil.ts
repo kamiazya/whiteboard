@@ -37,27 +37,36 @@ const facetKeySchema = z
     'must be a facet key like "visual.shape/v0"',
   )
 
-export const stencilAssetSchema = z.object({
-  /** What a picker calls it. The id stays machine-only, as everywhere else. */
-  displayName: z.string().min(1),
-  /**
-   * The node's colour, passed through uninterpreted (see the module doc).
-   * Absent means the stencil says nothing about colour, which is a
-   * legitimate vocabulary: a set distinguishing purely by silhouette is not
-   * a worse one, and ADR-0034's columns judge whether the distinctions land,
-   * never how many channels were spent.
-   */
-  color: z.string().min(1).optional(),
-  /**
-   * Facet payloads by key, each validated against the schema its own plugin
-   * registered — at REGISTRY BUILD rather than at `definePlugin`, because a
-   * stencil may legitimately name another plugin's facet. That is not the
-   * cross-plugin coupling ADR-0013 decision 3 refuses for `views`: a view
-   * READS another plugin's data behind its back, while a stencil WRITES a
-   * facet the target object was always free to carry.
-   */
-  facets: z.record(facetKeySchema, z.unknown()).default({}),
-})
+export const stencilAssetSchema = z
+  .object({
+    /** What a picker calls it. The id stays machine-only, as everywhere else. */
+    displayName: z.string().min(1),
+    /**
+     * The node's colour, passed through uninterpreted (see the module doc).
+     * Absent means the stencil says nothing about colour, which is a
+     * legitimate vocabulary: a set distinguishing purely by silhouette is not
+     * a worse one, and ADR-0034's columns judge whether the distinctions land,
+     * never how many channels were spent.
+     */
+    color: z.string().min(1).optional(),
+    /**
+     * Facet payloads by key, each validated against the schema its own plugin
+     * registered — at REGISTRY BUILD rather than at `definePlugin`, because a
+     * stencil may legitimately name another plugin's facet. That is not the
+     * cross-plugin coupling ADR-0013 decision 3 refuses for `views`: a view
+     * READS another plugin's data behind its back, while a stencil WRITES a
+     * facet the target object was always free to carry.
+     */
+    facets: z.record(facetKeySchema, z.unknown()).default({}),
+  })
+  // STRICT, so decision 3's "no position, no text" is enforced rather than
+  // assumed. A non-strict object would STRIP an `x` or a `text` a library
+  // author wrote and register the stencil anyway — accepted, dropped,
+  // nothing said, and the author left believing their stencil places the
+  // box. The same shape cost `node.add` a silently discarded `stencil`
+  // (2026-09-11); it is the worst of the three outcomes because neither the
+  // author nor a test that reads what was stored can see it.
+  .strict()
 
 export type StencilAsset = z.infer<typeof stencilAssetSchema>
 export type StencilAssetInput = z.input<typeof stencilAssetSchema>

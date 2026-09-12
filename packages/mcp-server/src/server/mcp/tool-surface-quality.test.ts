@@ -211,9 +211,20 @@ describe('what the tool table costs to read', () => {
       // conversations never touch. A library is meant to grow; a cost that
       // grows with it is the wrong shape, so discovery moved to a runtime
       // answer that costs nothing until asked.
+      //
+      // 13502 -> 13618 making a node DRAFT strict, which is the same 29
+      // bytes per object the stray-key row above charges, times the four
+      // node types the draft union carries. Bought a refusal where there
+      // was SILENCE: `stencil` written inside `node` — the likelier guess,
+      // since every other property of the box goes there — was stripped and
+      // the box drawn undressed with nothing said, while the identical
+      // mistake inside `patch` was already refused by name. Measured in a
+      // lane trial that then spent seventeen calls recovering by hand.
+      // -6 dropping `badge` from the stencil field's description: the
+      // bundled set writes one, and a board draws none.
       wb_canvas_edit: {
-        visibleBytes: 13502,
-        wireBytes: 37292,
+        visibleBytes: 13612,
+        wireBytes: 37402,
         descriptionWords: 169,
         parameters: 153,
         undescribed: 123,
@@ -272,11 +283,25 @@ describe('what the tool table costs to read', () => {
       //
       // `undescribed` stays 1: the new parameter carries its own
       // `.describe()`, because C3 counts down and never up.
+      //
+      // +274 visible bytes again for `workspaceId` (足場4b), and this row is
+      // the one place the trade is stated. C1 goes UP, which for an addition
+      // is the only direction it can go; what it buys is C5 — an errand step
+      // that had no tool behind it at all. A workspace's stencil library is
+      // CONTENT, so no registry a deployment composes can see it, and the
+      // ids it defines were reachable only by opening the library document
+      // and reading its frontmatter. The how-to shipped that as a stated
+      // limit one increment ago; this retires it.
+      //
+      // The cost is paid ONCE, in the table, and never per stencil: the ids
+      // stay out of every schema for the reason the assets half of this
+      // tool exists (+4838 to `wb_canvas_edit` at 120 stencils). A library
+      // that grows to a hundred adds nothing to what a model reads.
       wb_facet_list: {
-        visibleBytes: 653,
-        wireBytes: 1623,
-        descriptionWords: 46,
-        parameters: 2,
+        visibleBytes: 927,
+        wireBytes: 1897,
+        descriptionWords: 63,
+        parameters: 3,
         undescribed: 1,
         strays: 'refused',
         names: [],
@@ -296,10 +321,17 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: ['wb_facet_list'],
       },
+      // Moved down when the link stopped carrying a credential: the
+      // description's SECURITY warning ("this URL embeds the daemon
+      // bootstrap token — treat it like a credential") described something
+      // that no longer exists, and the output schema's `authMode` and
+      // `expiresHint` described the same vanished token. 1257 -> 994
+      // visible bytes (-263, -21%) and 70 -> 35 description words, for a
+      // tool whose input schema did not change at all.
       wb_pairing_link_create: {
-        visibleBytes: 1257,
-        wireBytes: 1919,
-        descriptionWords: 70,
+        visibleBytes: 994,
+        wireBytes: 1442,
+        descriptionWords: 35,
         parameters: 4,
         undescribed: 0,
         strays: 'refused',
@@ -426,9 +458,16 @@ describe('what the tool table costs to read', () => {
       // +516 for `stencil` on node.add and node.patch plus the registered
       // assets on wb_facet_list — the two halves of one decision, since the
       // field is a plain string precisely because the list lives there.
-      visibleBytes: 36669,
-      wireBytes: 111600,
-      parameters: 276,
+      // +116 for a strict node draft on node.add (see wb_canvas_edit): four
+      // node types x the 29 bytes a strict object costs, for a stray key
+      // refused instead of silently dropped, less 6 for a `badge` the
+      // stencil field's description no longer promises (see wb_canvas_edit).
+      // +274 for `workspaceId` on wb_facet_list (足場4b): the one parameter
+      // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
+      // once in the table and never per stencil.
+      visibleBytes: 36790,
+      wireBytes: 111507,
+      parameters: 277,
       undescribed: 191,
     })
   })

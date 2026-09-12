@@ -13,16 +13,18 @@
 //
 // The numbers are pinned EXACTLY. An improvement has to be as loud as a
 // regression, because the point is that someone says why it moved.
-import { writeCoreFacets, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { writeCoreFacets, writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { STENCIL_LIBRARY_PATH } from '@kamiazya/whiteboard-server-core'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
-import { MCP_ERRAND_CORPUS } from '../../shared/test-utils/mcp-errand-corpus.js'
+import { type Errand, MCP_ERRAND_CORPUS } from '../../shared/test-utils/mcp-errand-corpus.js'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 
 /** A markdown note with the frontmatter a tag needs somewhere to live. */
@@ -55,6 +57,7 @@ interface Tally {
 async function harness(
   seedDocuments: number,
   seedKind: 'spatial' | 'markdown' = 'spatial',
+  seedStencilLibrary?: Errand['seedStencilLibrary'],
 ): Promise<{
   client: Client
   documentIds: string[]
@@ -63,6 +66,15 @@ async function harness(
   const documentStore = new InMemoryDocumentStore()
   const documentIndex = new InMemoryDocumentIndex()
   const documentIds: string[] = []
+  const save = async (documentId: string, doc: LoroDoc) => {
+    const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
+    await documentStore.saveSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId },
+      manifest,
+      chunks,
+      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    })
+  }
   for (let i = 0; i < seedDocuments; i += 1) {
     const documentId = seedId(i)
     documentIds.push(documentId)
@@ -72,14 +84,24 @@ async function harness(
       path: `doc-${i}`,
       kind: seedKind,
     })
-    const doc = seedKind === 'spatial' ? makeSpatialDoc(SEED_CANVAS) : makeMarkdownDoc()
-    const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
-    await documentStore.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId },
-      manifest,
-      chunks,
-      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    await save(documentId, seedKind === 'spatial' ? makeSpatialDoc(SEED_CANVAS) : makeMarkdownDoc())
+  }
+  if (seedStencilLibrary !== undefined) {
+    // Seeded, never authored through the tools: a library is a PRECONDITION
+    // of the discovery errand, and writing it here would put an earlier
+    // conversation's calls into this one's count.
+    const libraryId = seedId(900)
+    documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: libraryId,
+      path: STENCIL_LIBRARY_PATH,
+      kind: 'markdown',
     })
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, 'markdown')
+    writeFacets(doc, { [VISUAL_STENCILS_KEY]: { stencils: seedStencilLibrary } } as never)
+    doc.commit()
+    await save(libraryId, doc)
   }
 
   const server = new McpServer({ name: 'whiteboard-call-count', version: '0.0.0' })
@@ -113,7 +135,11 @@ async function harness(
 async function score(name: string): Promise<Tally> {
   const errand = MCP_ERRAND_CORPUS.find((entry) => entry.name === name)
   if (errand === undefined) throw new Error(`no errand named ${name}`)
-  const { client, documentIds, tally } = await harness(errand.seedDocuments, errand.seedKind)
+  const { client, documentIds, tally } = await harness(
+    errand.seedDocuments,
+    errand.seedKind,
+    errand.seedStencilLibrary,
+  )
   await errand.run({ client, workspaceId: WORKSPACE_ID, documentIds })
   return tally
 }
@@ -150,6 +176,30 @@ describe('what an errand costs in tool calls', () => {
         calls: 2,
         requestBytes: 1532,
         responseBytes: 3172,
+      },
+      // A DISCOVERY errand (足場4b): learn what this workspace's own stencil
+      // library defines, then wear one of its ids. Two calls, and the id is
+      // read out of the first answer rather than known in advance.
+      //
+      // It replaces a three-call route that was not merely dearer: list the
+      // workspace, get the document at `stencils`, parse its frontmatter —
+      // reachable only by an agent that already knew a library lives at
+      // that path under the key `visual.stencils/v0`, neither of which is
+      // written anywhere a model reads.
+      //
+      // **Read the response bytes, because they are the price and they are
+      // not small.** 10,148 for one discovery call: `assetKind: 'stencils'`
+      // narrows the ASSETS and deliberately leaves the facets alone, so the
+      // answer still carries every registered facet's full JSON Schema.
+      // A `facets: false` would cut it, and is NOT worth having — it would
+      // add a parameter every model reads on every turn to save bytes on a
+      // call most conversations make once, which is the same trade the
+      // assets half of this tool already decided the other way. The price
+      // is stated here instead.
+      'wear a stencil this workspace defines': {
+        calls: 2,
+        requestBytes: 354,
+        responseBytes: 10148,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the

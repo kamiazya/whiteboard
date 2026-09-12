@@ -38,13 +38,13 @@ export {
 // The daemon-pairing-link fragment contract: shared by the wb_pairing_link_create
 // MCP tool (mints the link) and apps/web's fragment parser (reads it back), so
 // the two cannot silently disagree on the payload shape.
-export type { DaemonConnectionPayload } from './pairing-link.js'
+export type { DaemonConnectionPayload, DaemonConnectionTarget } from './pairing-link.js'
 export {
   DAEMON_CONNECTION_FRAGMENT_KEY,
   daemonConnectionPayloadSchema,
+  daemonConnectionTargetSchema,
   decodeBase64UrlText,
   encodeBase64UrlText,
-  MIN_BOOTSTRAP_TOKEN_LENGTH,
 } from './pairing-link.js'
 export type { DaemonPingResponse, RuntimeVerifyResponse } from './runtime.js'
 export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime.js'

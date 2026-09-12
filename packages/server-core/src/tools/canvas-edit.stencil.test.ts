@@ -8,7 +8,11 @@ import {
   definePlugin,
   type FacetRegistry,
 } from '@kamiazya/whiteboard-facet-engine'
-import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeDocumentKind,
+  writeFacets,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import {
   resolveNodeShape,
   resolveNodeStencil,
@@ -23,6 +27,7 @@ import {
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasEditInputSchema, createCanvasEditTool } from './canvas-edit.js'
 import { loadDocument } from './document-io.js'
+import { STENCIL_LIBRARY_PATH } from './stencil-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -135,6 +140,35 @@ describe('dressing a box with a stencil', () => {
     ).rejects.toThrow(/`stencil` goes beside `op`/)
   })
 
+  test('tells a caller who put stencil inside node.add\u2019s node where it belongs', async () => {
+    // The sibling of the case above, and the one that was SILENT. `patch` is
+    // `.strict()` so a stray key is refused there; a node DRAFT strips, so
+    // `stencil` inside `node` was accepted, dropped, and the box drawn
+    // undressed with nothing said. Measured in the lane that took this
+    // increment's reading: a trial put it there, got no error, noticed from
+    // the render that nothing was dressed, and spent seventeen further calls
+    // rebuilding the vocabulary by hand — ending one channel apart instead
+    // of two. Inside `node` is also the likelier guess, because every other
+    // property of the box goes there.
+    await expect(
+      run([
+        {
+          op: 'node.add',
+          node: {
+            id: 'a',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 80,
+            text: 'A',
+            stencil: 'visual.service',
+          },
+        },
+      ]),
+    ).rejects.toThrow(/`stencil` goes beside `op`/)
+  })
+
   test('node.add applies the appearance and records the kind in one field', async () => {
     const { result, canvas } = await run([
       {
@@ -222,5 +256,132 @@ describe('dressing a box with a stencil', () => {
     // ...and the rest of the stencil still applies, including the record.
     expect(resolveNodeShape(node as never)).toBe('parallelogram')
     expect(resolveNodeStencil(node as never)).toBe('visual.queue')
+  })
+})
+
+describe('a workspace\u2019s own stencil library', () => {
+  // ADR-0034 decision 4: a library is CONTENT — a document in the workspace,
+  // not a deployment's plugin set. This is the end of that path: a stencil
+  // nobody shipped, authored as a document, dressing a box.
+  const LIBRARY_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
+
+  const runWithLibrary = async (facets: Record<string, unknown> | undefined, ops: unknown[]) => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, { nodes: [], edges: [] })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    if (facets !== undefined) {
+      await seedDoc(store, LIBRARY_ID, (doc) => {
+        writeDocumentKind(doc, 'markdown')
+        writeFacets(doc, facets as never)
+      })
+      store.documentIndex.seed({
+        workspaceId: WORKSPACE_ID,
+        documentId: LIBRARY_ID,
+        path: STENCIL_LIBRARY_PATH,
+        kind: 'markdown',
+      })
+    }
+    const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+    const input = canvasEditInputSchema.parse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops,
+    })
+    const result = await createCanvasEditTool(deps).execute(input as never)
+    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    return { result, canvas }
+  }
+
+  const addWearing = (stencil: string) => [
+    {
+      op: 'node.add',
+      node: { id: 'b', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'orders' },
+      stencil,
+    },
+  ]
+
+  test('dresses a box with a stencil the LIBRARY defines and no plugin shipped', async () => {
+    const { canvas } = await runWithLibrary(
+      {
+        'visual.stencils/v0': {
+          stencils: {
+            bucket: {
+              displayName: 'Bucket',
+              color: '2',
+              facets: { 'visual.shape/v0': { kind: 'cylinder' } },
+            },
+          },
+        },
+      },
+      addWearing('workspace.bucket'),
+    )
+
+    const node = canvas.nodes.find((n) => n.id === 'b')
+    expect(node?.color).toBe('2')
+    expect(resolveNodeShape(node as never)).toBe('cylinder')
+    // Recorded under the same key a bundled stencil records under, so the
+    // facet axis reads a library-dressed board exactly as it reads any
+    // other. Asserted on the STORED payload rather than through a resolver:
+    // a resolver takes a registry, and the question here is what the
+    // document now says, not what some registry can make of it.
+    expect(
+      (node as { 'x-whiteboard'?: { facets?: Record<string, unknown> } })['x-whiteboard']?.facets?.[
+        'visual.stencil/v0'
+      ],
+    ).toEqual({ stencil: 'workspace.bucket' })
+  })
+
+  test('refuses a library id in a workspace that has no library, listing what it does have', async () => {
+    await expect(runWithLibrary(undefined, addWearing('workspace.bucket'))).rejects.toThrow(
+      /visual\.datastore/,
+    )
+  })
+
+  test('reads no library at all for a batch that names no stencil', async () => {
+    // The cost decision, pinned rather than trusted: finding a library is a
+    // listing plus a read, and `wb_canvas_edit` is the hottest write tool
+    // there is. A batch that moves boxes must not pay for a vocabulary it
+    // does not mention.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, { nodes: [], edges: [] })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    // Counted on this test's OWN store, which is built here and discarded
+    // here — nothing to restore, and nothing another test can observe.
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+    const input = canvasEditInputSchema.parse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'p', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'plain' },
+        },
+      ],
+    })
+    await createCanvasEditTool(deps).execute(input as never)
+
+    expect(listings).toBe(0)
+  })
+
+  test('leaves the bundled vocabulary working beside it', async () => {
+    const { canvas } = await runWithLibrary(
+      { 'visual.stencils/v0': { stencils: { bucket: { displayName: 'Bucket' } } } },
+      addWearing('visual.datastore'),
+    )
+    expect(canvas.nodes.find((n) => n.id === 'b')?.color).toBe('5')
   })
 })

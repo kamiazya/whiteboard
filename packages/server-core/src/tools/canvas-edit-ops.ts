@@ -67,11 +67,39 @@ const nodeExtensionWriteSchema = z
   })
 const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
 
+/**
+ * A key inside the node that the node has no room for is REFUSED, and
+ * `stencil` is told where it belongs — the same redirect `nodePatchSchema`
+ * carries, for the same key one op over.
+ *
+ * Strict at all, because the two ops disagreed and the disagreement was
+ * silent: `node.patch`'s fields are `.strict()`, so a stray key there is
+ * refused by name, while a node DRAFT strips — so the identical mistake on
+ * `node.add` was accepted, dropped, and the box drawn undressed with nothing
+ * said. Measured, not reasoned: a lane trial wrote `stencil` inside `node`
+ * on all seven boxes, received no error, worked out from the render that
+ * nothing had been dressed, and spent seventeen further calls rebuilding the
+ * vocabulary by hand — landing a board one distinction channel apart where
+ * the stencil set is two. Inside `node` is also the likelier guess, since
+ * every other property of the box goes there.
+ *
+ * A silently dropped key is the worst of the three outcomes: the caller
+ * cannot see it, and neither can a test that asserts on what was stored.
+ */
+const draftStrayKeys = {
+  error: (issue: { code: string; keys?: readonly string[] }) =>
+    issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
+      ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `node`.'
+      : undefined,
+}
+const draftOption = <S extends z.ZodRawShape>(option: { shape: S }) =>
+  z.object(option.shape, draftStrayKeys).strict()
+
 const nodeDraftSchema = z.discriminatedUnion('type', [
-  textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
-  fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
-  linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
-  groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  draftOption(textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
 ])
 
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
@@ -140,6 +168,12 @@ const exactlyOneTarget = {
  * `node` is part of the node's STORED shape, and this is an instruction to
  * expand a vocabulary into that shape.
  *
+ * The description names COLOUR and SILHOUETTE and not the badge, though a
+ * stencil may write one. `plugin-visual` contributes no node decoration, so
+ * a badge draws nothing on a board — it reaches the minimap, the favicon and
+ * a file row, where a node is too small to read. Naming it here promised a
+ * board distinction that is not there, and cost bytes to promise it.
+ *
  * **A validated STRING, not a `z.enum` of the registered ids**, and that is a
  * measurement rather than a preference. An enum's cost grows with the
  * vocabulary, and this field exists so a vocabulary can GROW — a deployment
@@ -168,7 +202,7 @@ const exactlyOneTarget = {
 const STENCIL_FIELD = namespacedIdSchema
   .optional()
   .describe(
-    'What this box IS, as a registered stencil id — sets colour, silhouette and badge together; an explicit color wins. wb_facet_list reports the ids this deployment has.',
+    'What this box IS, as a registered stencil id — sets its colour and silhouette together; an explicit color wins. wb_facet_list reports the ids this deployment has.',
   )
 
 /**

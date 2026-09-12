@@ -29,6 +29,7 @@ import { CATEGORY_GLYPHS } from './icons/category-glyphs.js'
 import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
 import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
+import { visualStencilsFacetSchema } from './stencil-library.js'
 import { VISUAL_STENCILS } from './stencils.js'
 import { VISUAL_THEMES } from './themes.js'
 
@@ -467,6 +468,22 @@ export const visualPlugin = definePlugin({
       // in first, where `wb_facet_list` reported a stencil, `wb_canvas_edit`
       // applied it, and the panel did not offer it.
       editor: { fields: { stencil: { widget: 'segmented', label: 'Stencil' } } },
+    }),
+    defineFacet({
+      name: 'stencils',
+      displayName: 'Stencil library',
+      version: 'v0',
+      // A DOCUMENT only, and the singular/plural pair is the distinction:
+      // `visual.stencil` says which stencil one box WEARS, `visual.stencils`
+      // says which stencils a document DEFINES. One is worn, the other is
+      // drawn from.
+      targets: ['document'],
+      schema: visualStencilsFacetSchema,
+      // No `editor`, so the derived form answers `unsupported` — a record of
+      // records is outside the control vocabulary, and that is the honest
+      // signal rather than a half-rendered payload. The affordance for
+      // growing a vocabulary is editing the document, which is the whole
+      // reason a library is one.
     }),
   ],
   // The vendored set, registered as ADR-0013 decision 3 assets so a

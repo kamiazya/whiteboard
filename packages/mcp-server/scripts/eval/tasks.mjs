@@ -37,6 +37,22 @@ const boardAt = async (wb, path) => {
   return wb.call('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId: entry.documentId })
 }
 
+/**
+ * A node's stored facets, which `wb_canvas_snapshot` does not carry — it
+ * answers geometry and text. The document's own content does, under
+ * `x-whiteboard`, which is also where the drawing score reads them.
+ */
+const nodeFacetsAt = async (wb, ids, path, match) => {
+  const read = await wb.call('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [ids[path]],
+  })
+  const content = read.documents[0]?.content
+  if (content === undefined) return undefined
+  const node = JSON.parse(content).nodes?.find((n) => match(n))
+  return node === undefined ? undefined : (node['x-whiteboard']?.facets ?? {})
+}
+
 const text = (n) => (n.text ?? '').trim()
 const byText = (board, t) => board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
 const strictlyInside = (n, g) =>
@@ -651,6 +667,136 @@ export const TASKS = [
         detail:
           missing.length === 0 ? 'both boards checkpointed' : `missing: ${missing.join(', ')}`,
       }
+    },
+  },
+  {
+    // 足場4b's own question, and the one thing that can refute it: given a
+    // vocabulary THIS WORKSPACE defines and the deployment does not, can an
+    // agent find it and wear it?
+    //
+    // Everything below the LLM lane says yes by construction — every unit
+    // test and the smoke hand the tool a `workspaceId` because the test
+    // wrote it. What none of them can answer is whether a model reaches for
+    // the tool at all when the id it needs is in no schema it reads.
+    //
+    // The prompt names no tool, no parameter and no id. It DOES say the
+    // style belongs to this workspace rather than to the server, because
+    // that is the distinction a person would actually make ("the one we
+    // agreed", not "a blue one") and because without it the ask is
+    // satisfiable by `visual.datastore` — a lakehouse is a kind of store,
+    // so a model reaching for the built-in would not have been wrong and
+    // the task would have measured nothing.
+    //
+    // Graded on the STORED facet rather than on the colour: `visual.gateway`
+    // is also colour 3, so a colour check would pass a board dressed with
+    // the wrong stencil. ADR-0034 records the id on the node for exactly
+    // this reason — what a box IS survives, not only how it looks.
+    name: 'dress a box with a style this workspace defines',
+    boards: ['boards/architecture'],
+    prompt:
+      'On boards/architecture, add a box labelled "Events lake". Our team keeps its own agreed box styles for this workspace on top of whatever the server ships; dress it as the lakehouse one we agreed, rather than a built-in style or a colour you pick. Apply it directly; I am looking at the board.',
+    verify: async (wb, ids) => {
+      const facets = await nodeFacetsAt(wb, ids, 'boards/architecture', (n) =>
+        (n.text ?? '').toLowerCase().includes('events lake'),
+      )
+      if (facets === undefined) {
+        return { ok: false, detail: 'no box labelled "Events lake" on boards/architecture' }
+      }
+      const worn = facets['visual.stencil/v0']?.stencil
+      if (worn === undefined) {
+        return { ok: false, detail: 'the box wears no stencil at all' }
+      }
+      if (worn !== 'workspace.lakehouse') {
+        return { ok: false, detail: `wore ${worn}, not the style this workspace defines` }
+      }
+      return { ok: true, detail: 'wore workspace.lakehouse' }
+    },
+  },
+  {
+    // The question ADR-0034 exists to answer, and the only thing that can
+    // REFUTE its premise: asked for a drawing whose boxes are of obviously
+    // different kinds, does a model reach for a reusable vocabulary at all?
+    //
+    // Graded on STRUCTURE alone — the boxes and the arrows — deliberately.
+    // Whether it reached for a stencil, hand-set colours, or drew everything
+    // plain is the DIAGNOSTIC, read off the `facets` columns this board
+    // already reports (ADR-0033 made this lane its scoreboard). Grading the
+    // reach would be grading the path, which this file's header forbids and
+    // which would also make the answer unfalsifiable: a model that
+    // distinguishes kinds some other way has not failed.
+    //
+    // The prompt names no stencil id, no `stencil` field and no tool. It
+    // does use the category words a person would use — database, queue,
+    // service, outside system — and that was weighed rather than assumed: a
+    // prompt that avoided them could not state the ask at all, and both the
+    // vocabulary path and the invent-it-per-board path satisfy them equally,
+    // so they bias toward DOING something rather than toward stencils.
+    name: 'draw a flow whose kinds are told apart at a glance',
+    boards: ['boards/checkout'],
+    prompt:
+      'Create a board at boards/checkout and draw how a checkout request flows: a Shopper hits an API gateway; the gateway calls an Orders service and a Payments service; Orders writes to a Postgres database and publishes to an Events queue; Payments calls Stripe, which is outside our system. Someone glancing at this board should be able to tell those apart without reading every label. Apply it directly; I am looking at the board.',
+    verify: async (wb) => {
+      const board = await boardAt(wb, 'boards/checkout')
+      if (board === undefined) return { ok: false, detail: 'no board at boards/checkout' }
+      const wanted = ['Shopper', 'gateway', 'Orders', 'Payments', 'Postgres', 'Events', 'Stripe']
+      // Matched on a distinctive WORD rather than the whole label: a model
+      // that writes "Orders service" or "Postgres database" has drawn the
+      // right box, and failing it for that would measure transcription.
+      //
+      // One WORD, and the list said `API gateway` until a run proved why
+      // that matters: a model wrapped the label as "API\nGateway" and the
+      // phrase stopped matching, so the lane reported `missing: API gateway`
+      // for a box that was there. The verifier judges WHICH BOXES EXIST; how
+      // well the label fits its box is the drawing score's column
+      // (`textOverflow`), and a gate that conflates the two reports the
+      // wrong finding for the right board.
+      const found = wanted.map((word) =>
+        board.nodes.find(
+          (n) => n.type !== 'group' && text(n).toLowerCase().includes(word.toLowerCase()),
+        ),
+      )
+      const missing = wanted.filter((_, i) => found[i] === undefined)
+      if (missing.length > 0) return { ok: false, detail: `missing: ${missing.join(', ')}` }
+      // One box may not answer for two kinds. `nodes.find()` per word can
+      // return the SAME node twice — "Orders Payments Service" matches both
+      // — and the verdict would then claim seven boxes over six. Six kinds
+      // drawn as six boxes is not the drawing the prompt asked for, whatever
+      // the labels add up to.
+      const shared = wanted.filter((_, i) => found.findIndex((n) => n?.id === found[i]?.id) !== i)
+      if (shared.length > 0) {
+        return { ok: false, detail: `one box answers for two kinds: ${shared.join(', ')}` }
+      }
+      const flows = [
+        ['Shopper', 'gateway'],
+        ['gateway', 'Orders'],
+        ['gateway', 'Payments'],
+        ['Orders', 'Postgres'],
+        ['Orders', 'Events'],
+        ['Payments', 'Stripe'],
+      ]
+      // A flow naming a box `wanted` does not is the verifier's own defect,
+      // and it reported itself as a crash that killed the whole RUN — every
+      // remaining trial with it — when `API gateway` above became `gateway`
+      // and these did not. Answered as a failed task instead, so the lane
+      // survives to report it.
+      const unnamed = [...new Set(flows.flat())].filter((w) => !wanted.includes(w))
+      if (unnamed.length > 0) {
+        return { ok: false, detail: `verifier names boxes it does not want: ${unnamed.join(', ')}` }
+      }
+      const idOf = (word) => found[wanted.indexOf(word)].id
+      // DIRECTED, unlike the shared `linked` helper above. The prompt says a
+      // Shopper hits the gateway and the gateway calls the services, so a
+      // board with the arrows reversed makes a different claim about the
+      // system rather than the same one drawn differently.
+      const linked = (a, b) =>
+        board.edges.some((e) => e.fromNode === idOf(a) && e.toNode === idOf(b))
+      const unlinked = flows.filter(([a, b]) => !linked(a, b)).map(([a, b]) => `${a}->${b}`)
+      if (unlinked.length > 0) return { ok: false, detail: `not connected: ${unlinked.join(', ')}` }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: `${wanted.length} boxes, ${flows.length} flows, no overlap` }
     },
   },
 ]

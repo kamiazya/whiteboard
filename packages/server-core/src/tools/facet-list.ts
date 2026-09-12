@@ -2,6 +2,7 @@ import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+import { workspaceFacetRegistry } from './stencil-library.js'
 
 /**
  * What facets this deployment registered, so an agent can DISCOVER a key
@@ -9,8 +10,11 @@ import type { ServerDeps } from '../server-deps.js'
  * against its schema and its declared targets, and until this tool existed
  * the only way to learn either was to read the source or fail a write.
  *
- * Read-only and deployment-scoped: the answer describes the registry, not
- * any document, so it takes no workspace or document id.
+ * Read-only. The answer describes a REGISTRY rather than any document, so
+ * it needs no ids — except that a workspace's own stencil library is
+ * content, and the only registry that holds it is the one composed for
+ * that workspace. `workspaceId` is how a caller asks for that one; without
+ * it the answer is the deployment's alone, and costs no lookup.
  */
 // The engine's own target set — not a wider guess. `workspace` is reserved
 // in ADR-0013 but not implemented, and publishing it here would advertise a
@@ -38,6 +42,19 @@ export const facetListInputSchema = z
     assetKind: assetKindSchema
       .optional()
       .describe('Keeps only assets of this kind. The facets are unaffected.'),
+    /**
+     * Opt-in, and it buys the one thing this tool could not answer: the
+     * stencils a WORKSPACE defines in its own library document
+     * (ADR-0034 decision 4). Omitted, nothing is read from the workspace at
+     * all — finding a library is a listing plus a document read, and a
+     * caller asking what the deployment registered must not pay for it.
+     */
+    workspaceId: z
+      .string()
+      .optional()
+      .describe(
+        'Also list the stencils this workspace defines in its own library, as `workspace.<name>`. Omit for the deployment\u2019s vocabulary alone.',
+      ),
   })
   .strict()
 export type FacetListInput = z.infer<typeof facetListInputSchema>
@@ -108,7 +125,7 @@ export function createFacetListTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_list' as const,
     description:
-      'List what this deployment registered: facets (the exact key to write, the owning plugin, which objects each may be attached to, the payload schema) and assets (the stencil, theme and icon ids a write names by id). Optionally filtered to one target or one asset kind.',
+      'List what a write may name: facets (the exact key to write, the owning plugin, which objects each may be attached to, the payload schema) and assets (the stencil, theme and icon ids a write names by id). This deployment\u2019s, plus the stencils a workspace defines in its own library when workspaceId is given. Optionally filtered to one target or one asset kind.',
     inputSchema: facetListInputSchema,
     outputSchema: facetListOutputSchema,
     execute: async (input: FacetListInput): Promise<FacetListOutput> => {
@@ -119,7 +136,15 @@ export function createFacetListTool(deps: ServerDeps) {
       // registers the Zod object rather than its `.shape` — but this
       // parse is what holds the line for the other callers.)
       const parsed = facetListInputSchema.parse(input)
-      const registry = deps.facetRegistry ?? bundledFacetRegistry
+      // A workspace nobody made REFUSES here, unlike on the write paths:
+      // `workspaceId` is the only thing this caller named, so there is no
+      // more specific refusal to make room for, and answering the
+      // deployment's own stencils would read as "this workspace defines
+      // none" — a wrong answer wearing the shape of a right one.
+      const registry =
+        parsed.workspaceId === undefined
+          ? (deps.facetRegistry ?? bundledFacetRegistry)
+          : await workspaceFacetRegistry(deps, parsed.workspaceId, 'refuse')
       const facets = registry.plugins
         .flatMap((plugin) =>
           plugin.facets.map((definition) => ({

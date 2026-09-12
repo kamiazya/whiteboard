@@ -2,7 +2,6 @@ import {
   daemonConnectionPayloadSchema,
   encodeBase64UrlText,
   isBareHttpOrigin,
-  MIN_BOOTSTRAP_TOKEN_LENGTH,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing-link'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
@@ -58,16 +57,11 @@ export const pairingLinkInputShape = {
 
 export const pairingLinkInputSchema = z.object(pairingLinkInputShape)
 
+// `authMode` and `expiresHint` are gone with the credential they described:
+// the link carries none, so there is no mode to report and nothing to expire.
 export const pairingLinkOutputSchema = z.object({
   url: z.string().url().describe('The `<webOrigin>/#wb=<payload>` pairing URL.'),
   webOrigin: z.string().describe('The web app origin embedded in url.'),
-  authMode: z.enum(['bootstrap', 'none']).describe('Auth mode encoded in the pairing payload.'),
-  // Omitted entirely (never emitted as `undefined`) whenever no real expiry
-  // source exists — which is always today: bootstrapToken here is the
-  // daemon's own static bearer token, embedded as-is, with no TTL of its
-  // own (valid until rotated). Flip this to always-emitted only if a
-  // genuinely time-boxed credential replaces it.
-  expiresHint: z.string().optional().describe('Human-readable expiry hint, when known.'),
 })
 
 // The explicit webOrigin input is constrained by bareHttpOriginSchema at the
@@ -107,8 +101,11 @@ function isLoopbackOrigin(origin: string): boolean {
   }
 }
 
-export const PAIRING_LINK_CREDENTIAL_NOTE =
-  'SECURITY: this URL embeds the daemon bootstrap token — treat it like a credential and share it only with the intended recipient. Hosted (non-loopback) webOrigin values must be added to WHITEBOARD_ALLOWED_WEB_ORIGINS on the daemon (an exact origin or a https://*.example.com wildcard subdomain pattern); loopback origins need no allowlist entry.'
+// The link carries no credential, so this is guidance rather than a warning:
+// what it has to tell the caller is that the recipient still approves on the
+// daemon's own page, and that a hosted origin needs an allowlist entry.
+export const PAIRING_LINK_NOTE =
+  'This URL carries no credential — opening it asks the daemon for access, which the person at the daemon approves on its own /pair page (or which is granted silently if that browser origin was approved before). Hosted (non-loopback) webOrigin values must be added to WHITEBOARD_ALLOWED_WEB_ORIGINS on the daemon (an exact origin or a https://*.example.com wildcard subdomain pattern); loopback origins need no allowlist entry.'
 
 // A non-loopback webOrigin absent from the daemon's own admitted set: the
 // link would open, but the paired web app's request to the daemon is exactly
@@ -123,20 +120,23 @@ export function buildPairingLinkText(
   webOrigin: string,
   allowedWebOrigins: readonly string[] = [],
 ): string {
-  const lines = [result.url, '', PAIRING_LINK_CREDENTIAL_NOTE]
+  const lines = [result.url, '', PAIRING_LINK_NOTE]
   if (!isLoopbackOrigin(webOrigin) && !isAllowedWebOrigin(webOrigin, allowedWebOrigins)) {
     lines.push(HOSTED_ORIGIN_NOT_ALLOWLISTED_WARNING)
   }
   return lines.join('\n')
 }
 
-// The daemon's own origin + bootstrap token, threaded in by the composition
-// root (http-server.ts, via createApp/createMcpServer) rather than read from
+// The daemon's own origin, threaded in by the composition root
+// (http-server.ts, via createApp/createMcpServer) rather than read from
 // process.env inside this module — the stdio entrypoint has no HTTP daemon
 // of its own to describe, which is the standalone case below.
+//
+// It used to carry the daemon's bootstrap token too, to embed in the link.
+// Nothing embeds a credential any more, so the field is gone rather than
+// left unread: a context that cannot reach the token cannot leak it.
 export interface PairingLinkContext {
   daemonBaseUrl: string
-  bootstrapToken?: string
   // The daemon's own WHITEBOARD_ALLOWED_WEB_ORIGINS (the same set /api CORS,
   // /mcp origin, and WS upgrade enforce), so a non-loopback webOrigin can be
   // checked against real coverage instead of only reminding the caller to
@@ -186,8 +186,7 @@ export function registerPairingLinkTool(
     PAIRING_LINK_TOOL_NAME,
     {
       description:
-        'Mint a `#wb=` daemon-pairing URL that lets the whiteboard web app connect to this local daemon, optionally targeting a specific workspace/document. ' +
-        PAIRING_LINK_CREDENTIAL_NOTE,
+        "Mint a `#wb=` daemon-pairing URL that lets the whiteboard web app connect to this local daemon, optionally targeting a specific workspace/document. The URL carries no credential: access is approved on the daemon's own /pair page.",
       // The OBJECT, strict, not the shape: handed a shape, the SDK rebuilds
       // a non-strict object around it and a misspelt optional parameter is
       // dropped rather than refused (ADR-0031 C10).
@@ -215,17 +214,6 @@ export function registerPairingLinkTool(
 
       const webOrigin = args.webOrigin ?? resolveEnvWebOrigin() ?? DEFAULT_PRODUCTION_WEB_ORIGIN
 
-      const token = pairing.bootstrapToken ?? ''
-      const hasToken = token.length > 0
-      if (hasToken && token.length < MIN_BOOTSTRAP_TOKEN_LENGTH) {
-        // Fail loudly rather than emit a URL the web-side schema would
-        // reject as invalid once opened — a dead link is worse than an
-        // explicit tool error.
-        throw new Error(
-          `wb_pairing_link_create: daemon bootstrap token is only ${token.length} chars (minimum ${MIN_BOOTSTRAP_TOKEN_LENGTH}); refusing to mint a pairing link the web app would reject`,
-        )
-      }
-
       const payload = daemonConnectionPayloadSchema.parse({
         // Normalize to a bare origin: a trailing slash (or any
         // non-normalized form) in the daemon's baseUrl would fail the
@@ -234,23 +222,17 @@ export function registerPairingLinkTool(
         workspaceId: args.workspaceId,
         path: args.path,
         fullscreen: args.fullscreen,
-        authMode: hasToken ? 'bootstrap' : 'none',
-        bootstrapToken: hasToken ? token : undefined,
       })
 
       const fragment = encodeBase64UrlText(JSON.stringify(payload))
       const url = `${webOrigin}/#wb=${fragment}`
 
-      const result: z.infer<typeof pairingLinkOutputSchema> = {
-        url,
-        webOrigin,
-        authMode: payload.authMode,
-      }
+      const result: z.infer<typeof pairingLinkOutputSchema> = { url, webOrigin }
       // Deliberately NOT structuredJsonResult(result): that helper emits
       // only the bare structuredContent JSON as content[0].text, which is
       // the one place a caller (or a transcript relaying this call's
-      // output) actually sees the minted link. The credential warning has
-      // to travel with the URL on every call, not just once in the static
+      // output) actually sees the minted link. The allowlist advice has to
+      // travel with the URL on every call, not just once in the static
       // tool description.
       return {
         structuredContent: result,

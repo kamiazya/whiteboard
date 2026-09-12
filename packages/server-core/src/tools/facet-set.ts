@@ -28,6 +28,7 @@ import {
   FacetWriteRejectedError,
   NodeNotFoundError,
 } from './errors.js'
+import { workspaceFacetRegistry } from './stencil-library.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
@@ -269,7 +270,28 @@ export function createFacetSetTool(deps: ServerDeps) {
       // payload is shared, so a rejected facet is rejected for every
       // document and there is nothing to be gained by discovering it on the
       // third one after the first two were already written.
-      const registry = deps.facetRegistry ?? bundledFacetRegistry
+      // The workspace's registry, not only the deployment's: a stencil its
+      // own library defines must be writable HERE too, or the two paths that
+      // dress a box disagree — `wb_canvas_edit` applying an id this tool
+      // refuses is the shape a single composer exists to prevent.
+      //
+      // Resolved only when this batch writes a facet that TAKES a stencil.
+      // A library can add nothing but stencil assets, so every other write —
+      // a tag, a deletion, a shape — gets an identical answer from the
+      // deployment's registry and must not pay a document listing for it.
+      // Asked of the registry rather than against a hardcoded
+      // `visual.stencil/v0`: which facets take a stencil is a plugin's
+      // declaration, and a server spelling one plugin's key is a server no
+      // other plugin extends.
+      const deploymentRegistry = deps.facetRegistry ?? bundledFacetRegistry
+      const writesAStencilRef = Object.entries(input.facets ?? {}).some(
+        ([key, payload]) =>
+          payload !== null &&
+          Object.values(deploymentRegistry.assetRefsOf(key) ?? {}).includes('stencils'),
+      )
+      const registry = writesAStencilRef
+        ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
+        : deploymentRegistry
       const requiredTarget: FacetTarget =
         input.nodeId !== undefined
           ? 'node'
