@@ -122,6 +122,9 @@ export function defineFacet<S extends z.ZodTypeAny>(
   if (definition.assetRefs !== undefined) {
     assertAssetRefsFit(definition.name, definition.schema, definition.assetRefs)
   }
+  if (editor?.picker?.specimenIcon !== undefined) {
+    assertSpecimenPickerFits(definition.name, definition.assetRefs)
+  }
   for (const tag of Object.keys(definition.compat ?? {})) {
     if (!VERSION_PATTERN.test(tag)) {
       throw new Error(
@@ -249,6 +252,29 @@ function assertAssetName(pluginId: string, name: string): void {
  * because a ref field is a plain string the form layer already handles and
  * the check is about NAMES, not controls.
  */
+/**
+ * A specimen picker's ref must be exactly one `themes` field.
+ *
+ * ONE, because the registry builds the whole payload from it and a second
+ * ref would leave it guessing what to write for the other. `themes`,
+ * because the mechanism means "this mark, drawn the way this asset draws"
+ * and a theme is the only asset that draws: a stencil id is not icon
+ * geometry, so the same shape over stencils would put a broken picture on
+ * every card. Refused here rather than rendered, since a picker whose cards
+ * are empty boxes is worse than a plugin that does not load.
+ */
+function assertSpecimenPickerFits(
+  facetName: string,
+  assetRefs: Readonly<Record<string, AssetKind>> | undefined,
+): void {
+  const refs = Object.entries(assetRefs ?? {})
+  if (refs.length !== 1 || refs[0]?.[1] !== 'themes') {
+    throw new Error(
+      `facet "${facetName}" declares a picker specimenIcon, which needs exactly one assetRefs field of kind "themes"`,
+    )
+  }
+}
+
 function assertAssetRefsFit(
   facetName: string,
   schema: z.ZodTypeAny,
@@ -438,9 +464,50 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
    * Only fields named in `assetRefs` are touched: a plain enum is the
    * plugin's own vocabulary and none of the registry's business.
    */
+  /**
+   * The CARDS half of the same promise (足場3b, user decision 2026-09-12).
+   *
+   * A picker writes whole payloads and its cards each need a picture, so the
+   * `{value, label}` options below cannot serve it. The facet names the mark
+   * once as `specimenIcon`; this supplies the ids and draws each through the
+   * theme it names, which is what the `theme` glyph arm is for — `asset`
+   * inks one flat stroke in `currentColor`, so two themes would be one
+   * picture twice.
+   *
+   * The absent card is labelled `Default` rather than the `None` a field
+   * gets, because an appearance always has a built-in one and "no theme" is
+   * not what a person is choosing. A facet wanting other copy declares its
+   * own options, which is the road this leaves untouched.
+   */
+  const withSpecimenCards = (
+    form: Extract<FacetForm, { kind: 'picker' }>,
+    definition: FacetDefinition,
+    refs: Readonly<Record<string, AssetKind>>,
+  ): FacetForm => {
+    const specimen = definition.editor?.picker?.specimenIcon
+    // A declared list is a choice the registry cannot second-guess — an
+    // order the plugin means, an asset it wants left out.
+    if (specimen === undefined || form.options.length > 0) return form
+    // Exactly one `themes` ref, held by `assertSpecimenPickerFits`.
+    const field = Object.keys(refs)[0] as string
+    return {
+      ...form,
+      options: [
+        { payload: null, label: 'Default', glyph: { kind: 'asset', id: specimen } },
+        ...[...tableOf('themes').keys()].map((id) => ({
+          payload: { [field]: id },
+          label: assetLabel(id, undefined),
+          glyph: { kind: 'theme' as const, id, icon: specimen },
+        })),
+      ],
+    }
+  }
+
   const withAssetOptions = (form: FacetForm, definition: FacetDefinition): FacetForm => {
     const refs = definition.assetRefs
-    if (refs === undefined || form.kind !== 'fields') return form
+    if (refs === undefined) return form
+    if (form.kind === 'picker') return withSpecimenCards(form, definition, refs)
+    if (form.kind !== 'fields') return form
     const fields = form.fields.map((field) => {
       const kind = refs[field.name]
       if (kind === undefined || field.control.kind !== 'segmented') return field

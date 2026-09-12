@@ -427,38 +427,15 @@ export const visualPlugin = definePlugin({
           // give the specimen room to be seen. A chip-sized swatch of the
           // same mark reads as a smudge.
           layout: 'cards',
-          // The SAME mark three times, drawn three ways: plain for the
-          // bundled look, and once per theme through that theme's own
-          // `ink` and `glow`. So registering a theme needs no new SWATCH —
-          // the picture follows from the tokens the asset already carries,
-          // which is what ADR-0030 decision 2 promises.
-          //
-          // The OPTION LIST is still written out here, and that is a real
-          // gap rather than the promise: a deployment registering a third
-          // theme gets a picker that does not offer it, exactly as stencils
-          // did before `assetRefs` drove their options. This picker takes a
-          // different road — cards carrying a per-option GLYPH spec, not the
-          // plain `fields`/`segmented` shape the registry now fills — so
-          // closing it means deciding what glyph a theme nobody wrote a
-          // spec for should draw. Named so the next reader finds it rather
-          // than trusting the sentence above.
-          options: [
-            {
-              payload: null,
-              label: 'Default',
-              glyph: { kind: 'asset', id: 'visual.signature' },
-            },
-            {
-              payload: { theme: 'visual.sketch' },
-              label: 'Sketch',
-              glyph: { kind: 'theme', id: 'visual.sketch', icon: 'visual.signature' },
-            },
-            {
-              payload: { theme: 'visual.neon' },
-              label: 'Neon',
-              glyph: { kind: 'theme', id: 'visual.neon', icon: 'visual.signature' },
-            },
-          ],
+          // The SAME mark once per registered theme, drawn through that
+          // theme's own `ink` and `glow`, plus a plain one for the bundled
+          // look. The mark is named here because it belongs to this plugin;
+          // the IDS come from the registry, so a deployment registering a
+          // third theme gets a third card and this file does not change.
+          // That is ADR-0030 decision 2's promise, and it was prose until
+          // 足場3b (user decision, 2026-09-12) — this list was written out
+          // by hand, so a registered theme was applicable and unselectable.
+          specimenIcon: 'visual.signature',
         },
       },
     }),

@@ -319,7 +319,7 @@ describe('visual.text/v0', () => {
       .flatMap((plugin) => plugin.facets)
       .find((facet) => facet.name === 'text')
     // Declared, not hand-written — the same path visual.shape takes.
-    expect(definition?.editor?.picker?.options.map((option) => option.payload)).toEqual([
+    expect(definition?.editor?.picker?.options?.map((option) => option.payload)).toEqual([
       null,
       { align: 'start' },
       { align: 'center' },
@@ -382,13 +382,42 @@ describe('visual.theme/v0', () => {
     ).toBe('infra.aws')
   })
 
-  it('declares a picker whose null option is the bundled look', () => {
-    const facet = visualPlugin.facets.find((f) => f.name === 'theme')
-    const options = facet?.editor?.picker?.options ?? []
-    expect(options.map((o) => o.payload)).toEqual([
+  it('offers a picker whose null option is the bundled look', () => {
+    // Read off the FORM, not the declaration: 足場3b stopped writing the
+    // options out and the registry fills them from the registered themes.
+    const form = registry.facetForm(VISUAL_THEME_KEY)
+    if (form.kind !== 'picker') throw new Error(`expected a picker, got ${form.kind}`)
+    expect(form.options.map((o) => o.payload)).toEqual([
       null,
       { theme: 'visual.sketch' },
       { theme: 'visual.neon' },
+    ])
+  })
+
+  it('draws exactly the cards that used to be written out by hand', () => {
+    // The behaviour-preservation claim, in full: labels and glyphs, not just
+    // payloads. `assetLabel` derives "Sketch" and "Neon" from the ids, which
+    // is character-for-character what the hand-written list said, and the
+    // glyph is the same signature mark drawn through each theme's tokens.
+    //
+    // This is what makes the move safe to read as a refactor. If a later
+    // change to `assetLabel` or to the fill alters what a person sees, this
+    // is where it says so.
+    const form = registry.facetForm(VISUAL_THEME_KEY)
+    if (form.kind !== 'picker') throw new Error(`expected a picker, got ${form.kind}`)
+    expect(form.layout).toBe('cards')
+    expect(form.options).toEqual([
+      { payload: null, label: 'Default', glyph: { kind: 'asset', id: 'visual.signature' } },
+      {
+        payload: { theme: 'visual.sketch' },
+        label: 'Sketch',
+        glyph: { kind: 'theme', id: 'visual.sketch', icon: 'visual.signature' },
+      },
+      {
+        payload: { theme: 'visual.neon' },
+        label: 'Neon',
+        glyph: { kind: 'theme', id: 'visual.neon', icon: 'visual.signature' },
+      },
     ])
   })
 })
