@@ -239,27 +239,34 @@ rather than by argument. Both would pass every gate this repo has.
   sentence gone. Registering the described `width`/`height` reads as -837
   bytes and 4 arms x (60 + 150) is the whole of it — the bytes ARE the
   descriptions. **Only a composite may be registered.**
-- **`allOf` + `$ref` inheritance publishes a schema that refuses every
-  valid call.** The four node arms spend 424 bytes each on the same
-  shared base, 1,696 together, so extracting it is worth ~1,100. What
-  `z.intersection` emits is `allOf: [{$ref}, {...additionalProperties:
-  false}]`, and `additionalProperties` only sees its own subschema's
-  properties. Checked with ajv 8 against 2020-12, three shapes side by
-  side: flat (today) accepts valid input and refuses a stray key;
-  allOf+`additionalProperties` **REFUSES valid input**; allOf +
-  `unevaluatedProperties: false` is correct. zod 4.4.3 can READ
-  `unevaluatedProperties` (`from-json-schema.ts`) and never EMITS it
-  (`to-json-schema.ts`, zero occurrences), and handing the SDK a raw JSON
-  Schema inlines the `$ref`s instead, so both doors are shut. The danger
-  is the shape of the failure: zod validates with its own logic, so the
-  server works, the tests pass, and only a client validating against the
-  published schema breaks — silently and completely.
+- **`allOf` + `$ref` inheritance: SPEC-INVALID as zod emits it, and NOT yet
+  judged on the axis that matters.** The four node arms spend 424 bytes each
+  on the same shared base, 1,696 together, so extracting it is worth ~1,100.
+  `z.intersection` pairs a `$ref` with a sibling carrying
+  `additionalProperties: false`, which sees only its own subschema's
+  properties. Checked with ajv 8 against 2020-12: flat accepts valid input,
+  allOf + `additionalProperties` refuses it, allOf + `unevaluatedProperties`
+  is correct. zod 4.4.3 reads `unevaluatedProperties` and never emits it.
 
-A description costs ~50 bytes each time it is emitted, and a field of the
-node union is emitted once per arm per op: describing every parameter
-would add ~40% to the table. Describe what the lane shows a model getting
-wrong (the refusal texts), and let JSON Canvas fields mean what the spec
-says.
+  **What that measurement does and does not cover, because the distinction was
+  got wrong once here.** ajv is a defensible reference for the artifact's
+  SPEC-CONFORMANCE — both MCP SDKs bundle it, and `fromJsonSchema` uses it to
+  validate tools registered with a raw JSON Schema, so it is the SDK's own
+  reading of what a JSON Schema means. It says nothing about C14, the axis
+  ADR-0031 exists for: whether a MODEL can read and use the table. Models
+  handle `allOf`/`$ref` routinely, and rung 3 is the instrument for that
+  question. **It has not been run on this change.**
+
+  Nor does any MEASURED consumer reject it today: this server validates with
+  zod, and the MCP client SDK does not validate outgoing arguments against
+  `inputSchema` at all (it only scans it for header declarations). The
+  exposure is to a conformant third-party client that does, which is real but
+  hypothetical here — it was first recorded as "only a client validating
+  breaks", with no client checked.
+
+  So this is **open, not refuted**. Adopting it needs a rung-3 reading
+  before/after; declining it needs someone to weigh ~1,100 bytes against
+  shipping a schema that a conformant validator calls unsatisfiable.
 
 ## Traps, each paid for once
 
