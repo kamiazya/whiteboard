@@ -123,6 +123,46 @@ key is derived at point of use — the PRF case ADR-0035 deferred under E2EE.
 **Deferred, with its trigger:** an explicit user opt-in, or a keeper the user does
 not own. It is not a UI feature and must not ship as one.
 
+#### What it would have to cover, counted rather than assumed
+
+The browser keeper persists in two places, and the second is easy to forget
+because only one module reaches it. Inventory taken 2026-09-13:
+
+| what | where | kind |
+|---|---|---|
+| snapshot bytes (`syncSnapshotChunks`), manifest/frontier/delta log (`syncDocuments`) | IndexedDB | content |
+| uploaded images (`blobs`) | IndexedDB | content |
+| rendered SVG and its bounds (`render/`) | **OPFS** | derived content |
+| placement and naming (`documentIndex`, `workspaces`) | IndexedDB | metadata — **names and paths in the clear** |
+| a version's `path`, `label`, `operator` (`versions`) | IndexedDB | metadata |
+| the search corpus | memory only | not persisted |
+
+Three consequences the table makes concrete:
+
+- **The images are in IndexedDB, not OPFS**, so what must be encrypted is
+  almost entirely in one store family. `render-store.ts` is the ONLY module in
+  this app that calls `navigator.storage.getDirectory()`.
+- **The OPFS render cache need not be encrypted at all.** It is total by
+  contract in both directions — a read that fails answers "not there" and the
+  caller renders — so the cheaper design is to not write it while locked and
+  drop it when the key is absent. Nothing breaks; a picture is recomputed.
+- **Encrypting content does not hide a document's NAME.** A board called
+  "2026 redundancies" leaks from `documentIndex` and from every `versions`
+  row. Whether the locked state hides names is a design question with a real
+  UX cost, and it is not answered by choosing a cipher.
+
+#### The gate this decision needs, which is prose because nothing else can be
+
+`local-files-source.ts` builds its search corpus in memory on first query and
+carries a `ponytail` note planning to **persist an index** when a measured
+workspace makes that slow. A persisted index is a plaintext inverted index of
+the encrypted content — the classic way encryption is undone by a later
+performance fix, by someone who never read this ADR.
+
+Today's in-memory corpus is lucky, not designed: the note is about latency.
+So whoever acts on that note under a shipped decision 6 must encrypt the index
+or scope it to unlocked documents.
+
 ### 7. An attestation lives beside the content, never inside it
 
 ADR-0035 decision 2 admits into content only an identifier that survives key
@@ -158,6 +198,10 @@ credential, so it fails that test. Attestations belong on the version row.
   "no safe way to move a private key" and is not a defect to engineer around.
 - **The platform matrix must be verified against real targets before shipping**,
   especially for decision 6. The facts above are dated and second-hand.
+- **The locked state is a UX design, not a cipher choice.** Decision 6's
+  inventory leaves names and paths readable; deciding whether a locked
+  workspace lists its documents by name is the part that needs a person, and
+  it gates nothing technical.
 
 ## Alternatives considered
 
