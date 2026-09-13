@@ -689,6 +689,25 @@ async function main() {
       `wb_facet_list did not report the workspace's own stencil: ${JSON.stringify(vocabulary.assets)}`,
     )
   }
+
+  // The FILTERED answer, called explicitly: `otherTargets` is a partial
+  // record, and the SDK validates `structuredContent` against the output
+  // schema at runtime, so a scope-keyed field that drifts back to requiring
+  // every member fails HERE rather than in front of a model. The first
+  // draft used `z.record` with an enum key — which zod 4 makes total — and
+  // this is the call that would have named it.
+  const dressing = await callTool('wb_facet_list', { target: 'node' })
+  if (dressing.facets.some((facet) => facet.key === 'visual.axes/v0')) {
+    throw new Error(
+      'wb_facet_list: visual.axes/v0 is canvas-only and must not survive a node filter',
+    )
+  }
+  if (!dressing.otherTargets?.canvas?.includes('visual.axes/v0')) {
+    throw new Error(
+      `wb_facet_list: a node-filtered answer must still name the canvas scope: ${JSON.stringify(dressing.otherTargets)}`,
+    )
+  }
+  console.log('[e2e] wb_facet_list target=node → otherTargets names canvas: visual.axes/v0')
   // ...and the deployment's own are still beside it: a library EXTENDS a
   // vocabulary rather than replacing one.
   if (!vocabulary.assets.some((asset) => asset.id === 'visual.datastore')) {

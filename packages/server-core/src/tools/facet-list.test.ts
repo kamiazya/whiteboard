@@ -83,6 +83,49 @@ describe('wb_facet_list', () => {
     ])
   })
 
+  /**
+   * The measured gap this closes (ADR-0031's round 15, 0 of 3 trials): asked
+   * to tell two things apart at once, every trial called this tool with
+   * `target: 'node'` — the right question while dressing boxes — and so
+   * never saw `visual.axes/v0`, which is canvas-only and is the ONE facet
+   * that records what a colour MEANS. All three coloured by health and all
+   * three recorded nothing, so the board drew a distinction the document
+   * could not state.
+   *
+   * A description saying so was measured next and changed nothing (round 16,
+   * still `target: 'node'` x3). This is the structural form of the same
+   * repair: what the filter removes is DATA in the answer, not a sentence
+   * the model may or may not act on.
+   */
+  test('a filtered answer still names what the other scopes hold', async () => {
+    const nodeOnly = await tool(createFacetRegistry([...bundledPlugins])).execute({
+      target: 'node',
+    })
+    expect(nodeOnly.facets.map((f) => f.key)).not.toContain('visual.axes/v0')
+    // Pinned whole rather than by `toContain`, so a facet that stops being
+    // reported is a failure and not a silently shorter list.
+    expect(nodeOnly.otherTargets).toEqual({
+      canvas: ['visual.axes/v0', 'visual.edges/v0', 'visual.theme/v0'],
+      edge: ['visual.edges/v0'],
+      document: ['visual.stencils/v0'],
+    })
+    // `visual.symbol/v0` attaches to canvas, node AND document, so the
+    // filter KEPT it — and it must not also be listed under its other
+    // scopes. Repeating what the answer already named is what would bury
+    // the entries that are genuinely missing, which is the whole point.
+    expect(Object.values(nodeOnly.otherTargets ?? {}).flat()).not.toContain('visual.symbol/v0')
+  })
+
+  /**
+   * Omitted rather than empty when nothing was filtered — the same rule
+   * `assetRefs` follows, and for the same reason: a key present on every
+   * answer is bytes that say nothing.
+   */
+  test('an unfiltered answer has nothing to say about elsewhere', async () => {
+    const all = await tool().execute({})
+    expect(all.otherTargets).toBeUndefined()
+  })
+
   test('the output validates against its own schema', async () => {
     const result = await tool().execute({})
     expect(facetListOutputSchema.safeParse(result).success).toBe(true)

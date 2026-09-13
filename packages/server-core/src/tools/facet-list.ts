@@ -153,6 +153,34 @@ export const facetListOutputSchema = z
         })
         .strict(),
     ),
+    /**
+     * What `target` filtered OUT, by the scope that holds it — keys only,
+     * since a caller who wants one can ask for that scope.
+     *
+     * Present only when `target` was given, and omitted rather than `{}`
+     * when the filter removed nothing, on the same rule `assetRefs`
+     * follows: a key on every answer is bytes that say nothing.
+     *
+     * Measured, not reasoned (ADR-0031 round 15, 0 of 3). Asked to tell two
+     * things apart at once, every trial called this tool with
+     * `target: 'node'` — the right question while dressing boxes — and so
+     * never saw `visual.axes/v0`, which is canvas-only and is the one facet
+     * that records what a colour MEANS. All three coloured by health and
+     * recorded nothing. A description saying the filter hides a scope was
+     * measured next and moved nothing (round 16: `target: 'node'` x3 again).
+     * This is the same repair in the form the tool's own history kept
+     * pointing at — a join the ANSWER carries rather than a sentence a
+     * model may or may not act on — and it costs no model-visible bytes at
+     * all, since a table's price is its INPUT schema and this is output.
+     *
+     * `partialRecord`, not `record`: handed an enum key, zod 4 makes EVERY
+     * member required, so an answer naming only the scopes that actually
+     * hold something fails its own output contract. Caught by three guards
+     * at once — `tsc`, the input fuzz property, and `smoke:e2e`'s runtime
+     * validation of `structuredContent` — which is what the first draft of
+     * this field did.
+     */
+    otherTargets: z.partialRecord(facetTargetSchema, z.array(z.string())).optional(),
   })
   .strict()
 export type FacetListOutput = z.infer<typeof facetListOutputSchema>
@@ -181,7 +209,7 @@ export function createFacetListTool(deps: ServerDeps) {
         parsed.workspaceId === undefined
           ? (deps.facetRegistry ?? bundledFacetRegistry)
           : await workspaceFacetRegistry(deps, parsed.workspaceId, 'refuse')
-      const facets = registry.plugins
+      const allFacets = registry.plugins
         .flatMap((plugin) =>
           plugin.facets.map((definition) => ({
             key: `${plugin.id}.${definition.name}/${definition.version}`,
@@ -205,10 +233,12 @@ export function createFacetListTool(deps: ServerDeps) {
               : { assetRefs: { ...definition.assetRefs } }),
           })),
         )
-        .filter((facet) => parsed.target === undefined || facet.targets.includes(parsed.target))
         // Sorted by key so two calls agree and a diff of the output is
         // stable; registration order is an implementation detail.
         .sort((a, b) => (a.key < b.key ? -1 : 1))
+      const facets = allFacets.filter(
+        (facet) => parsed.target === undefined || facet.targets.includes(parsed.target),
+      )
 
       // NOT sorted, unlike the facets: registration order is what a reader
       // wants here — the bundled vocabulary first, then what this
@@ -224,9 +254,30 @@ export function createFacetListTool(deps: ServerDeps) {
             ...(kind === 'stencils' ? { displayName: registry.stencilAsset(id)?.displayName } : {}),
           })),
         )
-      return { facets, assets }
+      return { facets, assets, ...otherTargets(allFacets, parsed.target) }
     },
   }
+}
+
+/**
+ * The scopes the filter removed a facet from, keyed by scope. A facet the
+ * filter KEPT never appears here even when it also attaches elsewhere:
+ * the answer already named it, and repeating it under its other scopes
+ * would bury the entries that are actually missing.
+ */
+function otherTargets(
+  allFacets: readonly { key: string; targets: readonly FacetTarget[] }[],
+  target: FacetTarget | undefined,
+): { otherTargets?: Partial<Record<FacetTarget, string[]>> } {
+  if (target === undefined) return {}
+  const byTarget: Partial<Record<FacetTarget, string[]>> = {}
+  for (const facet of allFacets) {
+    if (facet.targets.includes(target)) continue
+    for (const other of facet.targets) {
+      byTarget[other] = [...(byTarget[other] ?? []), facet.key]
+    }
+  }
+  return Object.keys(byTarget).length === 0 ? {} : { otherTargets: byTarget }
 }
 
 function describeSchema(schema: z.ZodTypeAny): unknown {
