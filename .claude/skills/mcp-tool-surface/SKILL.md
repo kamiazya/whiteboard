@@ -283,6 +283,43 @@ description-free record type (`{type: object, propertyNames, additional
 Properties}`, four sites, ~99 bytes) — safe by the rule and 0.26% of the
 table, so not worth an increment on its own.
 
+**The same multiplication prices an ADDITION, and usually refuses it.**
+Registration is attractive because a fragment repeats per arm; accommodation
+is expensive for exactly that reason, and the arithmetic runs the other way.
+Worked case: a lane trial wrote `stencil` INSIDE `node` — where every other
+property of the box goes, and where a person thinks it belongs ("this box is
+a database") — and lost the batch to the refusal. Accepting it where the
+model already reaches looks like a one-field change. Measured on the
+four-arm node draft, `node.add` alone:
+
+| shape | visibleBytes | parameters | undescribed |
+|---|---|---|---|
+| refuse + redirect (ships today) | 38,300 | 345 | 221 |
+| accept in `node`, described | 39,320 (**+1,020**) | 349 | 221 |
+| accept in `node`, undescribed | 38,604 (**+304**) | 349 | 225 (**+4**) |
+
+Neither shape moves C1, C13 or C3 DOWN, so neither clears §1's rule on its
+own; the only column that could justify either is C13. **Its ceiling is
+already known from the before-reading, which is why no rung-3 run was
+spent**: the misplacement hit one task, one trial in three, and the trial
+still PASSED — the refusal names the key, says it is not a node field, and
+says where it goes, so the model repaired it in one call. The table is read
+on every turn of every conversation; a ten-turn conversation pays the cheap
+shape's +304 bytes ten times to save at most that one call.
+
+The reason the trade is this lopsided is that **the expensive half of the
+problem was already fixed by a change that cost nothing**. When the draft
+STRIPPED, the identical mistake was accepted silently, the boxes were drawn
+undressed, and one trial spent seventeen further calls rebuilding the
+vocabulary by hand. Making the draft `.strict()` with a redirect turned that
+into one refused call. What remained was a retry, and a retry is not worth
+1,020 bytes a turn — nor 304.
+
+**So: price the refusal before buying the accommodation.** A good error
+message is the cheapest thing on this table — it costs bytes only when it
+fires, while a field costs bytes on every turn forever. Reach for the schema
+only when the refusal cannot name the repair.
+
 ## Traps, each paid for once
 
 - **Run the lane from an EMPTY directory.** The `claude` CLI loads the
