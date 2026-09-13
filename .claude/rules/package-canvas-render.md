@@ -840,6 +840,33 @@ the table alone.
       claiming `maxWidth` while an atomic run paints past it is what let
       `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
       all agree on a size nothing actually fitted in.
+    - **Kinsoku holds across an INLINE BOUNDARY, not only inside a run**
+      (`layout/nodes/inline-junction.ts`). The wrapper decides breaks one
+      `emit` call at a time and every inline node is its own call, so the
+      junction between two of them was a break opportunity by accident: a
+      `。` after `` `code` ``, after `**強調**`, or after an icon opened a
+      line, which is precisely what this decision says cannot happen.
+      Measured on the wrapping scoreboard, `forbiddenLineStarts` 4 -> 0. The
+      junction is asked of `uaxSegments` — the SAME authority, never a
+      character table of this package's own — and a break it forbids
+      relocates the stretch already on the line down to join the incoming
+      text, rather than splitting a pair no line may split. Price: +2 runs,
+      +2 lines, +4 measure calls over the 42-row corpus, all of it on the two
+      rows that relocate; the other 40 are byte-identical.
+      A run that PAINTS rather than spells answers U+FFFC OBJECT REPLACEMENT
+      CHARACTER at both edges. Its placeholder is an EM SPACE, so asking UAX
+      #14 about the text would say a picture is a space and a break after a
+      space is always allowed — which is the shape the defect was first
+      reported in. `uaxSegments` is its own module for the one-producer
+      reason: the granularity ladder and the junction rule must not come to
+      disagree about where a line may break.
+      What it does NOT fix, measured and left: an ATOMIC run is still cut
+      against the width remaining when it was placed, so a relocated one can
+      land on a line with room to spare and still wear its fade. Moving such
+      a run to a fresh line instead was implemented and read — it takes
+      `inline-code@320` from 2 lines to 3 with no defect column moving, so it
+      is a taller-box-versus-a-cut-run trade that belongs in its own
+      increment.
     On top of UAX #14, **BudouX narrows the candidates to phrase (文節)
     boundaries for Japanese**, a strict subset of the UAX opportunities, so
     preferring them costs nothing in fit and buys a line that breaks where a

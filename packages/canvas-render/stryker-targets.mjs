@@ -46,6 +46,17 @@ export const MUTATED = [
   // equivariance are properties over random boxes and seeds, and the
   // silhouette per outline kind is pinned by example.
   'src/layout/ink/sketch.ts',
+  // The junction rule that carries kinsoku across an inline boundary. It is a
+  // RULE rather than a ladder of ways to decline, and every one of its
+  // decisions is mutation-shaped: `clusterRun <= lineRun`, the two `=== ''`
+  // sentinels, `.at(0)`/`.at(-1)`, `length > 1`. What judges it inside the
+  // lane is `inline-boundary-break.test.ts` alone — the wrapping scoreboard's
+  // `forbiddenLineStarts` column would price it too, but that suite is
+  // excluded from the lane's vitest config for run time — so three of those
+  // decisions were mutation-checked by hand when it landed (the junction
+  // always breakable, never relocating, and a painting run answering its own
+  // EM SPACE instead of U+FFFC: 5, 5 and 1 test red respectively).
+  'src/layout/nodes/inline-junction.ts',
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:
