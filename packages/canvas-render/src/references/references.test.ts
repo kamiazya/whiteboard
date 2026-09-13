@@ -62,6 +62,30 @@ describe('imageTargets', () => {
     ).toEqual(['asset:deep'])
   })
 
+  /**
+   * A body is untrusted input, and the first version of this scan was a regex
+   * whose inner `[^\]]*` re-attempted at every `![`. Quadratic, and caught by
+   * CodeQL as `js/polynomial-redos` (high) rather than by anything here.
+   *
+   * The FIXTURE is the part worth reading. `'!['.repeat(n)` alone proves
+   * nothing — it holds no `](`, so the cheap gate returns before either
+   * version scans, and the first guard written here passed against the
+   * restored regex. What reaches the scan is a body that opens with a real
+   * image and then repeats `![`, which is an ordinary shape: measured on the
+   * regex, 37ms at 5000, 568ms at 20000, 2328ms at 40000. The forward pass
+   * does the 40000 case in under a tenth of a millisecond.
+   *
+   * The ceiling sits four orders of magnitude above that measurement and one
+   * below the regression, which is what makes it decisive under a loaded
+   * parallel run rather than a timing test that flakes.
+   */
+  it('scans a pathological body in linear time', () => {
+    const body = `![a](asset:real) ${'!['.repeat(40_000)}`
+    const started = performance.now()
+    expect(imageTargets({ bodies: [body] })).toEqual(['asset:real'])
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
   it('ignores a URL no keeper holds, which needs no resolution anyway', () => {
     // An absolute URL already draws, and a bare path is a separate question
     // (relative to WHAT), so neither is asked for. Asking would be a load
