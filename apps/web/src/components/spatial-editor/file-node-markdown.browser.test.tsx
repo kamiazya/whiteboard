@@ -1,4 +1,5 @@
 import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 /**
  * The verified user flow, locked in: a file node pointing at a markdown
  * document in the same workspace renders that document's prose inside the
@@ -28,15 +29,14 @@ const CARD = { title: 'the facet card title', rows: [{ label: 'type', value: 'no
 function canvasWithDocumentNode(): SpatialCanvas {
   return {
     nodes: [
-      {
+      fileNode({
         id: 'f1',
-        type: 'file',
         x: 40,
         y: 40,
         width: DOCUMENT_NODE_WIDTH,
         height: DOCUMENT_NODE_HEIGHT,
         file: 'notes',
-      },
+      }),
     ],
     edges: [],
   }

@@ -6,6 +6,7 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {
   BoundingBox,
   ResolvedEdgeNode,
@@ -71,15 +72,14 @@ function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayo
   }
 }
 
-const TEXT_NODE: SpatialNode = {
+const TEXT_NODE: SpatialNode = textNode({
   id: 'n1',
-  type: 'text',
   x: 0,
   y: 0,
   width: 200,
   height: 100,
   text: 'content',
-}
+})
 
 function canvasWith(comments: SpatialCanvas['comments']) {
   return {
@@ -270,24 +270,15 @@ describe('comment layer', () => {
   it('rides the target edge: pinned on its routed path, at the point nearest the stored anchor', () => {
     // Two nodes side by side, so the edge between them is a straight line
     // at their shared centre height; the comment is stored well below it.
-    const left: SpatialNode = {
-      id: 'a',
-      type: 'text',
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100,
-      text: 'a',
-    }
-    const right: SpatialNode = {
+    const left: SpatialNode = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 100, text: 'a' })
+    const right: SpatialNode = textNode({
       id: 'b',
-      type: 'text',
       x: 400,
       y: 0,
       width: 100,
       height: 100,
       text: 'b',
-    }
+    })
     const canvas: SpatialCanvas = {
       nodes: [left, right],
       edges: [
@@ -438,15 +429,14 @@ describe('comment layer', () => {
   })
 
   describe('placement', () => {
-    const NEIGHBOUR: SpatialNode = {
+    const NEIGHBOUR: SpatialNode = textNode({
       id: 'n2',
-      type: 'text',
       x: 214,
       y: 20,
       width: 200,
       height: 100,
       text: 'neighbour',
-    }
+    })
     function bboxOverlap(a: BoundingBox, b: BoundingBox): number {
       const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
       const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
@@ -498,9 +488,7 @@ describe('comment layer', () => {
       // A wall to the right of the anchor takes both right-hand quadrants.
       const scene = layoutSpatialCanvas(
         {
-          nodes: [
-            { id: 'wall', type: 'text', x: 405, y: -500, width: 400, height: 1000, text: 'w' },
-          ],
+          nodes: [textNode({ id: 'wall', x: 405, y: -500, width: 400, height: 1000, text: 'w' })],
           edges: [],
           comments: [{ id: 'c1', x: 400, y: 300, text: 'left' }],
         },
@@ -522,7 +510,7 @@ describe('comment layer', () => {
     it('a group frame is not an obstacle, so a comment inside a group stays inside it', () => {
       const scene = layoutSpatialCanvas(
         {
-          nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 800, height: 800 }],
+          nodes: [groupNode({ id: 'g', x: 0, y: 0, width: 800, height: 800 })],
           edges: [],
           comments: [{ id: 'c1', x: 100, y: 100, text: 'in the frame' }],
         },
@@ -557,15 +545,14 @@ describe('comment layer', () => {
 })
 
 describe('a passage of a node’s text (the text arm naming a node)', () => {
-  const NOTE: SpatialNode = {
+  const NOTE: SpatialNode = textNode({
     id: 'n1',
-    type: 'text',
     x: 0,
     y: 0,
     width: 400,
     height: 100,
     text: 'ship the plan by friday',
-  }
+  })
   const passage = (exact: string, status: CommentThread['status'] = 'open'): CommentThread => ({
     id: 't1',
     anchor: { kind: 'text', nodeId: 'n1', quote: { exact }, start: 0, end: 1 },
@@ -635,8 +622,8 @@ describe('a passage of a node’s text (the text arm naming a node)', () => {
 })
 
 describe('node sets and regions (the spatial arm with nodeIds or a rect)', () => {
-  const A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' } as const
-  const B = { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 50, text: 'b' } as const
+  const A = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' })
+  const B = textNode({ id: 'b', x: 300, y: 200, width: 100, height: 50, text: 'b' })
   const setThread = (status: 'open' | 'resolved' = 'open'): CommentThread => ({
     id: 'set',
     anchor: { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 10, height: 10 },

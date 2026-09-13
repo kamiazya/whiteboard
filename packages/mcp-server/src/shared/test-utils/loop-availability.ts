@@ -128,3 +128,41 @@ function round(value: number): number {
 export function loopTurnShare(availability: LoopAvailability): number {
   return availability.samples / (availability.elapsedMs / availability.intervalMs)
 }
+
+/**
+ * The worst stall THIS MACHINE imposes on a body that never blocks.
+ *
+ * `worstStallMs` cannot tell a blocked loop from a DESCHEDULED process: both
+ * arrive as ticks that did not land. So on a contended runner the reading
+ * carries time the OS took away from the process, and an assertion written
+ * as an absolute number of milliseconds is partly an assertion that the
+ * machine was quiet. That is not a hypothetical — this file's own
+ * calibration suite records three machine-calibrated constants that failed
+ * in this repo for exactly that reason, and the rule it settled on is the
+ * one this function exists to serve: **claim a DIFFERENCE between two references
+ * measured in the same run, never a bound in milliseconds.**
+ *
+ * This is the free-loop reference for `stallCeilingMs`. The body churns for
+ * the same wall clock as the pass being judged and yields every turn, so
+ * whatever it reports is what the machine did to a worker that was behaving
+ * — and the ceiling is charged only with what is left over.
+ *
+ * `setImmediate` rather than a timer: it returns through the check phase and
+ * the loop passes through the timers phase on the way back, so the sampler
+ * keeps its turns, and the reference occupies a CPU the way a yielding
+ * worker does rather than sleeping where a contended machine cannot see it.
+ */
+export async function measureSchedulingFloor(
+  forMs: number,
+  options: { intervalMs?: number } = {},
+): Promise<LoopAvailability> {
+  const { availability } = await measureLoopAvailability(async () => {
+    const until = process.hrtime.bigint() + BigInt(Math.round(Math.max(0, forMs) * 1e6))
+    while (process.hrtime.bigint() < until) {
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve)
+      })
+    }
+  }, options)
+  return availability
+}

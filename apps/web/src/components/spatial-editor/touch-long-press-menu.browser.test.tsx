@@ -4,7 +4,9 @@
  * editor arms its own timer on a single stationary touch. Real browser:
  * the behavior hangs off genuine pointer-event dispatch and hit geometry.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -14,7 +16,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const withNode: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 60, text: 'hold me' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 60, text: 'hold me' })],
   edges: [],
 }
 

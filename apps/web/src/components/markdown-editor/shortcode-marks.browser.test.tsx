@@ -8,7 +8,9 @@
  * then a note drawn one way in the document editor and another on the
  * canvas. Both hosts are mounted for real for that reason.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
@@ -78,15 +80,7 @@ describe('a finished shortcode is drawn as its emoji while writing', () => {
       // caret at the end of the body (measured, offset 11 on 'go :rocket:'),
       // which is the closing colon itself and therefore still revealed.
       nodes: [
-        {
-          id: 'n1',
-          type: 'text',
-          x: 100,
-          y: 100,
-          width: 260,
-          height: 120,
-          text: 'go :rocket: now',
-        },
+        textNode({ id: 'n1', x: 100, y: 100, width: 260, height: 120, text: 'go :rocket: now' }),
       ],
       edges: [],
     }

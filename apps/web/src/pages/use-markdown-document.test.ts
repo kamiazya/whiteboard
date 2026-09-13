@@ -6,6 +6,7 @@
  * save. Without that, a binding-driven edit would be on screen and in the
  * CRDT but never persisted and never reflected in the preview.
  */
+
 import {
   MARKDOWN_BODY_KEY,
   MARKDOWN_BODY_NODE_ID,
@@ -13,6 +14,7 @@ import {
   readSpatialCanvas,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { type Loro, LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
@@ -300,15 +302,14 @@ describe('a document written by the daemon-side writer', () => {
   const legacy = (doc: Loro) => {
     writeSpatialCanvas(doc, {
       nodes: [
-        {
+        textNode({
           id: MARKDOWN_BODY_NODE_ID,
-          type: 'text',
           x: 0,
           y: 0,
           width: 600,
           height: 400,
           text: 'written by wb_document_set',
-        },
+        }),
       ],
       edges: [],
     })

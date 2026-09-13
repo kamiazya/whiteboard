@@ -60,6 +60,10 @@ export {
   canvasRenderSvgOutputSchema,
   createCanvasRenderSvgTool,
 } from './tools/canvas-render-svg.js'
+// The snapshot's own shape, exported for the same reason every other tool's
+// schemas here are: a reader outside this package needs the one declaration
+// of what a board read answers, rather than a second description of it.
+export { canvasSnapshotSchema } from './tools/canvas-snapshot.js'
 export type { CanvasViewInput, CanvasViewOutput } from './tools/canvas-view.js'
 export {
   canvasViewInputSchema,

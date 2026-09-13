@@ -11,6 +11,7 @@
  * bar later slices build on; if a route or bridge change breaks any leg of
  * it, promotion silently degrades into the per-document copy it replaces.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,6 +24,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { seedWorkspaceRow } from '../_test-helpers.js'
@@ -235,7 +237,7 @@ it('promotion lands as ONE fan-out frame under a live subscriber, whose pending 
   expect(own).not.toBeNull()
   if (own === null) return
   writeSpatialCanvas(documentContainers(replica, own.documentId), {
-    nodes: [{ id: 'live-edit', type: 'text', text: 'live', x: 0, y: 0, width: 10, height: 10 }],
+    nodes: [textNode({ id: 'live-edit', text: 'live', x: 0, y: 0, width: 10, height: 10 })],
     edges: [],
   })
   replica.commit()

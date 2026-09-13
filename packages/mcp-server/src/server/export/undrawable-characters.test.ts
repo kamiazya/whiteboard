@@ -7,11 +7,12 @@
 // The information to say so is already on hand — `charToGlyphIndex` is what
 // the measurer uses to decide when to fall back to the estimator. This makes
 // it an answer instead of an internal detail.
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { undrawableCharacters } from './undrawable-characters.js'
 
 const CANVAS = (text: string) => ({
-  nodes: [{ id: 'n', type: 'text' as const, x: 0, y: 0, width: 200, height: 60, text }],
+  nodes: [textNode({ id: 'n', x: 0, y: 0, width: 200, height: 60, text })],
   edges: [],
 })
 
@@ -44,8 +45,8 @@ describe('undrawableCharacters', () => {
   test('reports each character once, in first-seen order, across every node', async () => {
     const missing = await undrawableCharacters({
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '漢字' },
-        { id: 'b', type: 'text', x: 0, y: 20, width: 10, height: 10, text: '漢字も' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '漢字' }),
+        textNode({ id: 'b', x: 0, y: 20, width: 10, height: 10, text: '漢字も' }),
       ],
       edges: [],
     })
@@ -59,9 +60,9 @@ describe('undrawableCharacters', () => {
   test('reads group labels and edge labels too, not just node text', async () => {
     const missing = await undrawableCharacters({
       nodes: [
-        { id: 'g', type: 'group', x: 0, y: 0, width: 100, height: 100, label: 'グループ' },
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'a' },
-        { id: 'b', type: 'text', x: 0, y: 20, width: 10, height: 10, text: 'b' },
+        groupNode({ id: 'g', x: 0, y: 0, width: 100, height: 100, label: 'グループ' }),
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'a' }),
+        textNode({ id: 'b', x: 0, y: 20, width: 10, height: 10, text: 'b' }),
       ],
       edges: [
         {

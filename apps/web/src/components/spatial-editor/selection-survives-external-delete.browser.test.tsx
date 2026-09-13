@@ -8,7 +8,9 @@
 // laid-out box, so the survivors keep drawing their outlines. What it
 // disables is the verbs, whose branches are gated on the PRIMARY having a
 // box — which is why the assertion here is on Delete, not on the outlines.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -19,9 +21,9 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 300, y: 100, width: 120, height: 60, text: 'B' },
-    { id: 'c', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'C' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 300, y: 100, width: 120, height: 60, text: 'B' }),
+    textNode({ id: 'c', x: 500, y: 100, width: 120, height: 60, text: 'C' }),
   ],
   edges: [],
 }

@@ -63,6 +63,38 @@ export interface DocumentEditorSurfaceProps {
 
 function noopChange(): void {}
 
+/**
+ * A stable tag per binding ARRAY, so the editor's key can change with the
+ * binding's identity and not merely with its presence.
+ *
+ * A CRDT binding names one LoroDoc, and `SourcePane` builds its CodeMirror
+ * view once per mount — a binding that arrives on a LATER render, or is
+ * rebuilt around a replaced document, reaches the props and never the view,
+ * while `onChange` below has already stepped aside for it. Everything typed
+ * in that interval is written nowhere. Keying on the binding's identity
+ * remounts the view at the moment the binding appears or changes; what was
+ * typed before it went through `setBody` and is already in the document, so
+ * the new view opens on it.
+ *
+ * WeakMap, so a discarded binding does not hold its tag alive. Identity, not
+ * equality, on purpose: it relies on the page memoising the array on its
+ * document — the same thing the binding itself relies on. `the editor
+ * survives a re-render that does not change the binding` pins that, so an
+ * unstable memo upstream fails a test rather than remounting the editor
+ * under whoever is typing.
+ */
+const bindingTags = new WeakMap<object, number>()
+let nextBindingTag = 0
+function bindingTag(extensions: object | undefined): string {
+  if (extensions === undefined) return 'unbound'
+  let tag = bindingTags.get(extensions)
+  if (tag === undefined) {
+    tag = ++nextBindingTag
+    bindingTags.set(extensions, tag)
+  }
+  return `bound-${tag}`
+}
+
 export function DocumentEditorSurface(props: DocumentEditorSurfaceProps): ReactNode {
   switch (props.kind) {
     case 'spatial':
@@ -75,7 +107,7 @@ export function DocumentEditorSurface(props: DocumentEditorSurfaceProps): ReactN
         <div className="flex h-full min-h-0 flex-col">
           <div className="min-h-0 flex-1">
             <MarkdownEditor
-              key={props.documentKey}
+              key={`${props.documentKey}:${bindingTag(sourceExtensions)}`}
               value={body}
               // A CRDT binding owns the write path when present; `value`
               // then flows only outward (preview, word count).

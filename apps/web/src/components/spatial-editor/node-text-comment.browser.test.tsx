@@ -3,7 +3,9 @@
 // the selection, the thread it commits carries the text arm with the node's
 // id and the quoted passage, and the next edit of that node draws the
 // passage highlighted — the same projection the note's source pane draws.
+
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -15,15 +17,14 @@ import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-const NODE = {
+const NODE = textNode({
   id: 'n1',
-  type: 'text',
   x: 100,
   y: 300,
   width: 220,
   height: 80,
   text: 'ship the plan by friday',
-} as const
+})
 const start: SpatialCanvas = { nodes: [NODE], edges: [] }
 
 function makeHost(threads?: readonly CommentThread[], initial: SpatialCanvas = start) {

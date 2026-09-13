@@ -5,6 +5,7 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 // out far enough collapses the miniature back to a card (hysteresis keeps
 // the boundary from flickering).
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -15,8 +16,8 @@ afterEach(cleanup)
 
 const referenced: SpatialCanvas = {
   nodes: [
-    { id: 'r1', type: 'text', x: 0, y: 0, width: 300, height: 150, text: 'inside' },
-    { id: 'r2', type: 'text', x: 400, y: 0, width: 200, height: 100, text: 'more' },
+    textNode({ id: 'r1', x: 0, y: 0, width: 300, height: 150, text: 'inside' }),
+    textNode({ id: 'r2', x: 400, y: 0, width: 200, height: 100, text: 'more' }),
   ],
   edges: [],
 }
@@ -48,7 +49,7 @@ function embeddedTextExists(container: HTMLElement): boolean {
 
 it('a large file node renders the referenced canvas inline; a small one stays a card', async () => {
   const large: SpatialCanvas = {
-    nodes: [{ id: 'big', type: 'file', x: 60, y: 60, width: 320, height: 240, file: 'ref-1' }],
+    nodes: [fileNode({ id: 'big', x: 60, y: 60, width: 320, height: 240, file: 'ref-1' })],
     edges: [],
   }
   const Host = makeHost(large)
@@ -58,7 +59,7 @@ it('a large file node renders the referenced canvas inline; a small one stays a 
   cleanup()
 
   const small: SpatialCanvas = {
-    nodes: [{ id: 'tiny', type: 'file', x: 60, y: 60, width: 120, height: 80, file: 'ref-1' }],
+    nodes: [fileNode({ id: 'tiny', x: 60, y: 60, width: 120, height: 80, file: 'ref-1' })],
     edges: [],
   }
   const SmallHost = makeHost(small)
@@ -75,7 +76,7 @@ it('a large file node renders the referenced canvas inline; a small one stays a 
 
 it('zooming far out collapses an expanded miniature back to the card', async () => {
   const large: SpatialCanvas = {
-    nodes: [{ id: 'big', type: 'file', x: 300, y: 220, width: 320, height: 240, file: 'ref-1' }],
+    nodes: [fileNode({ id: 'big', x: 300, y: 220, width: 320, height: 240, file: 'ref-1' })],
     edges: [],
   }
   const Host = makeHost(large)

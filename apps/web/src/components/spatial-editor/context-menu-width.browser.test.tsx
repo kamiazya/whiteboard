@@ -2,7 +2,9 @@
 // is not merely ugly — it cannot be tapped. jsdom has no layout, so this is
 // only measurable in a real browser: every jsdom test stayed green while the
 // phone clipped Color, Shape and Symbol alike.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -11,7 +13,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 60, y: 60, width: 140, height: 80, text: 'A' }],
+  nodes: [textNode({ id: 'a', x: 60, y: 60, width: 140, height: 80, text: 'A' })],
   edges: [],
 }
 

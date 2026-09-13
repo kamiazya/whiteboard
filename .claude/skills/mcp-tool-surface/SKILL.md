@@ -224,11 +224,64 @@ default. Check these before designing a bigger cut:
   The first is the SDK's and cannot be removed; the second is C10's price
   and is kept.
 
-A description costs ~50 bytes each time it is emitted, and a field of the
-node union is emitted once per arm per op: describing every parameter
-would add ~40% to the table. Describe what the lane shows a model getting
-wrong (the refusal texts), and let JSON Canvas fields mean what the spec
-says.
+Two cuts that look available and are NOT, each refuted by measurement
+rather than by argument. Both would pass every gate this repo has.
+
+- **Registering a DESCRIBED LEAF deletes its description.** Naming a
+  schema in zod's registry emits it into `$defs` once and `$ref`s it at
+  each site, which is where the 5,177 bytes the five existing
+  registrations save come from (measured by removing each one: `LineEnd`
+  -2,540 visible, `EdgeEnd` -1,382, `Bends` -609, `CanvasColor` -595,
+  `CanvasPoint` -51, `NodeEmbed` 0 — output schemas only). But a
+  description INSIDE a registered object survives (`EdgeEnd` keeps all
+  three of its) while a description ON the registered schema is dropped:
+  `$defs.BoxWidth` came back `{"type":"number","minimum":0}` with the
+  sentence gone. Registering the described `width`/`height` reads as -837
+  bytes and 4 arms x (60 + 150) is the whole of it — the bytes ARE the
+  descriptions. **Only a composite may be registered.**
+- **`allOf` + `$ref` inheritance: CLOSED, and not on the axis first claimed.**
+  The four node arms spend 424 bytes each on the same shared base, 1,696
+  together, so extracting it looks worth ~1,100. Four things were measured,
+  in the order they were found, and each on its own settles it:
+
+  1. **It never reaches the table.** The published node draft is derived
+     `spatialNodeSchema.options` -> `.omit()` -> `.partial()` -> `.extend()`
+     -> `z.discriminatedUnion`. Every step requires a ZodObject and every
+     step FLATTENS, so making the stored schema an intersection changes the
+     table by nothing. Reaching it means building the write-side drafts as
+     intersections directly, which costs `discriminatedUnion` (refusal
+     quality), `NODE_DRAFT_KEYS`, and the free derivation the code comment
+     calls "the point".
+  2. **It does not compile or run.** An intersection is not an object:
+     `.omit()` is gone (four sites) and `z.infer` degrades to `{}` /
+     `unknown` across `canvas-edit.ts`. The server does not start.
+  3. **Spec-conformance and C10 cannot both hold.** ajv 8, 2020-12, four
+     shapes: flat + strict accepts valid input and refuses a stray key;
+     `allOf` with both halves strict REFUSES valid input; `allOf` with
+     neither strict accepts a stray key (C10 lost); only `allOf` +
+     `unevaluatedProperties` is correct, and zod 4.4.3 reads that keyword
+     without ever emitting it.
+  4. **The model axis was never the blocker.** The table already publishes
+     five `$ref`s and the round-14 reading was pass^3 1.0 / debtFree^3 1.0,
+     so `$ref` comprehension is established. Only `allOf` specifically is
+     unmeasured — and a rung-3 run would not move any of 1-3, which is why
+     it was not spent.
+
+  The first record of this said "publishes a schema that refuses every valid
+  call" and stopped there. That is true of the artifact and was the wrong
+  thing to lead with: ajv answers spec-conformance (defensibly — both MCP
+  SDKs bundle it, and `fromJsonSchema` uses it for raw-JSON-Schema tools),
+  and says nothing about C14. It also asserted "only a client validating
+  against the published schema breaks" with no client checked. Checked
+  since: this server validates with zod, and the MCP client SDK does not
+  validate outgoing arguments against `inputSchema` at all.
+
+**Nothing else in the table is worth registering.** Re-scanned after the
+node extension landed: every remaining repeated fragment is a described
+leaf, which is the refuted shape above. The one exception is a
+description-free record type (`{type: object, propertyNames, additional
+Properties}`, four sites, ~99 bytes) — safe by the rule and 0.26% of the
+table, so not worth an increment on its own.
 
 ## Traps, each paid for once
 

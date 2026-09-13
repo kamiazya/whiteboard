@@ -93,6 +93,7 @@ describe('CONTRIBUTING describes the gates that actually exist', () => {
   const WORDED = new Map([
     ['five', 5],
     ['six', 6],
+    ['seven', 7],
   ])
 
   it('states the number of pre-push checks correctly', () => {

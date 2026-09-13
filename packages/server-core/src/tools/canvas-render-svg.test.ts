@@ -7,6 +7,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -29,7 +30,7 @@ describe('wb_scene_render tool', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' })],
         edges: [],
       })
     })
@@ -65,7 +66,7 @@ describe('wb_scene_render tool', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 100, label: 'Clients' }],
+        nodes: [groupNode({ id: 'g', x: 0, y: 0, width: 300, height: 100, label: 'Clients' })],
         edges: [],
       })
     })
@@ -152,7 +153,7 @@ describe('wb_scene_render measurer injection', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'hi' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 400, height: 200, text: 'hi' })],
         edges: [],
       })
     })
@@ -188,8 +189,8 @@ describe('wb_scene_render style (ADR-0030 decision 6)', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-          { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 50, text: 'b' },
+          textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+          textNode({ id: 'b', x: 300, y: 200, width: 100, height: 50, text: 'b' }),
         ],
         edges: [
           {
@@ -253,7 +254,7 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'a body' }],
+        nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'a body' })],
         edges: [],
         facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
       })

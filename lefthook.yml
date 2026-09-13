@@ -65,3 +65,33 @@ pre-push:
     # and derives the path from its own location.
     file-size-budget:
       run: pnpm vitest run --project mcp-node packages/mcp-server/src/server/file-size-budget.test.ts
+    # The same argument as file-size-budget, one order of magnitude wider. Most
+    # of arch-lint's files scan the repo from OUTSIDE the package they govern —
+    # the sleep ledger, the lazy-import check, the vocabulary check, the title
+    # check, the boundary and cycle scans — so running the project you changed
+    # never runs the guard that owns the rule you broke. Measured: a fixed
+    # sleep added to an mcp-server test leaves `--project mcp-node` green at
+    # 9/9 and fails `arch-lint-node`.
+    #
+    # This branch paid for that twice, both times a push that CI rejected: an
+    # in-body dynamic import in a `mcp-server` test, then a fixed sleep in the
+    # same package. `.claude/rules/dev-flow.md` records the gap in prose, which
+    # is a rung that cannot notice being forgotten — and was not, by the person
+    # who had written it down.
+    #
+    # A whole PROJECT rather than a file, and that is not a quiet exception to
+    # "no test suite at push". The suite rule exists because a product suite
+    # under push-time load is a saturated machine running timing-sensitive
+    # code — which is how the port-squatting flake got in. This project runs no
+    # product code, opens no port, starts no server and asserts on no clock; it
+    # reads files. Scoping it to the 13 scanning files instead would be a list
+    # to keep in step, which is the defect one level up.
+    #
+    # Costs the gate nothing, by the measure this file already uses: across
+    # three real `lefthook run pre-push` runs it took 25.84s, 29.25s and 28.73s
+    # while the run's total stayed exactly `pnpm -r typecheck`'s own (38.88s,
+    # 42.61s, 42.93s). It is the second-longest command and never the critical
+    # path. Quote the invariant, not the reading — the reading swings with
+    # contention.
+    arch-lint:
+      run: pnpm vitest run --project arch-lint-node

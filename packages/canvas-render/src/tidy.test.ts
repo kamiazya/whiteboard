@@ -687,6 +687,54 @@ const overlapsWithMargin = (a: ReturnType<typeof rectOf>, b: ReturnType<typeof r
   a.y < b.y + b.h + TIDY_MARGIN_PX &&
   b.y < a.y + a.h + TIDY_MARGIN_PX
 
+/**
+ * The counterexample the grid property found, pinned as an example before
+ * the fix — a shrunk input is worth more as a named case than as a seed
+ * nobody can read.
+ *
+ * What it exposes: a unit may keep an OFF-GRID position when it is lined up
+ * with a neighbour's centre or far edge, and here `n1` lines its far edge up
+ * with `n5`'s (n5 at x=240 width 140 ends at 380; n1 width 101 therefore
+ * sits at 279). Then overlap resolution moves n5 to 256 in the same pass,
+ * its far edge becomes 396, and n1 is left at 279 — off the grid and lined
+ * up with nothing.
+ *
+ * `clearAfter` already guards the neighbouring family, and its comment names
+ * it: the snap jams a unit, the hop pushes it away, the next pass snaps it
+ * back. It checks the SNAPPED unit for overlap, which is why it cannot see
+ * this one — what moves here is the ANCHOR.
+ *
+ * n5 oscillates 240 <-> 256 between the two phases on every pass, so the
+ * settle loop still reaches a repeated state and idempotence holds. Only the
+ * grid invariant breaks, which is exactly why no other test saw it.
+ */
+describe('an off-grid alignment whose anchor moves away', () => {
+  it('lands on the grid rather than keeping an anchor that is gone', () => {
+    const nodes = [
+      box('n0', 236, 0, 101, 40),
+      box('n1', 260, 0, 101, 40),
+      box('n2', 60, 0, 41, 40),
+      box('n3', 0, 92, 41, 40),
+      box('n4', 24, 92, 140, 40),
+      box('n5', 60, 140, 140, 40),
+    ]
+    const moves = tidyNodes(nodes)
+    const after = nodes.map((n) => {
+      const m = moves.find((mm) => mm.id === n.id)
+      return m === undefined ? n : { ...n, x: m.x, y: m.y }
+    })
+    const n1 = after.find((n) => n.id === 'n1') as TidyNode
+    const linedUp = after.some(
+      (o) =>
+        o.id !== 'n1' &&
+        (Math.abs(o.x + o.width / 2 - (n1.x + n1.width / 2)) <= 0.5 ||
+          o.x + o.width === n1.x + n1.width),
+    )
+    // Measured before the fix: x=279, 279 % 8 === 7, lined up with nothing.
+    expect(n1.x % TIDY_GRID_PX === 0 || linedUp).toBe(true)
+  })
+})
+
 describe('convergence', () => {
   it('settles a canvas whose passes cycle instead of reaching a fixpoint', () => {
     // Found by the idempotence property (seed 1329482316) and pre-existing:

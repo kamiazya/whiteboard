@@ -12,7 +12,9 @@
 // resolve their node in the render and return null when it is missing;
 // these now do the same, which is why the assertion is that the dialog is
 // GONE rather than that some later write was refused.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -33,7 +35,7 @@ const start: SpatialCanvas = {
       height: 60,
       url: 'https://example.com/a',
     },
-    { id: 'f1', type: 'file', x: 100, y: 300, width: 200, height: 60, file: 'notes/one.md' },
+    fileNode({ id: 'f1', x: 100, y: 300, width: 200, height: 60, file: 'notes/one.md' }),
   ],
   edges: [],
 }

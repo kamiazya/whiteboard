@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { annotationIdSchema, textAnchorSchema } from './annotation.js'
 import { nodeIdSchema } from './ids.js'
-import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import {
   canvasColorSchema,
   canvasEdgeSchema,
   canvasLineSchema,
+  nodePositionSchema,
+  nodeSizeSchema,
   spatialNodeSchema,
 } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
@@ -69,10 +70,16 @@ import { okfActorSchema, okfTimestampSchema } from './trust.js'
  */
 export const nodePatchFieldsSchema = z
   .object({
-    x: integerSchema.optional(),
-    y: integerSchema.optional(),
-    width: nonnegativeIntegerSchema.optional().describe('Box width; text wraps at it.'),
-    height: nonnegativeIntegerSchema
+    // Geometry is DERIVED from what the node stores, never restated. Which
+    // keys are patchable is a judgement (above); the type behind a patchable
+    // key is not, and restating it is how this drifted: ADR-0037 slice 4 made
+    // a coordinate a real number and these four went on saying `int`, so the
+    // model stored an `x` of 10.5 that `node.patch` refused — which is what
+    // the editor writes, dragging at sub-pixel positions.
+    x: nodePositionSchema.optional(),
+    y: nodePositionSchema.optional(),
+    width: nodeSizeSchema.optional().describe('Box width; text wraps at it.'),
+    height: nodeSizeSchema
       .optional()
       .describe('Box height; one too short for the text is refused with the height it needs.'),
     color: canvasColorSchema.optional(),

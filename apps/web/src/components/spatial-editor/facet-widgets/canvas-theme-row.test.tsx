@@ -23,7 +23,7 @@ describe('the canvas theme row', () => {
     const widget = CANVAS_SETTINGS_WIDGETS[THEME_KEY]
     expect(widget).toBeDefined()
     const { getByRole } = render(
-      <>{widget?.({ canvas: canvasIn(undefined), run, facetRegistry: bundledFacetRegistry })}</>,
+      widget?.({ canvas: canvasIn(undefined), run, facetRegistry: bundledFacetRegistry }),
     )
     expect(getByRole('radio', { name: 'Default' })).toBeTruthy()
     expect(getByRole('radio', { name: 'Sketch' })).toBeTruthy()
@@ -39,9 +39,7 @@ describe('the canvas theme row', () => {
     const run = vi.fn()
     const widget = CANVAS_SETTINGS_WIDGETS[THEME_KEY]
     const { getByRole } = render(
-      <>
-        {widget?.({ canvas: canvasIn('visual.sketch'), run, facetRegistry: bundledFacetRegistry })}
-      </>,
+      widget?.({ canvas: canvasIn('visual.sketch'), run, facetRegistry: bundledFacetRegistry }),
     )
     expect((getByRole('radio', { name: 'Sketch' }) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(getByRole('radio', { name: 'Default' }))

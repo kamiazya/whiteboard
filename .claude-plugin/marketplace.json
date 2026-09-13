@@ -24,7 +24,7 @@
       },
       "homepage": "https://github.com/kamiazya/whiteboard",
       "repository": "https://github.com/kamiazya/whiteboard",
-      "license": "MIT",
+      "license": "Apache-2.0",
       "keywords": ["json-canvas", "diagramming", "mcp", "whiteboard", "claude-code", "codex"],
       "category": "productivity",
       "tags": ["diagramming", "mcp", "json-canvas", "visualization"]

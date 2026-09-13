@@ -21,6 +21,7 @@ export const FACET_GLYPH_SHAPES = [
   'circle',
   'diamond',
   'hexagon',
+  'octagon',
   'parallelogram',
   'cylinder',
   'none',

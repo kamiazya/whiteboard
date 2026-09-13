@@ -120,7 +120,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // see by reading a diff" list and the review workflow gained its opt-in
   // tool-surface dimension; the entry is trimmed to the pointer, and the
   // detail is the skill's.
-  '.claude/rules/dev-flow.md': 28,
+  //
+  // 29 since `arch-lint-node` joined the pre-push gate. The file sat 60
+  // characters under the boundary, so ANY addition bought this bucket — the
+  // entry is the fact, the criterion it met and a pointer, and the timings,
+  // the mutation checks and the scoping argument are `lefthook.yml`'s comment
+  // and `pre-push-entry.test.ts`, which is where someone editing the gate
+  // reads them. The first draft put all of that here and cost two buckets.
+  '.claude/rules/dev-flow.md': 29,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat
@@ -136,7 +143,18 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // measurements and the reproduction belong here, the prescription is one
   // sentence, and the two test files carry the rest at their own headers.
   // Leaves 330 characters of headroom, up from the 157 this file had.
-  '.claude/rules/integrator-flow.md': 15,
+  //
+  // 16 for the twelfth flake shape: a resize refused because the window is in
+  // fullscreen, which vitest reports as a 60s timeout naming the test that
+  // asked rather than the state that refused. Held to 645 characters, and it
+  // earns always-on space on the same argument the ninth, tenth and eleventh
+  // won on — the symptom names neither the cause nor the file that caused it,
+  // so a reader who cannot recognise it has nothing to search for. Two tests
+  // were written off as flakes on exactly that evidence. An `arch-lint` scan
+  // now prevents the known instance; this entry is for the next window state
+  // that is not fullscreen, which no scan can anticipate and which will
+  // present identically.
+  '.claude/rules/integrator-flow.md': 16,
   // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a
@@ -313,7 +331,17 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // nobody deletes it looking for dead code or invents a router to justify it.
 // Plus the note that an edge with a FREE end is not routed yet, which is a
 // decision rather than an omission.
-const CANVAS_RENDER_BUDGET = 133
+//
+// 134 for kinsoku across an INLINE BOUNDARY, and the bytes go to two things a
+// reader cannot get from the diff. That deciding WHERE a line may break is
+// still delegated to UAX #14 at the junction too — so nobody answers the next
+// such report with a character table, which is the shape the fix does not
+// take. And that an ATOMIC run is still cut against the width it had when it
+// was placed, so a relocated one can fade on a line with room: without that
+// sentence the next reader finds a fade beside empty space and reads the
+// junction rule as broken. The entry was cut from 1900 chars to fit one
+// bucket rather than two; what went was provenance the commit already holds.
+const CANVAS_RENDER_BUDGET = 134
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

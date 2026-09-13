@@ -3,7 +3,9 @@
 // comment's pin is not: its anchor IS the node's corner, and moving the
 // node is how it moves. Real browser: the pin is hit-tested against the
 // laid-out scene, which only exists once the editor has rendered.
+
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -29,7 +31,7 @@ const ANCHORED: CanvasComment = {
   targetNodeId: 'n1',
 }
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [ANCHORED, FREE],
 }
@@ -218,15 +220,16 @@ it('a node-anchored pin does not detach: no move-comment, the anchor stays the c
 // arrives a round trip AFTER the drop — the case that showed the jank: the
 // preview vanished, the committed group came back at the OLD anchor, and the
 // keyed patcher's FLIP then animated it to the new one.
-const FILLER = Array.from({ length: 12 }, (_, i) => ({
-  id: `f${i}`,
-  type: 'text' as const,
-  x: 20 + (i % 4) * 60,
-  y: 520 + Math.floor(i / 4) * 30,
-  width: 50,
-  height: 24,
-  text: `${i}`,
-}))
+const FILLER = Array.from({ length: 12 }, (_, i) =>
+  textNode({
+    id: `f${i}`,
+    x: 20 + (i % 4) * 60,
+    y: 520 + Math.floor(i / 4) * 30,
+    width: 50,
+    height: 24,
+    text: `${i}`,
+  }),
+)
 
 it('a drop lands the comment at the new anchor with no flight back from the old one', async () => {
   const { Host, latest } = makeHost({ ...start, nodes: [...start.nodes, ...FILLER] })

@@ -1,3 +1,4 @@
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import type { PastDocument, VersionsBackend } from './versions-backend.js'
 
@@ -44,7 +45,7 @@ export interface VersionsBackendHarness {
 function textOf(past: PastDocument | null): string | undefined {
   if (past === null || past.kind !== 'spatial') return undefined
   const node = past.canvas.nodes[0]
-  return node?.type === 'text' ? node.text : undefined
+  return node === undefined ? undefined : nodeText(node)
 }
 
 export function versionsBackendContract(

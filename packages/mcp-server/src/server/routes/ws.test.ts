@@ -7,6 +7,7 @@ import {
   resolveWorkspaceDocument,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -48,7 +49,7 @@ function workspaceEditFrame(snapshot: Uint8Array, path: string, nodeId: string):
   const entry = resolveWorkspaceDocument(clientDoc, path)
   if (!entry) throw new Error(`no document at "${path}" in workspace snapshot`)
   writeSpatialCanvas(documentContainers(clientDoc, entry.documentId), {
-    nodes: [{ id: nodeId, type: 'text', text: nodeId, x: 0, y: 0, width: 10, height: 10 }],
+    nodes: [textNode({ id: nodeId, text: nodeId, x: 0, y: 0, width: 10, height: 10 })],
     edges: [],
   })
   clientDoc.commit()

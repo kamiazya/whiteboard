@@ -92,7 +92,15 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // The column that grows when a deployment adds plugins is exactly the one
     // this scoreboard exists to watch, so the move is the reading rather than
     // a regression.
-    expect(census.facet).toHaveLength(14)
+    //
+    // 14 -> 15 for `facets["visual.axes/v0"].axes[]` (ADR-0036): the one
+    // position where a canvas names which of its own facets carry MEANING
+    // rather than appearance. CANVAS only, and that is the design — an axis
+    // is a statement about the whole drawing, so the same key on a node says
+    // nothing a reader could act on, and it adds one position rather than
+    // two. It is `extension` for the ordinary reason every facet is: JSON
+    // Canvas has no vocabulary for "this attribute is a semantic axis".
+    expect(census.facet).toHaveLength(15)
   })
 
   it('so 48 of the 71 positions a document can hold are outside the format', () => {
@@ -109,8 +117,15 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // relation — and put it where a strict reader loses it cleanly instead of
     // where the format refused the whole element. `dropped` going to zero in
     // the same move is the other half of that sentence.
+    //
+    // 48/71 -> 49/72: both move by exactly the one facet position above, so
+    // the share outside is 65.8% -> 68.1%. A position that only ever lives in
+    // the extension raises both halves of the ratio together, which is what
+    // makes it a different kind of move from the line's — that one changed
+    // the numerator and denominator by different amounts and for different
+    // reasons.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(48)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(71)
+    expect(outside).toBe(49)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(72)
   })
 })

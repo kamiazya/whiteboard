@@ -5,7 +5,9 @@
 // edit. Suppression inverts that: the scene stays the source of truth for
 // the chrome (silhouette, stroke, fill), and only the text yields to the
 // editor.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
@@ -26,17 +28,16 @@ function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {
 
 const CANVAS: SpatialCanvas = {
   nodes: [
-    {
+    textNode({
       id: 'edited',
-      type: 'text',
       x: 0,
       y: 0,
       width: 200,
       height: 120,
       text: 'editedbody',
       facets: { 'visual.shape/v0': { kind: 'diamond' } },
-    },
-    { id: 'bystander', type: 'text', x: 300, y: 0, width: 200, height: 120, text: 'bystanderbody' },
+    }),
+    textNode({ id: 'bystander', x: 300, y: 0, width: 200, height: 120, text: 'bystanderbody' }),
   ],
   edges: [],
 }
@@ -79,15 +80,14 @@ describe('suppressedBodyNodeIds', () => {
   it('a suppressed node carries no truncation mark — there is no drawn text to truncate', () => {
     const tall: SpatialCanvas = {
       nodes: [
-        {
+        textNode({
           id: 'edited',
-          type: 'text',
           x: 0,
           y: 0,
           width: 120,
           height: 40,
           text: 'line\n\nline\n\nline\n\nline\n\nline\n\nline\n\nline',
-        },
+        }),
       ],
       edges: [],
     }

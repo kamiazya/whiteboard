@@ -144,7 +144,17 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // why. Raised rather than paid for by trimming prose — this file funded
   // an earlier increment that way, and a budget met by deleting rationale
   // buys lines at the price of the thing the lines were for.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1140,
+  // +3 for nothing anyone wrote: renaming `emojiCompletionSource` to
+  // `shortcodeCompletionSource` (it serves both vocabularies now) made the
+  // `override` array one character too long for the line, and the formatter
+  // broke it across three. Recorded rather than fought, and NOT paid for by
+  // trimming prose, for the reason the entry above already gives.
+  // +3 for `addToOptions`, which draws an icon row's glyph where an emoji
+  // row shows its character. It has to be passed at each host's own
+  // `autocompletion()` call — `completionConfig` is not exported, so it
+  // cannot ride the shared theme, and a second `autocompletion()` beside
+  // this one would replace its `override`.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1146,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first
@@ -187,7 +197,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `lines` collection threaded through the working copy — including the
   // sweep that takes ink anchored to a removed node and leaves free ink
   // alone, which is the one place the two element kinds must differ.
-  'packages/server-core/src/tools/canvas-edit.ts': 1180,
+  // 1180 -> 1183 for ADR-0038 decision 3's seam: two imports, and one line
+  // binding the text this file reads twice. Raised rather than shrunk because
+  // the alternative is reading `nodeText(node)` a second time to save a line,
+  // which is the opposite of what the accessor is for.
+  'packages/server-core/src/tools/canvas-edit.ts': 1183,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -221,17 +235,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 1165: the fold recreates a nested text or list container instead of
   // handing it to `LoroMap.set`.
   'packages/loro-adapter/src/workspace-tree.ts': 1165,
-  // Shrunk from 991 while the theme layer added its glow filter and pencil
-  // passes: the shape and edge renderers (crisp and sketched, with the
-  // halo either takes) moved to `svg/shapes.ts`, and the presence-only
-  // paint helpers every element shares to `svg/paint.ts`. What is left is
-  // the text, list, table, code, icon and edge cases plus the document
-  // envelope.
-  // +19 for the inline-image substitution: a run carrying `paints` draws
-  // its picture in the run's box instead of its glyphs. `renderTextRun` is
-  // the single funnel every block routes through, so one branch here is
-  // what reaches heading, paragraph and table cell alike.
-  'packages/canvas-render/src/svg/backend.ts': 850,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -323,10 +326,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the picture rather than emitting the alt words, and an alt-less one
   // takes an atomic placeholder because the wrappable path trims a
   // whitespace-only run out of existence.
+  // +46 for `emitWithIcons`, the icon half of the same idea and the one
+  // place it could go. An emoji shortcode is a CHARACTER, substituted into
+  // the string before the run is built; an icon is geometry, so a text node
+  // has to be SPLIT into prose runs and icon runs — and the offsets that
+  // split it are taken off the raw string, which only the site holding both
+  // vocabularies can do. Its comment is most of the 46 and says exactly
+  // that, because applying the two in the other order silently moves every
+  // offset after the first emoji.
   // +7: that image asks the caller WHERE its picture is, through the
   // `resolveReference` seam a body already carries — so a written path can
   // be a workspace attachment instead of only an absolute URL.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1706,
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1752,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

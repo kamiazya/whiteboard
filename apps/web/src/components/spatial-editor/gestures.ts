@@ -29,7 +29,9 @@
  * discard, and it discards the whole node when the node existed only to
  * hold that edit.
  */
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
@@ -219,8 +221,10 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
       return findNode(canvas, state.nodeId)?.type === state.startType
     case 'connecting':
       return findNode(canvas, state.fromNodeId) !== undefined
-    case 'editing-text':
-      return findNode(canvas, state.nodeId)?.type === 'text'
+    case 'editing-text': {
+      const target = findNode(canvas, state.nodeId)
+      return target !== undefined && nodeText(target) !== undefined
+    }
     case 'bending':
       return canvas.edges.some((edge) => edge.id === state.edgeId)
   }

@@ -7,6 +7,7 @@
  * importing it into a target record rather than by trusting the POST
  * happened.
  */
+
 import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
@@ -14,6 +15,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { newImageRef } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -122,7 +124,7 @@ describe('promoteWorkspace', () => {
     const content = new LoroDoc()
     writeSpatialCanvas(content, {
       nodes: [
-        { id: 'img', type: 'file', file: newImageRef(FILE_ID), x: 0, y: 0, width: 10, height: 10 },
+        fileNode({ id: 'img', file: newImageRef(FILE_ID), x: 0, y: 0, width: 10, height: 10 }),
       ],
       edges: [],
     })
@@ -183,15 +185,7 @@ describe('promoteWorkspace', () => {
     const content = new LoroDoc()
     writeSpatialCanvas(content, {
       nodes: [
-        {
-          id: 'img',
-          type: 'file',
-          file: newImageRef('gone-image'),
-          x: 0,
-          y: 0,
-          width: 5,
-          height: 5,
-        },
+        fileNode({ id: 'img', file: newImageRef('gone-image'), x: 0, y: 0, width: 5, height: 5 }),
       ],
       edges: [],
     })

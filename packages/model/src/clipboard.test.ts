@@ -1,8 +1,9 @@
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { clipboardFragmentSchema } from './clipboard.js'
 
-const NODE = { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }
-const NODE2 = { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'yo' }
+const NODE = textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' })
+const NODE2 = textNode({ id: 'n2', x: 200, y: 0, width: 100, height: 50, text: 'yo' })
 
 describe('clipboardFragmentSchema', () => {
   it('accepts a typed fragment of nodes, edges, and inline file assets', () => {
@@ -12,7 +13,7 @@ describe('clipboardFragmentSchema', () => {
       nodes: [
         NODE,
         NODE2,
-        { id: 'n3', type: 'file', x: 400, y: 0, width: 100, height: 50, file: 'asset:img' },
+        fileNode({ id: 'n3', x: 400, y: 0, width: 100, height: 50, file: 'asset:img' }),
       ],
       edges: [
         {

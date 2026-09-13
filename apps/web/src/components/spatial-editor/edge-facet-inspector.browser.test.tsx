@@ -4,6 +4,7 @@
 // board's. Storing the facet is not the claim — the drawn path is.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -16,9 +17,9 @@ afterEach(cleanup)
 // can separate them.
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 60, y: 60, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 260, width: 120, height: 60, text: 'B' },
-    { id: 'c', type: 'text', x: 60, y: 420, width: 120, height: 60, text: 'C' },
+    textNode({ id: 'a', x: 60, y: 60, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 260, width: 120, height: 60, text: 'B' }),
+    textNode({ id: 'c', x: 60, y: 420, width: 120, height: 60, text: 'C' }),
   ],
   edges: [
     {

@@ -149,9 +149,27 @@ describe('the mutation lane covers what it says it covers', () => {
     // the node where an id was wanted, so every board read as spending
     // nothing, and overload and excess both firing on the same board because
     // they were tested independently.
+    // 71 since `svg/icon.ts`, and OUTSIDE the lane. It is where `backend.ts`
+    // kept the icon table, its two fallbacks and the one producer of a
+    // `<use>` that references an icon, split out when a text run gained the
+    // ability to paint one so the `icon` node and that run cannot emit
+    // different definitions of the same icon. Nothing moved into it from a
+    // lane module — `backend.ts` was never in the lane — so the reach did
+    // not shrink. And it holds no property: every branch is a way of
+    // declining (a non-finite box, a name the table lacks, a
+    // prototype-inherited name answering a function) with a named example
+    // apiece, plus construction the pixel goldens compare byte for byte.
+    // 73 since the wrapper's line-break seam was split in two, and the two
+    // go opposite ways. `layout/nodes/inline-junction.ts` is IN, for the
+    // reason its own entry gives: it is a rule whose every decision is
+    // mutation-shaped, not a ladder of ways to decline.
+    // `layout/nodes/uax-segments.ts` is OUT and always will be — it is the
+    // `LineBreaker` call and its options object, with no branch of its own,
+    // and it exists only so the wrapper's granularity ladder and the
+    // junction rule cannot come to disagree about where a line may break.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 13,
-      production: 70,
+      mutated: 14,
+      production: 73,
     })
   })
 

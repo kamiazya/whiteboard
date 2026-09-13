@@ -2,8 +2,10 @@
 // each pins an invariant whose violation shipped (or nearly shipped) as a
 // real defect, generalized from its example test so the generator explores
 // the arrangements nobody thought to write down.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
@@ -178,15 +180,14 @@ describe('routing properties: anchor fan-out', () => {
   fcTest.prop([hubScenario], withDefaults())(
     'ends sharing a (node, side) never share a point, always sit on their side, and keep tangent order',
     ({ spokes, spokePositions, directions, explicitSides }) => {
-      const hub: SpatialNode = {
+      const hub: SpatialNode = textNode({
         id: 'hub',
-        type: 'text',
         x: 0,
         y: 0,
         width: 100,
         height: 100,
         text: 'h',
-      }
+      })
       const nodes: SpatialNode[] = [
         hub,
         ...spokes.map((id, i) => node(id, 'text', { ...spokePositions[i]!, w: 100, h: 100 })),

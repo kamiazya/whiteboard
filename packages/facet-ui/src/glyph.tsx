@@ -4,7 +4,7 @@ import type {
   FacetRegistry,
   IconAsset,
 } from '@kamiazya/whiteboard-facet-engine'
-import { Ban, Circle, Cylinder, Diamond, Hexagon, Square } from 'lucide-react'
+import { Ban, Circle, Cylinder, Diamond, Hexagon, Octagon, Square } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
 
 /**
@@ -44,6 +44,8 @@ function shapeGlyph(name: FacetGlyphShape): ReactNode {
       return <Diamond />
     case 'hexagon':
       return <Hexagon />
+    case 'octagon':
+      return <Octagon />
     case 'parallelogram':
       // No lucide glyph for a parallelogram; drawn in the same 24-grid
       // stroke style so a row of these reads as one set.

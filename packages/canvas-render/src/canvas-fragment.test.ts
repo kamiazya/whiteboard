@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { selectCanvasFragment } from './canvas-fragment.js'
 
@@ -8,11 +9,11 @@ const text = (id: string, x: number, y: number) =>
 const canvas: SpatialCanvas = {
   nodes: [
     text('outside', 500, 500),
-    { id: 'g-launch', type: 'group', x: 0, y: 0, width: 400, height: 300, label: 'Launch' },
+    groupNode({ id: 'g-launch', x: 0, y: 0, width: 400, height: 300, label: 'Launch' }),
     text('in-launch', 10, 10),
-    { id: 'g-inner', type: 'group', x: 150, y: 150, width: 100, height: 100, label: 'inner' },
+    groupNode({ id: 'g-inner', x: 150, y: 150, width: 100, height: 100, label: 'inner' }),
     text('half-out', 350, 10),
-    { id: 'g-launch-2', type: 'group', x: 600, y: 0, width: 200, height: 200, label: 'launch' },
+    groupNode({ id: 'g-launch-2', x: 600, y: 0, width: 200, height: 200, label: 'launch' }),
     text('in-second', 610, 10),
   ],
   edges: [

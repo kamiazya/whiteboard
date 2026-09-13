@@ -33,6 +33,9 @@ import {
   rekeyBrowserWorkspace,
   SYNC_DOCUMENTS_STORE,
   SYNC_SNAPSHOT_CHUNKS_STORE,
+  sweepVersionsWrittenBeforeDigests,
+  VERSIONS_BY_DOCUMENT_INDEX,
+  VERSIONS_STORE,
   WORKSPACES_STORE,
 } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -1487,5 +1490,177 @@ describe('IndexedDB v11 -> v12 (carries content to the port)', () => {
     const names = [...db.objectStoreNames]
     db.close()
     expect(names).not.toContain('loroDocuments')
+  })
+})
+
+/**
+ * v18 -> v19 empties the `versions` store.
+ *
+ * A saved point now carries the digest of the content it was taken of, which
+ * is how "has this document changed?" stopped being answered by the whole
+ * record's frontier. A row written before that cannot gain one — a past
+ * checkpoint's content is reachable only by checking the record out at its own
+ * frontier — so carrying them would mean keeping the old, wrong comparison
+ * alive as a second read path forever. At 0.0.x they go instead.
+ */
+describe('IndexedDB v18 -> v19 (sweeps points written before content digests)', () => {
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
+
+  it('current DB_VERSION is 19 or higher', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(19)
+  })
+
+  /** A v18 database holding one saved point and one stored document beside it. */
+  async function seedV18Fixture(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(MIGRATION_DB, 18)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+        if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
+        if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE)) {
+          db.createObjectStore(SYNC_DOCUMENTS_STORE)
+        }
+        if (!db.objectStoreNames.contains(SYNC_SNAPSHOT_CHUNKS_STORE)) {
+          db.createObjectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+        }
+        if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
+          const idx = db.createObjectStore(DOCUMENT_INDEX_STORE, {
+            keyPath: ['workspaceId', 'path'],
+          })
+          idx.createIndex('byId', ['workspaceId', 'documentId'], { unique: true })
+        }
+        if (!db.objectStoreNames.contains('documentFiles')) db.createObjectStore('documentFiles')
+        if (!db.objectStoreNames.contains('blobs')) db.createObjectStore('blobs')
+        if (!db.objectStoreNames.contains('contentTimestamps')) {
+          db.createObjectStore('contentTimestamps')
+        }
+        if (!db.objectStoreNames.contains(VERSIONS_STORE)) {
+          const versions = db.createObjectStore(VERSIONS_STORE, { keyPath: 'id' })
+          versions.createIndex(VERSIONS_BY_DOCUMENT_INDEX, ['workspaceId', 'documentId'])
+        }
+      }
+      req.onsuccess = () => {
+        const db = req.result
+        letFixtureStepAside(db)
+        const tx = db.transaction([VERSIONS_STORE, SYNC_DOCUMENTS_STORE], 'readwrite')
+        tx.objectStore(VERSIONS_STORE).put({
+          id: 'v-1',
+          workspaceId: 'ws-1',
+          documentId: 'doc-1',
+          path: 'canvas-a',
+          label: 'a point I named',
+          createdAt: 1,
+          elementCount: 1,
+          // The v17-v18 leftover, on the row where it really lived.
+          hasThumbnail: true,
+          frontiers: new Uint8Array([1, 2, 3]),
+        })
+        tx.objectStore(SYNC_DOCUMENTS_STORE).put(
+          { v: 2, snapshot: { manifest: null }, frontier: new Uint8Array(), deltas: [] },
+          'doc-1',
+        )
+        tx.onerror = () => {
+          db.close()
+          reject(tx.error)
+        }
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+      }
+      req.onerror = () => reject(req.error)
+    })
+  }
+
+  async function versionRows(): Promise<unknown[]> {
+    const db = await openAtCurrentVersion(MIGRATION_DB)
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(VERSIONS_STORE, 'readonly')
+      const req = tx.objectStore(VERSIONS_STORE).getAll()
+      tx.onerror = () => reject(tx.error)
+      tx.oncomplete = () => {
+        db.close()
+        resolve(req.result)
+      }
+    })
+  }
+
+  it('takes the points but not the documents they pointed into', async () => {
+    await seedV18Fixture()
+    // A probe, so "empty afterwards" cannot be satisfied by a fixture that
+    // never wrote anything.
+    expect(await versionRows()).toHaveLength(1)
+
+    const db = await openWhiteboardDb(MIGRATION_DB)
+    db.close()
+
+    expect(await versionRows()).toEqual([])
+    // The content is untouched: a version was a frontier plus a row, never a
+    // copy of what the document holds, so the sweep costs the ability to look
+    // back and nothing else.
+    const kept = await openAtCurrentVersion(MIGRATION_DB)
+    const documents = await new Promise<unknown[]>((resolve, reject) => {
+      const tx = kept.transaction(SYNC_DOCUMENTS_STORE, 'readonly')
+      const req = tx.objectStore(SYNC_DOCUMENTS_STORE).getAllKeys()
+      tx.onerror = () => reject(tx.error)
+      tx.oncomplete = () => {
+        kept.close()
+        resolve(req.result.map(String))
+      }
+    })
+    expect(documents).toEqual(['doc-1'])
+  })
+
+  /**
+   * The bound, which is the whole correctness of the sweep and is otherwise
+   * untestable until a v20 exists. Every other step in the upgrade handler is
+   * idempotent; this one run a second time would empty a store whose rows are
+   * by then exactly the ones the digest was added to keep.
+   */
+  it('runs once: a later upgrade leaves the points that now carry digests', async () => {
+    await seedV18Fixture()
+    const db = await openWhiteboardDb(MIGRATION_DB)
+    db.close()
+
+    // A point written the way v19 writes them, then a bump past v19.
+    const afterBump = await new Promise<unknown[]>((resolve, reject) => {
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION + 1)
+      req.onupgradeneeded = () => {
+        const tx = req.transaction
+        if (!tx) return
+        tx.objectStore(VERSIONS_STORE).put({
+          id: 'v-2',
+          workspaceId: 'ws-1',
+          documentId: 'doc-1',
+          path: 'canvas-a',
+          createdAt: 2,
+          elementCount: 1,
+          contentDigest: 'a1b2c3d4e5f60718',
+          frontiers: new Uint8Array([4, 5, 6]),
+        })
+        // The REAL sweep, in a genuine versionchange transaction, told the
+        // version a v19 database is upgrading from.
+        sweepVersionsWrittenBeforeDigests(tx, DB_VERSION)
+      }
+      req.onsuccess = () => {
+        const opened = req.result
+        const read = opened.transaction(VERSIONS_STORE, 'readonly')
+        const rows = read.objectStore(VERSIONS_STORE).getAll()
+        read.oncomplete = () => {
+          opened.close()
+          resolve(rows.result)
+        }
+        read.onerror = () => {
+          opened.close()
+          reject(read.error)
+        }
+      }
+      req.onerror = () => reject(req.error)
+    })
+
+    expect(afterBump).toHaveLength(1)
+    expect((afterBump[0] as { id: string }).id).toBe('v-2')
   })
 })

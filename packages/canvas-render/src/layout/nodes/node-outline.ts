@@ -121,6 +121,42 @@ export const BUILT_IN_SHAPES: ShapeTable = {
     },
     contentBox: (box) => insetHorizontally(box),
   },
+  'visual.octagon': {
+    // A rectangle with its four corners taken off — the polygon nearest to
+    // the rounded rectangle every notation draws a running component as,
+    // and `NodeOutline` (a `packages/scene` contract) has no rounded-rect
+    // kind. Clockwise from the top-left cut.
+    //
+    // A SYMMETRIC cut off the smaller dimension, not the hexagon's
+    // `min(w/4, h/2)`: the point of this silhouette is that it still reads
+    // as a rectangle, and a cut sized off the width alone eats a flat box's
+    // whole height. It is also what keeps the two apart — at 200x80 the
+    // hexagon's points run 40px in from each end while this cuts 20px off
+    // each corner, leaving real vertical edges the hexagon does not have.
+    outline: (box) => {
+      const cut = octagonCut(box)
+      return {
+        kind: 'polygon',
+        points: [
+          { x: box.x + cut, y: box.y },
+          { x: box.x + box.w - cut, y: box.y },
+          { x: box.x + box.w, y: box.y + cut },
+          { x: box.x + box.w, y: box.y + box.h - cut },
+          { x: box.x + box.w - cut, y: box.y + box.h },
+          { x: box.x + cut, y: box.y + box.h },
+          { x: box.x, y: box.y + box.h - cut },
+          { x: box.x, y: box.y + cut },
+        ],
+      }
+    },
+    // Half the cut on every side puts each corner exactly ON its diagonal
+    // (`cut/2 / cut + cut/2 / cut = 1`), which counts as inside — the same
+    // exact-boundary inscription the diamond already uses.
+    contentBox: (box) => {
+      const half = octagonCut(box) / 2
+      return { x: box.x + half, y: box.y + half, w: box.w - 2 * half, h: box.h - 2 * half }
+    },
+  },
   'visual.cylinder': {
     outline: (box) => ({
       kind: 'cylinder',
@@ -138,6 +174,13 @@ export const BUILT_IN_SHAPES: ShapeTable = {
     },
   },
 }
+
+/**
+ * The octagon's corner cut, off the SMALLER dimension so the shape survives
+ * any proportion: a quarter of it is pronounced enough to read as a cut
+ * corner and never large enough to make two cuts meet.
+ */
+const octagonCut = (box: BoundingBox): number => Math.min(box.w, box.h) / 4
 
 /** Hexagon and parallelogram give up only their slanted horizontal margins. */
 function insetHorizontally(box: BoundingBox): BoundingBox {
@@ -167,9 +210,10 @@ export function nodeOutline(
  *
  * Ellipse and diamond take the maximal inscribed rect of the box's own
  * aspect; hexagon and parallelogram give up only their slanted horizontal
- * margins; the cylinder gives up the lid (its drawn front rim dips to 2·ry)
- * and the bottom bulge. Every corner returned here satisfies
- * `outlineContains` — the geometry test pins that per kind.
+ * margins; the octagon gives up half its corner cut on every side; the
+ * cylinder gives up the lid (its drawn front rim dips to 2·ry) and the
+ * bottom bulge. Every corner returned here satisfies `outlineContains` —
+ * the geometry test pins that for every kind in the table.
  */
 export function outlineContentBox(
   shapeId: string | undefined,

@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -359,8 +360,8 @@ describe('saveDocument / loadDocument', () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-        { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'b' },
+        textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+        textNode({ id: 'n2', x: 200, y: 0, width: 100, height: 50, text: 'b' }),
       ],
       edges: [
         {

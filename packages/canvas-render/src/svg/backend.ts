@@ -1,4 +1,3 @@
-import { type LucideIconElement, VISUAL_ICONS } from '@kamiazya/whiteboard-plugin-visual'
 import type {
   BoundingBox,
   CodeBlockNode,
@@ -18,6 +17,7 @@ import { sceneBounds } from '../scene-bounds.js'
 import { collectDefs } from './defs.js'
 import type { SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
+import { type IconTable, renderIconUse } from './icon.js'
 import {
   appearanceAttrs,
   idToken,
@@ -150,6 +150,28 @@ function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
       },
       alt === '' ? [] : [el('title', undefined, [alt])],
     )
+  }
+  if (run.paints?.kind === 'icon') {
+    // A body run names no fill of its own so it INHERITS the host's (see
+    // `Appearance.fillOpacity`), and an icon is stroked where prose is
+    // filled — no host sets a stroke, so asking for `currentColor` is what
+    // makes the icon the colour the prose beside it resolved to rather than
+    // the SVG default, black, on every theme. A run that DOES name a fill
+    // (a link) hands it over instead, so the icon follows what it sits in.
+    //
+    // Falling through to the text is not a degradation to tidy away: a
+    // deployment supplies its own icon table, so a name this one cannot
+    // draw has to say something, and the source the author typed is the
+    // most useful thing it can say.
+    const use = renderIconUse(
+      run.paints.name,
+      run.bbox,
+      run.appearance,
+      tables?.icons,
+      glowOf(run.appearance, tables),
+      run.appearance?.fill ?? 'currentColor',
+    )
+    if (use !== undefined) return use
   }
   const halo = run.appearance?.halo
   const glow = glowOf(run.appearance, tables)
@@ -352,25 +374,6 @@ function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
   }
 }
 
-function renderIconElement(element: LucideIconElement): SvgChild {
-  switch (element.tag) {
-    case 'path':
-      return el('path', { d: element.d })
-    case 'rect':
-      return el('rect', {
-        x: element.x,
-        y: element.y,
-        width: element.width,
-        height: element.height,
-        rx: element.rx,
-      })
-    case 'circle':
-      return el('circle', { cx: element.cx, cy: element.cy, r: element.r })
-    case 'ellipse':
-      return el('ellipse', { cx: element.cx, cy: element.cy, rx: element.rx, ry: element.ry })
-  }
-}
-
 /** Baseline drop below the bbox center, as a fraction of the glyph size —
  * roughly half a typical glyph cap height, so the badge reads centered. */
 const GLYPH_BASELINE_FACTOR = 0.35
@@ -382,52 +385,6 @@ const GLYPH_BASELINE_FACTOR = 0.35
  * (a full lucide dependency, a facet distribution's own glyphs) without
  * this package depending on one, and the table survives `postMessage`.
  */
-/**
- * An icon set's paint, applied to the whole `<symbol>` definition so one def
- * serves every referencing node. Only the stroke COLOR is left to inherit
- * from each `<use>`.
- */
-export type IconPaint = Readonly<Record<string, string | number>>
-
-/**
- * One icon: its geometry plus the two things geometry is meaningless without.
- *
- * `viewBox` is the coordinate space the geometry is drawn in, and `paint` the
- * convention it is authored for. Both were hard-coded to the bundled set's
- * before this, so a contributed icon in any other space came out the wrong
- * size and clipped, and one wanting a fill came out invisible.
- */
-export interface IconContribution {
-  readonly geometry: ReadonlyArray<LucideIconElement>
-  readonly viewBox?: string
-  readonly paint?: IconPaint
-}
-
-export type IconTable = Readonly<Record<string, IconContribution>>
-
-/**
- * What a set that declares neither gets. 24x24 stroke-only is what every icon
- * in this repo is authored for, so a table saying nothing still draws.
- */
-const FALLBACK_ICON_VIEWBOX = '0 0 24 24'
-const FALLBACK_ICON_PAINT: IconPaint = {
-  fill: 'none',
-  'stroke-width': 2,
-  'stroke-linecap': 'round',
-  'stroke-linejoin': 'round',
-}
-
-/**
- * `Array.isArray` and not a bare `!== undefined`: both tables are plain
- * objects, so a prototype-inherited name (`toString`) answers a function,
- * which must degrade like any unknown name rather than throw downstream.
- */
-function lookupIcon(name: string, icons: IconTable | undefined): IconContribution | undefined {
-  const fromCaller = icons === undefined ? undefined : icons[name]
-  const found = fromCaller ?? VISUAL_ICONS[name]
-  return Array.isArray(found?.geometry) ? found : undefined
-}
-
 function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
   switch (node.kind) {
     case 'textRun':
@@ -594,38 +551,16 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
     }
     case 'shape':
       return renderShape(node, tables)
-    case 'icon': {
-      if (!isFiniteBox(node.bbox)) return []
-      const contribution = lookupIcon(node.icon, tables?.icons)
-      if (contribution === undefined) return []
-      const id = `wb-icon-${idToken(node.icon)}`
-      const def: SvgDef = {
-        id,
-        node: el('symbol', { id, viewBox: contribution.viewBox ?? FALLBACK_ICON_VIEWBOX }, [
-          // The set's paint lives ON the definition; only the stroke COLOR
-          // inherits from each referencing <use>, so one def serves every
-          // color-assigned node.
-          el(
-            'g',
-            contribution.paint ?? FALLBACK_ICON_PAINT,
-            contribution.geometry.map(renderIconElement),
-          ),
-        ]),
-      }
-      const paint = appearanceAttrs(node.appearance)
-      const glow = glowOf(node.appearance, tables)
-      const use = el('use', {
-        href: `#${id}`,
-        x: node.bbox.x,
-        y: node.bbox.y,
-        width: node.bbox.w,
-        height: node.bbox.h,
-        stroke: paint.stroke,
-        'stroke-opacity': paint['stroke-opacity'],
-        filter: glow.filter,
-      })
-      return withDefs(use, [def, ...glow.defs])
-    }
+    case 'icon':
+      return (
+        renderIconUse(
+          node.icon,
+          node.bbox,
+          node.appearance,
+          tables?.icons,
+          glowOf(node.appearance, tables),
+        ) ?? []
+      )
     case 'glyph': {
       if (!isFiniteBox(node.bbox) || node.glyph.length === 0) return []
       // A single glyph sized to the smaller bbox side and centered via

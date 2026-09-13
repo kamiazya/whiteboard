@@ -106,6 +106,60 @@ export const TEXT_WRAPPING_CORPUS: readonly CorpusCase[] = [
     name: 'long-token',
     root: paragraph('SupercalifragilisticexpialidociousAndThenSomeMoreCharacters'),
   },
+  // Kinsoku ACROSS an inline boundary, which the cases above cannot reach:
+  // every one of them is a single text node, and the wrapper decides breaks
+  // one `emit` call at a time. `。` opening a line is the same defect the
+  // `ja-kinsoku` case proves does NOT happen inside one run.
+  {
+    name: 'ja-code-kinsoku',
+    root: {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'これは日本語です' },
+            { type: 'inlineCode', value: 'layout' },
+            { type: 'text', value: '。つづきの文があります。' },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: 'ja-strong-kinsoku',
+    root: {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'これは日本語です' },
+            { type: 'strong', children: [{ type: 'text', value: '強調' }] },
+            { type: 'text', value: '。つづきの文があります。' },
+          ],
+        },
+      ],
+    },
+  },
+  // The same rule in its ASCII form: UAX #14 puts a full stop in class IS,
+  // which forbids a break before it just as it does before `。`.
+  {
+    name: 'en-code-stop',
+    root: {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'Run the ' },
+            { type: 'inlineCode', value: 'fit' },
+            { type: 'text', value: '. Then it continues.' },
+          ],
+        },
+      ],
+    },
+  },
   {
     name: 'inline-code',
     root: {

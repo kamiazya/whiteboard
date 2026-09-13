@@ -4,6 +4,7 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 // the node's padded box. The reference is opaque to the editor; the host
 // resolves it to an href.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -148,7 +149,7 @@ it('without the storage seam, image affordances hide and non-image drops are ign
 
 it('image references get no canvas actions: double-click never navigates, menu skips follow/retarget', async () => {
   const withImage: SpatialCanvas = {
-    nodes: [{ id: 'i1', type: 'file', x: 100, y: 100, width: 240, height: 180, file: 'asset:img' }],
+    nodes: [fileNode({ id: 'i1', x: 100, y: 100, width: 240, height: 180, file: 'asset:img' })],
     edges: [],
   }
   const { Host, latest } = makeHost(withImage)

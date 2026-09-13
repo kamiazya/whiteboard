@@ -1,7 +1,9 @@
 // JSON Canvas parity for the two authoring gaps the spec audit found:
 // a custom HEX color can only round-trip, not be SET here, and a group's
 // background image had no setting UI at all. Real pointer input throughout.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -12,8 +14,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' },
-    { id: 'g1', type: 'group', x: 400, y: 300, width: 300, height: 200, label: 'frame' },
+    textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' }),
+    groupNode({ id: 'g1', x: 400, y: 300, width: 300, height: 200, label: 'frame' }),
   ],
   edges: [],
 }

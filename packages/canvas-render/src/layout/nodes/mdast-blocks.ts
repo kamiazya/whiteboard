@@ -7,6 +7,7 @@ import type {
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
 import { expandEmojiShortcodes } from '@kamiazya/whiteboard-plugin-visual/emoji/shortcode'
+import { iconShortcodeRanges } from '@kamiazya/whiteboard-plugin-visual/icons/shortcode'
 import type {
   Appearance,
   BlockquoteNode,
@@ -30,7 +31,6 @@ import type {
   ThematicBreakNode,
   UnresolvedReferenceNode,
 } from '@kamiazya/whiteboard-scene'
-import { LineBreaker } from 'css-line-break'
 import { selectCanvasFragment } from '../../canvas-fragment.js'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
@@ -39,9 +39,11 @@ import { escapeXmlText } from '../../svg/format.js'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'
 import { Parser } from '../../vendor/budoux/parser.js'
+import { createInlineJunction, headCharacter } from './inline-junction.js'
 import { selectMarkdownSection } from './mdast-section.js'
 import { checkboxMarker } from './task-checkbox.js'
 import { fitToWidth } from './truncate.js'
+import { uaxSegments } from './uax-segments.js'
 
 /**
  * What an alt-less inline image reads as. A box has to exist for the
@@ -50,6 +52,18 @@ import { fitToWidth } from './truncate.js'
  * anybody wrote, and a reader who has the image does not need telling.
  */
 const IMAGE_PLACEHOLDER = '\u2002'
+/**
+ * An EM space, which a font defines as one em — so the run's box is a body-
+ * sized square WIDE, and as tall as the line. A `<symbol>` letterboxes
+ * rather than stretches, so the icon draws at the smaller side (the width)
+ * and is centred in the line box: body-sized, on the prose's optical
+ * centre. The EN space the image placeholder uses would halve it.
+ *
+ * Measured in a real browser rather than reasoned: the layout's own fake
+ * measurer charges 0.6em per character whatever the character is, so it
+ * reports a narrower box than any real face gives this one.
+ */
+const ICON_PLACEHOLDER = '\u2003'
 
 /**
  * Every layout constant comes from ONE theme object (theme/markdown-theme.ts),
@@ -399,27 +413,6 @@ interface PhrasingLayout {
 }
 
 /**
- * Break opportunities per UAX #14 with CSS `line-break: strict` — the same
- * algorithm a browser applies to `<p>`, which is where Japanese kinsoku
- * lives: a closing character never starts a line and an opening character
- * never ends one, and between two CJK ideographs almost anywhere is a break.
- * Each returned segment carries its own trailing whitespace.
- *
- * `wordBreak: 'normal'` is deliberate: `break-all` would also break English
- * mid-word, and an over-wide segment is handled where it arises (by finer
- * segments, then by code point) rather than by loosening the rule for every
- * string.
- */
-function uaxSegments(text: string): readonly string[] {
-  const breaker = LineBreaker(text, { lineBreak: 'strict', wordBreak: 'normal' })
-  const segments: string[] = []
-  for (let entry = breaker.next(); entry.done !== true; entry = breaker.next()) {
-    segments.push(entry.value.slice())
-  }
-  return segments
-}
-
-/**
  * UAX #14 says a Japanese line MAY break between almost any two characters,
  * which is enough to keep text inside its box and not enough to read well —
  * it breaks mid-word, which no Japanese typesetter would. BudouX supplies
@@ -520,6 +513,7 @@ function layoutPhrasing(
   const runs: TextRunNode[] = []
   const line = { x: 0, index: 0 }
   const canWrap = Number.isFinite(options.maxWidth) && options.maxWidth > 0
+  const junction = createInlineJunction(runs, line, lineHeightPx)
 
   const pushRun = (
     text: string,
@@ -563,6 +557,7 @@ function layoutPhrasing(
       },
     })
     line.x += width + 2 * padX
+    junction.placed(text, extra.paints)
   }
 
   const wrapAndPush = (
@@ -610,10 +605,22 @@ function layoutPhrasing(
         buffered = candidate
         continue
       }
+      // Nothing of this node has landed yet and it may not open a line: the
+      // stretch it is joined to comes down with it, rather than the pair
+      // being split across the break. Retried on the new line, where it
+      // either fits or falls through to the ordinary break below.
+      if (
+        buffered === '' &&
+        line.x > 0 &&
+        !junction.breakableBefore(headCharacter(segment, extra.paints)) &&
+        junction.relocateCluster()
+      ) {
+        index -= 1
+        continue
+      }
       if (buffered !== '' || line.x > 0) {
         flush()
-        line.x = 0
-        line.index += 1
+        junction.startLine()
         // A boundary space at the start of a line is dropped, not advanced.
         segments[index] = segment.trimStart()
         index -= 1
@@ -648,7 +655,12 @@ function layoutPhrasing(
     truncatable = true,
     font?: { family: string; sizePx: number },
   ) => {
+    // Decided ONCE per inline node, before anything of it is placed: a break
+    // UAX #14 allows on this node's left edge opens a new cluster, one it
+    // forbids joins the node to the stretch already on the line.
+    const joinedToPrevious = !junction.breakableBefore(headCharacter(text, extra.paints))
     if (!wrappable) {
+      if (!joinedToPrevious) junction.allowBreakHere()
       // Atomic: never SPLIT, because an interior space in a code span or an
       // HTML tag is not a word boundary. Cutting it is the only way left to
       // keep it inside the box, and the run says so.
@@ -698,6 +710,7 @@ function layoutPhrasing(
     if (/^\s/.test(text) && line.x > 0) {
       line.x += spaceWidth
     }
+    if (!joinedToPrevious) junction.allowBreakHere()
     if (collapsed !== '') {
       const fullWidth = measureRunWidth(
         options.measure,
@@ -714,6 +727,7 @@ function layoutPhrasing(
     }
     if (/\s$/.test(text)) {
       line.x += spaceWidth
+      junction.allowBreakHere()
     }
   }
 
@@ -730,6 +744,39 @@ function layoutPhrasing(
     }
   }
 
+  /**
+   * One text node's string, with both shortcode vocabularies applied.
+   *
+   * They cannot be applied the same way. An emoji is a CHARACTER, so it is
+   * substituted into the string and the run never knows; an icon is drawn
+   * geometry, so it needs a run of its own carrying `paints` for the
+   * painter. Icons are therefore split out FIRST, off offsets taken from
+   * the raw string, and the emoji expansion runs within each surviving
+   * segment — expanding first would move every offset after the first
+   * emoji.
+   *
+   * The icon run is ATOMIC (`wrappable: false`) for the reason the alt-less
+   * image placeholder is: the wrappable path collapses `text.trim()`, which
+   * erases a whitespace placeholder and the run with it.
+   */
+  const emitWithIcons = (
+    value: string,
+    currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+  ) => {
+    let at = 0
+    for (const range of iconShortcodeRanges(value)) {
+      if (range.from > at)
+        emit(expandEmojiShortcodes(value.slice(at, range.from)), {}, currentStyle)
+      emit(ICON_PLACEHOLDER, { paints: { kind: 'icon', name: range.name } }, currentStyle, false)
+      at = range.to
+    }
+    if (at === 0) {
+      emit(expandEmojiShortcodes(value), {}, currentStyle)
+      return
+    }
+    if (at < value.length) emit(expandEmojiShortcodes(value.slice(at)), {}, currentStyle)
+  }
+
   const walk = (
     nodes: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
     currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
@@ -739,7 +786,7 @@ function layoutPhrasing(
         case 'text':
           // Every body-drawing surface comes through here; `inlineCode`
           // below deliberately does not, a shortcode there being the subject.
-          emit(expandEmojiShortcodes(child.value), {}, currentStyle)
+          emitWithIcons(child.value, currentStyle)
           break
         case 'inlineCode':
           emit(
@@ -756,8 +803,7 @@ function layoutPhrasing(
           )
           break
         case 'break':
-          line.x = 0
-          line.index += 1
+          junction.startLine()
           break
         case 'html':
           emit(child.value, {}, currentStyle, false)

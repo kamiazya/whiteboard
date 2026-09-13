@@ -10,6 +10,7 @@
  */
 
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -100,7 +101,7 @@ describe('deleting a document', () => {
   async function seedCanvas(path: string, text: string): Promise<string> {
     const created = await index.createDocument({ workspaceId: WS, path, kind: 'spatial' })
     writeSpatialCanvas(index.documentContainers(docs.peek(WS), created.documentId), {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
       edges: [],
     })
     return created.documentId

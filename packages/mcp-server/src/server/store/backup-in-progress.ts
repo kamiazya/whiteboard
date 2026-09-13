@@ -1,6 +1,7 @@
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { writeFileAtomic } from '../atomic-write.js'
 
 /** Exported so `backupDataDir` can keep this command's own bookkeeping out
  *  of its own output. */
@@ -117,9 +118,17 @@ export async function withBackupMarker<T>(
       // no backup at all, for the whole pass.
       expiresAt: Math.ceil(Date.now() + ttlMs),
     } satisfies z.infer<typeof markerSchema>
-    await writeFile(markerPath(dataDir), `${JSON.stringify(marker, null, 2)}\n`, 'utf8').catch(
-      () => {},
-    )
+    // Atomic, because `backupIsInProgress` fails OPEN: a plain `writeFile`
+    // leaves the target truncated for the whole duration of the write, and a
+    // reader landing there gets the same answer as no backup at all — so GC
+    // resumes underneath a running backup, once per refresh. That is the
+    // window this marker exists to close. Same defect, same remedy, as the
+    // blob re-put and the backup copy `writeFileAtomic` already covers.
+    await writeFileAtomic(
+      dataDir,
+      markerPath(dataDir),
+      `${JSON.stringify(marker, null, 2)}\n`,
+    ).catch(() => {})
   }
 
   await write()

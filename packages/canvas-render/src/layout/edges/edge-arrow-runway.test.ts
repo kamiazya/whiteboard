@@ -10,7 +10,9 @@
 // and comes back up into the arrival anchor, so when the ARRIVAL box extends
 // further out than the departure box, the corridor clears it by less than the
 // stub depth — by nothing at all once the difference exceeds it.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { finalSegmentLength } from '../../test-utils/routing-metrics.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
@@ -27,8 +29,8 @@ describe('a same-side route leaves its arrowhead a runway', () => {
     // B's bottom sits 15px below A's, so a corridor 20px under A clears B's
     // anchor by 5 — half an arrowhead.
     const nodes: SpatialNode[] = [
-      { id: 'A', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'A' },
-      { id: 'B', type: 'text', x: 200, y: 0, width: 100, height: 115, text: 'B' },
+      textNode({ id: 'A', x: 0, y: 0, width: 100, height: 100, text: 'A' }),
+      textNode({ id: 'B', x: 200, y: 0, width: 100, height: 115, text: 'B' }),
     ]
     const routed = route(nodes, {
       id: 'e',
@@ -44,8 +46,8 @@ describe('a same-side route leaves its arrowhead a runway', () => {
     // 40px deeper than A — past the 20px stub, so the naive corridor would
     // arrive from INSIDE the box and the approach would reverse.
     const nodes: SpatialNode[] = [
-      { id: 'A', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'A' },
-      { id: 'B', type: 'text', x: 200, y: 0, width: 100, height: 140, text: 'B' },
+      textNode({ id: 'A', x: 0, y: 0, width: 100, height: 100, text: 'A' }),
+      textNode({ id: 'B', x: 200, y: 0, width: 100, height: 140, text: 'B' }),
     ]
     const routed = route(nodes, {
       id: 'e',
@@ -59,8 +61,8 @@ describe('a same-side route leaves its arrowhead a runway', () => {
     // A is the deeper box here, so the corridor already clears B generously
     // and nothing should be deepened.
     const nodes: SpatialNode[] = [
-      { id: 'A', type: 'text', x: 0, y: 0, width: 100, height: 140, text: 'A' },
-      { id: 'B', type: 'text', x: 200, y: 0, width: 100, height: 100, text: 'B' },
+      textNode({ id: 'A', x: 0, y: 0, width: 100, height: 140, text: 'A' }),
+      textNode({ id: 'B', x: 200, y: 0, width: 100, height: 100, text: 'B' }),
     ]
     const routed = route(nodes, {
       id: 'e',

@@ -27,6 +27,7 @@ import { join } from 'node:path'
 import { register } from 'tsx/esm/api'
 import { isCliAvailable } from '../smoke/lib/cli-available.mjs'
 import { seed, WORKSPACE_ID } from './fixture.mjs'
+import { facetLine } from './lib/report-line.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS } from './tasks.mjs'
 
@@ -110,26 +111,6 @@ function compositionLine(composition) {
     .filter((c) => composition[c] > 0)
     .map((c) => `${c} ${composition[c]}`)
   return `; composition ${owed.length === 0 ? 'clear' : owed.join(' ')}, perGuide ${composition.perGuide}, gaps ${composition.gaps}`
-}
-
-/**
- * ADR-0033's axis, read beside the other two and never mixed into either:
- * what the board says with APPEARANCE rather than with position. This lane
- * IS that axis's scoreboard — the ADR chose it over an invented corpus,
- * because the drawing corpus has no board that spends the channel and
- * hand-writing one is how a fixture becomes the convention by accident.
- *
- * `constructs` prints always, and `deficit` beside it, because the whole
- * first reading is the RATIO of the two: every board measured so far owes
- * every construct it declares. A board declaring nothing is silent here and
- * says so — that is the blind spot, not a clean bill.
- */
-function facetLine(facets) {
-  if (facets === undefined) return ''
-  if (facets.constructs === 0) return '; facets: declares nothing'
-  const owed = ['overload', 'excess'].filter((c) => facets[c] > 0).map((c) => `${c} ${facets[c]}`)
-  const misuse = owed.length === 0 ? '' : `, ${owed.join(' ')}`
-  return `; facets deficit ${facets.deficit}/${facets.constructs}, treatments ${facets.treatments}, distance ${facets.distance}${misuse}`
 }
 
 /**

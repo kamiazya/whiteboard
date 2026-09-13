@@ -14,7 +14,9 @@
  * `undefined` means the document has not loaded yet, which is not the same
  * as any passage being gone.
  */
+
 import type { AnnotationAnchor, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { resolveTextAnchor } from './text-anchor.js'
 
 export type AnchorPlacement = 'placed' | 'orphaned'
@@ -51,7 +53,8 @@ export function anchorResolverFor(subject: AnchorResolverSubject): AnchorResolve
     if (anchor.kind !== 'text') return 'placed'
     if (anchor.nodeId === undefined) return 'placed'
     const node = nodes.get(anchor.nodeId)
-    if (node === undefined || node.type !== 'text') return 'orphaned'
-    return resolveTextAnchor(node.text, anchor).kind
+    const text = node === undefined ? undefined : nodeText(node)
+    if (text === undefined) return 'orphaned'
+    return resolveTextAnchor(text, anchor).kind
   }
 }

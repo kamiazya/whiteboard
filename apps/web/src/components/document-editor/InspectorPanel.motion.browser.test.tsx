@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { InspectorPresenceContext } from '../../contexts/inspector-presence.js'
+import { setViewport } from '../../test-utils/viewport.js'
 import { DocumentPageShell } from './DocumentPageShell.js'
 import { InspectorPanel } from './InspectorPanel.js'
 
@@ -20,7 +21,7 @@ afterEach(cleanup)
 // reads it, so a test that narrows it would otherwise decide the shape of
 // every test after it. Each test states the width it means.
 beforeEach(async () => {
-  await page.viewport(1024, 700)
+  await setViewport(1024, 700)
 })
 
 function Host({ startOpen = true }: { readonly startOpen?: boolean }) {
@@ -102,7 +103,7 @@ it('grows between its two stages instead of jumping, on the sheet only', async (
   // A phone VIEWPORT, not a narrow container: the sheet shape and its stage
   // toggle are `md:` rules, which read the viewport. Sizing the host alone
   // leaves the toggle `md:hidden` and the click waits forever.
-  await page.viewport(390, 700)
+  await setViewport(390, 700)
   render(<Host />)
   const el = panel()
   if (el === null) throw new Error('no panel')

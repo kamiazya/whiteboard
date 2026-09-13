@@ -10,8 +10,10 @@
 // the slot's own close is `InspectorPanel`'s, and the phone case that
 // motivated the move (no Escape, no outside left to press) is pinned at
 // the page level in BrowserDocumentPage.display-panel.browser.test.tsx.
+
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledPlugins, type VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -28,8 +30,8 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 240, width: 120, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 40, y: 40, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 240, width: 120, height: 60, text: 'B' }),
   ],
   edges: [
     {

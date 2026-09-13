@@ -75,37 +75,87 @@ export interface ParameterCoverage {
  * and the items of an array. A union arm is addressed by its index, so two
  * arms declaring the same field count twice: each is its own line in the
  * schema the model reads, and each is undescribed on its own.
+ *
+ * `$ref` IS RESOLVED, against the root's `$defs`, and the counting rule above
+ * is what decides how: a referenced subschema counts at each site that
+ * references it, exactly as an inlined copy would. Registering a schema in
+ * zod's global registry is a byte-level change to how the same surface is
+ * transmitted, so it must not move a count that means "how many parameters
+ * are there".
+ *
+ * It went unresolved until measured, and it was wrong in BOTH directions —
+ * which is worse than being wrong in one, because the two cancel. A `$ref`
+ * node carries no `properties`, so the walk stopped there: every property
+ * inside the five schemas already named in the registry was invisible to the
+ * count, and registering an undescribed subschema read as debt PAID while
+ * registering a described one read as debt ADDED. Both are the instrument
+ * moving, not the surface.
+ *
+ * The description is taken from the resolved target, because that is where a
+ * model reading the schema finds it; a description on the referencing site
+ * still wins, since JSON Schema lets one annotate a `$ref`.
  */
 export function parameterCoverage(schema: JsonSchema): ParameterCoverage {
   let parameters = 0
   let described = 0
   const undescribed: string[] = []
-  const walk = (node: JsonSchema | boolean | undefined, path: string): void => {
+  const defs = (schema.$defs ?? {}) as Record<string, JsonSchema | undefined>
+  /**
+   * The target of a local `$ref`, or the node itself. Only `#/$defs/<name>`
+   * is resolved — that is the one shape zod emits, and a pointer this cannot
+   * follow must read as unresolved rather than as an empty schema.
+   */
+  const deref = (node: JsonSchema, seen: ReadonlySet<string>): JsonSchema => {
+    const ref = node.$ref
+    if (typeof ref !== 'string') return node
+    const name = ref.startsWith('#/$defs/') ? ref.slice('#/$defs/'.length) : undefined
+    if (name === undefined || seen.has(name)) return node
+    const target = defs[name]
+    if (target === undefined) return node
+    // The site's own annotations win over the target's.
+    return { ...target, ...node, $ref: undefined }
+  }
+  const walk = (
+    node: JsonSchema | boolean | undefined,
+    path: string,
+    seen: ReadonlySet<string>,
+  ): void => {
     if (node === undefined || typeof node === 'boolean') return
+    const refName =
+      typeof node.$ref === 'string' && node.$ref.startsWith('#/$defs/')
+        ? node.$ref.slice('#/$defs/'.length)
+        : undefined
+    if (refName !== undefined && seen.has(refName)) return
+    const nextSeen = refName === undefined ? seen : new Set([...seen, refName])
+    const resolved = deref(node, seen)
+    node = resolved
     if (node.properties !== undefined) {
-      for (const [key, child] of Object.entries(node.properties)) {
+      for (const [key, rawChild] of Object.entries(node.properties)) {
         parameters += 1
         const childPath = path === '' ? key : `${path}.${key}`
+        const child = deref(rawChild, nextSeen)
         if (typeof child.description === 'string' && child.description.length > 0) described += 1
         else undescribed.push(childPath)
-        walk(child, childPath)
+        walk(rawChild, childPath, nextSeen)
       }
     }
     if (Array.isArray(node.items)) {
       node.items.forEach((item, i) => {
-        walk(item, `${path}[${i}]`)
+        walk(item, `${path}[${i}]`, nextSeen)
       })
     } else if (node.items !== undefined) {
-      walk(node.items as JsonSchema, `${path}[]`)
+      walk(node.items as JsonSchema, `${path}[]`, nextSeen)
     }
     for (const keyword of ['anyOf', 'oneOf', 'allOf'] as const) {
       node[keyword]?.forEach((arm, i) => {
-        walk(arm, `${path}|${i}`)
+        walk(arm, `${path}|${i}`, nextSeen)
       })
     }
-    if (typeof node.additionalProperties === 'object') walk(node.additionalProperties, `${path}.*`)
+    if (typeof node.additionalProperties === 'object') {
+      walk(node.additionalProperties, `${path}.*`, nextSeen)
+    }
   }
-  walk(schema, '')
+  walk(schema, '', new Set())
   return { parameters, described, undescribed }
 }
 

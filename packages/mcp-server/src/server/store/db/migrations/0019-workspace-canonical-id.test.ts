@@ -200,17 +200,25 @@ describe('0019-workspace-canonical-id', () => {
     await seedWorkspace(handle, 'default')
     await setCurrentWorkspace(handle, 'default')
 
-    await handle.migrateToHead()
-    const newId = await idOf(handle, 'default')
-
-    // The branch row 0019 also re-keyed is not asserted here: this test runs
-    // to head, and 0023 drops the table. What 0019 did to it is history.
+    // The version row is asserted AT 0019 and the rest at head, because the
+    // two ask different things. Whether 0019 re-keyed the row is 0019's
+    // business, and 0026 later sweeps every version row deliberately; whether
+    // the docKeys and the marker below still name the new id after every
+    // later migration is a head question and has to stay one.
+    await handle.migrateTo(PRE_0019)
+    await handle.migrateTo('0019-workspace-canonical-id')
+    const idAt0019 = await idOf(handle, 'default')
     const version = await handle.db
       .selectFrom('versions')
       .select(['workspaceId', 'operatorWorkspaceId'])
       .executeTakeFirstOrThrow()
-    expect(version.workspaceId).toBe(newId)
-    expect(version.operatorWorkspaceId).toBe(newId)
+    expect(version.workspaceId).toBe(idAt0019)
+    expect(version.operatorWorkspaceId).toBe(idAt0019)
+
+    await handle.migrateToHead()
+    const newId = await idOf(handle, 'default')
+    // The branch row 0019 also re-keyed is not asserted here: this test runs
+    // to head, and 0023 drops the table. What 0019 did to it is history.
 
     const marker = await handle.db
       .selectFrom('runtime')

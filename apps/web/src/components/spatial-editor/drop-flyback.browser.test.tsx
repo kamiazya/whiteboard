@@ -11,7 +11,9 @@
  * Sampled per frame rather than asserted once at the end: both halves are
  * transient, and an end-state assertion passes against the bug.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -23,15 +25,16 @@ afterEach(cleanup)
 const NODES = 14
 
 const many = (): SpatialCanvas => ({
-  nodes: Array.from({ length: NODES }, (_, i) => ({
-    id: `n${i}`,
-    type: 'text' as const,
-    x: 40 + (i % 4) * 230,
-    y: 40 + Math.floor(i / 4) * 150,
-    width: 180,
-    height: 90,
-    text: `node ${i}`,
-  })),
+  nodes: Array.from({ length: NODES }, (_, i) =>
+    textNode({
+      id: `n${i}`,
+      x: 40 + (i % 4) * 230,
+      y: 40 + Math.floor(i / 4) * 150,
+      width: 180,
+      height: 90,
+      text: `node ${i}`,
+    }),
+  ),
   edges: [],
 })
 

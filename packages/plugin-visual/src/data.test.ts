@@ -1,6 +1,7 @@
 import { createFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { extensionFacetsSchema } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   bundledPlugins,
@@ -19,6 +20,7 @@ import {
   VISUAL_TEXT_KEY,
   VISUAL_THEME_KEY,
   visualPlugin,
+  visualShapeFacetSchema,
   visualSymbolFacetSchema,
 } from './data.js'
 
@@ -145,13 +147,34 @@ describe('visual.shape/v0', () => {
     expect(registry.validateFacetWrite(VISUAL_SHAPE_KEY, { kind: 'hexagon' }).ok).toBe(true)
     expect(registry.validateFacetWrite(VISUAL_SHAPE_KEY, { kind: 'star' }).ok).toBe(false)
   })
+
+  it('offers every kind in the enum as a picker choice, so none is agent-only', () => {
+    // The fourth place the vocabulary was written out. canvas-render's
+    // `shape-vocabulary.test.ts` ties the enum to what the renderer can
+    // DRAW; this ties it to what a person can CHOOSE. Adding the sixth kind
+    // is what surfaced the gap: nothing failed when the picker did not
+    // carry it, and a silhouette only an agent can write is a silhouette
+    // the editor quietly does not have.
+    const form = registry.facetForm(VISUAL_SHAPE_KEY)
+    const offered = new Set(
+      form.kind === 'picker'
+        ? form.options.map((option) =>
+            option.payload === null ? null : (option.payload as { kind: string }).kind,
+          )
+        : [],
+    )
+    expect([...visualShapeFacetSchema.shape.kind.options].filter((k) => !offered.has(k))).toEqual(
+      [],
+    )
+    // `null` is the rect, which is the ABSENT facet and so not in the enum.
+    expect(offered.has(null)).toBe(true)
+  })
 })
 
 describe('resolveNodeShape', () => {
   const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
-    ({
+    textNode({
       id: 'n1',
-      type: 'text',
       text: '',
       x: 0,
       y: 0,

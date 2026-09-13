@@ -1,6 +1,7 @@
 // The proposals plane is the same shape as the threads plane — a mergeable
 // container per proposal under `proposals` — and went through the same
 // flattening fold. See comment-threads.durability.test.ts.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readProposals, writeProposal } from './proposals.js'
@@ -28,7 +29,7 @@ describe('a proposal survives the workspace record', () => {
           id: 'c1',
           op: 'node.add',
           status: 'open',
-          node: { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' },
+          node: textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' }),
         },
       ],
     })

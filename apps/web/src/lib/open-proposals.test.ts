@@ -1,4 +1,5 @@
 import type { Proposal } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { isOpenProposal, openChangeCount, openProposals } from './open-proposals.js'
 
@@ -13,7 +14,7 @@ function proposal(id: string, ...statuses: Array<'open' | 'adopted' | 'dismissed
       status,
       op: 'node.remove' as const,
       nodeId: `n${i}`,
-      assumed: { id: `n${i}`, type: 'text' as const, x: 0, y: 0, width: 10, height: 10, text: '' },
+      assumed: textNode({ id: `n${i}`, x: 0, y: 0, width: 10, height: 10, text: '' }),
     })),
   }
 }

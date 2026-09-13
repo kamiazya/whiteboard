@@ -5,7 +5,9 @@
 // Both editor writers of an anchor — the pin drag and "Comment here" — must
 // therefore round what `screenToCanvas` hands them. Real browser at a
 // non-integer zoom, which the default-zoom tests never exercise.
+
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -25,7 +27,7 @@ const FREE: CanvasComment = {
   createdAt: '2026-09-02T00:00:00.000Z',
 }
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE],
 }

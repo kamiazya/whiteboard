@@ -47,6 +47,15 @@ interface VersionsTable {
   operatorWorkspaceId: string | null
   elementCount: number
   frontiers: string
+  // The identity of the content this point was taken of, and what
+  // `isUnchangedSinceLastVersion` compares. The workspace-scoped `frontiers`
+  // above answer a different question: they move when ANY document in the
+  // workspace is edited.
+  //
+  // Never empty on a row this store wrote — `contentDigestOf` always answers.
+  // The column's `''` default exists only because sqlite requires one to add
+  // a NOT NULL column, and 0026 deleted every row that would have taken it.
+  contentDigest: string
   createdAt: Timestamp
   // Set only on the point a restore produced; see `versionEntrySchema`.
   restoredFrom: string | null

@@ -109,7 +109,11 @@ it('drops the column and the pictures, keeping the points themselves', async () 
   await writeFile(join(dataDir, 'blobs', 'ws-1', 'versions', 'v-1.png'), 'png-ish')
   expect(await pictureFiles('ws-1')).toEqual(['v-1.png'])
 
-  await handle.migrateToHead()
+  // Pinned AT 0024, not at head, for the reason the cascade case below pins
+  // itself at 0015: the surviving ROW is what this migration must not take,
+  // and 0026 later sweeps every version row deliberately. Run to head, the
+  // assertion would read as 0024 having eaten the point.
+  await handle.migrateTo('0024-drop-version-thumbnails')
 
   expect(await versionColumns(handle.db)).not.toContain('hasThumbnail')
   expect(await pictureFiles('ws-1')).toBeNull()

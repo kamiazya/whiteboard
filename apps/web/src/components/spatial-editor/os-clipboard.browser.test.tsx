@@ -3,8 +3,10 @@
 // keydown preventDefault would suppress the very event that carries
 // `clipboardData` — and that data is what lets a fragment cross tabs and
 // what lets foreign text degrade into a note.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -16,7 +18,7 @@ afterEach(cleanup)
 beforeEach(clearClipboardFragmentForTests)
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' }],
+  nodes: [textNode({ id: 'a', x: 40, y: 40, width: 160, height: 80, text: 'A' })],
   edges: [],
 }
 
@@ -100,7 +102,7 @@ it('pasting our JSON from another tab recreates the nodes with reminted ids', ()
   const fragment = {
     type: 'whiteboard/clipboard',
     version: 1,
-    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'from-other-tab' }],
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'from-other-tab' })],
     edges: [],
   }
   const { Host, latest } = makeHost({ nodes: [], edges: [] })
@@ -164,8 +166,8 @@ it('a native cut copies to the OS clipboard AND holds the selection as a ghost',
 it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON carries the cut surface', () => {
   const wired: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
-      { id: 'b', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'B' },
+      textNode({ id: 'a', x: 40, y: 40, width: 160, height: 80, text: 'A' }),
+      textNode({ id: 'b', x: 320, y: 40, width: 160, height: 80, text: 'B' }),
     ],
     edges: [
       {

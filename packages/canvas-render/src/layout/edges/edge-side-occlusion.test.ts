@@ -4,7 +4,9 @@
 // cuts straight through that node. Picking an exposed side instead keeps
 // the route outside; authored sides and fully-covered nodes keep the old
 // behaviour.
+
 import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 
@@ -61,7 +63,7 @@ describe('occlusion-aware default sides', () => {
     // the REAL occluder s covering m's right anchor. With g excluded, the
     // exposed bottom side wins.
     const nodes: SpatialNode[] = [
-      { id: 'g', type: 'group', x: 0, y: 0, width: 600, height: 400 },
+      groupNode({ id: 'g', x: 0, y: 0, width: 600, height: 400 }),
       node('m', 50, 150, 100, 100),
       node('s', 140, 140, 120, 120),
       node('f', 500, 150, 80, 100),

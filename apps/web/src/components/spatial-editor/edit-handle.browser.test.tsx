@@ -3,7 +3,9 @@
 // route. Fired on click, not pointerdown — opening the editor inside a
 // discrete pointerdown loses the focus fight with mousedown's default
 // action (see SelectionOverlay's onEditRequest doc).
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -15,7 +17,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello world' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello world' })],
   edges: [],
 }
 
@@ -82,8 +84,8 @@ it('a touch tap opens the menu — the root suppresses synthetic clicks on touch
 it('a multi-selection gets the same doorway, opening align/distribute', async () => {
   const spread: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 300, y: 220, width: 120, height: 60, text: 'B' },
+      textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 300, y: 220, width: 120, height: 60, text: 'B' }),
     ],
     edges: [],
   }

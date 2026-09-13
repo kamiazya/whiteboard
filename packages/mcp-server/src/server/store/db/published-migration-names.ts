@@ -36,4 +36,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0023-drop-branches',
   '0024-drop-version-thumbnails',
   '0025-version-operator-actor',
+  '0026-version-content-digest',
 ] as const satisfies readonly string[]

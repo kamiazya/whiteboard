@@ -6,6 +6,7 @@
 
 import type { Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   CARRIED_RESIDE_STEP_PX,
@@ -20,9 +21,9 @@ import type { GestureState } from './gestures.js'
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
-    { id: 'g', type: 'group', x: 80, y: 80, width: 200, height: 120 },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 100, width: 120, height: 60, text: 'B' }),
+    groupNode({ id: 'g', x: 80, y: 80, width: 200, height: 120 }),
   ],
   edges: [
     {
