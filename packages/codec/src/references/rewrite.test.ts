@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   movesForPathChange,
@@ -52,9 +53,9 @@ describe('rewriteCanvasReferences', () => {
   const map = new Map([['design/login', 'archive/login']])
   const canvas: SpatialCanvas = {
     nodes: [
-      { id: 't1', x: 0, y: 0, width: 100, height: 40, type: 'text', text: 'see [[design/login]]' },
-      { id: 'f1', x: 0, y: 60, width: 100, height: 40, type: 'file', file: 'design/login' },
-      { id: 'f2', x: 0, y: 120, width: 100, height: 40, type: 'file', file: 'design/logout' },
+      textNode({ id: 't1', x: 0, y: 0, width: 100, height: 40, text: 'see [[design/login]]' }),
+      fileNode({ id: 'f1', x: 0, y: 60, width: 100, height: 40, file: 'design/login' }),
+      fileNode({ id: 'f2', x: 0, y: 120, width: 100, height: 40, file: 'design/logout' }),
     ],
     edges: [],
   }

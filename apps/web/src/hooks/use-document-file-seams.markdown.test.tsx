@@ -9,6 +9,7 @@ import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard
  * for every file node.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
@@ -99,17 +100,7 @@ describe("a resolved reference's markdown body", () => {
         loadDocument: vi.fn(async () => ({
           body: BODY,
           canvas: {
-            nodes: [
-              {
-                id: 'okf-body',
-                type: 'text' as const,
-                x: 0,
-                y: 0,
-                width: 600,
-                height: 400,
-                text: BODY,
-              },
-            ],
+            nodes: [textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: BODY })],
             edges: [],
           } as SpatialCanvas,
         })),

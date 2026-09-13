@@ -103,6 +103,28 @@ describe('publish contract', () => {
     expect(mcpPackage.scripts['test:coverage']).toBe('vitest run --coverage --project mcp-node')
   })
 
+  // The LICENSE file is not what a plugin user reads: the marketplace card and both
+  // plugin manifests declare a license of their own, and nothing derived them from the
+  // root package. All three sat on MIT for the whole life of the Apache-2.0 relicense
+  // (#304) because the existing guard above only asserts the LICENSE file EXISTS.
+  // Derived from the root package rather than pinned to a literal, so a later relicense
+  // moves one field and this follows.
+  it('declares the repo license consistently across every distribution manifest', () => {
+    const marketplaceEntry = claudeMarketplace.plugins.find(
+      (p: { name: string }) => p.name === 'whiteboard',
+    )
+    expect(marketplaceEntry).toBeDefined()
+    expect({
+      claudePlugin: claudePlugin.license,
+      codexPlugin: codexPlugin.license,
+      marketplace: marketplaceEntry.license,
+    }).toEqual({
+      claudePlugin: rootPackage.license,
+      codexPlugin: rootPackage.license,
+      marketplace: rootPackage.license,
+    })
+  })
+
   it('declares sideEffects explicitly for bundlers', () => {
     expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/stdio.js'])
   })

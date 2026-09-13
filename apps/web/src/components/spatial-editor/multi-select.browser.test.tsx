@@ -1,7 +1,9 @@
 // Multi-select slice (a): shift-click membership, group move, batch delete.
 // Marquee selection is deliberately deferred — it needs the pan-gesture
 // decision recorded on the task. Real pointer input throughout.
+
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -14,9 +16,9 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 300, y: 100, width: 120, height: 60, text: 'B' },
-    { id: 'c', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'C' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 300, y: 100, width: 120, height: 60, text: 'B' }),
+    textNode({ id: 'c', x: 500, y: 100, width: 120, height: 60, text: 'C' }),
   ],
   edges: [],
 }
@@ -293,9 +295,9 @@ it('Delete removes every member of the multi-selection', async () => {
 it('member outlines include the edges between members, not edges leaving the area', async () => {
   const wired: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 300, y: 100, width: 120, height: 60, text: 'B' },
-      { id: 'c', type: 'text', x: 500, y: 300, width: 120, height: 60, text: 'C' },
+      textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 300, y: 100, width: 120, height: 60, text: 'B' }),
+      textNode({ id: 'c', x: 500, y: 300, width: 120, height: 60, text: 'C' }),
     ],
     edges: [
       {

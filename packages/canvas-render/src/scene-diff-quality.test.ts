@@ -1,4 +1,5 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, ShapeId } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
@@ -36,15 +37,16 @@ function buildCanvas(): { canvas: SpatialCanvas; leafId: string; hubId: string }
   for (let i = 0; i < NODE_COUNT; i++) {
     const col = i % COLS
     const row = Math.floor(i / COLS)
-    nodes.push({
-      id: `n${i}`,
-      type: 'text',
-      x: col * 320,
-      y: row * 220,
-      width: 240,
-      height: 140,
-      text: `# Step ${i}\n\nThis node explains stage ${i} of the pipeline with a sentence long enough to wrap across lines.`,
-    })
+    nodes.push(
+      textNode({
+        id: `n${i}`,
+        x: col * 320,
+        y: row * 220,
+        width: 240,
+        height: 140,
+        text: `# Step ${i}\n\nThis node explains stage ${i} of the pipeline with a sentence long enough to wrap across lines.`,
+      }),
+    )
   }
   for (let i = 0; i < NODE_COUNT; i++) {
     if (i + 1 < NODE_COUNT)
@@ -152,15 +154,14 @@ describe('scene-diff scoreboard (single edit → fraction of the scene that chan
   })
 
   it('adding a disconnected node adds its own entries and disturbs nothing', () => {
-    const added: SpatialNode = {
+    const added: SpatialNode = textNode({
       id: 'n-new',
-      type: 'text',
       x: 9 * 320,
       y: 0,
       width: 240,
       height: 140,
       text: 'New note',
-    }
+    })
     const edited = layout({ ...canvas, nodes: [...canvas.nodes, added] })
     expect(diffCount(base, edited)).toEqual({ changed: 2, total: 180 })
   })

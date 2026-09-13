@@ -19,7 +19,9 @@
  * simulation never saw this. The tests below dispatch the child's echo
  * explicitly — the exact event pattern the trace recorded.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -28,7 +30,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const board: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 60, y: 60, width: 240, height: 140, text: 'node' }],
+  nodes: [textNode({ id: 'n1', x: 60, y: 60, width: 240, height: 140, text: 'node' })],
   edges: [],
 }
 

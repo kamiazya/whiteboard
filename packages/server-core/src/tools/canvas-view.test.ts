@@ -13,6 +13,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -48,8 +49,8 @@ async function seedWorkspace(store: FakeDocumentStore) {
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
       nodes: [
-        { id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
-        { id: 'f1', type: 'file', x: 200, y: 0, width: 320, height: 220, file: NOTE_ID },
+        textNode({ id: 't1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
+        fileNode({ id: 'f1', x: 200, y: 0, width: 320, height: 220, file: NOTE_ID }),
       ],
       edges: [],
     })
@@ -58,15 +59,14 @@ async function seedWorkspace(store: FakeDocumentStore) {
     writeDocumentKind(doc, 'markdown')
     writeSpatialCanvas(doc, {
       nodes: [
-        {
+        textNode({
           id: 'okf-body',
-          type: 'text',
           x: 0,
           y: 0,
           width: 600,
           height: 400,
           text: '# Weekly notes\n\nShipped it.',
-        },
+        }),
       ],
       edges: [],
     })
@@ -140,7 +140,7 @@ describe('canvas_view tool', () => {
       await seedWorkspace(store)
       await seedDoc(store, DOCUMENT_ID, (doc) => {
         writeSpatialCanvas(doc, {
-          nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+          nodes: [textNode({ id: 't1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
           edges: [],
           facets: { 'visual.theme/v0': { theme } },
         })
@@ -253,15 +253,7 @@ describe('canvas_view tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          {
-            id: 't1',
-            type: 'text',
-            x: 0,
-            y: 0,
-            width: 320,
-            height: 220,
-            text: 'Plan:\n\n![[notes]]',
-          },
+          textNode({ id: 't1', x: 0, y: 0, width: 320, height: 220, text: 'Plan:\n\n![[notes]]' }),
         ],
         edges: [],
       })
@@ -291,14 +283,14 @@ describe('canvas_view tool', () => {
     })
     await seedDoc(store, OLD_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'o', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'OLD' }],
+        nodes: [textNode({ id: 'o', x: 0, y: 0, width: 10, height: 10, text: 'OLD' })],
         edges: [],
       })
     })
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'f3', type: 'file', x: 0, y: 0, width: 300, height: 200, file: OLD_ID }],
+        nodes: [fileNode({ id: 'f3', x: 0, y: 0, width: 300, height: 200, file: OLD_ID })],
         edges: [],
       })
     })
@@ -324,14 +316,14 @@ describe('canvas_view tool', () => {
     await seedDoc(store, BOARD_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'x', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'INNER' }],
+        nodes: [textNode({ id: 'x', x: 0, y: 0, width: 10, height: 10, text: 'INNER' })],
         edges: [],
       })
     })
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'f2', type: 'file', x: 0, y: 0, width: 300, height: 200, file: BOARD_ID }],
+        nodes: [fileNode({ id: 'f2', x: 0, y: 0, width: 300, height: 200, file: BOARD_ID })],
         edges: [],
       })
     })
@@ -388,7 +380,7 @@ describe('canvas_view tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+        nodes: [textNode({ id: 't1', x: 0, y: 0, width: 10, height: 10, text: 'hi' })],
         edges: [],
       })
     })

@@ -8,6 +8,7 @@
 
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { okfTimestampSchema, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import {
@@ -38,15 +39,14 @@ async function seedCanvas(store: FakeDocumentStore, canvas: SpatialCanvas): Prom
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
 }
 
-const NODE: SpatialCanvas['nodes'][number] = {
+const NODE: SpatialCanvas['nodes'][number] = textNode({
   id: 'n1',
-  type: 'text',
   x: 100,
   y: 40,
   width: 200,
   height: 80,
   text: 'content',
-}
+})
 
 async function storedComments(store: FakeDocumentStore) {
   const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)

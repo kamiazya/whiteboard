@@ -6,8 +6,10 @@
 // mermaid fences in the markdown editor and rendered them as placeholders
 // the moment it was laid out inside a canvas node — one engine, two
 // answers, depending on which surface called it.
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode, SvgFragmentNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -39,21 +41,20 @@ function baseOptions(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions
 
 /** A big node, so nothing is dropped by the content-box truncation. */
 const textCanvas: SpatialCanvas = {
-  nodes: [{ id: 't1', type: 'text', x: 0, y: 0, width: 600, height: 600, text: 'source' }],
+  nodes: [textNode({ id: 't1', x: 0, y: 0, width: 600, height: 600, text: 'source' })],
   edges: [],
 }
 
 const fileCanvas: SpatialCanvas = {
   nodes: [
-    {
+    fileNode({
       id: 'f1',
-      type: 'file',
       x: 0,
       y: 0,
       width: 600,
       height: 600,
       file: 'notes',
-    } satisfies SpatialNode,
+    }) satisfies SpatialNode,
   ],
   edges: [],
 }
@@ -112,7 +113,7 @@ function textOf(nodes: readonly SceneNode[]): string[] {
 
 describe('a canvas-targeted embed inside a text node body', () => {
   const embedded: SpatialCanvas = {
-    nodes: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'INNER' }],
+    nodes: [textNode({ id: 'e1', x: 0, y: 0, width: 400, height: 200, text: 'INNER' })],
     edges: [],
   }
   const resolveEmbed = (documentId: string) =>

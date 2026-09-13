@@ -4,6 +4,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 
 /**
  * Boards for the annotation-density scoreboard.
@@ -44,15 +45,16 @@ export interface AnnotationDensityCase {
 function board(pitchX: number, pitchY: number): SpatialCanvas {
   const nodes: SpatialNode[] = []
   for (let i = 0; i < NODE_COUNT; i += 1) {
-    nodes.push({
-      id: `n${i}`,
-      type: 'text',
-      x: (i % COLS) * pitchX,
-      y: Math.floor(i / COLS) * pitchY,
-      width: NODE_W,
-      height: NODE_H,
-      text: `node ${i}`,
-    })
+    nodes.push(
+      textNode({
+        id: `n${i}`,
+        x: (i % COLS) * pitchX,
+        y: Math.floor(i / COLS) * pitchY,
+        width: NODE_W,
+        height: NODE_H,
+        text: `node ${i}`,
+      }),
+    )
   }
   return { nodes, edges: [] }
 }
@@ -90,15 +92,14 @@ function proposalsFor(canvas: SpatialCanvas, count: number): Proposal[] {
               id,
               status: 'open' as const,
               op: 'node.add' as const,
-              node: {
+              node: textNode({
                 id: `added${i}`,
-                type: 'text' as const,
                 x: target.x + 40,
                 y: target.y + 30,
                 width: 120,
                 height: 60,
                 text: `added ${i}`,
-              },
+              }),
             }
     out.push({ id: `p${i}`, createdAt: '2026-09-06T00:00:00.000Z', changes: [change] })
   }

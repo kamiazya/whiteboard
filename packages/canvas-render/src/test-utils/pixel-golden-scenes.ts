@@ -44,7 +44,9 @@
  * commit is loud rather than silently green — and the review step is the
  * eyeballing above, not a second run.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { computeEdgeJumps } from '../layout/edges/edge-jumps.js'
 import { layoutSpatialCanvas, resolveCanvasPalette } from '../layout/spatial-canvas.js'
@@ -221,20 +223,19 @@ export function buildIconSetScene(): Scene {
  */
 const LOOK_CANVAS: SpatialCanvas = {
   nodes: [
-    { id: 'frame', type: 'group', x: 0, y: 0, width: 260, height: 200 },
-    { id: 'preset', type: 'text', x: 40, y: 60, width: 160, height: 80, text: '', color: '5' },
-    { id: 'plain', type: 'text', x: 400, y: 60, width: 160, height: 80, text: '' },
-    { id: 'sink', type: 'text', x: 40, y: 320, width: 160, height: 80, text: '' },
-    {
+    groupNode({ id: 'frame', x: 0, y: 0, width: 260, height: 200 }),
+    textNode({ id: 'preset', x: 40, y: 60, width: 160, height: 80, text: '', color: '5' }),
+    textNode({ id: 'plain', x: 400, y: 60, width: 160, height: 80, text: '' }),
+    textNode({ id: 'sink', x: 40, y: 320, width: 160, height: 80, text: '' }),
+    textNode({
       id: 'oval',
-      type: 'text',
       x: 400,
       y: 320,
       width: 160,
       height: 80,
       text: '',
       facets: { 'visual.shape/v0': { kind: 'ellipse' } },
-    },
+    }),
   ],
   edges: [
     {

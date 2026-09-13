@@ -2,7 +2,9 @@
 // palette's canvas picker, followed via double press or the context menu,
 // retargeted via "Change target". The reference string is opaque to the
 // editor — the host page owns its meaning.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -18,7 +20,7 @@ const OPTIONS = [
 ] as const
 
 const withFileNode: SpatialCanvas = {
-  nodes: [{ id: 'f1', type: 'file', x: 100, y: 100, width: 200, height: 60, file: 'canvas-a' }],
+  nodes: [fileNode({ id: 'f1', x: 100, y: 100, width: 200, height: 60, file: 'canvas-a' })],
   edges: [],
 }
 
@@ -127,7 +129,7 @@ it('the file context menu offers Open canvas and Change target retargets via the
 it('a missing reference renders a quiet missing label and hides the follow affordances', async () => {
   const opened: string[] = []
   const dangling: SpatialCanvas = {
-    nodes: [{ id: 'f1', type: 'file', x: 100, y: 100, width: 200, height: 60, file: 'gone-id' }],
+    nodes: [fileNode({ id: 'f1', x: 100, y: 100, width: 200, height: 60, file: 'gone-id' })],
     edges: [],
   }
   function MissingHost() {

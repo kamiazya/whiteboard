@@ -19,6 +19,7 @@
 // persistence with the spatial editor mocked — no browser layout or input
 // fidelity at stake. The real-IDB contract stays pinned by the four
 // browser-mode keeper suites (see loro-store.browser.test.tsx).
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
@@ -267,15 +268,14 @@ describe('BrowserDocumentPage multi-canvas UI (real IndexedDB)', () => {
     const lateEdit: SpatialCanvas = {
       nodes: [
         ...warmupNode.nodes,
-        {
+        textNode({
           id: 'multi-canvas-late-edit-a',
-          type: 'text',
           x: 30,
           y: 30,
           width: 15,
           height: 15,
           text: 'x',
-        },
+        }),
       ],
       edges: [],
     }

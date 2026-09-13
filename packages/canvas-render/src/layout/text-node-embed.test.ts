@@ -5,7 +5,9 @@
  * parsed the body and laid the literal brackets out — and the wire to the
  * layout worker only made the omission visible on both threads at once.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { referenceSeams } from '../references/seams.js'
@@ -34,15 +36,14 @@ function textOf(nodes: readonly SceneNode[]): string[] {
 
 const canvas: SpatialCanvas = {
   nodes: [
-    {
+    textNode({
       id: 't',
-      type: 'text',
       x: 0,
       y: 0,
       width: 400,
       height: 300,
       text: `See [[${NOTE}]]\n\n![[${NOTE}]]`,
-    },
+    }),
   ],
   edges: [],
 }
@@ -64,9 +65,7 @@ describe('a text node body in the reference grammar', () => {
 
   it('keeps a target nobody resolves as the literal text the author wrote', () => {
     const literal: SpatialCanvas = {
-      nodes: [
-        { id: 't', type: 'text', x: 0, y: 0, width: 400, height: 100, text: 'See [[nowhere]]' },
-      ],
+      nodes: [textNode({ id: 't', x: 0, y: 0, width: 400, height: 100, text: 'See [[nowhere]]' })],
       edges: [],
     }
     const scene = layoutSpatialCanvas(literal, {

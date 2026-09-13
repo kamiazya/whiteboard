@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors } from './edges/spatial-edges.js'
 import type { SpatialLayoutOptions } from './spatial-canvas.js'
@@ -14,9 +15,9 @@ const appearance = {
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a' },
-    { id: 'b', type: 'text', x: 400, y: 0, width: 120, height: 60, text: 'b' },
-    { id: 'c', type: 'text', x: 200, y: 300, width: 120, height: 60, text: 'c' },
+    textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'a' }),
+    textNode({ id: 'b', x: 400, y: 0, width: 120, height: 60, text: 'b' }),
+    textNode({ id: 'c', x: 200, y: 300, width: 120, height: 60, text: 'c' }),
   ],
   edges: [
     {

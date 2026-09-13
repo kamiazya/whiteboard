@@ -7,11 +7,13 @@
 // Its own file because the exporter warms one face set per process: the font
 // is installed before the first export here, which is the state a daemon is
 // in when a user has installed one.
+
 import { mkdtempSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
@@ -23,7 +25,7 @@ import { installedFontDir } from './installed-fonts.js'
 const TEXT = 'xxxx xxxx xxxx'
 
 const sketched: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 200, text: TEXT }],
+  nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 200, text: TEXT })],
   edges: [],
   facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
 }

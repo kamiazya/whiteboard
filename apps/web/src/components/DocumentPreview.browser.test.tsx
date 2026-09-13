@@ -1,7 +1,9 @@
 // The version preview's real-browser claims. None survives jsdom: the palette
 // one needs canvas-render's SVG injected and measured for real, and the
 // navigation ones are pointer sequences against a live layout box.
+
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -13,7 +15,7 @@ afterEach(cleanup)
 const past: PastDocument = {
   kind: 'spatial',
   canvas: {
-    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'past note' }],
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'past note' })],
     edges: [],
   },
 }

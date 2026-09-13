@@ -10,6 +10,7 @@ import { mkdtempSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
@@ -82,7 +83,7 @@ describe('an installed font reaches both the renderer and the report', () => {
     writeFile(path, syntheticFont(COVERED))
 
   const CANVAS = {
-    nodes: [{ id: 'n', type: 'text' as const, x: 0, y: 0, width: 300, height: 60, text: COVERED }],
+    nodes: [textNode({ id: 'n', x: 0, y: 0, width: 300, height: 60, text: COVERED })],
     edges: [],
   }
 

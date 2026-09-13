@@ -17,6 +17,7 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
@@ -92,15 +93,14 @@ function makeSnapshotWithThread(canvas: SpatialCanvas = emptyCanvas()): Uint8Arr
   return doc.export({ mode: 'snapshot' })
 }
 
-const TEXT_NODE: SpatialCanvas['nodes'][number] = {
+const TEXT_NODE: SpatialCanvas['nodes'][number] = textNode({
   id: 'n-a',
-  type: 'text',
   x: 0,
   y: 0,
   width: 100,
   height: 50,
   text: 'hello',
-}
+})
 
 const TEXT_CANVAS: SpatialCanvas = { nodes: [TEXT_NODE], edges: [] }
 

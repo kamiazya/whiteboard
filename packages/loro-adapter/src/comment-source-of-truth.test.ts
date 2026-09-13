@@ -4,7 +4,9 @@
  * every consumer already speaks is unchanged while the storage underneath it
  * moves once rather than twice.
  */
+
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readCommentThreads, writeCommentThread, writeThreadMessage } from './comment-threads.js'
@@ -96,15 +98,7 @@ describe("a passage of a node's text, the anchor a flat comment cannot carry", (
     status: 'open' as const,
     messages: [{ id: 'm1', body: 'is this the right word?' }],
   }
-  const NODE = {
-    id: 'n1',
-    type: 'text' as const,
-    x: 100,
-    y: 200,
-    width: 50,
-    height: 30,
-    text: 'the plan',
-  }
+  const NODE = textNode({ id: 'n1', x: 100, y: 200, width: 50, height: 30, text: 'the plan' })
 
   it('projects onto the canvas as a comment on that node, standing at its corner', () => {
     const doc = new LoroDoc()

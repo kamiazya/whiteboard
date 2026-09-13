@@ -1,4 +1,12 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  frameLabel,
+  type NodeKind,
+  nodeKind,
+  nodeText,
+  nodeUrl,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 
 /** A document's content, as much of it as search needs to see. */
 export type SearchableContent =
@@ -32,35 +40,35 @@ export type SearchableContent =
  * this function with only lexical search in mind moves semantic results
  * too; the quality scoreboard prints the truncation rate, so measure.
  */
+/**
+ * What each kind of node contributes to the index, one row per kind.
+ *
+ * This was a `switch` over the node-kind union, and the comment on its
+ * `default` is the reason it is a TABLE now rather than a chain of `if`s: a
+ * fifth kind has to answer this question instead of falling through it.
+ * `NodeKind` is closed — the resource registry's ids plus the frame — so
+ * `satisfies` fails the build when the registry grows, which is the same
+ * guard `node satisfies never` gave and survives the union's dissolution.
+ */
+const SEARCHABLE = {
+  text: nodeText,
+  // The url IS the label canvas-render draws for a link node, so it is text
+  // the reader can see on the canvas and expects to find by.
+  link: nodeUrl,
+  frame: frameLabel,
+  // Nothing, deliberately. A file node's readable label is the resolved
+  // reference's, and resolving needs a lookup this package does not take. The
+  // raw file reference is an opaque id: indexing it would add a token no one
+  // will ever query, and match a document for a string it does not display.
+  file: () => undefined,
+} satisfies Record<NodeKind, (node: SpatialNode) => string | undefined>
+
 export function searchableTexts(content: SearchableContent): string[] {
   if (content.kind === 'markdown') return [content.body]
   const texts: string[] = []
   for (const node of content.canvas.nodes) {
-    switch (node.type) {
-      case 'text':
-        texts.push(node.text)
-        break
-      case 'link':
-        // The url IS the label canvas-render draws for a link node, so it is
-        // text the reader can see on the canvas and expects to find by.
-        texts.push(node.url)
-        break
-      case 'group':
-        if (node.label !== undefined) texts.push(node.label)
-        break
-      case 'file':
-        // Nothing, deliberately. A file node's readable label is the resolved
-        // reference's, and resolving needs a lookup this package does not take
-        // (see the note above about content already READ). The raw `node.file`
-        // is an opaque id: indexing it would add a token no one will ever
-        // query, and match a document for a string it does not display.
-        break
-      default:
-        // A fifth node kind has to answer this question rather than fall
-        // through it — an exhaustive switch is what makes forgetting one a
-        // build failure instead of a silent gap in search.
-        node satisfies never
-    }
+    const own = SEARCHABLE[nodeKind(node)](node)
+    if (own !== undefined) texts.push(own)
   }
   for (const edge of content.canvas.edges) if (edge.label !== undefined) texts.push(edge.label)
   return texts

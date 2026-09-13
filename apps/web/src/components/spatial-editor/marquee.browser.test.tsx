@@ -2,7 +2,9 @@
 // space marquee-selects intersecting nodes; panning moves to Space+drag or
 // middle-button drag (wheel pan unchanged). The stationary empty double
 // press still creates a node, resolved at the release.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -14,9 +16,9 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 300, y: 100, width: 120, height: 60, text: 'B' },
-    { id: 'c', type: 'text', x: 600, y: 400, width: 120, height: 60, text: 'C' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 300, y: 100, width: 120, height: 60, text: 'B' }),
+    textNode({ id: 'c', x: 600, y: 400, width: 120, height: 60, text: 'C' }),
   ],
   edges: [],
 }

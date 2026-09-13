@@ -9,7 +9,9 @@
  * the INJECTED deps is what tells "went through the seam" apart from "went
  * around it to module-level state", because both persist the same bytes.
  */
+
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../_test-helpers.js'
@@ -35,15 +37,7 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array {
   const doc = new LoroDoc()
   const vv0 = doc.version()
   writeSpatialCanvas(doc, {
-    nodes: nodeIds.map((id) => ({
-      id,
-      type: 'text' as const,
-      text: id,
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-    })),
+    nodes: nodeIds.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
   return doc.export({ mode: 'update', from: vv0 }) as Uint8Array

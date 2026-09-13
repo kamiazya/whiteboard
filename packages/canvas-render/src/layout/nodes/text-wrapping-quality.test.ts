@@ -38,7 +38,7 @@ function scoreLine(name: string, maxWidth: number): string {
     fontFamily: 'Roboto',
   })
   const m = wrappingMetrics(scene, maxWidth, counting.calls())
-  return `${name}@${maxWidth}: overflow=${m.overflowingRuns} max=+${m.maxOverflowPx}px bboxLies=${m.bboxUnderreports} runs=${m.runs} lines=${m.lines} measure=${m.measureCalls}`
+  return `${name}@${maxWidth}: overflow=${m.overflowingRuns} max=+${m.maxOverflowPx}px bboxLies=${m.bboxUnderreports} badStart=${m.forbiddenLineStarts} runs=${m.runs} lines=${m.lines} measure=${m.measureCalls}`
 }
 
 function allScores(): readonly string[] {
@@ -73,6 +73,7 @@ describe('text wrapping scoreboard', () => {
       overflowingRuns: totals.overflowingRuns,
       maxOverflowPx: totals.maxOverflowPx,
       bboxUnderreports: totals.bboxUnderreports,
+      forbiddenLineStarts: totals.forbiddenLineStarts,
     }).toEqual(PINNED_DEBT)
     expect({
       runs: totals.runs,
@@ -83,46 +84,68 @@ describe('text wrapping scoreboard', () => {
 })
 
 const PINNED_SCORES: readonly string[] = [
-  'en-prose@120: overflow=0 max=+0px bboxLies=0 runs=6 lines=6 measure=23',
-  'en-prose@200: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=19',
-  'en-prose@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=15',
-  'ja-prose@120: overflow=0 max=+0px bboxLies=0 runs=9 lines=9 measure=41',
-  'ja-prose@200: overflow=0 max=+0px bboxLies=0 runs=6 lines=6 measure=24',
-  'ja-prose@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=18',
-  'ja-en-mixed@120: overflow=0 max=+0px bboxLies=0 runs=6 lines=6 measure=41',
-  'ja-en-mixed@200: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=14',
-  'ja-en-mixed@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=10',
-  'ja-kinsoku@120: overflow=0 max=+0px bboxLies=0 runs=6 lines=6 measure=19',
-  'ja-kinsoku@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=13',
-  'ja-kinsoku@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=11',
-  'zh-prose@120: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=31',
-  'zh-prose@200: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=27',
-  'zh-prose@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=27',
-  'long-url@120: overflow=0 max=+0px bboxLies=0 runs=8 lines=8 measure=28',
-  'long-url@200: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=20',
-  'long-url@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=18',
-  'long-token@120: overflow=0 max=+0px bboxLies=0 runs=5 lines=5 measure=71',
-  'long-token@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=3 measure=67',
-  'long-token@320: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=65',
-  'inline-code@120: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=13',
-  'inline-code@200: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=23',
-  'inline-code@320: overflow=0 max=+0px bboxLies=0 runs=3 lines=2 measure=38',
-  'ja-heading@120: overflow=0 max=+0px bboxLies=0 runs=11 lines=11 measure=49',
-  'ja-heading@200: overflow=0 max=+0px bboxLies=0 runs=7 lines=7 measure=27',
-  'ja-heading@320: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=21',
-  'ja-list@120: overflow=0 max=+0px bboxLies=0 runs=14 lines=12 measure=52',
-  'ja-list@200: overflow=0 max=+0px bboxLies=0 runs=9 lines=7 measure=40',
-  'ja-list@320: overflow=0 max=+0px bboxLies=0 runs=6 lines=4 measure=23',
-  'emoji@120: overflow=0 max=+0px bboxLies=0 runs=4 lines=4 measure=13',
-  'emoji@200: overflow=0 max=+0px bboxLies=0 runs=2 lines=2 measure=9',
-  'emoji@320: overflow=0 max=+0px bboxLies=0 runs=1 lines=1 measure=3',
+  'en-prose@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=6 lines=6 measure=23',
+  'en-prose@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=4 measure=19',
+  'en-prose@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=2 lines=2 measure=15',
+  'ja-prose@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=9 lines=9 measure=41',
+  'ja-prose@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=6 lines=6 measure=24',
+  'ja-prose@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=3 measure=18',
+  'ja-en-mixed@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=6 lines=6 measure=41',
+  'ja-en-mixed@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=4 measure=14',
+  'ja-en-mixed@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=2 lines=2 measure=10',
+  'ja-kinsoku@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=6 lines=6 measure=19',
+  'ja-kinsoku@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=3 measure=13',
+  'ja-kinsoku@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=2 lines=2 measure=11',
+  'zh-prose@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=4 measure=31',
+  'zh-prose@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=2 lines=2 measure=27',
+  'zh-prose@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=2 lines=2 measure=27',
+  'long-url@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=8 lines=8 measure=28',
+  'long-url@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=4 measure=20',
+  'long-url@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=3 measure=18',
+  'long-token@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=5 lines=5 measure=71',
+  'long-token@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=3 measure=67',
+  'long-token@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=2 lines=2 measure=65',
+  'ja-code-kinsoku@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=5 lines=4 measure=23',
+  'ja-code-kinsoku@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=3 measure=15',
+  'ja-code-kinsoku@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=2 measure=14',
+  'ja-strong-kinsoku@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=5 lines=4 measure=20',
+  'ja-strong-kinsoku@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=2 measure=15',
+  'ja-strong-kinsoku@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=2 measure=15',
+  'en-code-stop@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=5 lines=4 measure=17',
+  'en-code-stop@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=2 measure=14',
+  'en-code-stop@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=1 measure=8',
+  'inline-code@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=2 measure=13',
+  'inline-code@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=2 measure=23',
+  'inline-code@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=3 lines=2 measure=38',
+  'ja-heading@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=11 lines=11 measure=49',
+  'ja-heading@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=7 lines=7 measure=27',
+  'ja-heading@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=4 measure=21',
+  'ja-list@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=14 lines=12 measure=52',
+  'ja-list@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=9 lines=7 measure=40',
+  'ja-list@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=6 lines=4 measure=23',
+  'emoji@120: overflow=0 max=+0px bboxLies=0 badStart=0 runs=4 lines=4 measure=13',
+  'emoji@200: overflow=0 max=+0px bboxLies=0 badStart=0 runs=2 lines=2 measure=9',
+  'emoji@320: overflow=0 max=+0px bboxLies=0 badStart=0 runs=1 lines=1 measure=3',
 ]
 
-const PINNED_DEBT = { overflowingRuns: 0, maxOverflowPx: 0, bboxUnderreports: 0 }
-// The debt above is unchanged and still zero on every case. The price moved
-// DOWN across the board when the type scale was compressed for node width,
-// and each mover has one cause: `ja-heading` wraps fewer lines because the
-// heading sizes shrank (32/24/20 -> 24/20/17), and `ja-list` wraps fewer
-// because the list indent went 32 -> 22, which is a WIDER content column by
-// definition. Nothing else in the corpus moved.
-const PINNED_PRICE = { runs: 153, lines: 144, measureCalls: 913 }
+// `forbiddenLineStarts` counts lines opened by a character UAX #14 forbids
+// there — the kinsoku this package documents as coming free with
+// `lineBreak: 'strict'`. It held inside a run and broke at every INLINE
+// BOUNDARY, because the wrapper decides breaks one `emit` call at a time and
+// each inline node is its own call; the three cases added to reach it read 4
+// (the existing corpus was single-text-node prose and could not). Carrying
+// the junction across those calls took it to zero, and the whole corpus is
+// at zero on every debt column.
+const PINNED_DEBT = {
+  overflowingRuns: 0,
+  maxOverflowPx: 0,
+  bboxUnderreports: 0,
+  forbiddenLineStarts: 0,
+}
+// Price is what refusing the forbidden break costs: +2 runs, +2 lines and +4
+// measure calls, all of it on the two rows where the stretch that could not
+// be parted from the incoming text had to come down a line to keep it
+// (`ja-code-kinsoku@200`, `en-code-stop@120`). The other 40 rows are
+// byte-identical, which is the claim worth having — a junction rule that
+// re-wrapped prose it has no business touching would show up here.
+const PINNED_PRICE = { runs: 191, lines: 168, measureCalls: 1054 }

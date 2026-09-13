@@ -2,7 +2,9 @@
 // or pan, and Select All means "every node" — neither should leave the
 // browser's own text selection painted over the chrome. Text stays selectable
 // exactly where text is being edited.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -12,7 +14,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 40, y: 40, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'a', x: 40, y: 40, width: 200, height: 100, text: 'hello' })],
   edges: [],
 }
 

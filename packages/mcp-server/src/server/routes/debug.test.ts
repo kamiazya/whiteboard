@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
@@ -106,8 +107,8 @@ describe('GET /api/debug', () => {
     await mkdir(join(tempDir, 'sess-nodes'), { recursive: true })
     const doc = makeSpatialDoc({
       nodes: [
-        { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-        { id: 'n2', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
+        textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+        textNode({ id: 'n2', text: 'b', x: 0, y: 0, width: 10, height: 10 }),
       ],
       edges: [
         {
@@ -147,7 +148,7 @@ describe('GET /api/debug', () => {
   it('ignores stale legacy tombstones once a canvas has migrated to the nodes model', async () => {
     await mkdir(join(tempDir, 'sess-mixed'), { recursive: true })
     const doc = makeSpatialDoc({
-      nodes: [{ id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
+      nodes: [textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
     const legacy = doc.getMovableList('elements')

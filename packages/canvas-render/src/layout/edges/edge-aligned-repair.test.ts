@@ -7,15 +7,17 @@
 // list — was strictly better on every tier. Neither number was visible to a
 // search that never aligns, so the fix is the second, fully-aligned run
 // `assignEdgeAnchors` makes over the settled configuration.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { pathLength } from '../../test-utils/routing-metrics.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
 const nodes: SpatialNode[] = [
-  { id: 'A', type: 'text', x: 100, y: 570, width: 200, height: 100, text: 'A' },
-  { id: 'B', type: 'text', x: 280, y: 520, width: 200, height: 100, text: 'B' },
-  { id: 'T', type: 'text', x: 80, y: 360, width: 200, height: 110, text: 'T' },
+  textNode({ id: 'A', x: 100, y: 570, width: 200, height: 100, text: 'A' }),
+  textNode({ id: 'B', x: 280, y: 520, width: 200, height: 100, text: 'B' }),
+  textNode({ id: 'T', x: 80, y: 360, width: 200, height: 110, text: 'T' }),
 ]
 const edges: CanvasEdge[] = [
   {

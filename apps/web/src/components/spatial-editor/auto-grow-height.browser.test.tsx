@@ -4,7 +4,9 @@
 // their border and overlapped neighbours. Contract pinned here: committing
 // text GROWS the node to fit its laid-out content (grow-only — a roomy box
 // stays at its authored size, and manual enlargement is never fought).
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -56,7 +58,7 @@ async function editNodeText(container: HTMLElement, text: string) {
 
 it('committing a tall body grows the node height to contain it', async () => {
   const { Host, latest } = makeHost({
-    nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 60, text: 'hi' }],
+    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 60, text: 'hi' })],
     edges: [],
   })
   const { container } = render(<Host />)
@@ -75,7 +77,7 @@ it('committing a tall body grows the node height to contain it', async () => {
 
 it('committing a short body into a roomy box leaves its height alone (grow-only)', async () => {
   const { Host, latest } = makeHost({
-    nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 180, text: 'hello' }],
+    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 180, text: 'hello' })],
     edges: [],
   })
   const { container } = render(<Host />)

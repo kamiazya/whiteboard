@@ -13,8 +13,10 @@
 //
 // The numbers are pinned EXACTLY. An improvement has to be as loud as a
 // regression, because the point is that someone says why it moved.
+
 import { writeCoreFacets, writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
@@ -41,7 +43,7 @@ import { registerDocumentTools } from './document-tools.js'
 
 const WORKSPACE_ID = 'ws-count'
 const SEED_CANVAS: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'seeded' }],
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 60, text: 'seeded' })],
   edges: [],
 }
 

@@ -1,5 +1,7 @@
 // The canvas's verb strip: under the header, for the duration of an edit.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -25,7 +27,7 @@ const bar = () => document.querySelector('[data-testid="canvas-verb-bar"]')
 
 function Host() {
   const [canvas, setCanvas] = useState<SpatialCanvas>({
-    nodes: [{ id: 'n1', type: 'text', x: 100, y: 300, width: 240, height: 100, text: 'milk' }],
+    nodes: [textNode({ id: 'n1', x: 100, y: 300, width: 240, height: 100, text: 'milk' })],
     edges: [],
   })
   return (

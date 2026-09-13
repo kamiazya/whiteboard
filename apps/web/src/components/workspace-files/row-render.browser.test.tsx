@@ -7,8 +7,10 @@
  * between them is not, which is exactly where a wrong key or a stale message
  * kind hides.
  */
+
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
@@ -16,8 +18,8 @@ import { createRowRenderLoader } from './load-row-render.js'
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 120, text: 'Alpha' },
-    { id: 'b', type: 'text', x: 300, y: 60, width: 200, height: 120, text: 'Beta' },
+    textNode({ id: 'a', x: 0, y: 0, width: 200, height: 120, text: 'Alpha' }),
+    textNode({ id: 'b', x: 300, y: 60, width: 200, height: 120, text: 'Beta' }),
   ],
   edges: [
     {

@@ -6,6 +6,7 @@ import type {
   SpatialNode,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
@@ -34,26 +35,24 @@ function makeDoc(): LoroDoc {
   return new LoroDoc()
 }
 
-const TEXT_NODE: SpatialNode = {
+const TEXT_NODE: SpatialNode = textNode({
   id: 'node-1',
-  type: 'text',
   x: 100,
   y: 200,
   width: 300,
   height: 150,
   text: 'Hello world',
-}
+})
 
-const FILE_NODE: SpatialNode = {
+const FILE_NODE: SpatialNode = fileNode({
   id: 'node-2',
-  type: 'file',
   x: 500,
   y: 200,
   width: 200,
   height: 200,
   file: 'image.png',
   subpath: '#page1',
-}
+})
 
 const LINK_NODE: SpatialNode = {
   id: 'node-3',
@@ -65,9 +64,8 @@ const LINK_NODE: SpatialNode = {
   url: 'https://example.com',
 }
 
-const GROUP_NODE: SpatialNode = {
+const GROUP_NODE: SpatialNode = groupNode({
   id: 'node-4',
-  type: 'group',
   x: 0,
   y: 0,
   width: 800,
@@ -75,7 +73,7 @@ const GROUP_NODE: SpatialNode = {
   label: 'My Group',
   background: '#ff0000',
   backgroundStyle: 'cover',
-}
+})
 
 const EDGE: CanvasEdge = {
   id: 'edge-1',
@@ -1209,8 +1207,8 @@ describe('canvas comments bridge', () => {
 })
 
 describe('reconcileSpatialCanvas', () => {
-  const A: SpatialNode = { id: 'a', type: 'text', text: 'alpha', x: 0, y: 0, width: 10, height: 10 }
-  const B: SpatialNode = { id: 'b', type: 'text', text: 'beta', x: 5, y: 5, width: 10, height: 10 }
+  const A: SpatialNode = textNode({ id: 'a', text: 'alpha', x: 0, y: 0, width: 10, height: 10 })
+  const B: SpatialNode = textNode({ id: 'b', text: 'beta', x: 5, y: 5, width: 10, height: 10 })
 
   test('writes only what changed, deletes only what the caller could SEE, never the rest', () => {
     const doc = makeDoc()
@@ -1284,8 +1282,8 @@ describe("an edge's facets bucket", () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [
-        { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-        { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
+        textNode({ id: 'a', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+        textNode({ id: 'b', text: 'b', x: 50, y: 50, width: 10, height: 10 }),
       ],
       edges: [
         {

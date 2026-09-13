@@ -3,7 +3,7 @@
   "version": "0.0.19",
   "description": "Collaborative whiteboard for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the shared skills bundled with that package.",
   "repository": "https://github.com/kamiazya/whiteboard",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "skills": "./skills",
   "mcpServers": {
     "whiteboard": {

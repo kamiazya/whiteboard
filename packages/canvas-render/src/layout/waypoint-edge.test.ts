@@ -3,6 +3,7 @@
 // composed scene with no option passed and nothing contributed.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -21,8 +22,8 @@ const BEND = { x: 60, y: 400 }
 
 const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a' },
-    { id: 'b', type: 'text', x: 500, y: 0, width: 120, height: 60, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'a' }),
+    textNode({ id: 'b', x: 500, y: 0, width: 120, height: 60, text: 'b' }),
   ],
   edges: [
     {

@@ -4,7 +4,9 @@
  * follow", and neither depends on where the finger landed — which is why a
  * property over press POSITIONS could not see either of them.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -13,7 +15,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const board: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 40, y: 40, width: 200, height: 100, text: 'a' }],
+  nodes: [textNode({ id: 'a', x: 40, y: 40, width: 200, height: 100, text: 'a' })],
   edges: [],
 }
 

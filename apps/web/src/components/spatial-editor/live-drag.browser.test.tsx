@@ -3,8 +3,10 @@
 // scene hides what the ghost layer is already drawing — no duplicate node
 // left behind at the start position. Real pointer input, assertions taken
 // MID-drag before any pointerup.
+
 import { assignEdgeAnchors } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -14,8 +16,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' },
-    { id: 'b', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'Beta' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' }),
+    textNode({ id: 'b', x: 500, y: 100, width: 120, height: 60, text: 'Beta' }),
   ],
   edges: [
     {
@@ -123,9 +125,9 @@ it('re-routes a bystander edge live when the dragged node lands on its path', as
   // or the preview disagrees with the committed result.
   const blocked: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Mover' },
-      { id: 'c', type: 'text', x: 100, y: 300, width: 120, height: 60, text: 'From' },
-      { id: 'd', type: 'text', x: 700, y: 300, width: 120, height: 60, text: 'To' },
+      textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'Mover' }),
+      textNode({ id: 'c', x: 100, y: 300, width: 120, height: 60, text: 'From' }),
+      textNode({ id: 'd', x: 700, y: 300, width: 120, height: 60, text: 'To' }),
     ],
     edges: [
       {
@@ -162,10 +164,10 @@ it('recomputes line jumps live while the drag is in flight', async () => {
   // enabled, so the drop result hops e2 over e1 — the live preview must too.
   const crossing: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 700, y: 100, width: 120, height: 60, text: 'B' },
-      { id: 'c', type: 'text', x: 350, y: 300, width: 120, height: 60, text: 'C' },
-      { id: 'd', type: 'text', x: 350, y: 600, width: 120, height: 60, text: 'D' },
+      textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 700, y: 100, width: 120, height: 60, text: 'B' }),
+      textNode({ id: 'c', x: 350, y: 300, width: 120, height: 60, text: 'C' }),
+      textNode({ id: 'd', x: 350, y: 600, width: 120, height: 60, text: 'D' }),
     ],
     edges: [
       {
@@ -221,9 +223,9 @@ it('keeps a touched edge label visible and centered during the drag', async () =
 it('a multi-selection ghost carries every member, not only the grabbed node', async () => {
   const trio: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' },
-      { id: 'c', type: 'text', x: 100, y: 300, width: 120, height: 60, text: 'Gamma' },
-      { id: 'b', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'Beta' },
+      textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' }),
+      textNode({ id: 'c', x: 100, y: 300, width: 120, height: 60, text: 'Gamma' }),
+      textNode({ id: 'b', x: 500, y: 100, width: 120, height: 60, text: 'Beta' }),
     ],
     edges: [],
   }
@@ -278,9 +280,9 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
   // (Bystander freezing is pinned in live-drag-side-tracking.)
   const crossing: SpatialCanvas = {
     nodes: [
-      { id: 'red', type: 'text', x: 300, y: 100, width: 200, height: 100, text: 'Red' },
-      { id: 'yellow', type: 'text', x: 620, y: 300, width: 160, height: 90, text: 'Yellow' },
-      { id: 'cyan', type: 'text', x: 700, y: 520, width: 160, height: 90, text: 'Cyan' },
+      textNode({ id: 'red', x: 300, y: 100, width: 200, height: 100, text: 'Red' }),
+      textNode({ id: 'yellow', x: 620, y: 300, width: 160, height: 90, text: 'Yellow' }),
+      textNode({ id: 'cyan', x: 700, y: 520, width: 160, height: 90, text: 'Cyan' }),
     ],
     edges: [
       {
@@ -351,18 +353,19 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
   try {
     const big = (shift: number): SpatialCanvas => ({
       nodes: [
-        { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' },
-        { id: 'p', type: 'text', x: 500, y: 100 + shift, width: 120, height: 60, text: 'P' },
-        { id: 'q', type: 'text', x: 500, y: 400 + shift, width: 120, height: 60, text: 'Q' },
-        ...Array.from({ length: 9 }, (_, i) => ({
-          id: `f${i}`,
-          type: 'text' as const,
-          x: 900 + i * 160,
-          y: 600,
-          width: 120,
-          height: 60,
-          text: `f${i}`,
-        })),
+        textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' }),
+        textNode({ id: 'p', x: 500, y: 100 + shift, width: 120, height: 60, text: 'P' }),
+        textNode({ id: 'q', x: 500, y: 400 + shift, width: 120, height: 60, text: 'Q' }),
+        ...Array.from({ length: 9 }, (_, i) =>
+          textNode({
+            id: `f${i}`,
+            x: 900 + i * 160,
+            y: 600,
+            width: 120,
+            height: 60,
+            text: `f${i}`,
+          }),
+        ),
       ],
       edges: [
         {
@@ -435,18 +438,17 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
   // editor's live layer resolves silhouettes at all.
   const shaped: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 100, y: 150, width: 120, height: 60, text: 'A' },
-      { id: 'c', type: 'text', x: 100, y: 350, width: 120, height: 60, text: 'C' },
-      {
+      textNode({ id: 'a', x: 100, y: 150, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'c', x: 100, y: 350, width: 120, height: 60, text: 'C' }),
+      textNode({
         id: 'hub',
-        type: 'text',
         x: 500,
         y: 200,
         width: 200,
         height: 200,
         text: 'Hub',
         facets: { 'visual.shape/v0': { kind: 'diamond' } },
-      },
+      }),
     ],
     edges: [
       {
