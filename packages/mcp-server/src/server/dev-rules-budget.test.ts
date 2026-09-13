@@ -320,7 +320,17 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // nobody deletes it looking for dead code or invents a router to justify it.
 // Plus the note that an edge with a FREE end is not routed yet, which is a
 // decision rather than an omission.
-const CANVAS_RENDER_BUDGET = 133
+//
+// 134 for kinsoku across an INLINE BOUNDARY, and the bytes go to two things a
+// reader cannot get from the diff. That deciding WHERE a line may break is
+// still delegated to UAX #14 at the junction too — so nobody answers the next
+// such report with a character table, which is the shape the fix does not
+// take. And that an ATOMIC run is still cut against the width it had when it
+// was placed, so a relocated one can fade on a line with room: without that
+// sentence the next reader finds a fade beside empty space and reads the
+// junction rule as broken. The entry was cut from 1900 chars to fit one
+// bucket rather than two; what went was provenance the commit already holds.
+const CANVAS_RENDER_BUDGET = 134
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
