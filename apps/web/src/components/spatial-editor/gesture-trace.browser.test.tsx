@@ -8,6 +8,13 @@
  * singleton's length: the recorder deliberately survives across tests, and
  * an assertion on "the newest entry" would read a neighbour's press as its
  * own (the global-counter flake shape).
+ *
+ * "Mints" was a literal per test until CI's `stress-changed-tests` repeated
+ * this file in-process: `--repeats` re-runs the same body without
+ * re-importing, so a FIXED id makes the second repetition read the first
+ * one's press as its own — the very shape the paragraph above describes,
+ * arriving from the test's own past rather than from a neighbour. The
+ * recorder survives that too, so the id has to really be minted.
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -49,6 +56,13 @@ function touch(target: Element, type: 'down' | 'move' | 'up', id: number, x: num
   else fireEvent.pointerUp(target, init)
 }
 
+/** A pointerId no other test and no earlier repetition of this one has used. */
+let mintedPointerIds = 70
+function mintPointerId(): number {
+  mintedPointerIds += 1
+  return mintedPointerIds
+}
+
 function entriesFor(pointerId: number): TraceEntry[] {
   return gestureTrace.entries().filter((entry) => {
     if (entry.kind === 'navigation')
@@ -62,16 +76,17 @@ it('a hand drag records the machine answering: panning, then idle again', () => 
   const { container } = render(<Host />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   const r = root.getBoundingClientRect()
-  touch(root, 'down', 71, r.left + 300, r.top + 300)
-  touch(root, 'move', 71, r.left + 340, r.top + 320)
-  touch(root, 'up', 71, r.left + 340, r.top + 320)
+  const id = mintPointerId()
+  touch(root, 'down', id, r.left + 300, r.top + 300)
+  touch(root, 'move', id, r.left + 340, r.top + 320)
+  touch(root, 'up', id, r.left + 340, r.top + 320)
 
-  const modes = entriesFor(71).flatMap((entry) =>
+  const modes = entriesFor(id).flatMap((entry) =>
     entry.kind === 'navigation' ? [entry.modeAfter] : [],
   )
   expect(modes).toEqual(['panning', 'panning', 'idle'])
   // The document-side ear heard the same press, headed inside the root.
-  const doc = entriesFor(71).filter((entry) => entry.kind === 'doc-pointer')
+  const doc = entriesFor(id).filter((entry) => entry.kind === 'doc-pointer')
   expect(doc.map((entry) => (entry.kind === 'doc-pointer' ? entry.insideRoot : false))).toEqual([
     true,
     true,
@@ -82,10 +97,11 @@ it('a press the dock takes is recorded with the name of what took it', () => {
   const { container } = render(<Host />)
   const dock = container.querySelector('[aria-label="Canvas tools"]') as HTMLElement
   const b = dock.getBoundingClientRect()
-  touch(dock, 'down', 72, b.left + 4, b.top + 4)
-  touch(dock, 'up', 72, b.left + 4, b.top + 4)
+  const id = mintPointerId()
+  touch(dock, 'down', id, b.left + 4, b.top + 4)
+  touch(dock, 'up', id, b.left + 4, b.top + 4)
 
-  const mine = entriesFor(72)
+  const mine = entriesFor(id)
   const rejected = mine.filter((entry) => entry.kind === 'overlay-rejected')
   expect(rejected).toHaveLength(1)
   expect(rejected[0]?.kind === 'overlay-rejected' && rejected[0].target.overlay).toBe(
@@ -106,14 +122,15 @@ it('a press a portal element takes never reaches the editor, and the trace says 
   portal.setAttribute('data-testid', 'trace-test-portal')
   portal.style.cssText = `position:fixed;left:${r.left + 200}px;top:${r.top + 200}px;width:120px;height:120px;z-index:9999`
   document.body.append(portal)
+  const id = mintPointerId()
   try {
-    touch(portal, 'down', 73, r.left + 240, r.top + 240)
-    touch(portal, 'up', 73, r.left + 240, r.top + 240)
+    touch(portal, 'down', id, r.left + 240, r.top + 240)
+    touch(portal, 'up', id, r.left + 240, r.top + 240)
   } finally {
     portal.remove()
   }
 
-  const mine = entriesFor(73)
+  const mine = entriesFor(id)
   const doc = mine.filter((entry) => entry.kind === 'doc-pointer' && entry.type === 'pointerdown')
   expect(doc).toHaveLength(1)
   expect(doc[0]?.kind === 'doc-pointer' && doc[0].insideRoot).toBe(false)

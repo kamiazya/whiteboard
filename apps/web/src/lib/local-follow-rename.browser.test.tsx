@@ -15,7 +15,8 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -24,6 +25,17 @@ import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
 
 claimIsolatedWhiteboardDb('local-follow-rename')
+
+// The claim is made once per MODULE, and `--repeats` re-runs the tests
+// without re-importing — so without this every seed after the first collides
+// on its own path (`DocumentPathTakenError`). The same beat as
+// `local-search.browser.test.tsx`, and found the same way: CI's
+// `stress-changed-tests` repeats a PR's touched test files in-process, so a
+// file that was never repeat-safe becomes a candidate the moment a diff
+// touches it.
+beforeEach(async () => {
+  await clearWhiteboardDb()
+})
 
 async function seedMarkdown(
   index: IdbDocumentIndex,
