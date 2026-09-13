@@ -109,6 +109,43 @@ describe('useDocumentFileSeams', () => {
     await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(2))
   })
 
+  it("loads the picture a TEXT node writes inline, not only a file node's", async () => {
+    // The layout draws a text node's `![](asset:…)` through the same seam a
+    // file node's picture comes from; nothing collected it, so the seam had
+    // nothing to answer and the body painted the written path.
+    const adapter = makeAdapter()
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({
+        canvas: embedded('see ![](asset:in-text) here'),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
+    )
+    await waitFor(() =>
+      expect(seamsOf(result).resolveReference('asset:in-text')?.image).toEqual({
+        href: 'blob:asset:in-text',
+      }),
+    )
+  })
+
+  it('loads the picture a DRAFTED body writes inline, so the overlay previews it', async () => {
+    const adapter = makeAdapter()
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({
+        canvas: canvasWith(),
+        adapter,
+        stampOf: new Map(),
+        bodies: ['![](asset:being-drafted)'],
+      }),
+    )
+    await waitFor(() =>
+      expect(seamsOf(result).resolveReference('asset:being-drafted')?.image).toEqual({
+        href: 'blob:asset:being-drafted',
+      }),
+    )
+  })
+
   it('does not spin when every image load fails', async () => {
     const loadImageUrl = vi.fn(async () => undefined)
     const adapter = makeAdapter({ loadImageUrl })
