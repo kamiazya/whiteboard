@@ -23,6 +23,47 @@ describe('useReferenceSeams', () => {
     expect(load).toHaveBeenCalledTimes(1)
   })
 
+  it("answers an inline image's picture, which is the whole point of the seam", async () => {
+    // The preview draws `![](asset:…)` through `resolveReference`. Without a
+    // picture on this side the layout keeps the written path, so a workspace
+    // attachment rendered as a broken image while the same asset drew fine
+    // on a board.
+    const loadImage = vi.fn(async (ref: string) => `blob:${ref}`)
+    const { result } = renderHook(() =>
+      useReferenceSeams({
+        body: 'see ![shot](asset:pic) here',
+        load: async () => undefined,
+        loadImage,
+      }),
+    )
+    await waitFor(() =>
+      expect(result.current.resolveReference('asset:pic')).toEqual({
+        image: { href: 'blob:asset:pic' },
+      }),
+    )
+    expect(loadImage).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows an embedded note, so a picture one level down loads too', async () => {
+    const loadImage = vi.fn(async (ref: string) => `blob:${ref}`)
+    const load = vi.fn<ReferenceLoader>(async (_target, id) =>
+      id === B ? { documentId: B, body: '![](asset:deep)' } : undefined,
+    )
+    const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load, loadImage }))
+    await waitFor(() =>
+      expect(result.current.resolveReference('asset:deep')?.image).toEqual({
+        href: 'blob:asset:deep',
+      }),
+    )
+  })
+
+  it('asks for no picture when the host supplies no loader', async () => {
+    const { result } = renderHook(() =>
+      useReferenceSeams({ body: '![](asset:pic)', load: async () => undefined }),
+    )
+    await waitFor(() => expect(result.current.resolveReference('asset:pic')).toBeUndefined())
+  })
+
   it('a canvas target is answered as a canvas, unparsed', async () => {
     const canvas: SpatialCanvas = {
       nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 100, text: 'board node' })],

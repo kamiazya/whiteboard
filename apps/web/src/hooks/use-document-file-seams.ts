@@ -17,6 +17,7 @@
 
 import {
   type FacetCardData,
+  imageTargets,
   type LoadedReference,
   type ReferenceExtra,
   type ReferenceWire,
@@ -30,8 +31,8 @@ import {
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { collectFileRefs } from '../lib/document-embed-content.js'
 import type { DocumentFileAdapter, LoadedFileDocument } from '../lib/document-file-contract.js'
+import { useImageUrls } from './use-image-urls.js'
 
 export interface UseDocumentFileSeamsOptions {
   readonly canvas: SpatialCanvas
@@ -91,24 +92,11 @@ export function useDocumentFileSeams({
     new Map(),
   )
   const embedStampsRef = useRef<Map<string, string>>(new Map())
-  // Image assets are immutable once stored, so object URLs cache for the
-  // lifetime of the page and are revoked together on unmount.
-  const [imageUrls, setImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
-  const imageUrlsRef = useRef<ReadonlyMap<string, string>>(imageUrls)
-  imageUrlsRef.current = imageUrls
-
   // Kept in a ref so a caller that rebuilds its adapter object every render
   // cannot restart the fetch effects; the adapter is a backend binding, not
   // reactive state.
   const adapterRef = useRef(adapter)
   adapterRef.current = adapter
-
-  useEffect(
-    () => () => {
-      for (const url of imageUrlsRef.current.values()) URL.revokeObjectURL(url)
-    },
-    [],
-  )
 
   // The shared record per reference: what this keeper loaded, minus the
   // facets, which are a surface extra below. `null` keeps the terminal
@@ -176,35 +164,17 @@ export function useDocumentFileSeams({
     }
   }, [bodies, canvas, embedContent, graph, stampOf])
 
-  useEffect(() => {
-    const refs = collectFileRefs(canvas).filter(
-      (ref) => adapterRef.current.isImageRef(ref) && !imageUrls.has(ref),
-    )
-    if (refs.length === 0) return
-    let cancelled = false
-    void Promise.all(
-      refs.map(async (ref) => [ref, await adapterRef.current.loadImageUrl(ref)] as const),
-    ).then((loaded) => {
-      if (cancelled) return
-      setImageUrls((prev) => {
-        // When every load failed, keep the SAME map instance: a fresh (equal)
-        // map would re-trigger this effect and spin the failed reads forever.
-        // Failed refs retry only on the next canvas change.
-        let added = false
-        const next = new Map(prev)
-        for (const [ref, url] of loaded) {
-          if (url !== undefined) {
-            next.set(ref, url)
-            added = true
-          }
-        }
-        return added ? next : prev
-      })
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [canvas, imageUrls])
+  // Every picture this render draws, from the one definition — a canvas's
+  // image file nodes AND what a body writes inline, the board's text nodes
+  // and the drafted bodies included. A file-node scan was all this had, so a
+  // text node's `![](asset:…)` was drawn by the layout and loaded by nobody.
+  const imageUrls = useImageUrls(
+    useMemo(
+      () => imageTargets({ canvases: [canvas], bodies, loaded: graph }),
+      [bodies, canvas, graph],
+    ),
+    useCallback((ref: string) => adapterRef.current.loadImageUrl(ref), []),
+  )
 
   // What this surface adds beside the content, as data so it rides the
   // wire as-is. An image reference is never loaded as a document, so its

@@ -12,6 +12,7 @@
  * the failed target is never re-fetched in a retry storm.
  */
 import {
+  imageTargets,
   type LoadedReference,
   type ReferenceSeams,
   referenceSeams,
@@ -22,6 +23,7 @@ import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { useCallback, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { loadBrowserReference } from '../lib/document-embed-content.js'
+import { type LoadImageUrl, useImageUrls } from './use-image-urls.js'
 import { type PrefetchRequest, usePrefetchedEntries } from './use-prefetched-cache.js'
 
 const log = getAppLogger('reference-seams')
@@ -49,6 +51,13 @@ export interface UseReferenceSeamsOptions {
   readonly resolveTitle?: (documentId: string) => string | undefined
   /** Injection seam for tests and for the daemon page; defaults to the browser's Loro loader. */
   readonly load?: ReferenceLoader
+  /**
+   * Where a stored picture is, for the body's inline `![](asset:…)`. Absent,
+   * the layout keeps the written URL — which is right for an absolute one and
+   * is why a host that has no attachment store passes nothing rather than a
+   * loader that always fails.
+   */
+  readonly loadImage?: LoadImageUrl
 }
 
 export function useReferenceSeams({
@@ -56,6 +65,7 @@ export function useReferenceSeams({
   resolveAlias,
   resolveTitle,
   load = loadFromBrowser,
+  loadImage,
 }: UseReferenceSeamsOptions): ReferenceSeams {
   // A canonical id names itself, the way codec's reader treats it; anything
   // else is an alias the page's table may know. Resolved here, once per
@@ -98,12 +108,24 @@ export function useReferenceSeams({
     ),
   )
 
+  // The pictures this body draws, from the same definition the board uses —
+  // so an attachment written inline resolves here exactly as it does there,
+  // rather than the preview inventing a second answer.
+  const imageUrls = useImageUrls(
+    useMemo(() => imageTargets({ bodies: [body], loaded: cache }), [body, cache]),
+    loadImage,
+  )
+
   return useMemo(
     () =>
       referenceSeams(cache, {
         ...(resolveAlias !== undefined ? { resolveAlias } : {}),
         ...(resolveTitle !== undefined ? { resolveTitle } : {}),
+        extra: (ref) => {
+          const href = imageUrls.get(ref)
+          return href === undefined ? undefined : { image: { href } }
+        },
       }),
-    [cache, resolveAlias, resolveTitle],
+    [cache, imageUrls, resolveAlias, resolveTitle],
   )
 }

@@ -334,7 +334,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // vocabularies can do. Its comment is most of the 46 and says exactly
   // that, because applying the two in the other order silently moves every
   // offset after the first emoji.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1745,
+  // +7: that image asks the caller WHERE its picture is, through the
+  // `resolveReference` seam a body already carries — so a written path can
+  // be a workspace attachment instead of only an absolute URL.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1752,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

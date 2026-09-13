@@ -65,7 +65,11 @@ import type {
 import { z } from 'zod'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
-import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
+import {
+  type ReferenceSeams,
+  referenceFor as resolveOneReference,
+  withReferenceSeams,
+} from '../references/seams.js'
 import { sceneBounds } from '../scene-bounds.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
@@ -900,17 +904,12 @@ function groupPassages(
 }
 
 /**
- * The caller's resolution for one reference, guarded to the never-throw
- * rule. The single place `resolveReference` is called, so every caller
- * below gets the same total behaviour without repeating a try/catch.
+ * The caller's resolution for one reference. The guard itself lives in
+ * `references/` — a body's inline image resolves through the same one, and
+ * a second copy would be a second answer to "what does a throwing seam do".
  */
 function referenceFor(ref: string, options: ResolvedLayoutOptions): ResolvedReference | undefined {
-  if (options.resolveReference === undefined) return undefined
-  try {
-    return options.resolveReference(ref)
-  } catch {
-    return undefined
-  }
+  return resolveOneReference(ref, options.resolveReference)
 }
 
 /** The readable label of a non-text node, or `undefined` when it has none. */
