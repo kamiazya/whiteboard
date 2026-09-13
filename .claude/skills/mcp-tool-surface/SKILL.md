@@ -239,34 +239,49 @@ rather than by argument. Both would pass every gate this repo has.
   sentence gone. Registering the described `width`/`height` reads as -837
   bytes and 4 arms x (60 + 150) is the whole of it — the bytes ARE the
   descriptions. **Only a composite may be registered.**
-- **`allOf` + `$ref` inheritance: SPEC-INVALID as zod emits it, and NOT yet
-  judged on the axis that matters.** The four node arms spend 424 bytes each
-  on the same shared base, 1,696 together, so extracting it is worth ~1,100.
-  `z.intersection` pairs a `$ref` with a sibling carrying
-  `additionalProperties: false`, which sees only its own subschema's
-  properties. Checked with ajv 8 against 2020-12: flat accepts valid input,
-  allOf + `additionalProperties` refuses it, allOf + `unevaluatedProperties`
-  is correct. zod 4.4.3 reads `unevaluatedProperties` and never emits it.
+- **`allOf` + `$ref` inheritance: CLOSED, and not on the axis first claimed.**
+  The four node arms spend 424 bytes each on the same shared base, 1,696
+  together, so extracting it looks worth ~1,100. Four things were measured,
+  in the order they were found, and each on its own settles it:
 
-  **What that measurement does and does not cover, because the distinction was
-  got wrong once here.** ajv is a defensible reference for the artifact's
-  SPEC-CONFORMANCE — both MCP SDKs bundle it, and `fromJsonSchema` uses it to
-  validate tools registered with a raw JSON Schema, so it is the SDK's own
-  reading of what a JSON Schema means. It says nothing about C14, the axis
-  ADR-0031 exists for: whether a MODEL can read and use the table. Models
-  handle `allOf`/`$ref` routinely, and rung 3 is the instrument for that
-  question. **It has not been run on this change.**
+  1. **It never reaches the table.** The published node draft is derived
+     `spatialNodeSchema.options` -> `.omit()` -> `.partial()` -> `.extend()`
+     -> `z.discriminatedUnion`. Every step requires a ZodObject and every
+     step FLATTENS, so making the stored schema an intersection changes the
+     table by nothing. Reaching it means building the write-side drafts as
+     intersections directly, which costs `discriminatedUnion` (refusal
+     quality), `NODE_DRAFT_KEYS`, and the free derivation the code comment
+     calls "the point".
+  2. **It does not compile or run.** An intersection is not an object:
+     `.omit()` is gone (four sites) and `z.infer` degrades to `{}` /
+     `unknown` across `canvas-edit.ts`. The server does not start.
+  3. **Spec-conformance and C10 cannot both hold.** ajv 8, 2020-12, four
+     shapes: flat + strict accepts valid input and refuses a stray key;
+     `allOf` with both halves strict REFUSES valid input; `allOf` with
+     neither strict accepts a stray key (C10 lost); only `allOf` +
+     `unevaluatedProperties` is correct, and zod 4.4.3 reads that keyword
+     without ever emitting it.
+  4. **The model axis was never the blocker.** The table already publishes
+     five `$ref`s and the round-14 reading was pass^3 1.0 / debtFree^3 1.0,
+     so `$ref` comprehension is established. Only `allOf` specifically is
+     unmeasured — and a rung-3 run would not move any of 1-3, which is why
+     it was not spent.
 
-  Nor does any MEASURED consumer reject it today: this server validates with
-  zod, and the MCP client SDK does not validate outgoing arguments against
-  `inputSchema` at all (it only scans it for header declarations). The
-  exposure is to a conformant third-party client that does, which is real but
-  hypothetical here — it was first recorded as "only a client validating
-  breaks", with no client checked.
+  The first record of this said "publishes a schema that refuses every valid
+  call" and stopped there. That is true of the artifact and was the wrong
+  thing to lead with: ajv answers spec-conformance (defensibly — both MCP
+  SDKs bundle it, and `fromJsonSchema` uses it for raw-JSON-Schema tools),
+  and says nothing about C14. It also asserted "only a client validating
+  against the published schema breaks" with no client checked. Checked
+  since: this server validates with zod, and the MCP client SDK does not
+  validate outgoing arguments against `inputSchema` at all.
 
-  So this is **open, not refuted**. Adopting it needs a rung-3 reading
-  before/after; declining it needs someone to weigh ~1,100 bytes against
-  shipping a schema that a conformant validator calls unsatisfiable.
+**Nothing else in the table is worth registering.** Re-scanned after the
+node extension landed: every remaining repeated fragment is a described
+leaf, which is the refuted shape above. The one exception is a
+description-free record type (`{type: object, propertyNames, additional
+Properties}`, four sites, ~99 bytes) — safe by the rule and 0.26% of the
+table, so not worth an increment on its own.
 
 ## Traps, each paid for once
 
