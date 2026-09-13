@@ -469,9 +469,26 @@ describe('what the tool table costs to read', () => {
       // That is now twice on this tool's subject, and the entry above says
       // what both point at: a join the ANSWER carries is not a sentence a
       // model may or may not act on.
+      //
+      // THAT JOIN NOW EXISTS — `otherTargets` names by scope what the
+      // filter removed, so `target: 'node'` also says `canvas` holds
+      // `visual.axes/v0` — AND IT DID NOT MOVE THE READING EITHER. Round
+      // 17: 0 of 3, `colour contested` x3, unmoved from round 15. Two of
+      // the three trials had the join in front of them (the third passed
+      // `assetKind` alone and never asked). So the sentence two rows up is
+      // now measured and wrong as a general remedy: carrying a fact in the
+      // answer makes it unmissable, not acted on. Four attempts on this
+      // lane have now been refuted — two skill/answer sentences, one
+      // description clause, and this, the first STRUCTURAL one.
+      //
+      // The row moves +176 WIRE and **0 visible**, because a table's price
+      // is its INPUT schema and this is output. The field is kept on a
+      // ground that is not C14 and says so in its own doc comment: a
+      // filtered answer that silently drops a scope is a partial truth.
+      // What was withdrawn is the claim, not the field.
       wb_facet_list: {
         visibleBytes: 1002,
-        wireBytes: 2114,
+        wireBytes: 2290,
         descriptionWords: 63,
         parameters: 3,
         undescribed: 0,
@@ -708,8 +725,14 @@ describe('what the tool table costs to read', () => {
       //
       // Then -4 visible / -20 wire for `node.patch`'s derived geometry (see
       // the `wb_canvas_edit` row). Strictly more accepted, and cheaper.
+      //
+      // Then +176 WIRE for `wb_facet_list`'s `otherTargets` (see its row):
+      // an OUTPUT field, so it moves `wireBytes` alone and leaves
+      // `visibleBytes` exactly where the line above left it — the only
+      // change in this file so far that bought something without touching
+      // the column a model pays on every turn.
       visibleBytes: 38296,
-      wireBytes: 115719,
+      wireBytes: 115895,
       parameters: 345,
       undescribed: 221,
     })

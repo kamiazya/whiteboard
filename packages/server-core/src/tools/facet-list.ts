@@ -40,9 +40,13 @@ export const facetListInputSchema = z
      * the plain meaning kept, because a parameter a caller picks from an
      * enum of four should say what it does either way.
      *
-     * What the reading points at instead is structural, and this tool's own
-     * history already says it: a join the ANSWER carries is not a sentence a
-     * model may or may not act on.
+     * What the reading pointed at instead was structural, and this tool's
+     * own history said it confidently: a join the ANSWER carries is not a
+     * sentence a model may or may not act on. That was built (`otherTargets`
+     * below) and MEASURED, and it is not true as a general remedy — round
+     * 17 read 0 of 3 with `colour contested` three times, unmoved, and two
+     * of those trials had the join in front of them. Carrying a fact in the
+     * answer makes it unmissable; it does not make a model act on it.
      */
     target: facetTargetSchema
       .optional()
@@ -153,6 +157,44 @@ export const facetListOutputSchema = z
         })
         .strict(),
     ),
+    /**
+     * What `target` filtered OUT, by the scope that holds it — keys only,
+     * since a caller who wants one can ask for that scope.
+     *
+     * Present only when `target` was given, and omitted rather than `{}`
+     * when the filter removed nothing, on the same rule `assetRefs`
+     * follows: a key on every answer is bytes that say nothing.
+     *
+     * Measured, not reasoned (ADR-0031 round 15, 0 of 3). Asked to tell two
+     * things apart at once, every trial called this tool with
+     * `target: 'node'` — the right question while dressing boxes — and so
+     * never saw `visual.axes/v0`, which is canvas-only and is the one facet
+     * that records what a colour MEANS. All three coloured by health and
+     * recorded nothing. A description saying the filter hides a scope was
+     * measured next and moved nothing (round 16: `target: 'node'` x3 again).
+     *
+     * THIS DID NOT MOVE IT EITHER, and that is the finding rather than a
+     * disappointment: round 17 read 0 of 3, `colour contested` three times.
+     * Two of the three trials called with `target: 'node'` and so had
+     * `otherTargets` naming `visual.axes/v0` in front of them; the third
+     * passed `assetKind` alone and never asked. So the structural form this
+     * tool's history predicted would work is measured and does not, as a
+     * remedy for C14.
+     *
+     * KEPT anyway, on a ground that is not C14 and is stated plainly so the
+     * next reader can overrule it: an answer that silently drops a scope is
+     * a partial truth, and this makes it whole for +176 WIRE bytes and ZERO
+     * model-visible ones — a table's price is its INPUT schema, and this is
+     * output. What is withdrawn is the CLAIM, not the field.
+     *
+     * `partialRecord`, not `record`: handed an enum key, zod 4 makes EVERY
+     * member required, so an answer naming only the scopes that actually
+     * hold something fails its own output contract. Caught by three guards
+     * at once — `tsc`, the input fuzz property, and `smoke:e2e`'s runtime
+     * validation of `structuredContent` — which is what the first draft of
+     * this field did.
+     */
+    otherTargets: z.partialRecord(facetTargetSchema, z.array(z.string())).optional(),
   })
   .strict()
 export type FacetListOutput = z.infer<typeof facetListOutputSchema>
@@ -181,7 +223,7 @@ export function createFacetListTool(deps: ServerDeps) {
         parsed.workspaceId === undefined
           ? (deps.facetRegistry ?? bundledFacetRegistry)
           : await workspaceFacetRegistry(deps, parsed.workspaceId, 'refuse')
-      const facets = registry.plugins
+      const allFacets = registry.plugins
         .flatMap((plugin) =>
           plugin.facets.map((definition) => ({
             key: `${plugin.id}.${definition.name}/${definition.version}`,
@@ -205,10 +247,12 @@ export function createFacetListTool(deps: ServerDeps) {
               : { assetRefs: { ...definition.assetRefs } }),
           })),
         )
-        .filter((facet) => parsed.target === undefined || facet.targets.includes(parsed.target))
         // Sorted by key so two calls agree and a diff of the output is
         // stable; registration order is an implementation detail.
         .sort((a, b) => (a.key < b.key ? -1 : 1))
+      const facets = allFacets.filter(
+        (facet) => parsed.target === undefined || facet.targets.includes(parsed.target),
+      )
 
       // NOT sorted, unlike the facets: registration order is what a reader
       // wants here — the bundled vocabulary first, then what this
@@ -224,9 +268,30 @@ export function createFacetListTool(deps: ServerDeps) {
             ...(kind === 'stencils' ? { displayName: registry.stencilAsset(id)?.displayName } : {}),
           })),
         )
-      return { facets, assets }
+      return { facets, assets, ...otherTargets(allFacets, parsed.target) }
     },
   }
+}
+
+/**
+ * The scopes the filter removed a facet from, keyed by scope. A facet the
+ * filter KEPT never appears here even when it also attaches elsewhere:
+ * the answer already named it, and repeating it under its other scopes
+ * would bury the entries that are actually missing.
+ */
+function otherTargets(
+  allFacets: readonly { key: string; targets: readonly FacetTarget[] }[],
+  target: FacetTarget | undefined,
+): { otherTargets?: Partial<Record<FacetTarget, string[]>> } {
+  if (target === undefined) return {}
+  const byTarget: Partial<Record<FacetTarget, string[]>> = {}
+  for (const facet of allFacets) {
+    if (facet.targets.includes(target)) continue
+    for (const other of facet.targets) {
+      byTarget[other] = [...(byTarget[other] ?? []), facet.key]
+    }
+  }
+  return Object.keys(byTarget).length === 0 ? {} : { otherTargets: byTarget }
 }
 
 function describeSchema(schema: z.ZodTypeAny): unknown {
