@@ -94,6 +94,21 @@ const nodeExtensionWriteSchema = z
       }),
     ...(value.facets === undefined ? {} : { facets: value.facets }),
   }))
+/**
+ * NAMED in zod's registry, so it is emitted into `$defs` once and referenced
+ * at each of its four sites instead of inlined there. Measured: -776
+ * model-visible bytes, with `parameters` and `undescribed` unmoved.
+ *
+ * Only a COMPOSITE may be registered, and that rule was measured rather than
+ * assumed. A description INSIDE a registered object survives into `$defs`
+ * (`EdgeEnd` keeps all three of its). A description ON the registered schema
+ * itself is DROPPED — registering the described `width`/`height` leaves read
+ * as -837 bytes, and the bytes were the descriptions being deleted: 4 arms x
+ * (60 + 150) is the whole of it, and the model would have been left guessing
+ * at a size field that used to say what omitting it buys.
+ */
+z.globalRegistry.add(nodeExtensionWriteSchema, { id: 'NodeExtension' })
+
 const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
 
 /**

@@ -144,7 +144,17 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // why. Raised rather than paid for by trimming prose — this file funded
   // an earlier increment that way, and a budget met by deleting rationale
   // buys lines at the price of the thing the lines were for.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1140,
+  // +3 for nothing anyone wrote: renaming `emojiCompletionSource` to
+  // `shortcodeCompletionSource` (it serves both vocabularies now) made the
+  // `override` array one character too long for the line, and the formatter
+  // broke it across three. Recorded rather than fought, and NOT paid for by
+  // trimming prose, for the reason the entry above already gives.
+  // +3 for `addToOptions`, which draws an icon row's glyph where an emoji
+  // row shows its character. It has to be passed at each host's own
+  // `autocompletion()` call — `completionConfig` is not exported, so it
+  // cannot ride the shared theme, and a second `autocompletion()` beside
+  // this one would replace its `override`.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1146,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first

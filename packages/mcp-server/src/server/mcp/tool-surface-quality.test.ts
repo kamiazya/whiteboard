@@ -312,12 +312,33 @@ describe('what the tool table costs to read', () => {
       // description bought is on `line.add`'s draft: when to reach for ink
       // over a relation, which is the only thing here a model cannot infer
       // from JSON Canvas.
+      // TWO causes, and they must not be read as one.
+      //
+      // BYTES: -776, the node extension NAMED in zod's registry so it is
+      // emitted into `$defs` once rather than inlined at each of its four
+      // sites. Nothing about what a model may send changed.
+      //
+      // COUNTS: +56 parameters and +24 undescribed at UNCHANGED bytes, and
+      // this is the instrument being corrected, not the surface moving. The
+      // oracle did not resolve `$ref`, so every property inside the five
+      // subschemas already named in the registry was invisible to it — the
+      // debt this board reports was understated by 24 for as long as those
+      // registrations have existed. It was wrong in both directions, which is
+      // why it never looked wrong: registering an undescribed subschema read
+      // as debt PAID and a described one as debt ADDED.
+      //
+      // Only a COMPOSITE is registered, and that rule is measured. A
+      // description inside a registered object survives into `$defs`; a
+      // description ON the registered schema is dropped. Registering the
+      // described `width`/`height` leaves read as -837 bytes, and the bytes
+      // WERE the descriptions being deleted (4 arms x (60 + 150)) — a saving
+      // that is really a silent content loss, refused here.
       wb_canvas_edit: {
-        visibleBytes: 15823,
-        wireBytes: 38801,
+        visibleBytes: 15047,
+        wireBytes: 38025,
         descriptionWords: 169,
-        parameters: 165,
-        undescribed: 130,
+        parameters: 221,
+        undescribed: 154,
         strays: 'refused',
         names: [],
       },
@@ -659,10 +680,17 @@ describe('what the tool table costs to read', () => {
       // The rung-3 task it was aimed at reads 0 of 3 before and after, so
       // this row buys the debt and nothing else — said plainly, because a
       // re-pinned row with no reason is the regression the exact pin refuses.
-      visibleBytes: 39076,
-      wireBytes: 116515,
-      parameters: 289,
-      undescribed: 197,
+      //
+      // Then -776 for the node extension named in zod's registry (see the
+      // canvas_edit row), and separately +56 parameters / +24 undescribed at
+      // unchanged bytes when the oracle learned to resolve `$ref`. The second
+      // pair is the instrument, not the table: 345 and 221 are what the
+      // surface has been all along, and 289 / 197 were what an oracle that
+      // stopped at a `$ref` could see of it.
+      visibleBytes: 38300,
+      wireBytes: 115739,
+      parameters: 345,
+      undescribed: 221,
     })
   })
 

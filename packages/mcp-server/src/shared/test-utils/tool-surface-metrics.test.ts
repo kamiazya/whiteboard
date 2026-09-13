@@ -59,6 +59,71 @@ describe('tool-surface metrics oracle', () => {
     })
   })
 
+  it('resolves a $ref, so a subschema named in the registry still counts where it is used', () => {
+    // Registering a schema in zod's global registry emits it into `$defs`
+    // once and a `$ref` at each site. That is a byte-level change to how the
+    // same surface is transmitted, so it must not move a count that means
+    // "how many parameters are there". Unresolved, the walk stopped at the
+    // `$ref` — every property behind one was invisible, in BOTH directions:
+    // registering an undescribed subschema read as debt paid, a described one
+    // as debt added.
+    const withRef = {
+      type: 'object',
+      $defs: {
+        End: {
+          type: 'object',
+          properties: {
+            node: { type: 'string', description: 'The node.' },
+            side: { type: 'string' },
+          },
+        },
+      },
+      properties: {
+        from: { $ref: '#/$defs/End' },
+        to: { $ref: '#/$defs/End' },
+      },
+    } as const
+    const coverage = parameterCoverage(withRef)
+    // `from`, `to`, and each end's two fields at each of the two sites.
+    expect(coverage.parameters).toBe(6)
+    expect(coverage.described).toBe(2)
+    expect(coverage.undescribed).toEqual(['from', 'from.side', 'to', 'to.side'])
+  })
+
+  it("takes a $ref target's description, and lets the referencing site override it", () => {
+    const schema = {
+      type: 'object',
+      $defs: { Size: { type: 'number', description: 'From the target.' } },
+      properties: {
+        width: { $ref: '#/$defs/Size' },
+        height: { $ref: '#/$defs/Size', description: 'From the site.' },
+      },
+    } as const
+    expect(parameterCoverage(schema).described).toBe(2)
+    expect(parameterCoverage(schema).undescribed).toEqual([])
+  })
+
+  it('stops at a $ref that points at itself, rather than recurring forever', () => {
+    const cyclic = {
+      type: 'object',
+      $defs: {
+        Tree: { type: 'object', properties: { child: { $ref: '#/$defs/Tree' } } },
+      },
+      properties: { root: { $ref: '#/$defs/Tree' } },
+    } as const
+    // `root`, and its `child` once; the second hop is refused.
+    expect(parameterCoverage(cyclic).parameters).toBe(2)
+  })
+
+  it('leaves a $ref it cannot follow alone, rather than reading it as an empty schema', () => {
+    const dangling = {
+      type: 'object',
+      properties: { a: { $ref: '#/$defs/Missing' }, b: { $ref: 'https://example.test/x' } },
+    } as const
+    expect(parameterCoverage(dangling).parameters).toBe(2)
+    expect(parameterCoverage(dangling).undescribed).toEqual(['a', 'b'])
+  })
+
   it('counts a union arm as its own parameter, since it is its own line to the model', () => {
     // Both arms declare `op`; one is described and one is not, and the
     // oracle must not let the described arm cover for the other.
