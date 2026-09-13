@@ -203,22 +203,52 @@ jobs:
   stress-changed-tests:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    # Sized on the largest changed set this repo has produced, because a loop
-    # that cannot finish reports `cancelled` — neither a pass nor a failure,
-    # and `ci-gate` correctly refuses it. Measured on a 290-file set (a
-    # repo-wide fixture migration): each of the five fresh runs took 369-380s
-    # and the first four passed 290/290, then the job hit 30 minutes partway
-    # into the fifth and the `--repeats=3` step never started. Four green
-    # passes reading as a red gate is the worst of both.
+    # SPLIT so a browser file never shares a vitest process with a node or
+    # jsdom one. Everywhere else in CI they are separate jobs — `test-browser`
+    # x2, `test-jsdom` x2, `test-unit` x2 — and this lane was the only place
+    # that put all three realms in ONE process, at whatever size the diff
+    # happened to be. That is not a scale the repo's tests are written
+    # against, and it showed: on a 290-file changed set (a repo-wide fixture
+    # migration) four consecutive runs each failed a DIFFERENT test, none of
+    # which the same commit's `test-unit`/`test-browser`/`test-jsdom` jobs
+    # could fail, and none of which reproduced locally. Two were budgets
+    # sized for a normal run (a wall-clock stall ceiling, a 5s default) and
+    # were fixed on their merits; the third was a browser test losing typed
+    # characters to ~115 chromium contexts competing with 175 node workers.
     #
-    # 5 x 380s + ~45s setup + the repeats step is ~40 minutes, so 60 leaves
-    # headroom without being a budget nobody notices spending. Cost is in
-    # WORKER time (92-93% of each run, one process per file), not in the
-    # tests themselves (2%) — so if this needs raising again, split the five
-    # runs across a matrix instead. They are independent by construction, and
-    # `ci-gate` judges per-leg conclusions from the Actions API precisely so
-    # a leg count can change without renaming a required check.
+    # The lane's job is to stress the tests a PR TOUCHED. At this size it was
+    # instead amplifying the whole suite's residual flakiness: five fresh runs
+    # plus `--repeats=3` is six full-suite passes, so even a small per-run
+    # failure probability makes red near-certain — and what it reported then
+    # said nothing about the diff.
+    #
+    # The partition is by project NAME, not by a list of them: a list beside
+    # the vitest config is the drift this repo keeps paying for. vitest takes
+    # globs and negation (`--project '*-browser'` / `--project '!*-browser'`),
+    # so the two legs are complementary by construction. What that RESTS on —
+    # every browser project's name ending `-browser`, and every project being
+    # claimed by exactly one leg — is derived and asserted in
+    # `ci-stress-job.test.ts`, because `--passWithNoTests` makes a pattern
+    # that matches nothing silent.
+    #
+    # 60 minutes: before the split, five runs at 369-380s each plus the
+    # repeats step came to ~40 on the full set, and the 30 it had ran out
+    # partway through the fifth — reporting `cancelled`, which is neither a
+    # pass nor a failure and which `ci-gate` correctly refuses. Each leg is
+    # smaller than that now and they run in parallel; the headroom stays
+    # because the cost is WORKER time (92-93% of each run, one process per
+    # file) and it grows with the diff. If a leg needs more, sharding it the
+    # way `test-browser` already shards is the next step, not a bigger number.
     timeout-minutes: 60
+    strategy:
+      # One leg failing must not hide the other's result.
+      fail-fast: false
+      matrix:
+        include:
+          - leg: browser
+            projects: '*-browser'
+          - leg: node
+            projects: '!*-browser'
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
@@ -284,8 +314,8 @@ jobs:
         # the first process of each job still pays full transform cost.
         run: |
           for i in 1 2 3 4 5; do
-            echo "=== stress run $i/5 ==="
-            pnpm exec vitest run --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
+            echo "=== stress run $i/5 (${{ matrix.leg }}) ==="
+            pnpm exec vitest run --project '${{ matrix.projects }}' --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
           done
 
       - name: Repeat changed tests in-process (3x)
@@ -294,7 +324,7 @@ jobs:
         # SAME test in one process (a leaked timer, a module-level cache, a
         # handle that was "most recent" last time). `--repeats` runs the
         # passes too, which is what separates it from `retry`.
-        run: pnpm exec vitest run --repeats=3 --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
+        run: pnpm exec vitest run --project '${{ matrix.projects }}' --repeats=3 --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
 
   sbom-npm:
     # Standing regression job: generate:sbom:npm only ran in release.yml before
