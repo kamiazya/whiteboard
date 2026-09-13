@@ -159,9 +159,17 @@ describe('the mutation lane covers what it says it covers', () => {
     // declining (a non-finite box, a name the table lacks, a
     // prototype-inherited name answering a function) with a named example
     // apiece, plus construction the pixel goldens compare byte for byte.
+    // 73 since the wrapper's line-break seam was split in two, and the two
+    // go opposite ways. `layout/nodes/inline-junction.ts` is IN, for the
+    // reason its own entry gives: it is a rule whose every decision is
+    // mutation-shaped, not a ladder of ways to decline.
+    // `layout/nodes/uax-segments.ts` is OUT and always will be — it is the
+    // `LineBreaker` call and its options object, with no branch of its own,
+    // and it exists only so the wrapper's granularity ladder and the
+    // junction rule cannot come to disagree about where a line may break.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 13,
-      production: 71,
+      mutated: 14,
+      production: 73,
     })
   })
 
