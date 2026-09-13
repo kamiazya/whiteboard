@@ -25,6 +25,7 @@ import {
 import { DOCUMENT_PATH_SEGMENT_PATTERN, generateDocumentId } from '@kamiazya/whiteboard-model'
 import {
   arbitraryForSchema,
+  textNode,
   workspaceSegmentArbitrary,
 } from '@kamiazya/whiteboard-model/test-utils'
 import type { DocRef, DocumentEntry } from '@kamiazya/whiteboard-ports'
@@ -278,7 +279,7 @@ describe('BrowserVersionStore', () => {
     if (record === null) throw new Error('no record')
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'saved' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'saved' })],
       edges: [],
     })
     doc.commit()

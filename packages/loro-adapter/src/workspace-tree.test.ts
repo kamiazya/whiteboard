@@ -8,6 +8,7 @@
  * where the answers are written down so a later change cannot quietly pick
  * different ones.
  */
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
@@ -111,7 +112,7 @@ describe('workspace tree', () => {
     createWorkspaceDocument(doc, { documentId: ID_B, segment: 'other', kind: 'spatial' })
 
     writeSpatialCanvas(documentContainers(doc, ID_A), {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'hello' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'hello' })],
       edges: [],
     })
 
@@ -149,7 +150,7 @@ describe('workspace tree', () => {
       const undoManager = new UndoManager(doc, { mergeInterval: 500 })
 
       writeSpatialCanvas(documentContainers(doc, ID_A), {
-        nodes: [{ id: 'n-1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'probe' }],
+        nodes: [textNode({ id: 'n-1', x: 0, y: 0, width: 80, height: 40, text: 'probe' })],
         edges: [],
       })
       expect(undoManager.canUndo()).toBe(true)
@@ -172,8 +173,8 @@ describe('workspace tree', () => {
       standalone.setPeerId(9n)
       writeSpatialCanvas(standalone, {
         nodes: [
-          { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' },
-          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'bb' },
+          textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'aa' }),
+          textNode({ id: 'n-b', x: 100, y: 0, width: 80, height: 40, text: 'bb' }),
         ],
         edges: [],
       })
@@ -191,8 +192,8 @@ describe('workspace tree', () => {
       moved.setPeerId(9n)
       writeSpatialCanvas(moved, {
         nodes: [
-          { id: 'n-a', type: 'text', x: 5, y: 5, width: 80, height: 40, text: 'aa' },
-          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'bb' },
+          textNode({ id: 'n-a', x: 5, y: 5, width: 80, height: 40, text: 'aa' }),
+          textNode({ id: 'n-b', x: 100, y: 0, width: 80, height: 40, text: 'bb' }),
         ],
         edges: [],
       })
@@ -202,8 +203,8 @@ describe('workspace tree', () => {
       writeWorkspaceDocumentContent(doc, ID_A, moved)
       writeSpatialCanvas(documentContainers(peer, ID_A), {
         nodes: [
-          { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' },
-          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'peer-renamed' },
+          textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'aa' }),
+          textNode({ id: 'n-b', x: 100, y: 0, width: 80, height: 40, text: 'peer-renamed' }),
         ],
         edges: [],
       })
@@ -219,8 +220,8 @@ describe('workspace tree', () => {
       const standalone = new LoroDoc()
       writeSpatialCanvas(standalone, {
         nodes: [
-          { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' },
-          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'bb' },
+          textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'aa' }),
+          textNode({ id: 'n-b', x: 100, y: 0, width: 80, height: 40, text: 'bb' }),
         ],
         edges: [],
       })
@@ -229,7 +230,7 @@ describe('workspace tree', () => {
 
       const shrunk = new LoroDoc()
       writeSpatialCanvas(shrunk, {
-        nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' }],
+        nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'aa' })],
         edges: [],
       })
       writeWorkspaceDocumentContent(doc, ID_A, shrunk)
@@ -293,7 +294,7 @@ describe('workspace tree', () => {
       const standalone = new LoroDoc()
       standalone.setPeerId(9n)
       writeSpatialCanvas(standalone, {
-        nodes: [{ id: 'n1', type: 'text', x: 1, y: 2, width: 80, height: 40, text: 'carry me' }],
+        nodes: [textNode({ id: 'n1', x: 1, y: 2, width: 80, height: 40, text: 'carry me' })],
         edges: [],
       })
 
@@ -308,7 +309,7 @@ describe('workspace tree', () => {
       expect(projected).not.toBeNull()
       if (projected === null) return
       expect(readSpatialCanvas(projected).nodes).toEqual([
-        { id: 'n1', type: 'text', x: 1, y: 2, width: 80, height: 40, text: 'carry me' },
+        textNode({ id: 'n1', x: 1, y: 2, width: 80, height: 40, text: 'carry me' }),
       ])
       // Node meta (segment, kind, name, documentId) is tree bookkeeping, not
       // document content — a projection carrying it would invent root
@@ -329,7 +330,7 @@ describe('workspace tree', () => {
       const standalone = new LoroDoc()
       standalone.setPeerId(9n)
       writeSpatialCanvas(standalone, {
-        nodes: [{ id: 'n1', type: 'text', x: 5, y: 6, width: 80, height: 40, text: 'moved in' }],
+        nodes: [textNode({ id: 'n1', x: 5, y: 6, width: 80, height: 40, text: 'moved in' })],
         edges: [],
       })
 
@@ -399,7 +400,7 @@ describe('workspace tree', () => {
 
       deleteWorkspaceDocument(a, { documentId: ID_A })
       writeSpatialCanvas(documentContainers(b, ID_A), {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'late' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'late' })],
         edges: [],
       })
       a.import(b.export({ mode: 'update' }))
@@ -420,14 +421,14 @@ describe('projection at a checkout', () => {
     const ws = new LoroDoc()
     createWorkspaceDocumentAtPath(ws, { path: 'design', documentId: ID, kind: 'spatial' })
     writeSpatialCanvas(documentContainers(ws, ID), {
-      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'v1' }],
+      nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'v1' })],
       edges: [],
     })
     const pastFrontiers = ws.frontiers()
     writeSpatialCanvas(documentContainers(ws, ID), {
       nodes: [
-        { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'v2' },
-        { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'later' },
+        textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'v2' }),
+        textNode({ id: 'n-b', x: 100, y: 0, width: 80, height: 40, text: 'later' }),
       ],
       edges: [],
     })
@@ -450,14 +451,14 @@ describe('reconcileDocContent (restore = a new edit equal to the past)', () => {
     const live = new LoroDoc()
     writeSpatialCanvas(live, {
       nodes: [
-        { id: 'n-a', type: 'text', x: 9, y: 9, width: 80, height: 40, text: 'edited' },
-        { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'later' },
+        textNode({ id: 'n-a', x: 9, y: 9, width: 80, height: 40, text: 'edited' }),
+        textNode({ id: 'n-b', x: 100, y: 0, width: 80, height: 40, text: 'later' }),
       ],
       edges: [],
     })
     const past = new LoroDoc()
     writeSpatialCanvas(past, {
-      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'v1' }],
+      nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'v1' })],
       edges: [],
     })
 
@@ -620,7 +621,7 @@ describe('row-relocated meta write paths (dual-plane collapse S4b)', () => {
     const standalone = new LoroDoc()
     standalone.setPeerId(9n)
     writeSpatialCanvas(standalone, {
-      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' }],
+      nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'aa' })],
       edges: [],
     })
     const doc = workspace()
@@ -644,7 +645,7 @@ describe('row-relocated meta write paths (dual-plane collapse S4b)', () => {
     const changed = new LoroDoc()
     changed.setPeerId(9n)
     writeSpatialCanvas(changed, {
-      nodes: [{ id: 'n-a', type: 'text', x: 5, y: 5, width: 80, height: 40, text: 'aa' }],
+      nodes: [textNode({ id: 'n-a', x: 5, y: 5, width: 80, height: 40, text: 'aa' })],
       edges: [],
     })
     const stampFloor = Date.now()
@@ -658,7 +659,7 @@ describe('row-relocated meta write paths (dual-plane collapse S4b)', () => {
     const standalone = new LoroDoc()
     standalone.setPeerId(9n)
     writeSpatialCanvas(standalone, {
-      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' }],
+      nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'aa' })],
       edges: [],
     })
     const doc = workspace()

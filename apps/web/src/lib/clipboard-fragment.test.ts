@@ -2,8 +2,10 @@
 // Pure clipboard-fragment helpers (editor-completeness slice 2): extract a
 // self-contained fragment from a selection, and remint ids on paste so a
 // fragment can land any number of times in any canvas without colliding.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { clipboardFragmentSchema, endIn, endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { extractClipboardFragment, remintClipboardFragment } from './clipboard-fragment.js'
@@ -32,9 +34,9 @@ vi.setConfig({ testTimeout: 60_000 })
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-    { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'b' },
-    { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'c' },
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+    textNode({ id: 'b', x: 200, y: 0, width: 100, height: 50, text: 'b' }),
+    textNode({ id: 'c', x: 400, y: 0, width: 100, height: 50, text: 'c' }),
   ],
   edges: [
     {

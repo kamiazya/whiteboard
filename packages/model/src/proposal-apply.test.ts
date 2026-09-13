@@ -3,13 +3,14 @@
 // the web editor adopts, and a later MCP verb will adopt the same way, and a
 // second implementation of "what does this change mean" would be free to
 // disagree with the first.
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { SpatialProposedChange } from './proposal.js'
 import { applyCanvasChange, canvasChangeConflicts } from './proposal-apply.js'
 import type { SpatialCanvas } from './spatial.js'
 
-const NODE_A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' } as const
-const NODE_B = { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' } as const
+const NODE_A = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
+const NODE_B = textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' })
 const EDGE = {
   id: 'e',
   from: { node: 'a' },
@@ -32,7 +33,7 @@ describe('applyCanvasChange', () => {
       id: 'node:c',
       status: 'open',
       op: 'node.add',
-      node: { id: 'c', type: 'text', x: 400, y: 400, width: 80, height: 30, text: 'C' },
+      node: textNode({ id: 'c', x: 400, y: 400, width: 80, height: 30, text: 'C' }),
     })
     expect(next.nodes.map((node) => node.id)).toEqual(['a', 'b', 'c'])
   })
@@ -141,7 +142,7 @@ describe('canvasChangeConflicts', () => {
       id: 'node:c',
       status: 'open',
       op: 'node.add',
-      node: { id: 'c', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'C' },
+      node: textNode({ id: 'c', x: 0, y: 0, width: 10, height: 10, text: 'C' }),
     }
     expect(canvasChangeConflicts(add, BOARD)).toBe(false)
     expect(

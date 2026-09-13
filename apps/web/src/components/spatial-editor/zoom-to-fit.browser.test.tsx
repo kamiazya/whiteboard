@@ -2,7 +2,9 @@
 // the viewport framing the editor could already compute. Shift+1 frames
 // everything, Shift+2 frames the selection; the hand-mode dock's framing
 // button is the touch path.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -13,8 +15,8 @@ afterEach(cleanup)
 // Content far wider than the 800x600 host, so fitting MUST zoom out.
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'A' },
-    { id: 'b', type: 'text', x: 2000, y: 1200, width: 400, height: 200, text: 'B' },
+    textNode({ id: 'a', x: 0, y: 0, width: 400, height: 200, text: 'A' }),
+    textNode({ id: 'b', x: 2000, y: 1200, width: 400, height: 200, text: 'B' }),
   ],
   edges: [],
 }

@@ -13,7 +13,9 @@
  * that no double press can be claimed, whatever the timing. What is left is
  * unconditional: a one-finger drag from a fresh spot pans by its own delta.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -27,8 +29,8 @@ const ROOT_H = 780
 
 const board: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 200, height: 100, text: 'a' },
-    { id: 'b', type: 'text', x: 20, y: 300, width: 200, height: 100, text: 'b' },
+    textNode({ id: 'a', x: 40, y: 40, width: 200, height: 100, text: 'a' }),
+    textNode({ id: 'b', x: 20, y: 300, width: 200, height: 100, text: 'b' }),
   ],
   edges: [],
 }

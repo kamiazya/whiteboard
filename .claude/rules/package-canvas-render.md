@@ -840,6 +840,20 @@ the table alone.
       claiming `maxWidth` while an atomic run paints past it is what let
       `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
       all agree on a size nothing actually fitted in.
+    - **Kinsoku holds across an INLINE BOUNDARY, not only inside a run**
+      (`layout/nodes/inline-junction.ts`). Every inline node is its own `emit`
+      call, so the junction between two was a break opportunity by accident:
+      `。` after `` `code` ``, after `**強調**` or after an icon opened a
+      line, which this decision forbids. It is asked of
+      `uaxSegments` — the same authority, not a table of its own — and a break
+      it forbids relocates the stretch already on the line rather than
+      splitting a pair no line may split. `forbiddenLineStarts` 4 -> 0, at +2
+      runs and +2 lines on the two rows that relocate. A run that PAINTS
+      answers U+FFFC at both edges: its EM SPACE placeholder would otherwise
+      read to UAX #14 as a space. Left, measured: an ATOMIC run is cut against
+      the width left when PLACED, so a relocated one can fade on a roomy line;
+      moving it down instead costs `inline-code@320` a line and moves no
+      defect column.
     On top of UAX #14, **BudouX narrows the candidates to phrase (文節)
     boundaries for Japanese**, a strict subset of the UAX opportunities, so
     preferring them costs nothing in fit and buys a line that breaks where a

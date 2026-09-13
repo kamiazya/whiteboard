@@ -14,6 +14,7 @@ import {
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -54,7 +55,7 @@ function seededSnapshot(): Uint8Array {
   const doc = new LoroDoc()
   writeDocumentKind(doc, 'spatial')
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
     edges: [],
   })
   writeCommentThread(doc, {

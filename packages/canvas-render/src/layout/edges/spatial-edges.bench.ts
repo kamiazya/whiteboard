@@ -9,8 +9,10 @@
 //
 // Numbers are machine-specific — compare a before/after on the SAME machine
 // in one sitting, never a committed figure against a fresh run.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { test } from 'vitest'
 import { clusteredLayout } from '../../test-utils/routing-corpus.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
@@ -21,15 +23,16 @@ import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
  * the optimizer busy. Deterministic, so two runs compare like for like.
  */
 function gridCanvas(nodeCount: number, edgeCount: number) {
-  const nodes: SpatialNode[] = Array.from({ length: nodeCount }, (_, i) => ({
-    id: `n${i}`,
-    type: 'text',
-    x: (i % 8) * 260,
-    y: Math.floor(i / 8) * 180,
-    width: 200,
-    height: 120,
-    text: `n${i}`,
-  }))
+  const nodes: SpatialNode[] = Array.from({ length: nodeCount }, (_, i) =>
+    textNode({
+      id: `n${i}`,
+      x: (i % 8) * 260,
+      y: Math.floor(i / 8) * 180,
+      width: 200,
+      height: 120,
+      text: `n${i}`,
+    }),
+  )
   const edges: CanvasEdge[] = Array.from({ length: edgeCount }, (_, i) => ({
     id: `e${i}`,
     from: { node: `n${i % nodeCount}` },

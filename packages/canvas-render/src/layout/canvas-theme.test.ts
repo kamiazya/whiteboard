@@ -3,8 +3,10 @@
 // a layout option and spread downward (ADR-0030 decision 5). What a theme
 // changes is paint and defaults; what it never changes is a silhouette or
 // route somebody chose explicitly (decision 4).
+
 import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {
   EmbedResolvedNode,
   ResolvedEdgeNode,
@@ -108,8 +110,8 @@ const themed = (
 })
 
 const TWO_NODES: SpatialCanvas['nodes'] = [
-  { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'a' },
-  { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 60, text: 'b' },
+  textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' }),
+  textNode({ id: 'b', x: 300, y: 200, width: 100, height: 60, text: 'b' }),
 ]
 
 const shapeOf = (scene: Scene, id: string) =>
@@ -210,7 +212,7 @@ describe('theme defaults: the theme is a default, an explicit facet wins', () =>
 
   it('groupFrame: a group frame takes the theme dash and width', () => {
     const nodes: SpatialCanvas['nodes'] = [
-      { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 300, label: 'G' },
+      groupNode({ id: 'g', x: 0, y: 0, width: 400, height: 300, label: 'G' }),
       ...TWO_NODES,
     ]
     const scene = layoutSpatialCanvas(
@@ -227,7 +229,7 @@ describe('theme defaults: the theme is a default, an explicit facet wins', () =>
 describe('theme fonts', () => {
   // A group's label is a label run, which is where the resolver's family lands.
   const labelled: SpatialCanvas['nodes'] = [
-    { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 300, label: 'G' },
+    groupNode({ id: 'g', x: 0, y: 0, width: 400, height: 300, label: 'G' }),
     ...TWO_NODES,
   ]
   const labelRunOf = (scene: Scene) =>
@@ -252,12 +254,12 @@ describe('theme fonts', () => {
 
 describe('embedded canvases', () => {
   const host = (): SpatialCanvas => ({
-    nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 300, height: 220, file: 'child' }],
+    nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 300, height: 220, file: 'child' })],
     edges: [],
     facets: { [THEME_KEY]: { theme: 'demo.chalk' } },
   })
   const child = (theme: string | undefined): SpatialCanvas => ({
-    nodes: [{ id: 'c1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'c' }],
+    nodes: [textNode({ id: 'c1', x: 0, y: 0, width: 400, height: 200, text: 'c' })],
     edges: [],
     ...(theme === undefined ? {} : { facets: { [THEME_KEY]: { theme } } }),
   })

@@ -12,6 +12,7 @@ import {
 import { withViewerFontEmbedded } from '@kamiazya/whiteboard-canvas-viewer'
 import { registerFontBytes } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -21,15 +22,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-const node = {
-  id: 'n1',
-  type: 'text' as const,
-  x: 100,
-  y: 100,
-  width: 200,
-  height: 100,
-  text: 'hello world',
-}
+const node = textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello world' })
 const start: SpatialCanvas = { nodes: [node], edges: [] }
 
 function Host({ initial = start }: { initial?: SpatialCanvas }) {

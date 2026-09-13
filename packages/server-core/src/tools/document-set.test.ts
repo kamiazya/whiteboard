@@ -6,6 +6,7 @@ import {
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -155,7 +156,7 @@ describe('wb_document_set tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'spatial')
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'diagram' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'diagram' })],
         edges: [],
       })
     })
@@ -217,7 +218,7 @@ describe('wb_document_set tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'okf-body', type: 'text', x: 0, y: 0, width: 600, height: 400, text: 'Old body.' },
+          textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: 'Old body.' }),
         ],
         edges: [],
       })
@@ -248,7 +249,7 @@ describe('wb_document_set tool', () => {
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'diagram' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'diagram' })],
         edges: [],
       })
     })

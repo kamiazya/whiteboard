@@ -7,6 +7,7 @@
 // carry one, so `readMarkdownBody` falls back to it and `writeMarkdownBody`
 // clears it on the next write. Nothing writes one any more — that is what
 // these tests pin.
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import {
@@ -21,7 +22,7 @@ const BODY = '# Weekly notes\n\nShipped the markdown file node.'
 /** The shape `wb_document_set` writes. */
 function withBodyNode(doc: LoroDoc, text: string): LoroDoc {
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'okf-body', type: 'text', x: 0, y: 0, width: 600, height: 400, text }],
+    nodes: [textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text })],
     edges: [],
   })
   return doc
@@ -46,7 +47,7 @@ describe('readMarkdownBody', () => {
   it('falls back to the first text node for a document written before the id was stable', () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'legacy', type: 'text', x: 0, y: 0, width: 600, height: 400, text: BODY }],
+      nodes: [textNode({ id: 'legacy', x: 0, y: 0, width: 600, height: 400, text: BODY })],
       edges: [],
     })
     expect(readMarkdownBody(doc)).toBe(BODY)
@@ -68,7 +69,7 @@ describe('readMarkdownBody', () => {
   it('ignores a non-text node when looking for the body', () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'okf-body', type: 'file', x: 0, y: 0, width: 10, height: 10, file: 'x' }],
+      nodes: [fileNode({ id: 'okf-body', x: 0, y: 0, width: 10, height: 10, file: 'x' })],
       edges: [],
     })
     expect(readMarkdownBody(doc)).toBe('')

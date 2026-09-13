@@ -6,6 +6,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -35,8 +36,8 @@ describe('wb_canvas_snapshot tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 60, text: 'Hello', color: '4' },
-          { id: 'n2', type: 'group', x: -10, y: -10, width: 400, height: 300, label: 'Phase 1' },
+          textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 60, text: 'Hello', color: '4' }),
+          groupNode({ id: 'n2', x: -10, y: -10, width: 400, height: 300, label: 'Phase 1' }),
           {
             id: 'n3',
             type: 'link',
@@ -46,7 +47,7 @@ describe('wb_canvas_snapshot tool', () => {
             height: 60,
             url: 'https://a.example',
           },
-          { id: 'n4', type: 'file', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' },
+          fileNode({ id: 'n4', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' }),
         ],
         edges: [
           {
@@ -68,10 +69,10 @@ describe('wb_canvas_snapshot tool', () => {
     expect(result).toEqual({
       documentId: DOCUMENT_ID,
       nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 60, text: 'Hello', color: '4' },
-        { id: 'n2', type: 'group', x: -10, y: -10, width: 400, height: 300, label: 'Phase 1' },
+        textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 60, text: 'Hello', color: '4' }),
+        groupNode({ id: 'n2', x: -10, y: -10, width: 400, height: 300, label: 'Phase 1' }),
         { id: 'n3', type: 'link', x: 0, y: 100, width: 200, height: 60, url: 'https://a.example' },
-        { id: 'n4', type: 'file', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' },
+        fileNode({ id: 'n4', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' }),
       ],
       edges: [
         {
@@ -98,8 +99,8 @@ describe('wb_canvas_snapshot tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'a' },
-          { id: 'n2', type: 'text', x: 0, y: 20, width: 10, height: 10, text: 'b' },
+          textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'a' }),
+          textNode({ id: 'n2', x: 0, y: 20, width: 10, height: 10, text: 'b' }),
         ],
         edges: [
           {
@@ -136,8 +137,8 @@ describe('wb_canvas_snapshot tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: longText },
-          { id: 'n2', type: 'text', x: 0, y: 20, width: 10, height: 10, text: 'short' },
+          textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: longText }),
+          textNode({ id: 'n2', x: 0, y: 20, width: 10, height: 10, text: 'short' }),
         ],
         edges: [],
       })
@@ -158,15 +159,9 @@ describe('wb_canvas_snapshot tool', () => {
 
   test('caps a large board but still reports the true totals', async () => {
     const store = new FakeDocumentStore()
-    const nodes: SpatialNode[] = Array.from({ length: SNAPSHOT_MAX_NODES + 5 }, (_, i) => ({
-      id: `n${i}`,
-      type: 'text' as const,
-      x: i,
-      y: 0,
-      width: 10,
-      height: 10,
-      text: `t${i}`,
-    }))
+    const nodes: SpatialNode[] = Array.from({ length: SNAPSHOT_MAX_NODES + 5 }, (_, i) =>
+      textNode({ id: `n${i}`, x: i, y: 0, width: 10, height: 10, text: `t${i}` }),
+    )
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, { nodes, edges: [] })
     })
@@ -193,8 +188,8 @@ describe('wb_canvas_snapshot tool', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'a' },
-          { id: 'n2', type: 'text', x: 0, y: 20, width: 10, height: 10, text: 'b' },
+          textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'a' }),
+          textNode({ id: 'n2', x: 0, y: 20, width: 10, height: 10, text: 'b' }),
         ],
         edges,
       })
@@ -245,7 +240,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'group', x: 0, y: 0, width: 100, height: 100 }],
+        nodes: [groupNode({ id: 'n1', x: 0, y: 0, width: 100, height: 100 })],
         edges: [],
       })
     })
@@ -261,8 +256,8 @@ describe('wb_canvas_snapshot — layout analysis', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'n1', type: 'group', x: 0, y: 0, width: 100, height: 100 },
-          { id: 'n2', type: 'group', x: 50, y: 50, width: 100, height: 100 },
+          groupNode({ id: 'n1', x: 0, y: 0, width: 100, height: 100 }),
+          groupNode({ id: 'n2', x: 50, y: 50, width: 100, height: 100 }),
         ],
         edges: [],
       })
@@ -302,8 +297,8 @@ describe('wb_canvas_snapshot — layout analysis', () => {
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [
-          { id: 'alpha', type: 'group', x: 0, y: 0, width: 100, height: 100 },
-          { id: 'beta', type: 'group', x: 50, y: 50, width: 100, height: 100 },
+          groupNode({ id: 'alpha', x: 0, y: 0, width: 100, height: 100 }),
+          groupNode({ id: 'beta', x: 50, y: 50, width: 100, height: 100 }),
         ],
         edges: [],
       })
@@ -343,7 +338,7 @@ describe('wb_canvas_snapshot — layout analysis', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'group', x: 0, y: 0, width: 10, height: 10 }],
+        nodes: [groupNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10 })],
         edges: [],
       })
     })
@@ -383,7 +378,7 @@ describe('wb_canvas_snapshot — overflows', () => {
 
   test('marks a node whose content does not fit the box it is drawn in', async () => {
     const result = await snapshotOf(
-      [{ id: 'cramped', type: 'text', x: 0, y: 0, width: 200, height: 32, text: CRAMPED }],
+      [textNode({ id: 'cramped', x: 0, y: 0, width: 200, height: 32, text: CRAMPED })],
       true,
     )
 
@@ -402,7 +397,7 @@ describe('wb_canvas_snapshot — overflows', () => {
     // this field claims. Reading the digest's `truncated` here would have
     // reported it too, but only by also telling the caller prose was hidden.
     const result = await snapshotOf(
-      [{ id: 'narrow', type: 'text', x: 0, y: 0, width: 30, height: 200, text: '`國`' }],
+      [textNode({ id: 'narrow', x: 0, y: 0, width: 30, height: 200, text: '`國`' })],
       true,
     )
 
@@ -412,7 +407,7 @@ describe('wb_canvas_snapshot — overflows', () => {
 
   test('leaves a node with room to spare unmarked', async () => {
     const result = await snapshotOf(
-      [{ id: 'roomy', type: 'text', x: 0, y: 0, width: 400, height: 400, text: CRAMPED }],
+      [textNode({ id: 'roomy', x: 0, y: 0, width: 400, height: 400, text: CRAMPED })],
       true,
     )
 
@@ -423,7 +418,7 @@ describe('wb_canvas_snapshot — overflows', () => {
   // default read as evidence of fitting would be wrong on every cramped node.
   test('never claims to know without a layout pass', async () => {
     const result = await snapshotOf(
-      [{ id: 'cramped', type: 'text', x: 0, y: 0, width: 200, height: 32, text: CRAMPED }],
+      [textNode({ id: 'cramped', x: 0, y: 0, width: 200, height: 32, text: CRAMPED })],
       false,
     )
 

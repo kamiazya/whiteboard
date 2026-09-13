@@ -2,8 +2,10 @@
 // another, the LATER edge (document order — the one painted on top) hops
 // over the earlier one with a small arc, so crossing lines stay readable.
 // Canvas-wide today; the per-edge override slot reuses the same resolution.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
@@ -26,10 +28,10 @@ const fakeParseBody = (text: string): MdastRoot => ({
 // No node stands in either path, so both routes are direct segments.
 const cross = (lineJumps?: 'none' | 'arc'): SpatialCanvas => ({
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 75, width: 50, height: 50, text: 'a' },
-    { id: 'b', type: 'text', x: 400, y: 75, width: 50, height: 50, text: 'b' },
-    { id: 'c', type: 'text', x: 200, y: 0, width: 50, height: 50, text: 'c' },
-    { id: 'd', type: 'text', x: 200, y: 300, width: 50, height: 50, text: 'd' },
+    textNode({ id: 'a', x: 0, y: 75, width: 50, height: 50, text: 'a' }),
+    textNode({ id: 'b', x: 400, y: 75, width: 50, height: 50, text: 'b' }),
+    textNode({ id: 'c', x: 200, y: 0, width: 50, height: 50, text: 'c' }),
+    textNode({ id: 'd', x: 200, y: 300, width: 50, height: 50, text: 'd' }),
   ],
   edges: [
     {
@@ -79,12 +81,12 @@ describe('line jumps', () => {
     // between overlapping hops. The first crossing keeps its hop.
     const tight: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 75, width: 50, height: 50, text: 'a' },
-        { id: 'b', type: 'text', x: 400, y: 75, width: 50, height: 50, text: 'b' },
-        { id: 'c1', type: 'text', x: 172, y: 0, width: 50, height: 50, text: 'c1' },
-        { id: 'd1', type: 'text', x: 172, y: 300, width: 50, height: 50, text: 'd1' },
-        { id: 'c2', type: 'text', x: 178, y: 0, width: 50, height: 50, text: 'c2' },
-        { id: 'd2', type: 'text', x: 178, y: 300, width: 50, height: 50, text: 'd2' },
+        textNode({ id: 'a', x: 0, y: 75, width: 50, height: 50, text: 'a' }),
+        textNode({ id: 'b', x: 400, y: 75, width: 50, height: 50, text: 'b' }),
+        textNode({ id: 'c1', x: 172, y: 0, width: 50, height: 50, text: 'c1' }),
+        textNode({ id: 'd1', x: 172, y: 300, width: 50, height: 50, text: 'd1' }),
+        textNode({ id: 'c2', x: 178, y: 0, width: 50, height: 50, text: 'c2' }),
+        textNode({ id: 'd2', x: 178, y: 300, width: 50, height: 50, text: 'd2' }),
       ],
       edges: [
         {
@@ -116,9 +118,9 @@ describe('line jumps', () => {
     // that contact is a junction, not a crossing to hop over.
     const fan: SpatialCanvas = {
       nodes: [
-        { id: 'hub', type: 'text', x: 0, y: 100, width: 50, height: 50, text: 'hub' },
-        { id: 'p', type: 'text', x: 300, y: 0, width: 50, height: 50, text: 'p' },
-        { id: 'q', type: 'text', x: 300, y: 200, width: 50, height: 50, text: 'q' },
+        textNode({ id: 'hub', x: 0, y: 100, width: 50, height: 50, text: 'hub' }),
+        textNode({ id: 'p', x: 300, y: 0, width: 50, height: 50, text: 'p' }),
+        textNode({ id: 'q', x: 300, y: 200, width: 50, height: 50, text: 'q' }),
       ],
       edges: [
         {

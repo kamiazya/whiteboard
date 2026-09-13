@@ -1,4 +1,5 @@
 import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { routeEdge } from './spatial-edges.js'
@@ -108,7 +109,7 @@ describe('obstacle-aware edge routing', () => {
   // its members is the everyday case: edges between two nodes in the same
   // group used to detour all the way around the group's frame.
   it('ignores a group that encloses both endpoints', () => {
-    const group: SpatialNode = { id: 'g', type: 'group', x: 0, y: 0, width: 800, height: 600 }
+    const group: SpatialNode = groupNode({ id: 'g', x: 0, y: 0, width: 800, height: 600 })
     const nodes = [group, node('a', 100, 100), node('b', 100, 400)]
     const routed = routeEdge(nodes, edge('a', 'b'))
 
@@ -119,7 +120,7 @@ describe('obstacle-aware edge routing', () => {
   })
 
   it('ignores a group that encloses one endpoint, so the edge pierces its border', () => {
-    const group: SpatialNode = { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 400 }
+    const group: SpatialNode = groupNode({ id: 'g', x: 0, y: 0, width: 400, height: 400 })
     const nodes = [group, node('a', 100, 100), node('b', 600, 100)]
     const routed = routeEdge(nodes, edge('a', 'b'))
 

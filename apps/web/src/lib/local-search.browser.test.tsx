@@ -4,6 +4,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -74,9 +75,7 @@ describe('local body search', () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     await seedSpatial(index, 'diagrams/auth', {
-      nodes: [
-        { id: 'n1', type: 'text', text: 'Session handshake', x: 0, y: 0, width: 80, height: 40 },
-      ],
+      nodes: [textNode({ id: 'n1', text: 'Session handshake', x: 0, y: 0, width: 80, height: 40 })],
       edges: [
         {
           id: 'e1',

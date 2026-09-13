@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { overlayReferences, referenceSeams } from './seams.js'
@@ -9,7 +10,7 @@ const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const BOARD_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
 const board: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'on the board' }],
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 100, text: 'on the board' })],
   edges: [],
 }
 
@@ -21,8 +22,8 @@ describe('referenceTargets', () => {
   it("names a body's links and embeds, a canvas's file nodes, and what loaded bodies name", () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'f', type: 'file', x: 0, y: 0, width: 10, height: 10, file: 'boards/roadmap' },
-        { id: 'i', type: 'file', x: 0, y: 0, width: 10, height: 10, file: 'asset:abc' },
+        fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'boards/roadmap' }),
+        fileNode({ id: 'i', x: 0, y: 0, width: 10, height: 10, file: 'asset:abc' }),
       ],
       edges: [],
     }
@@ -38,7 +39,7 @@ describe('referenceTargets', () => {
     // Root canvas -> spatial A -> file node B: B is drawn inside A's
     // miniature, so it has to be one fetch away like a body's embed is.
     const nested: SpatialCanvas = {
-      nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 10, height: 10, file: 'boards/b' }],
+      nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'boards/b' })],
       edges: [],
     }
     const targets = referenceTargets({
@@ -52,9 +53,7 @@ describe('referenceTargets', () => {
     // A text node's body is markdown like any note's, and the composer lays
     // it out with the same seams — so what it points at has to load too.
     const withText: SpatialCanvas = {
-      nodes: [
-        { id: 't', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'see ![[notes/a]]' },
-      ],
+      nodes: [textNode({ id: 't', x: 0, y: 0, width: 10, height: 10, text: 'see ![[notes/a]]' })],
       edges: [],
     }
     expect(referenceTargets({ canvases: [withText] })).toEqual(['notes/a'])
@@ -228,8 +227,8 @@ describe('referenceWireFor', () => {
     const OTHER_ID = '01CX5ZZKBKACTAV9WEVGEMMVRZ'
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 't', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'see [[notes/plan]]' },
-        { id: 'f', type: 'file', x: 0, y: 0, width: 10, height: 10, file: 'asset:pic' },
+        textNode({ id: 't', x: 0, y: 0, width: 200, height: 100, text: 'see [[notes/plan]]' }),
+        fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'asset:pic' }),
       ],
       edges: [],
     }
@@ -270,15 +269,14 @@ describe('referenceWireFor', () => {
   it('keeps a row the canvas names even when nothing loaded for it, and an alias a body wrote', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        {
+        textNode({
           id: 't',
-          type: 'text',
           x: 0,
           y: 0,
           width: 200,
           height: 100,
           text: '[[notes/gone]] [[notes/plan]]',
-        },
+        }),
       ],
       edges: [],
     }

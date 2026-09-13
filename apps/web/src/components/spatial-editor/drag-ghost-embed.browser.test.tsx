@@ -4,6 +4,7 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 // one-shot render made an inline miniature drag as a plain card and snap
 // back to a miniature on drop.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -11,22 +12,12 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const inner: SpatialCanvas = {
-  nodes: [{ id: 'i1', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'inner content' }],
+  nodes: [textNode({ id: 'i1', x: 0, y: 0, width: 200, height: 100, text: 'inner content' })],
   edges: [],
 }
 
 const outer: SpatialCanvas = {
-  nodes: [
-    {
-      id: 'f1',
-      type: 'file',
-      x: 100,
-      y: 100,
-      width: 320,
-      height: 300,
-      file: 'child',
-    },
-  ],
+  nodes: [fileNode({ id: 'f1', x: 100, y: 100, width: 320, height: 300, file: 'child' })],
   edges: [],
 }
 

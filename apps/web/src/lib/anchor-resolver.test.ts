@@ -1,9 +1,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { anchorResolverFor } from './anchor-resolver.js'
 
 const canvas: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'ship the plan' }],
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'ship the plan' })],
   edges: [
     {
       id: 'e1',

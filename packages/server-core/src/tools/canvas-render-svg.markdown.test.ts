@@ -12,6 +12,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -55,9 +56,9 @@ async function seedWorkspace(store: FakeDocumentStore, noteBody: string, boardTh
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
       nodes: [
-        { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 200, label: 'Launch' },
-        { id: 'in', type: 'text', x: 10, y: 10, width: 200, height: 60, text: 'LAUNCH-NODE' },
-        { id: 'out', type: 'text', x: 900, y: 900, width: 200, height: 60, text: 'OTHER-NODE' },
+        groupNode({ id: 'g', x: 0, y: 0, width: 400, height: 200, label: 'Launch' }),
+        textNode({ id: 'in', x: 10, y: 10, width: 200, height: 60, text: 'LAUNCH-NODE' }),
+        textNode({ id: 'out', x: 900, y: 900, width: 200, height: 60, text: 'OTHER-NODE' }),
       ],
       edges: [],
       ...(boardTheme === undefined ? {} : { facets: { 'visual.theme/v0': { theme: boardTheme } } }),

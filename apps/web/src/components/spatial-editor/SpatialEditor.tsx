@@ -66,6 +66,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -750,7 +751,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // layout over the same canvas) renders exactly what the editor shows.
         if (command.kind === 'set-text') {
           const node = running.nodes.find((n) => n.id === command.id)
-          if (node !== undefined && node.type === 'text') {
+          if (node !== undefined && nodeText(node) !== undefined) {
             const required = Math.ceil(
               requiredTextNodeHeight(node, { measure: resolvedMeasure, theme }),
             )
@@ -1859,9 +1860,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * holds HERE (not only in the dialog) because documents arrive via sync
      * and import — a hostile javascript:/data: URL must never reach
      * window.open. */
-    const openLinkNode = (node: Extract<SpatialNode, { type: 'link' }>) => {
-      if (!isFollowableUrl(node.url)) return
-      window.open(node.url, '_blank', 'noopener,noreferrer')
+    const openLinkNode = (node: SpatialNode) => {
+      const url = nodeUrl(node)
+      if (url === undefined || !isFollowableUrl(url)) return
+      window.open(url, '_blank', 'noopener,noreferrer')
     }
 
     return (

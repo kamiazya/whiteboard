@@ -5,6 +5,7 @@
  * both answer with their name. The legacy case is served by the fold, not
  * by a second read path of its own.
  */
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import 'fake-indexeddb/auto'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -68,7 +69,7 @@ describe('loadBrowserReference', () => {
       name: 'The Plan',
     })
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'plan node' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 100, text: 'plan node' })],
       edges: [],
     }
     const doc = new Loro()

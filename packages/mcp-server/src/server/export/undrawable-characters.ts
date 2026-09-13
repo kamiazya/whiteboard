@@ -1,5 +1,6 @@
 import { expandEmojiShortcodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import { loadExportFonts } from './measure-text.js'
 
 /**
@@ -51,10 +52,13 @@ export async function undrawableCharacters(canvas: SpatialCanvas): Promise<reado
   // First-seen order over document order: reproducible for the same canvas,
   // which a set's iteration order would not be across engines.
   for (const node of canvas.nodes) {
-    if (node.type === 'text') scan(node.text)
+    const text = nodeText(node)
+    const file = nodeFile(node)
+    const url = nodeUrl(node)
+    if (text !== undefined) scan(text)
     else if (node.type === 'group') scan(node.label)
-    else if (node.type === 'file') scan(node.file)
-    else if (node.type === 'link') scan(node.url)
+    else if (file !== undefined) scan(file)
+    else if (url !== undefined) scan(url)
   }
   for (const edge of canvas.edges) scan(edge.label)
 

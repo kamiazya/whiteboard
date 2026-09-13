@@ -15,8 +15,10 @@
  * frames across the update is the direct observation of it; the mutation check
  * for this test is to disable offloading, which starves the counter.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -29,15 +31,16 @@ const NODES = 45
 const EDGES = 90
 
 const heavy = (label: string): SpatialCanvas => ({
-  nodes: Array.from({ length: NODES }, (_, i) => ({
-    id: `n${i}`,
-    type: 'text' as const,
-    x: (i % 8) * 260,
-    y: Math.floor(i / 8) * 180,
-    width: 200,
-    height: 120,
-    text: i === 0 ? label : `node ${i} carries a sentence long enough to wrap somewhere`,
-  })),
+  nodes: Array.from({ length: NODES }, (_, i) =>
+    textNode({
+      id: `n${i}`,
+      x: (i % 8) * 260,
+      y: Math.floor(i / 8) * 180,
+      width: 200,
+      height: 120,
+      text: i === 0 ? label : `node ${i} carries a sentence long enough to wrap somewhere`,
+    }),
+  ),
   edges: Array.from({ length: EDGES }, (_, i) => ({
     id: `e${i}`,
     from: { node: `n${i % NODES}` },

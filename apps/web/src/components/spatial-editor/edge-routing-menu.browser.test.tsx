@@ -9,6 +9,7 @@
 // to open anything, so the panel is simply mounted.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -23,8 +24,8 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 240, width: 120, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 40, y: 40, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 240, width: 120, height: 60, text: 'B' }),
   ],
   edges: [
     {
@@ -153,10 +154,10 @@ it('draws a curve when the canvas asks for one', async () => {
 it('toggles line jumps from the canvas menu and draws the hop arc', async () => {
   const crossed: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 0, y: 145, width: 50, height: 50, text: 'a' },
-      { id: 'b', type: 'text', x: 500, y: 145, width: 50, height: 50, text: 'b' },
-      { id: 'c', type: 'text', x: 250, y: 0, width: 50, height: 50, text: 'c' },
-      { id: 'd', type: 'text', x: 250, y: 400, width: 50, height: 50, text: 'd' },
+      textNode({ id: 'a', x: 0, y: 145, width: 50, height: 50, text: 'a' }),
+      textNode({ id: 'b', x: 500, y: 145, width: 50, height: 50, text: 'b' }),
+      textNode({ id: 'c', x: 250, y: 0, width: 50, height: 50, text: 'c' }),
+      textNode({ id: 'd', x: 250, y: 400, width: 50, height: 50, text: 'd' }),
     ],
     edges: [
       {

@@ -2,7 +2,9 @@
 // preview size every frame and its edges re-route to the moving border —
 // mirroring what live drag already guarantees for moves. Assertions taken
 // MID-gesture before any pointerup.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -13,8 +15,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' },
-    { id: 'b', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'Beta' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' }),
+    textNode({ id: 'b', x: 500, y: 100, width: 120, height: 60, text: 'Beta' }),
   ],
   edges: [
     {

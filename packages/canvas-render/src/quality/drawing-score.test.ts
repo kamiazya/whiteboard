@@ -3,7 +3,9 @@
 // scoreboard that pins the score over real diagrams; this file is what says
 // the score can be believed there — an instrument trusted before it is
 // calibrated is how `worstStallMs` reported 0.3ms for a 200ms stall.
+
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
@@ -274,15 +276,14 @@ describe('scoreDrawing: labels', () => {
 
 describe('scoreDrawing: fit and spacing', () => {
   it('a text node whose text does not fit its box overflows', () => {
-    const cramped: SpatialNode = {
+    const cramped: SpatialNode = textNode({
       id: 'a',
-      type: 'text',
       x: 0,
       y: 0,
       width: 40,
       height: 24,
       text: 'a sentence far longer than forty pixels can hold on one line',
-    }
+    })
     expect(score(canvasOf([cramped])).textOverflow).toBe(1)
     expect(score(canvasOf([box('a', 0, 0)])).textOverflow).toBe(0)
   })
@@ -680,15 +681,14 @@ describe('scoreDrawing: one planted defect moves one debt column', () => {
     [box('a', 0, 0), box('b', 400, 0), box('c', 0, 200), box('d', 400, 200)],
     [edge('e', 'a', 'b'), edge('f', 'c', 'd')],
   )
-  const overflowing: SpatialNode = {
+  const overflowing: SpatialNode = textNode({
     id: 'a',
-    type: 'text',
     x: 0,
     y: 0,
     width: 40,
     height: 20,
     text: 'a sentence that cannot fit in a box this small',
-  }
+  })
 
   it.each<[string, DrawingScore, DrawingScore, Debt[]]>([
     [

@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -97,7 +98,7 @@ describe('documentWritten', () => {
       ops: [
         {
           op: 'node.add',
-          node: { id: 'n1', type: 'text', text: 'hi', x: 0, y: 0, width: 80, height: 40 },
+          node: textNode({ id: 'n1', text: 'hi', x: 0, y: 0, width: 80, height: 40 }),
         },
       ],
     })

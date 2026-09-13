@@ -3,7 +3,9 @@
 // its card: the whole conversation, its lifecycle actions in the top-right,
 // and a reply box already open — no menu, and no second gesture to reach the
 // thing a reader came to do.
+
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -50,7 +52,7 @@ const OTHER_THREAD: CommentThread = {
   messages: [{ id: 'm3', body: 'another note', createdAt: '2026-09-02T00:00:00.000Z' }],
 }
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE, OTHER],
 }

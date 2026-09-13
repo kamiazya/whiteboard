@@ -75,3 +75,74 @@ describe('stress-changed-tests cannot pass by collecting nothing', () => {
     expect(stress).toMatch(/fetch-depth: (0|2)\b/)
   })
 })
+
+// The lane is SPLIT so a browser file never shares a vitest process with a
+// node or jsdom one, and the split is expressed as two complementary project
+// PATTERNS rather than two lists of project names — a list beside the vitest
+// config is the drift this repo keeps paying for.
+//
+// A pattern has its own failure mode, and it is silent: `--passWithNoTests` is
+// on, so a leg whose pattern matches nothing passes in seconds, and a project
+// claimed by NEITHER leg is simply never stressed. Both directions are checked
+// here against the real project list.
+//
+// What the browser pattern rests on is that every browser project's NAME ends
+// `-browser`. That is a convention, and a convention nothing reads is one that
+// breaks quietly — a browser project named `foo-chromium` would be swept into
+// the node leg and the split would stop doing its job while both legs stayed
+// green. So the names are checked against the CONFIG each one comes from.
+
+const projectConfigs = [
+  ...readFileSync(join(ROOT, 'vitest.config.ts'), 'utf-8').matchAll(/'([^']+vitest[^']+)'/g),
+].map((m) => m[1] as string)
+
+const projects = projectConfigs.map((config) => {
+  const name = /name: '([^']+)'/.exec(readFileSync(join(ROOT, config), 'utf-8'))?.[1]
+  if (name === undefined) throw new Error(`no test.name in ${config}`)
+  return { config, name }
+})
+
+/** vitest's own rule: run if it matches no negated pattern, and — when plain patterns are given — at least one of them. */
+function matches(name: string, patterns: readonly string[]): boolean {
+  const glob = (p: string): RegExp =>
+    new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`)
+  const negated = patterns.filter((p) => p.startsWith('!')).map((p) => glob(p.slice(1)))
+  const plain = patterns.filter((p) => !p.startsWith('!')).map(glob)
+  if (negated.some((re) => re.test(name))) return false
+  return plain.length === 0 || plain.some((re) => re.test(name))
+}
+
+describe('the stress lane splits the realms without losing a project', () => {
+  const legPatterns = [...job('stress-changed-tests').matchAll(/projects: '([^']+)'/g)].map(
+    (m) => m[1] as string,
+  )
+
+  it('reads two legs off the workflow, and a plausible project count', () => {
+    expect(legPatterns, 'the matrix must declare a pattern per leg').toHaveLength(2)
+    // Reached, not assumed: a regex that stops matching would otherwise
+    // report every project as unclaimed, which sends the reader to the wrong
+    // file entirely.
+    expect(projects.length).toBeGreaterThan(20)
+  })
+
+  it('claims every project exactly once', () => {
+    for (const { name } of projects) {
+      const claimedBy = legPatterns.filter((pattern) => matches(name, [pattern]))
+      expect(
+        claimedBy,
+        `${name} is stressed by ${claimedBy.length} legs — every project must be claimed by exactly one`,
+      ).toHaveLength(1)
+    }
+  })
+
+  it('names every browser project so the browser pattern can find it', () => {
+    for (const { config, name } of projects) {
+      const isBrowser = config.endsWith('vitest.browser.config.ts')
+      expect(
+        name.endsWith('-browser'),
+        `${config} declares '${name}': a browser project's name must end '-browser', or the ` +
+          'stress lane sweeps it into the node leg and stops separating the realms',
+      ).toBe(isBrowser)
+    }
+  })
+})

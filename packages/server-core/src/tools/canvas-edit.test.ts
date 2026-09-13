@@ -14,6 +14,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import type { AgentActivity, ServerDeps, ViewportRequest } from '../server-deps.js'
@@ -65,11 +66,11 @@ describe('wb_canvas_edit tool', () => {
       ops: [
         {
           op: 'node.add',
-          node: { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' },
+          node: textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' }),
         },
         {
           op: 'node.add',
-          node: { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
+          node: textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' }),
         },
         {
           op: 'edge.add',
@@ -95,7 +96,7 @@ describe('wb_canvas_edit tool', () => {
   test('is all-or-nothing: a failing op leaves the stored canvas untouched', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -108,7 +109,7 @@ describe('wb_canvas_edit tool', () => {
         ops: [
           {
             op: 'node.add',
-            node: { id: 'b', type: 'text', x: 50, y: 0, width: 100, height: 48, text: 'B' },
+            node: textNode({ id: 'b', x: 50, y: 0, width: 100, height: 48, text: 'B' }),
           },
           // 'ghost' is not on the canvas — this op cannot apply.
           { op: 'node.patch', id: 'ghost', patch: { x: 5 } },
@@ -130,7 +131,7 @@ describe('wb_canvas_edit tool', () => {
   test('places a node that carries no geometry, and reports where it landed', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'anchor', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'anchor' }],
+      nodes: [textNode({ id: 'anchor', x: 0, y: 0, width: 100, height: 50, text: 'anchor' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -192,8 +193,8 @@ describe('wb_canvas_edit tool', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
-        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' }),
+        textNode({ id: 'b', x: 50, y: 0, width: 10, height: 10, text: 'B' }),
       ],
       edges: [
         {
@@ -230,8 +231,8 @@ describe('wb_canvas_edit tool', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
-        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' }),
+        textNode({ id: 'b', x: 50, y: 0, width: 10, height: 10, text: 'B' }),
       ],
       edges: [
         {
@@ -259,8 +260,8 @@ describe('wb_canvas_edit tool', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
-        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' }),
+        textNode({ id: 'b', x: 50, y: 0, width: 10, height: 10, text: 'B' }),
       ],
       edges: [],
     })
@@ -305,7 +306,7 @@ describe('wb_canvas_edit tool', () => {
   test('unlocking is the one op a locked element still accepts', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -338,8 +339,8 @@ describe('wb_canvas_edit tool', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
-        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' }),
+        textNode({ id: 'b', x: 50, y: 0, width: 10, height: 10, text: 'B' }),
       ],
       edges: [
         {
@@ -382,12 +383,12 @@ describe('wb_canvas_edit tool', () => {
       ops: [
         {
           op: 'node.add',
-          node: { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'A' },
+          node: textNode({ id: 'a', x: 0, y: 0, width: 100, height: 100, text: 'A' }),
         },
         {
           op: 'node.add',
           // Deliberately overlapping 'a' so tidy has something to separate.
-          node: { id: 'b', type: 'text', x: 10, y: 10, width: 100, height: 100, text: 'B' },
+          node: textNode({ id: 'b', x: 10, y: 10, width: 100, height: 100, text: 'B' }),
         },
         { op: 'tidy' },
       ],
@@ -426,7 +427,7 @@ describe('wb_canvas_edit tool', () => {
   test('refuses an id that is already taken rather than overwriting it', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'original' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'original' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -579,7 +580,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
   test('rejects a negative width at the schema level (from wb_node_patch)', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' })],
       edges: [],
     })
 
@@ -774,8 +775,8 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
-        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' }),
+        textNode({ id: 'b', x: 50, y: 0, width: 10, height: 10, text: 'B' }),
       ],
       edges: [
         {
@@ -809,8 +810,8 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'x', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'node x' },
-        { id: 'y', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'node y' },
+        textNode({ id: 'x', x: 0, y: 0, width: 10, height: 10, text: 'node x' }),
+        textNode({ id: 'y', x: 50, y: 0, width: 10, height: 10, text: 'node y' }),
       ],
       edges: [
         {
@@ -843,8 +844,8 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'pinned', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'pinned' },
-        { id: 'loose', type: 'text', x: 10, y: 10, width: 100, height: 100, text: 'loose' },
+        textNode({ id: 'pinned', x: 0, y: 0, width: 100, height: 100, text: 'pinned' }),
+        textNode({ id: 'loose', x: 10, y: 10, width: 100, height: 100, text: 'loose' }),
       ],
       edges: [],
     })
@@ -865,9 +866,9 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'A' },
-        { id: 'b', type: 'text', x: 10, y: 10, width: 100, height: 100, text: 'B' },
-        { id: 'c', type: 'text', x: 900, y: 900, width: 100, height: 100, text: 'C' },
+        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 100, text: 'A' }),
+        textNode({ id: 'b', x: 10, y: 10, width: 100, height: 100, text: 'B' }),
+        textNode({ id: 'c', x: 900, y: 900, width: 100, height: 100, text: 'C' }),
       ],
       edges: [],
     })
@@ -889,8 +890,8 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 3, y: 7, width: 100, height: 100, text: 'A' },
-        { id: 'b', type: 'text', x: 11, y: 13, width: 100, height: 100, text: 'B' },
+        textNode({ id: 'a', x: 3, y: 7, width: 100, height: 100, text: 'A' }),
+        textNode({ id: 'b', x: 11, y: 13, width: 100, height: 100, text: 'B' }),
       ],
       edges: [],
     })
@@ -1022,8 +1023,8 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
-        { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'A' }),
+        textNode({ id: 'b', x: 50, y: 0, width: 10, height: 10, text: 'B' }),
       ],
       edges: [
         {
@@ -1114,23 +1115,15 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
  * so it is out of scope and survives untouched.
  */
 describe('wb_canvas_edit — region.set', () => {
-  const GROUP = {
-    id: 'g',
-    type: 'group' as const,
-    x: 0,
-    y: 0,
-    width: 500,
-    height: 500,
-    label: 'Phase 1',
-  }
+  const GROUP = groupNode({ id: 'g', x: 0, y: 0, width: 500, height: 500, label: 'Phase 1' })
 
   test('removes what is inside the group and unlisted, and leaves the rest of the board alone', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'inside-old', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'old' },
-        { id: 'outside', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'elsewhere' },
+        textNode({ id: 'inside-old', x: 20, y: 20, width: 80, height: 40, text: 'old' }),
+        textNode({ id: 'outside', x: 900, y: 900, width: 80, height: 40, text: 'elsewhere' }),
       ],
       edges: [],
     })
@@ -1161,7 +1154,7 @@ describe('wb_canvas_edit — region.set', () => {
       nodes: [
         GROUP,
         // Half in, half out: x+width = 540 > the group's 500.
-        { id: 'straddling', type: 'text', x: 460, y: 20, width: 80, height: 40, text: 'moving' },
+        textNode({ id: 'straddling', x: 460, y: 20, width: 80, height: 40, text: 'moving' }),
       ],
       edges: [],
     })
@@ -1187,7 +1180,7 @@ describe('wb_canvas_edit — region.set', () => {
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'straddling', type: 'text', x: 460, y: 20, width: 80, height: 40, text: 'moving' },
+        textNode({ id: 'straddling', x: 460, y: 20, width: 80, height: 40, text: 'moving' }),
       ],
       edges: [],
     })
@@ -1226,9 +1219,9 @@ describe('wb_canvas_edit — region.set', () => {
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'a', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'a' },
-        { id: 'b', type: 'text', x: 200, y: 20, width: 80, height: 40, text: 'b' },
-        { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
+        textNode({ id: 'a', x: 20, y: 20, width: 80, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 200, y: 20, width: 80, height: 40, text: 'b' }),
+        textNode({ id: 'far', x: 900, y: 900, width: 80, height: 40, text: 'far' }),
       ],
       edges: [
         {
@@ -1263,9 +1256,9 @@ describe('wb_canvas_edit — region.set', () => {
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'a', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'a' },
-        { id: 'b', type: 'text', x: 200, y: 20, width: 80, height: 40, text: 'b' },
-        { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
+        textNode({ id: 'a', x: 20, y: 20, width: 80, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 200, y: 20, width: 80, height: 40, text: 'b' }),
+        textNode({ id: 'far', x: 900, y: 900, width: 80, height: 40, text: 'far' }),
       ],
       edges: [
         {
@@ -1305,7 +1298,7 @@ describe('wb_canvas_edit — region.set', () => {
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'pinned', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'pinned' },
+        textNode({ id: 'pinned', x: 20, y: 20, width: 80, height: 40, text: 'pinned' }),
       ],
       edges: [],
     })
@@ -1333,10 +1326,7 @@ describe('wb_canvas_edit — region.set', () => {
   test('moves a listed node that is elsewhere into the group, and is idempotent', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [
-        GROUP,
-        { id: 'one', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'one' },
-      ],
+      nodes: [GROUP, textNode({ id: 'one', x: 900, y: 900, width: 80, height: 40, text: 'one' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1371,7 +1361,7 @@ describe('wb_canvas_edit — region.set', () => {
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'outsider', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'keep me' },
+        textNode({ id: 'outsider', x: 900, y: 900, width: 10, height: 10, text: 'keep me' }),
       ],
       edges: [],
     })
@@ -1417,9 +1407,7 @@ describe('wb_canvas_edit — region.set', () => {
   test('refuses a `within` that is not a group on the canvas', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [
-        { id: 'plain', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'not a group' },
-      ],
+      nodes: [textNode({ id: 'plain', x: 0, y: 0, width: 10, height: 10, text: 'not a group' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1450,8 +1438,8 @@ describe('wb_canvas_edit — region.set', () => {
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'far1', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
-        { id: 'far2', type: 'text', x: 900, y: 940, width: 10, height: 10, text: 'far' },
+        textNode({ id: 'far1', x: 900, y: 900, width: 10, height: 10, text: 'far' }),
+        textNode({ id: 'far2', x: 900, y: 940, width: 10, height: 10, text: 'far' }),
       ],
       edges: [],
     })
@@ -1484,8 +1472,8 @@ describe('wb_canvas_edit — region.set', () => {
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'in', type: 'text', x: 20, y: 20, width: 10, height: 10, text: 'in' },
-        { id: 'far', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
+        textNode({ id: 'in', x: 20, y: 20, width: 10, height: 10, text: 'in' }),
+        textNode({ id: 'far', x: 900, y: 900, width: 10, height: 10, text: 'far' }),
       ],
       edges: [
         {
@@ -1517,7 +1505,7 @@ describe('wb_canvas_edit — region.set', () => {
     // spent two calls putting the boxes back and sizing the frame by hand.
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'q3', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'Q3' }],
+      nodes: [textNode({ id: 'q3', x: 0, y: 0, width: 200, height: 80, text: 'Q3' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1529,15 +1517,15 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [
         {
           op: 'node.add',
-          node: { id: 'a', type: 'text', x: 0, y: 300, width: 200, height: 80, text: 'A' },
+          node: textNode({ id: 'a', x: 0, y: 300, width: 200, height: 80, text: 'A' }),
         },
         {
           op: 'node.add',
-          node: { id: 'b', type: 'text', x: 300, y: 300, width: 200, height: 80, text: 'B' },
+          node: textNode({ id: 'b', x: 300, y: 300, width: 200, height: 80, text: 'B' }),
         },
         {
           op: 'node.add',
-          node: { id: 'c', type: 'text', x: 600, y: 300, width: 200, height: 80, text: 'C' },
+          node: textNode({ id: 'c', x: 600, y: 300, width: 200, height: 80, text: 'C' }),
         },
         { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pipeline' } },
         { op: 'region.set', within: 'g', nodes: ['a', 'b', 'c'] },
@@ -1580,7 +1568,7 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [
         {
           op: 'node.add',
-          node: { id: 'a', type: 'text', x: 100, y: 100, width: 200, height: 80, text: 'A' },
+          node: textNode({ id: 'a', x: 100, y: 100, width: 200, height: 80, text: 'A' }),
         },
         { op: 'node.add', node: { id: 'g', type: 'group', label: 'Wide', width: 1000 } },
         { op: 'region.set', within: 'g', nodes: ['a'] },
@@ -1601,9 +1589,9 @@ describe('wb_canvas_edit — region.set', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A' },
-        { id: 'between', type: 'text', x: 300, y: 0, width: 200, height: 80, text: 'not mine' },
-        { id: 'c', type: 'text', x: 600, y: 0, width: 200, height: 80, text: 'C' },
+        textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A' }),
+        textNode({ id: 'between', x: 300, y: 0, width: 200, height: 80, text: 'not mine' }),
+        textNode({ id: 'c', x: 600, y: 0, width: 200, height: 80, text: 'C' }),
       ],
       edges: [],
     })
@@ -1641,25 +1629,17 @@ describe('wb_canvas_edit — region.set', () => {
         {
           op: 'node.add',
           within: 'g',
-          node: { id: 'web', type: 'text', x: 240, y: 140, width: 160, height: 60, text: 'Web' },
+          node: textNode({ id: 'web', x: 240, y: 140, width: 160, height: 60, text: 'Web' }),
         },
         {
           op: 'node.add',
           within: 'g',
-          node: { id: 'cli', type: 'text', x: 40, y: 60, width: 160, height: 60, text: 'CLI' },
+          node: textNode({ id: 'cli', x: 40, y: 60, width: 160, height: 60, text: 'CLI' }),
         },
         {
           op: 'node.add',
           within: 'g',
-          node: {
-            id: 'mobile',
-            type: 'text',
-            x: 440,
-            y: 140,
-            width: 160,
-            height: 60,
-            text: 'Mobile',
-          },
+          node: textNode({ id: 'mobile', x: 440, y: 140, width: 160, height: 60, text: 'Mobile' }),
         },
       ],
     })
@@ -1698,25 +1678,17 @@ describe('wb_canvas_edit — region.set', () => {
         {
           op: 'node.add',
           within: 'clients',
-          node: { id: 'cli', type: 'text', x: 100, y: 100, width: 160, height: 60, text: 'CLI' },
+          node: textNode({ id: 'cli', x: 100, y: 100, width: 160, height: 60, text: 'CLI' }),
         },
         {
           op: 'node.add',
           within: 'clients',
-          node: {
-            id: 'mobile',
-            type: 'text',
-            x: 540,
-            y: 100,
-            width: 160,
-            height: 60,
-            text: 'Mobile',
-          },
+          node: textNode({ id: 'mobile', x: 540, y: 100, width: 160, height: 60, text: 'Mobile' }),
         },
         {
           op: 'node.add',
           within: 'services',
-          node: { id: 'auth', type: 'text', x: 100, y: 320, width: 160, height: 60, text: 'Auth' },
+          node: textNode({ id: 'auth', x: 100, y: 320, width: 160, height: 60, text: 'Auth' }),
         },
       ],
     })
@@ -1734,7 +1706,7 @@ describe('wb_canvas_edit — region.set', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'between', type: 'text', x: 240, y: 140, width: 160, height: 60, text: 'not mine' },
+        textNode({ id: 'between', x: 240, y: 140, width: 160, height: 60, text: 'not mine' }),
       ],
       edges: [],
     })
@@ -1750,12 +1722,12 @@ describe('wb_canvas_edit — region.set', () => {
           {
             op: 'node.add',
             within: 'g',
-            node: { id: 'a', type: 'text', x: 40, y: 140, width: 160, height: 60, text: 'A' },
+            node: textNode({ id: 'a', x: 40, y: 140, width: 160, height: 60, text: 'A' }),
           },
           {
             op: 'node.add',
             within: 'g',
-            node: { id: 'c', type: 'text', x: 440, y: 140, width: 160, height: 60, text: 'C' },
+            node: textNode({ id: 'c', x: 440, y: 140, width: 160, height: 60, text: 'C' }),
           },
         ],
       }),
@@ -1777,7 +1749,7 @@ describe('wb_canvas_edit — region.set', () => {
         ops: [
           {
             op: 'node.add',
-            node: { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' },
+            node: textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' }),
           },
           { op: 'node.add', within: null, node: { id: 'g', type: 'group', label: 'Later' } },
         ],
@@ -1790,9 +1762,9 @@ describe('wb_canvas_edit — region.set', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'outer', type: 'group', x: 0, y: 0, width: 1000, height: 400, label: 'Outer' },
-        { id: 'a', type: 'text', x: 100, y: 100, width: 200, height: 80, text: 'A' },
-        { id: 'b', type: 'text', x: 400, y: 100, width: 200, height: 80, text: 'B' },
+        groupNode({ id: 'outer', x: 0, y: 0, width: 1000, height: 400, label: 'Outer' }),
+        textNode({ id: 'a', x: 100, y: 100, width: 200, height: 80, text: 'A' }),
+        textNode({ id: 'b', x: 400, y: 100, width: 200, height: 80, text: 'B' }),
       ],
       edges: [],
     })
@@ -1833,9 +1805,9 @@ describe('wb_canvas_edit — tidy orders a row by its edges', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'apigw', type: 'text', x: 40, y: 400, width: 160, height: 60, text: 'apigw' },
-        { id: 'auth', type: 'text', x: 264, y: 400, width: 160, height: 60, text: 'auth' },
-        { id: 'search', type: 'text', x: 488, y: 400, width: 160, height: 60, text: 'search' },
+        textNode({ id: 'apigw', x: 40, y: 400, width: 160, height: 60, text: 'apigw' }),
+        textNode({ id: 'auth', x: 264, y: 400, width: 160, height: 60, text: 'auth' }),
+        textNode({ id: 'search', x: 488, y: 400, width: 160, height: 60, text: 'search' }),
       ],
       edges: [
         {
@@ -1867,15 +1839,7 @@ describe('wb_canvas_edit — tidy orders a row by its edges', () => {
 })
 
 describe('wb_canvas_edit — node.add within a group', () => {
-  const GROUP = {
-    id: 'g',
-    type: 'group' as const,
-    x: 0,
-    y: 0,
-    width: 500,
-    height: 500,
-    label: 'Phase 1',
-  }
+  const GROUP = groupNode({ id: 'g', x: 0, y: 0, width: 500, height: 500, label: 'Phase 1' })
 
   test('places a node that carries no geometry inside the group', async () => {
     // The default placement puts a node below existing content, which would
@@ -1914,8 +1878,8 @@ describe('wb_canvas_edit — node.add within a group', () => {
     await seedCanvas(store, {
       nodes: [
         { ...GROUP, x: 0, y: 600, width: 700, height: 300 },
-        { id: 'cli', type: 'text', x: 40, y: 700, width: 200, height: 80, text: 'CLI' },
-        { id: 'web', type: 'text', x: 300, y: 700, width: 200, height: 80, text: 'Web app' },
+        textNode({ id: 'cli', x: 40, y: 700, width: 200, height: 80, text: 'CLI' }),
+        textNode({ id: 'web', x: 300, y: 700, width: 200, height: 80, text: 'Web app' }),
       ],
       edges: [],
     })
@@ -2046,15 +2010,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
       ops: [
         {
           op: 'node.add',
-          node: {
-            id: 'mobile',
-            type: 'text',
-            x: 560,
-            y: 700,
-            width: 200,
-            height: 80,
-            text: 'Mobile',
-          },
+          node: textNode({ id: 'mobile', x: 560, y: 700, width: 200, height: 80, text: 'Mobile' }),
           within: 'g',
         },
       ],
@@ -2086,15 +2042,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
         ops: [
           {
             op: 'node.add',
-            node: {
-              id: 'early',
-              type: 'text',
-              x: -30,
-              y: 20,
-              width: 200,
-              height: 40,
-              text: 'early',
-            },
+            node: textNode({ id: 'early', x: -30, y: 20, width: 200, height: 40, text: 'early' }),
             within: 'g',
           },
         ],
@@ -2126,7 +2074,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
         // fitted inside the group, nothing grew, and the refusal this test
         // exists for never fired — a fixture that had stopped reaching its
         // own case while still reading as a passing test.
-        { id: 'neighbour', type: 'text', x: 220, y: 20, width: 260, height: 40, text: 'next door' },
+        textNode({ id: 'neighbour', x: 220, y: 20, width: 260, height: 40, text: 'next door' }),
       ],
       edges: [],
     })
@@ -2140,7 +2088,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
         ops: [
           {
             op: 'node.add',
-            node: { id: 'wide', type: 'text', x: 150, y: 20, width: 100, height: 40, text: 'wide' },
+            node: textNode({ id: 'wide', x: 150, y: 20, width: 100, height: 40, text: 'wide' }),
             within: 'g',
           },
         ],
@@ -2168,7 +2116,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
   test('refuses a `within` that is not a group', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'plain', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'plain' }],
+      nodes: [textNode({ id: 'plain', x: 0, y: 0, width: 10, height: 10, text: 'plain' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -2193,13 +2141,13 @@ describe('wb_canvas_edit — node.add within a group', () => {
  * lets the edit name the condition instead.
  */
 describe('wb_canvas_edit — a selector where an id goes', () => {
-  const GROUP = { id: 'g', type: 'group' as const, x: 0, y: 0, width: 500, height: 500 }
+  const GROUP = groupNode({ id: 'g', x: 0, y: 0, width: 500, height: 500 })
   const BOARD = {
     nodes: [
       GROUP,
-      { id: 'a', type: 'text' as const, x: 20, y: 20, width: 80, height: 40, text: 'a' },
-      { id: 'b', type: 'text' as const, x: 200, y: 20, width: 80, height: 40, text: 'b' },
-      { id: 'far', type: 'text' as const, x: 900, y: 900, width: 80, height: 40, text: 'far' },
+      textNode({ id: 'a', x: 20, y: 20, width: 80, height: 40, text: 'a' }),
+      textNode({ id: 'b', x: 200, y: 20, width: 80, height: 40, text: 'b' }),
+      textNode({ id: 'far', x: 900, y: 900, width: 80, height: 40, text: 'far' }),
     ],
     edges: [
       {
@@ -2329,7 +2277,7 @@ describe('wb_canvas_edit — a selector where an id goes', () => {
       ...BOARD,
       nodes: [
         ...BOARD.nodes,
-        { id: 'c', type: 'text' as const, x: 416, y: 456, width: 80, height: 40, text: 'c' },
+        textNode({ id: 'c', x: 416, y: 456, width: 80, height: 40, text: 'c' }),
       ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -2356,8 +2304,8 @@ describe('wb_canvas_edit — a selector where an id goes', () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        { id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 240 },
-        { id: 'a', type: 'text', x: 40, y: 40, width: 200, height: 80, text: 'a' },
+        groupNode({ id: 'g', x: 0, y: 0, width: 300, height: 240 }),
+        textNode({ id: 'a', x: 40, y: 40, width: 200, height: 80, text: 'a' }),
       ],
       edges: [],
     })
@@ -2509,7 +2457,7 @@ describe('wb_canvas_edit — a node created without a height', () => {
   test('a patch that makes the text outgrow the box, or the box too short for it, is refused', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'n', type: 'text', x: 0, y: 0, width: 260, height: 120, text: 'short' }],
+      nodes: [textNode({ id: 'n', x: 0, y: 0, width: 260, height: 120, text: 'short' })],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -2737,7 +2685,7 @@ describe('node.patch and a node type that does not have the key', () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedCanvas(store, {
-      nodes: [{ id: 'g1', type: 'group', x: 0, y: 0, width: 10, height: 10 }],
+      nodes: [groupNode({ id: 'g1', x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
 
@@ -2757,7 +2705,7 @@ describe('node.patch and a node type that does not have the key', () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedCanvas(store, {
-      nodes: [{ id: 'g1', type: 'group', x: 0, y: 0, width: 100, height: 50 }],
+      nodes: [groupNode({ id: 'g1', x: 0, y: 0, width: 100, height: 50 })],
       edges: [],
     })
 
@@ -2956,7 +2904,7 @@ describe('wb_canvas_edit — a node created without a width', () => {
     // board would otherwise outvote every box inside it.
     const board: SpatialCanvas = {
       nodes: [
-        { id: 'frame', type: 'group', x: -20, y: -20, width: 700, height: 300, label: 'F' },
+        groupNode({ id: 'frame', x: -20, y: -20, width: 700, height: 300, label: 'F' }),
         box('a', 0, 200),
         box('b', 300, 200),
       ],
@@ -2976,7 +2924,7 @@ describe('wb_canvas_edit — a node created without a width', () => {
  */
 describe('wb_canvas_edit — line ops', () => {
   const ONE_BOX: SpatialCanvas = {
-    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' }],
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
     edges: [],
   }
 
@@ -3137,7 +3085,7 @@ describe('wb_canvas_edit — ink the batch never mentions', () => {
   test('keeps a line a previous author drew, through an unrelated edit', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })],
       edges: [],
       lines: [
         {

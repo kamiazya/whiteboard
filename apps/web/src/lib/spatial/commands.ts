@@ -34,11 +34,17 @@ import {
   endNode,
   isSelfLoop,
   type LineJumps,
+  nodeFile,
+  nodeText,
+  nodeUrl,
   type ProposedChange,
   type ProposedChangeStatus,
   type SpatialCanvas,
   type SpatialNode,
   type StoredCoreFacets,
+  withNodeFile,
+  withNodeText,
+  withNodeUrl,
 } from '@kamiazya/whiteboard-model'
 import {
   resolveCanvasEdgeDefaults,
@@ -394,7 +400,9 @@ function resizeNode(
 }
 
 function setText(canvas: SpatialCanvas, id: string, text: string): SpatialCanvas {
-  return updateNode(canvas, id, (node) => (node.type === 'text' ? { ...node, text } : undefined))
+  return updateNode(canvas, id, (node) =>
+    nodeText(node) === undefined ? undefined : withNodeText(node, text),
+  )
 }
 
 function connectNodes(
@@ -631,14 +639,10 @@ function setNodeColor(
 }
 
 function setNodeFile(canvas: SpatialCanvas, id: string, file: string): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && node.type === 'file')) return canvas
+  if (!canvas.nodes.some((node) => node.id === id && nodeFile(node) !== undefined)) return canvas
   return {
     ...canvas,
-    nodes: canvas.nodes.map((node) => {
-      if (node.id !== id || node.type !== 'file') return node
-      const { subpath: _removed, ...rest } = node
-      return { ...rest, file }
-    }),
+    nodes: canvas.nodes.map((node) => (node.id === id ? withNodeFile(node, file) : node)),
   }
 }
 
@@ -685,12 +689,10 @@ function setGroupBackground(
 }
 
 function setNodeUrl(canvas: SpatialCanvas, id: string, url: string): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && node.type === 'link')) return canvas
+  if (!canvas.nodes.some((node) => node.id === id && nodeUrl(node) !== undefined)) return canvas
   return {
     ...canvas,
-    nodes: canvas.nodes.map((node) =>
-      node.id === id && node.type === 'link' ? { ...node, url } : node,
-    ),
+    nodes: canvas.nodes.map((node) => (node.id === id ? withNodeUrl(node, url) : node)),
   }
 }
 

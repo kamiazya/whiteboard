@@ -16,7 +16,7 @@ import {
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
+import { isImageRef, newImageRef, nodeFile } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { DocumentFileAdapter, LoadedFileDocument } from './document-file-contract.js'
@@ -125,7 +125,7 @@ export async function loadBrowserReference(
 
 /** The file references present in a canvas, deduplicated. */
 export function collectFileRefs(canvas: SpatialCanvas): readonly string[] {
-  return [...new Set(canvas.nodes.flatMap((node) => (node.type === 'file' ? [node.file] : [])))]
+  return [...new Set(canvas.nodes.map(nodeFile).filter((file) => file !== undefined))]
 }
 
 /**

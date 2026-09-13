@@ -2,8 +2,10 @@
 // as a KIND plus a seed on the scene node, never coordinates, so
 // translate/scale need no knowledge of it and the digest keeps reading the
 // semantic box.
+
 import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../scene-digest.js'
@@ -36,8 +38,8 @@ function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {
 
 const canvas: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'a', color: '5' },
-    { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 60, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a', color: '5' }),
+    textNode({ id: 'b', x: 300, y: 200, width: 100, height: 60, text: 'b' }),
   ],
   edges: [
     {
@@ -69,7 +71,7 @@ describe('sketch ink assignment', () => {
     const framed: SpatialCanvas = {
       ...canvas,
       nodes: [
-        { id: 'g', type: 'group', x: -20, y: -20, width: 400, height: 300, label: 'G', color: '2' },
+        groupNode({ id: 'g', x: -20, y: -20, width: 400, height: 300, label: 'G', color: '2' }),
         ...canvas.nodes,
       ],
     }

@@ -3,7 +3,9 @@
 // amber border, the corner radius, the padding and the floating shadow are
 // the theme's comment chrome, read from the same palette the renderer
 // paints from. Real browser: computed styles are what a person sees.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -14,7 +16,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [
     { id: 'c-free', x: 600, y: 450, text: 'free note', createdAt: '2026-09-02T00:00:00.000Z' },

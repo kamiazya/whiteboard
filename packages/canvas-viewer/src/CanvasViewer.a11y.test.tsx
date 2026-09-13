@@ -8,6 +8,7 @@
 
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -22,7 +23,7 @@ const fakeMeasure: MeasureText = (text) => ({
 afterEach(cleanup)
 
 const canvas: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'Hello' }],
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 60, text: 'Hello' })],
   edges: [],
 }
 
