@@ -13,7 +13,7 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it } from 'vitest'
-import { page, userEvent } from 'vitest/browser'
+import { userEvent } from 'vitest/browser'
 import { AppShell } from '../components/AppShell.js'
 import {
   getBrowserWorkspaceId,
@@ -23,6 +23,7 @@ import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { setViewport } from '../test-utils/viewport.js'
 
 // No real IndexedDB in this file (`LocalStoreDouble` is in-memory), so
 // nothing else in this page's module graph resolves the workspace-id
@@ -38,7 +39,7 @@ afterEach(async () => {
     await document.exitFullscreen()
   }
   cleanup()
-  await page.viewport(1280, 900)
+  await setViewport(1280, 900)
 })
 
 // The shell above the page, the way App composes them: the toggle is the
@@ -128,7 +129,7 @@ it('keeps the exit control off the edge a camera can occupy', async () => {
 // the width IS the variable here, so the flag is stubbed the way the jsdom
 // suite stubs it, over real CSS and real layout.
 it('does not collide with the canvas dock at a phone width', async () => {
-  await page.viewport(360, 780)
+  await setViewport(360, 780)
   await renderLoaded()
 
   Object.defineProperty(document, 'fullscreenElement', {
@@ -179,7 +180,7 @@ function declaredCornerBreakpoint(control: HTMLElement): number {
 // up with empty space beneath it reads as unanchored — reported from a landscape
 // device. So the lift is a narrow-width variant, and the corner is the default.
 it('takes the corner where the width allows', async () => {
-  await page.viewport(1280, 800)
+  await setViewport(1280, 800)
   await renderLoaded()
   const exit = await enterStubbedFullscreen()
 
@@ -194,12 +195,12 @@ it('takes the corner where the width allows', async () => {
 // the declaration moves this guard with it — and widening the dock without
 // moving the breakpoint fails here rather than on someone's phone.
 it('declares a corner breakpoint that still clears the dock', async () => {
-  await page.viewport(1280, 800)
+  await setViewport(1280, 800)
   await renderLoaded()
   const exit = await enterStubbedFullscreen()
   const breakpoint = declaredCornerBreakpoint(exit)
 
-  await page.viewport(breakpoint, 780)
+  await setViewport(breakpoint, 780)
   await act(async () => {})
 
   const dock = document.querySelector('[data-testid="tool-palette"]')

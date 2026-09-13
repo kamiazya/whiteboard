@@ -7,7 +7,7 @@
 // the layout viewport shrinks instead and the keyboard occludes nothing.
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { page, userEvent } from 'vitest/browser'
+import { userEvent } from 'vitest/browser'
 import { MarkdownNodeEditor } from '../spatial-editor/MarkdownNodeEditor.js'
 import { nodeEditorContent } from '../spatial-editor/node-editor-test-utils.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -15,6 +15,7 @@ import { TouchFormattingBar } from './TouchFormattingBar.js'
 // The bar loads its panel lazily; importing it here moves that chunk's load
 // into the collection phase, off the per-assertion retry budget.
 import './TouchFormattingBarPanel.js'
+import { setViewport } from '../../test-utils/viewport.js'
 import { TOUCH_BAR_HEIGHT_PX } from './verb-bar-layout.js'
 
 const realMatchMedia = window.matchMedia
@@ -28,7 +29,7 @@ let fake: FakeVisualViewport
 
 beforeEach(async () => {
   // A phone's width, so the overflow split is the one a phone gets.
-  await page.viewport(390, 844)
+  await setViewport(390, 844)
   coarse = true
   window.matchMedia = (query: string) =>
     query === '(pointer: coarse)'

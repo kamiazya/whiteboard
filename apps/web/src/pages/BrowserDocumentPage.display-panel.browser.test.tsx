@@ -15,10 +15,11 @@ import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { page, userEvent } from 'vitest/browser'
+import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
+import { setViewport } from '../test-utils/viewport.js'
 
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: () => <div data-testid="mock-spatial-editor" style={{ height: '100%' }} />,
@@ -50,7 +51,7 @@ const snap: DocumentSnapshot = {
 
 /** The viewport is GLOBAL, so each test states the width it means. */
 beforeEach(async () => {
-  await page.viewport(390, 780)
+  await setViewport(390, 780)
 })
 
 afterEach(cleanup)

@@ -5,7 +5,8 @@
 // and never takes the caret away.
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { page, userEvent } from 'vitest/browser'
+import { userEvent } from 'vitest/browser'
+import { setViewport } from '../../test-utils/viewport.js'
 import { MARKDOWN_EDITOR_VERBS } from './editor-verbs.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
@@ -29,7 +30,7 @@ async function mount(onChange = vi.fn()) {
 }
 
 it('shows every verb at a desktop width, in the table order that keeps bands together', async () => {
-  await page.viewport(1280, 800)
+  await setViewport(1280, 800)
   await mount()
   await vi.waitFor(() => expect(slots().length).toBeGreaterThan(0))
   // The bar draws no "…" of its own — ⋯ beside the view modes is the catalog.
@@ -37,7 +38,7 @@ it('shows every verb at a desktop width, in the table order that keeps bands tog
 })
 
 it('runs a verb on the caret and leaves the caret in the editor', async () => {
-  await page.viewport(1280, 800)
+  await setViewport(1280, 800)
   const onChange = await mount()
   await vi.waitFor(() => expect(slots().length).toBeGreaterThan(0))
 
@@ -57,12 +58,12 @@ it('runs a verb on the caret and leaves the caret in the editor', async () => {
 })
 
 it('drops the verbs a narrow width cannot hold rather than wrapping the strip', async () => {
-  await page.viewport(420, 800)
+  await setViewport(420, 800)
   await mount()
   await vi.waitFor(() => expect(bar()).not.toBeNull())
   const narrow = slots().length
   expect(narrow).toBeLessThan(MARKDOWN_EDITOR_VERBS.length)
 
-  await page.viewport(1280, 800)
+  await setViewport(1280, 800)
   await vi.waitFor(() => expect(slots().length).toBe(MARKDOWN_EDITOR_VERBS.length))
 })

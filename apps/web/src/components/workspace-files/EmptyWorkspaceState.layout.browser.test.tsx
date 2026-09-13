@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { page } from 'vitest/browser'
+import { setViewport } from '../../test-utils/viewport.js'
 import { EmptyWorkspaceState } from './EmptyWorkspaceState.js'
 
 // A phone put the two choice cards in a COLUMN (fixed card width + wrap):
@@ -8,12 +8,12 @@ import { EmptyWorkspaceState } from './EmptyWorkspaceState.js'
 // must share a row even at phone width.
 
 afterEach(async () => {
-  await page.viewport(1280, 800)
+  await setViewport(1280, 800)
 })
 
 describe('onboarding chooser layout', () => {
   it('keeps both choices on one row at phone width', async () => {
-    await page.viewport(375, 700)
+    await setViewport(375, 700)
     render(<EmptyWorkspaceState onCreate={() => {}} />)
 
     const canvas = document.querySelector('button[aria-label="Create a canvas"]')
