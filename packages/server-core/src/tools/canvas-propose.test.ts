@@ -2,12 +2,14 @@
 // started that ADR was that this half was never wired: an agent could only
 // write to the live document, so the flow the branch machinery was built for
 // had no first step. These tests are that first step.
+
 import {
   readProposals,
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { AgentActivity, ServerDeps } from '../server-deps.js'
 import {
@@ -24,8 +26,8 @@ const WORKSPACE_ID = 'ws-1'
 
 const BOARD: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' },
-    { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
+    textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' }),
+    textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' }),
   ],
   edges: [
     {
@@ -385,17 +387,16 @@ describe('the default mode (ADR-0029 decision 7)', () => {
 describe('elements whose fields hold objects', () => {
   const withFacets: SpatialCanvas = {
     nodes: [
-      {
+      textNode({
         id: 'a',
-        type: 'text',
         x: 0,
         y: 0,
         width: 100,
         height: 40,
         text: 'A',
         facets: { 'visual.shape/v0': { kind: 'hexagon' } },
-      },
-      { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
+      }),
+      textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' }),
     ],
     edges: [
       {

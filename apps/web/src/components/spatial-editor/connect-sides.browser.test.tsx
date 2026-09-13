@@ -1,7 +1,9 @@
 // Edge creation from every side, not only the right — reported as friction
 // after real use. Each handle starts the same connecting gesture; the edge's
 // path is routed from geometry at layout time, so no side is persisted.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -12,8 +14,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 300, y: 250, width: 160, height: 80, text: 'from' },
-    { id: 'b', type: 'text', x: 60, y: 250, width: 120, height: 80, text: 'to-left' },
+    textNode({ id: 'a', x: 300, y: 250, width: 160, height: 80, text: 'from' }),
+    textNode({ id: 'b', x: 60, y: 250, width: 120, height: 80, text: 'to-left' }),
   ],
   edges: [],
 }

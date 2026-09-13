@@ -5,6 +5,7 @@
  * era: no index row is ever written, no record is ever minted, and a
  * visit that edits nothing leaves the record byte-identical.
  */
+
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -13,6 +14,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -47,7 +49,7 @@ async function seedReplica(): Promise<void> {
   writeMarkdownBody(documentContainers(record, DOC_MD), '# Hello from the cache')
   createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
   writeSpatialCanvas(documentContainers(record, DOC_SP), {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 120, height: 40, text: 'cached node' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: 'cached node' })],
     edges: [],
   })
   // Two documents that POINT at `notes/plan`: one a markdown body with a
@@ -66,15 +68,7 @@ async function seedReplica(): Promise<void> {
   })
   writeSpatialCanvas(documentContainers(record, DOC_EMBEDDER), {
     nodes: [
-      {
-        id: 'e1',
-        type: 'text',
-        x: 0,
-        y: 0,
-        width: 320,
-        height: 220,
-        text: 'See:\n\n![[notes/plan]]',
-      },
+      textNode({ id: 'e1', x: 0, y: 0, width: 320, height: 220, text: 'See:\n\n![[notes/plan]]' }),
     ],
     edges: [],
   })

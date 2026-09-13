@@ -1,4 +1,5 @@
 import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -21,7 +22,7 @@ describe('exportOkf', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
         edges: [],
       })
       writeFacets(doc, { 'example.kanban/v1': { status: 'todo' } })
@@ -40,7 +41,7 @@ describe('exportOkf', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'group', x: 0, y: 0, width: 100, height: 50 }],
+        nodes: [groupNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50 })],
         edges: [],
       })
     })
@@ -70,7 +71,7 @@ describe('exportOkf', () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: '# Title' }],
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: '# Title' })],
         edges: [],
       })
     })

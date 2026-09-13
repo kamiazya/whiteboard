@@ -9,7 +9,9 @@
 // A second finger otherwise means pinch, so the two are told apart by STATE,
 // not by timing: only while the first finger holds a node does a second-finger
 // tap gather instead of zoom.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -19,9 +21,9 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 300, y: 40, width: 120, height: 60, text: 'B' },
-    { id: 'c', type: 'text', x: 560, y: 40, width: 120, height: 60, text: 'C' },
+    textNode({ id: 'a', x: 40, y: 40, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 300, y: 40, width: 120, height: 60, text: 'B' }),
+    textNode({ id: 'c', x: 560, y: 40, width: 120, height: 60, text: 'C' }),
   ],
   edges: [],
 }

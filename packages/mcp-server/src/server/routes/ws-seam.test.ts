@@ -6,10 +6,12 @@
  * passes every fallback-path test. The recorder on the INJECTED deps is the
  * discriminator, because going around the seam persists the same bytes.
  */
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
@@ -58,7 +60,7 @@ class FakeWebSocket {
 function canvasDoc(ids: string[]): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: ids.map((id) => ({ id, type: 'text', text: id, x: 0, y: 0, width: 10, height: 10 })),
+    nodes: ids.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
   return doc
@@ -68,7 +70,7 @@ function updateFrame(): Buffer {
   const doc = new LoroDoc()
   const vv0 = doc.version()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n-seam', type: 'text', text: 'seam', x: 0, y: 0, width: 10, height: 10 }],
+    nodes: [textNode({ id: 'n-seam', text: 'seam', x: 0, y: 0, width: 10, height: 10 })],
     edges: [],
   })
   return Buffer.from(doc.export({ mode: 'update', from: vv0 }))

@@ -4,7 +4,9 @@
 // start (single-node render, ~0.4ms) and travels via a per-frame CSS
 // transform; the committed full-canvas render stays untouched during the
 // drag, which is the property that keeps this smooth on large documents.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -13,9 +15,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
-  nodes: [
-    { id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'travelling text' },
-  ],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'travelling text' })],
   edges: [],
 }
 

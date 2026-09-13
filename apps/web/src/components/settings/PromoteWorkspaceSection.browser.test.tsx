@@ -8,12 +8,14 @@
  * pointer/focus risk, and the seeded workspace lives in real IndexedDB so the
  * section's count and the posted bytes come from the production read path.
  */
+
 import {
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { newImageRef } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -121,9 +123,7 @@ async function seedImageOnSketch(sketchId: string): Promise<void> {
   })
   const content = new LoroDoc()
   writeSpatialCanvas(content, {
-    nodes: [
-      { id: 'img', type: 'file', file: newImageRef('img-1'), x: 0, y: 0, width: 5, height: 5 },
-    ],
+    nodes: [fileNode({ id: 'img', file: newImageRef('img-1'), x: 0, y: 0, width: 5, height: 5 })],
     edges: [],
   })
   expect(
@@ -150,7 +150,7 @@ async function seedPreFoldDocument(path: string): Promise<string> {
   const doc = new LoroDoc()
   doc
     .getMap('nodes')
-    .set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'pre-fold' })
+    .set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'pre-fold' }))
   doc.commit()
   await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
   return entry.documentId
@@ -601,15 +601,14 @@ describe('PromoteWorkspaceSection', () => {
     const content = new LoroDoc()
     writeSpatialCanvas(content, {
       nodes: [
-        {
+        fileNode({
           id: 'img',
-          type: 'file',
           file: newImageRef('img-never-stored'),
           x: 0,
           y: 0,
           width: 5,
           height: 5,
-        },
+        }),
       ],
       edges: [],
     })

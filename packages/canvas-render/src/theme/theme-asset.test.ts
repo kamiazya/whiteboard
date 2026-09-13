@@ -1,5 +1,6 @@
 import { SAMPLE_THEME_TOKENS, themeTokensSchema } from '@kamiazya/whiteboard-facet-engine'
 import { edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
 import { MARKDOWN_THEME_NODE } from './markdown-theme.js'
@@ -92,18 +93,12 @@ describe('createThemedAppearance', () => {
       mode: 'light',
       fontFamily: 'Roboto',
     })
-    const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
+    const group = themed.resolveNode(groupNode({ id: 'g', x: 0, y: 0, width: 10, height: 10 }))
     expect(group.appearance?.strokeDasharray).toBe('6 4')
     expect(group.appearance?.strokeWidth).toBe(2)
-    const text = themed.resolveNode({
-      id: 't',
-      type: 'text',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-      text: '',
-    })
+    const text = themed.resolveNode(
+      textNode({ id: 't', x: 0, y: 0, width: 10, height: 10, text: '' }),
+    )
     expect(text.appearance?.strokeDasharray).toBeUndefined()
   })
 })
@@ -119,17 +114,11 @@ describe('stroke width tokens', () => {
       mode: 'light',
       fontFamily: 'Roboto',
     })
-    const text = themed.resolveNode({
-      id: 't',
-      type: 'text',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-      text: '',
-    })
+    const text = themed.resolveNode(
+      textNode({ id: 't', x: 0, y: 0, width: 10, height: 10, text: '' }),
+    )
     expect(text.appearance?.strokeWidth).toBe(1.4)
-    const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
+    const group = themed.resolveNode(groupNode({ id: 'g', x: 0, y: 0, width: 10, height: 10 }))
     expect(group.appearance?.strokeWidth).toBe(2)
     expect(
       themed.resolveEdge({
@@ -145,7 +134,7 @@ describe('stroke width tokens', () => {
       fontFamily: 'Roboto',
     })
     expect(
-      bare.resolveNode({ id: 't', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' })
+      bare.resolveNode(textNode({ id: 't', x: 0, y: 0, width: 10, height: 10, text: '' }))
         .appearance?.strokeWidth,
     ).toBeUndefined()
   })
@@ -166,15 +155,9 @@ describe('glow tokens', () => {
       mode: 'dark',
       fontFamily: 'Roboto',
     })
-    const node = themed.resolveNode({
-      id: 'n',
-      type: 'text',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-      text: '',
-    })
+    const node = themed.resolveNode(
+      textNode({ id: 'n', x: 0, y: 0, width: 10, height: 10, text: '' }),
+    )
     expect(node.appearance?.glow).toEqual({ radiusPx: 6 })
     expect(
       themed.resolveEdge({
@@ -189,7 +172,7 @@ describe('glow tokens', () => {
     // the label already sits on its halo pill; a container's frame is the
     // largest and least informative thing on the board to bloom.
     expect(themed.resolveLabel().glow).toBeUndefined()
-    const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
+    const group = themed.resolveNode(groupNode({ id: 'g', x: 0, y: 0, width: 10, height: 10 }))
     expect(group.appearance?.glow).toBeUndefined()
   })
 
@@ -200,7 +183,7 @@ describe('glow tokens', () => {
       fontFamily: 'Roboto',
     })
     expect(
-      themed.resolveNode({ id: 'n', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' })
+      themed.resolveNode(textNode({ id: 'n', x: 0, y: 0, width: 10, height: 10, text: '' }))
         .appearance?.glow,
     ).toBeUndefined()
     expect(

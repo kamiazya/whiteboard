@@ -198,7 +198,12 @@ describe('what the tool table costs to read', () => {
         // inlining it. Recorded rather than smoothed over — the lever is
         // worth pulling on the table's total, and this row is what it costs
         // to pull.
-        wireBytes: 21956,
+        // -8 when `node.patch`'s geometry stopped restating `int`. ATTRIBUTED
+        // by measurement, not by argument: reverted, this row reads 21956;
+        // applied, 21948. The mechanism is NOT established — `body-edit.ts`
+        // imports no node patch and no integer schema — so the number is
+        // recorded and the cause is left open rather than invented.
+        wireBytes: 21948,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -333,9 +338,18 @@ describe('what the tool table costs to read', () => {
       // described `width`/`height` leaves read as -837 bytes, and the bytes
       // WERE the descriptions being deleted (4 arms x (60 + 150)) — a saving
       // that is really a silent content loss, refused here.
+      //
+      // And -4 visible / -12 wire on top of both, from this branch:
+      // `node.patch`'s geometry stopped restating `int` and now derives from
+      // what a node STORES, which is a real number (ADR-0037 slice 4). The
+      // table pays four bytes less for a schema that accepts strictly more —
+      // the patch had been refusing the sub-pixel coordinates the editor
+      // writes. Independent of the two causes above and additive to them,
+      // measured rather than reasoned: the same -4/-12 appears against
+      // main's new base as it did against the old one.
       wb_canvas_edit: {
-        visibleBytes: 15047,
-        wireBytes: 38025,
+        visibleBytes: 15043,
+        wireBytes: 38013,
         descriptionWords: 169,
         parameters: 221,
         undescribed: 154,
@@ -665,6 +679,10 @@ describe('what the tool table costs to read', () => {
       // reach for ink over a relation (C4). The rest are `id`, `color`,
       // `label` and `facets`, which mean on a line exactly what they already
       // mean on an edge.
+      // 39,001 -> 38,997: `node.patch`'s geometry derived rather than
+      // restated (see `wb_canvas_edit` above). Strictly more accepted, four
+      // bytes cheaper.
+      //
       //
       // Then +142 on the WIRE alone, and nothing else: `assetRefs` on
       // `wb_facet_list`'s answer, plus `visual.axes/v0` and a sixth
@@ -687,8 +705,11 @@ describe('what the tool table costs to read', () => {
       // pair is the instrument, not the table: 345 and 221 are what the
       // surface has been all along, and 289 / 197 were what an oracle that
       // stopped at a `$ref` could see of it.
-      visibleBytes: 38300,
-      wireBytes: 115739,
+      //
+      // Then -4 visible / -20 wire for `node.patch`'s derived geometry (see
+      // the `wb_canvas_edit` row). Strictly more accepted, and cheaper.
+      visibleBytes: 38296,
+      wireBytes: 115719,
       parameters: 345,
       undescribed: 221,
     })

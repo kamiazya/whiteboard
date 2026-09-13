@@ -1,7 +1,9 @@
 // The inspector is not a dialog. It stays open, follows the selection, and
 // never takes focus off the canvas — which is what makes reaching a facet
 // through it cost one tap after the first, rather than two plus a close.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -12,8 +14,8 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 90, text: 'A' },
-    { id: 'b', type: 'text', x: 300, y: 40, width: 160, height: 90, text: 'B' },
+    textNode({ id: 'a', x: 40, y: 40, width: 160, height: 90, text: 'A' }),
+    textNode({ id: 'b', x: 300, y: 40, width: 160, height: 90, text: 'B' }),
   ],
   edges: [],
 }

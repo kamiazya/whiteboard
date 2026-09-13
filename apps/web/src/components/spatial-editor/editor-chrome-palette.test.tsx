@@ -4,12 +4,14 @@
  * from the bundled one, so nothing floating over a themed canvas arrives in
  * a colour the scene underneath never uses.
  */
+
 import {
   resolveCanvasPalette,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createIdleState } from './gestures.js'
@@ -21,8 +23,8 @@ afterEach(cleanup)
 
 const neon: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a' },
-    { id: 'b', type: 'text', x: 300, y: 200, width: 120, height: 60, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'a' }),
+    textNode({ id: 'b', x: 300, y: 200, width: 120, height: 60, text: 'b' }),
   ],
   edges: [
     {

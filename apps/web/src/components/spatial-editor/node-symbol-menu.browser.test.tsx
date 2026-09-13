@@ -8,6 +8,7 @@
 // shows its own content.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -20,7 +21,7 @@ afterEach(() => {
 })
 
 const initial: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 80, y: 80, width: 200, height: 100, text: 'A' }],
+  nodes: [textNode({ id: 'a', x: 80, y: 80, width: 200, height: 100, text: 'A' })],
   edges: [],
 }
 

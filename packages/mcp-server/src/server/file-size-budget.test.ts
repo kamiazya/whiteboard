@@ -197,7 +197,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `lines` collection threaded through the working copy — including the
   // sweep that takes ink anchored to a removed node and leaves free ink
   // alone, which is the one place the two element kinds must differ.
-  'packages/server-core/src/tools/canvas-edit.ts': 1180,
+  // 1180 -> 1183 for ADR-0038 decision 3's seam: two imports, and one line
+  // binding the text this file reads twice. Raised rather than shrunk because
+  // the alternative is reading `nodeText(node)` a second time to save a line,
+  // which is the opposite of what the accessor is for.
+  'packages/server-core/src/tools/canvas-edit.ts': 1183,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.

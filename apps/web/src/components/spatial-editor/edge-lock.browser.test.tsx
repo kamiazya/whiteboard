@@ -3,7 +3,9 @@
 // edge between two free nodes is still lockable. Same host-state seam as
 // the node lock: the editor takes the set as a prop and reports toggles
 // through a callback.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -13,8 +15,8 @@ afterEach(cleanup)
 
 const initial: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
-    { id: 'b', type: 'text', x: 360, y: 40, width: 160, height: 80, text: 'B' },
+    textNode({ id: 'a', x: 40, y: 40, width: 160, height: 80, text: 'A' }),
+    textNode({ id: 'b', x: 360, y: 40, width: 160, height: 80, text: 'B' }),
   ],
   edges: [
     {

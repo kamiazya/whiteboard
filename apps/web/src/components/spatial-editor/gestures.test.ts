@@ -1,11 +1,13 @@
 // @vitest-environment node
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createIdleState, reduceGesture } from './gestures.js'
 
 function canvas(): SpatialCanvas {
   return {
-    nodes: [{ id: 'a', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'hi' }],
+    nodes: [textNode({ id: 'a', x: 10, y: 10, width: 100, height: 50, text: 'hi' })],
     edges: [],
   }
 }
@@ -112,7 +114,7 @@ describe('gesture reducer', () => {
       point: { x: 50, y: 30 },
     })
     const replaced: SpatialCanvas = {
-      nodes: [{ id: 'a', type: 'file', x: 10, y: 10, width: 100, height: 50, file: 'x.png' }],
+      nodes: [fileNode({ id: 'a', x: 10, y: 10, width: 100, height: 50, file: 'x.png' })],
       edges: [],
     }
     result = reduceGesture(result.state, c, { type: 'canvas-replaced', canvas: replaced })
@@ -129,7 +131,7 @@ describe('gesture reducer', () => {
     })
     result = reduceGesture(result.state, c, { type: 'pointermove', point: { x: 70, y: 45 } })
     const remote: SpatialCanvas = {
-      nodes: [{ id: 'a', type: 'text', x: 999, y: 999, width: 100, height: 50, text: 'hi' }],
+      nodes: [textNode({ id: 'a', x: 999, y: 999, width: 100, height: 50, text: 'hi' })],
       edges: [],
     }
     result = reduceGesture(result.state, remote, { type: 'canvas-replaced', canvas: remote })
@@ -282,8 +284,8 @@ describe('connect gesture', () => {
   it('dragging from the connect handle onto another node emits connect-nodes', () => {
     const c: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'hi' },
-        { id: 'b', type: 'text', x: 200, y: 10, width: 100, height: 50, text: 'bye' },
+        textNode({ id: 'a', x: 10, y: 10, width: 100, height: 50, text: 'hi' }),
+        textNode({ id: 'b', x: 200, y: 10, width: 100, height: 50, text: 'bye' }),
       ],
       edges: [],
     }
@@ -370,8 +372,8 @@ describe('text-edit gesture', () => {
   it('a pointerdown on a different node while a text edit is open commits the pending text', () => {
     const c: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'hi' },
-        { id: 'b', type: 'text', x: 200, y: 10, width: 100, height: 50, text: 'bye' },
+        textNode({ id: 'a', x: 10, y: 10, width: 100, height: 50, text: 'hi' }),
+        textNode({ id: 'b', x: 200, y: 10, width: 100, height: 50, text: 'bye' }),
       ],
       edges: [],
     }
@@ -459,7 +461,7 @@ describe('text-edit gesture', () => {
       text: 'hi',
     })
     const replaced: SpatialCanvas = {
-      nodes: [{ id: 'a', type: 'file', x: 10, y: 10, width: 100, height: 50, file: 'x.png' }],
+      nodes: [fileNode({ id: 'a', x: 10, y: 10, width: 100, height: 50, file: 'x.png' })],
       edges: [],
     }
     const result = reduceGesture(editing.state, c, { type: 'canvas-replaced', canvas: replaced })
@@ -603,8 +605,8 @@ describe('multi-selection resize', () => {
   function pair(): SpatialCanvas {
     return {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 100, text: 'a' },
-        { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 100, text: 'b' },
+        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 100, text: 'a' }),
+        textNode({ id: 'b', x: 200, y: 0, width: 100, height: 100, text: 'b' }),
       ],
       edges: [],
     }
@@ -678,7 +680,7 @@ describe('cancel-text-edit removes a node that only existed for the cancelled ed
     expect(created.commands).toEqual([expect.objectContaining({ kind: 'create-node' })])
 
     const withNode: SpatialCanvas = {
-      nodes: [{ id: 'n-new', type: 'text', x: 0, y: 0, width: 160, height: 90, text: '' }],
+      nodes: [textNode({ id: 'n-new', x: 0, y: 0, width: 160, height: 90, text: '' })],
       edges: [],
     }
     const cancelled = reduceGesture(created.state, withNode, { type: 'cancel-text-edit' })

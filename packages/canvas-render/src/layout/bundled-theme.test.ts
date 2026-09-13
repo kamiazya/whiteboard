@@ -2,7 +2,9 @@
 // set — no composition-root wiring — the same way its silhouettes do: a
 // document that names `visual.sketch` or `visual.neon` draws that way
 // wherever a caller asks for the document's style.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
@@ -14,8 +16,8 @@ const THEME_KEY = 'visual.theme/v0'
 
 const canvasIn = (theme: string | undefined): SpatialCanvas => ({
   nodes: [
-    { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a', color: '5' },
-    { id: 'b', type: 'text', x: 300, y: 200, width: 120, height: 60, text: 'b' },
+    textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'a', color: '5' }),
+    textNode({ id: 'b', x: 300, y: 200, width: 120, height: 60, text: 'b' }),
   ],
   edges: [
     {

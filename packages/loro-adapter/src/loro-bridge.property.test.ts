@@ -3,6 +3,7 @@ import {
   canvasCommentArbitrary,
   extensionFacetsArbitrary,
   spatialCanvasArbitrary,
+  textNode,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
@@ -127,7 +128,7 @@ describe('loro-bridge properties', () => {
   it('stores a negative-zero coordinate as zero, because the record cannot carry one', () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'n1', type: 'text', text: '', x: -0, y: 1.5, width: 0, height: 0 }],
+      nodes: [textNode({ id: 'n1', text: '', x: -0, y: 1.5, width: 0, height: 0 })],
       edges: [],
     })
     const read = readSpatialCanvas(doc)
@@ -145,8 +146,8 @@ describe('loro-bridge properties', () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [
-        { id: 'a', type: 'text', text: '', x: 0, y: 0, width: 1, height: 1 },
-        { id: 'b', type: 'text', text: '', x: 9, y: 9, width: 1, height: 1 },
+        textNode({ id: 'a', text: '', x: 0, y: 0, width: 1, height: 1 }),
+        textNode({ id: 'b', text: '', x: 9, y: 9, width: 1, height: 1 }),
       ],
       edges: [
         {
@@ -169,7 +170,7 @@ describe('loro-bridge properties', () => {
     // decision 2 — an edge with a point end was ink wearing a relation's shape.
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
-      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 1, height: 1 }],
+      nodes: [textNode({ id: 'a', text: '', x: 0, y: 0, width: 1, height: 1 })],
       edges: [],
       lines: [
         {

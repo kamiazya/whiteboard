@@ -45,6 +45,7 @@
  * `applyResult` that DOES touch canvas/gesture/selection has to be added
  * here too.
  */
+
 import {
   type CanvasColor,
   type CanvasEdge,
@@ -54,6 +55,7 @@ import {
   type SpatialNode,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect, it } from 'vitest'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
@@ -242,9 +244,9 @@ const initialCanvasArb: fc.Arbitrary<SpatialCanvas> = fc
 function initialCanvas(): SpatialCanvas {
   return {
     nodes: [
-      { id: 'n0', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'zero' },
-      { id: 'n1', type: 'text', x: 160, y: 0, width: 100, height: 60, text: 'one' },
-      { id: 'n2', type: 'text', x: 0, y: 120, width: 100, height: 60, text: '' },
+      textNode({ id: 'n0', x: 0, y: 0, width: 100, height: 60, text: 'zero' }),
+      textNode({ id: 'n1', x: 160, y: 0, width: 100, height: 60, text: 'one' }),
+      textNode({ id: 'n2', x: 0, y: 120, width: 100, height: 60, text: '' }),
       {
         id: 'n3',
         type: 'link',

@@ -3,7 +3,9 @@
 // where the drop will land instead of pointing out of the gesture-start
 // side long after the geometry stopped supporting it. Bystander edges stay
 // frozen for route stability; the drop still runs the full optimization.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -21,8 +23,8 @@ it('a carried edge re-sides mid-drag to match the drop result', async () => {
   // from.
   const initial: SpatialCanvas = {
     nodes: [
-      { id: 't', type: 'text', x: 60, y: 20, width: 160, height: 60, text: 'T' },
-      { id: 'd', type: 'text', x: 80, y: 480, width: 160, height: 90, text: 'D' },
+      textNode({ id: 't', x: 60, y: 20, width: 160, height: 60, text: 'T' }),
+      textNode({ id: 'd', x: 80, y: 480, width: 160, height: 90, text: 'D' }),
     ],
     edges: [
       {
@@ -84,9 +86,9 @@ it('bystander edges stay frozen while an unrelated node is dragged', async () =>
   // The bystander's sides must not flap mid-drag.
   const initial: SpatialCanvas = {
     nodes: [
-      { id: 'a', type: 'text', x: 260, y: 0, width: 120, height: 60, text: 'A' },
-      { id: 'b', type: 'text', x: 260, y: 520, width: 120, height: 60, text: 'B' },
-      { id: 'd', type: 'text', x: 620, y: 240, width: 160, height: 120, text: 'D' },
+      textNode({ id: 'a', x: 260, y: 0, width: 120, height: 60, text: 'A' }),
+      textNode({ id: 'b', x: 260, y: 520, width: 120, height: 60, text: 'B' }),
+      textNode({ id: 'd', x: 620, y: 240, width: 160, height: 120, text: 'D' }),
     ],
     edges: [
       {
@@ -141,9 +143,9 @@ it('a bystander edge holds its exact anchor when the carried edge joins its side
   // fraction, so the newcomer used to slide the stationary edge.
   const initial: SpatialCanvas = {
     nodes: [
-      { id: 'n', type: 'text', x: 40, y: 40, width: 100, height: 100, text: 'N' },
-      { id: 't', type: 'text', x: 340, y: 40, width: 100, height: 100, text: 'T' },
-      { id: 'm', type: 'text', x: 340, y: 380, width: 100, height: 100, text: 'M' },
+      textNode({ id: 'n', x: 40, y: 40, width: 100, height: 100, text: 'N' }),
+      textNode({ id: 't', x: 340, y: 40, width: 100, height: 100, text: 'T' }),
+      textNode({ id: 'm', x: 340, y: 380, width: 100, height: 100, text: 'M' }),
     ],
     edges: [
       {

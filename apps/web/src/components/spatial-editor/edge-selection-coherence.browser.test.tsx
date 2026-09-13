@@ -10,7 +10,9 @@
 // what the user sees or what a verb does, so any browser test for it would
 // pass with the fix reverted. A guard that cannot fail is worse than none,
 // because it reads as coverage.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -22,8 +24,8 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
-    { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
+    textNode({ id: 'a', x: 100, y: 100, width: 120, height: 60, text: 'A' }),
+    textNode({ id: 'b', x: 400, y: 100, width: 120, height: 60, text: 'B' }),
   ],
   edges: [
     {

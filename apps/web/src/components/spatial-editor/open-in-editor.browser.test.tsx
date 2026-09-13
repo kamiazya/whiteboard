@@ -2,7 +2,9 @@
 // wrong for the long body that box is too small to show. The catalog gets a
 // second door onto the same text: the host opens whatever surface it likes,
 // and the canvas only says which node and with what text.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -13,7 +15,7 @@ afterEach(cleanup)
 const LONG = '# Plan\n\n- one\n- two\n- three\n\nA body far taller than its node.'
 
 const start: SpatialCanvas = {
-  nodes: [{ id: 'a', type: 'text', x: 100, y: 100, width: 220, height: 100, text: LONG }],
+  nodes: [textNode({ id: 'a', x: 100, y: 100, width: 220, height: 100, text: LONG })],
   edges: [],
 }
 

@@ -2,8 +2,10 @@
 // tools rather than argued from the code: every mutating tool is a
 // load-modify-save and `saveSnapshot` writes unconditionally, so two calls
 // that load the same base before either saves drop one of the changes.
+
 import { writeSpatialCanvas as _w, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { createCanvasEditTool } from '@kamiazya/whiteboard-server-core'
@@ -18,8 +20,8 @@ const WORKSPACE_ID = 'ws-1'
 
 const CANVAS: SpatialCanvas = {
   nodes: [
-    { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-    { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'b' },
+    textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+    textNode({ id: 'n2', x: 200, y: 0, width: 100, height: 50, text: 'b' }),
   ],
   edges: [],
 }

@@ -1,3 +1,4 @@
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { parseViewerScene, serializeViewerScene, type ViewerScene } from './scene.js'
 
@@ -11,7 +12,7 @@ describe('parseViewerScene', () => {
 
   it('accepts a nodes-only canvas object', () => {
     const canvas = {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' })],
     }
     const result = parseViewerScene(canvas)
     expect(result.ok).toBe(true)
@@ -35,16 +36,15 @@ describe('parseViewerScene', () => {
   it('accepts a node carrying the x-whiteboard embed extension', () => {
     const canvas = {
       nodes: [
-        {
+        textNode({
           id: 'n1',
-          type: 'text',
           x: 0,
           y: 0,
           width: 10,
           height: 10,
           text: '',
           embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
-        },
+        }),
       ],
     }
     const result = parseViewerScene(canvas)
@@ -62,8 +62,8 @@ describe('parseViewerScene', () => {
   it('rejects a duplicate node id with the json-canvas-schema stage', () => {
     const canvas = {
       nodes: [
-        { id: 'dup', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' },
-        { id: 'dup', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' },
+        textNode({ id: 'dup', x: 0, y: 0, width: 1, height: 1, text: '' }),
+        textNode({ id: 'dup', x: 0, y: 0, width: 1, height: 1, text: '' }),
       ],
     }
     const result = parseViewerScene(canvas)
@@ -76,7 +76,7 @@ describe('parseViewerScene', () => {
 
   it('rejects an edge referencing a nonexistent node', () => {
     const canvas = {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' }],
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 1, height: 1, text: '' })],
       edges: [
         {
           id: 'e1',
@@ -91,7 +91,7 @@ describe('parseViewerScene', () => {
 
   it('rejects non-integer geometry', () => {
     const canvas = {
-      nodes: [{ id: 'a', type: 'text', x: 0.5, y: 0, width: 1, height: 1, text: '' }],
+      nodes: [textNode({ id: 'a', x: 0.5, y: 0, width: 1, height: 1, text: '' })],
     }
     const result = parseViewerScene(canvas)
     expect(result.ok).toBe(false)
@@ -110,16 +110,15 @@ describe('serializeViewerScene', () => {
   it('round-trips an extended-mode canvas through parseViewerScene', () => {
     const canvas: ViewerScene = {
       nodes: [
-        {
+        textNode({
           id: 'n1',
-          type: 'text',
           x: 0,
           y: 0,
           width: 10,
           height: 10,
           text: 'hi',
           embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
-        },
+        }),
       ],
       edges: [],
     }
@@ -131,16 +130,15 @@ describe('serializeViewerScene', () => {
   it('strict mode drops x-whiteboard extension data', () => {
     const canvas: ViewerScene = {
       nodes: [
-        {
+        textNode({
           id: 'n1',
-          type: 'text',
           x: 0,
           y: 0,
           width: 10,
           height: 10,
           text: 'hi',
           embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
-        },
+        }),
       ],
       edges: [],
     }

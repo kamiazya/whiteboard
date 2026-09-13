@@ -3,7 +3,9 @@
 // as much reason to open a conversation as one selecting on it — so a press
 // on comment chrome that never travels opens the card under the hand tool
 // too, while one that travels is the pan it always was.
+
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -22,7 +24,7 @@ const THREAD: CommentThread = {
   messages: [{ id: 'm1', body: 'free note' }],
 }
 const start: SpatialCanvas = {
-  nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
+  nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE],
 }

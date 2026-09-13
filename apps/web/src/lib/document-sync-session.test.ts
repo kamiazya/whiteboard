@@ -33,6 +33,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
@@ -150,24 +151,22 @@ function makeDeps(overrides: Partial<SessionDeps> = {}): SessionDeps {
   }
 }
 
-const TEXT_NODE_A: SpatialCanvas['nodes'][number] = {
+const TEXT_NODE_A: SpatialCanvas['nodes'][number] = textNode({
   id: 'n-a',
-  type: 'text',
   x: 0,
   y: 0,
   width: 100,
   height: 50,
   text: 'hello',
-}
-const TEXT_NODE_B: SpatialCanvas['nodes'][number] = {
+})
+const TEXT_NODE_B: SpatialCanvas['nodes'][number] = textNode({
   id: 'n-b',
-  type: 'text',
   x: 200,
   y: 0,
   width: 100,
   height: 50,
   text: 'world',
-}
+})
 
 function twoNodeCanvas(): SpatialCanvas {
   return { nodes: [TEXT_NODE_A, TEXT_NODE_B], edges: [] }
@@ -742,15 +741,14 @@ describe('createDocumentSyncSession', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
-    const node: SpatialNode = {
+    const node: SpatialNode = textNode({
       id: 'n1',
-      type: 'text',
       x: 100,
       y: 200,
       width: 50,
       height: 30,
       text: 'the plan',
-    }
+    })
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, { nodes: [node], edges: [] })
     backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
@@ -1228,15 +1226,14 @@ describe('createDocumentSyncSession', () => {
     const snapshotBytes = makeSnapshot(twoNodeCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
 
-    const newNode: SpatialCanvas['nodes'][number] = {
+    const newNode: SpatialCanvas['nodes'][number] = textNode({
       id: 'n-c',
-      type: 'text',
       x: 400,
       y: 0,
       width: 100,
       height: 50,
       text: '',
-    }
+    })
     const command: EditorCommand = { kind: 'create-node', node: newNode }
     const next = applyCommand(twoNodeCanvas(), command)
     session.onChange(next, command)
@@ -1529,15 +1526,14 @@ describe('createDocumentSyncSession', () => {
     const snapshotBytes = makeSnapshot(emptyCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
 
-    const newNode: SpatialCanvas['nodes'][number] = {
+    const newNode: SpatialCanvas['nodes'][number] = textNode({
       id: 'n-c',
-      type: 'text',
       x: 0,
       y: 0,
       width: 100,
       height: 50,
       text: '',
-    }
+    })
     const createCmd: EditorCommand = { kind: 'create-node', node: newNode }
     const afterCreate = applyCommand(emptyCanvas(), createCmd)
     session.onChange(afterCreate, createCmd)
@@ -1988,9 +1984,9 @@ describe('createDocumentSyncSession', () => {
     function baseCanvas(): SpatialCanvas {
       return {
         nodes: [
-          { id: 'n-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
-          { id: 'n-b', type: 'text', x: 100, y: 0, width: 100, height: 50, text: 'b' },
-          { id: 'n-c', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'c' },
+          textNode({ id: 'n-a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+          textNode({ id: 'n-b', x: 100, y: 0, width: 100, height: 50, text: 'b' }),
+          textNode({ id: 'n-c', x: 200, y: 0, width: 100, height: 50, text: 'c' }),
         ],
         edges: [],
       }
@@ -2098,15 +2094,14 @@ describe('createDocumentSyncSession', () => {
       session.connect()
       backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-      const created: SpatialNode = {
+      const created: SpatialNode = textNode({
         id: 'n-new',
-        type: 'text',
         x: 500,
         y: 0,
         width: 100,
         height: 50,
         text: 'pasted',
-      }
+      })
       const command: EditorCommand = {
         kind: 'batch',
         commands: [
@@ -2351,15 +2346,14 @@ describe('deciding a proposal', () => {
     vi.useRealTimers()
   })
 
-  const node: SpatialNode = {
+  const node: SpatialNode = textNode({
     id: 'n1',
-    type: 'text',
     x: 0,
     y: 0,
     width: 100,
     height: 50,
     text: 'the plan',
-  }
+  })
   const proposal: Proposal = {
     id: 'p1',
     createdAt: '2026-09-06T00:00:00.000Z',
@@ -2459,8 +2453,8 @@ describe('deciding ONE change of a proposal', () => {
   })
 
   const nodes: readonly SpatialNode[] = [
-    { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'the plan' },
-    { id: 'n2', type: 'text', x: 0, y: 200, width: 100, height: 50, text: 'the risk' },
+    textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'the plan' }),
+    textNode({ id: 'n2', x: 0, y: 200, width: 100, height: 50, text: 'the risk' }),
   ]
   const moveN1: ProposedChange = {
     id: 'node:n1',

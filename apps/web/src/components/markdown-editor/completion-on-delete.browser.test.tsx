@@ -12,6 +12,7 @@
  * plugin's own activation, which is driven by transactions and timers the
  * extension set has to be real to exercise.
  */
+
 import {
   autocompletion,
   type CompletionSource,
@@ -22,6 +23,7 @@ import {
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
@@ -262,9 +264,7 @@ describe('both editing hosts install it', () => {
 
   it('reopens in a canvas node editor', async () => {
     const canvas: SpatialCanvas = {
-      nodes: [
-        { id: 'n1', type: 'text', x: 100, y: 100, width: 260, height: 120, text: 'go :rocket:' },
-      ],
+      nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 260, height: 120, text: 'go :rocket:' })],
       edges: [],
     }
     const { container } = render(

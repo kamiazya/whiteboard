@@ -1,5 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
@@ -948,7 +949,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   })
   const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
   const canvas: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'node' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 400, height: 200, text: 'node' })],
     edges: [],
   }
   const resolveEmbed = (id: string) => (id === A ? { title: 'Board', canvas } : undefined)
@@ -1068,9 +1069,9 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
   })
   const canvas: SpatialCanvas = {
     nodes: [
-      { id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 200, label: 'Launch' },
-      { id: 'in', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'inside' },
-      { id: 'out', type: 'text', x: 900, y: 900, width: 100, height: 50, text: 'outside' },
+      groupNode({ id: 'g', x: 0, y: 0, width: 300, height: 200, label: 'Launch' }),
+      textNode({ id: 'in', x: 10, y: 10, width: 100, height: 50, text: 'inside' }),
+      textNode({ id: 'out', x: 900, y: 900, width: 100, height: 50, text: 'outside' }),
     ],
     edges: [],
   }

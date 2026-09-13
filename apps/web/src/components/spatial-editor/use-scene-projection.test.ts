@@ -9,23 +9,16 @@
  * resolve through the canvas's OWN theme, which is what the two cases below
  * separate: a themed board and an unthemed one cannot answer the same.
  */
+
 import { resolveCanvasPalette, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import { useSceneProjection } from './use-scene-projection.js'
 
-const preset = {
-  id: 'a',
-  type: 'text',
-  x: 0,
-  y: 0,
-  width: 120,
-  height: 60,
-  text: 'a',
-  color: '1',
-} as const
+const preset = textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'a', color: '1' })
 
 const neon: SpatialCanvas = {
   nodes: [preset],

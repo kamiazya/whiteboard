@@ -22,6 +22,7 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
  * a press.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -44,17 +45,17 @@ const ROOT_H = 600
  * suspected.
  */
 const referenced: SpatialCanvas = {
-  nodes: [{ id: 'r1', type: 'text', x: 0, y: 0, width: 300, height: 150, text: 'inside' }],
+  nodes: [textNode({ id: 'r1', x: 0, y: 0, width: 300, height: 150, text: 'inside' })],
   edges: [],
 }
 
 const board: SpatialCanvas = {
   nodes: [
-    { id: 'g1', type: 'group', x: 40, y: 40, width: 620, height: 460, label: 'cluster' },
-    { id: 't1', type: 'text', x: 80, y: 80, width: 220, height: 120, text: 'one' },
-    { id: 't2', type: 'text', x: 260, y: 140, width: 220, height: 120, text: 'two' },
-    { id: 't3', type: 'text', x: 120, y: 300, width: 240, height: 140, text: 'three' },
-    { id: 'f1', type: 'file', x: 380, y: 300, width: 320, height: 240, file: 'ref-1' },
+    groupNode({ id: 'g1', x: 40, y: 40, width: 620, height: 460, label: 'cluster' }),
+    textNode({ id: 't1', x: 80, y: 80, width: 220, height: 120, text: 'one' }),
+    textNode({ id: 't2', x: 260, y: 140, width: 220, height: 120, text: 'two' }),
+    textNode({ id: 't3', x: 120, y: 300, width: 240, height: 140, text: 'three' }),
+    fileNode({ id: 'f1', x: 380, y: 300, width: 320, height: 240, file: 'ref-1' }),
     {
       id: 'l1',
       type: 'link',
