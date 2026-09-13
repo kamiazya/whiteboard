@@ -40,9 +40,13 @@ export const facetListInputSchema = z
      * the plain meaning kept, because a parameter a caller picks from an
      * enum of four should say what it does either way.
      *
-     * What the reading points at instead is structural, and this tool's own
-     * history already says it: a join the ANSWER carries is not a sentence a
-     * model may or may not act on.
+     * What the reading pointed at instead was structural, and this tool's
+     * own history said it confidently: a join the ANSWER carries is not a
+     * sentence a model may or may not act on. That was built (`otherTargets`
+     * below) and MEASURED, and it is not true as a general remedy — round
+     * 17 read 0 of 3 with `colour contested` three times, unmoved, and two
+     * of those trials had the join in front of them. Carrying a fact in the
+     * answer makes it unmissable; it does not make a model act on it.
      */
     target: facetTargetSchema
       .optional()
@@ -168,10 +172,20 @@ export const facetListOutputSchema = z
      * that records what a colour MEANS. All three coloured by health and
      * recorded nothing. A description saying the filter hides a scope was
      * measured next and moved nothing (round 16: `target: 'node'` x3 again).
-     * This is the same repair in the form the tool's own history kept
-     * pointing at — a join the ANSWER carries rather than a sentence a
-     * model may or may not act on — and it costs no model-visible bytes at
-     * all, since a table's price is its INPUT schema and this is output.
+     *
+     * THIS DID NOT MOVE IT EITHER, and that is the finding rather than a
+     * disappointment: round 17 read 0 of 3, `colour contested` three times.
+     * Two of the three trials called with `target: 'node'` and so had
+     * `otherTargets` naming `visual.axes/v0` in front of them; the third
+     * passed `assetKind` alone and never asked. So the structural form this
+     * tool's history predicted would work is measured and does not, as a
+     * remedy for C14.
+     *
+     * KEPT anyway, on a ground that is not C14 and is stated plainly so the
+     * next reader can overrule it: an answer that silently drops a scope is
+     * a partial truth, and this makes it whole for +176 WIRE bytes and ZERO
+     * model-visible ones — a table's price is its INPUT schema, and this is
+     * output. What is withdrawn is the CLAIM, not the field.
      *
      * `partialRecord`, not `record`: handed an enum key, zod 4 makes EVERY
      * member required, so an answer naming only the scopes that actually

@@ -399,6 +399,24 @@ describe('wb_facet_list: a WORKSPACE’s own vocabulary', () => {
     const overTheWire = JSON.parse(JSON.stringify(result))
     expect(facetListOutputSchema.safeParse(overTheWire).success).toBe(true)
   })
+
+  /**
+   * Pinned because a reading depended on it and could otherwise only INFER
+   * it. Round 17's trials all passed `workspaceId`, so "the model was told
+   * about `visual.axes/v0`" rests on the composed registry answering the
+   * same way the deployment's own does — a superset, since a library adds
+   * assets and no facets. Asserting it here makes that a guarantee rather
+   * than a reading of the source.
+   */
+  test('a workspace-composed registry still names the canvas scope it filtered out', async () => {
+    const deps = await withLibrary(lakehouse)
+    const dressing = await createFacetListTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      target: 'node',
+    })
+    expect(dressing.facets.map((f) => f.key)).not.toContain('visual.axes/v0')
+    expect(dressing.otherTargets?.canvas).toContain('visual.axes/v0')
+  })
 })
 
 /**
