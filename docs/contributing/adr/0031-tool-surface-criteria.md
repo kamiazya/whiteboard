@@ -1002,6 +1002,132 @@ MECHANISM rather than a message — tidy moving a fan-out hub between the
 boxes it fans out to — and that is a change to what tidy is allowed to
 do to an order a person drew, which is not this loop's to decide.
 
+**A note on numbering before the next five.** The readings above are this
+ADR's own series, 1-16, all taken on 2026-09-09/09-10. The eval lane
+separately counts ROUNDS, and its round numbers had reached 13 by the time
+the readings stopped being written down here — so "round 13" and "the
+thirteenth reading" are different things, and at least one follow-up record
+conflated them. The five below continue THIS series from seventeen and name
+the lane round each one is, so both can be looked up without collision.
+
+**The seventeenth reading (2026-09-12), lane round 13.** The first
+non-baseline reading of the FACET columns ([ADR-0033](0033-facet-vocabulary-axis.md)):
+pass^3 1.0, debtFree^3 0.917. The axis separated into two failures that a
+single number had hidden — DEFICIT, a declared distinction the drawing does
+not carry, and EXCESS, a distinction the drawing carries and the document
+does not declare. Only the task whose wording named kinds reached for the
+declared vocabulary: it called `wb_facet_list` first and dressed with
+stencils (deficit 0, distance 2), while `deploy-flow` and `order-states`
+each set a bare `color` and declared nothing.
+
+It also produced a C4/C5 finding the pass column could not see. Asked for a
+flow whose steps and decisions differ, a model called the tool with
+`assetKind: 'stencils'` — the right question — and then wrote
+`visual.shape/v0` with `{kind: 'diamond'}`: a registered facet, a successful
+write, and a SILHOUETTE rather than a kind. The shape facet publishes an
+enum containing the word it wanted; the stencil facet publishes a
+pattern-checked string. It picked the field it could act on, which is a
+finding about the published schemas and not about the model.
+
+**The eighteenth reading (2026-09-12), lane round 14.** Colour was stripped
+from the six bundled stencils, on the argument that dressing a board should
+not spend a channel a second axis needs. The prediction was written before
+the run and held: `boards/checkout` moved from `colour contested` on 2 of 3
+trials to `colour unused` on 3 of 3, with `shape carried(stencil)` on all
+three, and the task's debtFree^3 went 0.917 -> 1.0.
+
+The second finding was not what the run was for, and matters more. **The
+first pass of this reading reported 0 of 6, and the product was fine.** The
+lane's own verifier tested `end.kind === 'node'` on an edge end, which
+[ADR-0038](0038-ocif-projection.md) decision 2 had narrowed to a plain
+`{node, side?, end?}` — so every connectivity check answered "not
+connected", on boards whose `edge.add` calls had reported zero tool errors.
+The positive control that should have caught it had gone vacuous, under a
+comment naming that exact failure mode in advance. Fixed by deriving the
+fixture through `edgeEndSchema.parse`, which is `.strict()`, so the next
+narrowing throws in the test instead of silently passing.
+
+**The nineteenth reading (2026-09-12), lane round 15.** Asked to tell two
+things apart at once — what a box IS, and whether it is healthy — the lane
+read **0 of 3**, every trial `colour contested, shape carried(stencil)`.
+
+The cause was PROBED against a live server rather than inferred from the
+transcript. `visual.axes/v0` — the one facet that records what a colour
+MEANS — is `targets: ['canvas']`, correctly so, since naming a semantic
+axis is a statement about the whole drawing. But that makes it structurally
+absent from the answer to `target: 'node'`, which is the question a model
+asks while dressing boxes, and all three trials asked exactly that. All
+three used stencils correctly, all three coloured by health, and none
+declared what the colour meant. The intent was right every trial; the
+surface never showed them the field.
+
+Two by-products worth keeping. The task is not broken: its verifier has a
+positive control that passes on a board whose colour carries a declared
+axis, with the fixture expanded by the real `applyStencil`, and the
+mechanism was probed end-to-end across a restart. And an UNREGISTERED facet
+key is writable — `ops.status/v0` is in no plugin, and `wb_facet_set`
+accepted it, stored it, and `scoreFacets` read it back after a restart. The
+hypothesis that the registry would refuse it was wrong.
+
+**The twentieth reading (2026-09-12), lane round 16, refuted.** The obvious
+repair: describe `target` with a clause saying what filtering out costs —
+"a `canvas` facet attaches to the board as a whole, so filtering to `node`
+hides those". The model filtered to `node` in all three trials again and the
+reading stayed 0 of 3. `meanCalls` and `toolErrors` both fell between the
+two runs and NEITHER is claimed: different boards drawn by different runs,
+and reporting them as the clause's effect is the over-claiming
+`diagnosis-evidence` exists to refuse. The steering clause was withdrawn and
+the plain meaning kept, because C3 pays for it independently — 198 -> 197
+undescribed for +75 visible bytes rather than +221.
+
+**The twenty-first reading (2026-09-13), lane round 17, refuted — and this
+one refutes a belief these readings had built.** Two withdrawals on this
+subject had pointed at the same structural conclusion, and the tool's source
+stated it plainly: *a join the ANSWER carries is not a sentence a model may
+or may not act on.* That was built — `wb_facet_list`'s `otherTargets`, which
+names by scope what a `target` filter removed, so `target: 'node'` also says
+`canvas` holds `visual.axes/v0` — and measured.
+
+**0 of 3, `colour contested` three times, unmoved.**
+
+Probed, because the finding turns on whether the model saw it: two of the
+three trials called with `target: 'node'` and had the join in front of them;
+the third passed `assetKind` alone and never asked. A second inference was
+caught in the same pass — those calls also passed `workspaceId`, so they
+went through a COMPOSED registry rather than the bundled one the check had
+used, and that is now a test rather than a reading of the source.
+
+So the belief is measured and false as a general remedy. **Carrying a fact
+in the answer makes it unmissable; it does not make a model act on it.** The
+field is kept on a ground that is explicitly not C14 and says so where the
+next reader can overrule it — an answer that silently drops a scope is a
+partial truth — for +176 wire bytes and zero model-visible ones, since a
+table's price is its INPUT schema and this is output.
+
+**What four refutations have closed off.** Every remedy tried on this lane
+acts on what the model READS: a skill sentence (eleventh), a note on a tool's
+answer (twelfth), a description clause (twentieth), and a structured field
+in an answer (twenty-first). None moved a reading. Anything further shaped
+like *"tell the model better"* should be assumed refuted until something
+distinguishes it from these four. The untried class acts on what the model
+WRITES — a declared axis reachable from the write path rather than only from
+a discovery call, or a colour written with no declared axis answered with
+the declaration it implies.
+
+**A refusal priced rather than read (2026-09-13).** Not a reading, because
+no run was spent, and recorded here so the absence is deliberate. The model
+puts `stencil` INSIDE `node`, where every other property of the box goes;
+accepting it there was priced at +1,020 visible bytes described, or +304
+undescribed with C3 up 4. Neither moves C1, C13 or C3 down, so neither
+clears §1 on its own, and C13's ceiling was already known from the
+before-reading: one task, one trial in three, and the trial still PASSED,
+because the refusal names the key and says where it goes. A rung-3 run could
+have moved C13 and could not have moved C1, whose direction and magnitude
+are certain — the same ground the `allOf` closure was decided on. The
+expensive half of that problem had already been fixed for free, when the
+node draft stopped stripping: the identical mistake used to be accepted
+silently and cost one trial seventeen further calls.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
