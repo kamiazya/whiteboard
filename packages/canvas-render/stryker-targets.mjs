@@ -49,13 +49,17 @@ export const MUTATED = [
   // The junction rule that carries kinsoku across an inline boundary. It is a
   // RULE rather than a ladder of ways to decline, and every one of its
   // decisions is mutation-shaped: `clusterRun <= lineRun`, the two `=== ''`
-  // sentinels, `.at(0)`/`.at(-1)`, `length > 1`. What judges it inside the
-  // lane is `inline-boundary-break.test.ts` alone — the wrapping scoreboard's
-  // `forbiddenLineStarts` column would price it too, but that suite is
-  // excluded from the lane's vitest config for run time — so three of those
-  // decisions were mutation-checked by hand when it landed (the junction
-  // always breakable, never relocating, and a painting run answering its own
-  // EM SPACE instead of U+FFFC: 5, 5 and 1 test red respectively).
+  // sentinels, `.at(0)`/`.at(-1)`, `length > 1`.
+  // Its first report is why `inline-junction.test.ts` exists: 16 of 20
+  // survivors came back `judged by 0 tests` and the rest by one, because
+  // nothing NAMED the module — the boundary suite reaches it through
+  // `layoutMdastBlocks`, and the wrapping scoreboard that would price it is
+  // excluded from the lane for run time. Seven of those survivors were then
+  // applied by hand against the direct tests and every one went red, 1 to 9
+  // tests each. One — `headCharacter`'s whitespace branch — had killed
+  // NOTHING through the layout, since `emit` handles a leading space on its
+  // own path, so it is a gap the direct tests closed rather than a selection
+  // artefact.
   'src/layout/nodes/inline-junction.ts',
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
