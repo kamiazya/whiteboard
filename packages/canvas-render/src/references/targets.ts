@@ -72,3 +72,71 @@ export function referenceTargets(seeds: {
   }
   return [...targets]
 }
+
+/**
+ * A markdown inline image whose URL is a stored asset, as written.
+ *
+ * A SCANNER rather than a parse, for the reason `referenceTargets` uses one:
+ * this runs over every body the walk reaches, and parsing all of them to
+ * decide what to prefetch would charge a render the markdown parser twice.
+ * What makes that safe here is the direction of its error — the LAYOUT reads
+ * mdast, so a URL this finds inside a code fence costs one store read that
+ * answers nothing and paints nothing, while one it missed would be a picture
+ * that silently does not draw. Cheap in the wrong direction only.
+ *
+ * `asset:` (model's one convention) is the filter because it is what a keeper
+ * can actually answer. An absolute URL already draws without resolution, and
+ * a bare relative path is a different question — relative to what — that this
+ * does not decide by asking on its behalf.
+ */
+const INLINE_IMAGE = /!\[[^\]]*\]\(\s*([^)\s]+)/g
+
+function addInlineImages(body: string, into: Set<string>): void {
+  if (!body.includes('](')) return
+  for (const match of body.matchAll(INLINE_IMAGE)) {
+    const url = match[1] as string
+    if (isImageRef(url)) into.add(url)
+  }
+}
+
+/**
+ * What stored PICTURES a render has to load, as `referenceTargets` answers
+ * for documents — and deliberately not the same function, because the two
+ * sets are disjoint by construction: an asset is not a document, so that walk
+ * subtracts exactly what this one keeps.
+ *
+ * It exists because a body's inline image was reachable by no other route.
+ * A canvas's image file nodes were collected at the call site; the inline
+ * `![](asset:…)` in a note, or in a text node on the board, was collected
+ * nowhere, so the seam the layout asks had nothing to answer with. Both
+ * come from here now, so a surface cannot wire one and forget the other.
+ *
+ * Follows the same walk, caps and budget as `referenceTargets` — an
+ * embedded note is drawn, so its pictures are drawn too.
+ */
+export function imageTargets(seeds: {
+  readonly bodies?: readonly string[]
+  readonly canvases?: readonly SpatialCanvas[]
+  readonly loaded?: ReferenceGraph
+}): readonly string[] {
+  const images = new Set<string>()
+  const addCanvas = (canvas: SpatialCanvas) => {
+    for (const node of canvas.nodes) {
+      const file = nodeFile(node)
+      const text = nodeText(node)
+      if (file !== undefined && isImageRef(file)) images.add(file)
+      else if (text !== undefined) addInlineImages(text, images)
+    }
+  }
+  for (const body of seeds.bodies ?? []) addInlineImages(body, images)
+  for (const canvas of seeds.canvases ?? []) addCanvas(canvas)
+  // The documents this render draws, from the same definition, so what an
+  // embedded note holds is reached without a second walk of its own.
+  for (const target of referenceTargets(seeds)) {
+    const entry = seeds.loaded?.get(target)
+    if (entry === undefined || entry === null) continue
+    if (entry.body !== undefined) addInlineImages(entry.body, images)
+    else if (entry.canvas !== undefined) addCanvas(entry.canvas)
+  }
+  return [...images]
+}
