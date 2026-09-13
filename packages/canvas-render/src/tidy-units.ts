@@ -1,4 +1,4 @@
-import type { CanvasEdge } from '@kamiazya/whiteboard-model'
+import { type CanvasEdge, isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 /**
  * What a tidy is about: the boxes, the OPTIONS a caller sets, and the UNITS
  * the passes actually move — an outermost frame and everything more than
@@ -15,11 +15,44 @@ import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 
 export interface TidyNode {
   readonly id: string
-  readonly type: 'text' | 'file' | 'link' | 'group'
+  /**
+   * Whether this box is a FRAME — the one thing tidy asks about a node
+   * beyond its rectangle, since an outermost frame and its members move as
+   * one unit.
+   *
+   * A boolean rather than the model's node kind, which this interface used
+   * to mirror verbatim (`'text' | 'file' | 'link' | 'group'`). That mirror
+   * was a hand-written copy of a Zod union — the drift `model`'s rules exist
+   * to prevent — and it bought nothing: both readings here are `=== 'group'`,
+   * so three of the four arms were never distinguished. It also stood in the
+   * way of ADR-0038 decision 3, which dissolves that union: a caller holding
+   * a real node answers `isFrame(node)` and the geometry-only fixtures in
+   * `tidy-quality.test.ts` say `frame: false` without inventing a kind for a
+   * box that has no content at all.
+   */
+  readonly frame: boolean
   readonly x: number
   readonly y: number
   readonly width: number
   readonly height: number
+}
+
+/**
+ * The boxes a real canvas gives tidy.
+ *
+ * The one place that answers "is this a frame" for a stored node, so a
+ * caller never spells the discriminant and the flip that dissolves it
+ * (ADR-0038 decision 3) lands here rather than at each call site.
+ */
+export function tidyBoxes(nodes: readonly SpatialNode[]): TidyNode[] {
+  return nodes.map((node) => ({
+    id: node.id,
+    frame: isFrame(node),
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+  }))
 }
 
 export interface TidyOptions {
@@ -135,7 +168,7 @@ export function usable(nodes: readonly TidyNode[]): TidyNode[] {
 export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
   const locked = options.locked ?? (() => false)
   const inScope = (id: string) => options.scope === undefined || options.scope.has(id)
-  const groups = nodes.filter((n) => n.type === 'group')
+  const groups = nodes.filter((n) => n.frame)
   const isRoot = (g: TidyNode, index: number) =>
     !groups.some(
       (h, hIndex) =>
@@ -167,7 +200,7 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
   }
   for (const [index, node] of nodes.entries()) {
     if (claimed.has(node.id)) continue
-    if (node.type === 'group' && isRoot(node, groups.indexOf(node))) {
+    if (node.frame && isRoot(node, groups.indexOf(node))) {
       void index
       const members = nodes.filter(
         (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(rectOf(node), rectOf(m))),

@@ -1,5 +1,5 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { tidyNodes } from '../tidy.js'
+import { tidyBoxes, tidyNodes } from '../tidy.js'
 
 /**
  * Boards for the drawing scoreboard: the two diagrams the tool-surface
@@ -230,7 +230,7 @@ const laneArchitecture: SpatialCanvas = {
 /** The draft after `tidyNodes`, every move applied. */
 function tidied(canvas: SpatialCanvas): SpatialCanvas {
   const moves = new Map(
-    tidyNodes(canvas.nodes, { edges: canvas.edges }).map((m) => [m.id, m] as const),
+    tidyNodes(tidyBoxes(canvas.nodes), { edges: canvas.edges }).map((m) => [m.id, m] as const),
   )
   return {
     ...canvas,

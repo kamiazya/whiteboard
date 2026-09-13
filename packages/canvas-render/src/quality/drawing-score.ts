@@ -1,5 +1,5 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeAtEnd } from '@kamiazya/whiteboard-model'
+import { isFrame, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, ResolvedEdgeNode, Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { sceneBounds } from '../scene-bounds.js'
 import {
@@ -298,7 +298,7 @@ const isRun = (n: Scene['nodes'][number]): n is TextRunNode => n.kind === 'textR
 
 export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore {
   const nodes = canvas.nodes
-  const groups = nodes.filter((n) => n.type === 'group')
+  const groups = nodes.filter((n) => isFrame(n))
   const boxes = nodes.filter((n) => n.type !== 'group')
   const byId = new Map(nodes.map((n) => [n.id, n] as const))
   const edgeById = new Map<string, CanvasEdge>(canvas.edges.map((e) => [e.id, e] as const))
@@ -402,7 +402,7 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     const hidden = nodes.some(
       (n) =>
         n.id !== own.id &&
-        !(n.type === 'group' && contains(rectOf(n), rectOf(own))) &&
+        !(isFrame(n) && contains(rectOf(n), rectOf(own))) &&
         overlapArea(label.bbox, rectOf(n)) > 0,
     )
     if (hidden) labelCovered++
@@ -454,7 +454,7 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     )
   let nearMisses = 0
   pairs(nodes, (a, b) => {
-    if ((a.type === 'group') !== (b.type === 'group')) return
+    if (isFrame(a) !== isFrame(b)) return
     const ra = rectOf(a)
     const rb = rectOf(b)
     if (contains(ra, rb) || contains(rb, ra)) return

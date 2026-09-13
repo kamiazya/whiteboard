@@ -3,6 +3,7 @@ import {
   type MeasureText,
   naturalNodeContentSize,
   SPATIAL_THEME_GEOMETRY,
+  tidyBoxes,
   tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -1035,7 +1036,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // is a fixed obstacle it routes around, never one it moves.
             const scope =
               op.within !== undefined ? nodeTargets(index, op.op, { within: op.within }) : op.scope
-            const moved = tidyNodes(nodes, {
+            const moved = tidyNodes(tidyBoxes(nodes), {
               scope: scope === undefined ? undefined : new Set(scope),
               locked: (id) => nodeLocks.has(id),
               edges,

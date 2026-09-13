@@ -1,5 +1,5 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endNode } from '@kamiazya/whiteboard-model'
+import { endNode, frameLabel, isFrame } from '@kamiazya/whiteboard-model'
 
 /**
  * The part of a canvas a `#fragment` names, as a canvas of its own.
@@ -28,7 +28,7 @@ export function selectCanvasFragment(
     : findGroupByLabel(canvas.nodes, wanted)
   if (root === undefined) return undefined
   const ids = new Set<string>([root.id])
-  if (root.type === 'group') {
+  if (isFrame(root)) {
     for (const node of canvas.nodes) if (node !== root && within(node, root)) ids.add(node.id)
   }
   return {
@@ -45,12 +45,17 @@ export function selectCanvasFragment(
 }
 
 function findGroupByLabel(nodes: readonly SpatialNode[], label: string): SpatialNode | undefined {
-  const groups = nodes.filter((node) => node.type === 'group' && node.label !== undefined)
+  // `frameLabel` answers undefined for anything that is not a labelled frame,
+  // so the "is it a group" half of each of these three predicates is already
+  // in it — the narrowing was repeated once per lookup only because reading
+  // `.label` needed it.
+  const labelled = nodes.flatMap((node) => {
+    const own = frameLabel(node)?.trim()
+    return own === undefined ? [] : [{ node, label: own }]
+  })
   return (
-    groups.find((node) => node.type === 'group' && node.label?.trim() === label) ??
-    groups.find(
-      (node) => node.type === 'group' && node.label?.trim().toLowerCase() === label.toLowerCase(),
-    )
+    labelled.find((entry) => entry.label === label)?.node ??
+    labelled.find((entry) => entry.label.toLowerCase() === label.toLowerCase())?.node
   )
 }
 

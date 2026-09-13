@@ -27,7 +27,7 @@
  */
 
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { isFrame, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   resolveNodeShape,
   resolveNodeStencil,
@@ -234,7 +234,7 @@ function declaredPartitions(
   boxes: readonly SpatialNode[],
 ): NamedPartition[] {
   const out: NamedPartition[] = []
-  const frames = canvas.nodes.filter((n) => n.type === 'group')
+  const frames = canvas.nodes.filter((n) => isFrame(n))
   if (frames.length > 0) {
     const byFrame = new Map<string, string>()
     for (const box of boxes) {

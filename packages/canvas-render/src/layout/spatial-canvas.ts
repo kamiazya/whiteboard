@@ -43,7 +43,12 @@ import type {
   SpatialNode,
   SpatialProposedChange,
 } from '@kamiazya/whiteboard-model'
-import { canvasChangeConflicts, endNode, spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import {
+  canvasChangeConflicts,
+  endNode,
+  isFrame,
+  spatialAnchorRect,
+} from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
@@ -1770,9 +1775,9 @@ function composeDecorations(
  */
 export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNode[] {
   const groups = nodes
-    .filter((node) => node.type === 'group')
+    .filter((node) => isFrame(node))
     .sort((a, b) => b.width * b.height - a.width * a.height)
-  return [...groups, ...nodes.filter((node) => node.type !== 'group')]
+  return [...groups, ...nodes.filter((node) => !isFrame(node))]
 }
 
 function layoutSpatialCanvasInternal(

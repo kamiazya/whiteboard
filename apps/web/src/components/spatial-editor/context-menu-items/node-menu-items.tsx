@@ -5,7 +5,7 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  * multi-selection targeting, the facet doorway, order/align/distribute/
  * tidy/lock, and the properties/facets/verbs/delete band order.
  */
-import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endIn, nodeFile, nodeSubpath, nodeText } from '@kamiazya/whiteboard-model'
@@ -431,7 +431,7 @@ export function nodeMenuItems({
       icon: <Sparkles />,
       onSelect: () =>
         applyBoxMoves(
-          tidyNodes(canvasRef.current.nodes, {
+          tidyNodes(tidyBoxes(canvasRef.current.nodes), {
             scope: new Set([node.id, ...extraIds]),
             locked: isLocked,
             edges: canvasRef.current.edges,

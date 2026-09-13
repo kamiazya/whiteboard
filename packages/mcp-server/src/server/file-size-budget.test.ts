@@ -201,7 +201,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // binding the text this file reads twice. Raised rather than shrunk because
   // the alternative is reading `nodeText(node)` a second time to save a line,
   // which is the opposite of what the accessor is for.
-  'packages/server-core/src/tools/canvas-edit.ts': 1183,
+  // 1183 -> 1184 for `tidyBoxes`: the tool hands tidy a canvas's real nodes,
+  // and tidy no longer mirrors the model's node union to ask whether one is a
+  // frame. One import line.
+  'packages/server-core/src/tools/canvas-edit.ts': 1184,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -391,7 +394,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 2444 -> 2463: the proposal layer draws a proposed LINE. Without it the
   // op stored a change nothing rendered — built but unwired, and every test
   // green over a board that said nothing had happened.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2463,
+  // 2463 -> 2468 for ADR-0038 decision 3's seam: `isFrame` joins the model
+  // import, which takes that line past the formatter's width and wraps it
+  // over five. The two reads it replaces are one line each either way, so
+  // this is the wrap and nothing else — and decision 3 takes the file back
+  // down when the union's branches collapse.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2468,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
