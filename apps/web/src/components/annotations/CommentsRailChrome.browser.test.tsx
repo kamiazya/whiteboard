@@ -6,11 +6,12 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { CommentsRail } from '../../hooks/use-comments-rail.js'
+import { setViewport } from '../../test-utils/viewport.js'
 import { CommentsRailAside } from './CommentsRailChrome.js'
 
 afterEach(async () => {
   cleanup()
-  await page.viewport(800, 600)
+  await setViewport(800, 600)
 })
 
 const THREAD: CommentThread = {
@@ -59,7 +60,7 @@ it('is a column beside the editor where there is width for one', async () => {
 })
 
 it('is a sheet over the editor on a phone, and can be closed from it', async () => {
-  await page.viewport(412, 700)
+  await setViewport(412, 700)
   const toggle = mount()
   const rail = page.getByTestId('comments-rail').element()
   const editor = page.getByTestId('editor-stand-in').element()

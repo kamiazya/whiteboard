@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
 import '../../index.css'
+import { setViewport } from '../../test-utils/viewport.js'
 import { VersionPanel } from './VersionPanel.js'
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
@@ -53,7 +53,7 @@ beforeEach(() => {
 afterEach(async () => {
   vi.unstubAllGlobals()
   cleanup()
-  await page.viewport(1280, 900)
+  await setViewport(1280, 900)
 })
 
 // The panel ARRIVES with motion now, and changes stage with a height
@@ -83,7 +83,7 @@ function renderRow() {
 
 describe('VersionPanel narrow screens', () => {
   it('is a bottom sheet with a peek and a full stage under 768px, and a column above it', async () => {
-    await page.viewport(375, 700)
+    await setViewport(375, 700)
     const { container } = renderRow()
 
     const row = container.querySelector('div.relative') as HTMLElement
@@ -125,7 +125,7 @@ describe('VersionPanel narrow screens', () => {
   })
 
   it('keeps the column, and no stage control, on a wide screen', async () => {
-    await page.viewport(1280, 900)
+    await setViewport(1280, 900)
     const { container } = renderRow()
 
     const row = container.querySelector('div.relative') as HTMLElement
