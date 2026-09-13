@@ -44,22 +44,37 @@ export function useImageUrls(
     const wanted = key === '' ? [] : key.split('\n').filter((ref) => !urlsRef.current.has(ref))
     if (wanted.length === 0) return
     let cancelled = false
-    void Promise.all(wanted.map(async (ref) => [ref, await loader(ref)] as const)).then(
-      (loaded) => {
-        if (cancelled) return
-        setUrls((prev) => {
-          let added = false
-          const next = new Map(prev)
-          for (const [ref, url] of loaded) {
-            if (url !== undefined) {
-              next.set(ref, url)
-              added = true
-            }
+    // SETTLED, not `Promise.all`: a loader is a backend binding this hook does
+    // not own, and one rejection took the whole batch down — installing none
+    // of the URLs that had loaded, and going unhandled besides.
+    void Promise.all(
+      wanted.map(async (ref) => {
+        try {
+          return [ref, await loader(ref)] as const
+        } catch {
+          return [ref, undefined] as const
+        }
+      }),
+    ).then((loaded) => {
+      if (cancelled) {
+        // A URL minted after cleanup is in nobody's map, so the unmount
+        // revoke below can never reach it. Dropping it leaks the decoded
+        // image for the tab's lifetime.
+        for (const [, url] of loaded) if (url !== undefined) URL.revokeObjectURL(url)
+        return
+      }
+      setUrls((prev) => {
+        let added = false
+        const next = new Map(prev)
+        for (const [ref, url] of loaded) {
+          if (url !== undefined) {
+            next.set(ref, url)
+            added = true
           }
-          return added ? next : prev
-        })
-      },
-    )
+        }
+        return added ? next : prev
+      })
+    })
     return () => {
       cancelled = true
     }

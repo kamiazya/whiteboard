@@ -62,6 +62,28 @@ describe('imageTargets', () => {
     ).toEqual(['asset:deep'])
   })
 
+  it('reads an angle-bracket destination, which is what the parser sees', () => {
+    // Measured against `parseMarkdownBody`: `![a](<asset:abc>)` yields the mdast
+    // url `asset:abc`, so the layout asks for it — a scan that kept the
+    // brackets skipped the load and the picture silently did not draw, which
+    // is the one direction this scan is not allowed to be cheap in. Angle
+    // brackets also permit a SPACE, where a bare destination cannot.
+    expect(imageTargets({ bodies: ['![a](<asset:abc>) ![b](<asset:two words>)'] })).toEqual([
+      'asset:abc',
+      'asset:two words',
+    ])
+  })
+
+  it('stops at the same budget the document walk does', () => {
+    // `referenceTargets` bounds itself at REFERENCE_BUDGET so a link-dense
+    // workspace is never loaded whole. Sharing that walk without sharing the
+    // bound left this set unbounded, and a keeper starts one read per entry.
+    const many = Array.from({ length: REFERENCE_BUDGET + 50 }, (_, i) => `![](asset:${i})`).join(
+      ' ',
+    )
+    expect(imageTargets({ bodies: [many] })).toHaveLength(REFERENCE_BUDGET)
+  })
+
   /**
    * A body is untrusted input, and the first version of this scan was a regex
    * whose inner `[^\]]*` re-attempted at every `![`. Quadratic, and caught by
