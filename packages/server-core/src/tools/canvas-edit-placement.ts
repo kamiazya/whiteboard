@@ -4,7 +4,7 @@
  * refusal carries when a chosen position cannot go where it was pointed.
  * Pure geometry, so `canvas-edit.ts` keeps to the transaction.
  */
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 
 /** How many auto-placed nodes go in a row before the next one wraps. */
 export const PLACEMENT_COLUMNS = 4
@@ -66,7 +66,7 @@ export const DEFAULT_SIZE: Record<SpatialNode['type'], { width: number; height: 
 export function prevailingWidth(nodes: readonly SpatialNode[]): number | undefined {
   const counts = new Map<number, number>()
   for (const node of nodes) {
-    if (node.type === 'group') continue
+    if (isFrame(node)) continue
     counts.set(node.width, (counts.get(node.width) ?? 0) + 1)
   }
   let best: number | undefined

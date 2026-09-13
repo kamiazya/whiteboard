@@ -10,6 +10,8 @@ import {
   type ExtensionFacets,
   endNode,
   extensionFacetsSchema,
+  nodeKind,
+  nodeText,
   type SpatialCanvas,
   type SpatialNode,
   type StoredCoreFacets,
@@ -937,17 +939,22 @@ export function readMarkdownBody(doc: DocumentContainers): string {
   return markdownBodyFromCanvas(readSpatialCanvas(doc))
 }
 
-type SpatialTextNode = Extract<SpatialNode, { type: 'text' }>
-
 /**
  * The node a markdown document's body lives in, given an already-read
  * canvas: the stable id first, then the first text node (pre-stable-id
  * documents), matching `readMarkdownBody`'s node-side selection exactly.
+ *
+ * Asks the content seam what a node HOLDS rather than narrowing on the
+ * stored discriminant, so it says the same thing before and after ADR-0038
+ * decision 3 dissolves that union. It used to answer a
+ * `Extract<SpatialNode, { type: 'text' }>`, which is a type derived from the
+ * union itself — and the only thing the caller wanted from that narrowing
+ * was `.text`, which `nodeText` gives without it.
  */
-function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialTextNode | undefined {
+function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialNode | undefined {
   const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)
-  if (byId?.type === 'text') return byId
-  return nodes.find((node): node is SpatialTextNode => node.type === 'text')
+  if (byId !== undefined && nodeKind(byId) === 'text') return byId
+  return nodes.find((node) => nodeKind(node) === 'text')
 }
 
 /**
@@ -956,7 +963,8 @@ function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialTextNode | 
  * is what let a caller treat the node as a live representation to write.
  */
 function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
-  return findMarkdownBodyNode(canvas.nodes)?.text ?? ''
+  const node = findMarkdownBodyNode(canvas.nodes)
+  return (node === undefined ? undefined : nodeText(node)) ?? ''
 }
 
 /**
