@@ -113,17 +113,51 @@ and an attested row means a person was present. This is the first backing for
 OKF §5.3's human tier that is not a self-report — [ADR-0016](0016-okf-trust-family.md)
 admitted self-reports because nothing better existed.
 
-### 6. Gating content on user verification means encrypting it, not hiding it
+### 6. A user-verification gate may ship, and its copy says what it does not do
 
-Moment 3 is not attestation. Implemented as a UI check it is defeated by the
-same origin access `security-model.md` already documents: the occupant skips the
-check and reads IndexedDB. It is only real if the content is encrypted and the
-key is derived at point of use — the PRF case ADR-0035 deferred under E2EE.
+Moment 3 is not attestation, and it is not encryption either. Asking for user
+verification before showing a document is a real feature for what it actually
+addresses — a shared machine, an unattended screen, someone reading over a
+shoulder — and those are the situations most people who want it are in.
 
-**Deferred, with its trigger:** an explicit user opt-in, or a keeper the user does
-not own. It is not a UI feature and must not ship as one.
+What it is not is protection from the scenario `security-model.md` documents.
+A process that later owns the origin reads IndexedDB directly and never runs
+the app's code, so the check is one it never encounters. Only encryption
+reaches that case, and encryption stays deferred below.
 
-#### What it would have to cover, counted rather than assumed
+Both halves are true at once, so **the copy states both, and is declared in one
+place**. `lib/destructive-copy.ts` is the precedent and the shape to copy: a
+promise about someone's data, written once and imported at every site, tests
+included, with `destructive-copy-surface.test.ts` scanning that it appears
+nowhere else. That module exists because the same promise written at several
+sites HAD drifted — a correction reached four of the six places carrying it,
+and the two it missed were tests asserting a middle fragment.
+
+The promise this one makes is exactly the kind that decays: "requires Face ID"
+invites "so it is encrypted", and whoever writes the second surface's copy will
+not have read this ADR. So the declaration is the rung, not this paragraph.
+
+**The name must not claim more than the mechanism does.** Words that assert
+protection of the data at rest — *encrypted*, *secure*, *protected* — are
+unavailable to this feature. What it does is hide content on this screen until
+a person verifies, and the name may say that.
+
+#### The gate's scope is every surface that can show the content
+
+The inventory below is what the gate must cover, not only what encryption would
+cover later, and it is easy to under-cover because the content reaches a reader
+through more than the document view. A gated document must not surface through
+the preview pane, the row thumbnail — which `layout-worker.ts` will happily
+render from the OPFS cache — or **search results**, whose corpus is built by
+reading the document's own body. A gate that hides the canvas and leaves the
+body findable is the shape that makes the feature untrue rather than merely
+limited.
+
+#### Encryption, deferred, and what it would have to cover
+
+**Trigger:** an explicit user opt-in beyond the gate above, or a keeper the user
+does not own. The key is derived at point of use — the PRF case ADR-0035
+deferred under E2EE.
 
 The browser keeper persists in two places, and the second is easy to forget
 because only one module reaches it. Inventory taken 2026-09-13:
@@ -151,17 +185,22 @@ Three consequences the table makes concrete:
   row. Whether the locked state hides names is a design question with a real
   UX cost, and it is not answered by choosing a cipher.
 
-#### The gate this decision needs, which is prose because nothing else can be
+#### The search index, which both halves of this decision have to answer for
 
 `local-files-source.ts` builds its search corpus in memory on first query and
 carries a `ponytail` note planning to **persist an index** when a measured
-workspace makes that slow. A persisted index is a plaintext inverted index of
-the encrypted content — the classic way encryption is undone by a later
-performance fix, by someone who never read this ADR.
+workspace makes that slow. Today's in-memory corpus is lucky, not designed —
+the note is about latency, and whoever acts on it will be thinking about
+latency too.
 
-Today's in-memory corpus is lucky, not designed: the note is about latency.
-So whoever acts on that note under a shipped decision 6 must encrypt the index
-or scope it to unlocked documents.
+It bites the gate and the encryption differently, and neither is obvious from
+the note:
+
+- **For the gate**, an index built by reading bodies makes a hidden document's
+  text findable, which is the scope failure above in its most likely form.
+- **For encryption**, a persisted index is a plaintext inverted index of
+  encrypted content — the classic way encryption is undone by a later
+  performance fix, by someone who never read this ADR.
 
 ### 7. An attestation lives beside the content, never inside it
 
@@ -198,10 +237,14 @@ credential, so it fails that test. Attestations belong on the version row.
   "no safe way to move a private key" and is not a defect to engineer around.
 - **The platform matrix must be verified against real targets before shipping**,
   especially for decision 6. The facts above are dated and second-hand.
-- **The locked state is a UX design, not a cipher choice.** Decision 6's
-  inventory leaves names and paths readable; deciding whether a locked
-  workspace lists its documents by name is the part that needs a person, and
-  it gates nothing technical.
+- **The gate is a scope problem, not a cipher choice.** Its cost is finding
+  every surface that can show a hidden document — the view, the preview, the
+  thumbnail, search — and keeping that list true as surfaces are added.
+  Nothing mechanical enumerates them today.
+- **Names stay readable whichever half ships.** `documentIndex` and every
+  `versions` row carry a document's name in the clear, so a board called
+  "2026 redundancies" leaks from the list. Whether a hidden document appears
+  by name is a UX decision that needs a person, and no cipher answers it.
 
 ## Alternatives considered
 
@@ -221,6 +264,15 @@ Available later as an option; decision 3 records the fact that would drive it.
 **Signing every checkpoint.** Rejected in decision 4. It needs a stored key,
 which is decision 1, and ADR-0035 decision 3 had already scoped attestation to
 checkpoints rather than operations.
+
+**Refusing the user-verification gate outright, because it is not encryption.**
+The first draft of decision 6 took this position. Rejected: it declines a
+feature that genuinely serves the situations most people asking for it are in
+— a shared machine, an unattended screen — on the grounds that it fails a
+different threat. The honest objection was never to the feature but to the
+claim, and a claim is fixable by declaring it once. What the position was
+protecting against is real, and is what the naming rule and the copy
+declaration now carry.
 
 **Leaving the browser without any identity, and attesting only on the daemon.**
 Coherent, and the cheapest option: the daemon is the user's own machine and has
