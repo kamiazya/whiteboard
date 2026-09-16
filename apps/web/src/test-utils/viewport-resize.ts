@@ -25,16 +25,21 @@ const RESIZE_BUDGET_MS = 5_000
 /**
  * Whether `work` settled inside the budget.
  *
- * `Promise.race` subscribes to every entry it is handed, so the rejection that
- * arrives after the race has already settled is DELIVERED and discarded rather
- * than left unhandled — which matters here because a refused
- * `setWindowBounds` rejects long after this gave up, and an unhandled
- * rejection belonging to no test is the second mystery `viewport.ts`
- * describes. That is worth stating because the subscription is the load-bearing
- * part and it does not look like it: an explicit `work.catch(() => {})` stood
- * here first, and removing it changed nothing measurable. Its test survives
- * that removal and fails against a wait that does not subscribe, which is what
- * says where the property actually lives.
+ * `Promise.race` subscribes to every entry it is handed, so a rejection of the
+ * promise THIS was handed is delivered and discarded rather than left
+ * unhandled. The subscription is the load-bearing part and does not look like
+ * it: an explicit `work.catch(() => {})` stood here first, and removing it
+ * changed nothing measurable, while a wait that does not subscribe fails the
+ * test — which is what says where the property lives.
+ *
+ * It does NOT clear the "Unhandled Rejection" pair `viewport.ts` describes,
+ * and claiming it did would be wrong: measured on a real occurrence, the
+ * thrown error below arrived AND vitest still reported two
+ * `page.setViewportSize: Protocol error (Browser.setWindowBounds)` rejections,
+ * one per attempt, stacked inside `@vitest/browser-playwright` rather than in
+ * the promise this holds. The promise handed here never settles at all; the
+ * rejection escapes from a fire-and-forget inside the provider, which nothing
+ * on this side can reach.
  */
 async function settlesWithin(work: Promise<unknown>, budgetMs: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined

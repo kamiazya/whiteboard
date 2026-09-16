@@ -35,8 +35,8 @@ const JP_TEXT = '日本語ラベル'
 // path canvas_view would answer with for the family `visual.sketch` names.
 // Served from the vendored Roboto bytes below, so the smoke stays offline —
 // what is under test is the request and the registration, not the glyphs.
-const YOMOGI_URL =
-  'https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf'
+const CATALOGUE_ORIGIN = 'https://raw.githubusercontent.com'
+const YOMOGI_URL = `${CATALOGUE_ORIGIN}/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf`
 const VENDORED_TTF_PATH = join(packageRoot, 'assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf')
 const THEMED_SCENE = {
   nodes: [{ id: 'text-1', type: 'text', x: 10, y: 10, width: 160, height: 25, text: SAMPLE_TEXT }],
@@ -276,6 +276,132 @@ async function main() {
       )
     }
     await themedPage.close()
+
+    // A host's CSP, applied for real. The two scenarios above serve the
+    // widget with no policy at all, so everything a Content-Security-Policy
+    // could block passes them — and the whole point of `_meta.ui.csp` is
+    // that the server DECLARES what it needs and the host grants exactly
+    // that. Per the MCP Apps schema, `connectDomains` maps to `connect-src`
+    // and `resourceDomains` maps to `img-src`, `script-src`, `style-src`,
+    // `font-src` and `media-src`, with "omitted -> no network resources".
+    //
+    // So this serves the bundle under a policy whose font-src is built from
+    // the declared resourceDomains and nothing else, plus the baseline any
+    // host must add for an inline-bundle widget to run at all. What it
+    // caught: the embedded faces were registered as
+    // `new FontFace(family, 'url(data:font/ttf;base64,...)')`, and a
+    // `url()` source IS subject to font-src — so the bundled face was
+    // blocked (`Roboto:error`, violation `font-src <- data`) while the
+    // widget kept drawing, in a system fallback, saying nothing. The
+    // themed face survived the same policy because it is constructed from
+    // BYTES, which is not a fetch and not subject to font-src; that
+    // asymmetry is what the fix generalised.
+    const declaredCsp = [
+      "default-src 'none'",
+      `connect-src ${CATALOGUE_ORIGIN}`,
+      `img-src ${CATALOGUE_ORIGIN} data: blob:`,
+      `script-src ${CATALOGUE_ORIGIN} 'unsafe-inline' 'unsafe-eval' blob:`,
+      `style-src ${CATALOGUE_ORIGIN} 'unsafe-inline'`,
+      // The directive under test: exactly what resourceDomains declares.
+      `font-src ${CATALOGUE_ORIGIN}`,
+      `media-src ${CATALOGUE_ORIGIN} data: blob:`,
+      'worker-src blob:',
+      "frame-src 'none'",
+      "base-uri 'self'",
+    ].join('; ')
+
+    const cspPage = await browser.newPage()
+    await cspPage.addInitScript(() => {
+      window.__WHITEBOARD_WIDGET_DEBUG__ = true
+      window.__cspViolations__ = []
+      document.addEventListener('securitypolicyviolation', (event) => {
+        window.__cspViolations__.push(
+          `${event.violatedDirective} <- ${String(event.blockedURI).slice(0, 40)}`,
+        )
+      })
+    })
+    const cspRequests = []
+    await cspPage.route('**/*', (route) => {
+      cspRequests.push(route.request().url())
+      return route.abort()
+    })
+    await cspPage.route(`${WIDGET_ORIGIN}/**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: injectedHtml,
+        headers: { 'content-security-policy': declaredCsp },
+      }),
+    )
+    await cspPage.route(YOMOGI_URL, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'font/ttf',
+        body: fontBytes,
+        headers: { 'access-control-allow-origin': '*' },
+      }),
+    )
+    await cspPage.goto(`${WIDGET_ORIGIN}/`)
+    await cspPage.waitForSelector('svg')
+    await cspPage.evaluate(
+      (payload) => {
+        window.__whiteboardWidgetToolResult__?.(payload)
+      },
+      {
+        structuredContent: {
+          workspaceId: 'ws-smoke',
+          documentId: 'smoke/board',
+          scene: THEMED_SCENE,
+          style: 'document',
+          themeFont: { family: 'Yomogi', url: YOMOGI_URL },
+        },
+      },
+    )
+
+    // Both faces, under the declared policy. The face set is the observation
+    // that can refute the claim — `document.fonts.check()` cannot, since per
+    // the CSS Font Loading spec it assumes a family it does not hold is a
+    // system font and answers true for one that never loaded.
+    let cspFonts
+    try {
+      await cspPage.waitForFunction(
+        () => {
+          const faces = [...document.fonts]
+          return (
+            faces.some((f) => f.family === 'Roboto' && f.status !== 'unloaded') &&
+            faces.some((f) => f.family === 'Yomogi' && f.status !== 'unloaded')
+          )
+        },
+        null,
+        { timeout: 15_000 },
+      )
+    } catch {
+      // Fall through to the assertion below, which reports what it saw.
+    }
+    cspFonts = await cspPage.evaluate(() => ({
+      faces: [...document.fonts].map((f) => `${f.family}:${f.status}`),
+      violations: [...new Set(window.__cspViolations__ ?? [])],
+    }))
+
+    const blockedFaces = cspFonts.faces.filter((entry) => entry.endsWith(':error'))
+    if (blockedFaces.length > 0) {
+      fail(
+        `under the host CSP built from the declared _meta.ui.csp, ${blockedFaces.join(', ')} — ` +
+          `violations: ${cspFonts.violations.join(', ') || '(none reported)'}. ` +
+          'A face the declaration does not cover is blocked and the widget draws in a fallback silently.',
+      )
+    }
+    if (!cspFonts.faces.includes('Yomogi:loaded')) {
+      fail(
+        `expected the themed face to load under the declared CSP, saw: ${cspFonts.faces.join(', ')}`,
+      )
+    }
+    if (!cspFonts.faces.includes('Roboto:loaded')) {
+      fail(
+        `expected the bundled face to load under the declared CSP, saw: ${cspFonts.faces.join(', ')}`,
+      )
+    }
+    await cspPage.close()
 
     // srcdoc hosting: MCP Apps hosts embed this widget via a sandboxed
     // srcdoc iframe (no allow-same-origin), where location.href is the

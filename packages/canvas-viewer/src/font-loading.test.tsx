@@ -248,3 +248,38 @@ describe('registerFontBytes', () => {
     await expect(registerFontBytes('Yomogi', new Uint8Array([1]).buffer)).resolves.toBe('degraded')
   })
 })
+
+describe('dataUriToBytes', () => {
+  // The bytes matter, not just that something came back: a decoder that
+  // returned an empty buffer would still let `new FontFace(family, bytes)`
+  // be constructed, and the face would fail to load for a reason indis-
+  // tinguishable from the CSP block this whole path exists to avoid.
+  it('decodes the payload of a base64 data: URI', async () => {
+    const { dataUriToBytes } = await importFreshFontLoading()
+    // "wb" — chosen so a wrong offset (dropping or keeping the comma, or
+    // slicing the mime type into the payload) produces different bytes
+    // rather than a shorter run of the same ones.
+    expect([...dataUriToBytes('data:font/ttf;base64,d2I=')]).toEqual([0x77, 0x62])
+  })
+
+  it('reads past a mime type that itself contains a comma-free parameter', async () => {
+    const { dataUriToBytes } = await importFreshFontLoading()
+    expect([...dataUriToBytes('data:font/woff2;charset=utf-8;base64,d2I=')]).toEqual([0x77, 0x62])
+  })
+
+  it('answers a buffer a FontFace will accept, not a shared one', async () => {
+    const { dataUriToBytes } = await importFreshFontLoading()
+    // `BufferSource` refuses a `Uint8Array<ArrayBufferLike>`, which is what
+    // a bare `new Uint8Array(n)` is typed as. This is the runtime half of
+    // that; the type half is the annotation.
+    expect(dataUriToBytes('data:font/ttf;base64,d2I=').buffer).toBeInstanceOf(ArrayBuffer)
+  })
+
+  it('throws rather than answering empty bytes for a source it cannot decode', async () => {
+    const { dataUriToBytes } = await importFreshFontLoading()
+    // Empty bytes would register a face that never loads — the same silent
+    // fallback, arriving by a different route.
+    expect(() => dataUriToBytes('https://example.invalid/Roboto.ttf')).toThrow(/not a data: URI/)
+    expect(() => dataUriToBytes('data:font/ttf,notbase64')).toThrow(/expected a base64/)
+  })
+})

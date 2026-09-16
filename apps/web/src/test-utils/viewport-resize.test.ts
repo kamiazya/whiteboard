@@ -84,8 +84,10 @@ describe('resizeOrExplain', () => {
   /**
    * A refused `setWindowBounds` rejects long after this gave up, and an
    * unhandled rejection belonging to no test is the SECOND mystery the
-   * original flake produced. The failure a run reports must be the one thrown
-   * above and nothing else.
+   * original flake produced. What this pins is narrow and worth stating
+   * exactly: the promise THIS helper is handed does not become one. The
+   * provider's own internal rejection is not reachable from here and still
+   * arrives — see `viewport-resize.ts`.
    *
    * Watched on `process`, not on the window, because that is where it arrives
    * — probed, not assumed. The first version listened for `unhandledrejection`
