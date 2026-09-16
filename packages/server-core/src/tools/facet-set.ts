@@ -15,6 +15,7 @@ import {
   extensionFacetsSchema,
   nodeIdSchema,
   type SpatialNode,
+  tagWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
@@ -54,8 +55,11 @@ const MAX_DOCUMENTS = 50
  */
 const tagsChangeSchema = z
   .object({
+    // The scoped-tag grammar (ADR-0040 decision 1) is checked HERE, where a
+    // tag is written, and only on `add`: a removal names what is stored, and
+    // what is stored may have been written by another tool.
     add: z
-      .array(z.string().min(1))
+      .array(tagWriteSchema)
       .optional()
       .describe('Tags to add; one already present is left where it is.'),
     remove: z.array(z.string().min(1)).optional().describe('Tags to drop, by name.'),

@@ -81,14 +81,17 @@ extension key, `x-whiteboard`, allowed at three sites:
 
 - **Document root** — canvas-target facets (`facets`, keyed
   `{namespace}.{name}/v{n}`: `visual.edges/v0` for edge routing and line
-  jumps, `visual.theme/v0` for the theme) and the comment annotation layer
-  (`comments`). Rendering preferences for things JSON Canvas already models,
-  so a consumer that drops it still renders every edge, just with its own
-  routing.
+  jumps, `visual.theme/v0` for the theme), the board's own tags (`tags`, a
+  list of strings — plain tags and `key:value` scoped ones), the ink layer
+  (`lines`) and the comment annotation layer (`comments`). Rendering
+  preferences for things JSON Canvas already models, so a consumer that
+  drops it still renders every edge, just with its own routing.
 - **A node** — the canvas-embed extension (`kind: "embed"` plus a canvas
-  reference), the one piece of content JSON Canvas 1.0 cannot express, and
-  node-target facets in the same `facets` bucket.
-- **An edge** — edge-target facets (`facets`) and the bends the line is drawn
+  reference), the one piece of content JSON Canvas 1.0 cannot express,
+  node-target facets in the same `facets` bucket, and the node's `tags`.
+- **An edge** — edge-target facets (`facets`), the edge's `tags` (a tag on an
+  edge classifies the relation: the link between two services is healthy or
+  failing as much as the services are) and the bends the line is drawn
   through (`bends`: canvas coordinates, in order, whole pixels here even
   though the document stores them as real numbers). Never an embed: what an
   edge holds that the format cannot state is geometry, not content.

@@ -111,7 +111,11 @@ rather than in a string, so joining its runs yields `tightenthis`.
   (`edgeExtensionSchema`) rather than the node's facets-only arm: since ADR-0037 slice 4 an edge
   carries something the format cannot state, and it is geometry rather than content. One canonicalisation goes with it — an extension object with
   nothing in it is not emitted, because absence says the same thing — and it is pinned by
-  example rather than left to the round-trip property. Adding a model field means adding its ledger entry —
+  example rather than left to the round-trip property. A board's, a node's and an edge's `tags`
+  ride the same extension key beside the facets (ADR-0040), `extension` in both ledgers — neither
+  format has a classification vocabulary — and on OCIF as one `@whiteboard/tags` entry per site
+  rather than a `data` entry typed by a facet key, because a tag is core and not a plugin's.
+  Adding a model field means adding its ledger entry —
   `native` / `extension` / `degraded(to)` / `dropped(why)`, the last two owing a real reason.
   The ledger is the ONLY thing that classifies a field now. `censusSpatialModel` used to split
   its answer by whether a path was spelled under `x-whiteboard`, which worked only while the

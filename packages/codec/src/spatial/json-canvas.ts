@@ -7,6 +7,7 @@ import {
   integerSchema,
   nodeIdSchema,
   nonnegativeIntegerSchema,
+  storedTagsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
@@ -39,6 +40,7 @@ import { z } from 'zod'
 const facetsOnlyExtensionSchema = z
   .object({
     facets: extensionFacetsSchema.optional().catch(undefined),
+    tags: storedTagsSchema,
   })
   .strict()
 
@@ -57,6 +59,12 @@ export const xWhiteboardSchema = z.union([
     documentId: documentIdSchema,
     versionRef: z.string().min(1).optional(),
     facets: extensionFacetsSchema.optional().catch(undefined),
+    /**
+     * The node's tags ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)),
+     * on both arms because they are independent of the embed the way the
+     * facets are.
+     */
+    tags: storedTagsSchema,
   }),
   facetsOnlyExtensionSchema,
 ])
@@ -136,6 +144,7 @@ export type JsonCanvasNode = z.infer<typeof jsonCanvasNodeSchema>
 export const edgeExtensionSchema = z
   .object({
     facets: extensionFacetsSchema.optional().catch(undefined),
+    tags: storedTagsSchema,
     bends: z
       .array(z.object({ x: z.number().int(), y: z.number().int() }))
       .min(1)
@@ -203,6 +212,8 @@ export const canvasExtensionSchema = z.object({
    */
   lines: z.array(canvasLineSchema).optional().catch(undefined),
   facets: extensionFacetsSchema.optional().catch(undefined),
+  /** The board's own tags (ADR-0040 decision 2). */
+  tags: storedTagsSchema,
 })
 
 export const jsonCanvasDocumentSchema = z

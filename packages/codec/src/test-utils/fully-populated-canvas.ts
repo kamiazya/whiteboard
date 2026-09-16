@@ -22,6 +22,7 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
         text: 'a',
         color: '1',
         facets: { 'visual.shape/v0': { kind: 'rect' } },
+        tags: ['health:failing'],
       }),
       fileNode({ id: 'n2', x: 1, y: 1, width: 2, height: 2, file: 'a.png', subpath: '#x' }),
       { id: 'n3', type: 'link', x: 2, y: 2, width: 2, height: 2, url: 'https://e.test/' },
@@ -51,6 +52,7 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
         label: 'l',
         bends: [{ x: 1, y: 1 }],
         facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+        tags: ['link:healthy'],
       },
     ],
     lines: [
@@ -98,5 +100,6 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
       { id: 'c2', x: 1, y: 1, text: 'u', targetEdgeId: 'e1' },
     ],
     facets: { 'visual.theme/v0': { theme: 'sketch' } },
+    tags: ['phase:design'],
   }
 }

@@ -8,6 +8,7 @@ import {
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { SCOPED_TAG_RULE } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
@@ -940,5 +941,30 @@ describe('wb_facet_set and a workspace stencil library', () => {
     } as never)
 
     expect(listings).toBe(0)
+  })
+})
+
+describe('the scoped-tag grammar is checked where a tag is written (ADR-0040 decision 1)', () => {
+  test('a tag with a colon that is not key:value is refused with the rule', () => {
+    const result = facetSetInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['Health:failing'] },
+    })
+    expect(result.success).toBe(false)
+    if (result.success) return
+    const message = result.error.issues.map((issue) => issue.message).join('\n')
+    expect(message).toContain('Health:failing')
+    expect(message).toContain(SCOPED_TAG_RULE)
+  })
+
+  test('a plain tag and a well-formed scoped tag pass; removal is by name and never checked', () => {
+    expect(
+      facetSetInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { add: ['Machine Learning', 'health:failing'], remove: ['Health:failing'] },
+      }).success,
+    ).toBe(true)
   })
 })

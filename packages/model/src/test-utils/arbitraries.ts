@@ -190,6 +190,22 @@ export const canvasEdgeArbitrary = arbitraryForSchema(canvasEdgeSchema)
 
 export const canvasLineArbitrary = arbitraryForSchema(canvasLineSchema)
 
+/**
+ * A tag set as a board, a box or a relation carries one: scoped `key:value`
+ * tags beside plain ones, no duplicates. The schema-derived node and edge
+ * generators draw any string; this is for the sites composed by hand, and
+ * for a property that wants a scoped tag to land rather than to be possible.
+ */
+export const tagsArbitrary: fc.Arbitrary<string[]> = fc.uniqueArray(
+  fc.oneof(
+    fc
+      .tuple(fc.stringMatching(/^[a-z][a-z0-9-]{0,5}$/), fc.stringMatching(/^[a-z][a-z0-9-]{0,5}$/))
+      .map(([key, value]) => `${key}:${value}`),
+    fc.string({ minLength: 1, maxLength: 8 }),
+  ),
+  { maxLength: 4 },
+)
+
 export const markdownCanvasArbitrary = arbitraryForSchema(markdownDocumentSchema, {
   // A body long enough for a property about text to reach something.
   override: (path) => (path === '$.body' ? fc.string({ maxLength: 200 }) : undefined),
@@ -450,10 +466,15 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
             { nil: undefined },
           ),
           fc.option(extensionFacetsArbitrary, { nil: undefined }),
+          // The board's own tags (ADR-0040). Drawn here rather than by the
+          // schema walk because the canvas is composed by hand above; a node's
+          // and an edge's come from their schemas.
+          fc.option(tagsArbitrary, { nil: undefined }),
         )
-        .map(([comments, facets]) => ({
+        .map(([comments, facets, tags]) => ({
           ...canvas,
           ...(comments !== undefined && { comments }),
           ...(facets !== undefined && { facets }),
+          ...(tags !== undefined && { tags }),
         })),
   )

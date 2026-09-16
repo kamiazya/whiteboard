@@ -106,6 +106,14 @@ export const OCIF_TYPE = {
   /** The annotation layer (ADR-0024), canvas-level. */
   comments: '@whiteboard/comments',
   /**
+   * What a board, a box or a relation is CLASSIFIED as
+   * ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)): the
+   * tag set, one entry at whichever of the three sites carries it. OCIF has
+   * no tag vocabulary, and a tag is not a facet — it is core rather than a
+   * plugin's — so it is not a `data` entry typed by a facet key either.
+   */
+  tags: '@whiteboard/tags',
+  /**
    * What is left of a node once OCIF has taken everything it can state: the
    * preset colour, a file's `subpath`, an embed's `versionRef`, and the
    * kind's own content on the one node shape where an embed took the resource
