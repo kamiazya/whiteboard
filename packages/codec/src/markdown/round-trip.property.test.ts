@@ -191,15 +191,22 @@ function hasNoNewlineInSpan(node: AnyNode): boolean {
 }
 
 /**
- * A blank line inside a text value is a paragraph break, not text: markdown
- * has no way to write two consecutive line endings that stay inside one
- * paragraph, so `a\n\nb` comes back as two paragraphs and a trailing
- * `\n\n` as nothing.
+ * A blank line inside inline content is a paragraph break, not content:
+ * markdown has no way to write two consecutive line endings that stay
+ * inside one paragraph, so `a\n\nb` comes back as two paragraphs and a
+ * trailing `\n\n` as nothing. The same holds for the STRING fields the
+ * writer emits inline — an image's `alt` and a link's or image's `title` —
+ * which it writes raw: `![\n\n]()` reads back as two paragraphs of text.
+ * A single line ending in either survives, so only the blank line is
+ * excluded. `markdown-writer-limits-round-trip.test.ts` pins both.
  */
-function hasNoBlankLineInText(node: AnyNode): boolean {
-  if (isText(node) && /\n[ \t]*\n/.test(node.value)) return false
+const BLANK_LINE = /\n[ \t]*\n/
+function hasNoBlankLineInline(node: AnyNode & { alt?: unknown; title?: unknown }): boolean {
+  if (isText(node) && BLANK_LINE.test(node.value)) return false
+  if (typeof node.alt === 'string' && BLANK_LINE.test(node.alt)) return false
+  if (typeof node.title === 'string' && BLANK_LINE.test(node.title)) return false
   return Array.isArray(node.children)
-    ? node.children.every((child) => hasNoBlankLineInText(child as AnyNode))
+    ? node.children.every((child) => hasNoBlankLineInline(child as AnyNode))
     : true
 }
 
@@ -228,7 +235,7 @@ function nonListFlowArbitrary(maxDepth: number) {
     .filter(hasNoBackslashText)
     .filter(hasNoBlockEdgeNewline)
     .filter(hasNoNewlineInSpan)
-    .filter(hasNoBlankLineInText)
+    .filter(hasNoBlankLineInline)
     .filter(hasNoLeadingAngleInDestination)
 }
 

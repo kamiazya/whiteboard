@@ -88,3 +88,46 @@ describe('a destination that starts with <', () => {
     expect(back?.type === 'paragraph' ? back.children[0] : undefined).toMatchObject({ url: 'a<b' })
   })
 })
+
+describe('a blank line inside an inline string field', () => {
+  // `mdast-util-to-markdown` writes `alt` and `title` raw, so a blank line
+  // inside either ends the paragraph the way it would in text. The
+  // round-trip property's `hasNoBlankLineInline` excludes exactly this;
+  // these pins are the fast-check counterexample that found the `alt`
+  // half (seed 1557987087) and the `title` half probed beside it.
+  const paragraphOf = (node: object) => ({
+    type: 'root' as const,
+    children: [{ type: 'paragraph' as const, children: [node] }],
+  })
+  const types = (root: object) =>
+    parseMarkdownBody(stringifyMarkdownBody(root as never)).children.map((node) => node.type)
+
+  it('an image alt holding a blank line is written raw and splits the paragraph', () => {
+    const root = paragraphOf({ type: 'image', url: '', alt: '\n\n' })
+    expect(stringifyMarkdownBody(root as never)).toBe('![\n\n]()')
+    expect(types(root)).toEqual(['paragraph', 'paragraph'])
+  })
+
+  it('a link or image title holding a blank line splits the paragraph the same way', () => {
+    expect(types(paragraphOf({ type: 'image', url: 'x', alt: 'a', title: 'a\n\nb' }))).toEqual([
+      'paragraph',
+      'paragraph',
+    ])
+    expect(
+      types(
+        paragraphOf({
+          type: 'link',
+          url: 'x',
+          title: 'a\n\nb',
+          children: [{ type: 'text', value: 'a' }],
+        }),
+      ),
+    ).toEqual(['paragraph', 'paragraph'])
+  })
+
+  it('a single line ending in alt or title survives, so only the blank line is excluded', () => {
+    const root = paragraphOf({ type: 'image', url: 'x', alt: 'a\nb', title: 'c\nd' })
+    const back = parseMarkdownBody(stringifyMarkdownBody(root as never))
+    expect(back.children).toEqual(root.children)
+  })
+})
