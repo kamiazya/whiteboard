@@ -203,6 +203,12 @@ const promotionResultSchema = z.discriminatedUnion('ok', [
        * those runs kept the copy, so absent reads as false.
        */
       localCopyRemoved: z.boolean().optional(),
+      /**
+       * Whether the daemon verified a passkey assertion for this move and
+       * recorded it beside the checkpoints (ADR-0039). Absent on records
+       * from before passkeys; false when this browser had none to ask.
+       */
+      attested: z.boolean().optional(),
     })
     .strict(),
   z

@@ -1,8 +1,14 @@
 import {
+  type Attestation,
   attestationSchema,
   base64urlSchema,
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { z } from 'zod'
+
+// The web app reads the row's evidence through this barrel and never
+// through server-core (architecture-map.md: server-core is not one of its
+// dependencies).
+export type { Attestation }
 
 // POST /api/w/:workspaceId/workspace-document/promote — the browser keeper's
 // whole record moved into a daemon workspace (ADR-0023), with the person's

@@ -7,11 +7,12 @@
  * increment's job too (entry-graph-loro-free.test.ts guards the entry
  * closure; nothing on the entry path may import this file statically).
  *
- * The core move needs no dedicated route: POSTing the record's snapshot to
- * the existing workspace-document/update endpoint IS the CRDT merge — the
- * daemon side of exactly these bytes is pinned by mcp-server's
- * promote-workspace.test.ts (identity, shadowed collisions, idempotent
- * retry, the unregistered-target 404, and the fan-out to live sessions).
+ * The core move is a CRDT merge of the record's snapshot: the daemon's
+ * promote route imports exactly these bytes the way its sync surface would
+ * (mcp-server's promote-workspace.test.ts pins identity, shadowed
+ * collisions, idempotent retry and the unregistered-target 404), verifies
+ * the passkey assertion sent beside them first (ADR-0039), and writes one
+ * explicit human checkpoint per promoted document.
  *
  * The caller owns the fold: a legacy row-plane document that has not been
  * absorbed into the tree yet is not in the record this reads, so the promote
@@ -24,6 +25,7 @@
 import {
   apiErrorReason,
   documentFileApiUrl,
+  promoteWorkspaceResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   collectImageRefIds,
@@ -34,6 +36,7 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
 import { DocumentFileStore } from './document-file-store.js'
+import type { AttestOutcome } from './passkey-attestation.js'
 
 export interface PromoteWorkspaceOptions {
   fetch: typeof globalThis.fetch
@@ -48,6 +51,14 @@ export interface PromoteWorkspaceOptions {
    * instead of inventing a timeline.
    */
   onProgress?: (phase: 'record' | 'blobs') => void
+  /**
+   * The person's evidence for THIS record (ADR-0039): asked once the bytes
+   * to sign exist and before they leave. Absent, or answering `null`, means
+   * no passkey is registered for this daemon and the move is recorded
+   * without evidence; a cancelled prompt aborts the move, since a person
+   * who declined the question did not confirm the crossing.
+   */
+  attest?: (snapshot: Uint8Array) => Promise<AttestOutcome | null>
 }
 
 /**
@@ -74,6 +85,8 @@ export type PromoteWorkspaceResult =
       sourceWorkspaceId: string
       /** Every documentId the record carried across — the same ids, by design. */
       promotedDocumentIds: string[]
+      /** True when the daemon verified a passkey assertion and recorded it beside the rows. */
+      attested: boolean
       /** Paths the merge left contested; surfaced, never auto-resolved. */
       shadowedPaths: string[]
       /**
@@ -154,17 +167,40 @@ async function promoteWorkspaceUnsafe(
   const entries = readWorkspaceDocuments(record)
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
 
+  const snapshot = new Uint8Array(record.export({ mode: 'snapshot' }))
+  const attested = options.attest === undefined ? null : await options.attest(snapshot)
+  if (attested !== null && !attested.ok) {
+    return {
+      kind: 'failed',
+      reason:
+        attested.reason === 'cancelled'
+          ? 'The passkey prompt was cancelled, so nothing was moved.'
+          : `The passkey could not sign this move${attested.detail ? ` (${attested.detail})` : ''}; nothing was moved.`,
+    }
+  }
+
   onProgress?.('record')
+  // The promote route rather than the sync surface's update: the same merge,
+  // with the assertion beside the bytes it vouches for and verified before
+  // anything lands (ADR-0039). The daemon also writes the explicit
+  // checkpoints a person's move leaves behind.
   const res = await fetch(
-    `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/update`,
+    `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/promote`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: record.export({ mode: 'snapshot' }) as BodyInit,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        snapshot: bytesToBase64Url(snapshot),
+        ...(attested === null ? {} : { attestation: attested.attestation }),
+      }),
     },
   )
   if (!res.ok) {
     return { kind: 'failed', reason: await failureReason(res) }
+  }
+  const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
+  if (!promoted.success) {
+    return { kind: 'failed', reason: 'The daemon answered the move with an unexpected response.' }
   }
 
   // The daemon's own post-merge list is what reports collisions — shadowed
@@ -198,5 +234,18 @@ async function promoteWorkspaceUnsafe(
     else blobs.failed.push(fileId)
   }
 
-  return { kind: 'ok', sourceWorkspaceId, promotedDocumentIds, shadowedPaths, blobs }
+  return {
+    kind: 'ok',
+    sourceWorkspaceId,
+    promotedDocumentIds,
+    attested: promoted.data.attested,
+    shadowedPaths,
+    blobs,
+  }
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
 }
