@@ -170,8 +170,15 @@ describe('createDaemonFilesSource tags', () => {
         return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
       if (url.endsWith('/document-tags'))
         return Promise.resolve(
+          // The contract the client parses with is server-core's own output
+          // schema, so the mock speaks the whole of it: a payload missing a
+          // field is a parse failure, which the reader degrades to tagless.
           jsonResponse({
             documents: [{ documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', tags: ['release', 'q3'] }],
+            inUse: [
+              { tag: 'q3', documents: 1, boards: 0, nodes: 0, edges: 0 },
+              { tag: 'release', documents: 1, boards: 0, nodes: 0, edges: 0 },
+            ],
           }),
         )
       if (url.endsWith('/documents'))
