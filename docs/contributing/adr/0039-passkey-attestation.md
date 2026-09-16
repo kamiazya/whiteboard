@@ -1,7 +1,10 @@
 # ADR-0039: A passkey attests a person's presence, not a device
 
 **Status:** Proposed. Extends [ADR-0035](0035-device-keys-and-keeper.md) and amends
-the scope of its decision 1. Nothing implemented.
+the scope of its decision 1. Nothing implemented. Revised 2026-09-16 after
+review split "verified" into a CLAIM and its EVIDENCE — decisions 5, 8 and 9,
+and the second paragraph of decision 2, are that revision; the first draft's
+decision 5 is kept under *Revisions* because the correction is the point.
 
 ## Context
 
@@ -84,6 +87,16 @@ and per the measurement above the relying party cannot prevent that. Claiming
 this as a device key would be false. So the two coexist by naming different
 things: the daemon holds a **device key**, a passkey backs a **person**.
 
+Two things "person" does not yet mean, said here so the word is not read as
+more than it is. It is a ROLE, not an identifier: ADR-0035 deferred the user
+DID's method and this ADR inherits that deferral, so two passkeys held by one
+human — one per relying party, or one before and one after a loss — are
+unrelated until the profile that relates them exists. And a passkey-backed row
+writes its `actor` as the `did:key` of the credential's public key (P-256 has
+a multicodec), which keeps ADR-0035's one notation rather than adding a fourth
+— at the cost ADR-0035 already named: a `did:key` says nothing to a human
+without the lookup.
+
 ### 3. Backup eligibility is recorded, never assumed
 
 `BE` is read from every registration and assertion and stored with the
@@ -95,23 +108,44 @@ Nothing is gated on `BE` yet. It is recorded so that a later policy — a strict
 trust tier for device-bound credentials, a warning before a single-device
 lockout — has the fact it would need, rather than discovering it is absent.
 
-### 4. An attestation is produced only at a moment a person chose
+### 4. An attestation is asked for where impersonation would matter, and nowhere else
 
-Named moments: **promotion**, and a **human-attested checkpoint**. Automatic
-checkpoints and agent writes are never attested, and no flow asks for a gesture
-on a schedule. This is what keeps decision 2 affordable; a design that needed
-one per save would have to store a key, which decision 1 forbids.
+No flow asks for a gesture on a schedule, and — the revision — no flow asks
+for one on every explicit act either. A save that demanded Face ID each time
+is a save nobody makes. The prompt appears where the question "was that really
+the person?" has a cost if the answer is no:
 
-### 5. The ABSENCE of an attestation is what marks a non-human actor
+| moment | prompt | why |
+|---|---|---|
+| **promotion** (browser → daemon) | **always** | a trust boundary: the daemon receives content from a keeper it cannot check, once |
+| **approving a proposal** | **by workspace setting**, off by default | the moment an agent's change becomes the document; a human approving an agent's work is exactly where an agent approving its own would matter. ADR-0029 is design of record and unimplemented, so only the setting's existence is decided here |
+| **saving a version** | **never** | the click is the review (decision 8); evidence on top of it is not worth a prompt |
+| automatic checkpoints, agent writes | never | there is no person to ask |
 
-An in-browser AI shares the origin, the page and every API the human has. No
-credential can be issued "to" it that the page cannot also use. What the AI
-cannot do is satisfy user verification.
+This is what keeps decision 2 affordable; a design that needed a gesture per
+save would have to store a key, which decision 1 forbids — or would not be
+used.
 
-So agent writes stay `kind: 'ai'` with an `agentId` and carry no attestation,
-and an attested row means a person was present. This is the first backing for
-OKF §5.3's human tier that is not a self-report — [ADR-0016](0016-okf-trust-family.md)
-admitted self-reports because nothing better existed.
+### 5. `kind` names the actor; an attestation defends the claim where an agent could forge it
+
+On the designed path the actor is what the row SAYS: an agent writes
+`kind: 'ai'` with an `agentId`, a person's explicit act writes `kind: 'human'`,
+a scheduler writes `kind: 'system'`. That is a self-report, and
+[ADR-0016](0016-okf-trust-family.md) admits self-reports because nothing better
+existed.
+
+What a passkey adds is a defence on the path that is NOT designed: an
+in-browser AI shares the origin, the page and every API the human has, so it
+can press the human's button and write `kind: 'human'`. No credential can be
+issued "to" the AI that the page cannot also use. What the AI cannot do is
+satisfy user verification. So where an agent impersonating a person would
+matter (decision 4's table), the row carries an assertion the agent could not
+have produced — the first backing for a human claim in this system that is not
+a self-report.
+
+The first draft said the *absence* of an attestation marks a non-human actor.
+That is false under decision 4: most human rows carry none, by design. Absence
+means "not asked", and `kind` still says who.
 
 ### 6. A user-verification gate may ship, and its copy says what it does not do
 
@@ -208,6 +242,40 @@ ADR-0035 decision 2 admits into content only an identifier that survives key
 rotation. A WebAuthn credential id is scoped to a relying party and dies with the
 credential, so it fails that test. Attestations belong on the version row.
 
+### 8. A row's human-reviewed claim comes from the operation, not from the evidence
+
+Saving a version, approving a proposal, promoting a workspace — each is a
+person looking at the document and acting on it, which is what OKF §5.3's
+`human-reviewed` means. An automatic checkpoint is not. So a version row is
+human-reviewed when `operator.kind === 'human'` and `auto !== true`, both of
+which the row already carries; an attestation, when present, is EVIDENCE for
+that claim and lives beside it, never the source of it.
+
+This is the correction the review made. The first answer to "how does the
+human tier get decided" derived it from the attestation, which would have made
+every unprompted save unreviewed and every review a Face ID prompt — the
+claim and its proof conflated. The user sees them apart: a name, and a badge.
+
+**`trustTier()` and `isHumanActor()` in `packages/model` are unchanged**, and
+that was nearly got wrong too. They read an OKF document's `verified` events —
+the format's own wire vocabulary, where §5.3 keys the tier off the `human:`
+prefix — and that is the right place for a prefix rule to live. What is new is
+the derivation over ROWS above, and a projection from it: an explicit human
+checkpoint exported to OKF becomes a `verified` event with `by: human:<name>`.
+The prefix is a projection target, not a storage rule — ADR-0037's position
+applied to trust.
+
+### 9. What a reader is shown is a name and a badge, and the data is shaped by that
+
+Three visual states on a history row: **human**, **human · verified** (an
+attestation is present), **agent**, **system**. The user never sees an
+`actor` string. So `actor` stays an identity, `attestation` is a separate
+optional field on the version row, and the name comes from a profile — set
+once, related to the person's passkeys — rather than from a per-row
+`displayName` a caller typed. The profile is where ADR-0035's "device→user
+table" now lives, with passkeys in the device column; the person's identifier
+is minted locally and needs no DID method yet.
+
 ## Consequences
 
 ### What this makes possible
@@ -215,8 +283,9 @@ credential, so it fails that test. Attestations belong on the version row.
 - Promotion stops being an unverified hand-off. The signed statement is decision
   3's — this presence, at this frontier, over this content digest — and both the
   digest and the frontier already exist on a version row.
-- "A human did this" becomes checkable for the first time, and the check costs
-  the reader nothing: a row either carries an assertion or it does not.
+- "A human did this, and no agent pressed the button" becomes checkable where
+  it matters, and the check costs the reader nothing: the row either carries
+  an assertion or it does not. Elsewhere the click stays the review, unprompted.
 - Nothing new is stored that a later occupant of the origin can use.
 
 ### What gets harder
@@ -278,6 +347,22 @@ declaration now carry.
 Coherent, and the cheapest option: the daemon is the user's own machine and has
 no origin-squatting analogue. Rejected because moment 1 is exactly the boundary
 where the daemon has nothing to check, and moment 2 has no daemon in it at all.
+
+## Revisions
+
+**2026-09-16 — "verified" split into a claim and its evidence.** The first
+draft's decision 5 read: *"The ABSENCE of an attestation is what marks a
+non-human actor … an attested row means a person was present. This is the
+first backing for OKF §5.3's human tier that is not a self-report."* Review
+asked what an attested row would write as `actor`, and found that
+`isHumanActor` keys on a `human:` prefix a `did:key` does not carry — so the
+claimed backing never reached the tier. Following that thread: the tier should
+come from the OPERATION (a person saving, approving, promoting is a review; a
+scheduler is not) and the attestation should be evidence beside it, asked for
+only where an agent forging the click would matter. Decisions 4, 5, 8 and 9
+and the second paragraph of decision 2 are that revision. Kept here rather
+than silently rewritten because the mistake — deriving a claim from its proof
+— is an easy one to make again.
 
 ## Sources
 
