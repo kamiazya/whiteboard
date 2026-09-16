@@ -174,7 +174,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // one value: it is one thing with one meaning, so last-writer-wins per key
   // is the whole merge story, and two peers re-attaching the same end
   // converge on an end one of them chose rather than on a half of each.
-  'packages/loro-adapter/src/loro-bridge.ts': 1083,
+  // +21: ADR-0038 decision 3's read-side lift (`liftLegacyNodeKind` plus the
+  // `liftStoredNode` that composes it with the ADR-0037 one). Load-bearing,
+  // and the comment is most of the lines: the model is `.strict()`, so a node
+  // stored under the node-kind union fails its schema and the read drops what
+  // fails — the node VANISHES rather than losing its content. Net of the
+  // switch `nodeToFields` no longer needs.
+  'packages/loro-adapter/src/loro-bridge.ts': 1104,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -204,7 +210,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 1183 -> 1184 for `tidyBoxes`: the tool hands tidy a canvas's real nodes,
   // and tidy no longer mirrors the model's node union to ask whether one is a
   // frame. One import line.
-  'packages/server-core/src/tools/canvas-edit.ts': 1184,
+  // +45: the by-name refusal rebuilt. `.strict()` on the node schemas was the
+  // DETECTOR for a content key the target has no room for, and ADR-0038
+  // decision 3 dissolves the union it detected over — so the tool reads the
+  // patch back through the content seam instead, and the eight destructured
+  // draft keys plus `draftContent`'s call sites carry the rest. What a caller
+  // sees is unchanged; without it the op reported success and wrote nothing.
+  'packages/server-core/src/tools/canvas-edit.ts': 1229,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -405,7 +417,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // arms it dispatches over stop existing. Said plainly because the earlier
   // entry promised the reduction at this step and the number went the other
   // way.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2484,
+  // +3, and the entry above was right: the flip did NOT shrink this file. The
+  // arms stopped existing and `composeNode` still dispatches over four cases,
+  // because `nodeKind` has the same four answers the union's discriminant had
+  // — plus `undefined`, which is a fifth case the union could not express and
+  // the defensive branch now has a real caller for.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2487,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor

@@ -1,4 +1,3 @@
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Client } from '@modelcontextprotocol/client'
 
 /**
