@@ -465,6 +465,11 @@ export default function VersionTimeline({
                           {[
                             v.label ? versionTime(v.createdAt) : null,
                             author,
+                            // ADR-0039 decision 9: the fourth state. A
+                            // passkey assertion sits beside this row, so
+                            // "You · verified" is a person AND their proof;
+                            // a human row without it is still a person.
+                            v.attestation === undefined ? null : 'verified',
                             `${v.elementCount} els`,
                           ]
                             .filter((part) => part !== null)

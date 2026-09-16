@@ -87,6 +87,13 @@ function mkVersionsResponse(): Response {
             peerId: 'peer-human',
             displayName: 'Alice',
           },
+          attestation: {
+            kind: 'webauthn',
+            credentialId: 'Y3JlZA',
+            authenticatorData: 'YXV0aA',
+            clientDataJSON: 'Y2xpZW50',
+            signature: 'c2ln',
+          },
         },
         {
           id: 'v-feat',
@@ -281,6 +288,10 @@ describe('VersionTimeline', () => {
       expect(screen.getByText(/Assistant/)).toBeTruthy()
       expect(screen.getByText(/Alice/)).toBeTruthy()
     })
+    // The four states of ADR-0039 decision 9, two of them here: a person
+    // with their passkey's proof, and an agent without one.
+    expect(screen.getByText(/Alice · verified/)).toBeTruthy()
+    expect(screen.getByText(/Assistant/).textContent).not.toMatch(/verified/)
 
     // The lane dots this case also asserted on — one per row, coloured by
     // `BranchMeta.color`, solid or ringed by whether HEAD was on it — are
