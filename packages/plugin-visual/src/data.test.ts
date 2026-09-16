@@ -54,6 +54,18 @@ describe('semanticPlugin', () => {
     expect(semanticPlugin.id).toBe('semantic')
   })
 
+  it('teaches its two identifiers by example — the empty boxes say what to type', () => {
+    // Measured on a reader: "Axis" and "Value" with no example read as two
+    // empty boxes. The placeholder is what the form shows BEFORE a refusal.
+    const form = registry.facetForm(SEMANTIC_CLASS_KEY)
+    expect(form.kind).toBe('fields')
+    if (form.kind !== 'fields') return
+    expect(form.fields.map((f) => [f.name, f.label, f.placeholder])).toEqual([
+      ['axis', 'Axis', 'e.g. health, priority'],
+      ['value', 'Value', 'e.g. failing, high'],
+    ])
+  })
+
   it('validates an axis/value pair of lowercase identifiers', () => {
     expect(
       registry.validateFacetWrite(SEMANTIC_CLASS_KEY, { axis: 'health', value: 'failing' }).ok,

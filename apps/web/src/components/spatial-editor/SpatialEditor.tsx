@@ -128,6 +128,7 @@ import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
+import { collectFieldSuggestions } from './facet-widgets/field-suggestions.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
 import { snapGesturePoint } from './gesture-snap.js'
@@ -2730,6 +2731,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     : { kind: 'node', node: target as SpatialNode }
                 }
                 registry={bundledFacetRegistry}
+                // What the board already wrote into free-entry fields, so a
+                // second classification is a pick. Recomputed per render
+                // while the panel is open: one pass over the nodes' facets.
+                suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
                 onWrite={(key, payload) => {
                   if (edgeTarget !== undefined) {

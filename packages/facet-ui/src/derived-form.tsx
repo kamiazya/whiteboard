@@ -94,6 +94,7 @@ function FieldInput({
   registry,
   onChange,
   onClear,
+  suggestions,
 }: {
   readonly facetKey: string
   /** Facet title, so the accessible name says WHICH facet's field this is. */
@@ -110,6 +111,8 @@ function FieldInput({
    * same immediate path the Clear button beside it already takes.
    */
   readonly onClear: () => void
+  /** Values a text field may offer (a datalist); free entry stays free. */
+  readonly suggestions?: readonly string[]
 }) {
   // Scoped by facet: two facets may declare the same field name, and a
   // duplicate id would point every label at the first input. The
@@ -180,23 +183,38 @@ function FieldInput({
       </select>
     )
   }
+  // A datalist only when there is something to list: an empty one still
+  // draws a dropdown affordance on some browsers, promising choices it
+  // does not have.
+  const listId = suggestions !== undefined && suggestions.length > 0 ? `${id}-options` : undefined
   return (
-    <input
-      id={id}
-      aria-label={name}
-      type={field.control.kind === 'number' ? 'number' : 'text'}
-      style={CONTROL}
-      value={value === undefined || value === null ? '' : String(value)}
-      onChange={(event) =>
-        onChange(
-          field.control.kind === 'number'
-            ? event.target.value === ''
-              ? undefined
-              : Number(event.target.value)
-            : event.target.value,
-        )
-      }
-    />
+    <>
+      <input
+        id={id}
+        aria-label={name}
+        type={field.control.kind === 'number' ? 'number' : 'text'}
+        style={CONTROL}
+        value={value === undefined || value === null ? '' : String(value)}
+        {...(field.placeholder === undefined ? {} : { placeholder: field.placeholder })}
+        {...(listId === undefined ? {} : { list: listId })}
+        onChange={(event) =>
+          onChange(
+            field.control.kind === 'number'
+              ? event.target.value === ''
+                ? undefined
+                : Number(event.target.value)
+              : event.target.value,
+          )
+        }
+      />
+      {listId !== undefined && (
+        <datalist id={listId}>
+          {suggestions?.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+      )}
+    </>
   )
 }
 
@@ -216,6 +234,14 @@ export interface DerivedFacetFormProps {
   readonly registry: FacetRegistry
   /** `undefined` payload clears the facet. */
   readonly onWrite: (key: string, payload: unknown) => void
+  /**
+   * Per field name, values already in use that a text box may offer as a
+   * datalist. Supplied by the vessel, which is the only thing that can see
+   * the rest of the board: after the first box is classified by hand, the
+   * second is a pick. Free entry is untouched — the list suggests, the
+   * schema still decides.
+   */
+  readonly suggestions?: Readonly<Record<string, readonly string[]>>
 }
 
 export function DerivedFacetForm({
@@ -224,6 +250,7 @@ export function DerivedFacetForm({
   stored,
   registry,
   onWrite,
+  suggestions,
 }: DerivedFacetFormProps) {
   // Asked of the REGISTRY rather than derived here: a caller computing the
   // form itself is a caller that can compute it differently, and this is
@@ -441,6 +468,9 @@ export function DerivedFacetForm({
               registry={registry}
               onChange={(next) => change(field, next)}
               onClear={() => onWrite(facetKey, undefined)}
+              {...(suggestions?.[field.name] === undefined
+                ? {}
+                : { suggestions: suggestions[field.name] })}
             />
           </Row>
         )

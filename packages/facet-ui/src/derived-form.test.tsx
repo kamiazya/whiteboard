@@ -156,6 +156,82 @@ describe('a picker over a payload somebody else wrote', () => {
  * therefore takes a plain wrapper; every other control here is a single
  * labelable element, which is what `htmlFor` is for.
  */
+describe('free entry says what to type', () => {
+  const CLASS_KEY = 'demo.class/v0'
+  const classRegistry = createFacetRegistry([
+    definePlugin({
+      id: 'demo',
+      displayName: 'Demo',
+      facets: [
+        defineFacet({
+          name: 'class',
+          displayName: 'Class',
+          version: 'v0',
+          targets: ['node'],
+          schema: z.object({ axis: z.string(), value: z.string() }),
+          editor: {
+            fields: {
+              axis: { widget: 'text', placeholder: 'e.g. health' },
+              value: { widget: 'text', placeholder: 'e.g. failing' },
+            },
+          },
+        }),
+      ],
+    }),
+  ])
+
+  it('renders a declared placeholder inside the empty box', () => {
+    render(
+      <DerivedFacetForm
+        facetKey={CLASS_KEY}
+        title="Class"
+        registry={classRegistry}
+        stored={undefined}
+        onWrite={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Class Axis').getAttribute('placeholder')).toBe('e.g. health')
+    expect(screen.getByLabelText('Class Value').getAttribute('placeholder')).toBe('e.g. failing')
+  })
+
+  it('offers the values already in use as a datalist, so the second box is a pick', () => {
+    render(
+      <DerivedFacetForm
+        facetKey={CLASS_KEY}
+        title="Class"
+        registry={classRegistry}
+        stored={undefined}
+        onWrite={vi.fn()}
+        suggestions={{ axis: ['health', 'priority'], value: ['failing', 'healthy'] }}
+      />,
+    )
+    const axis = screen.getByLabelText('Class Axis') as HTMLInputElement
+    const listId = axis.getAttribute('list')
+    expect(listId).not.toBeNull()
+    const list = document.getElementById(listId as string) as HTMLDataListElement
+    expect([...list.options].map((o) => o.value)).toEqual(['health', 'priority'])
+    // Still free entry: the list suggests, the box takes anything.
+    fireEvent.change(axis, { target: { value: 'phase' } })
+    expect(axis.value).toBe('phase')
+  })
+
+  it('draws no datalist for a field with nothing to suggest', () => {
+    render(
+      <DerivedFacetForm
+        facetKey={CLASS_KEY}
+        title="Class"
+        registry={classRegistry}
+        stored={undefined}
+        onWrite={vi.fn()}
+        suggestions={{ axis: [] }}
+      />,
+    )
+    expect(screen.getByLabelText('Class Axis').getAttribute('list')).toBeNull()
+    expect(screen.getByLabelText('Class Value').getAttribute('list')).toBeNull()
+    expect(document.querySelector('datalist')).toBeNull()
+  })
+})
+
 describe('label nesting', () => {
   it('never nests an option label inside a field label', () => {
     const { container } = render(
