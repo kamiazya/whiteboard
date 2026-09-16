@@ -619,4 +619,11 @@ describe('sceneDocumentBounds', () => {
     // the panel plus its margins (94) since the content is only 10 tall.
     expect(sceneDocumentBounds({ nodes, legend })).toEqual({ x: 50 - 111, y: 20, w: 311, h: 94 })
   })
+  // The producer never attaches a legend with nothing to say, but the type
+  // admits one, and a panel of no rows must reserve no band — not the bare
+  // margins around an empty box, which the guard's removal would leave.
+  it('reserves no band for a legend with nothing to say', () => {
+    const legend = { keys: [], uncarried: { boxes: false, edges: false } }
+    expect(sceneDocumentBounds({ nodes, legend })).toEqual(sceneBounds({ nodes }))
+  })
 })
