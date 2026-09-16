@@ -405,6 +405,8 @@ export function WorkspaceFilesPanel({
     // somewhere else.
     setRefreshError(null)
     setPinError(null)
+    // The vocabulary is the departed keeper's until the new one answers.
+    setTagsInUse(null)
     // Guarded by the source's IDENTITY, not by a first-run flag: an
     // `initialFolder` is a deliberate address and must survive mounting,
     // while StrictMode replays this effect with the SAME readList — which a

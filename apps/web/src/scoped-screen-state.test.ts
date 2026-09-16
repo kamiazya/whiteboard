@@ -133,6 +133,10 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   searchDegraded: 'cleared on switch',
   refreshError: 'cleared on switch',
   pinError: 'cleared on switch',
+  // The keeper's vocabulary names the departed workspace's tags; until the
+  // new keeper answers, the strip would offer chips whose press searches
+  // the store now on screen for tags it never carried.
+  tagsInUse: 'cleared on switch',
 
   listStatus: 'no subject: a load outcome for the list as a whole, reset by the same effect',
   // Reset inside the block's identity check rather than beside the rest —
