@@ -4,7 +4,7 @@
 // test suite.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Resolved AFTER vi.resetModules(), never statically imported at the top of
@@ -22,16 +22,15 @@ const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 function rectCanvas(over: Partial<SpatialCanvas['nodes'][number]> = {}): SpatialCanvas {
   return {
     nodes: [
-      {
+      textNode({
         id: 'rect-1',
-        type: 'text',
         x: 50,
         y: 50,
         width: 200,
         height: 100,
         text: 'hello world',
         ...over,
-      },
+      }),
     ],
     edges: [],
   }
@@ -203,15 +202,14 @@ describe('headless-renderer', () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const canvas: SpatialCanvas = {
       nodes: [
-        {
+        linkNode({
           id: 'link-1',
-          type: 'link',
           x: 0,
           y: 0,
           width: 200,
           height: 40,
           url: 'https://example.com',
-        },
+        }),
       ],
       edges: [],
     }
@@ -421,15 +419,14 @@ describe('an export says which declared families it could not provide', () => {
 describe('an export colours code the way the editor does', () => {
   const CODE_CANVAS: SpatialCanvas = {
     nodes: [
-      {
+      textNode({
         id: 'n1',
-        type: 'text',
         x: 0,
         y: 0,
         width: 360,
         height: 220,
         text: '```ts\n// note\nexport const x = "hi"\n```',
-      },
+      }),
     ],
     edges: [],
   }

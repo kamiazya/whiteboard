@@ -9,7 +9,7 @@ import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard
  * for every file node.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
@@ -22,15 +22,16 @@ const seamsOf = (result: { current: { references: ReferenceWire } }) =>
 const BODY = '# Weekly notes\n\nShipped the markdown file node.'
 
 const canvasWith = (...files: string[]): SpatialCanvas => ({
-  nodes: files.map((file, i) => ({
-    id: `n${i}`,
-    type: 'file' as const,
-    x: 0,
-    y: 0,
-    width: 200,
-    height: 200,
-    file,
-  })),
+  nodes: files.map((file, i) =>
+    fileNode({
+      id: `n${i}`,
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 200,
+      file,
+    }),
+  ),
   edges: [],
 })
 

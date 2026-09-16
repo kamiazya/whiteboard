@@ -5,7 +5,9 @@
 // input goes through the real parser, isolating this totality behavior from
 // having to find a markdown string that reliably falls outside codec's
 // own versioned mdast subset.
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode as buildTextNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import { captureLogsForTests } from '../log.js'
@@ -26,16 +28,15 @@ const { renderSpatialCanvasToSvg } = await import('./headless-renderer.js')
 function textNode(overrides: Partial<SpatialNode> = {}): SpatialCanvas {
   return {
     nodes: [
-      {
+      buildTextNode({
         id: 'n1',
-        type: 'text',
         x: 0,
         y: 0,
         width: 100,
         height: 40,
         text: '__THROW__',
         ...overrides,
-      } as SpatialNode,
+      }) as SpatialNode,
     ],
     edges: [],
   }

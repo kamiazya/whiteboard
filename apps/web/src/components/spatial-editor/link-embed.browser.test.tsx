@@ -14,9 +14,8 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const bigLink = (id: string, x: number) =>
-  ({
+  linkNode({
     id,
-    type: 'link',
     x,
     y: 60,
     width: 320,

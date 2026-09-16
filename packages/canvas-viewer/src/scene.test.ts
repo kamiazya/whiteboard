@@ -24,8 +24,8 @@ describe('parseViewerScene', () => {
   it('accepts a nodes+edges JSON string via the codec parser', () => {
     const text = JSON.stringify({
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' },
-        { id: 'b', type: 'text', x: 20, y: 20, width: 10, height: 10, text: '' },
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' }),
+        textNode({ id: 'b', x: 20, y: 20, width: 10, height: 10, text: '' }),
       ],
       edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
     })

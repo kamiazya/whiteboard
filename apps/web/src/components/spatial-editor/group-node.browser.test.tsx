@@ -176,7 +176,7 @@ it('Group selection from a multi-selected node frames the selection with padding
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(3))
   const frame = latest.canvas.nodes[0]
   // Enclosing box (120,120)-(420,280) plus the 24px padding on every side.
-  expect(frame).toMatchObject({ type: 'group', x: 96, y: 96, width: 348, height: 208 })
+  expect(frame).toMatchObject(groupNode({ x: 96, y: 96, width: 348, height: 208 }))
 })
 
 // A member that paints BELOW its frame (member first, frame later in
@@ -287,11 +287,12 @@ it('Group selection can frame a selection that includes a group frame', async ()
   // A new OUTER frame prepends, enclosing the inner frame and both nodes
   // (min corner 80,80 / max corner 520,220, plus 24px padding).
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(4))
-  expect(latest.canvas.nodes[0]).toMatchObject({
-    type: 'group',
-    x: 56,
-    y: 56,
-    width: 488,
-    height: 188,
-  })
+  expect(latest.canvas.nodes[0]).toMatchObject(
+    groupNode({
+      x: 56,
+      y: 56,
+      width: 488,
+      height: 188,
+    }),
+  )
 })

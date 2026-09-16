@@ -29,7 +29,7 @@ function baseOptions(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions
     // asserted by nothing.
     parseBody: () => ({
       type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'body' }] }],
+      children: [{ type: 'paragraph', children: [textNode({ value: 'body' })] }],
     }),
     appearance: APPEARANCE,
     ...over,

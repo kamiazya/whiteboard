@@ -217,9 +217,8 @@ describe('resolveNodeShape', () => {
 
 describe('visual.symbol/v0', () => {
   const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
-    ({
+    textNode({
       id: 'n1',
-      type: 'text',
       x: 0,
       y: 0,
       width: 10,
@@ -317,9 +316,8 @@ describe('visual.symbol/v0', () => {
 
 describe('visual.text/v0', () => {
   const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
-    ({
+    textNode({
       id: 'n1',
-      type: 'text',
       x: 0,
       y: 0,
       width: 10,

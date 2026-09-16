@@ -7,7 +7,7 @@ import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard
  * hand-written copy is exactly what should not happen.
  */
 import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
@@ -18,15 +18,16 @@ const seamsOf = (result: { current: { references: ReferenceWire } }) =>
   referenceSeamsFromWire(result.current.references)
 
 const canvasWith = (...files: string[]): SpatialCanvas => ({
-  nodes: files.map((file, i) => ({
-    id: `n${i}`,
-    type: 'file' as const,
-    x: 0,
-    y: 0,
-    width: 10,
-    height: 10,
-    file,
-  })),
+  nodes: files.map((file, i) =>
+    fileNode({
+      id: `n${i}`,
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      file,
+    }),
+  ),
   edges: [],
 })
 

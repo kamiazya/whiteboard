@@ -92,15 +92,14 @@ function proposalsFor(canvas: SpatialCanvas, count: number): Proposal[] {
               id,
               status: 'open' as const,
               op: 'node.add' as const,
-              node: {
-                type: 'text',
+              node: textNode({
                 id: `added${i}`,
                 x: target.x + 40,
                 y: target.y + 30,
                 width: 120,
                 height: 60,
                 text: `added ${i}`,
-              },
+              }),
             }
     out.push({ id: `p${i}`, createdAt: '2026-09-06T00:00:00.000Z', changes: [change] })
   }

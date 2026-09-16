@@ -14,6 +14,7 @@ import {
   resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -37,7 +38,7 @@ async function seedDocument(path: string, text: string): Promise<string> {
     kind: 'spatial',
   })
   const doc = new Loro()
-  doc.getMap('nodes').set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text })
+  doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text }))
   doc.commit()
   await new LoroStore(DB_NAME).save(entry.documentId, doc.export({ mode: 'snapshot' }))
   return entry.documentId

@@ -19,7 +19,7 @@ function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {
     measure: createFakeMeasure(),
     parseBody: (text: string) => ({
       type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+      children: [{ type: 'paragraph', children: [textNode({ value: text })] }],
     }),
     appearance: APPEARANCE,
     ...over,

@@ -1,7 +1,9 @@
 // Z-order manipulation: [ / ] / Shift+[ / Shift+] via the shortcut catalog
 // (shortcuts.ts), and the context menu's Order row as the touch path.
 // Array order IS z-order — assertions read the canvas node order directly.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -13,15 +15,16 @@ afterEach(cleanup)
 // An overlapping chain (a∩b, b∩c, a∦c): forward/backward are
 // overlap-aware, so the fixture must actually overlap for them to move.
 const initial: SpatialCanvas = {
-  nodes: (['a', 'b', 'c'] as const).map((id, index) => ({
-    id,
-    type: 'text',
-    x: index * 150,
-    y: 100,
-    width: 200,
-    height: 80,
-    text: id,
-  })),
+  nodes: (['a', 'b', 'c'] as const).map((id, index) =>
+    textNode({
+      id,
+      x: index * 150,
+      y: 100,
+      width: 200,
+      height: 80,
+      text: id,
+    }),
+  ),
   edges: [],
 }
 

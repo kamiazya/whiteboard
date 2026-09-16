@@ -39,7 +39,7 @@ const appearance: SpatialAppearanceResolver = {
 
 const parseBody = (text: string): MdastRoot => ({
   type: 'root',
-  children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+  children: [{ type: 'paragraph', children: [textNode({ value: text })] }],
 })
 
 const canvasWithOneCommentedNode: SpatialCanvas = {

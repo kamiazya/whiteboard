@@ -10,6 +10,7 @@
  * at the dialog, so the load-bearing assertion is that the fold was ATTEMPTED
  * (the spy fired); the count and copy assertions pin the degradation shape.
  */
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,7 +72,7 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
       kind: 'spatial',
     })
     const doc = new LoroDoc()
-    doc.getMap('nodes').set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 8, height: 4 })
+    doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 8, height: 4 }))
     doc.commit()
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 

@@ -1,4 +1,5 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LiveDocuments } from '../server-deps.js'
@@ -12,15 +13,16 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array {
   const doc = new LoroDoc()
   const vv0 = doc.version()
   writeSpatialCanvas(doc, {
-    nodes: nodeIds.map((id) => ({
-      id,
-      type: 'text' as const,
-      text: id,
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-    })),
+    nodes: nodeIds.map((id) =>
+      textNode({
+        id,
+        text: id,
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+      }),
+    ),
     edges: [],
   })
   return doc.export({ mode: 'update', from: vv0 }) as Uint8Array
