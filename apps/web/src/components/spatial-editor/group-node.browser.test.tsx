@@ -5,6 +5,7 @@
 // the drag/double-press paths.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isFrame } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -213,7 +214,7 @@ it('deleting the frame keeps its members', async () => {
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
   await userEvent.click(page.getByRole('menuitem', { name: 'Delete' }))
 
-  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(false))
+  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(false))
   expect(latest.canvas.nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'c'])
 })
 
@@ -237,7 +238,7 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
       (b) => b.getAttribute('aria-label') === 'Group',
     ) as HTMLElement,
   )
-  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(true))
+  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(true))
 
   const root = rootOf(container).getBoundingClientRect()
   await vi.waitFor(() => {

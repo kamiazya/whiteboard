@@ -17,14 +17,12 @@ import {
   type NodeEmbed,
   type NodeResource,
   nodeIdSchema,
-  nodeKind,
   nodePatchFieldsSchema,
   nodePositionSchema,
   nodeSizeSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
   RESOURCE_KINDS,
-  type SpatialNode,
   sharedNodeFieldsSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -187,21 +185,6 @@ const nodeDraftSchema = z.discriminatedUnion('type', [
 ])
 
 export type NodeDraft = z.infer<typeof nodeDraftSchema>
-
-/**
- * The word this TOOL calls a node's kind, which is not `nodeKind`'s: a frame
- * is `group` here, and a node showing a resource this build cannot read is
- * `group` too — the wire's node that shows nothing.
- *
- * Every message and every projection on the tool's surface goes through this,
- * so the vocabulary the model moved to (ADR-0038 decision 3) cannot leak into
- * a string a caller reads. A refusal that suddenly said "a frame node has no
- * text" would be a surface change nobody gated.
- */
-export const publishedKind = (node: SpatialNode): NodeDraft['type'] => {
-  const kind = nodeKind(node)
-  return kind === undefined || kind === 'frame' ? 'group' : kind
-}
 
 /**
  * The published draft's `type` plus its content field, as the fields the

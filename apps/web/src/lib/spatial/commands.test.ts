@@ -6,8 +6,8 @@ import type {
   ProposedChange,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { endNode, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { endNode, nodeText, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
 
@@ -301,15 +301,14 @@ describe('applyCommand', () => {
   it('set-node-url updates a link node and ignores non-link targets', () => {
     const withLink = applyCommand(baseCanvas(), {
       kind: 'create-node',
-      node: {
+      node: linkNode({
         id: 'l1',
-        type: 'link',
         x: 0,
         y: 200,
         width: 200,
         height: 60,
         url: 'https://example.com/',
-      },
+      }),
     })
 
     const updated = applyCommand(withLink, {
@@ -354,7 +353,7 @@ describe('applyCommand', () => {
   it('set-group-label sets, updates, empty-removes, and ignores non-groups', () => {
     const grouped = applyCommand(baseCanvas(), {
       kind: 'create-group',
-      node: { type: 'group', id: 'g1', x: -20, y: -20, width: 400, height: 200 },
+      node: groupNode({ id: 'g1', x: -20, y: -20, width: 400, height: 200 }),
     })
 
     const labeled = applyCommand(grouped, { kind: 'set-group-label', id: 'g1', label: 'phase 1' })
@@ -371,7 +370,7 @@ describe('applyCommand', () => {
   it('set-group-background sets, restyles, removes, and ignores non-groups', () => {
     const grouped = applyCommand(baseCanvas(), {
       kind: 'create-group',
-      node: { type: 'group', id: 'g1', x: -20, y: -20, width: 400, height: 200 },
+      node: groupNode({ id: 'g1', x: -20, y: -20, width: 400, height: 200 }),
     })
 
     const withBg = applyCommand(grouped, {
@@ -406,7 +405,7 @@ describe('applyCommand', () => {
   it('set-node-file retargets a file node and ignores non-file targets', () => {
     const withFile = applyCommand(baseCanvas(), {
       kind: 'create-node',
-      node: { type: 'file', id: 'f1', x: 0, y: 300, width: 200, height: 60, file: 'notes/plan' },
+      node: fileNode({ id: 'f1', x: 0, y: 300, width: 200, height: 60, file: 'notes/plan' }),
     })
 
     const retargeted = applyCommand(withFile, {
@@ -444,15 +443,16 @@ describe('applyCommand', () => {
     /** Four nodes stacked on the same spot — everything overlaps. */
     function stackedCanvas(): SpatialCanvas {
       return {
-        nodes: (['a', 'b', 'c', 'd'] as const).map((id) => ({
-          id,
-          type: 'text',
-          x: 0,
-          y: 0,
-          width: 80,
-          height: 40,
-          text: id,
-        })),
+        nodes: (['a', 'b', 'c', 'd'] as const).map((id) =>
+          textNode({
+            id,
+            x: 0,
+            y: 0,
+            width: 80,
+            height: 40,
+            text: id,
+          }),
+        ),
         edges: [],
       }
     }
@@ -906,8 +906,7 @@ describe('buildFragmentInsertCommand', () => {
     if (command?.kind !== 'batch') throw new Error('expected a batch command')
     const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
     const nodeCommands = command.commands.filter((c) => c.kind === 'create-node')
-    const remintedB = nodeCommands.find((c) => c.node.type === 'text' && c.node.text === 'b')?.node
-      .id
+    const remintedB = nodeCommands.find((c) => nodeText(c.node) === 'b')?.node.id
     expect(remintedB).toBeDefined()
     const boundary = edgeCommands.find((c) => c.edge.label === 'kept')?.edge
     expect(boundary).toMatchObject({
@@ -1150,7 +1149,7 @@ describe('decide-proposal', () => {
       id: 'node:new',
       op: 'node.add',
       status: 'open',
-      node: { type: 'text', id: 'new', x: 300, y: 0, width: 60, height: 40, text: 'added' },
+      node: textNode({ id: 'new', x: 300, y: 0, width: 60, height: 40, text: 'added' }),
     },
   ]
 

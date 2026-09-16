@@ -10,6 +10,7 @@
 
 import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { SYNC_DOCUMENTS_STORE, whiteboardDbName } from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -223,7 +224,7 @@ export async function persistedNodeIds(documentId: string): Promise<string[]> {
 /** A canvas holding one text node — the minimal edit these suites drive. */
 export function textNodeCanvas(id: string, x: number, y: number): SpatialCanvas {
   return {
-    nodes: [{ id, type: 'text', x, y, width: 80, height: 40, text: id }],
+    nodes: [textNode({ id, x, y, width: 80, height: 40, text: id })],
     edges: [],
   }
 }

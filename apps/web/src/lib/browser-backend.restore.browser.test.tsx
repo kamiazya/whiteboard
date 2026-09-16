@@ -5,6 +5,8 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -46,7 +48,7 @@ class InMemoryWorkspaceDocs implements WorkspaceDocs {
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
     edges: [],
   })
   doc.commit()
@@ -95,7 +97,7 @@ function textOf(doc: LoroDoc, documentId: string): string | undefined {
   const projected = projectWorkspaceDocument(doc, documentId)
   if (projected === null) throw new Error(`document ${documentId} is not in the record`)
   const node = readSpatialCanvas(projected).nodes[0]
-  return node?.type === 'text' ? node.text : undefined
+  return node === undefined ? undefined : nodeText(node)
 }
 
 describe('BrowserBackend.applyRestore', () => {

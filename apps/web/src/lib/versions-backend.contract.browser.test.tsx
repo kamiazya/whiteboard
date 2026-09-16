@@ -5,6 +5,8 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -28,7 +30,7 @@ claimIsolatedWhiteboardDb('versionsbackendcontract')
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
     edges: [],
   })
   doc.commit()
@@ -38,7 +40,7 @@ function textDoc(text: string): LoroDoc {
 function textOf(doc: LoroDoc | null): string | undefined {
   if (doc === null) return undefined
   const node = readSpatialCanvas(doc).nodes[0]
-  return node?.type === 'text' ? node.text : undefined
+  return node === undefined ? undefined : nodeText(node)
 }
 
 /**

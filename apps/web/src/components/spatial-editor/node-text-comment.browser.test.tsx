@@ -5,6 +5,7 @@
 // passage highlighted — the same projection the note's source pane draws.
 
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -25,6 +26,8 @@ const NODE = textNode({
   height: 80,
   text: 'ship the plan by friday',
 })
+
+const NODE_TEXT = nodeText(NODE) ?? ''
 const start: SpatialCanvas = { nodes: [NODE], edges: [] }
 
 function makeHost(threads?: readonly CommentThread[], initial: SpatialCanvas = start) {
@@ -64,7 +67,7 @@ it('editing a node draws its commented passage highlighted, with no gutter shift
   const { Host } = makeHost([thread])
   const { container } = render(<Host />)
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 340 } })
-  await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE.text))
+  await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE_TEXT))
   await vi.waitFor(() =>
     expect(
       Array.from(container.querySelectorAll('.cm-annotation')).map((el) => el.textContent),
@@ -122,7 +125,7 @@ it('a right-click inside the node editor opens the editing catalog, Comment incl
   const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 340 } })
-  await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE.text))
+  await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE_TEXT))
   // "ship", selected: the catalog offers Comment only about a selection.
   await userEvent.keyboard('{Home}')
   for (let i = 0; i < 4; i++) await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}')
@@ -165,7 +168,7 @@ it('dismissing the catalog hands the caret back: the edit stays open and commits
   const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 340 } })
-  await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE.text))
+  await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE_TEXT))
   const content = container.querySelector('.cm-content') as HTMLElement
   const r = content.getBoundingClientRect()
   fireEvent.contextMenu(content, { clientX: r.left + 20, clientY: r.top + 10, button: 2 })
@@ -176,12 +179,12 @@ it('dismissing the catalog hands the caret back: the edit stays open and commits
   // the editor underneath the menu.
   await userEvent.keyboard('{Escape}')
   await expect.element(page.getByRole('menu')).not.toBeInTheDocument()
-  expect(nodeEditorText(container)).toBe(NODE.text)
+  expect(nodeEditorText(container)).toBe(NODE_TEXT)
   expect(content.contains(document.activeElement)).toBe(true)
 
   await userEvent.keyboard(' now')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
   await vi.waitFor(() =>
-    expect(latest.canvas.nodes[0]).toMatchObject({ type: 'text', text: `${NODE.text} now` }),
+    expect(latest.canvas.nodes[0]).toMatchObject({ type: 'text', text: `${NODE_TEXT} now` }),
   )
 })

@@ -12,7 +12,9 @@
  * sometimes, because the affordance rides the canvas (so which screen region
  * it covers depends on the pan) and appears only above a zoom threshold.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -22,13 +24,17 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 // 400x300 at zoom 1 clears the embed LOD thresholds (200x140).
-const NODE = { id: 'l1', type: 'link', x: 60, y: 60, width: 400, height: 300 } as const
 // A port nothing listens on: the iframe element mounts and refuses at once,
 // so the live-embed case never leaves the machine.
-const board: SpatialCanvas = {
-  nodes: [{ ...NODE, url: 'http://127.0.0.1:1/' }],
-  edges: [],
-}
+const NODE = linkNode({
+  id: 'l1',
+  x: 60,
+  y: 60,
+  width: 400,
+  height: 300,
+  url: 'http://127.0.0.1:1/',
+})
+const board: SpatialCanvas = { nodes: [NODE], edges: [] }
 
 function Host({ tool }: { tool: 'hand' | 'select' }) {
   const [canvas, setCanvas] = useState<SpatialCanvas>(board)

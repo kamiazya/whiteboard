@@ -4,7 +4,9 @@
 // keeps its long-standing behaviour (viewport centre), while dragging one
 // onto the canvas places it where it is dropped — the viewport never moves,
 // so nothing has to pan to show what was just made.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isFrame } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -47,7 +49,7 @@ it('Group creates a frame and leaves no editor open', () => {
   fireEvent.click(screen.getByRole('menuitem', { name: 'Group' }))
 
   expect(latest.canvas.nodes).toHaveLength(1)
-  expect(latest.canvas.nodes[0]?.type).toBe('group')
+  expect(latest.canvas.nodes[0] !== undefined && isFrame(latest.canvas.nodes[0])).toBe(true)
   // Group is the creation that needs no typing, which is what makes it the
   // one these placement tests drive: no editor to dismiss between steps.
   expect(container.querySelector('[data-testid="text-node-editor"]')).toBeNull()

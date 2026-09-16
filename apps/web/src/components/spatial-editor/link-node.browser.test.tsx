@@ -19,15 +19,14 @@ const empty: SpatialCanvas = { nodes: [], edges: [] }
 
 const withLink: SpatialCanvas = {
   nodes: [
-    {
+    linkNode({
       id: 'l1',
-      type: 'link',
       x: 100,
       y: 100,
       width: 200,
       height: 60,
       url: 'https://example.com/docs',
-    },
+    }),
   ],
   edges: [],
 }

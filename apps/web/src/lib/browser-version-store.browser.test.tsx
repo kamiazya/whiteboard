@@ -4,6 +4,8 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -21,7 +23,7 @@ claimIsolatedWhiteboardDb('browserversionstore')
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
     edges: [],
   })
   doc.commit()
@@ -31,7 +33,7 @@ function textDoc(text: string): LoroDoc {
 function textOf(doc: LoroDoc | null): string | undefined {
   if (doc === null) return undefined
   const node = readSpatialCanvas(doc).nodes[0]
-  return node?.type === 'text' ? node.text : undefined
+  return node === undefined ? undefined : nodeText(node)
 }
 
 /** Writes `text` as the document's content into the stored record, as an edit would. */

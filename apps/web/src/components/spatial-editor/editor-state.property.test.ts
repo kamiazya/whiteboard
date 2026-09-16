@@ -51,11 +51,13 @@ import {
   type CanvasEdge,
   endIn,
   endNode,
+  nodeKind,
+  nodeText,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect, it } from 'vitest'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
@@ -91,6 +93,15 @@ import {
   selectionMembers,
 } from './selection.js'
 import type { ShortcutId } from './shortcuts.js'
+
+/**
+ * The same thing `gestures.ts`'s `startKindOf` records, read back. Written
+ * out rather than exported from the module under test: the property exists
+ * to check the gesture against the canvas, and borrowing the subject's own
+ * function would make it agree with itself.
+ */
+const startKindOfNode = (node: SpatialNode | undefined): string | undefined =>
+  node === undefined ? undefined : (nodeKind(node) ?? '')
 
 /**
  * The initial document is GENERATED, not fixed, and the geometry is drawn
@@ -167,13 +178,13 @@ function nodeArb(id: string): fc.Arbitrary<SpatialNode> {
       const base = { id, ...box }
       switch (kind) {
         case 'file':
-          return { ...base, type: 'file', file: `notes/${id}.md` }
+          return fileNode({ ...base, file: `notes/${id}.md` })
         case 'link':
-          return { ...base, type: 'link', url: `https://example.com/${id}` }
+          return linkNode({ ...base, url: `https://example.com/${id}` })
         case 'group':
-          return { ...base, type: 'group', label: text }
+          return groupNode({ ...base, label: text })
         default:
-          return { ...base, type: 'text', text }
+          return textNode({ ...base, text })
       }
     })
 }
@@ -247,15 +258,14 @@ function initialCanvas(): SpatialCanvas {
       textNode({ id: 'n0', x: 0, y: 0, width: 100, height: 60, text: 'zero' }),
       textNode({ id: 'n1', x: 160, y: 0, width: 100, height: 60, text: 'one' }),
       textNode({ id: 'n2', x: 0, y: 120, width: 100, height: 60, text: '' }),
-      {
+      linkNode({
         id: 'n3',
-        type: 'link',
         x: 160,
         y: 120,
         width: 100,
         height: 60,
         url: 'https://example.com/',
-      },
+      }),
     ],
     edges: [
       {
@@ -578,7 +588,7 @@ function checkInvariants(real: Real): void {
       break
     case 'moving':
     case 'resizing':
-      expect(nodeById(canvas, gesture.nodeId)?.type, `G1 ${gesture.kind} ${at}`).toBe(
+      expect(startKindOfNode(nodeById(canvas, gesture.nodeId)), `G1 ${gesture.kind} ${at}`).toBe(
         gesture.startType,
       )
       break
@@ -586,7 +596,9 @@ function checkInvariants(real: Real): void {
       expect(nodeById(canvas, gesture.fromNodeId), `G1 connecting ${at}`).toBeDefined()
       break
     case 'editing-text':
-      expect(nodeById(canvas, gesture.nodeId)?.type, `G1 editing-text ${at}`).toBe('text')
+      expect(startKindOfNode(nodeById(canvas, gesture.nodeId)), `G1 editing-text ${at}`).toBe(
+        'text',
+      )
       break
   }
 
@@ -879,7 +891,7 @@ function pickConnected(real: Real, index: number): SpatialNode | undefined {
 
 function pickText(real: Real, index: number): SpatialNode | undefined {
   const texts = real.canvas.nodes.filter(
-    (node) => node.type === 'text' && !real.lockedNodeIds.has(node.id),
+    (node) => nodeText(node) !== undefined && !real.lockedNodeIds.has(node.id),
   )
   if (texts.length === 0) return undefined
   return texts[index % texts.length]
@@ -1168,8 +1180,8 @@ class StartTextEdit extends GestureCommand {
   }
   event(real: Real): GestureEvent | undefined {
     const node = pickText(real, this.index)
-    if (node === undefined || node.type !== 'text') return undefined
-    return { type: 'start-text-edit', nodeId: node.id, text: node.text }
+    if (node === undefined || nodeText(node) === undefined) return undefined
+    return { type: 'start-text-edit', nodeId: node.id, text: nodeText(node) ?? '' }
   }
   toString(): string {
     return `startTextEdit(text#${this.index})`
@@ -2112,7 +2124,7 @@ class GroupSelection implements fc.Command<Model, Real> {
     const id = `group-${real.nextId++}`
     dispatchCommands(
       real,
-      [{ kind: 'create-group', node: { id, type: 'group', ...frame } }],
+      [{ kind: 'create-group', node: groupNode({ id, ...frame }) }],
       this.toString(),
     )
     real.selection = reduceSelection(real.selection, { type: 'set-primary', id })

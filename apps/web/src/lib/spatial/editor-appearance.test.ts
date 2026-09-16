@@ -1,5 +1,7 @@
 // @vitest-environment node
+
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode as buildTextNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   createEditorAppearance,
@@ -7,15 +9,14 @@ import {
   EDITOR_LIGHT_PALETTE,
 } from './editor-appearance.js'
 
-const textNode: SpatialNode = {
+const textNode: SpatialNode = buildTextNode({
   id: 'a',
-  type: 'text',
   x: 0,
   y: 0,
   width: 100,
   height: 50,
   text: 'hi',
-}
+})
 const edge = {
   id: 'e',
   from: { node: 'a' },

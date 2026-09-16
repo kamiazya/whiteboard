@@ -35,7 +35,7 @@ describe('applyCanvasChange', () => {
       id: 'node:c',
       status: 'open',
       op: 'node.add',
-      node: { type: 'text', id: 'c', x: 400, y: 400, width: 80, height: 30, text: 'C' },
+      node: textNode({ id: 'c', x: 400, y: 400, width: 80, height: 30, text: 'C' }),
     })
     expect(next.nodes.map((node) => node.id)).toEqual(['a', 'b', 'c'])
   })
@@ -144,7 +144,7 @@ describe('canvasChangeConflicts', () => {
       id: 'node:c',
       status: 'open',
       op: 'node.add',
-      node: { type: 'text', id: 'c', x: 0, y: 0, width: 10, height: 10, text: 'C' },
+      node: textNode({ id: 'c', x: 0, y: 0, width: 10, height: 10, text: 'C' }),
     }
     expect(canvasChangeConflicts(add, BOARD)).toBe(false)
     expect(

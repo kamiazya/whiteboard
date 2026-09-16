@@ -4,6 +4,7 @@
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { createRef, useState } from 'react'
@@ -1974,7 +1975,7 @@ describe('node placement and affordances', () => {
     await waitFor(() => {
       const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
       const node = canvas.nodes.find((n) => n.id === 'note-1')
-      expect(node?.type === 'text' ? node.text : undefined).toBe('typed before clicking away')
+      expect(node === undefined ? undefined : nodeText(node)).toBe('typed before clicking away')
     })
   })
 

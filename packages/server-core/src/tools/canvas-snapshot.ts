@@ -25,8 +25,8 @@ import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
-import { publishedKind } from './canvas-edit-ops.js'
 import { loadDocument } from './document-io.js'
+import { type PublishedNodeKind, publishedKind } from './published-node-kind.js'
 
 /**
  * Per-node text budget, in characters. A text node can hold a whole markdown
@@ -172,7 +172,7 @@ type CanvasSnapshotInput = z.infer<typeof canvasSnapshotInputSchema>
 /** Everything a snapshot node carries whatever it shows. */
 type SnapshotNodeBase = {
   readonly id: string
-  readonly type: 'text' | 'file' | 'link' | 'group'
+  readonly type: PublishedNodeKind
   readonly x: number
   readonly y: number
   readonly width: number

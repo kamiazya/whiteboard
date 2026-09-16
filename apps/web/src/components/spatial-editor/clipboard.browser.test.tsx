@@ -3,7 +3,7 @@
 // mutation ONE batch command (one undo step), reminted ids on every paste.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endIn, endNode } from '@kamiazya/whiteboard-model'
+import { endIn, endNode, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -161,7 +161,7 @@ it('undoing a paste restores the cut surface — the next paste reconnects again
   // The document holds no trace of the first paste, so the next paste is a
   // first paste again: the boundary edge must reconnect, not silently drop.
   clip(root, 'paste')
-  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  const pasted = latest.canvas.nodes.find((n) => nodeText(n) === 'A')
   expect(latest.canvas.edges).toHaveLength(1)
   const restored = latest.canvas.edges[0]
   expect([endNode(restored.from), endNode(restored.to)].sort()).toEqual([pasted?.id, 'b'].sort())
@@ -331,7 +331,7 @@ it('deleting a ghosted selection is a real delete; the next paste reconnects lik
   // The originals are gone now, so the cut surface applies: paste restores
   // the node wired back to its surviving peer.
   clip(root, 'paste')
-  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  const pasted = latest.canvas.nodes.find((n) => nodeText(n) === 'A')
   expect(latest.canvas.edges).toHaveLength(1)
   const restored = latest.canvas.edges[0]
   expect([endNode(restored.from), endNode(restored.to)].sort()).toEqual([pasted?.id, 'b'].sort())
@@ -386,7 +386,7 @@ it('a content-only change to a held node lifts the hold — ANY touch counts, no
     latest.reset({
       ...latest.canvas,
       nodes: latest.canvas.nodes.map((n) =>
-        n.id === 'a' && n.type === 'text' ? { ...n, text: 'rewritten' } : n,
+        n.id === 'a' && nodeText(n) !== undefined ? { ...n, text: 'rewritten' } : n,
       ),
     }),
   )
@@ -396,9 +396,7 @@ it('a content-only change to a held node lifts the hold — ANY touch counts, no
   // the node someone just rewrote.
   clip(root, 'paste')
   expect(latest.canvas.nodes).toHaveLength(3)
-  expect(
-    latest.canvas.nodes.filter((n) => n.type === 'text' && n.text === 'rewritten'),
-  ).toHaveLength(1)
+  expect(latest.canvas.nodes.filter((n) => nodeText(n) === 'rewritten')).toHaveLength(1)
 })
 
 it("an anchored 'Paste here' moves the held selection so its center lands on the click", async () => {

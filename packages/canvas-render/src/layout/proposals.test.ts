@@ -96,7 +96,7 @@ describe('drawing a proposal in place', () => {
           id: 'node:c',
           status: 'open',
           op: 'node.add',
-          node: { type: 'text', id: 'c', x: 500, y: 200, width: 120, height: 60, text: 'C' },
+          node: textNode({ id: 'c', x: 500, y: 200, width: 120, height: 60, text: 'C' }),
         },
       ]),
     ])

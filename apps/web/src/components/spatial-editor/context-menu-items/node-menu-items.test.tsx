@@ -9,29 +9,31 @@ import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 // at context-menu.browser.test.tsx:462-508 and is not re-tested here.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  fileNode as buildFileNode,
+  textNode as buildTextNode,
+} from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { NodeMenuItemsInput } from './node-menu-items.js'
 import { nodeMenuItems } from './node-menu-items.js'
 
-const textNode: SpatialNode = {
+const textNode: SpatialNode = buildTextNode({
   id: 'a',
-  type: 'text',
   x: 0,
   y: 0,
   width: 10,
   height: 10,
   text: 'A',
-}
-const fileNode: SpatialNode = {
+})
+const fileNode: SpatialNode = buildFileNode({
   id: 'f',
-  type: 'file',
   x: 0,
   y: 0,
   width: 10,
   height: 10,
   file: 'doc-1',
-}
+})
 
 const emptyRegistry = createFacetRegistry([])
 const nodeFacetRegistry = createFacetRegistry([
@@ -176,24 +178,22 @@ describe('nodeMenuItems', () => {
   })
 
   it('excludes a LOCKED edge whose both endpoints are inside the multi-selection from the area recolor', () => {
-    const nodeA: SpatialNode = {
+    const nodeA: SpatialNode = buildTextNode({
       id: 'a',
-      type: 'text',
       x: 0,
       y: 0,
       width: 10,
       height: 10,
       text: 'A',
-    }
-    const nodeB: SpatialNode = {
+    })
+    const nodeB: SpatialNode = buildTextNode({
       id: 'b',
-      type: 'text',
       x: 20,
       y: 0,
       width: 10,
       height: 10,
       text: 'B',
-    }
+    })
     const canvas: SpatialCanvas = {
       nodes: [nodeA, nodeB],
       edges: [
@@ -233,7 +233,14 @@ describe('nodeMenuItems', () => {
 
 describe('Comment on selection', () => {
   it('opens a compose about every member, at the corner of the box they occupy', () => {
-    const b: SpatialNode = { id: 'b', type: 'text', x: 40, y: 20, width: 10, height: 30, text: 'B' }
+    const b: SpatialNode = buildTextNode({
+      id: 'b',
+      x: 40,
+      y: 20,
+      width: 10,
+      height: 30,
+      text: 'B',
+    })
     const canvas: SpatialCanvas = { nodes: [textNode, b], edges: [] }
     const setCommentCompose = vi.fn()
     const items = nodeMenuItems(

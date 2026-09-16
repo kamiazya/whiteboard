@@ -31,7 +31,7 @@
  */
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
@@ -212,13 +212,26 @@ function storedWaypoints(canvas: SpatialCanvas, edgeId: string): readonly Point[
   return edge?.bends ?? []
 }
 
+/**
+ * What a gesture records about the node it started on, so it can abandon
+ * itself if that node becomes something else mid-drag. `''` for a node
+ * showing a resource this build cannot read: one class, and every such node
+ * compares equal to every other, which is the same thing the old
+ * `node.type` did for the four arms it knew.
+ */
+function startKindOf(node: SpatialNode): string {
+  return nodeKind(node) ?? ''
+}
+
 function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean {
   switch (state.kind) {
     case 'idle':
       return true
     case 'moving':
-    case 'resizing':
-      return findNode(canvas, state.nodeId)?.type === state.startType
+    case 'resizing': {
+      const target = findNode(canvas, state.nodeId)
+      return target !== undefined && startKindOf(target) === state.startType
+    }
     case 'connecting':
       return findNode(canvas, state.fromNodeId) !== undefined
     case 'editing-text': {
@@ -277,7 +290,7 @@ function reducePointerDown(
     state: {
       kind: 'moving',
       nodeId: event.nodeId,
-      startType: node.type,
+      startType: startKindOf(node),
       startPoint: event.point,
       startX: node.x,
       startY: node.y,
@@ -296,7 +309,7 @@ function reducePointerDownHandle(
   return stateOnly({
     kind: 'resizing',
     nodeId: event.nodeId,
-    startType: node.type,
+    startType: startKindOf(node),
     handle: event.handle,
     startPoint: event.point,
     startBox: event.box,
@@ -439,12 +452,11 @@ export const NEW_NODE_HEIGHT = 100
 function newTextNodeAt(point: Point, id: string): SpatialNode {
   return {
     id,
-    type: 'text',
     x: Math.round(point.x - NEW_NODE_WIDTH / 2),
     y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
     width: NEW_NODE_WIDTH,
     height: NEW_NODE_HEIGHT,
-    text: '',
+    resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: '' },
   }
 }
 

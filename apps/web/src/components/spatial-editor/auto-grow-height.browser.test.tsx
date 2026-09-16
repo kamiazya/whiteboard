@@ -6,6 +6,7 @@
 // stays at its authored size, and manual enlargement is never fought).
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -66,7 +67,7 @@ it('committing a tall body grows the node height to contain it', async () => {
   await editNodeText(container, TALL_BODY)
 
   const node = latest.canvas.nodes.find((n) => n.id === 'n1')
-  expect(node?.type === 'text' ? node.text : undefined).toBe(TALL_BODY)
+  expect(node === undefined ? undefined : nodeText(node)).toBe(TALL_BODY)
   // Seven laid-out lines cannot fit 60px; the box must have grown. The exact
   // value is measurement-dependent — the contract is containment, so assert
   // a clear lower bound rather than a golden number.
@@ -85,6 +86,6 @@ it('committing a short body into a roomy box leaves its height alone (grow-only)
   await editNodeText(container, 'ok')
 
   const node = latest.canvas.nodes.find((n) => n.id === 'n1')
-  expect(node?.type === 'text' ? node.text : undefined).toBe('ok')
+  expect(node === undefined ? undefined : nodeText(node)).toBe('ok')
   expect(node?.height).toBe(180)
 })

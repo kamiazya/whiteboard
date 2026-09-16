@@ -32,6 +32,7 @@ import {
   type EdgeRoutingStyle,
   endIn,
   endNode,
+  isFrame,
   isSelfLoop,
   type LineJumps,
   nodeFile,
@@ -652,11 +653,11 @@ function createGroup(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
 }
 
 function setGroupLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && node.type === 'group')) return canvas
+  if (!canvas.nodes.some((node) => node.id === id && isFrame(node))) return canvas
   return {
     ...canvas,
     nodes: canvas.nodes.map((node) => {
-      if (node.id !== id || node.type !== 'group') return node
+      if (node.id !== id || !isFrame(node)) return node
       const { label: _removed, ...rest } = node
       return label === '' ? rest : { ...rest, label }
     }),
@@ -669,11 +670,11 @@ function setGroupBackground(
   background: string | undefined,
   backgroundStyle: 'cover' | 'ratio' | 'repeat' | undefined,
 ): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && node.type === 'group')) return canvas
+  if (!canvas.nodes.some((node) => node.id === id && isFrame(node))) return canvas
   return {
     ...canvas,
     nodes: canvas.nodes.map((node) => {
-      if (node.id !== id || node.type !== 'group') return node
+      if (node.id !== id || !isFrame(node)) return node
       const { background: _bg, backgroundStyle: _style, ...rest } = node
       if (background === undefined) return rest
       return {

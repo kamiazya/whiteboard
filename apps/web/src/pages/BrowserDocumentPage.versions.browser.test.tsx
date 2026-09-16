@@ -8,6 +8,8 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -38,7 +40,7 @@ function render(ui: ReactElement) {
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
     edges: [],
   })
   doc.commit()
@@ -71,7 +73,7 @@ async function storedText(documentId: string): Promise<string | undefined> {
   const record = await new BrowserWorkspaceDocs().open(getBrowserWorkspaceId())
   const projected = record === null ? null : projectWorkspaceDocument(record, documentId)
   const node = projected === null ? undefined : readSpatialCanvas(projected).nodes[0]
-  return node?.type === 'text' ? node.text : undefined
+  return node === undefined ? undefined : nodeText(node)
 }
 
 async function writeBody(documentId: string, body: string): Promise<void> {

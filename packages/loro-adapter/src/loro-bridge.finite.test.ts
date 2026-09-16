@@ -5,21 +5,23 @@
 // loss across every synced peer. The write path therefore refuses
 // non-finite geometry loudly — a thrown TypeError at the buggy call site
 // beats a node quietly vanishing everywhere else.
+
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas, writeSpatialCanvas, writeSpatialNode } from './loro-bridge.js'
 
-const node = (overrides: Partial<SpatialNode>): SpatialNode => ({
-  id: 'n1',
-  type: 'text',
-  x: 0,
-  y: 0,
-  width: 100,
-  height: 60,
-  text: 'x',
-  ...overrides,
-})
+const node = (overrides: Partial<SpatialNode>): SpatialNode =>
+  textNode({
+    id: 'n1',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 60,
+    text: 'x',
+    ...overrides,
+  })
 
 describe('finite-geometry write guard', () => {
   for (const [field, value] of [

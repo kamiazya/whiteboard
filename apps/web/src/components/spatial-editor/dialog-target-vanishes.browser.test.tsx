@@ -14,7 +14,7 @@
 // GONE rather than that some later write was refused.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -26,15 +26,14 @@ afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [
-    {
+    linkNode({
       id: 'l1',
-      type: 'link',
       x: 100,
       y: 100,
       width: 200,
       height: 60,
       url: 'https://example.com/a',
-    },
+    }),
     fileNode({ id: 'f1', x: 100, y: 300, width: 200, height: 60, file: 'notes/one.md' }),
   ],
   edges: [],

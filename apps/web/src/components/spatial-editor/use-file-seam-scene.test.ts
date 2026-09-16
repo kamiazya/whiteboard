@@ -5,9 +5,11 @@
  * and the budget — at the layer they live, where each case is a zoom
  * number instead of a mounted editor.
  */
+
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { fileNode as buildFileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useFileSeamScene } from './use-file-seam-scene.js'
@@ -16,7 +18,7 @@ const measure: MeasureText = () => ({ advanceWidth: 0, ascent: 0, descent: 0, li
 const references = referenceSeams(new Map())
 
 function fileNode(id: string, width: number, height: number): SpatialNode {
-  return { id, type: 'file', file: `doc-${id}`, x: 0, y: 0, width, height }
+  return buildFileNode({ id, file: `doc-${id}`, x: 0, y: 0, width, height })
 }
 
 function canvasOf(nodes: readonly SpatialNode[]): SpatialCanvas {

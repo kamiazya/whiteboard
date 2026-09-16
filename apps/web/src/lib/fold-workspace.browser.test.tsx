@@ -6,12 +6,14 @@
  * built around — Loro's async import cannot live inside a versionchange
  * transaction — only exists here.
  */
+
 import {
   documentContainers,
   readSpatialCanvas,
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -59,7 +61,7 @@ it('folds every indexed document into the workspace document, content included',
       .sort(),
   ).toEqual(['archive/notes', 'design'])
   const canvas = readSpatialCanvas(documentContainers(workspace, designId))
-  expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('from design')
+  expect(canvas.nodes[0] === undefined ? null : nodeText(canvas.nodes[0])).toBe('from design')
 })
 
 it('is idempotent, and picks up documents created between runs', async () => {

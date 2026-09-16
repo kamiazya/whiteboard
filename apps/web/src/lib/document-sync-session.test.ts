@@ -33,6 +33,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { withNodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -255,7 +256,7 @@ describe('createDocumentSyncSession', () => {
     doc.import(makeSnapshot(canvas))
     writeSpatialCanvas(doc, {
       ...canvas,
-      nodes: [{ ...TEXT_NODE_A, text: 'changed' }, TEXT_NODE_B],
+      nodes: [withNodeText(TEXT_NODE_A, 'changed'), TEXT_NODE_B],
     })
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
@@ -594,7 +595,7 @@ describe('createDocumentSyncSession', () => {
 
     const doc = new LoroDoc()
     doc.import(makeSnapshot(canvas))
-    const changed = { ...canvas, nodes: [{ ...TEXT_NODE_A, text: 'changed' }, TEXT_NODE_B] }
+    const changed = { ...canvas, nodes: [withNodeText(TEXT_NODE_A, 'changed'), TEXT_NODE_B] }
     writeSpatialCanvas(doc, changed)
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
@@ -634,7 +635,7 @@ describe('createDocumentSyncSession', () => {
     // publishes — so trigger one via a remote update to assert delivery.
     const doc = new LoroDoc()
     doc.import(makeSnapshot(canvas))
-    const patched = { ...canvas, nodes: [{ ...TEXT_NODE_A, text: 'changed' }, TEXT_NODE_B] }
+    const patched = { ...canvas, nodes: [withNodeText(TEXT_NODE_A, 'changed'), TEXT_NODE_B] }
     writeSpatialCanvas(doc, patched)
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
@@ -1161,7 +1162,7 @@ describe('createDocumentSyncSession', () => {
     peerDoc.import(snapshotBytes)
     writeSpatialCanvas(peerDoc, {
       ...twoNodeCanvas(),
-      nodes: [TEXT_NODE_A, { ...TEXT_NODE_B, text: 'renamed-by-peer' }],
+      nodes: [TEXT_NODE_A, withNodeText(TEXT_NODE_B, 'renamed-by-peer')],
     })
 
     const merged = new LoroDoc()
@@ -2182,7 +2183,7 @@ describe('createDocumentSyncSession', () => {
       peerDoc.import(snapshotBytes)
       writeSpatialCanvas(peerDoc, {
         ...base,
-        nodes: [TEXT_NODE_A, { ...TEXT_NODE_B, text: 'renamed-by-peer' }],
+        nodes: [TEXT_NODE_A, withNodeText(TEXT_NODE_B, 'renamed-by-peer')],
       })
       const merged = new LoroDoc()
       merged.import(snapshotBytes)

@@ -31,7 +31,7 @@ const canvasWith = (...files: string[]): SpatialCanvas => ({
 })
 
 const embedded = (text: string): SpatialCanvas => ({
-  nodes: [{ id: 'e', type: 'text', x: 0, y: 0, width: 1, height: 1, text }],
+  nodes: [textNode({ id: 'e', x: 0, y: 0, width: 1, height: 1, text })],
   edges: [],
 })
 

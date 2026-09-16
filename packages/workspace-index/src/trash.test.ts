@@ -10,6 +10,7 @@
  */
 
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -131,7 +132,7 @@ describe('deleting a document', () => {
     expect(await index.resolveDocumentById({ workspaceId: WS, documentId })).not.toBeNull()
     // Content, not just placement.
     const node = readSpatialCanvas(index.documentContainers(docs.peek(WS), documentId)).nodes[0]
-    expect(node?.type === 'text' ? node.text : null).toBe('important')
+    expect(node === undefined ? null : nodeText(node)).toBe('important')
     // Off the trash listing once it is back.
     expect(await index.listTrash({ workspaceId: WS })).toHaveLength(0)
   })

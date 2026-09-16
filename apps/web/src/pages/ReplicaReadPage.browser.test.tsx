@@ -14,6 +14,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
@@ -151,9 +152,7 @@ describe('ReplicaReadPage', () => {
     await vi.waitFor(async () => {
       const record = await new BrowserWorkspaceDocs().open(DAEMON_WS)
       const canvas = readSpatialCanvas(documentContainers(record!, DOC_SP))
-      expect(canvas.nodes.map((n) => (n.type === 'text' ? n.text : ''))).toContain(
-        'offline sketch note',
-      )
+      expect(canvas.nodes.map((n) => nodeText(n) ?? '')).toContain('offline sketch note')
       // The record today's schema cannot read is still there, untouched.
       expect(documentContainers(record!, DOC_SP).getMap('nodes').get('from-the-future')).toEqual({
         type: 'hologram',

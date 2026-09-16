@@ -15,6 +15,7 @@ import {
   nodeFile,
   nodeSubpath,
   nodeText,
+  nodeUrl,
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
@@ -249,7 +250,7 @@ export function nodeMenuItems({
       })
     }
   }
-  if (node.type === 'link') {
+  if (nodeUrl(node) !== undefined) {
     verbs.push({
       label: 'Open link',
       icon: <ExternalLink />,

@@ -5,7 +5,7 @@
 // what lets foreign text degrade into a note.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endNode } from '@kamiazya/whiteboard-model'
+import { endNode, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -195,7 +195,7 @@ it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON c
 
   // Each paste re-parses the SAME text, exactly like repeated Ctrl+V.
   dispatchClipboard(root, 'paste', clipboardWith(written))
-  const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
+  const pasted = latest.canvas.nodes.find((n) => nodeText(n) === 'A')
   expect(latest.canvas.edges).toHaveLength(1)
   const restored = latest.canvas.edges[0]
   expect([endNode(restored.from), endNode(restored.to)].sort()).toEqual([pasted?.id, 'b'].sort())

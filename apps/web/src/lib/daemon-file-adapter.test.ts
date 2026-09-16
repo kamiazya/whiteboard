@@ -4,11 +4,13 @@
  * daemon page passed no seams at all, so canvas embeds (J5a) and image nodes
  * (J5b) silently did nothing there while working in browser mode.
  */
+
 import {
   writeCoreFacets,
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
@@ -21,7 +23,7 @@ const path = 'my-canvas'
 function snapshotOf(text: string): Uint8Array {
   const doc = new Loro()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text })],
     edges: [],
   })
   return doc.export({ mode: 'snapshot' })

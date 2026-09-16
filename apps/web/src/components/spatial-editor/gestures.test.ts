@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createIdleState, reduceGesture } from './gestures.js'
@@ -701,7 +702,7 @@ describe('cancel-text-edit removes a node that only existed for the cancelled ed
     const cancelled = reduceGesture(editing.state, c, { type: 'cancel-text-edit' })
     expect(cancelled.commands).toEqual([])
     const node = c.nodes[0]
-    expect(node?.type === 'text' ? node.text : undefined).toBe('hi')
+    expect(node === undefined ? undefined : nodeText(node)).toBe('hi')
   })
 
   it('keeps a created node whose text was committed', () => {

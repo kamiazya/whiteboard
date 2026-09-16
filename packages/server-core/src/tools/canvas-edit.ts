@@ -49,7 +49,6 @@ import {
   draftContent,
   type geometryEntrySchema,
   type NodeDraft,
-  publishedKind,
   type Target,
 } from './canvas-edit-ops.js'
 import {
@@ -67,6 +66,7 @@ import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
+import { publishedKind } from './published-node-kind.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 
 export { canvasEditInputSchema } from './canvas-edit-ops.js'

@@ -1,8 +1,10 @@
 // Tier 1's vessel: every registered facet a node can carry is visible and
 // editable here, including the ones no quick band knows about — the gap an
 // agent's MCP write otherwise falls into.
+
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 // STATIC, and load-bearing rather than convenience. `visual.symbol`'s
 // catalog reaches its rows through `await import('./emoji/sections.js')`,
@@ -71,16 +73,16 @@ const flow = definePlugin({
 })
 const registry = createFacetRegistry([...bundledPlugins, plain, flow])
 
-const node = (facets?: Record<string, unknown>): SpatialNode => ({
-  id: 'n1',
-  type: 'text',
-  x: 0,
-  y: 0,
-  width: 100,
-  height: 60,
-  text: '',
-  ...(facets === undefined ? {} : { facets }),
-})
+const node = (facets?: Record<string, unknown>): SpatialNode =>
+  textNode({
+    id: 'n1',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 60,
+    text: '',
+    ...(facets === undefined ? {} : { facets }),
+  })
 
 describe('FacetFormPanel', () => {
   it('lists every node-target facet under its plugin heading, widget or not', () => {

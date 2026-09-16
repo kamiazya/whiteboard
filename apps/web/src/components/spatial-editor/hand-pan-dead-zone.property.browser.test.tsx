@@ -22,7 +22,7 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
  * a press.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -56,33 +56,30 @@ const board: SpatialCanvas = {
     textNode({ id: 't2', x: 260, y: 140, width: 220, height: 120, text: 'two' }),
     textNode({ id: 't3', x: 120, y: 300, width: 240, height: 140, text: 'three' }),
     fileNode({ id: 'f1', x: 380, y: 300, width: 320, height: 240, file: 'ref-1' }),
-    {
+    linkNode({
       id: 'l1',
-      type: 'link',
       x: 700,
       y: 60,
       width: 400,
       height: 300,
       url: 'https://example.com/a',
-    },
-    {
+    }),
+    linkNode({
       id: 'l2',
-      type: 'link',
       x: 700,
       y: 420,
       width: 400,
       height: 300,
       url: 'https://example.com/b',
-    },
-    {
+    }),
+    linkNode({
       id: 'l3',
-      type: 'link',
       x: 60,
       y: 560,
       width: 400,
       height: 300,
       url: 'https://example.com/c',
-    },
+    }),
   ],
   edges: [
     {
