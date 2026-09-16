@@ -1,6 +1,6 @@
 # ADR-0040: Scoped tags are the one classification vocabulary, on documents, boards, nodes and edges
 
-**Status:** Proposed — for the human gate. Supersedes the part of
+**Status:** Accepted — human gate 2026-09-16 (edges included in the first scope at the owner's request). Supersedes the part of
 [ADR-0009](0009-mcp-tool-naming.md) decision 3 that left a spatial document
 without `tags`, and [ADR-0036](0036-semantic-axes.md) §6's `semantic.class/v0`,
 which retires unshipped. Extends [ADR-0013](0013-facet-system.md) (core
