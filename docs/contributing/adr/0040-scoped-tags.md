@@ -115,23 +115,32 @@ surprises:
 
 - **Search.** `wb_document_search`'s `tags` filter matches an object that
   carries every listed tag exactly, as today. A spatial document matches when
-  its board or any of its nodes carries the tags; the answer names the
-  matching nodes as excerpts. No wildcard in this decision; a key filter
+  its board, any of its nodes or any of its edges carries the tags; the
+  answer names the matching nodes and edges as excerpts, an edge by its
+  label or its two ends. No wildcard in this decision; a key filter
   (`health:*`) is a later addition if the lane asks for it.
-- **The facet score.** A key K is a PARTITION of a board's boxes when every
-  box that carries K carries exactly one value under K. It is then a
-  partition by construction, needing no declaration — the reading
-  `semantic.class/v0` had. When any box carries two or more values under K,
-  K is not a partition: the score reports it as `multi` with the count of
-  such boxes, and no channel can read `carried(K)`. A key that is a partition
-  on one board and `multi` on another is judged per board, because that is
-  the truth of each board. Plain tags are multi-valued by nature and are
-  never a partition; the board's own tags are one object's and are not one
-  either. This is the principled reading ADR-0033 asked for: tags in general
-  are not a partition, scoped keys used one-per-box are.
+- **The facet score.** The population is EVERY box on the board, tagged or
+  not, exactly as it is for the three partitions the score already knows:
+  a box carrying no value under K is its own class, the way a box wearing
+  no stencil is the `''` class today, so a half-classified board still
+  reads and is not silently narrowed to the boxes somebody got round to.
+  A key K is then a PARTITION when every box carries at most one value
+  under K — needing no declaration, the reading `semantic.class/v0` had —
+  and colour is `carried(K)` only when it is constant within every class,
+  the untagged class included: five failing boxes in red and one untagged
+  box in red read as carried, one untagged box in green reads as contested.
+  When any box carries two or more values under K, K is not a partition:
+  the score reports it as `multi` with the count of such boxes, and no
+  channel can read `carried(K)`. A key that is a partition on one board and
+  `multi` on another is judged per board, because that is the truth of
+  each board. Plain tags are multi-valued by nature and are never a
+  partition; the board's own tags are one object's and are not one either.
+  This is the principled reading ADR-0033 asked for: tags in general are
+  not a partition, scoped keys used at most once per box are.
 
-  Edges get the same reading over their own population: a key partitions a
-  board's edges when every edge carrying it carries one value, `multi`
+  Edges get the same reading over their own population, every edge on the
+  board with the untagged ones as their own class: a key partitions a
+  board's edges when every edge carries at most one value under it, `multi`
   otherwise, judged separately from the boxes — a key can partition the
   boxes and be `multi` on the edges. The score reads NO edge channel today
   (its channels are a box's colour and shape), so this decision adds one,
@@ -172,11 +181,11 @@ manage.
 
 **In use** (this decision, first increments): the vocabulary a workspace has
 already spent. A read tool answers, per workspace, every tag with its count
-by object kind, grouped by key for scoped ones — the same shape the editor's
-suggestions are built from. Rename and merge are bulk writes over the
-workspace: `rename` turns every `health:degraded` into `health:failing`
-across documents, boards and nodes in one operation, and is what makes a
-typo recoverable. Whether these ride `wb_facet_set`'s `tags` change with a
+by object kind, grouped by key for scoped ones, counted separately for documents, boards, nodes
+and edges — the same shape the editor's suggestions are built from. Rename
+and merge are bulk writes over the workspace: `rename` turns every
+`health:degraded` into `health:failing` across documents, boards, nodes
+and edges in one operation, and is what makes a typo recoverable. Whether these ride `wb_facet_set`'s `tags` change with a
 workspace-wide target or a tool of their own is priced on ADR-0031's
 scoreboards by the increment, not decided here.
 
@@ -215,8 +224,10 @@ warned against.
 
 Two changes reach what a model reads and each runs ADR-0031's ladder:
 
-- `wb_facet_set` accepts `tags` with a `nodeId` and on a spatial document,
-  which is a description change (rung 1) and a lane task (rung 3): the
+- `wb_facet_set` accepts `tags` on a spatial document, with a `nodeId`, and
+  with an `edgeId` — the edge target it already takes for facets, validated
+  the same way (the edge must exist on the one document named) — which is a
+  description change (rung 1) and a lane task (rung 3): the
   "tell two things apart" task, unchanged, with its verifier reading scoped
   tags. That reading is round 19. The twenty-second reading's open question
   — whether the prompt should ask for the meaning to be recorded — is still
