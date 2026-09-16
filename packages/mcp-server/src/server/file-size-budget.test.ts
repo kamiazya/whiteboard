@@ -111,7 +111,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `set-edge-side` grew a real branch — only a node end has a side to pin,
   // so the write is a no-op on a free one. The width is the branch, not
   // ceremony: the flat version could not have had it.
-  'apps/web/src/lib/spatial/commands.ts': 1064,
+  // +35 for ADR-0040's tag writes: three union arms (`set-node-tags`,
+  // `set-edge-tags`, `set-canvas-tags`) and their cases, each a whole-list
+  // write through `lib/spatial/tags.ts`'s `withTagList`, where the set and
+  // canonical-emptiness rules live rather than here.
+  'apps/web/src/lib/spatial/commands.ts': 1099,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -446,7 +450,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `lib/spatial/viewport.ts` — an overlay taking its own press needs the
   // same client-to-root mapping, and two of them is how the pointer and the
   // geometry come to disagree about where a press landed.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2785,
+  // +31 for the Facets panel's tag row (ADR-0040 decision 6): the write
+  // that fans a tag edit out over the selection as a CHANGE to each box's
+  // own list (`retag`), beside the facet write that already fans out.
+  // +8: the tag fan-out reads each object's CURRENT tags off the eager
+  // chain's ref rather than the prop, so a second commit under a slow
+  // parent cannot erase the first.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2824,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

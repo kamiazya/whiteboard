@@ -1320,3 +1320,74 @@ describe('set-edge-facet', () => {
     ).toBe(next)
   })
 })
+
+// ADR-0040's tag writes: a WHOLE list per object, so the command carries the
+// value the way `set-edge-bends` does rather than an add/remove pair — the
+// chips editor already holds the list, and an empty one is spelled as the
+// absence it means.
+describe('set-node-tags / set-edge-tags / set-canvas-tags', () => {
+  const board = (): SpatialCanvas => ({
+    nodes: [
+      textNode({ id: 'a', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+      textNode({ id: 'b', text: 'b', x: 50, y: 50, width: 10, height: 10, tags: ['keep:me'] }),
+    ],
+    edges: [
+      { id: 'e1', from: { node: 'a' }, to: { node: 'b' } },
+      { id: 'e2', from: { node: 'b' }, to: { node: 'a' }, tags: ['link:ok'] },
+    ],
+  })
+  const nodeTags = (canvas: SpatialCanvas, id: string) =>
+    canvas.nodes.find((node) => node.id === id)?.tags
+  const edgeTags = (canvas: SpatialCanvas, id: string) =>
+    canvas.edges.find((edge) => edge.id === id)?.tags
+
+  it('writes the list on the named node and leaves its neighbour alone', () => {
+    const next = applyCommand(board(), {
+      kind: 'set-node-tags',
+      id: 'a',
+      tags: ['health:ok', 'draft'],
+    })
+    expect(nodeTags(next, 'a')).toEqual(['health:ok', 'draft'])
+    expect(nodeTags(next, 'b')).toEqual(['keep:me'])
+  })
+
+  it('an empty list removes the field, so a box that was tagged and untagged serializes like one never tagged', () => {
+    const next = applyCommand(board(), { kind: 'set-node-tags', id: 'b', tags: [] })
+    expect(next.nodes.find((node) => node.id === 'b')).not.toHaveProperty('tags')
+  })
+
+  it('a duplicate in the list is written once — a tag list is a set', () => {
+    const next = applyCommand(board(), {
+      kind: 'set-node-tags',
+      id: 'a',
+      tags: ['x', 'x', 'y'],
+    })
+    expect(nodeTags(next, 'a')).toEqual(['x', 'y'])
+  })
+
+  it('is a no-op, by reference, for a node that is gone', () => {
+    const before = board()
+    expect(applyCommand(before, { kind: 'set-node-tags', id: 'ghost', tags: ['x'] })).toBe(before)
+  })
+
+  it('the edge twin writes one edge and leaves the other', () => {
+    const next = applyCommand(board(), { kind: 'set-edge-tags', id: 'e1', tags: ['link:slow'] })
+    expect(edgeTags(next, 'e1')).toEqual(['link:slow'])
+    expect(edgeTags(next, 'e2')).toEqual(['link:ok'])
+    const cleared = applyCommand(next, { kind: 'set-edge-tags', id: 'e2', tags: [] })
+    expect(cleared.edges.find((edge) => edge.id === 'e2')).not.toHaveProperty('tags')
+    expect(applyCommand(cleared, { kind: 'set-edge-tags', id: 'ghost', tags: ['x'] })).toBe(cleared)
+  })
+
+  it('the canvas twin writes the board’s own tags, and an empty list leaves the envelope clean', () => {
+    const before = board()
+    const tagged = applyCommand(before, { kind: 'set-canvas-tags', tags: ['team:core'] })
+    expect(tagged.tags).toEqual(['team:core'])
+    // Nothing else on the envelope moves, and no node or edge is touched:
+    // the same references, not equal copies.
+    expect(tagged.nodes).toBe(before.nodes)
+    expect(tagged.edges).toBe(before.edges)
+    const cleared = applyCommand(tagged, { kind: 'set-canvas-tags', tags: [] })
+    expect(cleared).not.toHaveProperty('tags')
+  })
+})

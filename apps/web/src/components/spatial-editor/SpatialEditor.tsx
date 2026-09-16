@@ -100,6 +100,7 @@ import {
 } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
+import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import {
   canvasToScreen,
   clientPointToRootLocal,
@@ -2735,7 +2736,53 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // second classification is a pick. Recomputed per render
                 // while the panel is open: one pass over the nodes' facets.
                 suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
+                tagSuggestions={collectCanvasTags(canvas)}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
+                onTagsChange={(after) => {
+                  // Every write is the CHANGE the row showed being made,
+                  // applied to the object's tags as the eager chain holds
+                  // them (`canvasRef.current`), never the shown list copied
+                  // over: under a slow parent the row still shows the list
+                  // before the previous commit landed, and on a selection
+                  // of five the four other boxes carry tags of their own.
+                  if (edgeTarget !== undefined) {
+                    const current = canvasRef.current.edges.find((e) => e.id === edgeTarget.id)
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        {
+                          kind: 'set-edge-tags' as const,
+                          id: edgeTarget.id,
+                          tags: retag(current?.tags, edgeTarget.tags ?? [], after),
+                        },
+                      ],
+                    })
+                    return
+                  }
+                  const before = target?.tags ?? []
+                  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
+                  const ids =
+                    target !== undefined && members.has(target.id)
+                      ? [...members]
+                      : target === undefined
+                        ? []
+                        : [target.id]
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: ids.flatMap((id) => {
+                      const node = canvasRef.current.nodes.find((entry) => entry.id === id)
+                      return node === undefined
+                        ? []
+                        : [
+                            {
+                              kind: 'set-node-tags' as const,
+                              id,
+                              tags: retag(node.tags, before, after),
+                            },
+                          ]
+                    }),
+                  })
+                }}
                 onWrite={(key, payload) => {
                   if (edgeTarget !== undefined) {
                     // One edge, because an edge selection is one edge —

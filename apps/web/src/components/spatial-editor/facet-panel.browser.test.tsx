@@ -7,7 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -96,4 +96,120 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   fireEvent.pointerDown(root, { clientX: 20, clientY: 400, button: 0, pointerId: 7 })
   fireEvent.pointerUp(root, { clientX: 20, clientY: 400, button: 0, pointerId: 7 })
   expect(container.querySelector('[data-testid="facet-form-panel"]')).toBeNull()
+})
+
+// ADR-0040 decision 6: a box is tagged from the same panel, and a tag
+// finished there lands on every selected box — as the CHANGE made (the tag
+// added), not the shown list copied over each box's own tags.
+it('a tag finished in the panel’s tag row lands on every selected box, keeping each box’s own tags', () => {
+  const start: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'a', x: 80, y: 80, width: 200, height: 100, text: 'A' }),
+      textNode({ id: 'b', x: 400, y: 80, width: 200, height: 100, text: 'B', tags: ['tier:web'] }),
+    ],
+    edges: [],
+  }
+  const latest: { canvas: SpatialCanvas } = { canvas: start }
+  function Host() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+  // Select A, then shift-select B, and open the panel on A.
+  fireEvent.pointerDown(root, {
+    clientX: r.left + 180,
+    clientY: r.top + 130,
+    button: 0,
+    pointerId: 1,
+  })
+  fireEvent.pointerUp(root, {
+    clientX: r.left + 180,
+    clientY: r.top + 130,
+    button: 0,
+    pointerId: 1,
+  })
+  fireEvent.pointerDown(root, {
+    clientX: r.left + 500,
+    clientY: r.top + 130,
+    button: 0,
+    pointerId: 2,
+    shiftKey: true,
+  })
+  fireEvent.pointerUp(root, {
+    clientX: r.left + 500,
+    clientY: r.top + 130,
+    button: 0,
+    pointerId: 2,
+    shiftKey: true,
+  })
+  fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  const entry = [...menu.querySelectorAll('button')].find((b) => b.textContent?.includes('Facets'))
+  fireEvent.click(entry as HTMLElement)
+  const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
+
+  const box = panel.querySelector('input[aria-label="Add tag"]') as HTMLInputElement
+  expect(box).not.toBeNull()
+  fireEvent.change(box, { target: { value: 'health:ok' } })
+  fireEvent.keyDown(box, { key: 'Enter' })
+
+  expect(latest.canvas.nodes.find((n) => n.id === 'a')?.tags).toEqual(['health:ok'])
+  expect(latest.canvas.nodes.find((n) => n.id === 'b')?.tags).toEqual(['tier:web', 'health:ok'])
+  // The chip shows on the panel, with its own remove control.
+  expect(panel.querySelector('button[aria-label="Remove tag health:ok"]')).not.toBeNull()
+})
+
+// The same slow-parent case on a box: the panel still shows the list from
+// before the first commit landed, and the second write must not erase it.
+it('two tags finished in the panel under a deferred parent both land on the box', async () => {
+  const latest: { canvas: SpatialCanvas } = { canvas: initial }
+  function DeferredHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => {
+            setTimeout(() => {
+              latest.canvas = next
+              setCanvas(next)
+            }, 30)
+          }}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<DeferredHost />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  const entry = [...menu.querySelectorAll('button')].find((b) => b.textContent?.includes('Facets'))
+  fireEvent.click(entry as HTMLElement)
+  const box = () =>
+    container.querySelector(
+      '[data-testid="facet-form-panel"] input[aria-label="Add tag"]',
+    ) as HTMLInputElement
+  fireEvent.change(box(), { target: { value: 'health:ok' } })
+  fireEvent.keyDown(box(), { key: 'Enter' })
+  fireEvent.change(box(), { target: { value: 'tier:web' } })
+  fireEvent.keyDown(box(), { key: 'Enter' })
+  await vi.waitFor(() =>
+    expect(latest.canvas.nodes.find((n) => n.id === 'a')?.tags).toEqual(['health:ok', 'tier:web']),
+  )
 })

@@ -89,6 +89,7 @@ describe('FacetFormPanel', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
+        onTagsChange={() => {}}
       />,
     )
     expect(screen.getByText('Planning')).not.toBeNull()
@@ -107,6 +108,7 @@ describe('FacetFormPanel', () => {
         }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     const input = screen.getByLabelText('Due Date') as HTMLInputElement
@@ -124,6 +126,7 @@ describe('FacetFormPanel', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     // `date` is required and empty: the registry's own write validation is
@@ -143,6 +146,7 @@ describe('FacetFormPanel', () => {
         }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Clear Due' }))
@@ -162,6 +166,7 @@ describe('control kinds the derived form emits', () => {
         }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     // Switching arms must not carry the previous arm's field into the
@@ -181,6 +186,7 @@ describe('control kinds the derived form emits', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     fireEvent.change(screen.getByLabelText('Due Date'), {
@@ -204,6 +210,7 @@ describe("the panel honours a facet's declared editor", () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
+        onTagsChange={() => {}}
       />,
     )
     // visual.shape declares label 'Shape' and a segmented control; without
@@ -222,6 +229,7 @@ describe('the absence segment clears the facet, like the band does', () => {
         subject={{ kind: 'node' as const, node: node({ 'visual.shape/v0': { kind: 'hexagon' } }) }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     // `Rectangle` carries value: null — the facet's ABSENCE. Staging it in
@@ -243,6 +251,7 @@ describe('a draft never outlives what it was seeded from', () => {
         subject={{ kind: 'node' as const, node: stored }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Clear Due' }))
@@ -252,6 +261,7 @@ describe('a draft never outlives what it was seeded from', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
+        onTagsChange={() => {}}
         editors={{}}
       />,
     )
@@ -271,6 +281,7 @@ describe('a draft never outlives what it was seeded from', () => {
         }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     fireEvent.change(screen.getByLabelText('Mark Kind'), {
@@ -298,6 +309,7 @@ describe('the panel is bound to ONE node', () => {
         }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     // Edit node A's draft without saving, then retarget the panel at node B.
@@ -312,6 +324,7 @@ describe('the panel is bound to ONE node', () => {
         }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
 
@@ -330,6 +343,7 @@ describe('choices apply on pick; free entry still needs Save', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={(key, payload) => writes.push({ key, payload })}
+        onTagsChange={() => {}}
       />,
     )
     // The same facet reached from the quick band applies on tap; reaching
@@ -347,6 +361,7 @@ describe('choices apply on pick; free entry still needs Save', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => writes.push(1)}
+        onTagsChange={() => {}}
       />,
     )
     fireEvent.change(screen.getByLabelText('Due Date'), { target: { value: '2026-09-01' } })
@@ -363,6 +378,7 @@ describe('a segmented option draws its declared glyph', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
+        onTagsChange={() => {}}
       />,
     )
     // visual.shape declares a glyph per option. A picker that names shapes in
@@ -381,6 +397,7 @@ it('does not print a field label that repeats the facet name', () => {
       subject={{ kind: 'node' as const, node: node() }}
       registry={registry}
       onWrite={() => {}}
+      onTagsChange={() => {}}
     />,
   )
   // visual.shape declares label 'Shape' on its only field, under a heading
@@ -398,6 +415,7 @@ describe('a registered editor replaces the derived form', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     // The picker that used to live in the context menu now lives here, so
@@ -439,6 +457,7 @@ describe('a registered editor replaces the derived form', () => {
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
         editors={editors}
       />,
     )
@@ -478,6 +497,7 @@ describe('a registered editor is a COMPONENT, not a function the panel calls', (
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
+        onTagsChange={() => {}}
         editors={first}
       />,
     )
@@ -489,6 +509,7 @@ describe('a registered editor is a COMPONENT, not a function the panel calls', (
         subject={{ kind: 'node' as const, node: node() }}
         registry={registry}
         onWrite={() => {}}
+        onTagsChange={() => {}}
         editors={second}
       />,
     )
@@ -512,6 +533,7 @@ describe('the panel retargeted at an edge', () => {
         subject={{ kind: 'edge', edge: edge() }}
         registry={registry}
         onWrite={() => {}}
+        onTagsChange={() => {}}
       />,
     )
     // 'Edges' is the bundled visual.edges facet, now edge-target too; 'Due'
@@ -528,6 +550,7 @@ describe('the panel retargeted at an edge', () => {
         subject={{ kind: 'edge', edge: edge({ 'flow.route/v0': { hops: 2 } }) }}
         registry={registry}
         onWrite={onWrite}
+        onTagsChange={() => {}}
       />,
     )
     const field = screen.getByLabelText('Route Hops') as HTMLInputElement
@@ -538,7 +561,69 @@ describe('the panel retargeted at an edge', () => {
   })
 
   it('says so when nothing is selected, rather than showing an empty list', () => {
-    render(<FacetFormPanel subject={undefined} registry={registry} onWrite={() => {}} />)
+    render(
+      <FacetFormPanel
+        subject={undefined}
+        registry={registry}
+        onWrite={() => {}}
+        onTagsChange={() => {}}
+      />,
+    )
     expect(screen.getByText(/select a node or an edge/i)).toBeDefined()
+  })
+})
+
+// ADR-0040 decision 6: the tag row is on the same panel as the facets, AFTER
+// the plugin containers, for a node and for an edge alike.
+describe('the tag row', () => {
+  const edge = (): CanvasEdge => ({ id: 'e1', from: { node: 'a' }, to: { node: 'b' } })
+
+  it('sits after every plugin group, shows the subject’s chips, and writes the whole list', () => {
+    const onTagsChange = vi.fn()
+    render(
+      <FacetFormPanel
+        subject={{
+          kind: 'node' as const,
+          node: { ...node(), tags: ['health:ok'] },
+        }}
+        registry={registry}
+        onWrite={() => {}}
+        onTagsChange={onTagsChange}
+        tagSuggestions={['health:ok', 'health:failing']}
+      />,
+    )
+    const panel = screen.getByTestId('facet-form-panel')
+    const headings = [...panel.querySelectorAll('span')]
+      .map((el) => el.textContent)
+      .filter((text) => text === 'Planning' || text === 'Visual style' || text === 'Tags')
+    expect(headings).toEqual(['Planning', 'Visual style', 'Tags'])
+    expect(screen.getByText('health:ok')).not.toBeNull()
+
+    const box = screen.getByLabelText(/add tag/i)
+    fireEvent.change(box, { target: { value: 'tier:web' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(onTagsChange).toHaveBeenLastCalledWith(['health:ok', 'tier:web'])
+    fireEvent.click(screen.getByRole('button', { name: /remove tag health:ok/i }))
+    expect(onTagsChange).toHaveBeenLastCalledWith([])
+    // The board's vocabulary is offered under the key being typed.
+    fireEvent.change(box, { target: { value: 'health:' } })
+    expect(
+      [...panel.querySelectorAll('datalist option')].map((o) => o.getAttribute('value')),
+    ).toEqual(['health:failing', 'health:ok'])
+  })
+
+  it('an edge gets the same row', () => {
+    const onTagsChange = vi.fn()
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'edge', edge: { ...edge(), tags: ['link:ok'] } }}
+        registry={registry}
+        onWrite={() => {}}
+        onTagsChange={onTagsChange}
+      />,
+    )
+    expect(screen.getByText('link:ok')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /remove tag link:ok/i }))
+    expect(onTagsChange).toHaveBeenLastCalledWith([])
   })
 })
