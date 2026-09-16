@@ -5,7 +5,7 @@
 // what lets foreign text degrade into a note.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endNode, nodeText } from '@kamiazya/whiteboard-model'
+import { endNode, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -95,7 +95,9 @@ it('a native copy writes the fragment as JSON into text/plain', () => {
   const parsed = JSON.parse(written)
   expect(parsed.type).toBe('whiteboard/clipboard')
   expect(parsed.nodes).toHaveLength(1)
-  expect(parsed.nodes[0].text).toBe('A')
+  // The OS clipboard carries the MODEL's nodes, so the payload spells what
+  // the model stores — this is what a paste in another tab parses back.
+  expect(nodeText(parsed.nodes[0] as SpatialNode)).toBe('A')
 })
 
 it('pasting our JSON from another tab recreates the nodes with reminted ids', () => {
@@ -112,7 +114,7 @@ it('pasting our JSON from another tab recreates the nodes with reminted ids', ()
   dispatchClipboard(root, 'paste', clipboardWith(JSON.stringify(fragment)))
 
   expect(latest.canvas.nodes).toHaveLength(1)
-  expect(latest.canvas.nodes[0]).toMatchObject({ text: 'from-other-tab' })
+  expect(nodeText(latest.canvas.nodes[0] as SpatialNode)).toBe('from-other-tab')
   expect(latest.canvas.nodes[0].id).not.toBe('a')
   expect(latest.commands.at(-1)?.kind).toBe('batch')
 })
@@ -125,7 +127,7 @@ it('pasting arbitrary text degrades to a text node instead of doing nothing', ()
   dispatchClipboard(root, 'paste', clipboardWith('hello from a web page'))
 
   expect(latest.canvas.nodes).toHaveLength(1)
-  expect(latest.canvas.nodes[0]).toMatchObject({ type: 'text', text: 'hello from a web page' })
+  expect(nodeText(latest.canvas.nodes[0] as SpatialNode)).toBe('hello from a web page')
 })
 
 it('foreign JSON is treated as plain text, never as a fragment', () => {
@@ -137,7 +139,7 @@ it('foreign JSON is treated as plain text, never as a fragment', () => {
   dispatchClipboard(root, 'paste', clipboardWith(foreign))
 
   expect(latest.canvas.nodes).toHaveLength(1)
-  expect(latest.canvas.nodes[0]).toMatchObject({ type: 'text', text: foreign })
+  expect(nodeText(latest.canvas.nodes[0] as SpatialNode)).toBe(foreign)
 })
 
 it('an empty clipboard paste is a no-op', () => {
@@ -215,5 +217,5 @@ it('the in-app store still round-trips when the event carries no clipboardData',
   dispatchClipboard(root, 'paste', null)
 
   expect(latest.canvas.nodes).toHaveLength(2)
-  expect(latest.canvas.nodes[1]).toMatchObject({ text: 'A' })
+  expect(nodeText(latest.canvas.nodes[1] as SpatialNode)).toBe('A')
 })

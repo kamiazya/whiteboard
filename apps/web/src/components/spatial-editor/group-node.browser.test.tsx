@@ -5,7 +5,7 @@
 // the drag/double-press paths.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { isFrame } from '@kamiazya/whiteboard-model'
+import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -76,7 +76,7 @@ it('the palette Add group button creates an empty frame at the bottom of the z-o
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
   await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
-  expect(latest.canvas.nodes[0]).toMatchObject({ type: 'group' })
+  expect(isFrame(latest.canvas.nodes[0] as SpatialNode)).toBe(true)
   expect(latest.commands).toContain('create-group')
 })
 

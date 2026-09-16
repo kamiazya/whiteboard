@@ -9,6 +9,7 @@
 
 import { BODY_LINE_HEIGHT_PX } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -25,9 +26,8 @@ afterEach(cleanup)
 // fallback/kerning variance cannot flip a line count this discrete.
 const WRAPPING_TEXT = Array(24).fill('wrap').join(' ')
 
-const node = {
+const node = textNode({
   id: 'n1',
-  type: 'text' as const,
   x: 100,
   y: 100,
   width: 200,
@@ -39,7 +39,7 @@ const node = {
   // so it needs no clipping to report every line.
   height: 240,
   text: WRAPPING_TEXT,
-}
+})
 const start: SpatialCanvas = { nodes: [node], edges: [] }
 
 function Host() {

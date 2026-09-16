@@ -13,6 +13,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -112,12 +113,10 @@ describe('local rename follows references', () => {
     const doc = new Loro()
     doc.import(loaded.snapshot)
     const canvas = readSpatialCanvas(doc)
-    expect(canvas.nodes.find((n) => n.id === 't1')).toMatchObject({
-      text: 'see [[follow/archive-login]]',
-    })
-    expect(canvas.nodes.find((n) => n.id === 'f1')).toMatchObject({
-      file: 'follow/archive-login',
-    })
+    const movedText = canvas.nodes.find((n) => n.id === 't1')
+    expect(movedText !== undefined && nodeText(movedText)).toBe('see [[follow/archive-login]]')
+    const movedFile = canvas.nodes.find((n) => n.id === 'f1')
+    expect(movedFile !== undefined && nodeFile(movedFile)).toBe('follow/archive-login')
   })
 
   it('a subtree move follows references to a descendant', async () => {

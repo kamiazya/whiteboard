@@ -10,8 +10,6 @@
  */
 
 import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -21,8 +19,10 @@ const BODY = '# Weekly notes\n\nShipped it.'
 const seamsOf = (entries: Record<string, { name?: string; body?: string }>) =>
   referenceSeams(new Map(Object.entries(entries)))
 
-const canvas: SpatialCanvas = {
-  nodes: [fileNode({ id: 'f1', x: 0, y: 0, width: 320, height: 220, file: 'notes' })],
+// `mountCanvasViewer` PARSES its `scene`, so this is the JSON Canvas wire
+// shape rather than the model's — `type` plus the kind's own field.
+const canvas = {
+  nodes: [{ id: 'f1', type: 'file', file: 'notes', x: 0, y: 0, width: 320, height: 220 }],
   edges: [],
 }
 

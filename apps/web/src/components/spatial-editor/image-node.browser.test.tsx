@@ -4,6 +4,7 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 // the node's padded box. The reference is opaque to the editor; the host
 // resolves it to an href.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -85,7 +86,7 @@ it('picking an image via the + menu stores it and renders an <image> in the node
   fireEvent.change(input, { target: { files: [pngFile()] } })
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
-  expect(latest.canvas.nodes[0]).toMatchObject({ type: 'file', file: 'asset:1' })
+  expect(nodeFile(latest.canvas.nodes[0] as SpatialNode)).toBe('asset:1')
   expect(latest.stored[0]?.name).toBe('chart.png')
 
   await vi.waitFor(() => {

@@ -3,7 +3,7 @@
 // mutation ONE batch command (one undo step), reminted ids on every paste.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endIn, endNode, nodeText } from '@kamiazya/whiteboard-model'
+import { endIn, endNode, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -104,7 +104,8 @@ it('copy then paste clones the selection with reminted ids, offset, as ONE batch
   expect(latest.canvas.nodes).toHaveLength(3)
   const copy = latest.canvas.nodes[2]
   expect(copy.id).not.toBe('a')
-  expect(copy).toMatchObject({ text: 'A', x: 40 + 16, y: 40 + 16 })
+  expect(copy).toMatchObject({ x: 40 + 16, y: 40 + 16 })
+  expect(nodeText(copy)).toBe('A')
   expect(latest.commands.at(-1)?.kind).toBe('batch')
 
   // Paste again: reminted afresh, cascading offset from the ORIGINAL copy.
@@ -215,7 +216,7 @@ it('the clipboard is shared across editor mounts — cross-canvas paste within t
   const second = render(<b.Host />)
   clip(rootOf(second.container), 'paste')
   expect(b.latest.canvas.nodes).toHaveLength(1)
-  expect(b.latest.canvas.nodes[0]).toMatchObject({ text: 'A' })
+  expect(nodeText(b.latest.canvas.nodes[0] as SpatialNode)).toBe('A')
 })
 
 it("the empty-space context menu offers 'Paste here', centering the fragment at the click point", () => {

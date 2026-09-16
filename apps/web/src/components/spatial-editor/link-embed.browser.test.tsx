@@ -5,6 +5,7 @@
 // this layer is editor-only HTML.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { withNodeUrl } from '@kamiazya/whiteboard-model'
 import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -101,7 +102,10 @@ it('caps live iframes at three — activating a fourth collapses the oldest', as
 
 it('never offers a facade for a non-followable URL scheme', async () => {
   const canvas: SpatialCanvas = {
-    nodes: [{ ...bigLink('js', 60), url: 'javascript:alert(1)' } as never],
+    // The url goes through the BUILDER, not a spread beside it: a node's
+    // address lives inside its resource now, so `{ ...node, url }` leaves a
+    // stray key and the node keeps the address it was built with.
+    nodes: [withNodeUrl(bigLink('js', 60), 'javascript:alert(1)')],
     edges: [],
   }
   const Host = makeHost(canvas)

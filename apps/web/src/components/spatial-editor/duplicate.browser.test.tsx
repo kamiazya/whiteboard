@@ -3,7 +3,7 @@
 // reminted ids, +16px offset, edge properties preserved, copies selected.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endIn } from '@kamiazya/whiteboard-model'
+import { endIn, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -82,7 +82,8 @@ it('Cmd+D duplicates the selected node as ONE batch command, offset and selected
   expect(latest.canvas.nodes).toHaveLength(3)
   const copy = latest.canvas.nodes[2]
   expect(copy.id).not.toBe('a')
-  expect(copy).toMatchObject({ type: 'text', text: 'A', x: 40 + 16, y: 40 + 16 })
+  expect(copy).toMatchObject({ x: 40 + 16, y: 40 + 16 })
+  expect(nodeText(copy)).toBe('A')
   // One batch command = one undo step at the sync layer.
   const last = latest.commands.at(-1)
   expect(last?.kind).toBe('batch')

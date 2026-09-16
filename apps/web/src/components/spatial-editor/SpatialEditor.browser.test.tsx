@@ -4,7 +4,7 @@
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { createRef, useState } from 'react'
@@ -1289,7 +1289,8 @@ describe('SpatialEditor (browser)', () => {
 
     expect(onChange).toHaveBeenCalledTimes(2)
     const [firstNext, firstCommand] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
-    expect(firstCommand).toMatchObject({ kind: 'create-node', node: { id: 'new-node', text: '' } })
+    expect(firstCommand).toMatchObject({ kind: 'create-node', node: { id: 'new-node' } })
+    expect(nodeText((firstCommand as { node: SpatialNode }).node)).toBe('')
     expect(firstNext.nodes.map((n) => n.id)).toContain('new-node')
     const [, secondCommand] = onChange.mock.calls[1] as [SpatialCanvas, unknown]
     expect(secondCommand).toEqual({ kind: 'set-text', id: 'new-node', text: 'my first note' })

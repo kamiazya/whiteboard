@@ -5,7 +5,7 @@
 // passage highlighted — the same projection the note's source pane draws.
 
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -185,6 +185,6 @@ it('dismissing the catalog hands the caret back: the edit stays open and commits
   await userEvent.keyboard(' now')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
   await vi.waitFor(() =>
-    expect(latest.canvas.nodes[0]).toMatchObject({ type: 'text', text: `${NODE_TEXT} now` }),
+    expect(nodeText(latest.canvas.nodes[0] as SpatialNode)).toBe(`${NODE_TEXT} now`),
   )
 })
