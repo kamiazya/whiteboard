@@ -122,6 +122,9 @@ describe('loro-bridge properties', () => {
       // round-trip is no evidence a field persists here. Comments are
       // projected from the threads plane and compared in their own tests.
       expect(result.facets).toEqual(canvas.facets)
+      // The board's tags share the envelope and would share its silence: a
+      // node's tags fail the node equality above, a board's fail nothing else.
+      expect(result.tags).toEqual(canvas.tags)
     },
   )
 

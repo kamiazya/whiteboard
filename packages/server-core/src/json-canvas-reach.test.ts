@@ -75,13 +75,18 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     ])
   })
 
-  it('leaves 34 to the extension key — 30 named fields and 4 facet buckets', () => {
+  it('leaves 37 to the extension key — 33 named fields and 4 facet buckets', () => {
     // 16 -> 34, and almost all of it is one collection: a LINE's 18 positions
     // all ride `x-whiteboard.lines`. A line between two nodes COULD be emitted
     // as a JSON Canvas edge and read better in a foreign tool; that is the lie
     // the split removes, since the format's edge asserts a connection the line
     // deliberately does not claim.
-    expect(withKind('extension')).toHaveLength(34)
+    //
+    // 34 -> 37 for `tags[]`, `nodes[].tags[]` and `edges[].tags[]` (ADR-0040
+    // decision 2): the format has no classification vocabulary, so a board's,
+    // a box's and a relation's tag set ride the extension key, and a strict
+    // reader keeps the content and loses what it was called.
+    expect(withKind('extension')).toHaveLength(37)
     expect(census.facetBuckets).toHaveLength(4)
   })
 
@@ -108,7 +113,7 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     expect(census.facet).toHaveLength(17)
   })
 
-  it('so 51 of the 74 positions a document can hold are outside the format', () => {
+  it('so 54 of the 77 positions a document can hold are outside the format', () => {
     // Both numbers move for DIFFERENT reasons, which is the reading.
     //
     // The denominator grew by 14 because a LINE is a new element with its own
@@ -133,8 +138,12 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // 49/72 -> 51/74: the classification facet's two positions, both halves
     // again, so the share outside is 68.1% -> 68.9%. Same shape of move as
     // the axes facet's, one row up.
+    //
+    // 51/74 -> 54/77: the three tag positions (ADR-0040), both halves again,
+    // so the share outside is 68.9% -> 70.1%. Core rather than a facet this
+    // time, and still a concept the format has no word for.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(51)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(74)
+    expect(outside).toBe(54)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(77)
   })
 })

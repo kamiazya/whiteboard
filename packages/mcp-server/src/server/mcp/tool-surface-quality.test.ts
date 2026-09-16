@@ -172,9 +172,14 @@ describe('what the tool table costs to read', () => {
       // -1,241 wire when `CanvasColor` / `CanvasPoint` / `NodeEmbed` /
       // `Bends` were named in zod's registry: a scene repeats all four, so
       // this row is where the registration pays most.
+      //
+      // +1,000 wire when the model gained `tags` at three sites (ADR-0040
+      // increment 1): the scene's output schema echoes stored boards, boxes
+      // and relations, so it states the field. Visible bytes unmoved — the
+      // tool's INPUT is what a model reads, and nothing was added to it.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 20500,
+        wireBytes: 21500,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -203,7 +208,10 @@ describe('what the tool table costs to read', () => {
         // applied, 21948. The mechanism is NOT established — `body-edit.ts`
         // imports no node patch and no integer schema — so the number is
         // recorded and the cause is left open rather than invented.
-        wireBytes: 21948,
+        //
+        // +500 when the model gained `tags` (ADR-0040 increment 1): the
+        // output echoes stored elements. Visible bytes unmoved.
+        wireBytes: 22448,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -356,7 +364,12 @@ describe('what the tool table costs to read', () => {
         // C13 or C14 is what §1 refuses, so the row is back where it was,
         // and the rule that decided it was written before the reading.
         visibleBytes: 15043,
-        wireBytes: 38013,
+        // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
+        // increment 1): the OUTPUT echoes stored nodes and edges and states
+        // the field; the node drafts and the edge draft/patch deliberately
+        // omit it until decision 7's reading prices the inline form. Letting
+        // it through read +6 parameters / +6 undescribed / +300 visible.
+        wireBytes: 38513,
         descriptionWords: 169,
         parameters: 221,
         undescribed: 154,
@@ -747,7 +760,10 @@ describe('what the tool table costs to read', () => {
       // nothing here: a facet is output of `wb_facet_list`, not input to
       // anything a model reads every turn.
       visibleBytes: 38296,
-      wireBytes: 115895,
+      // +2,000 wire and 0 visible when the model gained `tags` at three sites
+      // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
+      // and state the field; no input gained a parameter.
+      wireBytes: 117895,
       parameters: 345,
       undescribed: 221,
     })

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
 import { integerSchema } from './integer.js'
+import { storedTagsSchema } from './tags.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
@@ -86,6 +87,13 @@ const sharedNodeFieldsSchema = z.object({
    */
   embed: nodeEmbedSchema.optional(),
   facets: facetsFieldSchema,
+  /**
+   * What this box IS classified as
+   * ([ADR-0040](../../../docs/contributing/adr/0040-scoped-tags.md)
+   * decision 2): plain tags and `key:value` scoped ones, read verbatim. The
+   * grammar is `tags.ts`'s and is checked where a tag is WRITTEN.
+   */
+  tags: storedTagsSchema,
 })
 
 const textNodeSchema = sharedNodeFieldsSchema
@@ -429,6 +437,12 @@ export const canvasEdgeSchema = z
     bends: bendsFieldSchema,
     /** Edge-target facets (ADR-0013 decision 5's edge slot). */
     facets: facetsFieldSchema,
+    /**
+     * A tag on an edge classifies the RELATION (ADR-0040 decision 2): the
+     * link between two services is healthy or failing as much as the
+     * services are. A LINE carries none — ink makes no claim.
+     */
+    tags: storedTagsSchema,
   })
   .strict()
 
@@ -605,6 +619,11 @@ export const spatialCanvasSchema = z
     comments: z.array(canvasCommentSchema).optional().catch(undefined),
     /** Canvas-target facets (ADR-0013 decision 5). */
     facets: facetsFieldSchema,
+    /**
+     * The board's own tags (ADR-0040 decision 2), closing the gap ADR-0009
+     * decision 3 left: a spatial document is as taggable as a note.
+     */
+    tags: storedTagsSchema,
   })
   /**
    * Strict at all three sites, which the format's own schema is NOT and must

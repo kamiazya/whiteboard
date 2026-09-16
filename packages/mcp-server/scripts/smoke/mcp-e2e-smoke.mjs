@@ -2139,6 +2139,16 @@ async function main() {
   }
   console.log('[e2e] wb_document_search → found the imported body, snippet and lexical rank')
 
+  // The scoped-tag grammar (ADR-0040 decision 1) is checked where a tag is
+  // WRITTEN: a colon makes a tag scoped, and a scoped tag with an uppercase
+  // half is refused with the rule rather than stored as a plain tag.
+  await expectToolError(
+    'wb_facet_set',
+    { workspaceId: WORKSPACE_ID, documentIds: [mdCanvasId], tags: { add: ['Health:failing'] } },
+    'a tag with a colon that is not key:value is refused on write',
+    'not a scoped tag',
+  )
+
   const exported = await readDocument(mdCanvasId)
   if (!exported.content.includes('Imported body.')) {
     throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)

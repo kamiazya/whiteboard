@@ -193,7 +193,8 @@ implementations live in the composition roots.
   document and 14860 -> 16082 at fifty.
 
 - A third map, `doc.getMap('canvas')`, holds properties of the canvas rather
-  than of anything on it — today `facets`, under a key of its own. Separate
+  than of anything on it — today `facets` and `tags` (ADR-0040), each under a
+  key of its own. Separate
   from nodes and edges because the merge story differs in kind: those are
   keyed per object so two peers editing different objects both survive,
   whereas a canvas-wide preference is one value with one meaning and
@@ -256,7 +257,10 @@ implementations live in the composition roots.
   evidence a field persists here.
   Mutation-checked: dropping a node's `subpath`, a group's
   `backgroundStyle`, an edge's `label` or the envelope's `facets` in the
-  write path each turns it red.
+  write path each turns it red — and a node's `tags`, which it reported on
+  the day the field arrived, before `nodeToFields` carried it. The board's
+  own `tags` get their own equality beside `facets`, since a node's failure
+  says nothing about the envelope.
 
 ## Common mistakes (append as review finds them)
 

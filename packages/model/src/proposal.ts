@@ -102,7 +102,17 @@ export type NodePatchFields = z.infer<typeof nodePatchFieldsSchema>
  * Derived from the stored schema rather than restated beside it, so a field
  * added to an edge reaches this for free.
  */
-export const edgePatchFieldsSchema = canvasEdgeSchema.omit({ id: true }).partial().strict()
+/**
+ * `tags` is omitted along with the id: an inline tag field on a canvas op is
+ * priced before it is published
+ * ([ADR-0040](../../../docs/contributing/adr/0040-scoped-tags.md)
+ * decision 7), and this schema reaches `wb_canvas_edit`'s edge patch as it
+ * stands. Lift the omission when that reading says to.
+ */
+export const edgePatchFieldsSchema = canvasEdgeSchema
+  .omit({ id: true, tags: true })
+  .partial()
+  .strict()
 
 /**
  * The same, for a LINE (ADR-0038 decision 2). Derived rather than written

@@ -36,15 +36,20 @@ describe('what the two formats reach, read side by side', () => {
     // element shape the format gives a per-end marker. Under the old shape one
     // element served both meanings, so those positions were `degraded` for
     // every edge whether or not that edge was ink.
+    //
+    // ADR-0040 added three positions — the board's, a box's and a relation's
+    // tag set — and both formats carry them on an extension: `extension`
+    // 34 -> 37 and 29 -> 32, `native` and `dropped` unmoved. Neither format
+    // has a classification vocabulary to state a tag natively.
     expect(kinds(JSON_CANVAS_PROJECTION)).toEqual({
       native: 19,
-      extension: 34,
+      extension: 37,
       degraded: 4,
       dropped: 0,
     })
     expect(kinds(OCIF_PROJECTION)).toEqual({
       native: 23,
-      extension: 29,
+      extension: 32,
       degraded: 5,
       dropped: 0,
     })

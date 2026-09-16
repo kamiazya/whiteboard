@@ -45,8 +45,15 @@ const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
  * spellings of one thing on a table a model reads every turn. Measured when
  * ADR-0037 moved them onto the node: 14 new parameters across the four node
  * types, every one of them undescribed.
+ *
+ * `tags` is held back for a different reason: whether an inline tag field on
+ * a canvas op is worth its bytes is a question
+ * [ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
+ * decision 7 answers by measuring, and until that reading it is not on the
+ * table. Measured on arrival: letting it through added 6 undescribed
+ * parameters and 300 model-visible bytes.
  */
-const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
+const STORED_EXTENSION_FIELDS = { embed: true, facets: true, tags: true } as const
 const textOption = textNode.omit(STORED_EXTENSION_FIELDS)
 const fileOption = fileNode.omit(STORED_EXTENSION_FIELDS)
 const linkOption = linkNode.omit(STORED_EXTENSION_FIELDS)
@@ -146,7 +153,8 @@ const nodeDraftSchema = z.discriminatedUnion('type', [
   draftOption(groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
 ])
 
-const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
+// `tags` omitted for the reason the node options omit it (ADR-0040 decision 7).
+const edgeDraftSchema = canvasEdgeSchema.omit({ tags: true }).partial({ id: true })
 
 /**
  * Ink, which an edge cannot be: a LINE's ends are a node or a bare POINT, so
