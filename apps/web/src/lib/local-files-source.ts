@@ -35,6 +35,7 @@ import {
   idbContentClock,
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
+import { countTagsInUse, type TagBearer } from './tags-in-use.js'
 import { loadWorkspaceDocumentProjection } from './workspace-content.js'
 
 /**
@@ -152,6 +153,27 @@ export function createLocalFilesSource(
   }
 
   return {
+    async listTagsInUse() {
+      const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+      const bearers: TagBearer[] = []
+      for (const entry of entries) {
+        if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
+        try {
+          const doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
+          if (entry.kind === 'markdown') {
+            bearers.push({ what: 'document', tags: readCoreFacets(doc)?.tags ?? [] })
+            continue
+          }
+          const canvas = readSpatialCanvas(doc)
+          bearers.push({ what: 'board', tags: canvas.tags ?? [] })
+          for (const node of canvas.nodes) bearers.push({ what: 'node', tags: node.tags ?? [] })
+          for (const edge of canvas.edges) bearers.push({ what: 'edge', tags: edge.tags ?? [] })
+        } catch {
+          // unreadable or never written: carries nothing
+        }
+      }
+      return countTagsInUse(bearers)
+    },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       let entries: Awaited<ReturnType<DocumentIndex['listDocuments']>>
       try {
@@ -174,11 +196,13 @@ export function createLocalFilesSource(
       // measured workspace makes the panel open slowly.
       const tagsById = new Map<string, readonly string[]>()
       for (const entry of entries) {
-        if (entry.kind !== 'markdown') continue
+        if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
         try {
-          const tags = readCoreFacets(
-            await loadCurrentDoc({ documentId: entry.documentId, path: entry.path }),
-          )?.tags
+          const doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
+          // A board's own tags are the document's (ADR-0040 decision 2);
+          // what its boxes carry is the vocabulary's, counted below.
+          const tags =
+            entry.kind === 'markdown' ? readCoreFacets(doc)?.tags : readSpatialCanvas(doc).tags
           if (tags !== undefined && tags.length > 0) tagsById.set(entry.documentId, tags)
         } catch {
           // unreadable or never written: no tags to show

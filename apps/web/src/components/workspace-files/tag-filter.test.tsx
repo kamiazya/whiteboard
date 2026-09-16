@@ -81,3 +81,39 @@ describe('search result rows', () => {
     expect(list.textContent).not.toContain('Misc')
   })
 })
+
+describe('tag filter strip from the keeper’s vocabulary', () => {
+  it('groups a scoped key’s values under the key and counts every bearer, when the source answers', async () => {
+    render(
+      <WorkspaceFilesPanel
+        source={fakeFilesSource({
+          listDocuments: () => Promise.resolve(DOCS),
+          listTagsInUse: () =>
+            Promise.resolve([
+              {
+                tag: 'health:ok',
+                key: 'health',
+                value: 'ok',
+                documents: 0,
+                boards: 1,
+                nodes: 2,
+                edges: 0,
+              },
+              { tag: 'release', documents: 1, boards: 0, nodes: 0, edges: 0 },
+            ]),
+        })}
+      />,
+    )
+    const strip = await screen.findByRole('group', { name: /filter by tag/i })
+    await waitFor(() => expect(screen.getByRole('button', { name: '#health:ok' })).toBeTruthy())
+    expect(strip.textContent).toContain('health')
+    // A tag only the entries know (q3) is not on the strip: the keeper's
+    // answer is the vocabulary, and the entries were only the fallback.
+    expect(screen.queryByRole('button', { name: '#q3' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '#health:ok' }))
+    expect(screen.getByRole('searchbox', { name: /search documents/i })).toHaveProperty(
+      'value',
+      '#health:ok',
+    )
+  })
+})

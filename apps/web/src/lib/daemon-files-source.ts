@@ -36,6 +36,9 @@ export function createDaemonFilesSource(
   workspaceId: string,
 ): WorkspaceFilesSource {
   return {
+    async listTagsInUse() {
+      return (await getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId)).inUse
+    },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       try {
         // Names ride alongside the list for their pinned[] — pin order is

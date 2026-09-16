@@ -340,3 +340,24 @@ describe('createDaemonFilesSource loadMarkdown', () => {
     expect(await source.loadMarkdown(entry)).toEqual({ body: '' })
   })
 })
+
+describe('createDaemonFilesSource tags in use', () => {
+  it('answers the route’s in-use rows, and a failed fetch is the caller’s to catch', async () => {
+    const inUse = [
+      { tag: 'health:ok', key: 'health', value: 'ok', documents: 0, boards: 0, nodes: 2, edges: 0 },
+    ]
+    const fetchImpl = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/document-tags'))
+        return Promise.resolve(jsonResponse({ documents: [], inUse }))
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    const source = createDaemonFilesSource(fetchImpl, BASE, 'ws')
+    await expect(source.listTagsInUse?.()).resolves.toEqual(inUse)
+
+    const down = vi.fn(() =>
+      Promise.resolve(jsonResponse({ error: 'x' }, 500)),
+    ) as unknown as typeof globalThis.fetch
+    await expect(createDaemonFilesSource(down, BASE, 'ws').listTagsInUse?.()).rejects.toThrow()
+  })
+})
