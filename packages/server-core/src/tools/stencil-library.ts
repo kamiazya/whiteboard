@@ -71,16 +71,19 @@ export async function workspaceFacetRegistry(
   deps: ServerDeps,
   workspaceId: string,
   unknownWorkspace: UnknownWorkspace,
+  // A caller that already holds the listing passes it, so one call costs
+  // one listing however many things it reads from the workspace.
+  listed?: readonly DocumentEntry[],
 ): Promise<FacetRegistry> {
   const base = deps.facetRegistry ?? bundledFacetRegistry
-  const entries = await listDocuments(deps, workspaceId, unknownWorkspace)
+  const entries = listed ?? (await listWorkspaceDocuments(deps, workspaceId, unknownWorkspace))
   const library = entries.find((entry) => entry.path === STENCIL_LIBRARY_PATH)
   if (library === undefined) return base
   const doc = await loadOrCreateDocument(deps, workspaceId, library.documentId)
   return withWorkspaceStencils(base, readStencilLibrary(readFacets(doc)))
 }
 
-async function listDocuments(
+export async function listWorkspaceDocuments(
   deps: ServerDeps,
   workspaceId: string,
   unknownWorkspace: UnknownWorkspace,

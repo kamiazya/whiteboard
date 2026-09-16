@@ -506,10 +506,17 @@ describe('what the tool table costs to read', () => {
       // ground that is not C14 and says so in its own doc comment: a
       // filtered answer that silently drops a scope is a partial truth.
       // What was withdrawn is the claim, not the field.
+      //
+      // +65 visible / +13 words and +572 wire when the tool learned to answer
+      // the tags a workspace already USES (ADR-0040 decision 5's in-use
+      // layer): one clause in the description, and an output array counted
+      // by what carries each tag. Output-only on the wire, so a model reads
+      // the clause and pays for nothing else until it asks with a
+      // workspaceId.
       wb_facet_list: {
-        visibleBytes: 1002,
-        wireBytes: 2290,
-        descriptionWords: 63,
+        visibleBytes: 1067,
+        wireBytes: 2862,
+        descriptionWords: 76,
         parameters: 3,
         undescribed: 0,
         strays: 'refused',
@@ -521,11 +528,21 @@ describe('what the tool table costs to read', () => {
       // that says "tags", which three trials of "tag this note" had never
       // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
       // errors over three trials before, 2 calls and 0 after.
+      //
+      // Re-pinned again for ADR-0040 increment 3: +651 visible / +23 words /
+      // +3 parameters (all described; `undescribed` stays 1). Two things,
+      // priced separately. `tags` now reaches a board, a node and an edge —
+      // a description change, ~+300 of the bytes — because a relation and a
+      // box are classified the way a note is. And `tags.rename` (decision
+      // 5), ~+350 bytes and the three parameters, chosen over a tool of its
+      // own: `wb_tag_rename` measured 987 visible bytes and 5 parameters as
+      // a row a model would read on every turn, against an arm inside the
+      // one write verb it already reaches for. Round 19 reads the first.
       wb_facet_set: {
-        visibleBytes: 2421,
-        wireBytes: 3240,
-        descriptionWords: 118,
-        parameters: 9,
+        visibleBytes: 3072,
+        wireBytes: 3917,
+        descriptionWords: 141,
+        parameters: 12,
         undescribed: 1,
         strays: 'refused',
         names: ['wb_facet_list'],
@@ -759,12 +776,15 @@ describe('what the tool table costs to read', () => {
       // bundled facet it was the write path for, `semantic.class/v0`, costs
       // nothing here: a facet is output of `wb_facet_list`, not input to
       // anything a model reads every turn.
-      visibleBytes: 38296,
+      visibleBytes: 39012,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
-      wireBytes: 117895,
-      parameters: 345,
+      // Then +716 visible / +3 parameters / +1,249 wire for ADR-0040
+      // increment 3 (wb_facet_set's tags on every target and rename;
+      // wb_facet_list's in-use tags), each priced at its row.
+      wireBytes: 119144,
+      parameters: 348,
       undescribed: 221,
     })
   })

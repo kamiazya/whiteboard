@@ -5,7 +5,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from '../tools/document-io.js'
 import { type ContentFacts, extractContentFacts } from './extract.js'
 
-const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], tags: undefined }
+const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], bearers: [] }
 
 /**
  * Content-derived facts per document, kept between requests and validated

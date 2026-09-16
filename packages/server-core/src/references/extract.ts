@@ -5,7 +5,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { searchableTexts, snippetAround } from '@kamiazya/whiteboard-search'
@@ -48,8 +48,54 @@ function spatialReferences(canvas: SpatialCanvas): RawReference[] {
 export interface ContentFacts {
   readonly refs: readonly DocumentReferenceFacts['refs'][number][]
   readonly texts: readonly string[]
-  /** OKF core-facet tags; undefined for spatial documents (they hold none). */
-  readonly tags: readonly string[] | undefined
+  /**
+   * Everything in the document that carries tags
+   * ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
+   * decision 2): the markdown document itself (OKF core tags), a board, a
+   * node or an edge. A filter matches when ONE bearer carries every listed
+   * tag, and the bearer's `text` is what an answer names as the excerpt.
+   */
+  readonly bearers: readonly TagBearer[]
+}
+
+export interface TagBearer {
+  readonly what: 'document' | 'board' | 'node' | 'edge'
+  /** The node's or edge's id; absent on the document and the board. */
+  readonly id?: string
+  /** What a reader would call it: a node's text, an edge's label or its two ends. */
+  readonly text: string
+  readonly tags: readonly string[]
+}
+
+/** The name a reader knows a node by: its text, a group's label, or its id. */
+function nodeName(node: SpatialNode): string {
+  const own = nodeText(node) ?? (node.type === 'group' ? node.label : undefined)
+  return own === undefined || own.length === 0 ? node.id : own
+}
+
+function edgeName(edge: CanvasEdge, canvas: SpatialCanvas): string {
+  if (edge.label !== undefined && edge.label.length > 0) return edge.label
+  const name = (id: string) => {
+    const node = canvas.nodes.find((n) => n.id === id)
+    return node === undefined ? id : nodeName(node)
+  }
+  return `${name(edge.from.node)} → ${name(edge.to.node)}`
+}
+
+function spatialBearers(canvas: SpatialCanvas): TagBearer[] {
+  const bearers: TagBearer[] = []
+  if (canvas.tags !== undefined && canvas.tags.length > 0) {
+    bearers.push({ what: 'board', text: '', tags: canvas.tags })
+  }
+  for (const node of canvas.nodes) {
+    if (node.tags === undefined || node.tags.length === 0) continue
+    bearers.push({ what: 'node', id: node.id, text: nodeName(node), tags: node.tags })
+  }
+  for (const edge of canvas.edges) {
+    if (edge.tags === undefined || edge.tags.length === 0) continue
+    bearers.push({ what: 'edge', id: edge.id, text: edgeName(edge, canvas), tags: edge.tags })
+  }
+  return bearers
 }
 
 export function extractContentFacts(
@@ -68,6 +114,12 @@ export function extractContentFacts(
     texts: markdown
       ? searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
       : searchableTexts({ kind: 'spatial', canvas: canvas as SpatialCanvas }),
-    tags: markdown ? readCoreFacets(doc)?.tags : undefined,
+    bearers: markdown
+      ? markdownBearers(readCoreFacets(doc)?.tags)
+      : spatialBearers(canvas as SpatialCanvas),
   }
+}
+
+function markdownBearers(tags: readonly string[] | undefined): TagBearer[] {
+  return tags === undefined || tags.length === 0 ? [] : [{ what: 'document', text: '', tags }]
 }

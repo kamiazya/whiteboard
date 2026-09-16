@@ -110,10 +110,14 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // the first facet from a SECOND bundled plugin, and the first that says
     // what a box IS rather than how it is drawn. Node only, so two positions
     // and not four. This is the column growing for the reason it is watched.
-    expect(census.facet).toHaveLength(17)
+    //
+    // 17 -> 15 when ADR-0040 retired it: what a box IS is a scoped tag now,
+    // which is CORE — three positions in the ledger rather than two in a
+    // bucket — so the facet column gives back what the tag rows took.
+    expect(census.facet).toHaveLength(15)
   })
 
-  it('so 54 of the 77 positions a document can hold are outside the format', () => {
+  it('so 52 of the 75 positions a document can hold are outside the format', () => {
     // Both numbers move for DIFFERENT reasons, which is the reading.
     //
     // The denominator grew by 14 because a LINE is a new element with its own
@@ -142,8 +146,13 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // 51/74 -> 54/77: the three tag positions (ADR-0040), both halves again,
     // so the share outside is 68.9% -> 70.1%. Core rather than a facet this
     // time, and still a concept the format has no word for.
+    //
+    // 54/77 -> 52/75: the classification facet's two positions leave with
+    // it (ADR-0040 decision 4). Net of the tag rows the model says one
+    // position MORE than before the ADR — a relation is classified too —
+    // and the share outside settles at 69.3%.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(54)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(77)
+    expect(outside).toBe(52)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(75)
   })
 })

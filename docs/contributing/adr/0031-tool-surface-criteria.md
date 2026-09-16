@@ -1182,6 +1182,34 @@ edge draft carrying `end` was refused as an unrecognized key in one; and
 the `within` placement refusal ("placed around its members would reach
 `title`") cost one trial three refused batches of fifteen ops each.
 
+**The twenty-third reading (2026-09-16), lane round 19, unchanged.** What
+ADR-0040 increment 3 put in front of the model: `wb_facet_set` taking
+`tags` on a node and an edge (the description says so, +651 visible), the
+scoped-tag grammar in the parameter's own sentence, and the classification
+facet gone from `wb_facet_list`'s answer. The two-axis task, unchanged,
+three trials: **0 of 3, and no trial wrote a tag.** Two trials coloured the
+failing boxes and recorded nothing (`colour contested`), the shape every
+earlier round read. The third did something new: it recorded health as a
+BADGE — `visual.symbol/v0` with ✅ and ❌ on all five boxes, one
+`wb_facet_set` each — and spent no colour, so the score read `colour
+unused` and a person looking at the board saw no health at all, since a
+badge is not drawn on the canvas (the minimap is its only reader). The
+model reached for the one facet whose name says "symbol", which is the
+closest word in the table to "show it", and the table did not say the
+symbol is invisible here. Filed as a finding; the answer is either a drawn
+badge channel or a description that says where a symbol is drawn.
+
+What this adds to the twenty-second: the write path for a word that is
+NOT a plugin's — a tag needs no registry to be a partition — reads the same
+as the registered facet did. Six remedies, one reading, and the open
+question stays the one the twenty-second named: whether the prompt asks
+for the meaning to be recorded is a decision about what the lane is FOR.
+The inline `tags` field on the canvas ops therefore stays unbought at its
+measured price (+6 undescribed parameters, +300 visible on
+`wb_canvas_edit`); a model that does not reach for the described path on
+the write verb it already uses will not reach for the same thing one op
+in.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

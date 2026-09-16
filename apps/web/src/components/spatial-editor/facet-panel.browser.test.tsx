@@ -15,16 +15,7 @@ afterEach(cleanup)
 const initial: SpatialCanvas = {
   nodes: [
     textNode({ id: 'a', x: 80, y: 80, width: 200, height: 100, text: 'A' }),
-    // Already classified, so the panel opened on `a` has something to offer.
-    textNode({
-      id: 'b',
-      x: 400,
-      y: 80,
-      width: 200,
-      height: 100,
-      text: 'B',
-      facets: { 'semantic.class/v0': { axis: 'health', value: 'failing' } },
-    }),
+    textNode({ id: 'b', x: 400, y: 80, width: 200, height: 100, text: 'B' }),
   ],
   edges: [],
 }
@@ -69,16 +60,16 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // A CHOICE applies on pick, the way the same facet's quick band does —
   // there is no Save to press, and a facet made only of choices has none.
   fireEvent.click(hexagon)
-  // ONE Save, and it is the classification's: every visual facet applies on
-  // pick or through its registered picker, and `semantic.class/v0` (ADR-0036
-  // §6) is two free-entry identifiers, the first bundled facet that stages
-  // until Save. Listed by name so a facet that grows a Save it should not
-  // have is caught here, not in a jsdom fixture.
+  // NO Save: every bundled facet applies on pick or through its registered
+  // picker. The classification facet was the one free-entry form that staged
+  // until Save, and ADR-0040 retired it — a box's meaning is a tag now, and
+  // the tag row is increment 4's. Listed by name so a facet that grows a
+  // Save it should not have is caught here, not in a jsdom fixture.
   expect(
     [...panel.querySelectorAll('button[aria-label^="Save"]')].map((b) =>
       b.getAttribute('aria-label'),
     ),
-  ).toEqual(['Save Classification'])
+  ).toEqual([])
   // The picker that used to be a context-menu band is here instead, as a
   // TRIGGER: a catalog is hundreds of cells and a property row is one line,
   // so the row shows what is chosen and the choosing happens over the top.
@@ -94,42 +85,6 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
     kind: 'hexagon',
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()
-
-  // A person's write path for a box's SECOND axis: what it is stays in the
-  // silhouette, how it is doing goes in the classification, and both land
-  // on the same node — the board the facet score reads as
-  // `carried(semantic.class/v0)` with nothing declared.
-  //
-  // The empty boxes say what goes in them (measured on a reader: "Axis" and
-  // "Value" alone did not), and what the board already uses is on offer,
-  // so the second classification is a pick rather than a spelling.
-  const axisBox = () =>
-    panel.querySelector('input[aria-label="Classification Axis"]') as HTMLInputElement
-  const valueBox = () =>
-    panel.querySelector('input[aria-label="Classification Value"]') as HTMLInputElement
-  expect(axisBox().placeholder).toBe('e.g. health, priority')
-  expect(valueBox().placeholder).toBe('e.g. failing, high')
-  const listed = (input: HTMLInputElement) =>
-    [
-      ...(document.getElementById(input.getAttribute('list') ?? '') as HTMLDataListElement).options,
-    ].map((o) => o.value)
-  expect(listed(axisBox())).toEqual(['health'])
-  expect(listed(valueBox())).toEqual(['failing'])
-  fireEvent.change(panel.querySelector('input[aria-label="Classification Axis"]') as HTMLElement, {
-    target: { value: 'health' },
-  })
-  fireEvent.change(panel.querySelector('input[aria-label="Classification Value"]') as HTMLElement, {
-    target: { value: 'failing' },
-  })
-  fireEvent.click(panel.querySelector('button[aria-label="Save Classification"]') as HTMLElement)
-  expect(latest.canvas.nodes[0]?.facets).toEqual({
-    'visual.shape/v0': { kind: 'hexagon' },
-    'semantic.class/v0': { axis: 'health', value: 'failing' },
-  })
-  // Written to the selection, so the neighbour's own classification stays.
-  expect(latest.canvas.nodes[1]?.facets).toEqual({
-    'semantic.class/v0': { axis: 'health', value: 'failing' },
-  })
 
   // DESELECTING is the way out, and the only one: the panel carries no
   // dismiss control of its own, because it is about the selected node and a
