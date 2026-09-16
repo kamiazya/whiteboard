@@ -1359,13 +1359,37 @@ editor half is the one that stands.)
   set of hypotheses to check rather than a worklist to burn down — the
   difference is measured in hours.
   **A survivor `judged by` ZERO tests is a runner artefact, not a
-  hypothesis.** On `tidy.ts` with `coverageAnalysis: 'off'` — every mutant
-  is meant to face all 42 tests — 19 of 65 survivors came back with
-  `testsCompleted 0`, and the six of those checked by hand (the root
-  tie-break, the hop direction, both hop arithmetics, the floor's y
-  block) each failed one to three tests when the same edit was applied.
-  Read that column before the row: `0` says nothing ran, and the edit is
-  still yours to apply. The `tidy.ts` entries the ledger does hold were
+  hypothesis — and it is root-caused now.** On `tidy.ts` with
+  `coverageAnalysis: 'off'` — every mutant is meant to face all 42 tests —
+  19 of 65 survivors came back with `testsCompleted 0`, and the six of
+  those checked by hand (the root tie-break, the hop direction, both hop
+  arithmetics, the floor's y block) each failed one to three tests when the
+  same edit was applied. The cause, found on `sceneDocumentBounds` where
+  15 of 15 mutants came back that way (2026-09-16): `coverageAnalysis:
+  'off'` does NOT make the runner run every test — the vitest runner's
+  setup records per-test coverage regardless, and Stryker core plans a
+  per-mutant `testFilter` from it whenever the dry run returned any. That
+  filter is a regex over test ids the runner builds by joining suite and
+  test names with a SPACE (vitest 4's `getTaskFullName`), and vitest 5
+  matches it against `fullTestName`, which joins them with ` > `. So no
+  test inside a `describe` ever matched: only a top-level `it` could kill,
+  and this package has 36 of those against 1312 nested. Measured on the
+  same mutants in one sandbox: the space-joined regex skips all 617
+  related tests, the ` > ` one runs them and kills. Upstream 10.0.0 still
+  joins with a space, so `patches/@stryker-mutator__vitest-runner@9.6.1.
+  patch` joins with ` > ` in both places the id is built; the same 15 then
+  die in 73 seconds at 1.2 tests a mutant, and the whole file reads 100%
+  (136 killed, 5 timed out, 8 minutes) where it read 89.4% with 15
+  survivors. The file's one recorded equivalent went with it: the
+  `default` arm's mutant was a TIMEOUT in both runs, never a survivor, so
+  the entry was suppressing nothing. `mutation-comment.mjs` lists a
+  zero-test survivor apart from real ones now, under "the lane ran NO test
+  against", so the next runner-vs-vitest disagreement reads as the lane's
+  defect rather than as a function no test pins. Every score and survivor
+  list taken before that date was read through this filter: a kill was a
+  top-level test or a hit-limit timeout, and a survivor list was mostly
+  the filter's. Read that column before the row: `0` says nothing ran, and
+  the edit is still yours to apply. The `tidy.ts` entries the ledger does hold were
   each judged by all 42 and reasoned: `<=` on a floor admits exactly the
   coordinate the shift then lands on, so the mutant costs a no-op
   iteration and nothing else; skipping a zero delta is a guard around an

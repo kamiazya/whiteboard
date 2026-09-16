@@ -354,7 +354,15 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // pays for because each of those four facts is a seam a change here can
 // break in silence (a legend on a miniature, or a second copy in canvas
 // space).
-const CANVAS_RENDER_BUDGET = 137
+//
+// 137 -> 139 (the mutation lane's filter): the paragraph on a survivor judged
+// by zero tests grew from "a runner artefact" to its cause — Stryker's
+// per-mutant test filter joining names with a space where vitest 5 matches
+// ` > `, so no test inside a `describe` ever ran against a mutant — and the
+// two consequences a session here has to carry: the pnpm patch that makes
+// the lane real, and that every score and survivor list before it was read
+// through that filter.
+const CANVAS_RENDER_BUDGET = 139
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
