@@ -3,6 +3,7 @@
 // the editor's inline label editor anchor here — two independent midpoint
 // derivations is the drift class that put exported labels on the sharp
 // corner a curved edge's ink never touches.
+import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
 
 type Point = { readonly x: number; readonly y: number }
@@ -69,17 +70,9 @@ type Rect = LabelObstacle
  * What an edge label must not lie over: every non-container node, the
  * edge's own endpoints included. A frame is a region, not a box.
  */
-export function labelObstacles(
-  nodes: readonly {
-    readonly type: string
-    readonly x: number
-    readonly y: number
-    readonly width: number
-    readonly height: number
-  }[],
-): LabelObstacle[] {
+export function labelObstacles(nodes: readonly SpatialNode[]): LabelObstacle[] {
   return nodes
-    .filter((node) => node.type !== 'group')
+    .filter((node) => !isFrame(node))
     .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
 }
 

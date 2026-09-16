@@ -394,12 +394,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 2444 -> 2463: the proposal layer draws a proposed LINE. Without it the
   // op stored a change nothing rendered — built but unwired, and every test
   // green over a board that said nothing had happened.
-  // 2463 -> 2468 for ADR-0038 decision 3's seam: `isFrame` joins the model
-  // import, which takes that line past the formatter's width and wraps it
-  // over five. The two reads it replaces are one line each either way, so
-  // this is the wrap and nothing else — and decision 3 takes the file back
-  // down when the union's branches collapse.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2468,
+  // 2463 -> 2484 across ADR-0038 decision 3's reader conversion, in two
+  // steps. +5: `isFrame` took the model import past the formatter's width
+  // and wrapped it. +16: the other eight accessors joined that same list,
+  // which is eight lines of the sixteen, and the rest is rationale that had
+  // nowhere to live before — why the file arm's `?? ''` is unreachable
+  // rather than a default, and why the dispatch asks what a node HOLDS.
+  //
+  // The seam does not shrink this file; the FLIP does, and only once the
+  // arms it dispatches over stop existing. Said plainly because the earlier
+  // entry promised the reduction at this step and the number went the other
+  // way.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2484,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor

@@ -96,6 +96,23 @@ export const withNodeUrl = (node: SpatialNode, url: string): SpatialNode =>
 export const frameLabel = (node: SpatialNode): string | undefined =>
   node.type === 'group' ? node.label : undefined
 
+/**
+ * The image a frame is painted with, and how it is fitted — `undefined` when
+ * this node is not a frame, or names none.
+ *
+ * Beside `frameLabel` for the same reason and on the same axis: these are the
+ * last two stored fields a caller could only reach by narrowing through
+ * `type`, which is what left `composeGroupBackground` taking a node type
+ * derived from the union ADR-0038 decision 3 dissolves.
+ */
+export const frameBackground = (node: SpatialNode): string | undefined =>
+  node.type === 'group' ? node.background : undefined
+
+export const frameBackgroundStyle = (
+  node: SpatialNode,
+): 'cover' | 'ratio' | 'repeat' | undefined =>
+  node.type === 'group' ? node.backgroundStyle : undefined
+
 /** The fragment inside the document a node points at, or `undefined`. */
 export const nodeSubpath = (node: SpatialNode): string | undefined =>
   node.type === 'file' ? node.subpath : undefined

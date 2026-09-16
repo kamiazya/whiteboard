@@ -358,7 +358,7 @@ function channelUse(
 }
 
 export function scoreFacets(canvas: SpatialCanvas): FacetScore {
-  const boxes = canvas.nodes.filter((n) => n.type !== 'group')
+  const boxes = canvas.nodes.filter((n) => !isFrame(n))
   const treatment = new Map(boxes.map((b) => [b.id, treatmentOf(b)]))
   const key = (id: string) => keyOf(treatment.get(id) ?? DEFAULT_TREATMENT)
 

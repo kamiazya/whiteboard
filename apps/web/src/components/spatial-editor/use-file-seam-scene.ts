@@ -87,7 +87,7 @@ export function useFileSeamScene({
     () =>
       resolveReference === undefined
         ? undefined
-        : (node: Extract<SpatialNode, { type: 'file' }>) => expandedFileIds.has(node.id),
+        : (node: SpatialNode) => expandedFileIds.has(node.id),
     [resolveReference, expandedFileIds],
   )
 

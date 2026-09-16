@@ -299,7 +299,7 @@ const isRun = (n: Scene['nodes'][number]): n is TextRunNode => n.kind === 'textR
 export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore {
   const nodes = canvas.nodes
   const groups = nodes.filter((n) => isFrame(n))
-  const boxes = nodes.filter((n) => n.type !== 'group')
+  const boxes = nodes.filter((n) => !isFrame(n))
   const byId = new Map(nodes.map((n) => [n.id, n] as const))
   const edgeById = new Map<string, CanvasEdge>(canvas.edges.map((e) => [e.id, e] as const))
 
@@ -317,7 +317,7 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
   // overlap without one holding the other. Each unordered pair once.
   let straddles = 0
   pairs(nodes, (a, b) => {
-    if (a.type !== 'group' && b.type !== 'group') return
+    if (!isFrame(a) && !isFrame(b)) return
     const ra = rectOf(a)
     const rb = rectOf(b)
     if (overlapArea(ra, rb) > 0 && !contains(ra, rb) && !contains(rb, ra)) straddles++

@@ -25,7 +25,7 @@
  * weight).
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeAtEnd } from '@kamiazya/whiteboard-model'
+import { isFrame, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 
 export interface CompositionScore {
@@ -132,7 +132,7 @@ const contains = (outer: Rect, inner: Rect): boolean =>
 function declaredGroups(canvas: SpatialCanvas, boxes: readonly SpatialNode[]): SpatialNode[][] {
   const out: SpatialNode[][] = []
   for (const frame of canvas.nodes) {
-    if (frame.type !== 'group') continue
+    if (!isFrame(frame)) continue
     const members = boxes.filter((b) => contains(rectOf(frame), rectOf(b)))
     if (members.length >= 2 && members.length < boxes.length) out.push(members)
   }
@@ -147,7 +147,7 @@ const distinct = (values: readonly number[]): number =>
 
 export function scoreComposition(canvas: SpatialCanvas, scene: Scene): CompositionScore {
   const nodes = canvas.nodes
-  const boxes = nodes.filter((n) => n.type !== 'group')
+  const boxes = nodes.filter((n) => !isFrame(n))
 
   // C1 — proximity.
   const groups = declaredGroups(canvas, boxes)
