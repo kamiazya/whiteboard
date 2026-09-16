@@ -7,8 +7,17 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  */
 import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endIn, nodeFile, nodeSubpath, nodeText } from '@kamiazya/whiteboard-model'
+import {
+  endIn,
+  frameBackground,
+  frameBackgroundStyle,
+  isFrame,
+  nodeFile,
+  nodeSubpath,
+  nodeText,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -128,7 +137,7 @@ export function nodeMenuItems({
   const properties: ContextMenuItem[] = []
   const verbs: ContextMenuItem[] = []
   const commentOnThis = commentOnNodeItem(node, setCommentCompose)
-  if (node.type === 'group') {
+  if (isFrame(node)) {
     verbs.push({
       label: 'Edit label',
       icon: <Tag />,
@@ -144,8 +153,10 @@ export function nodeMenuItems({
         },
       })
     }
-    if (node.background !== undefined) {
-      const background = node.background
+    const ownBackground = frameBackground(node)
+    if (ownBackground !== undefined) {
+      const background = ownBackground
+      const backgroundStyle = frameBackgroundStyle(node)
       const applyStyle = (backgroundStyle: 'cover' | 'ratio') =>
         applyResult({
           state: { kind: 'idle' },
@@ -158,13 +169,13 @@ export function nodeMenuItems({
           {
             label: 'Cover',
             ariaLabel: 'Cover',
-            selected: node.backgroundStyle !== 'ratio',
+            selected: backgroundStyle !== 'ratio',
             onSelect: () => applyStyle('cover'),
           },
           {
             label: 'Fit',
             ariaLabel: 'Fit',
-            selected: node.backgroundStyle === 'ratio',
+            selected: backgroundStyle === 'ratio',
             onSelect: () => applyStyle('ratio'),
           },
         ],

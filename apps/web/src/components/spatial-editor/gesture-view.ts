@@ -14,7 +14,7 @@
  */
 
 import type { BoundingBox, EdgeSides, Scene } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { isFrame, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { carriedWithDrag } from './drag-preview.js'
 import type { GestureState } from './gestures.js'
@@ -118,7 +118,7 @@ export function ghostCommentObstacles(
   const riding = new Set((commentsFor(canvas, carried, true) ?? []).map((comment) => comment.id))
   return [
     ...canvas.nodes
-      .filter((node) => !carried.has(node.id) && node.type !== 'group')
+      .filter((node) => !carried.has(node.id) && !isFrame(node))
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
     ...committed.nodes.flatMap((node) => {
       if (node.kind !== 'shape' || node.commentChrome !== true) return []

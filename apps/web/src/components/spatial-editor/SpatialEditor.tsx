@@ -66,7 +66,14 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
+import {
+  isFrame,
+  nodeFile,
+  nodeKind,
+  nodeSubpath,
+  nodeText,
+  nodeUrl,
+} from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -1529,41 +1536,49 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         result.commands.length === 0
       ) {
         const node = canvasRef.current.nodes.find((n) => n.id === gestureState.nodeId)
-        if (node?.type === 'text') {
-          applyResult(
-            reduceGesture(result.state, canvas, {
-              type: 'start-text-edit',
-              nodeId: node.id,
-              text: node.text,
-            }),
-          )
-          return
-        }
-        // A link node's double press follows the reference, mirroring the
-        // text node's double-press-edits rule: the object's primary action.
-        if (node?.type === 'link') {
-          applyResult(result)
-          openLinkNode(node)
-          return
-        }
-        // A group's double press edits its label — the frame's one own datum.
-        if (node?.type === 'group') {
-          applyResult(result)
-          setGroupLabelEditId(node.id)
-          return
-        }
-        // A file node's double press follows the reference (navigate), the
-        // same primary-action rule as link nodes. Image references are not
-        // followable — navigating to an asset id is a dead end.
-        if (
-          node?.type === 'file' &&
-          onOpenFileRef !== undefined &&
-          isImageFileRef?.(node.file) !== true &&
-          missingFileRef?.(node.file) !== true
-        ) {
-          applyResult(result)
-          onOpenFileRef(node.file, node.subpath)
-          return
+        // Each arm asks what the node HOLDS rather than narrowing on the
+        // stored discriminant. Resolved once, in a block rather than an early
+        // return: a press on a node that is gone still falls through to the
+        // `applyResult(result)` at the end of this handler, as it always did.
+        if (node !== undefined) {
+          const text = nodeText(node)
+          if (text !== undefined) {
+            applyResult(
+              reduceGesture(result.state, canvas, {
+                type: 'start-text-edit',
+                nodeId: node.id,
+                text,
+              }),
+            )
+            return
+          }
+          // A link node's double press follows the reference, mirroring the
+          // text node's double-press-edits rule: the object's primary action.
+          if (nodeUrl(node) !== undefined) {
+            applyResult(result)
+            openLinkNode(node)
+            return
+          }
+          // A group's double press edits its label — the frame's one own datum.
+          if (isFrame(node)) {
+            applyResult(result)
+            setGroupLabelEditId(node.id)
+            return
+          }
+          // A file node's double press follows the reference (navigate), the
+          // same primary-action rule as link nodes. Image references are not
+          // followable — navigating to an asset id is a dead end.
+          const file = nodeFile(node)
+          if (
+            file !== undefined &&
+            onOpenFileRef !== undefined &&
+            isImageFileRef?.(file) !== true &&
+            missingFileRef?.(file) !== true
+          ) {
+            applyResult(result)
+            onOpenFileRef(file, nodeSubpath(node))
+            return
+          }
         }
       }
       const moved = result.commands.find((c) => c.kind === 'move-node')
@@ -2336,7 +2351,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   canvasPicker.mode === 'retarget'
                     ? (() => {
                         const target = canvas.nodes.find((n) => n.id === canvasPicker.nodeId)
-                        return target?.type === 'file' ? target.file : undefined
+                        return target === undefined ? undefined : nodeFile(target)
                       })()
                     : undefined
                 }
@@ -2365,7 +2380,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   linkDialog.mode === 'edit'
                     ? (() => {
                         const target = canvas.nodes.find((n) => n.id === linkDialog.nodeId)
-                        return target?.type === 'link' ? target.url : undefined
+                        return target === undefined ? undefined : nodeUrl(target)
                       })()
                     : undefined
                 }
@@ -2567,8 +2582,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // Only a single text node has a body to open, and only when the
                 // host has a surface to open it on.
                 onOpenInEditor={
-                  onOpenInEditor !== undefined && !isMultiSelection && selectedNode?.type === 'text'
-                    ? () => onOpenInEditor(selectedNode.id, selectedNode.text)
+                  onOpenInEditor !== undefined &&
+                  !isMultiSelection &&
+                  selectedNode !== undefined &&
+                  nodeKind(selectedNode) === 'text'
+                    ? () => onOpenInEditor(selectedNode.id, nodeText(selectedNode) ?? '')
                     : undefined
                 }
                 onMoreActions={(anchor) => {
@@ -2678,7 +2696,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               />
             )}
             {gestureState.kind === 'editing-text' &&
-              selectedNode?.type === 'text' &&
+              selectedNode !== undefined &&
+              nodeKind(selectedNode) === 'text' &&
               selection !== undefined && (
                 <MarkdownBodyEditorOverlay
                   node={selectedNode}

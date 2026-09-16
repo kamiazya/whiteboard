@@ -7,7 +7,12 @@ import {
   SPATIAL_THEME_GEOMETRY,
   type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  type CommentThread,
+  nodeText,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type GestureState, reduceGesture } from './gestures.js'
@@ -36,8 +41,12 @@ export function MarkdownBodyEditorOverlay({
   applyResult,
   fontFamily,
 }: {
-  /** The text node being edited (the caller has already narrowed the type). */
-  readonly node: SpatialNode & { readonly type: 'text'; readonly text: string }
+  /**
+   * The node being edited. The caller has established it holds text; the
+   * body is read through `nodeText` rather than a type that intersects the
+   * stored arm, which ADR-0038 decision 3 dissolves.
+   */
+  readonly node: SpatialNode
   readonly selectionBox: { x: number; y: number; width: number; height: number }
   readonly sceneNodes: readonly SceneNode[]
   readonly sceneCurrent: boolean
@@ -71,7 +80,7 @@ export function MarkdownBodyEditorOverlay({
         const inner = outlineContentBox(shapeId, bbox)
         return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
       })()}
-      initialText={node.text}
+      initialText={nodeText(node) ?? ''}
       // The conversations about passages of this node's text, highlighted
       // over the draft; and the comment verb's seam, which attaches the
       // caret's scope to this node and opens the compose bubble at the

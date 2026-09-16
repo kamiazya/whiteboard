@@ -3,7 +3,12 @@ import {
   overlayReferences,
   type ReferenceSeams,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  nodeFile,
+  nodeKind,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useState } from 'react'
 import { createSpatialContentCache } from '../../lib/content-cache.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
@@ -68,7 +73,7 @@ export function useFileSeamScene({
   useEffect(() => {
     if (resolveReference === undefined) return
     const candidates = canvas.nodes
-      .filter((node): node is Extract<SpatialNode, { type: 'file' }> => node.type === 'file')
+      .filter((node) => nodeKind(node) === 'file')
       .filter((node) => {
         const w = node.width * zoom
         const h = node.height * zoom
@@ -104,7 +109,8 @@ export function useFileSeamScene({
     if (missingFileRef === undefined) return undefined
     const refs = new Set<string>()
     for (const node of canvas.nodes) {
-      if (node.type === 'file' && missingFileRef(node.file)) refs.add(node.file)
+      const file = nodeFile(node)
+      if (file !== undefined && missingFileRef(file)) refs.add(file)
     }
     return refs.size === 0 ? undefined : refs
   }, [canvas, missingFileRef])

@@ -457,7 +457,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `lib/spatial/viewport.ts` — an overlay taking its own press needs the
   // same client-to-root mapping, and two of them is how the pointer and the
   // geometry come to disagree about where a press landed.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2785,
+  // 2785 -> 2791 for ADR-0038 decision 3's seam. Six lines: the accessor
+  // import, and the double-press dispatch becoming a block that resolves the
+  // node once instead of four `node?.type` tests that each narrowed their own
+  // arm. The block is what costs, and it is not optional — an early return
+  // would skip the `applyResult(result)` this handler ends with.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2791,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
