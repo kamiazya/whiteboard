@@ -78,6 +78,40 @@ export const versionEntrySchema = z.object({
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 
 /**
+ * Unpadded base64url — what WebAuthn hands a page, and what `Buffer` reads
+ * back without a padding step. Padding and the `+/` alphabet are refused
+ * rather than normalised, so one encoding travels.
+ */
+const base64urlSchema = z
+  .string()
+  .min(1)
+  .regex(/^[A-Za-z0-9_-]+$/, 'unpadded base64url')
+
+/**
+ * The evidence a person was present when a row was written (ADR-0039).
+ *
+ * The RAW assertion, not a verdict: `authenticatorData`, `clientDataJSON` and
+ * the ES256 signature exactly as the authenticator emitted them, so anyone
+ * holding the pinned public key can re-verify later. That is why `actor` is
+ * not here — decision 7 keeps the credential out of content and ADR-0035
+ * decision 2 keeps a browser row's `actor` empty; the credential is named by
+ * `credentialId` and resolved through the daemon's pin. Backup eligibility
+ * is not a field either: it is a flag inside `authenticatorData`, and storing
+ * it twice is how the two would drift.
+ *
+ * `kind` is a discriminator with one member so a second attestation format
+ * can arrive as a union rather than a rewrite.
+ */
+export const attestationSchema = z.object({
+  kind: z.literal('webauthn'),
+  credentialId: base64urlSchema,
+  authenticatorData: base64urlSchema,
+  clientDataJSON: base64urlSchema,
+  signature: base64urlSchema,
+})
+export type Attestation = z.infer<typeof attestationSchema>
+
+/**
  * A version as the MCP tools answer it: what an agent acts on, and nothing
  * the History PANEL needs that an agent does not. `path` repeats the
  * document it asked about, `elementCount` is panel
