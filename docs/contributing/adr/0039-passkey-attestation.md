@@ -94,10 +94,15 @@ more than it is. It is a ROLE, not an identifier: ADR-0035 deferred the user
 DID's method and this ADR inherits that deferral, so two passkeys held by one
 human — one per relying party, or one before and one after a loss — are
 unrelated until the profile that relates them exists. And a passkey-backed row
-writes its `actor` as the `did:key` of the credential's public key (P-256 has
-a multicodec), which keeps ADR-0035's one notation rather than adding a fourth
-— at the cost ADR-0035 already named: a `did:key` says nothing to a human
-without the lookup.
+carries **no `actor`**, exactly as ADR-0035 decision 2 requires of a browser
+row until an identifier that survives rotation exists — a credential's
+`did:key` would be a stand-in, and one of the orphanable kind that decision
+names. The credential's public key lives in the `attestation` (decision 9),
+where verification needs it anyway; the person's name comes from the profile,
+not from an actor string. A draft of this revision wrote the credential's
+`did:key` into `actor` "to keep one notation", and review caught it
+contradicting ADR-0035 decision 2 — there was no notation to keep, since that
+decision already leaves a browser row's `actor` empty.
 
 ### 3. Backup eligibility is recorded, never assumed
 
@@ -269,7 +274,7 @@ applied to trust.
 
 ### 9. What a reader is shown is a name and a badge, and the data is shaped by that
 
-Three visual states on a history row: **human**, **human · verified** (an
+Four visual states on a history row: **human**, **human · verified** (an
 attestation is present), **agent**, **system**. The user never sees an
 `actor` string. So `actor` stays an identity, `attestation` is a separate
 optional field on the version row, and the name comes from a profile — set
