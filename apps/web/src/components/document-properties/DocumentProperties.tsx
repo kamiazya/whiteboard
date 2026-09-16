@@ -1,8 +1,8 @@
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
+import { TagChipsEditor } from '../tags/TagChipsEditor.js'
 
 export interface DocumentPropertiesProps {
   /**
@@ -221,7 +221,6 @@ export function DocumentFacetsEditor({
   readonly typeSuggestions?: readonly string[]
 }) {
   const suggestionsId = useId()
-  const [draftTag, setDraftTag] = useState('')
   const tags = facets.tags ?? []
 
   const withTags = (next: readonly string[]): StoredCoreFacets => {
@@ -239,15 +238,6 @@ export function DocumentFacetsEditor({
     const { [key]: _dropped, ...rest } = facets
     const trimmed = value.trim()
     return trimmed === '' ? rest : { ...rest, [key]: value }
-  }
-
-  const commitDraftTag = () => {
-    const tag = draftTag.trim()
-    // Blank and duplicate both mean "nothing to add" — emitting anyway would
-    // write an identical document and, for a duplicate, a misleading one.
-    if (tag === '' || tags.includes(tag)) return
-    onChange?.(withTags([...tags, tag]))
-    setDraftTag('')
   }
 
   return (
@@ -318,43 +308,13 @@ export function DocumentFacetsEditor({
         >
           Tags
         </label>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs"
-            >
-              {tag}
-              <button
-                type="button"
-                aria-label={`Remove tag ${tag}`}
-                onClick={() => onChange?.(withTags(tags.filter((entry) => entry !== tag)))}
-                className="hover:text-foreground"
-              >
-                <X aria-hidden className="size-3" />
-              </button>
-            </span>
-          ))}
-          <input
-            id={`${suggestionsId}-tag`}
-            value={draftTag}
-            onChange={(event) => setDraftTag(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ',') return
-              // The Enter that confirms an IME conversion is "accept this
-              // word", not "finish this tag" — let it pass untouched.
-              if (isImeComposingKeydown(event.nativeEvent)) return
-              // Enter would submit an enclosing form and `,` would land in
-              // the box; both mean "finish this tag" here.
-              event.preventDefault()
-              commitDraftTag()
-            }}
-            onBlur={commitDraftTag}
-            placeholder="Add tag"
-            aria-label="Add tag"
-            className="text-foreground placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-xs outline-none"
-          />
-        </div>
+        {/* The same control a box, an edge and the board are tagged with
+            (ADR-0040 decision 6): a note and a box are tagged the same way. */}
+        <TagChipsEditor
+          inputId={`${suggestionsId}-tag`}
+          tags={tags}
+          onChange={(next) => onChange?.(withTags(next))}
+        />
       </div>
     </div>
   )

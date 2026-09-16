@@ -36,13 +36,19 @@
  * survives at every render entry point as decision 6 describes — headless
  * defaults to `clean`, the editor to `document` — with no UI that sets it.
  */
-import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
+import {
+  type FacetRegistry,
+  POINT_SECTIONS,
+  resolveFacetContributions,
+} from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
+import { collectCanvasTags } from '../../lib/spatial/tags.js'
 import { cn } from '../../lib/utils.js'
+import { TagChipsEditor } from '../tags/TagChipsEditor.js'
 import { CANVAS_SETTINGS_WIDGETS, type CanvasSettingsWidget } from './facet-widgets/index.js'
 
 export interface CanvasDisplaySettingsProps {
@@ -91,8 +97,21 @@ export function CanvasDisplaySettings({
   const [activeNamespace, setActiveNamespace] = useState<string | null>(null)
   const active = groups.find((entry) => entry.group.namespace === activeNamespace) ?? groups[0]
 
-  return (
-    <>
+  // The board's own tags (ADR-0040 decision 6), placed by the engine's
+  // section order beside the plugin panels — a tag is core, not a
+  // contribution, so no namespace tab owns it.
+  const tagsRow = (
+    <div key="tags" className="flex flex-col gap-1.5 pt-2">
+      <span className="text-xs font-medium">Tags</span>
+      <TagChipsEditor
+        tags={canvas.tags ?? []}
+        onChange={(tags) => run({ kind: 'set-canvas-tags', tags })}
+        suggestions={collectCanvasTags(canvas)}
+      />
+    </div>
+  )
+  const facetRows = (
+    <Fragment key="facets">
       {groups.length >= 2 && (
         <div role="tablist" className="mb-2 flex items-center gap-1 border-b border-border">
           {groups.map(({ group }) => (
@@ -117,6 +136,12 @@ export function CanvasDisplaySettings({
       {active?.widgets.map(({ key, widget }) => (
         <Fragment key={key}>{widget({ canvas, run, facetRegistry })}</Fragment>
       ))}
+    </Fragment>
+  )
+
+  return (
+    <>
+      {POINT_SECTIONS.canvasSettings.map((section) => (section === 'facets' ? facetRows : tagsRow))}
     </>
   )
 }

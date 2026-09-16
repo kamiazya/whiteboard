@@ -52,6 +52,7 @@ import {
   VISUAL_EDGES_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { remintClipboardFragment } from '../clipboard-fragment.js'
+import { withTagList } from './tags.js'
 import type { Point } from './viewport.js'
 
 export type EditorLeafCommand =
@@ -146,6 +147,22 @@ export type EditorLeafCommand =
       readonly key: string
       /** undefined removes the facet — an edge with none inherits the board's. */
       readonly payload: unknown
+    }
+  | {
+      /**
+       * One node's tags as a WHOLE list (ADR-0040): the chips editor holds
+       * the list, so the command carries the value the way `set-edge-bends`
+       * does rather than an add/remove pair. Empty removes the field.
+       */
+      readonly kind: 'set-node-tags'
+      readonly id: string
+      readonly tags: readonly string[]
+    }
+  | { readonly kind: 'set-edge-tags'; readonly id: string; readonly tags: readonly string[] }
+  | {
+      /** The board's own tags — the canvas envelope's, beside its facets. */
+      readonly kind: 'set-canvas-tags'
+      readonly tags: readonly string[]
     }
   | {
       /**
@@ -827,6 +844,26 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return withCanvasFacet(canvas, command.key, command.payload)
     case 'set-edge-facet':
       return setEdgeFacet(canvas, command.id, command.key, command.payload)
+    case 'set-node-tags':
+      return canvas.nodes.some((node) => node.id === command.id)
+        ? {
+            ...canvas,
+            nodes: canvas.nodes.map((node) =>
+              node.id === command.id ? withTagList(node, command.tags) : node,
+            ),
+          }
+        : canvas
+    case 'set-edge-tags':
+      return canvas.edges.some((edge) => edge.id === command.id)
+        ? {
+            ...canvas,
+            edges: canvas.edges.map((edge) =>
+              edge.id === command.id ? withTagList(edge, command.tags) : edge,
+            ),
+          }
+        : canvas
+    case 'set-canvas-tags':
+      return withTagList(canvas, command.tags)
     case 'set-edge-bends':
       return setEdgeBends(canvas, command.id, command.bends)
     case 'set-edge-routing':

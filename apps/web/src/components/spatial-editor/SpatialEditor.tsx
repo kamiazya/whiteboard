@@ -100,6 +100,7 @@ import {
 } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
+import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import {
   canvasToScreen,
   clientPointToRootLocal,
@@ -2735,7 +2736,45 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // second classification is a pick. Recomputed per render
                 // while the panel is open: one pass over the nodes' facets.
                 suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
+                tagSuggestions={collectCanvasTags(canvas)}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
+                onTagsChange={(after) => {
+                  if (edgeTarget !== undefined) {
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-edge-tags' as const, id: edgeTarget.id, tags: after },
+                      ],
+                    })
+                    return
+                  }
+                  // The CHANGE reaches every selected box, applied to each
+                  // box's own tags: the row showed one box, and copying its
+                  // list over five would erase what the other four carried.
+                  const before = target?.tags ?? []
+                  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
+                  const ids =
+                    target !== undefined && members.has(target.id)
+                      ? [...members]
+                      : target === undefined
+                        ? []
+                        : [target.id]
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: ids.flatMap((id) => {
+                      const node = canvas.nodes.find((entry) => entry.id === id)
+                      return node === undefined
+                        ? []
+                        : [
+                            {
+                              kind: 'set-node-tags' as const,
+                              id,
+                              tags: retag(node.tags, before, after),
+                            },
+                          ]
+                    }),
+                  })
+                }}
                 onWrite={(key, payload) => {
                   if (edgeTarget !== undefined) {
                     // One edge, because an edge selection is one edge —

@@ -70,3 +70,19 @@ export function resolveFacetContributions(
       return [{ namespace: plugin.id, displayName: plugin.displayName, facets }]
     })
 }
+
+/**
+ * What a point's vessel lays out, in order: the plugin containers this
+ * module resolves, then the CORE tag row — a tag is OKF core rather than
+ * any plugin's (ADR-0040), so it is not a contribution and no plugin id
+ * orders it. Declared here once (decision 6: "Visual style first, tags
+ * after") so the node inspector, the edge inspector and the canvas
+ * settings cannot each put the row somewhere else.
+ */
+export type PointSection = 'facets' | 'tags'
+
+export const POINT_SECTIONS: Readonly<Record<ContributionPoint, readonly PointSection[]>> = {
+  'inspector.node': ['facets', 'tags'],
+  'inspector.edge': ['facets', 'tags'],
+  canvasSettings: ['facets', 'tags'],
+}

@@ -323,6 +323,11 @@ const COMMAND_COVERAGE = {
     'not modelled: the edge twin of set-node-facet — a plugin-owned payload written to one edge, covered by commands.test.ts',
   'set-canvas-facet':
     'not modelled: the canvas-envelope twin of set-node-facet — a plugin-owned payload written to the envelope rather than to per-element state, covered by commands.test.ts',
+  'set-node-tags':
+    'not modelled: the tag row’s write, a whole-list single-field write to one node with no gesture or selection coupling in the command itself (the fan-out over a selection is the vessel’s, facet-panel.browser.test.tsx); its canvas meaning is commands.test.ts',
+  'set-edge-tags': 'not modelled: the edge twin of set-node-tags, covered by commands.test.ts',
+  'set-canvas-tags':
+    'not modelled: the board’s own tags on the canvas envelope, a canvas-wide value rather than per-element state; commands.test.ts and canvas-settings.browser.test.tsx',
   'set-node-file': 'not modelled: file picker dialog, single-field write',
   'set-node-url': 'not modelled: link URL dialog, single-field write',
   'create-group': 'covered',
