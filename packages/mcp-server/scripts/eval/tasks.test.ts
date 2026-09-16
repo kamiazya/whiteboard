@@ -271,8 +271,27 @@ describe('the two-axis verifier', () => {
     return { ...(node.facets ?? {}), 'ops.status/v0': { status } }
   }
 
+  /**
+   * The same box, its health recorded through the REGISTERED classification
+   * facet (ADR-0036 §6) instead of an invented key. This is what the inline
+   * `facets` field on node.add writes, so it is the shape a model reaches
+   * without a second tool or a canvas declaration.
+   */
+  const classified = (stencil: string, status: string) => {
+    const node = applyStencil(
+      { id: 'x', type: 'text', text: '', x: 0, y: 0, width: 200, height: 80 } as never,
+      stencil,
+    )
+    if (node === undefined) throw new Error(`no such bundled stencil: ${stencil}`)
+    return { ...(node.facets ?? {}), 'semantic.class/v0': { axis: 'health', value: status } }
+  }
+
   /** The JSON Canvas projection `wb_document_get` answers, with facets. */
-  const fleetContent = (boxes: readonly Box[], axes: readonly string[]) =>
+  const fleetContent = (
+    boxes: readonly Box[],
+    axes: readonly string[],
+    dress: (stencil: string, status: string) => Record<string, unknown> = dressed,
+  ) =>
     JSON.stringify({
       nodes: boxes.map((b, i) => ({
         id: b.id,
@@ -283,7 +302,7 @@ describe('the two-axis verifier', () => {
         width: 200,
         height: 80,
         color: b.color,
-        'x-whiteboard': { facets: dressed(b.stencil, b.status) },
+        'x-whiteboard': { facets: dress(b.stencil, b.status) },
       })),
       edges: [],
       'x-whiteboard': { facets: { 'visual.axes/v0': { axes: [...axes] } } },
@@ -304,6 +323,18 @@ describe('the two-axis verifier', () => {
 
   it('passes a board whose colour carries a DECLARED axis and whose shape carries the stencil', async () => {
     await expect(verify(fleetContent(FLEET_BOXES, ['ops.status/v0']))).resolves.toMatchObject({
+      ok: true,
+    })
+  })
+
+  it('passes a board whose colour carries the CLASSIFICATION facet with NO axis declared', async () => {
+    // The end-to-end proof that the built-in partition reaches the lane: same
+    // pixels as the declared case, the health recorded through
+    // `semantic.class/v0` rather than an invented key, and `visual.axes/v0`
+    // absent. The case below is its negative control — the same board with
+    // the invented key and no declaration refuses — so the pair discriminates
+    // on exactly the thing the registered facet buys.
+    await expect(verify(fleetContent(FLEET_BOXES, [], classified))).resolves.toMatchObject({
       ok: true,
     })
   })

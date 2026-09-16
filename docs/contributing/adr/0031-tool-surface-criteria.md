@@ -1128,6 +1128,60 @@ expensive half of that problem had already been fixed for free, when the
 node draft stopped stripping: the identical mistake used to be accepted
 silently and cost one trial seventeen further calls.
 
+**The twenty-second reading (2026-09-16), lane round 18, refuted — the
+first write-side remedy, and it closes the class the twenty-first left
+open.** What the four refuted remedies had never touched was what the model
+could WRITE: every bundled facet was `visual.*`, so "health" had no
+registered word, and `node.add` took no facets, so the second axis cost one
+`wb_facet_set` per box on top of the colour. Both were built (ADR-0036 §6):
+`semantic.class/v0` = `{axis, value}` in a second bundled plugin, a
+partition the score reads with no declaration, and `facets` beside `op` on
+`node.add` / `node.patch`, validated as `wb_facet_set` validates, at +590
+visible bytes — with the withdrawal rule written before the run.
+
+**0 of 3, `colour contested` three times, the field written zero times.**
+Raw inputs, not the verdict: fifty-five `node.add` / `node.patch` ops across
+three trials, every box with a `stencil` and a `color`, none with `facets`;
+`semantic.class` in no input; `wb_facet_set` called zero times. Every trial
+began with `wb_facet_list` — five calls, three of them `target: 'node'` or
+unfiltered, whose answer lists the new facet (the +846 on the facet errand's
+`responseBytes` is that answer) — so the word was in front of the model
+before it drew, and the field was in the schema it read on every turn. Both
+affordances present, both unused, three of three.
+
+**What this refutes.** The twenty-first reading named the untried class as
+"a declared axis reachable from the write path". That is now tried in its
+cheapest shape and reads identically to the four read-side remedies. So the
+missing thing on this task was never the word or the path. The model does
+what the prompt asks — kind by silhouette, health by colour — and does not
+record what the colour MEANS because nothing asks it to, and a surface that
+offers a place to record it does not change that. Five remedies, one
+reading. The field withdrew under the rule ADR-0036 §6 pre-registered
+(C1 up 590 for nothing on C13 or C14), in the same PR that landed it; the
+facet and the partition stay at zero model-visible bytes, because a board
+that DOES carry the classification reads `carried(semantic.class/v0)` with
+no declaration, which the positive control in `tasks.test.ts` pins.
+
+**What is left, said plainly so it is not re-tried by accident.** One
+write-side shape remains: the tool INFERRING the declaration — a colour
+written with no declared axis answered with the declaration it implies —
+and that is the tool guessing meaning, the thing ADR-0036 §1 refused to let
+the instrument do. The other is the task itself: a verifier that demands
+the meaning be RECORDED grades something the prompt never asks for, and
+fifteen trials over five rounds say a model does not volunteer it. Whether
+"say what your colours mean" belongs in the prompt (then the lane measures
+the surface) or stays out (then it measures spontaneous data hygiene, which
+reads 0 of 15) is a decision about what the lane is FOR, and it is not
+taken here.
+
+By-products from the refusal texts, filed rather than fixed here:
+`stencil: null` on `node.add` was refused in two trials ("expected string,
+received null") — the model says "no stencil" for a title or a frame the
+way `within: null` says "no group", and the schema does not let it; an
+edge draft carrying `end` was refused as an unrecognized key in one; and
+the `within` placement refusal ("placed around its members would reach
+`title`") cost one trial three refused batches of fifteen ops each.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

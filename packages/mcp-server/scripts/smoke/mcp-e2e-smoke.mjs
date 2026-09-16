@@ -739,6 +739,69 @@ async function main() {
   }
   console.log('[e2e] wb_facet_set + wb_canvas_edit → a stencil the WORKSPACE defines dresses a box')
 
+  // The SECOND axis (ADR-0036 §6): a box says what it IS with `stencil` and
+  // how it is doing with the registered classification facet, and the
+  // classification survives the save beside the stencil. Through
+  // wb_facet_set, because that is the facet's only write path — the inline
+  // field was landed, read at 0 of 3, and withdrawn. Read back through
+  // wb_document_get rather than the reply, because the point is what was
+  // STORED. The SDK validates structuredContent against the output schema
+  // on the way, so a drift there fails here too.
+  const classifiedBatch = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      {
+        op: 'node.add',
+        node: { id: 'redis', type: 'text', x: 1100, y: 0, width: 200, height: 100, text: 'cache' },
+        stencil: 'visual.datastore',
+      },
+    ],
+  })
+  if (classifiedBatch.applied !== 1) {
+    throw new Error(`the stencilled node.add did not apply: ${JSON.stringify(classifiedBatch)}`)
+  }
+  const classified = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    nodeId: 'redis',
+    facets: { 'semantic.class/v0': { axis: 'health', value: 'failing' } },
+  })
+  if (classified.updated[0]?.facets?.['semantic.class/v0']?.value !== 'failing') {
+    throw new Error(`the classification was not accepted: ${JSON.stringify(classified)}`)
+  }
+  const classifiedDoc = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  const storedRedis = JSON.parse(classifiedDoc.documents[0].content).nodes.find(
+    (n) => n.id === 'redis',
+  )
+  const storedClass = storedRedis?.['x-whiteboard']?.facets?.['semantic.class/v0']
+  if (storedClass?.axis !== 'health' || storedClass?.value !== 'failing') {
+    throw new Error(`the classification did not survive the save: ${JSON.stringify(storedRedis)}`)
+  }
+  if (
+    storedRedis?.['x-whiteboard']?.facets?.['visual.stencil/v0']?.stencil !== 'visual.datastore'
+  ) {
+    throw new Error(`the classification clobbered the stencil: ${JSON.stringify(storedRedis)}`)
+  }
+  console.log('[e2e] wb_facet_set semantic.class/v0 → the second axis is stored beside the stencil')
+  // An unregistered key passes through unvalidated, so the accepted write
+  // above proves nothing about REGISTRATION; a refused bad payload does.
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      nodeId: 'redis',
+      facets: { 'semantic.class/v0': { axis: 'Health', value: 'failing' } },
+    },
+    'semantic.class/v0 with an axis that is not a lowercase identifier',
+    'lowercase identifier',
+  )
+
   // A FREE END (ADR-0037 slice 3): an edge from a node to a bare point on
   // the canvas. Here rather than only at the unit layer because the endpoint
   // is a discriminated union crossing a process boundary in BOTH directions

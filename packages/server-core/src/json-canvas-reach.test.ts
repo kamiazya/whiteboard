@@ -85,7 +85,7 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     expect(census.facetBuckets).toHaveLength(4)
   })
 
-  it('carries 14 further field positions inside those buckets, from one bundled plugin', () => {
+  it('carries the further field positions inside those buckets, from the bundled plugins', () => {
     // Positions, not facets: a facet targeting both a node and the canvas can
     // be written at either, and each is somewhere a reader has to look.
     // 13 -> 14 when the bundled plugin gained `visual.stencil/v0` (ADR-0034).
@@ -100,10 +100,15 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // nothing a reader could act on, and it adds one position rather than
     // two. It is `extension` for the ordinary reason every facet is: JSON
     // Canvas has no vocabulary for "this attribute is a semantic axis".
-    expect(census.facet).toHaveLength(15)
+    //
+    // 15 -> 17 for `semantic.class/v0`'s `axis` and `value` (ADR-0036 §6):
+    // the first facet from a SECOND bundled plugin, and the first that says
+    // what a box IS rather than how it is drawn. Node only, so two positions
+    // and not four. This is the column growing for the reason it is watched.
+    expect(census.facet).toHaveLength(17)
   })
 
-  it('so 48 of the 71 positions a document can hold are outside the format', () => {
+  it('so 51 of the 74 positions a document can hold are outside the format', () => {
     // Both numbers move for DIFFERENT reasons, which is the reading.
     //
     // The denominator grew by 14 because a LINE is a new element with its own
@@ -124,8 +129,12 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // makes it a different kind of move from the line's — that one changed
     // the numerator and denominator by different amounts and for different
     // reasons.
+    //
+    // 49/72 -> 51/74: the classification facet's two positions, both halves
+    // again, so the share outside is 68.1% -> 68.9%. Same shape of move as
+    // the axes facet's, one row up.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(49)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(72)
+    expect(outside).toBe(51)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(74)
   })
 })

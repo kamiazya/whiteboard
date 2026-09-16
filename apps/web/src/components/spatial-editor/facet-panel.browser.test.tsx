@@ -57,11 +57,16 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // A CHOICE applies on pick, the way the same facet's quick band does —
   // there is no Save to press, and a facet made only of choices has none.
   fireEvent.click(hexagon)
-  // Nothing in the bundled plugin needs a Save any more: shape and text are
-  // declared choices, and symbol renders its registered picker. A Save
-  // survives only for a facet with free entry — covered in the jsdom suite,
-  // where a fixture facet can have one.
-  expect(panel.querySelector('button[aria-label^="Save"]')).toBeNull()
+  // ONE Save, and it is the classification's: every visual facet applies on
+  // pick or through its registered picker, and `semantic.class/v0` (ADR-0036
+  // §6) is two free-entry identifiers, the first bundled facet that stages
+  // until Save. Listed by name so a facet that grows a Save it should not
+  // have is caught here, not in a jsdom fixture.
+  expect(
+    [...panel.querySelectorAll('button[aria-label^="Save"]')].map((b) =>
+      b.getAttribute('aria-label'),
+    ),
+  ).toEqual(['Save Classification'])
   // The picker that used to be a context-menu band is here instead, as a
   // TRIGGER: a catalog is hundreds of cells and a property row is one line,
   // so the row shows what is chosen and the choosing happens over the top.
@@ -77,6 +82,22 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
     kind: 'hexagon',
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()
+
+  // A person's write path for a box's SECOND axis: what it is stays in the
+  // silhouette, how it is doing goes in the classification, and both land
+  // on the same node — the board the facet score reads as
+  // `carried(semantic.class/v0)` with nothing declared.
+  fireEvent.change(panel.querySelector('input[aria-label="Classification Axis"]') as HTMLElement, {
+    target: { value: 'health' },
+  })
+  fireEvent.change(panel.querySelector('input[aria-label="Classification Value"]') as HTMLElement, {
+    target: { value: 'failing' },
+  })
+  fireEvent.click(panel.querySelector('button[aria-label="Save Classification"]') as HTMLElement)
+  expect(latest.canvas.nodes[0]?.facets).toEqual({
+    'visual.shape/v0': { kind: 'hexagon' },
+    'semantic.class/v0': { axis: 'health', value: 'failing' },
+  })
 
   // DESELECTING is the way out, and the only one: the panel carries no
   // dismiss control of its own, because it is about the selected node and a

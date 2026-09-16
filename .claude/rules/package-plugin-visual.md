@@ -17,6 +17,23 @@ Nothing about being bundled is load-bearing. The engine does not import this
 package, and `bundledFacetRegistry` here is a convenience for the compositions
 that want the shipped set, not a privileged registry.
 
+## The second plugin, `semantic` — here for now, and why
+
+`bundledPlugins` is `[visualPlugin, semanticPlugin]`. The second holds one
+facet, `semantic.class/v0` (`{axis, value}`, node only), and it is NOT a
+`visual.*` facet on purpose: [ADR-0036](../../docs/contributing/adr/0036-semantic-axes.md)
+§1 draws the line by what a facet SAYS — `visual.shape/v0` says how a box is
+drawn, this says what a box IS — and the facet score treats it as a partition
+by that same criterion.
+
+**ponytail:** it lives in this package because it is one facet with no UI
+half and no render contribution, and a package for that is more ceremony
+than plugin. The day it grows a second facet or an editor it moves to
+`plugin-semantic`, and this package goes back to being exactly the worked
+example the section above describes. Until then, the thing to keep true is
+the same as for `visual`: `data.ts` stays react-free, because `canvas-render`
+imports it.
+
 ## The two halves
 
 | entry | holds | may not hold |

@@ -243,7 +243,13 @@ describe('what an errand costs in tool calls', () => {
         // the same +990 — so the two are independent of the line ops and of
         // `visual.path/v0` retiring. This is the declared price of
         // declaring a facet, which is exactly what this answer is for.
-        responseBytes: 10168,
+        //
+        // Then 10,168 -> 11,014: +846 is `semantic.class/v0` joining the
+        // list (ADR-0036 §6) — the same price, for the same reason, as the
+        // axes facet above. It is the second bundled plugin's only facet,
+        // and the first registered word for a box's second axis; the errand
+        // reads the list and so pays to see it, as it should.
+        responseBytes: 11014,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the

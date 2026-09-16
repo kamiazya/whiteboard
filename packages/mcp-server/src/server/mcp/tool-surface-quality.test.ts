@@ -348,6 +348,13 @@ describe('what the tool table costs to read', () => {
       // measured rather than reasoned: the same -4/-12 appears against
       // main's new base as it did against the old one.
       wb_canvas_edit: {
+        // UNCHANGED by the second axis's write path, which was landed here
+        // at +590 visible / +2 parameters (`facets` beside `op` on node.add
+        // and node.patch, ADR-0036 §6), read by lane round 18, and
+        // withdrawn: 0 of 3 with the field written zero times in fifty-five
+        // node ops (ADR-0031's twenty-second reading). C1 up for nothing on
+        // C13 or C14 is what §1 refuses, so the row is back where it was,
+        // and the rule that decided it was written before the reading.
         visibleBytes: 15043,
         wireBytes: 38013,
         descriptionWords: 169,
@@ -731,6 +738,14 @@ describe('what the tool table costs to read', () => {
       // `visibleBytes` exactly where the line above left it — the only
       // change in this file so far that bought something without touching
       // the column a model pays on every turn.
+      //
+      //
+      // Then +590 visible / +2 parameters for `wb_canvas_edit`'s inline
+      // `facets`, read at 0 of 3 with the field unused and WITHDRAWN in the
+      // same PR (see its row) — so the totals did not move. The second
+      // bundled facet it was the write path for, `semantic.class/v0`, costs
+      // nothing here: a facet is output of `wb_facet_list`, not input to
+      // anything a model reads every turn.
       visibleBytes: 38296,
       wireBytes: 115895,
       parameters: 345,
