@@ -115,6 +115,7 @@
     "fast-check": "^4.7.0",
     "loro-crdt": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "sideEffects": false

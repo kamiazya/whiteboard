@@ -1,4 +1,9 @@
-import { base64urlSchema } from '@kamiazya/whiteboard-server-core'
+// The version-entry MODULE, never server-core's root: this file is on the
+// web app's critical path (the pairing hook and the identity pin import it
+// statically), and a root import there is retained whole by the bundler —
+// measured at 144.5 KB → 413.8 KB gzip, loro's WASM included. See
+// server-core-root-imports.test.ts.
+import { base64urlSchema } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { z } from 'zod'
 
 // Pairing-token wire contract, shared between the daemon route

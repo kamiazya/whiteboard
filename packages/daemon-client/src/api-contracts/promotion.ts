@@ -1,4 +1,7 @@
-import { attestationSchema, base64urlSchema } from '@kamiazya/whiteboard-server-core'
+import {
+  attestationSchema,
+  base64urlSchema,
+} from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { z } from 'zod'
 
 // POST /api/w/:workspaceId/workspace-document/promote — the browser keeper's
