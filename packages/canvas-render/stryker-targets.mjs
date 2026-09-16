@@ -187,12 +187,6 @@ export const KNOWN_EQUIVALENT = {
     'OptionalChaining: elements[0]?.attrs -> elements[0].attrs': 1,
     'StringLiteral: \'string\' -> ""': 1,
   },
-  // The `default` arm returns `undefined`, which is also what falling out of
-  // the switch returns — so removing it changes nothing. Hand-verified
-  // against the full suite.
-  'src/scene-bounds.ts': {
-    'ConditionalExpression: default: return undefined -> default:': 1,
-  },
   // `formatCoord`'s three belt-and-braces guards, each unobservable because of
   // a property of the other two — the reasoning is on the function itself.
   // Hand-verified: removing any one of them leaves all 1002 canvas-render

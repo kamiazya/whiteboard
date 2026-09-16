@@ -223,3 +223,11 @@ allowBuilds:
 
 patchedDependencies:
   mdast-util-gfm-task-list-item@2.0.0: patches/mdast-util-gfm-task-list-item@2.0.0.patch
+  # The runner builds each mutant's test filter from ids that join suite and
+  # test names with a space; vitest 5 matches that regex against names joined
+  # with ' > ', so a test inside a `describe` never matched and a mutant
+  # covered only by such tests ran ZERO tests and was reported Survived —
+  # 15 of 15 on scene-bounds.ts's legend band, each killed by hand. Upstream
+  # 10.0.0 still joins with a space. Measured 2026-09-16; see
+  # package-canvas-render.md's mutation section.
+  '@stryker-mutator/vitest-runner@9.6.1': patches/@stryker-mutator__vitest-runner@9.6.1.patch

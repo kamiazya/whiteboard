@@ -88,6 +88,31 @@ test('a survivor says how many tests judged it', () => {
   assert.match(body, /judged by/)
 })
 
+test('a survivor the lane ran no test against is listed apart, not as a survivor', () => {
+  // `testsCompleted: 0` on a Survived mutant means nothing judged it — the
+  // runner selected no test, which happened to every mutant covered only by
+  // tests inside a `describe`. Listing it beside real survivors is how 15
+  // false ones read as a function no test pins.
+  const body = renderComment(
+    report([
+      mutant('Survived', { testsCompleted: 0, location: { start: { line: 5, column: 1 } } }),
+      mutant('Survived', { testsCompleted: 3 }),
+    ]),
+    MARKER,
+  )
+  assert.match(body, /\*\*1 new survivor\*\*/)
+  assert.match(body, /1 mutant the lane ran NO test against/)
+  const rows = body.split('\n').filter((line) => line.startsWith('| `src/a.ts'))
+  assert.equal(rows.length, 2)
+  assert.match(rows[0], /src\/a\.ts:12.*\| 3 tests \|$/)
+  assert.match(rows[1], /src\/a\.ts:5.*\| `a > b` \|$/)
+  const { survivors, unjudged } = summarize(
+    report([mutant('Survived', { testsCompleted: 0 }), mutant('Survived', { testsCompleted: 3 })]),
+  )
+  assert.equal(survivors.length, 1)
+  assert.equal(unjudged.length, 1)
+})
+
 test('a mutant with no test count is marked as such, not as zero', () => {
   // A Timeout carries no count because it never finished. Rendering that as
   // `0 tests` would read as "nothing covers this line", which is the opposite
