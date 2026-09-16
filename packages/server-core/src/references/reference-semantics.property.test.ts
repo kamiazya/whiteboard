@@ -468,10 +468,7 @@ describe('reference semantics under command sequences', () => {
                       id: nodeId,
                       type: 'file',
                       file: 'embed-placeholder',
-                      // `execute` takes the schema's OUTPUT type, and the input's
-                      // flat write shape has already been narrowed to the model's
-                      // field by then.
-                      'x-whiteboard': { embed: { documentId: targetId } },
+                      embed: { documentId: targetId },
                     },
                   },
                 ],

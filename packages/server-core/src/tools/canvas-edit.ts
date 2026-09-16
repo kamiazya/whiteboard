@@ -627,10 +627,10 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 : placeInside(index, op.op, group, [{ width, height }])[0]
             if (at === undefined) fail(index, op.op, 'no placement')
 
-            // The draft's extension arrives under the published input key and
-            // spreads out as the model's own fields — see WRITE_EXTENSION.
+            // `embed` and `facets` are the model's own fields on the input
+            // now, so they ride through `rest` rather than being unpacked
+            // from a published extension key — see WRITE_EXTENSION.
             const {
-              'x-whiteboard': extension,
               type: _type,
               text: _text,
               file: _file,
@@ -643,7 +643,6 @@ export function createCanvasEditTool(deps: ServerDeps) {
             } = draft as NodeDraft & Record<string, unknown>
             const parsed = spatialNodeSchema.safeParse({
               ...rest,
-              ...extension,
               // The draft's published `type` and content field become the
               // model's resource here, at the tool's boundary — see
               // `draftContent` for why that boundary exists at all.

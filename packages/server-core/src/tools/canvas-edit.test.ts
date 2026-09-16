@@ -2795,24 +2795,46 @@ describe('the node extension on the write side', () => {
     expect(parsed.snapshot.nodes[0]).toMatchObject({ width: 120.5, height: 40.25 })
   })
 
-  test("narrows a flat extension to the model's fields: an embed, or facets alone", () => {
-    const parse = (extension: Record<string, unknown>) =>
+  test("takes the model's own embed and facets, and refuses the retired extension key", () => {
+    const parse = (fields: Record<string, unknown>) =>
       canvasEditInputSchema.parse({
         workspaceId: 'ws',
         documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
-        ops: [{ op: 'node.add', node: { type: 'text', text: 'x', 'x-whiteboard': extension } }],
+        ops: [{ op: 'node.add', node: { type: 'text', text: 'x', ...fields } }],
       }).ops[0]
-    // In comes the FORMAT's union arm, under the published input key; out come
-    // the MODEL's two independent fields (ADR-0037). The key stays because it
-    // is what a model reads in `tools/list`; moving it is a tool-surface change.
-    const embed = parse({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' })
-    expect(embed.op === 'node.add' && embed.node['x-whiteboard']).toEqual({
-      embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' },
+
+    // The published input names the MODEL's fields. It used to name JSON
+    // Canvas 1.0's `x-whiteboard` extension key, flattened, which made sense
+    // while the model WAS the format; since ADR-0037 the model has no such
+    // key anywhere, so publishing one told a reader of `tools/list`
+    // something untrue about the thing it was writing.
+    const embed = parse({ embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' } })
+    expect(embed.op === 'node.add' && embed.node.embed).toEqual({
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
     })
     const facets = parse({ facets: { 'example.kanban/v1': { status: 'todo' } } })
-    expect(facets.op === 'node.add' && facets.node['x-whiteboard']).toEqual({
-      facets: { 'example.kanban/v1': { status: 'todo' } },
+    expect(facets.op === 'node.add' && facets.node.facets).toEqual({
+      'example.kanban/v1': { status: 'todo' },
     })
+
+    // STRUCTURAL now, where a hand-written `.refine` used to spell it out:
+    // `nodeEmbedSchema` requires `documentId`, so an embed naming no
+    // document cannot be expressed rather than being caught after the fact.
+    expect(() => parse({ embed: { versionRef: 'v1' } })).toThrow()
+
+    // The second half of the old write schema does NOT dissolve, and this is
+    // what would silently regress if someone derived `facets` straight from
+    // the stored field: that one is `.catch(undefined)`, read-side tolerance
+    // so an unrecognised bucket cannot stop a canvas being readable. On the
+    // write side the same tolerance drops a malformed bucket a caller just
+    // sent. Here it is refused.
+    expect(() => parse({ facets: { nope: {} } })).toThrow()
+
+    // And the retired key is a stray now, refused by name (C10) rather than
+    // quietly accepted — which is what makes this a real retirement.
+    expect(() =>
+      parse({ 'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' } }),
+    ).toThrow()
   })
 })
 

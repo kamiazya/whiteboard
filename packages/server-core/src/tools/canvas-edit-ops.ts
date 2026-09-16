@@ -10,12 +10,11 @@ import {
   canvasEdgeSchema,
   canvasLineSchema,
   documentIdSchema,
-  type ExtensionFacets,
   edgePatchFieldsSchema,
   extensionFacetsSchema,
   linePatchFieldsSchema,
-  type NodeEmbed,
   type NodeResource,
+  nodeEmbedSchema,
   nodeIdSchema,
   nodePatchFieldsSchema,
   nodePositionSchema,
@@ -48,63 +47,35 @@ const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
  */
 const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
 /**
- * The node extension as a WRITER declares it: one flat object instead of
- * the stored two-variant union, narrowed to the stored shape on parse.
+ * The model's own two fields, reached directly.
  *
- * Two reasons, one of them measured. The stored schema `.catch`es an
- * unrecognised extension so a canvas stays readable, which on the write
- * side would silently DROP a broken embed a caller just sent; here a
- * `kind: "embed"` with no document is refused by name. And the stored
- * union is emitted inline into the tool's input once per node type per op
- * — eight times, 487 bytes each — where this shape is 290, on a table a
- * model reads on every turn.
- */
-const nodeExtensionWriteSchema = z
-  .object({
-    kind: z.literal('embed').optional(),
-    documentId: documentIdSchema.optional(),
-    versionRef: z.string().min(1).optional(),
-    facets: extensionFacetsSchema.optional(),
-  })
-  .strict()
-  .refine((value) => (value.kind === 'embed') === (value.documentId !== undefined), {
-    message: 'an embed names the document it embeds: kind "embed" and documentId go together',
-  })
-  /**
-   * Out comes the MODEL's two fields, not the format's union arm.
-   *
-   * The tool's INPUT key stays `x-whiteboard` — it is published in
-   * `tools/list`, a model reads it every turn, and moving it is a tool-surface
-   * change with its own gate (ADR-0031). What ADR-0037 changed is the far
-   * side: a node carries `embed` and `facets` independently now, and the
-   * transform is where the union arm becomes them.
-   */
-  .transform((value): { embed?: NodeEmbed; facets?: ExtensionFacets } => ({
-    ...(value.kind === 'embed' &&
-      value.documentId !== undefined && {
-        embed: {
-          documentId: value.documentId,
-          ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
-        },
-      }),
-    ...(value.facets === undefined ? {} : { facets: value.facets }),
-  }))
-/**
- * NAMED in zod's registry, so it is emitted into `$defs` once and referenced
- * at each of its four sites instead of inlined there. Measured: -776
- * model-visible bytes, with `parameters` and `undescribed` unmoved.
+ * The tool used to publish them as `x-whiteboard: { kind: "embed",
+ * documentId, versionRef, facets }` — JSON Canvas 1.0's extension key, flat
+ * rather than the stored union, with a `.refine` spelling out that an embed
+ * names the document it embeds. That key made sense while the model WAS the
+ * format. ADR-0037 ended that: a node carries `embed` and `facets`
+ * independently now, and a published input naming a foreign format's
+ * extension key, when the model has none anywhere, tells a model reading
+ * `tools/list` something untrue about the thing it is writing.
  *
- * Only a COMPOSITE may be registered, and that rule was measured rather than
- * assumed. A description INSIDE a registered object survives into `$defs`
- * (`EdgeEnd` keeps all three of its). A description ON the registered schema
- * itself is DROPPED — registering the described `width`/`height` leaves read
- * as -837 bytes, and the bytes were the descriptions being deleted: 4 arms x
- * (60 + 150) is the whole of it, and the model would have been left guessing
- * at a size field that used to say what omitting it buys.
+ * The hand-written refusal becomes STRUCTURAL in the move: `nodeEmbedSchema`
+ * requires `documentId`, so "an embed with no document" is refused by the
+ * type rather than by a `.refine` that had to say it. That is the whole of
+ * what the old schema's first reason bought, now bought by the model.
+ *
+ * `facets` is still named here rather than derived, and that is the second
+ * reason, which does NOT dissolve: the stored field is
+ * `extensionFacetsSchema.optional().catch(undefined)`, and the `.catch` is
+ * read-side tolerance — an unrecognised bucket must not stop a canvas being
+ * readable. On the WRITE side the same `.catch` would silently drop a
+ * malformed facets bucket a caller just sent, where this refuses it by name.
+ * So the stored pair stays omitted from the derived shape and is re-added
+ * here with the tolerance stripped.
  */
-z.globalRegistry.add(nodeExtensionWriteSchema, { id: 'NodeExtension' })
-
-const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
+const WRITE_EXTENSION = {
+  embed: nodeEmbedSchema.optional(),
+  facets: extensionFacetsSchema.optional(),
+} as const
 
 const draftBase = sharedNodeFieldsSchema
   .omit(STORED_EXTENSION_FIELDS)

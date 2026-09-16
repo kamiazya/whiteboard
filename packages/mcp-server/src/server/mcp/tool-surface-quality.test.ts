@@ -174,7 +174,12 @@ describe('what the tool table costs to read', () => {
       // this row is where the registration pays most.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 20500,
+        // -850 when `ExtensionFacets` joined the registry. The facets record
+        // is description-free, so naming it deletes nothing a model reads,
+        // and a scene repeats it on every node and every edge — which is why
+        // an INPUT convergence on wb_canvas_edit shows up loudest on this
+        // tool's output.
+        wireBytes: 19650,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -217,7 +222,9 @@ describe('what the tool table costs to read', () => {
         // confirmed, and the two tools sharing one figure to the byte is a
         // fact this comment records rather than explains. Left open on
         // purpose: an invented mechanism reads like a measured one.
-        wireBytes: 17804,
+        // -334 more from the `ExtensionFacets` registration, on top of the
+        // unattributed drop above.
+        wireBytes: 17470,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -362,15 +369,28 @@ describe('what the tool table costs to read', () => {
       // measured rather than reasoned: the same -4/-12 appears against
       // main's new base as it did against the old one.
       wb_canvas_edit: {
-        visibleBytes: 15043,
-        // -4144, the same figure `canvas_view` moved by and for a cause left
-        // equally open there. `visibleBytes` is UNCHANGED at 15043 across the
-        // whole node-draft rewrite, which is the measurement that says the
-        // published input really is the one this tool has always had.
-        wireBytes: 33869,
+        // -79. The node input stopped publishing JSON Canvas 1.0's
+        // `x-whiteboard` extension key and now names the model's own `embed`
+        // and `facets` — which the model has had since ADR-0037, leaving the
+        // tool describing a shape nothing anywhere held.
+        //
+        // The convergence ALONE took this row UP 169 bytes, and that is worth
+        // recording because it is the opposite of what the change reads like:
+        // retiring a registered composite (`NodeExtension`) put the facets
+        // record inline at four more sites. Registering `ExtensionFacets` —
+        // the one safe registration ADR-0031 §3b had listed and left unspent,
+        // safe because the record carries no description to be deleted — pays
+        // that back and 79 more.
+        visibleBytes: 14964,
+        // -413, same two causes.
+        wireBytes: 33456,
         descriptionWords: 169,
-        parameters: 221,
-        undescribed: 154,
+        // -4 each: `x-whiteboard`'s four flattened members (`kind`,
+        // `documentId`, `versionRef`, `facets`) become two the model already
+        // defines. All four were undescribed, so the whole of the parameter
+        // drop is a drop in UNEXPLAINED parameters.
+        parameters: 217,
+        undescribed: 150,
         strays: 'refused',
         names: [],
       },
@@ -392,7 +412,13 @@ describe('what the tool table costs to read', () => {
       },
       wb_document_get: {
         visibleBytes: 979,
-        wireBytes: 2757,
+        // +63: the `ExtensionFacets` registration is a NET COST here, and
+        // saying so is the point of an exact pin. A `$defs` entry plus a
+        // `$ref` is dearer than one inlined copy, so a tool holding the
+        // record once pays for the dedup the repeat-heavy tools collect. The
+        // table-wide figure is what the registration is judged on (-1,408
+        // wire, -16 visible); this row is where it is paid.
+        wireBytes: 2820,
         descriptionWords: 63,
         parameters: 4,
         undescribed: 3,
@@ -503,8 +529,12 @@ describe('what the tool table costs to read', () => {
       // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
       // errors over three trials before, 2 calls and 0 after.
       wb_facet_set: {
-        visibleBytes: 2421,
-        wireBytes: 3240,
+        // +63 visible, +126 wire, same cause as `wb_document_get` above and
+        // the only row where the registration costs MODEL-VISIBLE bytes. It
+        // is bought by -79 on `wb_canvas_edit`, the tool that is 39% of
+        // everything a model reads.
+        visibleBytes: 2484,
+        wireBytes: 3366,
         descriptionWords: 118,
         parameters: 9,
         undescribed: 1,
@@ -726,13 +756,13 @@ describe('what the tool table costs to read', () => {
       //
       // Then -4 visible / -20 wire for `node.patch`'s derived geometry (see
       // the `wb_canvas_edit` row). Strictly more accepted, and cheaper.
-      visibleBytes: 38296,
+      visibleBytes: 38280,
       // -8288: the two rows above, and nothing else. A table whose whole
       // model-visible cost is unchanged while its wire cost falls is the
       // shape a storage change is supposed to have.
-      wireBytes: 107431,
-      parameters: 345,
-      undescribed: 221,
+      wireBytes: 106023,
+      parameters: 341,
+      undescribed: 217,
     })
   })
 

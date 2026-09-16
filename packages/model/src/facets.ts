@@ -71,6 +71,24 @@ export const extensionFacetsSchema = z.record(z.string(), z.unknown()).superRefi
   }
 })
 
+/**
+ * NAMED in zod's registry, so it is emitted into `$defs` once and `$ref`ed at
+ * each site instead of inlined there.
+ *
+ * Safe by the rule the tool-surface skill measured: only a COMPOSITE may be
+ * registered, because a description ON a registered schema is DROPPED from
+ * `$defs` while one INSIDE a registered object survives. This schema carries
+ * no `.describe()` — its prose is a source comment, which never reaches the
+ * wire — so registering it deletes nothing a model was reading.
+ *
+ * It was listed as the last remaining safe registration and left unspent at
+ * four sites and ~99 bytes each, which was the right call then. Converging
+ * `wb_canvas_edit`'s node input on the model's fields put `facets` at four
+ * more sites and took the table UP 169 visible bytes; this is what pays that
+ * back and more.
+ */
+z.globalRegistry.add(extensionFacetsSchema, { id: 'ExtensionFacets' })
+
 export type ExtensionFacets = z.infer<typeof extensionFacetsSchema>
 
 /**
