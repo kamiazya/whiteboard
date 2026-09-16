@@ -3,7 +3,13 @@
 // mutation ONE batch command (one undo step), reminted ids on every paste.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endIn, endNode, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  endIn,
+  endNode,
+  nodeText,
+  type SpatialNode,
+  withNodeText,
+} from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -386,9 +392,7 @@ it('a content-only change to a held node lifts the hold — ANY touch counts, no
   act(() =>
     latest.reset({
       ...latest.canvas,
-      nodes: latest.canvas.nodes.map((n) =>
-        n.id === 'a' && nodeText(n) !== undefined ? { ...n, text: 'rewritten' } : n,
-      ),
+      nodes: latest.canvas.nodes.map((n) => (n.id === 'a' ? withNodeText(n, 'rewritten') : n)),
     }),
   )
   expect(container.querySelector('[data-testid="ghost-overlay"]')).toBeNull()
