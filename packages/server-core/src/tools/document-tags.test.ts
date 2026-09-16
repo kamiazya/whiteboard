@@ -111,6 +111,10 @@ describe('the workspace tag projection', () => {
       { documentId: NOTE_ID, tags: ['retro'] },
       { documentId: BOARD_ID, tags: ['phase:design'] },
     ])
+    // What the board's boxes carry, per board: the half a client's `#tag`
+    // filter needs to find the board by a tag the vocabulary counted from
+    // boxes. The note has nothing inside to carry one.
+    expect(out.contents).toEqual([{ documentId: BOARD_ID, tags: ['health:failing'] }])
     expect(out.inUse).toEqual([
       {
         tag: 'health:failing',

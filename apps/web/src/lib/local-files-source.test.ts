@@ -3,7 +3,12 @@
  * three-pane browser serve local mode, which is the whole point of the seam.
  */
 import 'fake-indexeddb/auto'
-import { writeCoreFacets, writeFacets, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeCoreFacets,
+  writeFacets,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -303,5 +308,73 @@ describe('createLocalFilesSource search', () => {
 
     const byJapanese = await source.searchDocuments('ロケット')
     expect(byJapanese.map((hit) => hit.document.path)).toEqual(['notes/untitled-1'])
+  })
+})
+
+// ADR-0040: a board's own tags are the document's, listed like a note's, and
+// what its boxes and edges carry is counted in the workspace's vocabulary —
+// the browser keeper's spelling of the daemon's /document-tags.
+describe('createLocalFilesSource board tags and the vocabulary in use', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('lists a board’s own tags on its entry and counts every bearer in listTagsInUse', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const note = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'note',
+      kind: 'markdown',
+    })
+    const board = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'board',
+      kind: 'spatial',
+    })
+    const store = new LoroStore()
+    const noteDoc = new Loro()
+    writeCoreFacets(noteDoc, { type: 'note', tags: ['q3'] })
+    await store.save(note.documentId, noteDoc.export({ mode: 'snapshot' }))
+    const boardDoc = new Loro()
+    writeSpatialCanvas(boardDoc, {
+      tags: ['team:core', 'q3'],
+      nodes: [
+        {
+          id: 'a',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          text: 'a',
+          tags: ['health:ok'],
+        },
+        {
+          id: 'b',
+          type: 'text',
+          x: 200,
+          y: 0,
+          width: 100,
+          height: 50,
+          text: 'b',
+          tags: ['health:ok'],
+        },
+      ],
+      edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['link:slow'] }],
+    })
+    await store.save(board.documentId, boardDoc.export({ mode: 'snapshot' }))
+
+    const source = createLocalFilesSource()
+    const entries = await source.listDocuments()
+    expect(entries.find((e) => e.path === 'board')?.tags).toEqual(['team:core', 'q3'])
+    // What the boxes and the edge carry, once each, beside the board's own —
+    // never on the note, which has nothing inside.
+    expect(entries.find((e) => e.path === 'board')?.carriedTags).toEqual(['health:ok', 'link:slow'])
+    expect(entries.find((e) => e.path === 'note')?.carriedTags).toBeUndefined()
+    expect(await source.listTagsInUse?.()).toEqual([
+      { tag: 'health:ok', key: 'health', value: 'ok', documents: 0, boards: 0, nodes: 2, edges: 0 },
+      { tag: 'link:slow', key: 'link', value: 'slow', documents: 0, boards: 0, nodes: 0, edges: 1 },
+      { tag: 'q3', documents: 1, boards: 1, nodes: 0, edges: 0 },
+      { tag: 'team:core', key: 'team', value: 'core', documents: 0, boards: 1, nodes: 0, edges: 0 },
+    ])
   })
 })

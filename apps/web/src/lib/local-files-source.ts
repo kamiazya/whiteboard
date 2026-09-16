@@ -35,6 +35,7 @@ import {
   idbContentClock,
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
+import { countTagsInUse, type TagBearer } from './tags-in-use.js'
 import { loadWorkspaceDocumentProjection } from './workspace-content.js'
 
 /**
@@ -152,6 +153,27 @@ export function createLocalFilesSource(
   }
 
   return {
+    async listTagsInUse() {
+      const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+      const bearers: TagBearer[] = []
+      for (const entry of entries) {
+        if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
+        try {
+          const doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
+          if (entry.kind === 'markdown') {
+            bearers.push({ what: 'document', tags: readCoreFacets(doc)?.tags ?? [] })
+            continue
+          }
+          const canvas = readSpatialCanvas(doc)
+          bearers.push({ what: 'board', tags: canvas.tags ?? [] })
+          for (const node of canvas.nodes) bearers.push({ what: 'node', tags: node.tags ?? [] })
+          for (const edge of canvas.edges) bearers.push({ what: 'edge', tags: edge.tags ?? [] })
+        } catch {
+          // unreadable or never written: carries nothing
+        }
+      }
+      return countTagsInUse(bearers)
+    },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       let entries: Awaited<ReturnType<DocumentIndex['listDocuments']>>
       try {
@@ -173,13 +195,28 @@ export function createLocalFilesSource(
       // ponytail: O(N) doc loads per listing; cache per-document when a
       // measured workspace makes the panel open slowly.
       const tagsById = new Map<string, readonly string[]>()
+      const carriedById = new Map<string, readonly string[]>()
       for (const entry of entries) {
-        if (entry.kind !== 'markdown') continue
+        if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
         try {
-          const tags = readCoreFacets(
-            await loadCurrentDoc({ documentId: entry.documentId, path: entry.path }),
-          )?.tags
-          if (tags !== undefined && tags.length > 0) tagsById.set(entry.documentId, tags)
+          const doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
+          if (entry.kind === 'markdown') {
+            const tags = readCoreFacets(doc)?.tags
+            if (tags !== undefined && tags.length > 0) tagsById.set(entry.documentId, tags)
+            continue
+          }
+          // A board's own tags are the document's (ADR-0040 decision 2);
+          // what its boxes and edges carry rides beside them, deduplicated,
+          // so the `#tag` filter finds the board (decision 3) — the browser
+          // spelling of the daemon's `/document-tags` `contents`.
+          const canvas = readSpatialCanvas(doc)
+          if (canvas.tags !== undefined && canvas.tags.length > 0) {
+            tagsById.set(entry.documentId, canvas.tags)
+          }
+          const carried = new Set<string>()
+          for (const node of canvas.nodes) for (const tag of node.tags ?? []) carried.add(tag)
+          for (const edge of canvas.edges) for (const tag of edge.tags ?? []) carried.add(tag)
+          if (carried.size > 0) carriedById.set(entry.documentId, [...carried])
         } catch {
           // unreadable or never written: no tags to show
         }
@@ -192,6 +229,9 @@ export function createLocalFilesSource(
         ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
         ...(tagsById.has(entry.documentId)
           ? { tags: tagsById.get(entry.documentId) as readonly string[] }
+          : {}),
+        ...(carriedById.has(entry.documentId)
+          ? { carriedTags: carriedById.get(entry.documentId) as readonly string[] }
           : {}),
         ...(stamps.has(entry.documentId)
           ? { updatedAt: stamps.get(entry.documentId) as string }

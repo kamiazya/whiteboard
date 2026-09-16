@@ -38,15 +38,17 @@ so in one line instead of guessing.
 
 In the document browser:
 
-- The **tag strip** above the file panes lists every tag in the workspace.
-  Click one to filter to its documents; click it again to clear.
+- The **tag strip** above the file panes lists every tag in use anywhere in
+  the workspace — on notes, boards, boxes and edges — plain tags first, then
+  each scoped key with its values under it (`health` · ok · failing), each
+  with a count of what carries it (hover for the breakdown). Click one to
+  filter to the documents carrying it; click it again to clear.
 - The **search box** understands two forms: plain text matches tags along
   with names and paths, and `#tag` matches *only* documents carrying exactly
   that tag.
 - Document cards and search results show each document's tags.
 
-A board's own tags show in the document browser when the workspace is kept
-by the daemon; a board kept in the browser is tagged and exported the same
-way, but the browser's document list does not read them yet. What a
-board's boxes and edges carry is never a document tag: it is found through
-the MCP search (`wb_document_search`), which names the matching boxes.
+A board's own tags show in the document browser under either keeper. What
+a board's boxes and edges carry is counted on the strip but is never a
+document tag: filtering by such a tag finds the boards whose boxes carry
+it, and the MCP search (`wb_document_search`) names the matching boxes.

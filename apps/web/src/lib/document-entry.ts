@@ -49,6 +49,14 @@ export interface WorkspaceDocumentEntry {
    */
   readonly tags?: readonly string[]
   /**
+   * Tags carried INSIDE a board — by its nodes and edges — deduplicated.
+   * Never the document's own (those are `tags`) and never shown as its:
+   * they exist so the `#tag` filter finds the board a chip the strip
+   * counted from boxes is about (ADR-0040 decision 3). Absent for a note,
+   * and for a board whose contents carry nothing.
+   */
+  readonly carriedTags?: readonly string[]
+  /**
    * Present iff the user pinned this document; the value is its position
    * among the pinned. Pinned documents outrank the path sort everywhere the
    * panel orders a flat run of documents — the grid this panel replaced put
