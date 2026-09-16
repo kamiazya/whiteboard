@@ -5,19 +5,21 @@
 // can lie once obstacles force the L into a staircase. Crossing-free,
 // overlap-free documents are still never reshuffled: the optimizer's
 // short-circuit ignores the bend term on purpose.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const box = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
+const box = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
 
 function routed(nodes: SpatialNode[], edges: CanvasEdge[], id: string) {
   const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')

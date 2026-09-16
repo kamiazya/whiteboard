@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
 import { integerSchema } from './integer.js'
+import { nodeResourceSchema } from './node-resource.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
@@ -88,43 +89,36 @@ const sharedNodeFieldsSchema = z.object({
   facets: facetsFieldSchema,
 })
 
-const textNodeSchema = sharedNodeFieldsSchema
+/**
+ * A node is a BOX that may SHOW something.
+ *
+ * [ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md) decision 3:
+ * the `text | file | link | group` union is inherited from JSON Canvas and
+ * dissolves under OCIF's decomposition. What a node shows is a RESOURCE — a
+ * media type plus inline content or a location — and the kind is DERIVED from
+ * it (`nodeKind`), never stored beside it.
+ *
+ * Absent `resource` means the node shows nothing, which is what a FRAME is:
+ * a box that collects whatever its rectangle contains. That is faithful to
+ * both sides — OCIF's group node carries no resource either, and the old
+ * `group` arm was the one arm with no content field.
+ *
+ * The frame's own fields stay where they were. Turning membership from
+ * GEOMETRIC into declared (`parent` plus `@ocif/group`) changes behaviour
+ * rather than shape — `tidy-units.ts` says plainly that membership is
+ * containment — so it is a separate decision from this one, whose
+ * justification in the ADR is entirely about text.
+ */
+export const spatialNodeSchema = sharedNodeFieldsSchema
   .extend({
-    type: z.literal('text'),
-    text: z.string(),
-  })
-  .strict()
-
-const fileNodeSchema = sharedNodeFieldsSchema
-  .extend({
-    type: z.literal('file'),
-    file: z.string(),
-    subpath: z.string().startsWith('#').optional(),
-  })
-  .strict()
-
-const linkNodeSchema = sharedNodeFieldsSchema
-  .extend({
-    type: z.literal('link'),
-    url: z.url(),
-  })
-  .strict()
-
-const groupNodeSchema = sharedNodeFieldsSchema
-  .extend({
-    type: z.literal('group'),
+    /** What this node shows. Absent: it shows nothing, and is a frame. */
+    resource: nodeResourceSchema.optional(),
+    /** A frame's caption. */
     label: z.string().optional(),
     background: z.string().optional(),
     backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
   })
   .strict()
-
-export const spatialNodeSchema = z.discriminatedUnion('type', [
-  textNodeSchema,
-  fileNodeSchema,
-  linkNodeSchema,
-  groupNodeSchema,
-])
 
 export type SpatialNode = z.infer<typeof spatialNodeSchema>
 

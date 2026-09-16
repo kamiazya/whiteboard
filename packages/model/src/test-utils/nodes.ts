@@ -13,20 +13,8 @@
  * constructing each builder's input with no reference to a stored field name.
  */
 import type { ExtensionFacets } from '../facets.js'
+import { RESOURCE_KINDS } from '../node-resource.js'
 import type { CanvasColor, NodeEmbed, SpatialNode } from '../spatial.js'
-
-/**
- * Each builder answers ITS OWN arm, never the whole union. A fixture that
- * wrote `{ ... } as const` had the narrow type, and handing back the union
- * instead breaks the thing fixtures do with a node most often: spreading it
- * and overriding one field. `{ ...node, text: 'edited' }` does not compile
- * against a union whose `file` arm has no `text`, and the error names the
- * spread rather than the builder.
- *
- * These aliases are derived, so ADR-0038 decision 3 redefines them here and
- * the call sites keep compiling.
- */
-type Arm<K extends SpatialNode['type']> = Extract<SpatialNode, { type: K }>
 
 /** What every node has, whatever it shows. */
 interface NodeFields {
@@ -59,19 +47,29 @@ const common = ({ id, x, y, width, height, ...rest }: NodeFields) => ({
   ...present(rest),
 })
 
-export const textNode = (fields: NodeFields & { text: string }): Arm<'text'> => {
+export const textNode = (fields: NodeFields & { text: string }): SpatialNode => {
   const { text, ...node } = fields
-  return { ...common(node), type: 'text', text }
+  return { ...common(node), resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: text } }
 }
 
-export const fileNode = (fields: NodeFields & { file: string; subpath?: string }): Arm<'file'> => {
+export const fileNode = (fields: NodeFields & { file: string; subpath?: string }): SpatialNode => {
   const { file, subpath, ...node } = fields
-  return { ...common(node), type: 'file', file, ...present({ subpath }) }
+  return {
+    ...common(node),
+    resource: {
+      // A file's media type is not knowable from a reference alone, and the
+      // registry claims any located resource that is not a uri-list, so the
+      // generic octet stream is what a fixture means by "a document".
+      mimeType: RESOURCE_KINDS.file.mimeType,
+      location: file,
+      ...present({ subpath }),
+    },
+  }
 }
 
-export const linkNode = (fields: NodeFields & { url: string }): Arm<'link'> => {
+export const linkNode = (fields: NodeFields & { url: string }): SpatialNode => {
   const { url, ...node } = fields
-  return { ...common(node), type: 'link', url }
+  return { ...common(node), resource: { mimeType: RESOURCE_KINDS.link.mimeType, location: url } }
 }
 
 export const groupNode = (
@@ -80,7 +78,8 @@ export const groupNode = (
     background?: string
     backgroundStyle?: 'cover' | 'ratio' | 'repeat'
   },
-): Arm<'group'> => {
+): SpatialNode => {
   const { label, background, backgroundStyle, ...node } = fields
-  return { ...common(node), type: 'group', ...present({ label, background, backgroundStyle }) }
+  // No resource: a frame shows nothing.
+  return { ...common(node), ...present({ label, background, backgroundStyle }) }
 }

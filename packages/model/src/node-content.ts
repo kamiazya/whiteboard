@@ -15,7 +15,7 @@
  * containment — so it is a separate decision from this one and wants its own
  * single reader when it is taken.
  */
-import type { ResourceKind } from './node-resource.js'
+import { RESOURCE_KINDS, type ResourceKind, resourceKind } from './node-resource.js'
 import type { SpatialNode } from './spatial.js'
 
 /**
@@ -38,98 +38,101 @@ import type { SpatialNode } from './spatial.js'
 
 /** The markdown a node shows inline, or `undefined` if it shows none. */
 export const nodeText = (node: SpatialNode): string | undefined =>
-  node.type === 'text' ? node.text : undefined
+  node.resource !== undefined && resourceKind(node.resource) === 'text'
+    ? node.resource.content
+    : undefined
 
 /** The document a node points at, or `undefined`. */
 export const nodeFile = (node: SpatialNode): string | undefined =>
-  node.type === 'file' ? node.file : undefined
+  node.resource !== undefined && resourceKind(node.resource) === 'file'
+    ? node.resource.location
+    : undefined
 
 /** The external address a node points at, or `undefined`. */
 export const nodeUrl = (node: SpatialNode): string | undefined =>
-  node.type === 'link' ? node.url : undefined
+  node.resource !== undefined && resourceKind(node.resource) === 'link'
+    ? node.resource.location
+    : undefined
+
+/** The fragment inside the document a node points at, or `undefined`. */
+export const nodeSubpath = (node: SpatialNode): string | undefined =>
+  nodeFile(node) === undefined ? undefined : node.resource?.subpath
 
 /**
  * Whether this node is a FRAME — a box drawn behind others that collects
  * whatever its rectangle contains.
- */
-export const isFrame = (node: SpatialNode): boolean => node.type === 'group'
-
-/**
- * The same node showing different text.
  *
- * The write counterpart, and it exists for the reason the readers do: today
- * this is `{ ...node, text }`, and under decision 3 it becomes a write into
- * the node's resource. A caller that spells the field is a caller the storage
- * flip has to visit.
- *
- * Answers the node unchanged when it shows no text, so a caller rewriting
- * every node on a canvas needs no `type` check of its own.
+ * A frame shows nothing, so it is the node with no resource. That is the same
+ * thing the `group` arm said and the same thing OCIF's group node says.
  */
-export const withNodeText = (node: SpatialNode, text: string): SpatialNode =>
-  node.type === 'text' ? { ...node, text } : node
-
-/**
- * The same node pointing at a different document.
- *
- * Drops `subpath` with the old reference, because a fragment identifies a
- * place inside the document it came from and means nothing in another one —
- * the behaviour `commands.ts` already had, moved here so the storage flip
- * finds it in one place.
- */
-export const withNodeFile = (node: SpatialNode, file: string): SpatialNode => {
-  if (node.type !== 'file') return node
-  const { subpath: _dropped, ...rest } = node
-  return { ...rest, file }
-}
-
-/** The same node pointing at a different address. */
-export const withNodeUrl = (node: SpatialNode, url: string): SpatialNode =>
-  node.type === 'link' ? { ...node, url } : node
+export const isFrame = (node: SpatialNode): boolean => node.resource === undefined
 
 /**
  * A frame's own label, or `undefined` when this node is not a frame.
- *
- * On the frame axis rather than the content one, and here for the same reason
- * `isFrame` is: a caller reading it otherwise has to narrow through `type`,
- * which is the spelling both axes are moving away from.
  */
 export const frameLabel = (node: SpatialNode): string | undefined =>
-  node.type === 'group' ? node.label : undefined
+  isFrame(node) ? node.label : undefined
 
 /**
  * The image a frame is painted with, and how it is fitted — `undefined` when
  * this node is not a frame, or names none.
  *
  * Beside `frameLabel` for the same reason and on the same axis: these are the
- * last two stored fields a caller could only reach by narrowing through
- * `type`, which is what left `composeGroupBackground` taking a node type
- * derived from the union ADR-0038 decision 3 dissolves.
+ * last two stored fields a caller could only reach by narrowing.
  */
 export const frameBackground = (node: SpatialNode): string | undefined =>
-  node.type === 'group' ? node.background : undefined
+  isFrame(node) ? node.background : undefined
 
 export const frameBackgroundStyle = (
   node: SpatialNode,
-): 'cover' | 'ratio' | 'repeat' | undefined =>
-  node.type === 'group' ? node.backgroundStyle : undefined
-
-/** The fragment inside the document a node points at, or `undefined`. */
-export const nodeSubpath = (node: SpatialNode): string | undefined =>
-  node.type === 'file' ? node.subpath : undefined
+): 'cover' | 'ratio' | 'repeat' | undefined => (isFrame(node) ? node.backgroundStyle : undefined)
 
 /**
  * What KIND of thing a node is: one of the resource kinds, or the frame.
  *
- * The one accessor an exhaustive reader needs. `NodeKind` is closed — the
- * registry's ids plus `'frame'` — so a `switch` over it narrows to `never`
- * and a table written `satisfies Record<NodeKind, …>` fails to compile when
- * the registry grows. That is the guard `searchable-texts.ts` asks for, kept
- * across the dissolution rather than traded for indirection.
- *
- * Today it reads the stored discriminant. After the storage moves it reads
- * `resourceKind(node.resource)`, and no caller changes.
+ * `undefined` means the node shows content this build has no reader for —
+ * a resource whose media type nothing in `RESOURCE_KINDS` claims. The
+ * node-kind union could not express that at all: an unknown arm failed to
+ * parse and the whole node was dropped. A caller that must answer for every
+ * node answers for this case too.
  */
 export type NodeKind = ResourceKind | 'frame'
 
-export const nodeKind = (node: SpatialNode): NodeKind =>
-  node.type === 'group' ? 'frame' : node.type
+export const nodeKind = (node: SpatialNode): NodeKind | undefined =>
+  node.resource === undefined ? 'frame' : resourceKind(node.resource)
+
+/**
+ * The same node showing different text.
+ *
+ * Answers the node unchanged when it shows no text, so a caller rewriting
+ * every node on a canvas needs no kind check of its own.
+ */
+export const withNodeText = (node: SpatialNode, text: string): SpatialNode =>
+  nodeText(node) === undefined
+    ? node
+    : {
+        ...node,
+        resource: { ...node.resource, mimeType: RESOURCE_KINDS.text.mimeType, content: text },
+      }
+
+/**
+ * The same node pointing at a different document.
+ *
+ * Drops `subpath` with the old reference, because a fragment identifies a
+ * place inside the document it came from and means nothing in another one.
+ */
+export const withNodeFile = (node: SpatialNode, file: string): SpatialNode => {
+  const resource = node.resource
+  if (resource === undefined || resourceKind(resource) !== 'file') return node
+  const { subpath: _dropped, ...rest } = resource
+  return { ...node, resource: { ...rest, location: file } }
+}
+
+/** The same node pointing at a different address. */
+export const withNodeUrl = (node: SpatialNode, url: string): SpatialNode =>
+  nodeUrl(node) === undefined
+    ? node
+    : {
+        ...node,
+        resource: { ...node.resource, mimeType: RESOURCE_KINDS.link.mimeType, location: url },
+      }

@@ -16,6 +16,7 @@
 // vacuously, which is the shape ADR-0031 §7 warns about. What is pinned
 // instead is that the corpus is uniform, so the first board to spend
 // anything is loud.
+import { isFrame } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { DRAWING_CORPUS } from '../test-utils/drawing-corpus.js'
 import { type FacetScore, scoreFacets } from './facet-score.js'
@@ -113,7 +114,7 @@ describe('facet vocabulary across the corpus', () => {
     const board = of('architecture/reference')
     expect(board.deficit).toBe(3)
     const canvas = DRAWING_CORPUS.find((c) => c.name === 'architecture/reference')?.canvas
-    const frames = (canvas?.nodes ?? []).filter((n) => n.type === 'group')
+    const frames = (canvas?.nodes ?? []).filter((n) => isFrame(n))
     const inFirstFrame = (n: { x: number; y: number; width: number; height: number }) => {
       const f = frames[0]
       return (
@@ -127,7 +128,7 @@ describe('facet vocabulary across the corpus', () => {
     const recoloured = {
       ...canvas,
       nodes: (canvas?.nodes ?? []).map((n) =>
-        n.type !== 'group' && inFirstFrame(n) ? { ...n, color: '4' } : n,
+        !isFrame(n) && inFirstFrame(n) ? { ...n, color: '4' } : n,
       ),
     } as NonNullable<typeof canvas>
     const after = scoreFacets(recoloured)

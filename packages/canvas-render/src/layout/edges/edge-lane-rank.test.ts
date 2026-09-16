@@ -2,19 +2,21 @@
 // its side must run deeper than their exit segments, or it crosses them
 // right at the node — a crossing that exists only because of lane
 // assignment, not because the two connections actually have to cross.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
+const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
 
 type P = { x: number; y: number }
 function segmentsCross(a1: P, a2: P, b1: P, b2: P): boolean {

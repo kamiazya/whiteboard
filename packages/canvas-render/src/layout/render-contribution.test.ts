@@ -9,7 +9,9 @@
 // The namespace still comes from the CONTRIBUTION, never from a payload: a
 // reader answers a bare kind and this package composes the id, so a document
 // cannot name another plugin's geometry however it is written.
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -68,16 +70,15 @@ const DEMO: RenderContribution = {
 
 const canvasOf = (id: string, facets?: Record<string, unknown>): SpatialCanvas => ({
   nodes: [
-    {
+    textNode({
       id,
-      type: 'text',
       x: 0,
       y: 0,
       width: 200,
       height: 120,
       text: id,
       ...(facets === undefined ? {} : { facets }),
-    },
+    }),
   ],
   edges: [],
 })

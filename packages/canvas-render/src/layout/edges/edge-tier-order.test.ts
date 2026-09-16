@@ -4,20 +4,22 @@
 // reason, and their order relative to each other was never argued — with
 // border-tracing above, the lexicographic compare bought 0px of border
 // tracing with 170px of tunnelling straight through the target.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { PENALTY_RULES } from './edge-rules.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: '',
-})
+const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: '',
+  })
 
 /** Length of path running strictly inside a node body — the harm being ranked. */
 function interiorInk(

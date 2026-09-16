@@ -1,5 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
@@ -28,16 +28,18 @@ function runsOf(canvas: SpatialCanvas): readonly TextRunNode[] {
 
 const NODE_WIDTH = 160
 
+type LabelBox = { id: string; x: number; y: number; width: number; height: number }
+
 describe('label truncation', () => {
   it.each([
-    ['file', { type: 'file' as const, file: 'とても長い日本語のファイル名です.md' }],
-    ['link', { type: 'link' as const, url: 'https://example.com/very/long/path/x' }],
-    ['group', { type: 'group' as const, label: 'とても長いグループのラベル' }],
-  ])('keeps a %s label inside its node and marks it truncated', (_kind, rest) => {
-    const canvas = {
-      nodes: [{ id: 'n', x: 0, y: 0, width: NODE_WIDTH, height: 60, ...rest }],
+    ['file', (box: LabelBox) => fileNode({ ...box, file: 'とても長い日本語のファイル名です.md' })],
+    ['link', (box: LabelBox) => linkNode({ ...box, url: 'https://example.com/very/long/path/x' })],
+    ['group', (box: LabelBox) => groupNode({ ...box, label: 'とても長いグループのラベル' })],
+  ])('keeps a %s label inside its node and marks it truncated', (_kind, build) => {
+    const canvas: SpatialCanvas = {
+      nodes: [build({ id: 'n', x: 0, y: 0, width: NODE_WIDTH, height: 60 })],
       edges: [],
-    } as SpatialCanvas
+    }
     const runs = runsOf(canvas)
     expect(runs.length).toBeGreaterThan(0)
     for (const run of runs) {

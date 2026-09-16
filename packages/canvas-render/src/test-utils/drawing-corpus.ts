@@ -1,4 +1,5 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { tidyBoxes, tidyNodes } from '../tidy.js'
 
 /**
@@ -32,15 +33,15 @@ const box = (
   y: number,
   width = BOX_W,
   height = BOX_H,
-): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text,
-})
+): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text,
+  })
 const group = (
   id: string,
   label: string,
@@ -48,15 +49,15 @@ const group = (
   y: number,
   width: number,
   height: number,
-): SpatialNode => ({
-  id,
-  type: 'group',
-  label,
-  x,
-  y,
-  width,
-  height,
-})
+): SpatialNode =>
+  groupNode({
+    id,
+    label,
+    x,
+    y,
+    width,
+    height,
+  })
 const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge => ({
   id,
   from: { node: fromNode },

@@ -1,4 +1,5 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode as buildTextNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import type { MeasureText } from '../measure.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -17,15 +18,7 @@ const textNode = (
   y: number,
   text: string,
   size: { w?: number; h?: number } = {},
-): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: size.w ?? 240,
-  height: size.h ?? 140,
-  text,
-})
+): SpatialNode => buildTextNode({ id, x, y, width: size.w ?? 240, height: size.h ?? 140, text })
 
 function mapCache(): SpatialContentCache & {
   store: Map<string, FittedBlocks>

@@ -184,7 +184,7 @@ export type EditorLeafCommand =
       // so hit-testing (last containing box wins) still reaches members
       // drawn above it. A colliding id is a no-op, like create-node.
       readonly kind: 'create-group'
-      readonly node: Extract<SpatialNode, { type: 'group' }>
+      readonly node: SpatialNode
     }
   | {
       // Sets a group frame's label; an empty string removes the field
@@ -646,10 +646,7 @@ function setNodeFile(canvas: SpatialCanvas, id: string, file: string): SpatialCa
   }
 }
 
-function createGroup(
-  canvas: SpatialCanvas,
-  node: Extract<SpatialNode, { type: 'group' }>,
-): SpatialCanvas {
+function createGroup(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
   if (canvas.nodes.some((existing) => existing.id === node.id)) return canvas
   return { ...canvas, nodes: [node, ...canvas.nodes] }
 }

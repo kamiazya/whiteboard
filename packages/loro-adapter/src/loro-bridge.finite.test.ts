@@ -10,7 +10,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas, writeSpatialCanvas, writeSpatialNode } from './loro-bridge.js'
 
-const node = (overrides: Partial<Extract<SpatialNode, { type: 'text' }>>): SpatialNode => ({
+const node = (overrides: Partial<SpatialNode>): SpatialNode => ({
   id: 'n1',
   type: 'text',
   x: 0,

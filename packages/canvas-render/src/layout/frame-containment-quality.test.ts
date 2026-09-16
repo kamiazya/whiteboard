@@ -1,5 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   CORPUS_WIDTHS_PX,
@@ -62,15 +63,7 @@ interface Debt {
 function scoreCase(name: string, width: number, fraction: number): Debt {
   const measure = createCorpusMeasure().measure
   const options = { measure, parseBody: parseByName, appearance: APPEARANCE }
-  const node = (height: number) => ({
-    id: 'n',
-    type: 'text' as const,
-    x: 0,
-    y: 0,
-    width,
-    height,
-    text: name,
-  })
+  const node = (height: number) => textNode({ id: 'n', x: 0, y: 0, width, height, text: name })
 
   const natural = naturalNodeContentSize(node(1), options)
   // +2 padding is what `naturalNodeContentSize` documents as containing it.

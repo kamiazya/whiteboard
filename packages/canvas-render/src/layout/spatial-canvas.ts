@@ -1323,7 +1323,10 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
       options.onDegrade?.({
         kind: 'unknown-node-kind',
         nodeId: node.id,
-        type: nodeKind(node),
+        // The media type is what a reader needs here: `nodeKind` answers
+        // `undefined` precisely when nothing claims the resource, so naming
+        // the kind would say nothing at all.
+        type: node.resource?.mimeType ?? 'none',
       })
       return [chromeShape(node, options)]
     }

@@ -109,7 +109,7 @@ export interface CanvasCommands {
   readonly groupSelection: (memberIds: readonly string[]) => void
   readonly createNodeAt: (point: Point) => void
   readonly createGroupAtViewportCenter: (at?: Point) => void
-  readonly openLinkNode: (node: Extract<SpatialNode, { type: 'link' }>) => void
+  readonly openLinkNode: (node: SpatialNode) => void
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   readonly onAddImage?: (file: File) => Promise<string | undefined>
   readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void

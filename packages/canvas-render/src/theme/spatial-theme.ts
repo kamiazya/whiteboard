@@ -21,6 +21,7 @@
 // (export gaining a dark chrome variant), not a convergence one, and is
 // out of this slice's scope.
 import type { CanvasColor, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeKind } from '@kamiazya/whiteboard-model'
 import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
@@ -82,15 +83,27 @@ function rawHex(color: CanvasColor | undefined): string | undefined {
   return color?.startsWith('#') ? color : undefined
 }
 
+/** The palette key a node is painted with; see `resolveNode` on the spelling. */
+function paletteKeyFor(node: SpatialNode): 'text' | 'file' | 'link' | 'group' | undefined {
+  const kind = nodeKind(node)
+  return kind === 'frame' ? 'group' : kind
+}
+
 function buildTheme(palette: SpatialPalette, mode: SpatialThemeMode): SpatialAppearanceResolver {
   return {
     mode,
     resolveNode: (node: SpatialNode) => {
-      // `palette.node` is keyed by `SpatialNode['type']`'s closed union;
-      // the fallback only fires for a value cast past the type system
-      // (`layoutSpatialCanvas`'s own defensive `unknown-node-kind` branch),
-      // keeping this resolver total rather than throwing on a bad node.
-      const style = palette.node[node.type] ?? palette.node.text
+      // `palette.node` is keyed by the four things a node could BE. The
+      // fallback fires for a node showing a resource nothing in
+      // `RESOURCE_KINDS` claims — `nodeKind` answers `undefined` there, and
+      // `layoutSpatialCanvas` degrades the same node to chrome only.
+      //
+      // The key is still spelled `group` where `nodeKind` says `frame`: the
+      // palette's shape is `facet-engine`'s published theme-token contract,
+      // which a plugin registers assets against, so renaming it is its own
+      // increment with its own review rather than a drive-by (vocabulary.md).
+      const key = paletteKeyFor(node)
+      const style = (key === undefined ? undefined : palette.node[key]) ?? palette.node.text
       // Preset: accent STROKE + tint FILL (body text keeps the theme text
       // color — readability never depends on the accent hue). Raw hex: the
       // author's exact fill, unchanged (their own responsibility).

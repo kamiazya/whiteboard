@@ -1,7 +1,7 @@
 import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
@@ -708,7 +708,7 @@ function blocksOf(canvas: SpatialCanvas): ReadonlyArray<{ y: number; h: number }
 }
 
 function textNodeAt(width: number, height: number, text: string): SpatialCanvas {
-  return { nodes: [{ id: 'n', type: 'text', x: 0, y: 0, width, height, text }], edges: [] }
+  return { nodes: [textNode({ id: 'n', x: 0, y: 0, width, height, text })], edges: [] }
 }
 
 /** Bodies that wrap and bodies that do not, in one to five blocks. */
@@ -819,10 +819,10 @@ function containmentNode(
   height: number,
 ): SpatialNode {
   const base = { id: 'n', x: 0, y: 0, width, height }
-  if (type === 'text') return { ...base, type, text }
-  if (type === 'file') return { ...base, type, file: 'md.md' }
-  if (type === 'link') return { ...base, type, url: 'https://example.com' }
-  return { ...base, type, label: text }
+  if (type === 'text') return textNode({ ...base, text })
+  if (type === 'file') return fileNode({ ...base, file: 'md.md' })
+  if (type === 'link') return linkNode({ ...base, url: 'https://example.com' })
+  return groupNode({ ...base, label: text })
 }
 
 /**

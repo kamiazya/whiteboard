@@ -27,7 +27,7 @@
  */
 
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
-import { isFrame, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
+import { isFrame, nodeKind, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   resolveNodeShape,
   resolveNodeStencil,
@@ -243,7 +243,9 @@ function declaredPartitions(
     }
     out.push({ name: 'frame', partition: byFrame })
   }
-  const byKind = new Map<string, string>(boxes.map((b) => [b.id, b.type]))
+  // A box showing a resource nothing claims partitions as '': one class, the
+  // way an undressed box below is, rather than each such box its own.
+  const byKind = new Map<string, string>(boxes.map((b) => [b.id, nodeKind(b) ?? '']))
   out.push({ name: 'kind', partition: byKind })
   // A box wearing no stencil is its own class (''), exactly as a box in no
   // frame is: "undressed" is a thing the board says about it, not an absence

@@ -5,7 +5,7 @@
 
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
@@ -15,10 +15,10 @@ const node = (
   id: string,
   type: 'text' | 'group',
   r: { x: number; y: number; w: number; h: number },
-): SpatialNode =>
-  type === 'group'
-    ? { id, type, x: r.x, y: r.y, width: r.w, height: r.h }
-    : { id, type, x: r.x, y: r.y, width: r.w, height: r.h, text: id }
+): SpatialNode => {
+  const box = { id, x: r.x, y: r.y, width: r.w, height: r.h }
+  return type === 'group' ? groupNode(box) : textNode({ ...box, text: id })
+}
 
 const edge = (from: string, to: string): CanvasEdge => ({
   id: 'e1',

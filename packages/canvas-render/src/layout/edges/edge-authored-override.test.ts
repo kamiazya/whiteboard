@@ -3,20 +3,22 @@
 // architecture board, every edge pinned bottom/top, same-row pairs included
 // — the search treats the edge as free and re-sides it; a named pair that
 // routes cleanly is kept exactly as named.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { interiorInk } from '../../quality/polyline-geometry.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: 200,
-  height: 80,
-  text: id,
-})
+const node = (id: string, x: number, y: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: 200,
+    height: 80,
+    text: id,
+  })
 const ownInk = (path: readonly { x: number; y: number }[], n: SpatialNode) =>
   interiorInk(path, { x: n.x, y: n.y, w: n.width, h: n.height })
 

@@ -15,11 +15,7 @@ import { useFileSeamScene } from './use-file-seam-scene.js'
 const measure: MeasureText = () => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
 const references = referenceSeams(new Map())
 
-function fileNode(
-  id: string,
-  width: number,
-  height: number,
-): Extract<SpatialNode, { type: 'file' }> {
+function fileNode(id: string, width: number, height: number): SpatialNode {
   return { id, type: 'file', file: `doc-${id}`, x: 0, y: 0, width, height }
 }
 
@@ -43,10 +39,8 @@ function renderSeam(canvas: SpatialCanvas, zoom: number) {
   )
 }
 
-const expands = (
-  result: { current: ReturnType<typeof useFileSeamScene> },
-  node: Extract<SpatialNode, { type: 'file' }>,
-) => result.current.fileSeamOptions.expandFileNode?.(node) ?? false
+const expands = (result: { current: ReturnType<typeof useFileSeamScene> }, node: SpatialNode) =>
+  result.current.fileSeamOptions.expandFileNode?.(node) ?? false
 
 describe('useFileSeamScene LOD gate', () => {
   it('expands a file node only once its on-screen box reaches 200x140', async () => {

@@ -8,7 +8,9 @@
 // distinctions a reader can SEE match the ones the document DECLARES —
 // never that the drawing was understood, and never that the distinction
 // drawn was the right one to draw.
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { type FacetScore, scoreFacets } from './facet-score.js'
 
@@ -17,11 +19,10 @@ const box = (
   x: number,
   y: number,
   extra: Partial<SpatialNode> & Record<string, unknown> = {},
-): SpatialNode =>
-  ({ id, type: 'text', x, y, width: 200, height: 80, text: id, ...extra }) as SpatialNode
+): SpatialNode => ({ ...textNode({ id, x, y, width: 200, height: 80, text: id }), ...extra })
 
 const frame = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
-  ({ id, type: 'group', x, y, width, height, label: id }) as SpatialNode
+  groupNode({ id, x, y, width, height, label: id })
 
 const shaped = (kind: string) => ({
   facets: { 'visual.shape/v0': { kind } },
