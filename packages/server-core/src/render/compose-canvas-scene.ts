@@ -9,7 +9,7 @@ import {
   type BoundingBox,
   createSpatialTheme,
   layoutSpatialCanvas,
-  sceneBounds,
+  sceneDocumentBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
@@ -114,5 +114,8 @@ export function composeCanvasScene(
  */
 export function sceneEnvelope(scene: Scene): BoundingBox {
   if (scene.nodes.length === 0) return { x: 0, y: 0, w: 0, h: 0 }
-  return sceneBounds(scene)
+  // The document's bounds, not the scene's: a legend takes a band on the
+  // left (ADR-0040 decision 6), and a viewBox without it draws the legend
+  // over the first box.
+  return sceneDocumentBounds(scene)
 }

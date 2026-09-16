@@ -398,7 +398,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 2444 -> 2463: the proposal layer draws a proposed LINE. Without it the
   // op stored a change nothing rendered — built but unwired, and every test
   // green over a board that said nothing had happened.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2463,
+  // +4: the legend attached to the top-level scene (ADR-0040 decision 6) —
+  // derived in legend/canvas-legend.ts, so the layout only asks and attaches.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2467,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -456,7 +458,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +8: the tag fan-out reads each object's CURRENT tags off the eager
   // chain's ref rather than the prop, so a second commit under a slow
   // parent cannot erase the first.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2824,
+  // +5: the legend overlay (ADR-0040 decision 6), mounted from the scene
+  // the worker answered — one line of wiring and its comment.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2829,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

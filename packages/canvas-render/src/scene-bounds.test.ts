@@ -1,6 +1,6 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
+import { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 
 describe('sceneBounds', () => {
   it('returns the documented fallback for an empty scene', () => {
@@ -592,5 +592,31 @@ describe('sceneBounds', () => {
     }
     const scene: Scene = { nodes: [node] }
     expect(() => sceneBounds(scene)).not.toThrow()
+  })
+})
+
+describe('sceneDocumentBounds', () => {
+  const nodes: Scene['nodes'] = [{ kind: 'thematicBreak', bbox: { x: 50, y: 20, w: 200, h: 10 } }]
+  it('is the scene’s bounds when there is no legend', () => {
+    expect(sceneDocumentBounds({ nodes })).toEqual(sceneBounds({ nodes }))
+  })
+  it('adds the legend’s band on the left and grows the height to hold the panel', () => {
+    const legend = {
+      keys: [
+        {
+          key: 'health',
+          of: 'boxes' as const,
+          entries: [
+            { value: 'ok', count: 1, swatch: {} },
+            { value: 'failing', count: 1, swatch: {} },
+          ],
+        },
+      ],
+      uncarried: { boxes: false, edges: false },
+    }
+    // Panel: widest word 'failing' (7 glyphs at 7px) → 16+16+6+49 = 87 wide;
+    // three rows → 16+54 = 70 tall; band = 87 + 24 = 111; height holds
+    // the panel plus its margins (94) since the content is only 10 tall.
+    expect(sceneDocumentBounds({ nodes, legend })).toEqual({ x: 50 - 111, y: 20, w: 311, h: 94 })
   })
 })

@@ -136,6 +136,7 @@ import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import { LegendOverlay } from './LegendOverlay.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
@@ -2137,6 +2138,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           press on it reaching the canvas, so hiding bought nothing and cost
           a flicker on every gesture. Hidden only on an empty canvas, where
           an overview of nothing is chrome with no job. */}
+          {/* What the board's colour MEANS, as the layout attached it to the
+          scene (ADR-0040 decision 6). Screen space like the minimap; the keyed
+          projection omits its SVG twin, so the corner is drawn once. */}
+          {scene?.legend !== undefined && <LegendOverlay legend={scene.legend} />}
           {boxes.length > 0 && rootSize.width >= MINIMAP_MIN_ROOT_WIDTH_PX && (
             <MinimapOverlay
               boxes={minimapNodes}

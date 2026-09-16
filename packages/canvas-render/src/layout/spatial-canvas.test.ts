@@ -1154,3 +1154,41 @@ describe('a text node keeps its body inside its own box', () => {
     expect(runBottoms(scene).length).toBeGreaterThan(0)
   })
 })
+
+// ADR-0040 decision 6: the legend is the LAYOUT's, attached to the scene it
+// produces, so every surface that pictures a document — the export, the
+// viewer, the editor's overlay — reads one answer rather than each
+// deciding whether to ask. A miniature (a canvas embedded in another)
+// carries none: the reader has the host's.
+describe('the scene carries its legend', () => {
+  it('attaches the legend for a board whose colour a scoped-tag key carries, with the resolver’s swatches', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'a', x: 0, y: 0, text: 'A', tags: ['health:ok'], color: '4' }),
+        textNode({ id: 'b', x: 400, y: 0, text: 'B', tags: ['health:failing'], color: '1' }),
+      ],
+      edges: [],
+    }
+    const scene = layoutSpatialCanvas(
+      canvas,
+      baseOptions({
+        appearance: {
+          ...fakeAppearance,
+          resolveNode: (n) => ({
+            appearance: { fill: `f${n.color ?? ''}`, stroke: `s${n.color ?? ''}` },
+          }),
+        },
+      }),
+    )
+    expect(scene.legend?.keys.map((k) => k.key)).toEqual(['health'])
+    expect(scene.legend?.keys[0]?.entries.map((e) => [e.value, e.swatch.fill])).toEqual([
+      ['failing', 'f1'],
+      ['ok', 'f4'],
+    ])
+  })
+
+  it('a board with nothing to say carries no legend field at all', () => {
+    const scene = layoutSpatialCanvas(canvas([textNode({ id: 'a', text: 'A' })]), baseOptions())
+    expect(scene).not.toHaveProperty('legend')
+  })
+})
