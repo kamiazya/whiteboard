@@ -30,6 +30,15 @@ paths:
   cells inside a menu is not a menu. Neither axis is a style choice: one
   says what question the row asks, the other says what container it stands
   in.
+- **`DerivedFacetForm` draws what the engine derived, and takes ONE thing
+  from the vessel it cannot derive: `suggestions`.** Per field name, the
+  values a text box may offer as a `<datalist>` — what the rest of the
+  board already wrote there, which only the vessel can see
+  (`apps/web`'s `collectFieldSuggestions`). Free entry stays free: the list
+  suggests, the schema still refuses. A `placeholder` on a text field is
+  the engine's (declared in the facet's editor spec) and is drawn here
+  unchanged. Both exist because two free identifiers with no example read
+  as two empty boxes, measured on a reader of the Classification form.
 - **`CatalogPicker` — a searchable catalog of choices, and it knows NOTHING
   about facets.** A short list, ONE search box, a category band, a scrolling
   grid, and what was picked recently. It takes loaded sections, a

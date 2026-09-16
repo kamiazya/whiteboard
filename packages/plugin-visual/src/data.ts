@@ -507,9 +507,17 @@ export const semanticPlugin = definePlugin({
       version: 'v0',
       targets: ['node'],
       schema: semanticClassFacetSchema,
-      // No editor spec yet, for the reason `visual.axes` gives: a derived
-      // form over two free identifiers is two text boxes writing a class
-      // nobody can pick from a list. The UI comes with the vocabulary.
+      // Two free identifiers get a derived form either way; what the spec
+      // adds is the EXAMPLE in each empty box, which is the one thing that
+      // can say what goes there before the lowercase rule refuses it. The
+      // pick-from-a-list half comes from the vessel, which alone can see
+      // what the rest of the board already uses.
+      editor: {
+        fields: {
+          axis: { widget: 'text', label: 'Axis', placeholder: 'e.g. health, priority' },
+          value: { widget: 'text', label: 'Value', placeholder: 'e.g. failing, high' },
+        },
+      },
     }),
   ],
 })

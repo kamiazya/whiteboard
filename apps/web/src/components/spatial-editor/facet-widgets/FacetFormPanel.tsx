@@ -43,6 +43,7 @@ const storedFacets = (subject: FacetSubject): Record<string, unknown> =>
   subjectOf(subject).facets ?? {}
 
 import { cn } from '../../../lib/utils.js'
+import type { FieldSuggestions } from './field-suggestions.js'
 import { NODE_FACET_EDITORS } from './index.js'
 
 export interface FacetFormPanelProps {
@@ -72,6 +73,12 @@ export interface FacetFormPanelProps {
    * every time it opens.
    */
   readonly variant?: 'dock' | 'sheet'
+  /**
+   * Per facet key, per text field: the values the rest of the board already
+   * holds (`collectFieldSuggestions`), offered by the derived form as a
+   * datalist. The vessel supplies it because only the vessel sees the board.
+   */
+  readonly suggestions?: FieldSuggestions
 }
 
 export function FacetFormPanel({
@@ -80,6 +87,7 @@ export function FacetFormPanel({
   onWrite,
   editors = NODE_FACET_EDITORS,
   variant = 'dock',
+  suggestions,
 }: FacetFormPanelProps) {
   const groups =
     subject === undefined ? [] : resolveFacetContributions(registry, SUBJECT_POINT[subject.kind])
@@ -129,6 +137,9 @@ export function FacetFormPanel({
                   stored={stored[facet.key]}
                   registry={registry}
                   onWrite={onWrite}
+                  {...(suggestions?.[facet.key] === undefined
+                    ? {}
+                    : { suggestions: suggestions[facet.key] })}
                 />
               )
             })}
