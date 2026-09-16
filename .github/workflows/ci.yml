@@ -510,6 +510,14 @@ jobs:
       - name: Daemon-origin real-browser smoke (R3 UI retirement)
         run: pnpm --filter @kamiazya/whiteboard-mcp smoke:daemon-origin
 
+      # The passkey attestation seam (ADR-0039) crossed for real: Chromium's
+      # virtual authenticator against this daemon's verifier, through the
+      # pairing bearer under a browser-enforced Origin. The browser-mode tests
+      # fake the authenticator and the route tests hand-build the bytes; this
+      # is the one place each side meets what the other produces.
+      - name: Passkey promote real-browser smoke (ADR-0039)
+        run: pnpm --filter @kamiazya/whiteboard-mcp smoke:passkey-promote
+
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
 
