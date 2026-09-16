@@ -218,7 +218,11 @@ It is that a board which DOES carry it — written by a person, a skill that
 says to, or a model told to — reads `carried(semantic.class/v0)` with no
 declaration, and the instrument can then tell a colour that means something
 from one that does not. That is the positive control in `tasks.test.ts`,
-and it is the whole of what §6 now claims.
+and it is the whole of what §6 now claims. The person's path came free:
+the web editor's Facets panel derives a form for every registered node
+facet, so it now shows a Meaning section with Axis, Value and the panel's
+one Save — the first bundled facet with free entry, which is why the
+browser test that pinned "no Save on this panel" had to learn its name.
 
 Two ceilings, named so they are upgrades and not surprises: one
 classification per box (a board needing "health" AND "priority" wants a
