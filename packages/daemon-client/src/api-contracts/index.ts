@@ -58,6 +58,7 @@ export {
 } from './pairing-link.js'
 export type { Attestation, PromoteWorkspaceRequest, PromoteWorkspaceResponse } from './promotion.js'
 export {
+  base64urlSchema,
   promoteWorkspaceRequestSchema,
   promoteWorkspaceResponseSchema,
   promotionChallengeInput,

@@ -331,6 +331,51 @@ describe('PromoteWorkspaceSection', () => {
     expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
   })
 
+  it('while a passkey is being registered the move waits, so it cannot slip through unattested', async () => {
+    await seedTwoDocuments()
+    const passkey = fakePasskey()
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const create = passkey.create
+    passkey.create = async (options) => {
+      await gate
+      return create(options)
+    }
+    const promotes: StubOptions['promotes'] = []
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), { promotes, registrations: [] })}
+        passkeyCredentials={passkey}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-register-passkey'))
+    await waitFor(() =>
+      expect(screen.getByTestId('promote-passkey-status').textContent).toMatch(/waiting/i),
+    )
+    const confirm = screen.getByTestId('promote-confirm') as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+    // A click that lands anyway (a stale handle, a programmatic call) moves nothing.
+    confirm.click()
+    expect(promotes).toHaveLength(0)
+    release()
+    await waitFor(() =>
+      expect(screen.getByTestId('promote-passkey').textContent).toMatch(/is registered/i),
+    )
+    expect((screen.getByTestId('promote-confirm') as HTMLButtonElement).disabled).toBe(false)
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(
+      /your passkey confirmed this move/i,
+    )
+    expect(promotes).toHaveLength(1)
+    expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
+  })
+
   it('a browser without passkeys is told so, and the move is recorded without one', async () => {
     await seedTwoDocuments()
     const promotes: StubOptions['promotes'] = []

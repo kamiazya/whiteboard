@@ -234,7 +234,9 @@ export function PromoteWorkspaceSection({
 
   const runPromotion = useCallback(
     async (targetId: string, target?: WorkspaceIdentity) => {
-      if (!daemon) return
+      // A move confirmed mid-registration would be recorded without the
+      // evidence the person is in the middle of providing.
+      if (!daemon || passkey.kind === 'registering') return
       setFlow({ step: 'running', phase: 'record' })
       let record: PromotionResultRecord
       try {
@@ -494,8 +496,10 @@ export function PromoteWorkspaceSection({
               </div>
               {/* The passkey block: what the move will be confirmed with,
                   and the one place a passkey is registered (ADR-0039). No
-                  state here blocks the move — a browser without one still
-                  moves, and the result says the move carries no evidence. */}
+                  settled state here blocks the move — a browser without one
+                  still moves, and the result says the move carries no
+                  evidence. Only a registration in flight holds it, so the
+                  move cannot be recorded without the proof being made. */}
               <div
                 data-testid="promote-passkey"
                 className="flex flex-col gap-1.5 rounded-md border px-3 py-2 text-xs"
@@ -562,6 +566,7 @@ export function PromoteWorkspaceSection({
                 <Button
                   type="button"
                   data-testid="promote-confirm"
+                  disabled={passkey.kind === 'registering'}
                   onClick={() =>
                     void runPromotion(
                       flow.targetId,

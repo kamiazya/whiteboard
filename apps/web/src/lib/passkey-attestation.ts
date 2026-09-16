@@ -17,6 +17,7 @@
 import {
   type Attestation,
   apiErrorReason,
+  base64urlSchema,
   pinnedCredentialSummarySchema,
   promotionChallengeInput,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
@@ -26,7 +27,10 @@ const PASSKEYS_KEY = 'whiteboard:daemon-passkeys'
 
 const registeredPasskeySchema = z
   .object({
-    credentialId: z.string().min(1),
+    // Validated at the storage boundary so a record that cannot be decoded
+    // reads as no passkey, the same as any other corrupt record — rather
+    // than throwing on the way into `allowCredentials` and failing the move.
+    credentialId: base64urlSchema,
     registeredAt: z.string(),
   })
   .strict()
@@ -171,7 +175,13 @@ export async function registerPasskey({
     }
     return { ok: false, reason: 'rejected', detail: detail ?? `Request failed (${res.status}).` }
   }
-  const pinned = pinnedCredentialSummarySchema.safeParse(await res.json())
+  let body: unknown
+  try {
+    body = await res.json()
+  } catch {
+    body = undefined
+  }
+  const pinned = pinnedCredentialSummarySchema.safeParse(body)
   if (!pinned.success) return { ok: false, reason: 'rejected', detail: 'malformed response' }
 
   const passkeys = loadPasskeys(storage)

@@ -160,6 +160,15 @@ describe('registerPasskey', () => {
         credentials: { create: async () => attestationCredential(), get: async () => null },
       }),
     ).toMatchObject({ ok: false, reason: 'unreachable' })
+    // A 2xx whose body is not the contract is a refusal to store, not a throw:
+    // the caller has already shown "waiting", and a rejection would leave it there.
+    expect(
+      await registerPasskey({
+        ...base,
+        fetch: (async () => new Response('', { status: 201 })) as typeof globalThis.fetch,
+        credentials: { create: async () => attestationCredential(), get: async () => null },
+      }),
+    ).toEqual({ ok: false, reason: 'rejected', detail: 'malformed response' })
     expect(getRegisteredPasskey(DAEMON, storage)).toBeNull()
   })
 })
@@ -176,6 +185,26 @@ describe('attestPromotion', () => {
         snapshot,
         credentials: { create: async () => null, get },
         storage: memoryStorage(),
+      }),
+    ).toBeNull()
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  it('a stored id that is not base64url reads as no passkey, so the move goes on without one', async () => {
+    const storage = memoryStorage()
+    storage.setItem(
+      'whiteboard:daemon-passkeys',
+      JSON.stringify({ [DAEMON]: { credentialId: '%', registeredAt: 'x' } }),
+    )
+    const get = vi.fn()
+    expect(getRegisteredPasskey(DAEMON, storage)).toBeNull()
+    expect(
+      await attestPromotion({
+        daemonBaseUrl: DAEMON,
+        workspaceId: 'ws-1',
+        snapshot,
+        credentials: { create: async () => null, get },
+        storage,
       }),
     ).toBeNull()
     expect(get).not.toHaveBeenCalled()
