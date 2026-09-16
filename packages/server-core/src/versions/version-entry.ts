@@ -77,15 +77,35 @@ export const versionEntrySchema = z.object({
 })
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 
+const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+
 /**
- * Unpadded base64url — what WebAuthn hands a page, and what `Buffer` reads
- * back without a padding step. Padding and the `+/` alphabet are refused
- * rather than normalised, so one encoding travels.
+ * RFC 4648 §3.5's canonical form, which the alphabet alone does not give: a
+ * length of 1 mod 4 encodes no whole byte, and the bits of the last
+ * character that no byte reaches must be zero — `AB` and `AA` would
+ * otherwise decode to the same byte, and a wire contract that admits two
+ * spellings of one value is not one encoding.
+ */
+function isCanonicalBase64url(value: string): boolean {
+  const remainder = value.length % 4
+  if (remainder === 1) return false
+  if (remainder === 0) return true
+  const last = BASE64URL_ALPHABET.indexOf(value.charAt(value.length - 1))
+  const unusedBits = remainder === 2 ? 4 : 2
+  return last >= 0 && (last & ((1 << unusedBits) - 1)) === 0
+}
+
+/**
+ * Canonical unpadded base64url — what WebAuthn hands a page, and what
+ * `Buffer` reads back without a padding step. Padding, the `+/` alphabet
+ * and a non-canonical tail are refused rather than normalised, so exactly
+ * one spelling of a value travels.
  */
 const base64urlSchema = z
   .string()
   .min(1)
   .regex(/^[A-Za-z0-9_-]+$/, 'unpadded base64url')
+  .refine(isCanonicalBase64url, 'canonical unpadded base64url')
 
 /**
  * The evidence a person was present when a row was written (ADR-0039).

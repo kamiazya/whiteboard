@@ -284,6 +284,45 @@ describe('attestationSchema and decodeAttestation', () => {
     },
   )
 
+  fcTest.prop(
+    [
+      fc
+        .array(
+          fc.constantFrom(...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'),
+          { minLength: 1, maxLength: 12 },
+        )
+        .map((chars) => chars.join('')),
+    ],
+    withDefaults({ numRuns: 200 }),
+  )('accepts exactly the strings that decode and re-encode to themselves', (value) => {
+    const accepted = attestationSchema.safeParse({
+      kind: 'webauthn',
+      credentialId: value,
+      authenticatorData: 'AAAA',
+      clientDataJSON: 'AAAA',
+      signature: 'AAAA',
+    }).success
+    // Node's decoder is lenient, so re-encoding is what tells a canonical
+    // spelling from a second spelling of the same bytes.
+    expect(accepted).toBe(Buffer.from(value, 'base64url').toString('base64url') === value)
+  })
+
+  it('refuses a non-canonical tail: an impossible length, or unused bits that are not zero', () => {
+    const wire = (credentialId: string) => ({
+      kind: 'webauthn',
+      credentialId,
+      authenticatorData: 'AAAA',
+      clientDataJSON: 'AAAA',
+      signature: 'AAAA',
+    })
+    for (const bad of ['A', 'AB', 'AAB', 'AAAAA']) {
+      expect(attestationSchema.safeParse(wire(bad)).success, bad).toBe(false)
+    }
+    for (const good of ['AQ', 'AA', 'AAE', 'AAAA', '_w']) {
+      expect(attestationSchema.safeParse(wire(good)).success, good).toBe(true)
+    }
+  })
+
   it('refuses padded or non-base64url fields', () => {
     const base = {
       kind: 'webauthn',
