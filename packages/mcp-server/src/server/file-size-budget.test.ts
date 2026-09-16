@@ -111,7 +111,17 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `set-edge-side` grew a real branch — only a node end has a side to pin,
   // so the write is a no-op on a free one. The width is the branch, not
   // ceremony: the flat version could not have had it.
-  'apps/web/src/lib/spatial/commands.ts': 1064,
+  // +64 for INK: `create-line` and `delete-line`, `deleteInkCommand`, and the
+  // `delete-node` cascade learning that a line whose end names the deleted
+  // node goes with it. A line is a different collection from an edge, not a
+  // variant of one (ADR-0038 decision 2), so the arms cannot share an edge's
+  // — and `deleteInkCommand` exists precisely so the two collections are
+  // reconciled HERE rather than at each of the call sites that hold one
+  // selected-ink id. Roughly half the width is the comment saying why the
+  // editor needs no second selection state: the scene already hands an edge
+  // and a line out identically, which is the non-obvious fact that kept the
+  // rest of this change small.
+  'apps/web/src/lib/spatial/commands.ts': 1128,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
