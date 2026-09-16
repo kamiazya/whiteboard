@@ -19,6 +19,7 @@ import {
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
@@ -91,7 +92,9 @@ it('a save with a kind lands on the workspace tree node and writes no per-docume
   if (entry === null) return
   expect(entry.kind).toBe('spatial')
   const canvas = readSpatialCanvas(documentContainers(workspace, entry.documentId))
-  expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('tree-borne')
+  expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe(
+    'tree-borne',
+  )
 
   // The tree is the address book: no documents table exists at all, no per-document record.
   expect(await documentsTableExists()).toBe(false)
@@ -111,7 +114,7 @@ it('loadDocument serves the tree content back, edits included', async () => {
 
   const loaded = await loadDocument('ws-a', 'design')
   const canvas = readSpatialCanvas(loaded)
-  expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('second')
+  expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe('second')
 })
 
 it('a kindless save of a NEW document lands on the tree as spatial — nothing writes the legacy plane', async () => {
@@ -139,7 +142,9 @@ it('a kindless save of a NEW document lands on the tree as spatial — nothing w
   ).toBeNull()
   const loaded = await loadDocument('ws-a', 'no-kind')
   const canvas = readSpatialCanvas(loaded)
-  expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('kindless')
+  expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe(
+    'kindless',
+  )
 })
 
 it('deleteDocument evacuates the tree node into the trash', async () => {
@@ -192,5 +197,5 @@ it('renameDocumentPath moves the tree node', async () => {
   expect(resolveWorkspaceDocumentById(workspace, entry.documentId)?.path).toBe('new-place')
   const loaded = await loadDocument('ws-a', 'new-place')
   const canvas = readSpatialCanvas(loaded)
-  expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('movable')
+  expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe('movable')
 })

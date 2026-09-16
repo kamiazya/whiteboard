@@ -203,7 +203,21 @@ describe('what the tool table costs to read', () => {
         // applied, 21948. The mechanism is NOT established — `body-edit.ts`
         // imports no node patch and no integer schema — so the number is
         // recorded and the cause is left open rather than invented.
-        wireBytes: 21948,
+        // -4144 with ADR-0038 decision 3, and `canvas_view` and
+        // `wb_canvas_edit` moved by EXACTLY that same amount while every
+        // other row and every other column held. What that pins is the
+        // claim the frozen-surface decision rests on: `visibleBytes`,
+        // `parameters`, `undescribed` and `descriptionWords` did not move
+        // for ANY tool, so a model reads a byte-identical table before and
+        // after the storage flip.
+        //
+        // The wire drop is NOT attributed. codec's `json-canvas.ts` — which
+        // is what `scene` and `references[].canvas` emit here — is untouched
+        // since main, so the obvious explanation is ruled out rather than
+        // confirmed, and the two tools sharing one figure to the byte is a
+        // fact this comment records rather than explains. Left open on
+        // purpose: an invented mechanism reads like a measured one.
+        wireBytes: 17804,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -349,7 +363,11 @@ describe('what the tool table costs to read', () => {
       // main's new base as it did against the old one.
       wb_canvas_edit: {
         visibleBytes: 15043,
-        wireBytes: 38013,
+        // -4144, the same figure `canvas_view` moved by and for a cause left
+        // equally open there. `visibleBytes` is UNCHANGED at 15043 across the
+        // whole node-draft rewrite, which is the measurement that says the
+        // published input really is the one this tool has always had.
+        wireBytes: 33869,
         descriptionWords: 169,
         parameters: 221,
         undescribed: 154,
@@ -709,7 +727,10 @@ describe('what the tool table costs to read', () => {
       // Then -4 visible / -20 wire for `node.patch`'s derived geometry (see
       // the `wb_canvas_edit` row). Strictly more accepted, and cheaper.
       visibleBytes: 38296,
-      wireBytes: 115719,
+      // -8288: the two rows above, and nothing else. A table whose whole
+      // model-visible cost is unchanged while its wire cost falls is the
+      // shape a storage change is supposed to have.
+      wireBytes: 107431,
       parameters: 345,
       undescribed: 221,
     })

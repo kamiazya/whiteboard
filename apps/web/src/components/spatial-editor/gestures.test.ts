@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createIdleState, reduceGesture } from './gestures.js'
@@ -530,8 +530,10 @@ describe('dblclick-empty (create-node)', () => {
     )
     expect(result.commands[0]).toMatchObject({
       kind: 'create-node',
-      node: { id: 'new-node', type: 'text', text: '' },
+      node: { id: 'new-node' },
     })
+    const created = (result.commands[0] as { node: SpatialNode }).node
+    expect(nodeText(created)).toBe('')
     expect(result.selectedId).toBe('new-node')
     expect(result.state).toEqual({
       kind: 'editing-text',
@@ -561,7 +563,7 @@ describe('dblclick-empty (create-node)', () => {
     // dropped, and the old node's text is never lost.
     expect(result.commands).toEqual([
       { kind: 'set-text', id: 'a', text: 'edited' },
-      { kind: 'create-node', node: expect.objectContaining({ id: 'new-node', text: '' }) },
+      { kind: 'create-node', node: expect.objectContaining({ id: 'new-node' }) },
     ])
     expect(result.state).toEqual({
       kind: 'editing-text',

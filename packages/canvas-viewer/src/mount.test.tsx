@@ -1,4 +1,3 @@
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mountCanvasViewer, ViewerSceneError } from './mount.js'
 
@@ -20,7 +19,7 @@ describe('mountCanvasViewer', () => {
     document.body.appendChild(container)
 
     const handle = mountCanvasViewer(container, {
-      scene: { nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })] },
+      scene: { nodes: [{ type: 'text', id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' }] },
     })
 
     expect(container.querySelector('[data-testid="canvas-viewer"]')).toBeTruthy()
@@ -136,7 +135,7 @@ describe('mountCanvasViewer', () => {
     document.body.appendChild(container)
 
     const handle = mountCanvasViewer(container, {
-      scene: { nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })] },
+      scene: { nodes: [{ type: 'text', id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' }] },
       background: '#f8fafc',
     })
 
@@ -149,8 +148,8 @@ describe('mountCanvasViewer', () => {
     document.body.appendChild(container)
     const scene = {
       nodes: [
-        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' }),
-        textNode({ id: 'b', x: 300, y: 200, width: 100, height: 40, text: 'b' }),
+        { type: 'text', id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { type: 'text', id: 'b', x: 300, y: 200, width: 100, height: 40, text: 'b' },
       ],
       edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
       // What this entry point ACCEPTS is a JSON Canvas document, so a facet

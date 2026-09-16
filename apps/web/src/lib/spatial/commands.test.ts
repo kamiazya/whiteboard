@@ -6,7 +6,16 @@ import type {
   ProposedChange,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { endNode, nodeText, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import {
+  endNode,
+  isFrame,
+  nodeFile,
+  nodeText,
+  nodeUrl,
+  type SpatialNode,
+  spatialCanvasSchema,
+  withNodeText,
+} from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
@@ -51,7 +60,7 @@ describe('applyCommand', () => {
   it('set-text changes only the text field of a text node', () => {
     const canvas = baseCanvas()
     const next = applyCommand(canvas, { kind: 'set-text', id: 'a', text: 'updated' })
-    expect(next.nodes[0]).toEqual({ ...canvas.nodes[0], text: 'updated' })
+    expect(next.nodes[0]).toEqual(withNodeText(canvas.nodes[0] as SpatialNode, 'updated'))
   })
 
   it('set-text on a non-text node is a no-op returning the input canvas', () => {
@@ -316,9 +325,8 @@ describe('applyCommand', () => {
       id: 'l1',
       url: 'https://jsoncanvas.org/',
     })
-    expect(updated.nodes.find((n) => n.id === 'l1')).toMatchObject({
-      url: 'https://jsoncanvas.org/',
-    })
+    const relinked = updated.nodes.find((n) => n.id === 'l1')
+    expect(relinked !== undefined && nodeUrl(relinked)).toBe('https://jsoncanvas.org/')
     expect(spatialCanvasSchema.safeParse(updated).success).toBe(true)
 
     // A text node has no url — the command is a no-op, not a corruption.
@@ -342,7 +350,8 @@ describe('applyCommand', () => {
     const grouped = applyCommand(baseCanvas(), { kind: 'create-group', node: group })
     // Array order IS z-order: the frame sits at the bottom, so hit-testing
     // (last containing box wins) still reaches the members inside it.
-    expect(grouped.nodes[0]).toMatchObject({ id: 'g1', type: 'group' })
+    expect(grouped.nodes[0]).toMatchObject({ id: 'g1' })
+    expect(grouped.nodes[0] !== undefined && isFrame(grouped.nodes[0])).toBe(true)
     expect(grouped.nodes).toHaveLength(3)
     expect(spatialCanvasSchema.safeParse(grouped).success).toBe(true)
 
@@ -413,7 +422,8 @@ describe('applyCommand', () => {
       id: 'f1',
       file: 'notes/roadmap',
     })
-    expect(retargeted.nodes.find((n) => n.id === 'f1')).toMatchObject({ file: 'notes/roadmap' })
+    const moved = retargeted.nodes.find((n) => n.id === 'f1')
+    expect(moved !== undefined && nodeFile(moved)).toBe('notes/roadmap')
     // Retargeting clears a stale subpath: a heading anchor from the old
     // document has no meaning in the new one.
     expect(retargeted.nodes.find((n) => n.id === 'f1')).not.toHaveProperty('subpath')
@@ -588,7 +598,8 @@ describe('batch', () => {
         { kind: 'connect-nodes', edgeId: 'e9', fromNode: 'a', toNode: 'b' },
       ],
     })
-    expect(next.nodes[0]).toMatchObject({ x: 10, y: 20, text: 'batched' })
+    expect(next.nodes[0]).toMatchObject({ x: 10, y: 20 })
+    expect(nodeText(next.nodes[0] as SpatialNode)).toBe('batched')
     expect(next.edges).toEqual([
       {
         id: 'e9',

@@ -10,6 +10,7 @@ import {
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -149,7 +150,9 @@ describe('createDaemonFileAdapter', () => {
     const loaded = await adapter.loadDocument('sibling')
 
     expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/sibling/snapshot`)
-    expect(loaded?.canvas?.nodes[0]).toMatchObject({ id: 'n1', text: 'hello' })
+    const only = loaded?.canvas?.nodes[0]
+    expect(only?.id).toBe('n1')
+    expect(only !== undefined && nodeText(only)).toBe('hello')
   })
 
   it('carries a referenced markdown document body, read from the same snapshot', async () => {

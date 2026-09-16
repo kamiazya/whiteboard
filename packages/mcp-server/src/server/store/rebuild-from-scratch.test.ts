@@ -13,6 +13,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -112,7 +113,9 @@ it('the whole document surface works with no documents table at all, across a re
 
   const loaded = await loadDocument(WS, 'boards/main')
   const canvas = readSpatialCanvas(loaded)
-  expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('the canvas')
+  expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe(
+    'the canvas',
+  )
 
   const names = await loadWorkspaceNames(WS)
   expect(names.documents['boards/main']).toBe('Main Board')

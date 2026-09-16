@@ -11,7 +11,6 @@
 // the file would be a fixture pile that nobody reads.
 
 import { type EdgeEnd, edgeEndSchema } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { applyStencil } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import { TASKS } from './tasks.mjs'
@@ -80,9 +79,19 @@ const FLOWS = [
 
 /** Seven boxes in a row, no overlaps, every flow in the prompt's direction. */
 const goodBoard = (): Board => ({
-  nodes: LABELS.map(([id, text], i) =>
-    textNode({ id, text, x: i * 300, y: 0, width: 200, height: 80 }),
-  ),
+  // The WIRE shape `wb_canvas_snapshot` answers with, which is what the
+  // verifier reads — `type` plus `text`, not the model's resource. Frozen by
+  // ADR-0031 and deliberately unmoved by ADR-0038 decision 3, so a fixture
+  // built with the model's node builders would be testing the wrong contract.
+  nodes: LABELS.map(([id, text], i) => ({
+    id,
+    type: 'text',
+    text,
+    x: i * 300,
+    y: 0,
+    width: 200,
+    height: 80,
+  })),
   edges: FLOWS.map(([from, to], i) => ({ id: `e${i}`, from: at(from), to: at(to) })),
 })
 

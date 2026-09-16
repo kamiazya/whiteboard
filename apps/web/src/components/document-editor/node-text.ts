@@ -1,4 +1,9 @@
-import { nodeKind, nodeText, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  nodeKind,
+  nodeText,
+  type SpatialCanvas,
+  withNodeText as withNodeTextOn,
+} from '@kamiazya/whiteboard-model'
 
 /**
  * The canvas with one text node's body replaced.
@@ -14,13 +19,11 @@ import { nodeKind, nodeText, type SpatialCanvas } from '@kamiazya/whiteboard-mod
  */
 export function withNodeText(canvas: SpatialCanvas, nodeId: string, text: string): SpatialCanvas {
   const target = canvas.nodes.find((node) => node.id === nodeId)
-  // The seam answers what the node HOLDS; the write below still spells the
-  // stored field, and moves with the storage rather than ahead of it.
   if (target === undefined || nodeKind(target) !== 'text' || nodeText(target) === text) {
     return canvas
   }
   return {
     ...canvas,
-    nodes: canvas.nodes.map((node) => (node.id === nodeId ? { ...node, text } : node)),
+    nodes: canvas.nodes.map((node) => (node.id === nodeId ? withNodeTextOn(node, text) : node)),
   }
 }

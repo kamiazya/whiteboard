@@ -33,7 +33,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { withNodeText } from '@kamiazya/whiteboard-model'
+import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1174,7 +1174,7 @@ describe('createDocumentSyncSession', () => {
     const a = result.nodes.find((n) => n.id === 'n-a')
     const b = result.nodes.find((n) => n.id === 'n-b')
     expect(a).toMatchObject({ x: 10, y: 20 })
-    expect(b).toMatchObject({ text: 'renamed-by-peer' })
+    expect(b !== undefined && nodeText(b)).toBe('renamed-by-peer')
   })
 
   it('onChange with connect-nodes writes only the new edge, leaving existing edges untouched', async () => {
@@ -2192,7 +2192,8 @@ describe('createDocumentSyncSession', () => {
 
       const result = readSpatialCanvas(merged)
       expect(result.edges).toEqual([])
-      expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ text: 'renamed-by-peer' })
+      const peerEdited = result.nodes.find((n) => n.id === 'n-b')
+      expect(peerEdited !== undefined && nodeText(peerEdited)).toBe('renamed-by-peer')
     })
   })
 

@@ -2605,10 +2605,10 @@ describe('pinned counterexamples', () => {
 
     expect(moved.commands).toEqual([{ kind: 'set-text', id: 'n0', text: 'zero, edited' }])
     expect(moved.state).toEqual({ kind: 'editing-text', nodeId: 'n1', pendingText: 'one' })
-    expect(applyCommand(canvas, moved.commands[0]).nodes[0]).toMatchObject({
-      id: 'n0',
-      text: 'zero, edited',
-    })
+    expect(applyCommand(canvas, moved.commands[0]).nodes[0]).toMatchObject({ id: 'n0' })
+    expect(nodeText(applyCommand(canvas, moved.commands[0]).nodes[0] as SpatialNode)).toBe(
+      'zero, edited',
+    )
   })
 
   // Re-opening the editor on the node ALREADY being edited is a no-op, and

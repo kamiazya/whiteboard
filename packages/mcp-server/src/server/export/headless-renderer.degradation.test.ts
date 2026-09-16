@@ -58,8 +58,18 @@ describe('headless-renderer degradation observability', () => {
   })
 
   it('logs a warning for an unrecognized spatial node kind', async () => {
+    // Schema-valid since ADR-0038 decision 3, and reachable through the
+    // store: a resource whose media type nothing in `RESOURCE_KINDS` claims.
+    // Under the node-kind union this needed a cast, because such a node
+    // failed to parse and `readSpatialCanvas` dropped it — the defensive
+    // branch had no real caller at all.
     const canvas: SpatialCanvas = {
-      nodes: [{ ...textNode().nodes[0], type: 'bogus', text: 'fine' } as unknown as SpatialNode],
+      nodes: [
+        {
+          ...(textNode().nodes[0] as SpatialNode),
+          resource: { mimeType: 'application/x-nothing-claims-this' },
+        },
+      ],
       edges: [],
     }
     const capture = captureLogsForTests()
