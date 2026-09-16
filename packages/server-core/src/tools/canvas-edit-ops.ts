@@ -130,26 +130,12 @@ const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } 
  * A silently dropped key is the worst of the three outcomes: the caller
  * cannot see it, and neither can a test that asserts on what was stored.
  */
-/**
- * Two keys are redirected rather than merely refused, and for the same
- * measured reason: each is a property OF the box as a person thinks of it
- * ("this box is a database", "this box is failing") and so is the likelier
- * guess for where it goes; each lives beside `op` instead because a field
- * inside the draft is emitted once per arm of the type union (+1,020
- * visible bytes for one described field, measured) and a field beside `op`
- * is emitted once.
- */
-const OP_LEVEL_KEYS = ['stencil', 'facets'] as const
-const redirectOpLevelKey = (sibling: 'node' | 'patch') => ({
-  error: (issue: { code: string; keys?: readonly string[] }) => {
-    if (issue.code !== 'unrecognized_keys') return undefined
-    const key = OP_LEVEL_KEYS.find((k) => (issue.keys ?? []).includes(k))
-    return key === undefined
-      ? undefined
-      : `Unrecognized key: "${key}" — ${key === 'stencil' ? 'a stencil is' : 'facets are'} not a field of the node; \`${key}\` goes beside \`op\`, next to \`${sibling}\`.`
-  },
-})
-const draftStrayKeys = redirectOpLevelKey('node')
+const draftStrayKeys = {
+  error: (issue: { code: string; keys?: readonly string[] }) =>
+    issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
+      ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `node`.'
+      : undefined,
+}
 const draftOption = <S extends z.ZodRawShape>(option: { shape: S }) =>
   z.object(option.shape, draftStrayKeys).strict()
 
@@ -269,22 +255,6 @@ const exactlyOneTarget = {
  * deployment register" — so the ecosystem reuses a seam rather than growing
  * the table.
  */
-/**
- * The write path for a box's SECOND axis, and any registered node facet.
- * Beside `op` like `stencil`, priced the same way (+590 visible bytes for
- * both ops, against +1,020 for one field inside the draft).
- *
- * Validated through the registry exactly as `wb_facet_set` validates —
- * declared targets, then the facet's own schema — so the two write paths
- * cannot disagree about what a payload is; an unregistered key passes
- * through unvalidated on both, for the same round-trip reason.
- */
-const FACETS_FIELD = extensionFacetsSchema
-  .optional()
-  .describe(
-    'Facets to set on the node by key, e.g. semantic.class/v0 {axis, value} says what the box IS on a named dimension. Registered ones are validated (wb_facet_list says which); null deletes a key.',
-  )
-
 const STENCIL_FIELD = namespacedIdSchema
   .optional()
   .describe(
@@ -305,7 +275,14 @@ const STENCIL_FIELD = namespacedIdSchema
  * the ops it just used, and a refusal naming the key without naming the
  * repair costs the whole batch twice.
  */
-const nodePatchSchema = z.object(nodePatchFieldsSchema.shape, redirectOpLevelKey('patch')).strict()
+const nodePatchSchema = z
+  .object(nodePatchFieldsSchema.shape, {
+    error: (issue: { code: string; keys?: readonly string[] }) =>
+      issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
+        ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `patch`.'
+        : undefined,
+  })
+  .strict()
 
 const canvasOpSchema = z.discriminatedUnion('op', [
   z
@@ -314,7 +291,6 @@ const canvasOpSchema = z.discriminatedUnion('op', [
         op: z.literal('node.add'),
         node: nodeDraftSchema,
         stencil: STENCIL_FIELD,
-        facets: FACETS_FIELD,
         within: nodeIdSchema
           .nullable()
           .optional()
@@ -331,7 +307,6 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       ...NODE_TARGET,
       patch: nodePatchSchema,
       stencil: STENCIL_FIELD,
-      facets: FACETS_FIELD,
     })
     .strict()
     .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),

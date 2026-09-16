@@ -192,22 +192,33 @@ built in, so it joins `frame`, `kind` and `stencil` — and a canvas that
 ALSO lists it in `visual.axes/v0` names it once, not twice. The one place to
 overrule this is `declaredPartitions` in `facet-score.ts`.
 
-**And it has an inline write path.** `facets` beside `op` on `node.add` and
-`node.patch`, validated exactly as `wb_facet_set` validates (declared targets,
-then the facet's own schema; an unregistered key passes through on both
-paths), merged by key with `null` deleting. Beside `op` like `stencil` and
-priced the same way: two candidates on rung 1, a generic record at +600
-visible / undescribed +0 against a dedicated field at +750 / +4, and the
-record chosen; the same field inside the draft was priced at +1,020. It
-landed at **+590 visible, +2 parameters, undescribed unchanged**, and +846
-on the errand that reads the facet list — the declared price of declaring a
-facet.
+**It had an inline write path for one reading, and the reading withdrew
+it.** `facets` beside `op` on `node.add` and `node.patch`, validated exactly
+as `wb_facet_set` validates, was built and priced the way `stencil` was: a
+generic record at +600 visible / undescribed +0 against a dedicated field at
++750 / +4, the record chosen, the same field inside the draft at +1,020; it
+landed at +590 visible. That is C1 up, so the rule was written BEFORE the
+run: if round 18 read 0 of 3 with the field unused, the FIELD withdraws and
+the facet and the partition stay, since they cost nothing a model reads
+every turn. Round 18 read exactly that — 0 of 3, fifty-five node ops, the
+field written zero times, `wb_facet_set` called zero times, while every
+trial had called `wb_facet_list` and had the new word in its answer
+(ADR-0031's twenty-second reading). The field is withdrawn in the same PR
+that landed it; its shape is in that PR's history if a later reading earns
+it back. What survives of the pricing is a rule about PLACE, in the
+`mcp-tool-surface` skill.
 
-**That is C1 up, and this ADR does not pretend otherwise.** The field is the
-first change on this lane that acts on what the model WRITES rather than
-what it reads, and its worth is round 18's to decide on C13 and C14. If that
-reading is 0 of 3 with the field unused, the FIELD withdraws and the facet
-and the partition stay — they cost nothing a model reads every turn.
+**What the reading says about the axis, not the field.** Five remedies on
+this task — four on what the model reads, one on what it writes — and one
+reading. The model tells the two things apart the way the prompt asks, kind
+by silhouette and health by colour, and does not record what the colour
+MEANS because nothing asks it to; a registered word and a one-op path did
+not change that. So the facet's worth is not "a model will volunteer it".
+It is that a board which DOES carry it — written by a person, a skill that
+says to, or a model told to — reads `carried(semantic.class/v0)` with no
+declaration, and the instrument can then tell a colour that means something
+from one that does not. That is the positive control in `tasks.test.ts`,
+and it is the whole of what §6 now claims.
 
 Two ceilings, named so they are upgrades and not surprises: one
 classification per box (a board needing "health" AND "priority" wants a
@@ -222,10 +233,12 @@ plugin's home.
 - ADR-0034's stencil is unchanged in what it IS and constrained in what it may
   SPEND: it is still a named appearance applied to one node, and §5 says the
   appearance should stop including a colour once a second axis is real.
-- **The second axis has a registered word and an inline write path (§6).**
+- **The second axis has a registered word (§6), and no inline write path.**
   `semantic.class/v0` is the first non-`visual` bundled facet and the first
-  built-in partition beside `stencil`; a box can say what it is and how it
-  is doing in one op. Whether a model does is round 18's reading.
+  built-in partition beside `stencil`. The one-op path was landed, read at
+  0 of 3 with the field unused, and withdrawn; the facet is written through
+  `wb_facet_set` like any other, and read by the score without a
+  declaration.
 - **`channels.X` now says WHICH axis carries it** — CLOSED, in its own
   increment as this bullet said it would be. It read `carried` for both a
   board that declares a status axis and lets a stencil's colour win and one

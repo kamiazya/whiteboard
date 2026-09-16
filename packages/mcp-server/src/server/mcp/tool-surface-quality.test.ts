@@ -348,20 +348,17 @@ describe('what the tool table costs to read', () => {
       // measured rather than reasoned: the same -4/-12 appears against
       // main's new base as it did against the old one.
       wb_canvas_edit: {
-        // +590 visible / +2 parameters for `facets` on node.add and
-        // node.patch: the inline write path for a box's SECOND axis
-        // (`semantic.class/v0`, ADR-0036 §6). Op level like `stencil`, so it
-        // is emitted once per op and not once per arm — the same field
-        // inside the draft was priced at +1,020. Both parameters described,
-        // so `undescribed` does not move. Justified by nothing on this
-        // board: it is the first change on the two-axis lane that acts on
-        // what the model WRITES rather than what it reads, and its worth is
-        // round 18's to decide (C13 and C14), after rounds 15-17 read
-        // 0 of 3 with zero node facets written across nine trials.
-        visibleBytes: 15633,
-        wireBytes: 38603,
+        // UNCHANGED by the second axis's write path, which was landed here
+        // at +590 visible / +2 parameters (`facets` beside `op` on node.add
+        // and node.patch, ADR-0036 §6), read by lane round 18, and
+        // withdrawn: 0 of 3 with the field written zero times in fifty-five
+        // node ops (ADR-0031's twenty-second reading). C1 up for nothing on
+        // C13 or C14 is what §1 refuses, so the row is back where it was,
+        // and the rule that decided it was written before the reading.
+        visibleBytes: 15043,
+        wireBytes: 38013,
         descriptionWords: 169,
-        parameters: 223,
+        parameters: 221,
         undescribed: 154,
         strays: 'refused',
         names: [],
@@ -742,13 +739,16 @@ describe('what the tool table costs to read', () => {
       // change in this file so far that bought something without touching
       // the column a model pays on every turn.
       //
+      //
       // Then +590 visible / +2 parameters for `wb_canvas_edit`'s inline
-      // `facets` (see its row): the second axis's write path, priced against
-      // the in-draft alternative and chosen as the cheaper of two candidates
-      // (+600 generic record vs +750 dedicated field, undescribed +0 vs +4).
-      visibleBytes: 38886,
-      wireBytes: 116485,
-      parameters: 347,
+      // `facets`, read at 0 of 3 with the field unused and WITHDRAWN in the
+      // same PR (see its row) — so the totals did not move. The second
+      // bundled facet it was the write path for, `semantic.class/v0`, costs
+      // nothing here: a facet is output of `wb_facet_list`, not input to
+      // anything a model reads every turn.
+      visibleBytes: 38296,
+      wireBytes: 115895,
+      parameters: 345,
       undescribed: 221,
     })
   })

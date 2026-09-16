@@ -321,8 +321,11 @@ was priced as two candidates before either was built: a generic
 `extensionFacetsSchema` record at +600 visible / undescribed +0, a dedicated
 `{axis, value}` field at +750 / +4 — both beside `op`, so emitted once per
 op; the same one field inside the draft was +1,020. The cheaper on both C1
-and C3 was taken and landed at +590. A field's cost is decided by how many
-times the emitter repeats it, before a word of description is written.
+and C3 was taken and landed at +590 — and was WITHDRAWN one reading later
+(round 18: 0 of 3, the field unused in fifty-five node ops), under a rule
+written before the run. A field's cost is decided by how many times the
+emitter repeats it, before a word of description is written; and a field
+bought on a hypothesis is bought with its withdrawal rule attached.
 
 **So: price the refusal before buying the accommodation.** A good error
 message is the cheapest thing on this table — it costs bytes only when it

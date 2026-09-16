@@ -37,7 +37,6 @@ import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { CanvasEditError } from './canvas-edit-error.js'
-import { dressNode, dressSelected } from './canvas-edit-facets.js'
 import {
   type CanvasEditInput,
   type CanvasEditOutput,
@@ -56,6 +55,7 @@ import {
   prevailingWidth,
   type Rect,
 } from './canvas-edit-placement.js'
+import { dressWithStencil } from './canvas-edit-stencil.js'
 import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
@@ -195,10 +195,8 @@ export function createCanvasEditTool(deps: ServerDeps) {
       // costs a document listing plus a read, and this is the hottest write
       // tool there is — the overwhelming majority of batches move boxes and
       // draw lines, and none of them should pay for a vocabulary they do not
-      // mention. `facetRegistry` serves stencils AND the inline `facets`
-      // field, but only a stencil can come from the workspace library (a
-      // library adds assets and no facets), so only a stencil pays for the
-      // lookup — which is what makes the narrower condition safe.
+      // mention. `facetRegistry` is used for stencils and nothing else here,
+      // which is what makes that safe rather than clever.
       const namesAStencil = input.ops.some(
         (op) => 'stencil' in op && (op as { stencil?: string }).stencil !== undefined,
       )
@@ -627,8 +625,10 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 growToHold(index, op.op, group, [parsed.data])
               }
             }
-            const dressing = { stencil: op.stencil, color: draft.color, facets: op.facets }
-            nodes = [...nodes, dressNode(index, op.op, parsed.data, dressing, facetRegistry)]
+            nodes = [
+              ...nodes,
+              dressWithStencil(index, op.op, parsed.data, op.stencil, draft.color, facetRegistry),
+            ]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
             if (!positioned && group === undefined && draft.type === 'group') {
@@ -649,8 +649,14 @@ export function createCanvasEditTool(deps: ServerDeps) {
             for (const id of ids) patchNode(index, op.op, id, op.patch)
             // After the patch, so an explicit `color` in the same op still
             // wins: a caller naming both has said the more specific thing.
-            const dressing = { stencil: op.stencil, color: op.patch.color, facets: op.facets }
-            nodes = dressSelected(index, op.op, nodes, ids, dressing, facetRegistry)
+            if (op.stencil !== undefined) {
+              const stencil = op.stencil
+              nodes = nodes.map((node) =>
+                ids.includes(node.id)
+                  ? dressWithStencil(index, op.op, node, stencil, op.patch.color, facetRegistry)
+                  : node,
+              )
+            }
             return
           }
 
