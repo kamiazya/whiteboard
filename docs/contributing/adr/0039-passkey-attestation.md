@@ -1,10 +1,12 @@
 # ADR-0039: A passkey attests a person's presence, not a device
 
-**Status:** Proposed. Extends [ADR-0035](0035-device-keys-and-keeper.md) and amends
-the scope of its decision 1. Nothing implemented. Revised 2026-09-16 after
-review split "verified" into a CLAIM and its EVIDENCE — decisions 5, 8 and 9,
-and the second paragraph of decision 2, are that revision; the first draft's
-decision 5 is kept under *Revisions* because the correction is the point.
+**Status:** Accepted — human gate 2026-09-16. Extends
+[ADR-0035](0035-device-keys-and-keeper.md) and amends the scope of its decision
+1 (that ADR carries the addendum). Design of record; nothing implemented.
+Revised the same day, before acceptance, when review split "verified" into a
+CLAIM and its EVIDENCE — decisions 5, 8 and 9, and the second paragraph of
+decision 2, are that revision; the first draft's decision 5 is kept under
+*Revisions* because the correction is the point.
 
 ## Context
 
