@@ -341,7 +341,13 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // sentence the next reader finds a fade beside empty space and reads the
 // junction rule as broken. The entry was cut from 1900 chars to fit one
 // bucket rather than two; what went was provenance the commit already holds.
-const CANVAS_RENDER_BUDGET = 134
+//
+// 134 -> 136 (ADR-0040 increment 2): the facet score's fourth partition — a
+// scoped-tag key, with the `multi` rule and the edges' own reading — is a
+// rule a session in canvas-render pays for because the columns it adds are
+// the ones a diff to the score is judged by; the retired classification
+// facet's paragraph went with it, so the net is one section, not two.
+const CANVAS_RENDER_BUDGET = 136
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
