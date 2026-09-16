@@ -13,7 +13,7 @@ import {
   writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   resolveNodeShape,
   resolveNodeStencil,
@@ -93,7 +93,7 @@ describe('a deployment\u2019s own stencils', () => {
       [
         {
           op: 'node.add',
-          node: textNode({ id: 'b', x: 0, y: 0, width: 200, height: 80, text: 'assets' }),
+          node: { type: 'text', id: 'b', x: 0, y: 0, width: 200, height: 80, text: 'assets' },
           stencil: 'infra.bucket',
         },
       ],
@@ -113,7 +113,7 @@ describe('a deployment\u2019s own stencils', () => {
         [
           {
             op: 'node.add',
-            node: textNode({ id: 'x', x: 0, y: 0, width: 200, height: 80, text: 'X' }),
+            node: { type: 'text', id: 'x', x: 0, y: 0, width: 200, height: 80, text: 'X' },
             stencil: 'infra.nope',
           },
         ],
@@ -134,7 +134,7 @@ describe('dressing a box with a stencil', () => {
       run([
         {
           op: 'node.add',
-          node: textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A' }),
+          node: { type: 'text', id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A' },
         },
         { op: 'node.patch', id: 'a', patch: { stencil: 'visual.service' } },
       ]),
@@ -174,7 +174,7 @@ describe('dressing a box with a stencil', () => {
     const { result, canvas } = await run([
       {
         op: 'node.add',
-        node: textNode({ id: 'db', x: 0, y: 0, width: 200, height: 80, text: 'orders' }),
+        node: { type: 'text', id: 'db', x: 0, y: 0, width: 200, height: 80, text: 'orders' },
         stencil: 'visual.datastore',
       },
     ])
@@ -189,18 +189,18 @@ describe('dressing a box with a stencil', () => {
     expect(resolveNodeStencil(node as never)).toBe('visual.datastore')
     // The text the caller wrote is untouched: a stencil says what a box IS,
     // never what it says.
-    expect((node as { text?: string }).text).toBe('orders')
+    expect(nodeText(node as SpatialNode)).toBe('orders')
   })
 
   test('node.patch dresses boxes that already exist, and takes a selector', async () => {
     const { canvas } = await run([
       {
         op: 'node.add',
-        node: textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A' }),
+        node: { type: 'text', id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A' },
       },
       {
         op: 'node.add',
-        node: textNode({ id: 'b', x: 300, y: 0, width: 200, height: 80, text: 'B' }),
+        node: { type: 'text', id: 'b', x: 300, y: 0, width: 200, height: 80, text: 'B' },
       },
       { op: 'node.patch', all: true, patch: {}, stencil: 'visual.service' },
     ])
@@ -219,7 +219,7 @@ describe('dressing a box with a stencil', () => {
       run([
         {
           op: 'node.add',
-          node: textNode({ id: 'x', x: 0, y: 0, width: 200, height: 80, text: 'X' }),
+          node: { type: 'text', id: 'x', x: 0, y: 0, width: 200, height: 80, text: 'X' },
           stencil: 'visual.nope',
         },
       ]),
@@ -233,7 +233,7 @@ describe('dressing a box with a stencil', () => {
     const { canvas } = await run([
       {
         op: 'node.add',
-        node: textNode({ id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A', color: '1' }),
+        node: { type: 'text', id: 'a', x: 0, y: 0, width: 200, height: 80, text: 'A', color: '1' },
       },
       { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.datastore' },
       { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.queue' },
@@ -248,7 +248,7 @@ describe('dressing a box with a stencil', () => {
     const { canvas } = await run([
       {
         op: 'node.add',
-        node: textNode({ id: 'q', x: 0, y: 0, width: 200, height: 80, text: 'Q', color: '1' }),
+        node: { type: 'text', id: 'q', x: 0, y: 0, width: 200, height: 80, text: 'Q', color: '1' },
         stencil: 'visual.queue',
       },
     ])
@@ -300,7 +300,7 @@ describe('a workspace\u2019s own stencil library', () => {
   const addWearing = (stencil: string) => [
     {
       op: 'node.add',
-      node: textNode({ id: 'b', x: 0, y: 0, width: 200, height: 80, text: 'orders' }),
+      node: { type: 'text', id: 'b', x: 0, y: 0, width: 200, height: 80, text: 'orders' },
       stencil,
     },
   ]
@@ -393,7 +393,7 @@ describe('a workspace\u2019s own stencil library', () => {
       ops: [
         {
           op: 'node.add',
-          node: textNode({ id: 'p', x: 0, y: 0, width: 200, height: 80, text: 'plain' }),
+          node: { type: 'text', id: 'p', x: 0, y: 0, width: 200, height: 80, text: 'plain' },
         },
       ],
     })

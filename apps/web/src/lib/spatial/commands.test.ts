@@ -354,7 +354,7 @@ describe('applyCommand', () => {
   it('set-group-label sets, updates, empty-removes, and ignores non-groups', () => {
     const grouped = applyCommand(baseCanvas(), {
       kind: 'create-group',
-      node: groupNode({ id: 'g1', x: -20, y: -20, width: 400, height: 200 }),
+      node: { type: 'group', id: 'g1', x: -20, y: -20, width: 400, height: 200 },
     })
 
     const labeled = applyCommand(grouped, { kind: 'set-group-label', id: 'g1', label: 'phase 1' })
@@ -371,7 +371,7 @@ describe('applyCommand', () => {
   it('set-group-background sets, restyles, removes, and ignores non-groups', () => {
     const grouped = applyCommand(baseCanvas(), {
       kind: 'create-group',
-      node: groupNode({ id: 'g1', x: -20, y: -20, width: 400, height: 200 }),
+      node: { type: 'group', id: 'g1', x: -20, y: -20, width: 400, height: 200 },
     })
 
     const withBg = applyCommand(grouped, {
@@ -406,7 +406,7 @@ describe('applyCommand', () => {
   it('set-node-file retargets a file node and ignores non-file targets', () => {
     const withFile = applyCommand(baseCanvas(), {
       kind: 'create-node',
-      node: fileNode({ id: 'f1', x: 0, y: 300, width: 200, height: 60, file: 'notes/plan' }),
+      node: { type: 'file', id: 'f1', x: 0, y: 300, width: 200, height: 60, file: 'notes/plan' },
     })
 
     const retargeted = applyCommand(withFile, {
@@ -1150,7 +1150,7 @@ describe('decide-proposal', () => {
       id: 'node:new',
       op: 'node.add',
       status: 'open',
-      node: textNode({ id: 'new', x: 300, y: 0, width: 60, height: 40, text: 'added' }),
+      node: { type: 'text', id: 'new', x: 300, y: 0, width: 60, height: 40, text: 'added' },
     },
   ]
 

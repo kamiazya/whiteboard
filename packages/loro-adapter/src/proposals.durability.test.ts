@@ -29,7 +29,7 @@ describe('a proposal survives the workspace record', () => {
           id: 'c1',
           op: 'node.add',
           status: 'open',
-          node: textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' }),
+          node: { type: 'text', id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' },
         },
       ],
     })

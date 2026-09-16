@@ -3,15 +3,17 @@
 // estimator is what lays the scene out. One that thinks Japanese is half as
 // wide as it is tells an agent a node hides nothing while the editor is
 // showing the reader a fade.
+
 import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 
 const APPEARANCE = { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) }
 
 function truncatedOf(text: string, width: number, height: number): boolean {
   const canvas: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width, height, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width, height, text })],
     edges: [],
   }
   const scene = layoutSpatialCanvas(canvas, {

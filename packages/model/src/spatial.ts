@@ -66,7 +66,17 @@ export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
 export const nodePositionSchema = z.number().finite()
 export const nodeSizeSchema = z.number().finite().nonnegative()
 
-const sharedNodeFieldsSchema = z.object({
+/**
+ * What every node has, whatever it shows.
+ *
+ * Exported because `spatialNodeSchema` below is REFINED, and zod v4 refuses
+ * `.partial()` over a refined object — so a writer deriving an optional-
+ * geometry draft from the stored node (`wb_canvas_edit`'s `node.add`) has to
+ * derive it from something. This is that something, and it is the same
+ * object the stored schema extends, so the two cannot disagree about a
+ * field's type the way a hand-written copy would.
+ */
+export const sharedNodeFieldsSchema = z.object({
   id: nodeIdSchema,
   x: nodePositionSchema,
   y: nodePositionSchema,

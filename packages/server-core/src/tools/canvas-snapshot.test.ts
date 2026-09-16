@@ -6,7 +6,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
@@ -38,15 +38,14 @@ describe('wb_canvas_snapshot tool', () => {
         nodes: [
           textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 60, text: 'Hello', color: '4' }),
           groupNode({ id: 'n2', x: -10, y: -10, width: 400, height: 300, label: 'Phase 1' }),
-          {
+          linkNode({
             id: 'n3',
-            type: 'link',
             x: 0,
             y: 100,
             width: 200,
             height: 60,
             url: 'https://a.example',
-          },
+          }),
           fileNode({ id: 'n4', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' }),
         ],
         edges: [
@@ -68,11 +67,16 @@ describe('wb_canvas_snapshot tool', () => {
     // extra or dropped field is exactly the regression worth catching.
     expect(result).toEqual({
       documentId: DOCUMENT_ID,
+      // The tool's own vocabulary, which is not the model's: `type` plus the
+      // kind's content field is what `tools/list` publishes, and ADR-0038
+      // decision 3 moved the STORAGE without moving this (ADR-0031 gates a
+      // surface change). So these stay written out rather than built with the
+      // model's node builders — spelling the wire shape is the point.
       nodes: [
-        textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 60, text: 'Hello', color: '4' }),
-        groupNode({ id: 'n2', x: -10, y: -10, width: 400, height: 300, label: 'Phase 1' }),
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 60, color: '4', text: 'Hello' },
+        { id: 'n2', type: 'group', x: -10, y: -10, width: 400, height: 300, label: 'Phase 1' },
         { id: 'n3', type: 'link', x: 0, y: 100, width: 200, height: 60, url: 'https://a.example' },
-        fileNode({ id: 'n4', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' }),
+        { id: 'n4', type: 'file', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' },
       ],
       edges: [
         {

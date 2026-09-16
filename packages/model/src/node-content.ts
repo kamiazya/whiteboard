@@ -16,6 +16,7 @@
  * single reader when it is taken.
  */
 import { RESOURCE_KINDS, type ResourceKind, resourceKind } from './node-resource.js'
+import type { NodePatchFields } from './proposal.js'
 import type { SpatialNode } from './spatial.js'
 
 /**
@@ -136,3 +137,68 @@ export const withNodeUrl = (node: SpatialNode, url: string): SpatialNode =>
         ...node,
         resource: { ...node.resource, mimeType: RESOURCE_KINDS.link.mimeType, location: url },
       }
+
+/**
+ * A node with the patch applied, in the vocabulary `nodePatchFieldsSchema`
+ * publishes — `text` / `file` / `subpath` / `url` for content, the frame's
+ * three for a frame, geometry and colour straight through.
+ *
+ * The one place the patch's vocabulary meets the stored resource, and the
+ * reason it is here rather than at either caller: `wb_canvas_edit`'s
+ * `node.patch` and the proposal layer's `node.patch` change apply the same
+ * patch to the same node, and two conversions would be two chances for one
+ * of them to write a shape the other refuses.
+ *
+ * A content key on a node that shows something else is IGNORED here, not
+ * refused: this function answers what the patch means, and whether the patch
+ * was legitimate is the caller's to say — `wb_canvas_edit` refuses it by
+ * name, which is a message a proposal has no one to deliver.
+ */
+export function applyNodePatch(node: SpatialNode, patch: NodePatchFields): SpatialNode {
+  const { text, file, subpath, url, label, background, backgroundStyle, ...rest } = patch
+  let next: SpatialNode = { ...node, ...rest }
+  if (text !== undefined) next = withNodeText(next, text)
+  if (file !== undefined) next = withNodeFile(next, file)
+  if (url !== undefined) next = withNodeUrl(next, url)
+  if (subpath !== undefined && nodeFile(next) !== undefined) {
+    next = {
+      ...next,
+      resource: { ...next.resource, mimeType: next.resource?.mimeType ?? '', subpath },
+    }
+  }
+  if (isFrame(next)) {
+    next = {
+      ...next,
+      ...(label !== undefined && { label }),
+      ...(background !== undefined && { background }),
+      ...(backgroundStyle !== undefined && { backgroundStyle }),
+    }
+  }
+  return next
+}
+
+/**
+ * What a node holds at one of the patch's keys — the READ half of
+ * `applyNodePatch`, so a conflict check can compare a change's `assumed`
+ * prior against the node as it stands without knowing how content is stored.
+ */
+export function nodePatchField(node: SpatialNode, key: keyof NodePatchFields): unknown {
+  switch (key) {
+    case 'text':
+      return nodeText(node)
+    case 'file':
+      return nodeFile(node)
+    case 'url':
+      return nodeUrl(node)
+    case 'subpath':
+      return nodeSubpath(node)
+    case 'label':
+      return frameLabel(node)
+    case 'background':
+      return frameBackground(node)
+    case 'backgroundStyle':
+      return frameBackgroundStyle(node)
+    default:
+      return node[key]
+  }
+}

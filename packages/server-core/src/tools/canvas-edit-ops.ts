@@ -15,43 +15,40 @@ import {
   extensionFacetsSchema,
   linePatchFieldsSchema,
   type NodeEmbed,
+  type NodeResource,
   nodeIdSchema,
+  nodeKind,
   nodePatchFieldsSchema,
   nodePositionSchema,
   nodeSizeSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
-  spatialNodeSchema,
+  RESOURCE_KINDS,
+  type SpatialNode,
+  sharedNodeFieldsSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
 
-// Derived from the stored node schemas rather than restated beside them, so
-// a field added to a node type reaches this tool's input for free. Only the
-// id and the four geometry fields become optional; `type` stays required
-// because it is the discriminator, and the per-type content fields stay
-// required because there is no sensible default for a link with no url.
+// Geometry and identity are DERIVED from the stored node's own fields rather
+// than restated beside them, so a change to what an `x` may hold reaches this
+// tool's input for free. Only the id and the four geometry fields become
+// optional.
 const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
 const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
-const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
 /**
- * The model's two extension fields are omitted from the derived options and
+ * The model's two extension fields are omitted from the derived shape and
  * reached through `WRITE_EXTENSION` below instead.
  *
- * Deriving from the stored schemas means a field added to a node type arrives
- * here for free — which is the point, and wrong for exactly these two: the
- * tool already publishes a way to write them, and a second one is two
- * spellings of one thing on a table a model reads every turn. Measured when
- * ADR-0037 moved them onto the node: 14 new parameters across the four node
- * types, every one of them undescribed.
+ * Deriving from the stored schema means a field added to a node arrives here
+ * for free — which is the point, and wrong for exactly these two: the tool
+ * already publishes a way to write them, and a second one is two spellings of
+ * one thing on a table a model reads every turn. Measured when ADR-0037 moved
+ * them onto the node: 14 new parameters across the four node types, every one
+ * of them undescribed.
  */
 const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
-const textOption = textNode.omit(STORED_EXTENSION_FIELDS)
-const fileOption = fileNode.omit(STORED_EXTENSION_FIELDS)
-const linkOption = linkNode.omit(STORED_EXTENSION_FIELDS)
-const groupOption = groupNode.omit(STORED_EXTENSION_FIELDS)
-
 /**
  * The node extension as a WRITER declares it: one flat object instead of
  * the stored two-variant union, narrowed to the stored shape on parse.
@@ -111,6 +108,49 @@ z.globalRegistry.add(nodeExtensionWriteSchema, { id: 'NodeExtension' })
 
 const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
 
+const draftBase = sharedNodeFieldsSchema
+  .omit(STORED_EXTENSION_FIELDS)
+  .partial(DRAFT_OPTIONAL)
+  .extend(WRITE_EXTENSION)
+
+/**
+ * What a node SHOWS is a RESOURCE in the model now
+ * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
+ * decision 3), and this tool's four arms are NOT derived from it. They are
+ * written out here, and the boundary converts.
+ *
+ * A deliberate decision rather than an oversight. `type` plus the kind's own
+ * content field is what `tools/list` has published since the tool existed,
+ * and a model reads that table on every turn — so converging the input on
+ * the model's shape is a tool-surface change with its own criteria, its own
+ * two scoreboards and its own LLM-driven before/after (ADR-0031, the
+ * `mcp-tool-surface` skill). Keeping the surface still is what makes the
+ * storage flip a model change that no caller can see.
+ *
+ * `type` stays required because it is the discriminator the arms are chosen
+ * by, and each content field stays required because there is no sensible
+ * default for a link with no url.
+ */
+const textOption = draftBase.extend({
+  type: z.literal('text'),
+  text: z.string(),
+})
+const fileOption = draftBase.extend({
+  type: z.literal('file'),
+  file: z.string(),
+  subpath: z.string().startsWith('#').optional(),
+})
+const linkOption = draftBase.extend({
+  type: z.literal('link'),
+  url: z.url(),
+})
+const groupOption = draftBase.extend({
+  type: z.literal('group'),
+  label: z.string().optional(),
+  background: z.string().optional(),
+  backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
+})
+
 /**
  * A key inside the node that the node has no room for is REFUSED, and
  * `stencil` is told where it belongs — the same redirect `nodePatchSchema`
@@ -140,11 +180,70 @@ const draftOption = <S extends z.ZodRawShape>(option: { shape: S }) =>
   z.object(option.shape, draftStrayKeys).strict()
 
 const nodeDraftSchema = z.discriminatedUnion('type', [
-  draftOption(textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
-  draftOption(fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
-  draftOption(linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
-  draftOption(groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(textOption),
+  draftOption(fileOption),
+  draftOption(linkOption),
+  draftOption(groupOption),
 ])
+
+export type NodeDraft = z.infer<typeof nodeDraftSchema>
+
+/**
+ * The word this TOOL calls a node's kind, which is not `nodeKind`'s: a frame
+ * is `group` here, and a node showing a resource this build cannot read is
+ * `group` too — the wire's node that shows nothing.
+ *
+ * Every message and every projection on the tool's surface goes through this,
+ * so the vocabulary the model moved to (ADR-0038 decision 3) cannot leak into
+ * a string a caller reads. A refusal that suddenly said "a frame node has no
+ * text" would be a surface change nobody gated.
+ */
+export const publishedKind = (node: SpatialNode): NodeDraft['type'] => {
+  const kind = nodeKind(node)
+  return kind === undefined || kind === 'frame' ? 'group' : kind
+}
+
+/**
+ * The published draft's `type` plus its content field, as the fields the
+ * model stores.
+ *
+ * This function IS the boundary the comment on the four arms above describes:
+ * the tool's vocabulary on one side, ADR-0038 decision 3's resource on the
+ * other, converted once. Every other reader of a node goes through the
+ * content seam (`nodeText`/`nodeFile`/…), so this is the only place the two
+ * vocabularies meet.
+ */
+export function draftContent(draft: NodeDraft): {
+  resource?: NodeResource
+  label?: string
+  background?: string
+  backgroundStyle?: 'cover' | 'ratio' | 'repeat'
+} {
+  switch (draft.type) {
+    case 'text':
+      return { resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: draft.text } }
+    case 'file':
+      return {
+        resource: {
+          // A reference alone does not say what it points AT, and the registry
+          // claims any located resource that is not a uri-list.
+          mimeType: RESOURCE_KINDS.file.mimeType,
+          location: draft.file,
+          ...(draft.subpath !== undefined && { subpath: draft.subpath }),
+        },
+      }
+    case 'link':
+      return { resource: { mimeType: RESOURCE_KINDS.link.mimeType, location: draft.url } }
+    case 'group':
+      // No resource: a frame shows nothing, which is what the `group` arm
+      // always meant.
+      return {
+        ...(draft.label !== undefined && { label: draft.label }),
+        ...(draft.background !== undefined && { background: draft.background }),
+        ...(draft.backgroundStyle !== undefined && { backgroundStyle: draft.backgroundStyle }),
+      }
+  }
+}
 
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
 

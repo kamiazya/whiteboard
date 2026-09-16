@@ -98,14 +98,15 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
       const ops = [
         ...Array.from({ length: 8 }, (_, i) => ({
           op: 'node.add',
-          node: textNode({
+          node: {
+            type: 'text',
             id: `n${i}`,
             x: (i % 4) * 200,
             y: Math.floor(i / 4) * 120,
             width: 160,
             height: 80,
             text: `node ${i}`,
-          }),
+          },
         })),
         ...Array.from({ length: 6 }, (_, i) => ({
           op: 'edge.add',
@@ -164,14 +165,15 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
         mode: 'apply',
         ops: kinds.map((stencil, i) => ({
           op: 'node.add',
-          node: textNode({
+          node: {
+            type: 'text',
             id: `s${i}`,
             x: (i % 3) * 240,
             y: Math.floor(i / 3) * 140,
             width: 200,
             height: 80,
             text: `box ${i}`,
-          }),
+          },
           stencil,
         })),
       })
@@ -215,7 +217,15 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
         ops: [
           {
             op: 'node.add',
-            node: textNode({ id: 'lake', x: 0, y: 200, width: 200, height: 80, text: 'orders' }),
+            node: {
+              type: 'text',
+              id: 'lake',
+              x: 0,
+              y: 200,
+              width: 200,
+              height: 80,
+              text: 'orders',
+            },
             stencil,
           },
         ],

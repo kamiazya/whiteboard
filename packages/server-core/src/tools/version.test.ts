@@ -1,4 +1,5 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -38,7 +39,7 @@ function textDoc(text: string): LoroDoc {
 
 function textOf(doc: LoroDoc): string | undefined {
   const node = readSpatialCanvas(doc).nodes[0]
-  return node?.type === 'text' ? node.text : undefined
+  return node === undefined ? undefined : nodeText(node)
 }
 
 class RecordingNotifier implements CanvasClientNotifier {

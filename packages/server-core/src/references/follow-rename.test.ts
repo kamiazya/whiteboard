@@ -1,4 +1,5 @@
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -106,10 +107,10 @@ describe('followReferencesAfterRename', () => {
     expect(result.updatedDocumentIds).toEqual([canvas.documentId])
     const doc = await loadOrCreateDocument(deps, WS, canvas.documentId as never)
     const spatial = readSpatialCanvas(doc)
-    expect(spatial.nodes.find((n) => n.id === 't1')).toMatchObject({
-      text: 'see [[archive/login]]',
-    })
-    expect(spatial.nodes.find((n) => n.id === 'f1')).toMatchObject({ file: 'archive/login' })
+    const rewritten = spatial.nodes.find((n) => n.id === 't1')
+    expect(rewritten !== undefined && nodeText(rewritten)).toBe('see [[archive/login]]')
+    const movedFile = spatial.nodes.find((n) => n.id === 'f1')
+    expect(movedFile !== undefined && nodeFile(movedFile)).toBe('archive/login')
   })
 
   it('a subtree move follows references to a descendant', async () => {
@@ -186,9 +187,8 @@ describe('followReferencesAfterRename', () => {
 
     expect(result.updatedDocumentIds).toEqual([board.documentId])
     const doc = await loadOrCreateDocument(deps, WS, board.documentId as never)
-    expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 't1')).toMatchObject({
-      text: 'see [[archive/login]]',
-    })
+    const survivor = readSpatialCanvas(doc).nodes.find((n) => n.id === 't1')
+    expect(survivor !== undefined && nodeText(survivor)).toBe('see [[archive/login]]')
     // The unreadable record is still there, byte-for-byte.
     expect(doc.getMap('nodes').get('from-the-future')).toEqual({
       type: 'hologram',

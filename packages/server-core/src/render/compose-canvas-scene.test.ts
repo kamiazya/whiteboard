@@ -7,7 +7,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { afterEach, describe, expect, test } from 'vitest'
 import { setLogSink } from '../log.js'
@@ -79,15 +79,14 @@ describe('composeCanvasScene', () => {
       nodes: [
         textNode({ id: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello **world**' }),
         fileNode({ id: 'file', x: 200, y: 0, width: 100, height: 60, file: 'a.png' }),
-        {
+        linkNode({
           id: 'link',
-          type: 'link',
           x: 0,
           y: 200,
           width: 80,
           height: 40,
           url: 'https://example.com',
-        },
+        }),
         groupNode({ id: 'group', x: 400, y: 400, width: 200, height: 200, label: 'a group' }),
       ],
       edges: [
@@ -137,14 +136,24 @@ describe('composeCanvasScene', () => {
   })
 
   test('reports a degradation through getLogger, without changing the returned scene', () => {
-    // A node `type` outside the closed union — unreachable through the
-    // schema-validated store path, but canvas-render's own defensive branch
-    // (spatial-canvas.ts) still degrades it to chrome-only and reports it,
-    // which is what this pins.
-    const canvas = {
-      nodes: [{ id: 'n1', type: 'bogus', x: 0, y: 0, width: 100, height: 50 }],
+    // A node showing a resource nothing in `RESOURCE_KINDS` claims. Since
+    // ADR-0038 decision 3 this is SCHEMA-VALID and reachable through the
+    // store — OCIF conformance requires keeping a resource a reader does not
+    // understand — so the defensive branch in canvas-render's
+    // `spatial-canvas.ts` has a real case now rather than only a cast.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'n1',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          resource: { mimeType: 'application/x-nothing-claims-this' },
+        },
+      ],
       edges: [],
-    } as unknown as SpatialCanvas
+    }
 
     const sceneWithoutSink = composeCanvasScene(canvas, constantRatioMeasureText)
 
@@ -157,7 +166,9 @@ describe('composeCanvasScene', () => {
         scope: 'compose-canvas-scene',
         level: 'warning',
         msg: 'unrecognized spatial node kind; emitting chrome only',
-        data: { nodeId: 'n1', type: 'bogus' },
+        // The MEDIA TYPE, not the kind: `nodeKind` answers `undefined`
+        // precisely here, so naming the kind would say nothing.
+        data: { nodeId: 'n1', type: 'application/x-nothing-claims-this' },
       },
     ])
     // Being told is observability-only — the callback must never change

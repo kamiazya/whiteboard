@@ -5,6 +5,7 @@
  * Pure geometry, so `canvas-edit.ts` keeps to the transaction.
  */
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
+import type { NodeDraft } from './canvas-edit-ops.js'
 
 /** How many auto-placed nodes go in a row before the next one wraps. */
 export const PLACEMENT_COLUMNS = 4
@@ -19,7 +20,7 @@ export const PLACEMENT_GUTTER_PX = 40
  * The WIDTH here is only the fallback; `prevailingWidth` below takes
  * precedence when the board has an opinion, and says why.
  */
-export const DEFAULT_SIZE: Record<SpatialNode['type'], { width: number; height: number }> = {
+export const DEFAULT_SIZE: Record<NodeDraft['type'], { width: number; height: number }> = {
   text: { width: 260, height: 120 },
   file: { width: 260, height: 120 },
   link: { width: 260, height: 120 },

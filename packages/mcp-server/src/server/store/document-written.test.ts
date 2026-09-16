@@ -98,7 +98,7 @@ describe('documentWritten', () => {
       ops: [
         {
           op: 'node.add',
-          node: textNode({ id: 'n1', text: 'hi', x: 0, y: 0, width: 80, height: 40 }),
+          node: { type: 'text', id: 'n1', text: 'hi', x: 0, y: 0, width: 80, height: 40 },
         },
       ],
     })

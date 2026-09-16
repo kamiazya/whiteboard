@@ -47,7 +47,7 @@ describe('wb_canvas_edit — a misplaced draft key', () => {
           {
             op: 'node.add',
             id: 'hub',
-            node: textNode({ text: 'Hub', x: 0, y: 0, width: 200, height: 80 }),
+            node: { type: 'text', text: 'Hub', x: 0, y: 0, width: 200, height: 80 },
           },
         ],
       },
