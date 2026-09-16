@@ -319,13 +319,23 @@ core field that only a plugin could draw would DROP authored geometry the
 record still holds — silently, which is the failure this repo has already
 corrected once, in `lowlight`.
 
-**The seam itself stays, and it now has no bundled consumer.**
-`RenderContribution.routers` / `readRouting` are a published contract and
-were the right seam; what they carried turned out to be core. That is a
-reachability gap of the kind `codebase-auditor` flags, so it is recorded
-rather than left to be discovered: see the backlog issue
-`issues/router-seam-has-no-bundled-consumer`. Do not delete the seam to close
-it, and do not invent a router to justify it.
+**The seam itself stays, and it now has no bundled consumer — SETTLED, not
+open.** `RenderContribution.routers` / `readRouting` are a published contract
+and were the right seam; what they carried turned out to be core. Do not
+delete the seam to close it, and do not invent a router to justify it.
+
+That was recorded as a backlog issue and kept being rediscovered anyway,
+which is what a note in a rule file three packages from the code buys. So the
+reasoning now lives at the two places a reader actually arrives at: the
+`routers` declaration in `packages/scene/src/contribution.ts`, and
+`canvas-render`'s `contributed-router.test.ts`, which says in its header that
+it is the seam's only consumer BY DESIGN.
+
+What makes leaving it safe rather than merely tolerated is that the contract
+is exercised end to end: that test drives a fake plugin's router through
+`layoutSpatialCanvas` — not through `resolveRouter` directly — and pins both
+fallbacks, so a break in the wiring fails a test rather than only a type.
+`pnpm knip` reports nothing here, so no mechanical rung calls it dead either.
 
 What DID stay here, because it is a property of where a bend lives rather
 than of any facet: the midpoint of an edge run is already spoken for.
