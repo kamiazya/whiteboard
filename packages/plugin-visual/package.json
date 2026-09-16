@@ -59,7 +59,7 @@
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19",
     "@vitejs/plugin-react": "^6.1.1",
-    "fast-check": "^4.7.0",
+    "fast-check": "^4.9.0",
     "react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
