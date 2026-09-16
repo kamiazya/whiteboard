@@ -395,60 +395,166 @@ describe('channel attribution', () => {
 })
 
 /**
- * The classification facet as a BUILT-IN partition (ADR-0036 §6).
- *
- * `semantic.class/v0` says what a box IS on a named dimension, which is
- * ADR-0036 §1's own criterion for an axis — the reason a stencil is a
- * partition the score knows by name without any declaration. So a board
- * coloured by class owes nothing even when `visual.axes/v0` is absent, and
- * a board that ALSO declares the key names it once, not twice.
- *
- * Measured reason (ADR-0031 §17-21): nine trials coloured health and wrote
- * a node facet for it zero times, and the declaration was the step every
- * refuted remedy aimed at. A registered facet the model can write inline is
- * the first change on that lane that gives it a word rather than a hint.
+ * A scoped-tag KEY as a partition
+ * ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
+ * decision 3), which is where `semantic.class/v0`'s reading went: a key
+ * every box carries at most one value under says what each box IS on a
+ * named dimension, needs no declaration, and is named in `carriedBy` by the
+ * key. The population is every box, the untagged ones as their own class,
+ * exactly as an undressed box is under `stencil`.
  */
-describe('facet vocabulary: the classification facet is an axis by construction', () => {
-  const classed = (axis: string, value: string, color?: string) => ({
+describe('facet vocabulary: a scoped-tag key is a partition', () => {
+  const tagged = (tags: readonly string[], color?: string) => ({
     ...(color === undefined ? {} : { color }),
-    facets: { 'semantic.class/v0': { axis, value } },
+    tags: [...tags],
   })
   // Same pixels as the `withStatus` case above: one red box among plain
   // ones. The only difference is that each box now SAYS its health.
   const fleet = [
-    box('api', 0, 0, classed('health', 'ok')),
-    box('db', 300, 0, classed('health', 'failing', '1')),
-    box('cache', 600, 0, classed('health', 'ok')),
+    box('api', 0, 0, tagged(['health:ok'])),
+    box('db', 300, 0, tagged(['health:failing'], '1')),
+    box('cache', 600, 0, tagged(['health:ok'])),
   ]
 
-  it('reads colour as carried by the classification with NO axes declaration on the canvas', () => {
+  it('reads colour as carried by the key, with no declaration anywhere', () => {
     const s = score(fleet)
-    expect(s.channels.colour).toEqual({ use: 'carried', carriedBy: ['semantic.class/v0'] })
+    expect(s.channels.colour).toEqual({ use: 'carried', carriedBy: ['health'] })
     expect(s.contested).toBe(0)
+    expect(s.multi).toEqual([])
   })
 
-  it('names the classification once when the canvas also declares it as an axis', () => {
-    const declared = scoreFacets({
-      nodes: [...fleet],
-      edges: [],
-      facets: { 'visual.axes/v0': { axes: ['semantic.class/v0'] } },
-    } as SpatialCanvas)
-    expect(declared.channels.colour).toEqual({
-      use: 'carried',
-      carriedBy: ['semantic.class/v0'],
-    })
-  })
-
-  it('a box with no classification is its own class, so a half-classified board still reads', () => {
+  it('a box with no value under the key is its own class, so a half-classified board still reads', () => {
     // `cache` says nothing. It is the '' class, exactly as an undressed box
     // is under `stencil`, and its default colour is constant within that
     // class — so colour still carries the partition rather than reading as
-    // contested for want of one payload.
+    // contested for want of one tag.
     const half = [fleet[0] as SpatialNode, fleet[1] as SpatialNode, box('cache', 600, 0)]
-    expect(score(half).channels.colour).toEqual({
-      use: 'carried',
-      carriedBy: ['semantic.class/v0'],
+    expect(score(half).channels.colour).toEqual({ use: 'carried', carriedBy: ['health'] })
+  })
+
+  it('the untagged class is judged like any other: two untagged boxes in two colours are contested', () => {
+    const mixed = [
+      fleet[0] as SpatialNode,
+      fleet[1] as SpatialNode,
+      box('cache', 600, 0, { color: '1' }),
+      box('queue', 900, 0, { color: '4' }),
+    ]
+    const s = score(mixed)
+    expect(s.channels.colour).toEqual({ use: 'contested', carriedBy: [] })
+    expect(s.contested).toBe(1)
+  })
+
+  it('a key one box carries twice is MULTI, not a partition, so no channel can be carried by it', () => {
+    const regions = [
+      box('a', 0, 0, tagged(['region:eu', 'region:us'], '1')),
+      box('b', 300, 0, tagged(['region:eu'], '4')),
+      box('c', 600, 0, tagged(['region:us'], '5')),
+    ]
+    const s = score(regions)
+    expect(s.multi).toEqual([{ key: 'region', count: 1 }])
+    expect(s.channels.colour).toEqual({ use: 'contested', carriedBy: [] })
+    expect(s.partitions).toBe(0)
+  })
+
+  it("a plain tag is never a partition, and neither are the board's own tags", () => {
+    const plainTags = [
+      box('a', 0, 0, tagged(['urgent'], '1')),
+      box('b', 300, 0, tagged(['Machine Learning'], '4')),
+    ]
+    const s = scoreFacets({ nodes: plainTags, edges: [], tags: ['phase:design'] } as SpatialCanvas)
+    expect(s.partitions).toBe(0)
+    expect(s.channels.colour).toEqual({ use: 'contested', carriedBy: [] })
+  })
+
+  it('names every key a channel is constant within, and only those', () => {
+    const two = [
+      box('a', 0, 0, tagged(['health:ok', 'tier:web'], '4')),
+      box('b', 300, 0, tagged(['health:failing', 'tier:web'], '1')),
+      box('c', 600, 0, tagged(['health:ok', 'tier:data'], '4')),
+    ]
+    const s = score(two)
+    expect(s.partitions).toBe(2)
+    expect(s.channels.colour).toEqual({ use: 'carried', carriedBy: ['health'] })
+  })
+
+  it('no longer reads the retired classification facet as a partition', () => {
+    // `semantic.class/v0` retires unshipped (ADR-0040 decision 4); a board
+    // that still carries it is coloured by nothing the score can name.
+    const classed = [
+      box('api', 0, 0, { facets: { 'semantic.class/v0': { axis: 'health', value: 'ok' } } }),
+      box('db', 300, 0, {
+        color: '1',
+        facets: { 'semantic.class/v0': { axis: 'health', value: 'failing' } },
+      }),
+    ]
+    expect(score(classed).channels.colour).toEqual({ use: 'contested', carriedBy: [] })
+  })
+})
+
+/**
+ * EDGES get the same reading over their own population (ADR-0040 decision
+ * 3): every edge on the board, the untagged ones as their own class, judged
+ * separately from the boxes. The one edge channel is the edge's colour; a
+ * second (the stroke's style) is not claimed until a board spends it.
+ */
+describe('facet vocabulary: an edge key partitions the edges, and edge colour is read against it', () => {
+  const edge = (id: string, from: string, to: string, extra: Record<string, unknown> = {}) =>
+    ({ id, from: { node: from }, to: { node: to }, ...extra }) as SpatialCanvas['edges'][number]
+  const nodes = [box('a', 0, 0), box('b', 300, 0), box('c', 600, 0)]
+  const scoreWith = (edges: readonly SpatialCanvas['edges'][number][]) =>
+    scoreFacets({ nodes: [...nodes], edges: [...edges] } as SpatialCanvas)
+
+  it('reads edge colour as carried by an edge key, the untagged edge as its own class', () => {
+    const s = scoreWith([
+      edge('e1', 'a', 'b', { color: '4', tags: ['link:healthy'] }),
+      edge('e2', 'b', 'c', { color: '1', tags: ['link:failing'] }),
+      edge('e3', 'a', 'c'),
+    ])
+    expect(s.edges).toEqual({ colour: { use: 'carried', carriedBy: ['link'] }, multi: [] })
+    expect(s.contested).toBe(0)
+  })
+
+  it('reads edge colour as contested when it is spent and no edge key explains it', () => {
+    const s = scoreWith([
+      edge('e1', 'a', 'b', { color: '4' }),
+      edge('e2', 'b', 'c', { color: '1' }),
+    ])
+    expect(s.edges.colour).toEqual({ use: 'contested', carriedBy: [] })
+    // Counted with the box channels: a reader meets it on the same board.
+    expect(s.contested).toBe(1)
+  })
+
+  it('reads edge colour as unused when no edge spends it', () => {
+    expect(scoreWith([edge('e1', 'a', 'b'), edge('e2', 'b', 'c')]).edges).toEqual({
+      colour: { use: 'unused', carriedBy: [] },
+      multi: [],
     })
+  })
+
+  it('judges a key per population: a partition on the boxes and multi on the edges', () => {
+    const boxes = [
+      box('a', 0, 0, { tags: ['link:healthy'] }),
+      box('b', 300, 0, { tags: ['link:failing'], color: '1' }),
+    ]
+    const s = scoreFacets({
+      nodes: boxes,
+      edges: [edge('e1', 'a', 'b', { color: '4', tags: ['link:healthy', 'link:failing'] })],
+    } as SpatialCanvas)
+    expect(s.channels.colour).toEqual({ use: 'carried', carriedBy: ['link'] })
+    expect(s.multi).toEqual([])
+    expect(s.edges.multi).toEqual([{ key: 'link', count: 1 }])
+  })
+
+  it('does not let a box key carry an edge colour: the populations are separate', () => {
+    const boxes = [
+      box('a', 0, 0, { tags: ['health:ok'] }),
+      box('b', 300, 0, { tags: ['health:failing'] }),
+    ]
+    const s = scoreFacets({
+      nodes: boxes,
+      edges: [edge('e1', 'a', 'b', { color: '1' }), edge('e2', 'b', 'a', { color: '4' })],
+    } as SpatialCanvas)
+    expect(s.edges.colour).toEqual({ use: 'contested', carriedBy: [] })
   })
 })
 
