@@ -266,7 +266,8 @@ rather than in a string, so joining its runs yields `tightenthis`.
   strikethrough flanking-rule interactions, reference-style links/definitions, and non-HTML-shaped
   `html` node values, a line ending at a block's first or last text — the block boundary itself,
   which the writer emits raw where it encodes a boundary space as `&#x20;` — a blank line inside a
-  text value (a paragraph break), a line ending inside a code span or inline math (CommonMark reads
+  text value, or inside an image's `alt` or a link's/image's `title`, which the writer
+  emits raw (a paragraph break; the `alt` half found by seed 1557987087), a line ending inside a code span or inline math (CommonMark reads
   it as a space and the writer writes one whenever the next character could open a block; in an
   ATX-only heading it splits the heading), and a destination starting with `<` (the writer leaves
   it raw where the parser reads a pointy-bracket destination) — the last two pinned by

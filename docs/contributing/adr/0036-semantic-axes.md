@@ -159,6 +159,13 @@ needs a seventh silhouette, not a seventh entry.
 
 ### 6. The second axis gets a WORD: `semantic.class/v0` (2026-09-16)
 
+*Superseded the same day by [ADR-0040](0040-scoped-tags.md) (proposed): the
+owner rejected a screen vocabulary that differs from the tools', and the
+second axis becomes a SCOPED TAG (`health:failing`) on documents, boards,
+nodes and edges rather than a facet of its own. `semantic.class/v0` retires unshipped
+with that ADR's increments. The reading below stands as the measurement that
+led there.*
+
 §5 freed the colour channel for a status axis and never said what fills it.
 The lane measured the gap over three rounds (ADR-0031's nineteenth to
 twenty-first readings): asked to tell kind and health apart at once, nine
