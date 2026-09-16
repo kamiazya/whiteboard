@@ -13,7 +13,7 @@
 import { type EdgeEnd, edgeEndSchema } from '@kamiazya/whiteboard-model'
 import { applyStencil } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
-import { TASKS } from './tasks.mjs'
+import { endNode, linked, linkedFrom, TASKS } from './tasks.mjs'
 
 const KINDS = TASKS.find((t) => t.name === 'draw a flow whose kinds are told apart at a glance')
 
@@ -345,5 +345,82 @@ describe('the two-axis verifier', () => {
       ['ops.status/v0'],
     )
     await expect(verify(content)).resolves.toMatchObject({ ok: false, detail: 'missing: Redis' })
+  })
+})
+
+describe('the shared link helpers', () => {
+  // `linked` / `linkedFrom` are how most write verifiers ask "is A connected
+  // to B", and they have answered `false` for EVERY edge twice: first reading
+  // a flat `fromNode` key, then testing a `kind` that ADR-0038 decision 2
+  // retired. Each time every verifier built on them became impossible to
+  // pass, and nothing anywhere went red.
+  //
+  // Nothing could, because the lane's own check is one-sided: `--dry-run`
+  // asserts that a write verifier FAILS on the unseeded fixture, which a
+  // permanently broken verifier does too. Both breakages were found by
+  // spending model quota and reading "not connected" beside `edge.add` calls
+  // that reported zero tool errors. A POSITIVE case is the cheap thing that
+  // tells those two apart, and it belongs on the shared helper rather than on
+  // one task's verifier, because the helper is what every other verifier
+  // depends on.
+  //
+  // Ends are built through `edgeEndSchema` for the reason the kinds fixture
+  // is: it is `.strict()`, so a fixture carrying a key the schema retired
+  // throws here instead of quietly standing in for a payload no tool sends.
+  //
+  // Both directions are mutation-checked, and the second says why this is not
+  // covered by what was already here: restoring the retired `kind` test fails
+  // four of these cases, and a `linked` that answers `true` for every pair
+  // fails two — while the kinds task's own five cases pass it, because that
+  // verifier only ever asks about edges the good board really has.
+  const box = (id: string) => ({ id })
+  const a = box('a')
+  const b = box('b')
+  const lonely = box('lonely')
+  const board = { edges: [{ id: 'e0', from: at('a'), to: at('b') }] }
+
+  it('says a pair the board really connects IS connected', () => {
+    expect(linked(board, a, b)).toBe(true)
+  })
+
+  it('reads an edge either way round, since a relation is not a direction', () => {
+    expect(linked(board, b, a)).toBe(true)
+  })
+
+  it('says a pair no edge touches is not connected', () => {
+    // The other side of the guard: a helper that answered `true` for
+    // everything would pass every case above and grade every board a pass.
+    expect(linked(board, a, lonely)).toBe(false)
+  })
+
+  it('keeps direction where the caller asked for it', () => {
+    expect(linkedFrom(board, a, b)).toBe(true)
+    expect(linkedFrom(board, b, a)).toBe(false)
+  })
+
+  it('reads an end that also carries a side and an arrowhead', () => {
+    // `side` and `end` are optional on the schema, and a model that names
+    // either is drawing the same relation. A helper keyed on the end object's
+    // exact shape rather than on its `node` would refuse these.
+    const dressed = {
+      edges: [
+        {
+          id: 'e0',
+          from: edgeEndSchema.parse({ node: 'a', side: 'right' }),
+          to: edgeEndSchema.parse({ node: 'b', side: 'left', end: 'arrow' }),
+        },
+      ],
+    }
+    expect(linked(dressed, a, b)).toBe(true)
+    expect(linkedFrom(dressed, a, b)).toBe(true)
+  })
+
+  it('answers for an end the snapshot left out instead of throwing', () => {
+    // A verifier reads whatever the tools answered. An end that is absent is
+    // a board that does not connect anything, not a crash that reads as an
+    // infrastructure failure.
+    const ragged = { edges: [{ id: 'e0', from: undefined, to: at('b') }] }
+    expect(endNode(undefined)).toBeUndefined()
+    expect(linked(ragged, a, b)).toBe(false)
   })
 })
