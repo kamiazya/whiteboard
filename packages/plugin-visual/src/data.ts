@@ -100,32 +100,6 @@ export type VisualAxesFacet = z.infer<typeof visualAxesFacetSchema>
 export const VISUAL_AXES_KEY = 'visual.axes/v0'
 
 /**
- * What a box IS on one named dimension — `{axis: 'health', value: 'failing'}`
- * — under ONE registered schema, so "health", "priority" and "phase" are
- * payload rather than three schemas ([ADR-0013](../../../docs/contributing/adr/0013-facet-system.md)'s
- * escape valve: runtime vocabulary is payload under a registered schema,
- * never a runtime schema).
- *
- * Both halves are lowercase identifiers, the facet-name grammar, because
- * the facet score partitions a board BY PAYLOAD: `Health/OK` and
- * `health/ok` would read as two classes, and a refusal at the write is
- * cheaper than a distinction nobody drew.
- *
- * ponytail: one classification per box. A board that needs two ("health"
- * AND "priority") wants a record payload and an instrument that reads a
- * path inside it; neither is built until a board asks.
- */
-const classSegmentSchema = z
-  .string()
-  .regex(/^[a-z][a-z0-9-]*$/, 'must be a lowercase identifier like "health" or "failing"')
-export const semanticClassFacetSchema = z
-  .object({ axis: classSegmentSchema, value: classSegmentSchema })
-  .strict()
-export type SemanticClassFacet = z.infer<typeof semanticClassFacetSchema>
-
-export const SEMANTIC_CLASS_KEY = 'semantic.class/v0'
-
-/**
  * A node's badge: a named icon from the renderer's vendored set, or a
  * single emoji/character. A union on purpose — the two arms render through
  * different scene nodes (icon geometry vs a text glyph) and future arms
@@ -484,45 +458,7 @@ export const visualPlugin = definePlugin({
   assets: { themes: VISUAL_THEMES, icons: VISUAL_ASSET_ICONS, stencils: VISUAL_STENCILS },
 })
 
-/**
- * The second bundled plugin, and deliberately NOT a `visual.*` facet.
- * [ADR-0036](../../../docs/contributing/adr/0036-semantic-axes.md) §1 draws
- * the line by what a facet SAYS: `visual.shape/v0` says how a box is drawn
- * and is emphatically not an axis; this says what a box is, and is one by
- * construction — the same reason a stencil is a partition the score knows
- * by name.
- *
- * ponytail: lives in this package because it is one facet with no UI half.
- * Its own package (`plugin-semantic`) the day it grows a second facet or an
- * editor, so `plugin-visual` goes back to being the worked example of one
- * plugin in one package that `package-plugin-visual.md` describes.
- */
-export const semanticPlugin = definePlugin({
-  id: 'semantic',
-  displayName: 'Meaning',
-  facets: [
-    defineFacet({
-      name: 'class',
-      displayName: 'Classification',
-      version: 'v0',
-      targets: ['node'],
-      schema: semanticClassFacetSchema,
-      // Two free identifiers get a derived form either way; what the spec
-      // adds is the EXAMPLE in each empty box, which is the one thing that
-      // can say what goes there before the lowercase rule refuses it. The
-      // pick-from-a-list half comes from the vessel, which alone can see
-      // what the rest of the board already uses.
-      editor: {
-        fields: {
-          axis: { widget: 'text', label: 'Axis', placeholder: 'e.g. health, priority' },
-          value: { widget: 'text', label: 'Value', placeholder: 'e.g. failing, high' },
-        },
-      },
-    }),
-  ],
-})
-
-export const bundledPlugins = [visualPlugin, semanticPlugin]
+export const bundledPlugins = [visualPlugin]
 
 /**
  * The registry every composition uses unless a deployment configures its

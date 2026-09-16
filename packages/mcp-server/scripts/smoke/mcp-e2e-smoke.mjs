@@ -762,14 +762,18 @@ async function main() {
   if (classifiedBatch.applied !== 1) {
     throw new Error(`the stencilled node.add did not apply: ${JSON.stringify(classifiedBatch)}`)
   }
+  // The second axis is a SCOPED TAG on the node (ADR-0040): written through
+  // wb_facet_set beside the stencil, read back through wb_document_get so
+  // the point is what was STORED, and the SDK validates structuredContent
+  // against the output schema on the way.
   const classified = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
     documentIds: [documentId],
     nodeId: 'redis',
-    facets: { 'semantic.class/v0': { axis: 'health', value: 'failing' } },
+    tags: { add: ['health:failing'] },
   })
-  if (classified.updated[0]?.facets?.['semantic.class/v0']?.value !== 'failing') {
-    throw new Error(`the classification was not accepted: ${JSON.stringify(classified)}`)
+  if (JSON.stringify(classified.updated[0]?.tags) !== JSON.stringify(['health:failing'])) {
+    throw new Error(`the node tag was not accepted: ${JSON.stringify(classified)}`)
   }
   const classifiedDoc = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
@@ -778,29 +782,64 @@ async function main() {
   const storedRedis = JSON.parse(classifiedDoc.documents[0].content).nodes.find(
     (n) => n.id === 'redis',
   )
-  const storedClass = storedRedis?.['x-whiteboard']?.facets?.['semantic.class/v0']
-  if (storedClass?.axis !== 'health' || storedClass?.value !== 'failing') {
-    throw new Error(`the classification did not survive the save: ${JSON.stringify(storedRedis)}`)
+  if (JSON.stringify(storedRedis?.['x-whiteboard']?.tags) !== JSON.stringify(['health:failing'])) {
+    throw new Error(`the node tag did not survive the save: ${JSON.stringify(storedRedis)}`)
   }
   if (
     storedRedis?.['x-whiteboard']?.facets?.['visual.stencil/v0']?.stencil !== 'visual.datastore'
   ) {
-    throw new Error(`the classification clobbered the stencil: ${JSON.stringify(storedRedis)}`)
+    throw new Error(`the tag clobbered the stencil: ${JSON.stringify(storedRedis)}`)
   }
-  console.log('[e2e] wb_facet_set semantic.class/v0 → the second axis is stored beside the stencil')
-  // An unregistered key passes through unvalidated, so the accepted write
-  // above proves nothing about REGISTRATION; a refused bad payload does.
-  await expectToolError(
-    'wb_facet_set',
-    {
-      workspaceId: WORKSPACE_ID,
-      documentIds: [documentId],
-      nodeId: 'redis',
-      facets: { 'semantic.class/v0': { axis: 'Health', value: 'failing' } },
-    },
-    'semantic.class/v0 with an axis that is not a lowercase identifier',
-    'lowercase identifier',
+  console.log('[e2e] wb_facet_set tags on a node → the second axis is stored beside the stencil')
+  // The board and an edge are taggable too, and the vocabulary in use is
+  // what wb_facet_list answers with a workspaceId.
+  const boardTagged = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    tags: { add: ['phase:design'] },
+  })
+  if (JSON.stringify(boardTagged.updated[0]?.tags) !== JSON.stringify(['phase:design'])) {
+    throw new Error(`the board tag was not accepted: ${JSON.stringify(boardTagged)}`)
+  }
+  const inUse = await callTool('wb_facet_list', { workspaceId: WORKSPACE_ID })
+  const failingRow = (inUse.tags ?? []).find((row) => row.tag === 'health:failing')
+  if (failingRow?.key !== 'health' || failingRow?.nodes !== 1) {
+    throw new Error(`wb_facet_list did not count the node tag: ${JSON.stringify(inUse.tags)}`)
+  }
+  console.log('[e2e] wb_facet_list → the tags in use, counted by what carries them')
+  // A rename reaches the board and every node and edge in one call.
+  const renamed = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    tags: { rename: [{ from: 'health:failing', to: 'health:degraded' }] },
+  })
+  if (renamed.updated.length !== 1) {
+    throw new Error(`rename did not answer: ${JSON.stringify(renamed)}`)
+  }
+  const renamedDoc = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  const renamedRedis = JSON.parse(renamedDoc.documents[0].content).nodes.find(
+    (n) => n.id === 'redis',
   )
+  if (
+    JSON.stringify(renamedRedis?.['x-whiteboard']?.tags) !== JSON.stringify(['health:degraded'])
+  ) {
+    throw new Error(`rename did not reach the node: ${JSON.stringify(renamedRedis)}`)
+  }
+  console.log('[e2e] wb_facet_set tags.rename → reached the node through the board')
+  // The tagged search finds the board by its node, naming the node.
+  const byTag = await callTool('wb_document_search', {
+    workspaceId: WORKSPACE_ID,
+    tags: ['health:degraded'],
+  })
+  if (!byTag.results.some((r) => r.documentId === documentId && r.contexts.includes('cache'))) {
+    throw new Error(
+      `wb_document_search did not find the board by its node tag: ${JSON.stringify(byTag)}`,
+    )
+  }
+  console.log('[e2e] wb_document_search → a board found by a node tag, the node named')
 
   // A FREE END (ADR-0037 slice 3): an edge from a node to a bare point on
   // the canvas. Here rather than only at the unit layer because the endpoint

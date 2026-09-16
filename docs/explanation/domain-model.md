@@ -40,10 +40,13 @@ backed by more than one representation today. Read
   canvas has none. JSON Canvas is nodes and edges with no frontmatter
   concept, so there is nowhere in that format for a facet to live — which
   is why the editor offers the Properties disclosure on a markdown canvas
-  only, and why `wb_facet_set` refuses a spatial one. Metadata on a
-  diagram is a reasonable thing to want and is not built: it would be a
-  workspace-level capability, not a facet
-  ([ADR-0009](../contributing/adr/0009-mcp-tool-naming.md)).
+  only, and why `wb_facet_set` refuses a facet on a spatial one without a
+  target. A board's TAGS are another matter: a spatial document, each of
+  its nodes and each of its edges carries tags of its own — plain ones and
+  `key:value` scoped ones — written by the same tool
+  ([ADR-0040](../contributing/adr/0040-scoped-tags.md)). Other metadata on
+  a diagram is not built: it would be a workspace-level capability, not a
+  facet ([ADR-0009](../contributing/adr/0009-mcp-tool-naming.md)).
 
 ## Identity, per mode
 

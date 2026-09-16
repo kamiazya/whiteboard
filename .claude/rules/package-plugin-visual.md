@@ -17,22 +17,19 @@ Nothing about being bundled is load-bearing. The engine does not import this
 package, and `bundledFacetRegistry` here is a convenience for the compositions
 that want the shipped set, not a privileged registry.
 
-## The second plugin, `semantic` — here for now, and why
+## There is no second plugin, and there was one
 
-`bundledPlugins` is `[visualPlugin, semanticPlugin]`. The second holds one
-facet, `semantic.class/v0` (`{axis, value}`, node only), and it is NOT a
-`visual.*` facet on purpose: [ADR-0036](../../docs/contributing/adr/0036-semantic-axes.md)
-§1 draws the line by what a facet SAYS — `visual.shape/v0` says how a box is
-drawn, this says what a box IS — and the facet score treats it as a partition
-by that same criterion.
-
-**ponytail:** it lives in this package because it is one facet with no UI
-half and no render contribution, and a package for that is more ceremony
-than plugin. The day it grows a second facet or an editor it moves to
-`plugin-semantic`, and this package goes back to being exactly the worked
-example the section above describes. Until then, the thing to keep true is
-the same as for `visual`: `data.ts` stays react-free, because `canvas-render`
-imports it.
+`bundledPlugins` is `[visualPlugin]`, pinned as the exact list. It was
+`[visualPlugin, semanticPlugin]` for one increment: `semantic.class/v0`
+(`{axis, value}`, node only) recorded what a box IS on a named dimension, as
+a facet, because [ADR-0036](../../docs/contributing/adr/0036-semantic-axes.md)
+§1's criterion made it an axis by construction.
+[ADR-0040](../../docs/contributing/adr/0040-scoped-tags.md) retired it
+unshipped: what a box means is a scoped TAG now (`health:failing`), which is
+core rather than any plugin's, attaches to a board and an edge as well, and
+needs no registry to be a partition. So a facet that says what a thing IS
+does not belong here or in any plugin; it is a tag. What this package keeps
+is what a thing DRAWS.
 
 ## The two halves
 

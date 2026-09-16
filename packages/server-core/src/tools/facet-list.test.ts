@@ -2,7 +2,13 @@
 // facet write visible to a human, and this makes the human's registered
 // facets discoverable to an agent — which until now had to guess a key.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import { writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeCoreFacets,
+  writeDocumentKind,
+  writeFacets,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledPlugins, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
@@ -464,5 +470,86 @@ describe('assets and facets join', () => {
     expect(result.facets.find((facet) => facet.key === 'planning.due/v0')).not.toHaveProperty(
       'assetRefs',
     )
+  })
+})
+
+describe('wb_facet_list: the tags a workspace already USES (ADR-0040 decision 5)', () => {
+  const WORKSPACE_ID = 'ws-tags'
+  const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W1'
+  const BOARD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W2'
+
+  const withTags = async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, NOTE_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags: ['health:failing', 'Machine Learning'] })
+    })
+    // Seeded with its KIND: the facts extractor branches on the index entry's
+    // kind, and `registerDocumentInWorkspace` registers everything as spatial.
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      path: 'notes/a',
+      kind: 'markdown',
+    })
+    await seedDoc(store, BOARD_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'a',
+            text: 'A',
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            tags: ['health:failing'],
+          }),
+          textNode({ id: 'b', text: 'B', x: 50, y: 0, width: 10, height: 10, tags: ['health:ok'] }),
+        ],
+        edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['health:failing'] }],
+        tags: ['phase:design'],
+      })
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: BOARD_ID,
+      path: 'boards/fleet',
+      kind: 'spatial',
+    })
+    return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+  }
+
+  test('counts every tag by what carries it, grouped by key for scoped ones', async () => {
+    const deps = await withTags()
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(result.tags).toEqual([
+      { tag: 'Machine Learning', documents: 1, boards: 0, nodes: 0, edges: 0 },
+      {
+        tag: 'health:failing',
+        key: 'health',
+        value: 'failing',
+        documents: 1,
+        boards: 0,
+        nodes: 1,
+        edges: 1,
+      },
+      { tag: 'health:ok', key: 'health', value: 'ok', documents: 0, boards: 0, nodes: 1, edges: 0 },
+      {
+        tag: 'phase:design',
+        key: 'phase',
+        value: 'design',
+        documents: 0,
+        boards: 1,
+        nodes: 0,
+        edges: 0,
+      },
+    ])
+  })
+
+  test('answers no tags at all without a workspaceId: a deployment has a vocabulary and no usage', async () => {
+    const deps = await withTags()
+    const result = await createFacetListTool(deps).execute({})
+    expect(result).not.toHaveProperty('tags')
   })
 })

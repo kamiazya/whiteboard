@@ -2,7 +2,8 @@ import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { workspaceFacetRegistry } from './stencil-library.js'
+import { computeTagsInUse, tagInUseSchema } from './document-tags.js'
+import { listWorkspaceDocuments, workspaceFacetRegistry } from './stencil-library.js'
 
 /**
  * What facets this deployment registered, so an agent can DISCOVER a key
@@ -195,6 +196,13 @@ export const facetListOutputSchema = z
      * this field did.
      */
     otherTargets: z.partialRecord(facetTargetSchema, z.array(z.string())).optional(),
+    /**
+     * The tags the workspace already uses, counted by what carries them
+     * (ADR-0040 decision 5). Present only with a `workspaceId`: a deployment
+     * has a vocabulary and no usage, and a caller asking what is registered
+     * must not pay for a workspace it never named.
+     */
+    tags: z.array(tagInUseSchema).optional(),
   })
   .strict()
 export type FacetListOutput = z.infer<typeof facetListOutputSchema>
@@ -203,7 +211,7 @@ export function createFacetListTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_list' as const,
     description:
-      'List what a write may name: facets (the exact key to write, the owning plugin, which objects each may be attached to, the payload schema) and assets (the stencil, theme and icon ids a write names by id). This deployment\u2019s, plus the stencils a workspace defines in its own library when workspaceId is given. Optionally filtered to one target or one asset kind.',
+      'List what a write may name: facets (the exact key to write, the owning plugin, which objects each may be attached to, the payload schema) and assets (the stencil, theme and icon ids a write names by id). This deployment\u2019s, plus — when workspaceId is given — the stencils the workspace defines in its own library and the tags it already uses, counted by what carries them. Optionally filtered to one target or one asset kind.',
     inputSchema: facetListInputSchema,
     outputSchema: facetListOutputSchema,
     execute: async (input: FacetListInput): Promise<FacetListOutput> => {
@@ -219,10 +227,15 @@ export function createFacetListTool(deps: ServerDeps) {
       // more specific refusal to make room for, and answering the
       // deployment's own stencils would read as "this workspace defines
       // none" — a wrong answer wearing the shape of a right one.
+      // ONE listing serves both the library and the tags in use.
+      const listed =
+        parsed.workspaceId === undefined
+          ? undefined
+          : await listWorkspaceDocuments(deps, parsed.workspaceId, 'refuse')
       const registry =
         parsed.workspaceId === undefined
           ? (deps.facetRegistry ?? bundledFacetRegistry)
-          : await workspaceFacetRegistry(deps, parsed.workspaceId, 'refuse')
+          : await workspaceFacetRegistry(deps, parsed.workspaceId, 'refuse', listed)
       const allFacets = registry.plugins
         .flatMap((plugin) =>
           plugin.facets.map((definition) => ({
@@ -268,7 +281,11 @@ export function createFacetListTool(deps: ServerDeps) {
             ...(kind === 'stencils' ? { displayName: registry.stencilAsset(id)?.displayName } : {}),
           })),
         )
-      return { facets, assets, ...otherTargets(allFacets, parsed.target) }
+      const tags =
+        parsed.workspaceId === undefined || listed === undefined
+          ? {}
+          : { tags: await computeTagsInUse(deps, parsed.workspaceId, listed) }
+      return { facets, assets, ...otherTargets(allFacets, parsed.target), ...tags }
     },
   }
 }

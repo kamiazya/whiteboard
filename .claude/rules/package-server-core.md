@@ -137,6 +137,23 @@ paths:
   (`wb-glow`), never by the word `filter`: a drop shadow is a filter too,
   and the e2e smoke failed on exactly that substring once.
 
+## Tags reach every kind of document, and search reads them by BEARER
+
+[ADR-0040](../../docs/contributing/adr/0040-scoped-tags.md): `wb_facet_set`'s
+`tags` change lands on a markdown document's OKF core tags, on a spatial
+document's board (with or without `target: 'canvas'` — a board's tags are the
+canvas's), or with `nodeId` / `edgeId` on one node or one edge; `tags.rename`
+reaches every node and edge of the documents named, and `tagWriteSchema`
+refuses a colon-bearing tag that is not `key:value` where it is written.
+`extractContentFacts` answers `bearers` rather than a flat tag list — the
+document, the board, each tagged node and each tagged edge, with the text a
+reader knows it by — so `wb_document_search`'s filter matches when ONE bearer
+carries every listed tag and names the matching nodes and edges as excerpts,
+and `computeDocumentTags` / `wb_facet_list`'s `tags` count the vocabulary in
+use by what carries it. `wb_facet_list` lists the workspace ONCE and hands the
+listing to both the library and the counts, which a test holds by counting
+listings.
+
 ## Common mistakes (append as review finds them)
 
 - Importing a store/sync implementation directly instead of taking it via

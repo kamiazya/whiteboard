@@ -135,14 +135,25 @@ export function createDocumentSearchTool(
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
       const content = await cache.factsFor(deps, parsed.workspaceId, entries)
 
-      const searchable: (SearchableDocument & { kind?: 'markdown' | 'spatial' })[] = []
+      const searchable: (SearchableDocument & {
+        kind?: 'markdown' | 'spatial'
+        /** The nodes and edges a tag filter matched, named for the excerpt. */
+        named: readonly string[]
+      })[] = []
       for (const entry of entries) {
         const facts = content.get(entry.documentId)
         if (facts === undefined) continue
         if (parsed.kind !== undefined && entry.kind !== parsed.kind) continue
+        // ONE bearer carries every listed tag (ADR-0040 decision 3): a note
+        // by its frontmatter, a board by its own tags, or one node or edge.
+        let named: string[] = []
         if (parsed.tags !== undefined) {
-          const tags = facts.tags ?? []
-          if (!parsed.tags.every((tag) => tags.includes(tag))) continue
+          const wanted = parsed.tags
+          const carrying = facts.bearers.filter((bearer) =>
+            wanted.every((tag) => bearer.tags.includes(tag)),
+          )
+          if (carrying.length === 0) continue
+          named = carrying.filter((bearer) => bearer.text.length > 0).map((bearer) => bearer.text)
         }
         searchable.push({
           documentId: entry.documentId,
@@ -150,6 +161,7 @@ export function createDocumentSearchTool(
           ...(entry.name === undefined ? {} : { name: entry.name }),
           ...(entry.kind === undefined ? {} : { kind: entry.kind }),
           texts: [...facts.texts],
+          named,
         })
       }
 
@@ -184,7 +196,9 @@ export function createDocumentSearchTool(
         return {
           results: admitted
             .slice(0, parsed.limit)
-            .map((doc) => describe(doc.documentId, 0, openingOf(doc), {})),
+            .map((doc) =>
+              describe(doc.documentId, 0, doc.named.length > 0 ? doc.named : openingOf(doc), {}),
+            ),
         }
       }
       const query = parsed.query

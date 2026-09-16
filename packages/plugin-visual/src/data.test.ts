@@ -14,8 +14,6 @@ import {
   resolveNodeShape,
   resolveNodeSymbol,
   resolveNodeTextAlign,
-  SEMANTIC_CLASS_KEY,
-  semanticPlugin,
   VISUAL_EDGES_KEY,
   VISUAL_SHAPE_KEY,
   VISUAL_SYMBOL_KEY,
@@ -32,62 +30,6 @@ const canvasWith = (facets: SpatialCanvas['facets']): SpatialCanvas => ({
   nodes: [],
   edges: [],
   facets,
-})
-
-/**
- * The second bundled plugin, and the second AXIS. `visual.*` says how a box
- * is DRAWN; this says what a box IS on some named dimension — "health:
- * failing", "priority: high" — under ONE registered schema, so a deployment
- * grows vocabulary as payload rather than as schemas (ADR-0013's escape
- * valve, the same road ADR-0034 took for stencils).
- *
- * Measured reason it exists (ADR-0031 §17-21): asked to tell two things
- * apart at once, a model dressed the KIND with stencils every trial and
- * coloured the HEALTH every trial — and wrote a node facet for health zero
- * times in nine trials, because nothing registered said "health", and the
- * only route was to invent a key. Four remedies that told it about the axis
- * declaration all failed; none gave it a word to write.
- */
-describe('semanticPlugin', () => {
-  it('registers semantic.class/v0 on nodes and nowhere else', () => {
-    expect(registry.targetsOf(SEMANTIC_CLASS_KEY)).toEqual(['node'])
-    expect(semanticPlugin.id).toBe('semantic')
-  })
-
-  it('teaches its two identifiers by example — the empty boxes say what to type', () => {
-    // Measured on a reader: "Axis" and "Value" with no example read as two
-    // empty boxes. The placeholder is what the form shows BEFORE a refusal.
-    const form = registry.facetForm(SEMANTIC_CLASS_KEY)
-    expect(form.kind).toBe('fields')
-    if (form.kind !== 'fields') return
-    expect(form.fields.map((f) => [f.name, f.label, f.placeholder])).toEqual([
-      ['axis', 'Axis', 'e.g. health, priority'],
-      ['value', 'Value', 'e.g. failing, high'],
-    ])
-  })
-
-  it('validates an axis/value pair of lowercase identifiers', () => {
-    expect(
-      registry.validateFacetWrite(SEMANTIC_CLASS_KEY, { axis: 'health', value: 'failing' }).ok,
-    ).toBe(true)
-  })
-
-  it('refuses a payload that is not a stable, comparable class key', () => {
-    // A partition is keyed by payload, so two spellings of one class would
-    // read as two classes: case and shape are both refused at the write.
-    expect(
-      registry.validateFacetWrite(SEMANTIC_CLASS_KEY, { axis: 'Health', value: 'ok' }).ok,
-    ).toBe(false)
-    expect(registry.validateFacetWrite(SEMANTIC_CLASS_KEY, { axis: 'health' }).ok).toBe(false)
-    expect(
-      registry.validateFacetWrite(SEMANTIC_CLASS_KEY, { axis: 'health', value: 'ok', note: 'x' })
-        .ok,
-    ).toBe(false)
-  })
-
-  it('the bundled registry carries both plugins', () => {
-    expect(bundledPlugins.map((p) => p.id)).toEqual(['visual', 'semantic'])
-  })
 })
 
 describe('visualPlugin', () => {
@@ -193,13 +135,14 @@ describe('resolveCanvasEdgeDefaults / resolveEffectiveCanvasEdgeStyle', () => {
 })
 
 describe('bundledPlugins', () => {
-  // Two ORDINARY plugins, still no privileged extras: `semantic` goes through
-  // the same registry, validation and ordering as `visual` and as any
-  // deployment's own, and a deployment may disable either. The pin is the
-  // exact list, so a third plugin has to be argued for here rather than
-  // slipped in.
-  it('contains exactly the two bundled plugins, both ordinary', () => {
-    expect(bundledPlugins).toEqual([visualPlugin, semanticPlugin])
+  // One ORDINARY plugin, no privileged extras: `visual` goes through the same
+  // registry, validation and ordering as any deployment's own, and a
+  // deployment may disable it. The pin is the exact list, so a second plugin
+  // has to be argued for here rather than slipped in. There WAS a second —
+  // `semantic`, one classification facet — and ADR-0040 retired it: what a
+  // box means is a scoped tag now, core rather than a plugin's.
+  it('contains exactly the one bundled plugin, ordinary', () => {
+    expect(bundledPlugins).toEqual([visualPlugin])
   })
 })
 

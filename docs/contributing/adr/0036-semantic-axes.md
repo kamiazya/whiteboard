@@ -162,7 +162,7 @@ needs a seventh silhouette, not a seventh entry.
 *Superseded the same day by [ADR-0040](0040-scoped-tags.md) (proposed): the
 owner rejected a screen vocabulary that differs from the tools', and the
 second axis becomes a SCOPED TAG (`health:failing`) on documents, boards,
-nodes and edges rather than a facet of its own. `semantic.class/v0` retires unshipped
+nodes and edges rather than a facet of its own; the facet and its plugin were removed in that ADR's increment 3. `semantic.class/v0` retires unshipped
 with that ADR's increments. The reading below stands as the measurement that
 led there.*
 

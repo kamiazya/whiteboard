@@ -194,6 +194,14 @@ and edges in one operation, and is what makes a typo recoverable. Whether these 
 workspace-wide target or a tool of their own is priced on ADR-0031's
 scoreboards by the increment, not decided here.
 
+*Priced (increment 3):* `tags.rename` rides `wb_facet_set`, applied to the
+documents named (a workspace-wide rename is a listing plus one call over up
+to fifty ids). It cost ~350 model-visible bytes and 3 described parameters
+inside the write verb a model already reaches for; a `wb_tag_rename` tool
+measured 987 visible bytes and 5 parameters as a row of its own. The in-use
+listing rides `wb_facet_list` with a `workspaceId`, output-only on the wire
+(+572) and one clause in the description (+65 visible).
+
 **Declared** (a later increment, this decision only names it): a workspace
 TAG LIBRARY document, the shape ADR-0034 decision 4 and its amendment fixed
 for stencils — payload under a registered schema, per workspace, composed
@@ -234,11 +242,16 @@ Two changes reach what a model reads and each runs ADR-0031's ladder:
   the same way (the edge must exist on the one document named) — which is a
   description change (rung 1) and a lane task (rung 3): the
   "tell two things apart" task, unchanged, with its verifier reading scoped
-  tags. That reading is round 19. The twenty-second reading's open question
-  — whether the prompt should ask for the meaning to be recorded — is still
-  open and is not answered by this ADR.
+  tags. That reading is round 19: **0 of 3, no tag written** — two trials
+  coloured and recorded nothing, one recorded health as a badge the board
+  does not draw (ADR-0031's twenty-third reading). The twenty-second
+  reading's open question — whether the prompt should ask for the meaning
+  to be recorded — is still open and is not answered by this ADR.
 - An inline `tags` field on `node.add` / `node.patch` is PRICED before it is
-  bought: the same measurement as ADR-0036 §6's `facets` field, with the same
+  bought (measured when the model gained the field, increment 1: letting it
+  reach the node drafts and the edge draft/patch read +6 undescribed
+  parameters and +300 visible bytes on `wb_canvas_edit`, so the drafts omit
+  it until round 19 says a model reaches for it): the same measurement as ADR-0036 §6's `facets` field, with the same
   withdrawal rule written before the run. Tags may behave differently from a
   facet — models write document tags unprompted — and that is exactly the
   kind of claim the lane exists to test rather than argue.

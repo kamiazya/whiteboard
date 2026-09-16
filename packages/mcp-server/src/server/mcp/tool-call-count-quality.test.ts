@@ -249,7 +249,11 @@ describe('what an errand costs in tool calls', () => {
         // axes facet above. It is the second bundled plugin's only facet,
         // and the first registered word for a box's second axis; the errand
         // reads the list and so pays to see it, as it should.
-        responseBytes: 11014,
+        // Then 11,014 -> 10,190: -824 when ADR-0040 retired `semantic.class/v0`
+        // — the listing no longer carries the second plugin's facet, its
+        // schema and its editor spec. What a box means left the registry
+        // for the tags a node carries, which this errand does not read.
+        responseBytes: 10190,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
