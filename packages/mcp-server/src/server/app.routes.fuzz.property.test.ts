@@ -46,6 +46,7 @@ import {
   workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { listFontsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
+import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
   daemonPingResponseSchema,
   runtimeStatusResponseSchema,
@@ -330,6 +331,11 @@ const RULES: Record<string, Rule> = {
     answers: 'json',
     raw: true,
     response: updateDocumentResponseSchema,
+  },
+  'POST /api/w/:workspaceId/workspace-document/promote': {
+    refusesOnly:
+      'a schema-drawn snapshot is random base64url and never a Loro record; the merge, the rows and the attestation verdicts are routes/document/workspace-promote.test.ts',
+    body: promoteWorkspaceRequestSchema,
   },
   'GET /api/sync/stream': { skip: 'holds the response open until the client goes away' },
   'POST /api/sync/subscribe': {

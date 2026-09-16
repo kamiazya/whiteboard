@@ -15,6 +15,7 @@ import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { getDataDir } from '../config.js'
+import { getLogger } from '../log.js'
 import {
   validateBranchName,
   validateDocumentPath,
@@ -27,6 +28,8 @@ import { prepareDataDir } from './db/prepare.js'
 import { DocumentNotFoundError } from './document-not-found-error.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
+
+const log = getLogger('version-store')
 
 // Loro-native versioning, backed by the sqlite metadata DB.
 //
@@ -46,6 +49,7 @@ import type {
   OperatorInfo,
   VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { type Attestation, attestationSchema } from '@kamiazya/whiteboard-server-core'
 import { errorMessage } from '../../shared/error-message.js'
 
 export type { OperatorInfo, VersionEntry }
@@ -62,6 +66,8 @@ export interface VersionStore {
       operator?: OperatorInfo
       /** The version this point was produced by restoring; see `versionEntrySchema`. */
       restoredFrom?: string
+      /** The person's evidence, when the operation asked for it; see `versionEntrySchema`. */
+      attestation?: Attestation
     },
   ): Promise<VersionEntry>
   // Returns an independent past-state doc: the stored workspace record
@@ -152,12 +158,15 @@ interface VersionRow {
   contentDigest: string
   createdAt: number
   restoredFrom: string | null
+  // JSON of `attestationSchema`; see db/schema.ts.
+  attestation: string | null
   // The store hydrates this from the documents row at list time so callers
   // still see a path field on each entry.
   path: string
 }
 
 function rowToEntry(row: VersionRow): VersionEntry {
+  const attestation = parseStoredAttestation(row)
   const operator: OperatorInfo | undefined =
     row.operatorKind !== ''
       ? {
@@ -178,6 +187,25 @@ function rowToEntry(row: VersionRow): VersionEntry {
     ...(row.label !== null ? { label: row.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(row.restoredFrom !== null ? { restoredFrom: row.restoredFrom } : {}),
+    ...(attestation !== undefined ? { attestation } : {}),
+  }
+}
+
+/**
+ * A stored attestation that fails its own schema reads as no attestation
+ * rather than as a corrupt row: the row's other columns are still a valid
+ * checkpoint, and the badge it loses is the honest one for evidence nobody
+ * can re-verify. Logged, so the loss is visible rather than silent.
+ */
+function parseStoredAttestation(
+  row: Pick<VersionRow, 'id' | 'attestation'>,
+): Attestation | undefined {
+  if (row.attestation === null) return undefined
+  try {
+    return attestationSchema.parse(JSON.parse(row.attestation))
+  } catch (err) {
+    log.warning({ versionId: row.id, err }, 'version row carries an unreadable attestation')
+    return undefined
   }
 }
 
@@ -193,6 +221,7 @@ export class FileVersionStore implements VersionStore {
       operator?: OperatorInfo
       /** The version this point was produced by restoring; see `versionEntrySchema`. */
       restoredFrom?: string
+      attestation?: Attestation
     },
   ): Promise<VersionEntry> {
     validateWorkspaceId(workspaceId)
@@ -261,6 +290,7 @@ export class FileVersionStore implements VersionStore {
           contentDigest: entry.contentDigest,
           createdAt,
           restoredFrom: opts.restoredFrom ?? null,
+          attestation: opts.attestation === undefined ? null : JSON.stringify(opts.attestation),
         })
         .execute()
 
@@ -276,6 +306,7 @@ export class FileVersionStore implements VersionStore {
         ...(opts.label !== undefined ? { label: opts.label } : {}),
         ...(operator !== undefined ? { operator } : {}),
         ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
+        ...(opts.attestation !== undefined ? { attestation: opts.attestation } : {}),
       }
     })
   }

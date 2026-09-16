@@ -226,6 +226,29 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(listed[0]?.operator).toEqual(entry.operator)
   })
 
+  it('round-trips save({ attestation }) through list(), and a point without one reads back without one', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    const attestation = {
+      kind: 'webauthn' as const,
+      credentialId: 'Y3JlZA',
+      authenticatorData: 'YXV0aA',
+      clientDataJSON: 'Y2xpZW50',
+      signature: 'c2ln',
+    }
+    const attested = await store.save('sess-1', 'canvas-a', doc, {
+      auto: false,
+      operator: { kind: 'human', displayName: 'Yuki' },
+      attestation,
+    })
+    expect(attested.attestation).toEqual(attestation)
+    const plain = await store.save('sess-1', 'canvas-a', doc, { auto: false })
+    expect(plain.attestation).toBeUndefined()
+
+    const listed = await store.list('sess-1', 'canvas-a')
+    expect(listed.map((entry) => entry.attestation)).toEqual([undefined, attestation])
+  })
+
   it('list returns operator=undefined for entries saved without an operator', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')

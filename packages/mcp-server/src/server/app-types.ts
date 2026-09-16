@@ -8,6 +8,7 @@ import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import type { PairingGrantStore } from './security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from './security/pairing-session.js'
 import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
+import type { WebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
@@ -53,6 +54,8 @@ interface LocalDaemonAppOptions {
     grants: PairingGrantStore
     codes: PairingCodeStore
     tokens: PairingTokenStore
+    /** Passkey pins paired origins registered (ADR-0039); durable like grants. */
+    credentials: WebAuthnCredentialStore
   }
   /** Daemon signing identity (security/daemon-identity.ts). Injectable for
    *  tests; when omitted, createApp loads-or-creates it from the data dir. */

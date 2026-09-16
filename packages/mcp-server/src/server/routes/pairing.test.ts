@@ -1,8 +1,14 @@
-import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto'
+import {
+  createHash,
+  createPublicKey,
+  verify as cryptoVerify,
+  generateKeyPairSync,
+} from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  listCredentialsResponseSchema,
   listGrantsResponseSchema,
   pairingTokenResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
@@ -14,6 +20,7 @@ import {
   createPairingCodeStore,
   createPairingTokenStore,
 } from '../security/pairing-session.js'
+import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createPairingRouter } from './pairing.js'
 
 const HOSTED = 'https://latest.kamiazya-whiteboard.pages.dev'
@@ -26,7 +33,36 @@ function makeApp() {
   const codes = createPairingCodeStore()
   const tokens = createPairingTokenStore()
   const identity = createDaemonIdentity({ dataDir: dir })
-  return { app: createPairingRouter({ grants, codes, tokens, identity }), grants, tokens, identity }
+  const credentials = createWebAuthnCredentialStore(dir)
+  return {
+    app: createPairingRouter({ grants, codes, tokens, credentials, identity }),
+    grants,
+    tokens,
+    credentials,
+    identity,
+  }
+}
+
+/** A registration as `navigator.credentials.create()` would hand the page it. */
+function registration(rpId: string, { uv = true } = {}) {
+  const { publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+  const credentialId = Buffer.from(`credential-for-${rpId}`)
+  const head = Buffer.alloc(37)
+  createHash('sha256').update(rpId).digest().copy(head, 0)
+  head[32] = 0x01 | (uv ? 0x04 : 0) | 0x08 | 0x40 // UP, UV, BE, AT
+  const length = Buffer.alloc(2)
+  length.writeUInt16BE(credentialId.length, 0)
+  return {
+    credentialId: credentialId.toString('base64url'),
+    publicKey: publicKey.export({ format: 'der', type: 'spki' }).toString('base64url'),
+    authenticatorData: Buffer.concat([
+      head,
+      Buffer.alloc(16),
+      length,
+      credentialId,
+      Buffer.alloc(77),
+    ]).toString('base64url'),
+  }
 }
 
 afterEach(() => {
@@ -271,5 +307,72 @@ describe('pairing token identity signatures', () => {
         body.identity?.signature ?? '',
       ),
     ).toBe(true)
+  })
+
+  describe('credential pins', () => {
+    const HOST = new URL(HOSTED).hostname
+
+    it('a granted origin pins a passkey, lists it without the key, and revokes it', async () => {
+      const { app, grants, credentials } = makeApp()
+      grants.addGrant(HOSTED)
+      const body = registration(HOST)
+
+      const res = await post(app, '/api/pairing/credentials', body, { Origin: HOSTED })
+      expect(res.status).toBe(201)
+      const pinned = (await res.json()) as { credentialId: string; origin: string }
+      expect(pinned).toMatchObject({
+        credentialId: body.credentialId,
+        origin: HOSTED,
+        backupEligible: true,
+      })
+      // The pin holds the P-256 key the registration carried, keyed by origin.
+      expect(credentials.find(HOSTED, body.credentialId)?.publicKeyJwk.crv).toBe('P-256')
+      expect(credentials.find(HOSTED, body.credentialId)?.rpId).toBe(HOST)
+
+      const list = await app.request('/api/pairing/credentials')
+      const listed = listCredentialsResponseSchema.parse(await list.json())
+      expect(listed.credentials.map((c) => c.credentialId)).toEqual([body.credentialId])
+      expect(JSON.stringify(listed)).not.toContain('publicKey')
+
+      const del = await app.request(`/api/pairing/credentials/${body.credentialId}`, {
+        method: 'DELETE',
+      })
+      expect(del.status).toBe(200)
+      expect(credentials.list()).toEqual([])
+      expect(
+        (await app.request(`/api/pairing/credentials/${body.credentialId}`, { method: 'DELETE' }))
+          .status,
+      ).toBe(404)
+    })
+
+    it('refuses a pin from an origin without a grant, without an Origin header, or for another relying party', async () => {
+      const { app, grants, credentials } = makeApp()
+      const body = registration(HOST)
+      expect((await post(app, '/api/pairing/credentials', body, { Origin: HOSTED })).status).toBe(
+        403,
+      )
+      expect((await post(app, '/api/pairing/credentials', body)).status).toBe(403)
+
+      grants.addGrant(HOSTED)
+      // Registered for a different rpId than the granted origin's host.
+      const foreign = await post(app, '/api/pairing/credentials', registration('evil.example'), {
+        Origin: HOSTED,
+      })
+      expect(foreign.status).toBe(400)
+      expect(await foreign.json()).toEqual({
+        error: 'registration_rejected',
+        message: 'rpIdHash',
+      })
+      // A gesture without user verification is not one a promote can rely on.
+      const noUv = await post(app, '/api/pairing/credentials', registration(HOST, { uv: false }), {
+        Origin: HOSTED,
+      })
+      expect(noUv.status).toBe(400)
+      expect(await noUv.json()).toEqual({
+        error: 'registration_rejected',
+        message: 'userVerification',
+      })
+      expect(credentials.list()).toEqual([])
+    })
   })
 })

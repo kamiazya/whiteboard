@@ -6,7 +6,7 @@ import type { LoroDoc } from 'loro-crdt'
 import type { RestoreProgressEvent } from './operations/restore-version.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
-import type { OperatorInfo, VersionEntry } from './versions/version-entry.js'
+import type { Attestation, OperatorInfo, VersionEntry } from './versions/version-entry.js'
 
 /**
  * A text measurer and the families it holds a real face for, as ONE value:
@@ -357,6 +357,8 @@ export interface VersionHistory {
       operator?: OperatorInfo
       /** Set when this point is the merge a restore produced; see `versionEntrySchema`. */
       restoredFrom?: string
+      /** The person's evidence, when the operation asked for it; see `versionEntrySchema`. */
+      attestation?: Attestation
     },
   ): Promise<VersionEntry>
   /**

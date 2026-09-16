@@ -1,3 +1,9 @@
+// The version-entry MODULE, never server-core's root: this file is on the
+// web app's critical path (the pairing hook and the identity pin import it
+// statically), and a root import there is retained whole by the bundler —
+// measured at 144.5 KB → 413.8 KB gzip, loro's WASM included. See
+// server-core-root-imports.test.ts.
+import { base64urlSchema } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { z } from 'zod'
 
 // Pairing-token wire contract, shared between the daemon route
@@ -87,3 +93,38 @@ export const listGrantsResponseSchema = z
   .strict()
 
 export type ListGrantsResponse = z.infer<typeof listGrantsResponseSchema>
+
+// POST /api/pairing/credentials — a paired origin PINS a passkey's public key
+// on the daemon (ADR-0039). The three fields are what `navigator.credentials
+// .create()` hands the page, raw and base64url: the credential id, the
+// public key as SPKI (`response.getPublicKey()`), and the registration's
+// `authenticatorData` (`response.getAuthenticatorData()`), which is where
+// the daemon reads the relying party, the attested credential id and the
+// backup-eligibility flag from. The origin is never in the body: the
+// browser-enforced Origin header names it, and a body field would be a
+// caller's claim about which origin it is.
+export const registerCredentialRequestSchema = z
+  .object({
+    credentialId: base64urlSchema,
+    publicKey: base64urlSchema,
+    authenticatorData: base64urlSchema,
+  })
+  .strict()
+export type RegisterCredentialRequest = z.infer<typeof registerCredentialRequestSchema>
+
+// What a settings UI needs to name a pin, and what POST answers: never the
+// key itself.
+export const pinnedCredentialSummarySchema = z
+  .object({
+    credentialId: z.string().min(1),
+    origin: z.string().min(1),
+    backupEligible: z.boolean(),
+    createdAt: z.string(),
+  })
+  .strict()
+export type PinnedCredentialSummary = z.infer<typeof pinnedCredentialSummarySchema>
+
+export const listCredentialsResponseSchema = z
+  .object({ credentials: z.array(pinnedCredentialSummarySchema) })
+  .strict()
+export type ListCredentialsResponse = z.infer<typeof listCredentialsResponseSchema>

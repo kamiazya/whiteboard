@@ -59,6 +59,10 @@ interface VersionsTable {
   createdAt: Timestamp
   // Set only on the point a restore produced; see `versionEntrySchema`.
   restoredFrom: string | null
+  // The raw WebAuthn assertion as JSON (`attestationSchema`), when the
+  // operation that wrote this row asked a person for one (ADR-0039). Null
+  // means not asked, which is most rows by design.
+  attestation: string | null
 }
 
 // Single-row key/value store for daemon-runtime markers (currentWorkspaceId,
