@@ -1,4 +1,4 @@
-# ADR-0040: Scoped tags are the one classification vocabulary, on documents, boards and nodes
+# ADR-0040: Scoped tags are the one classification vocabulary, on documents, boards, nodes and edges
 
 **Status:** Proposed — for the human gate. Supersedes the part of
 [ADR-0009](0009-mcp-tool-naming.md) decision 3 that left a spatial document
@@ -77,7 +77,7 @@ failing` is refused with the rule in the message — and never on read. That
 is the two-sided shape ADR-0037 chose for the extension key: strict where
 this codebase produces, lenient where it consumes.
 
-### 2. Tags attach to markdown documents, to spatial documents, and to nodes
+### 2. Tags attach to markdown documents, to spatial documents, to nodes and to edges
 
 - **Markdown documents**: unchanged, OKF core frontmatter `tags`.
 - **Spatial documents**: the board gains `tags`. This closes the gap
@@ -87,10 +87,15 @@ this codebase produces, lenient where it consumes.
   OCIF, both `extension` rows in their ledgers, lost in `strict` like every
   extension.
 - **Nodes**: a node gains `tags`, stored and projected the same way.
-- **Edges**: not in this decision. An edge is a relation (ADR-0038 decision
-  2); whether relations are classified with the same vocabulary is a question
-  with no use case behind it yet, and the extension slot exists if one
-  arrives.
+- **Edges**: an edge gains `tags` too, in the first scope (owner decision,
+  2026-09-16). The use case is the infrastructure diagram: a link between
+  two services is healthy or failing as much as the services are, and a
+  reader asks the same question of the arrow as of the box. An edge is a
+  RELATION (ADR-0038 decision 2), so a tag on it classifies the relation;
+  stored and projected like a node's, on the edge extension both ledgers
+  already carry.
+- **Lines** (ADR-0038's ink, which asserts nothing about what is related to
+  what) get no tags: a classification is a claim, and a line makes none.
 
 A tag set is a SET: no duplicates, order carries no meaning, and a write that
 adds a tag already present is a no-op rather than a second copy.
@@ -124,10 +129,20 @@ surprises:
   never a partition; the board's own tags are one object's and are not one
   either. This is the principled reading ADR-0033 asked for: tags in general
   are not a partition, scoped keys used one-per-box are.
+
+  Edges get the same reading over their own population: a key partitions a
+  board's edges when every edge carrying it carries one value, `multi`
+  otherwise, judged separately from the boxes — a key can partition the
+  boxes and be `multi` on the edges. The score reads NO edge channel today
+  (its channels are a box's colour and shape), so this decision adds one,
+  the edge's colour, carried or contested by an edge key exactly as a box's
+  colour is by a box key. A second edge channel (the stroke's style) is not
+  claimed until a board shows a distinction spent on it.
 - **The legend (decision 6).** Only keys colour is `carried` by are drawn
-  with swatches. A `multi` key is not: colour cannot mean two things on one
-  box, and a legend that said it did would be a promise the drawing does not
-  keep.
+  with swatches — a filled swatch for a box key, a line swatch for an edge
+  key. A `multi` key is not: colour cannot mean two things on one box or one
+  arrow, and a legend that said it did would be a promise the drawing does
+  not keep.
 - **The editor.** Chips. A node showing `health:failing` and
   `health:degraded` side by side is the honest picture of what it carries;
   the panel does not collapse them.
@@ -180,17 +195,19 @@ warned against.
 ### 6. The reading surfaces: chips in the editor, a legend on the board
 
 - **Facets panel**: the Meaning group's form is replaced by a tag row on the
-  same panel, for a node and for the board: chips of what is carried, one
-  input that takes `key:value` or a plain tag, suggestions of keys and of
-  values under the key being typed (the pairing the datalist could not do),
-  and a chip's own close control to remove it. The document header's
+  same panel, for a node, for an edge (the panel already takes an edge as
+  its subject) and for the board: chips of what is carried, one input that
+  takes `key:value` or a plain tag, suggestions of keys and of values under
+  the key being typed (the pairing the datalist could not do), and a chip's
+  own close control to remove it. The document header's
   existing tag editor is the same control, so a note and a box are tagged the
   same way. The panel's group ORDER is decided at the same time: Visual style
   first, tags after, declared once in the engine rather than left to plugin
   ids.
 - **Legend**: a corner overlay on the board, shown only when the score reads
-  colour as `carried` by at least one key, listing that key's values with
-  their swatches; collapsible; the same component rendered into SVG and PNG
+  a colour as `carried` by at least one key, listing that key's values with
+  their swatches, boxes and edges each in their own kind of swatch;
+  collapsible; the same component rendered into SVG and PNG
   export. When colour is spent and no key carries it, one muted line says so.
   Not in the panel: a legend is for the reader, and the reader has no panel.
 
@@ -216,9 +233,14 @@ Two changes reach what a model reads and each runs ADR-0031's ladder:
   and the ADRs all say tag. The UX finding's first and third points (the
   words, and the value-by-key pairing) are dissolved rather than solved; its
   second and fourth (group order, legend) are decided in decision 6.
-- The model gains two positions (`tags` on the board, `nodes[].tags`), both
-  `extension` in both projection ledgers; `json-canvas-reach` and the OCIF
-  ledger move by +2 and say why.
+- The model gains three positions (`tags` on the board, `nodes[].tags`,
+  `edges[].tags`), all `extension` in both projection ledgers;
+  `json-canvas-reach` and the OCIF ledger move by +3 and say why.
+- The facet score gains its first edge reading (the edge's colour), which
+  is an instrument change and is calibrated the way the box channels were:
+  a board with edges coloured by a key reads `carried`, the same board with
+  the key removed reads `contested`, and a planted `multi` key reads
+  neither.
 - ADR-0033's `tags` omission closes with a rule that admits multi-valued keys
   honestly (`multi`) instead of forcing a partition.
 - The structure of a scoped tag lives in a string. That is a convention, and
@@ -247,7 +269,12 @@ Two changes reach what a model reads and each runs ADR-0031's ladder:
   eval tasks, the document header) speaks strings, and a string is what a
   person types and an agent writes. The grammar buys the structure without a
   second shape.
-- **Tags on edges now.** Deferred; no use case, and the slot is there.
+- **Tags on edges deferred.** The first draft deferred them for want of a
+  use case; the owner supplied one (an infrastructure link that is healthy
+  or failing), and an ADR that classified the box and not the arrow would
+  have left the reader's question half answered.
+- **Tags on lines.** Rejected: ink asserts nothing, so it has nothing to
+  classify (ADR-0038 decision 2).
 - **A tag library first.** Deferred; the in-use layer answers the finding,
   and a library nobody has asked for is the failure ADR-0034 named.
 
@@ -256,16 +283,19 @@ Two changes reach what a model reads and each runs ADR-0031's ladder:
 Each is a PR with its own tests, in dependency order (`architecture-map.md`
 fixes the direction):
 
-1. **Model and codec**: `tags` on the spatial document and on nodes; the
-   scoped-tag grammar and its write-side check; both projection ledgers and
-   `json-canvas-reach`; round-trip properties.
-2. **The score**: keys as partitions with the `multi` rule; `semantic.class`'s
+1. **Model and codec**: `tags` on the spatial document, on nodes and on
+   edges; the scoped-tag grammar and its write-side check; both projection
+   ledgers and `json-canvas-reach`; round-trip properties.
+2. **The score**: keys as partitions with the `multi` rule, over boxes and
+   over edges; the edge colour channel, calibrated; `semantic.class`'s
    partition removed; the eval positive control and the two-axis verifier
    read tags.
-3. **Tools and search**: `wb_facet_set` tags on boards and nodes; search
-   reaching node tags; the in-use listing; rename/merge, priced; the inline
-   canvas-op field, priced; round 19; `semantic.class/v0` retired; smoke.
-4. **The editor**: the tag row in the Facets panel for nodes and boards,
-   the document header sharing it; group order declared; the legend on the
-   board and in export; a tags panel for the workspace's vocabulary in use.
+3. **Tools and search**: `wb_facet_set` tags on boards, nodes and edges;
+   search reaching node and edge tags; the in-use listing; rename/merge,
+   priced; the inline canvas-op field, priced; round 19; `semantic.class/v0`
+   retired; smoke.
+4. **The editor**: the tag row in the Facets panel for nodes, edges and
+   boards, the document header sharing it; group order declared; the legend
+   on the board and in export; a tags panel for the workspace's vocabulary
+   in use.
 5. **The library** (when asked for): the declared layer of decision 5.
