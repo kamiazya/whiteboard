@@ -24,6 +24,16 @@ values under that key after it. A tag with a colon that is not `key:value`
 With several boxes selected, a tag added or removed on one is added or
 removed on all of them; what each box already carried stays.
 
+## Read the legend
+
+When a board's colours follow a scoped key — every `health:ok` box green,
+every `health:failing` box red — a **legend** appears in the board's
+top-left corner listing that key's values with the swatch each is drawn
+in, boxes and edges each in their own kind of swatch. It is part of the
+board, so an SVG or PNG export carries it too; in the editor it collapses
+to its title. When colour is used but no key explains it, the legend says
+so in one line instead of guessing.
+
 ## Find by tag
 
 In the document browser:

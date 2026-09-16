@@ -64,6 +64,7 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import { highlightCode } from '../highlight/lowlight.js'
+import { canvasLegend } from '../legend/canvas-legend.js'
 import type { MeasureText } from '../measure.js'
 import {
   type ReferenceSeams,
@@ -1798,9 +1799,13 @@ function layoutSpatialCanvasInternal(
   const regionContent = composeRegionOutlines(resolved)
   const commentContent = composeComments(canvas, resolved, (id) => edgePaths.get(id))
   const proposalContent = composeProposals(canvas, resolved, (id) => edgePaths.get(id))
+  // The legend is the layout's answer, attached here and not in a
+  // miniature: the reader of an embedded canvas has the host's corner.
+  const legend = canvasLegend(canvas, resolved.appearance)
   return {
     scene: {
       nodes: [...nodeContent, ...content, ...regionContent, ...commentContent, ...proposalContent],
+      ...(legend === undefined ? {} : { legend }),
     },
     anchors,
   }

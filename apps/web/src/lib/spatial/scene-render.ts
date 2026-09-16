@@ -16,7 +16,11 @@ import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteb
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
-import { type RenderedCanvas, renderCanvasToSvgWith } from './scene-render-core.js'
+import {
+  type RenderedCanvas,
+  renderCanvasForExportWith,
+  renderCanvasToSvgWith,
+} from './scene-render-core.js'
 
 export type { RenderedCanvas } from './scene-render-core.js'
 
@@ -63,4 +67,12 @@ export function renderCanvasToSvg(
   options: RenderCanvasOptions,
 ): RenderedCanvas {
   return renderCanvasToSvgWith(canvas, options)
+}
+
+/** The saved document: the editor's layout, with its legend in its band. */
+export function renderCanvasForExport(
+  canvas: SpatialCanvas,
+  options: RenderCanvasOptions,
+): { readonly svg: string; readonly bounds: BoundingBox } {
+  return renderCanvasForExportWith(canvas, options)
 }

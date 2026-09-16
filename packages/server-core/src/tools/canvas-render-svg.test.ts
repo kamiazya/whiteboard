@@ -306,3 +306,47 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
     expect(result.svg).not.toContain('Yomogi')
   })
 })
+
+describe('wb_scene_render draws the legend (ADR-0040 decision 6)', () => {
+  test('a board whose colour a scoped-tag key carries exports with the key’s values in a legend', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'a',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'api',
+            tags: ['health:ok'],
+            color: '4',
+          }),
+          textNode({
+            id: 'b',
+            x: 300,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'db',
+            tags: ['health:failing'],
+            color: '1',
+          }),
+        ],
+        edges: [],
+      })
+    })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'clean',
+    })
+    const legend = result.svg.slice(result.svg.indexOf('data-wb-legend'))
+    expect(legend).toContain('>health<')
+    expect(legend).toContain('>failing<')
+    expect(legend).toContain('>ok<')
+  })
+})

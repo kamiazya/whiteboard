@@ -233,6 +233,16 @@ warned against.
   export. When colour is spent and no key carries it, one muted line says so.
   Not in the panel: a legend is for the reader, and the reader has no panel.
 
+  *Landed (increment 4b): the legend is the LAYOUT's answer — `canvasLegend`
+  derives it from the facet score and the appearance the layout paints with,
+  and `layoutSpatialCanvas` attaches it to the top-level scene (never to a
+  miniature). The SVG backend draws it in the top-left corner of an
+  enveloped document, in a band `sceneDocumentBounds` reserves on the left
+  so it covers no content, so every export and the viewer carry it; the keyed
+  projection the editor patches from omits it and the editor draws the same
+  data as its own overlay. Only a scoped-tag key is listed: a frame, a kind
+  or a stencil that carries the colour has no values a legend can name.*
+
 ### 7. The tool surface is measured, not assumed
 
 Two changes reach what a model reads and each runs ADR-0031's ladder:

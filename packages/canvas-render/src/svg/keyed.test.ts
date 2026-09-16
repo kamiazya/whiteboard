@@ -257,3 +257,19 @@ describe('the keyed projection marks the annotation layer', () => {
     expect(`${keyed.rootOpen}${unwrapped}</svg>`).toBe(renderSceneToSvg(laidOut, { padding: 4 }))
   })
 })
+
+// The editor draws the legend as its own overlay, so the keyed projection it
+// patches from must not carry a second copy in canvas space.
+describe('renderSceneToKeyedSvg — legend', () => {
+  it('omits the legend the plain renderer draws', () => {
+    const scene: Scene = {
+      nodes: [{ kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 100, h: 10 } }],
+      legend: {
+        keys: [{ key: 'health', of: 'boxes', entries: [{ value: 'ok', count: 1, swatch: {} }] }],
+        uncarried: { boxes: false, edges: false },
+      },
+    }
+    const keyed = renderSceneToKeyedSvg(scene, { padding: 5 })
+    expect(keyed.groups.map((g) => g.svg).join('')).not.toContain('data-wb-legend')
+  })
+})

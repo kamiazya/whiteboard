@@ -4,7 +4,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
-import { renderCanvasToSvg } from './scene-render.js'
+import { renderCanvasForExport, renderCanvasToSvg } from './scene-render.js'
 
 function fakeMeasure(text: string) {
   return { advanceWidth: text.length * 6, ascent: 10, descent: 2, lineGap: 0 }
@@ -111,5 +111,55 @@ describe('the editor draws the theme the document names (ADR-0030 decision 6)', 
   it("style: 'clean' is the session override that draws the bundled look instead", () => {
     const { svg } = renderCanvasToSvg(themed, { measure: fakeMeasure, style: 'clean' })
     expect(svg).not.toContain('wb-glow')
+  })
+})
+
+// ADR-0040 decision 6: the editor's string is the keyed projection's bytes
+// and carries no legend (the editor draws it as an overlay); the SAVED
+// document carries it, in the band reserved for it, so an export shows what
+// the screen showed.
+describe('renderCanvasForExport', () => {
+  const tagged: SpatialCanvas = {
+    nodes: [
+      textNode({
+        id: 'a',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 50,
+        text: 'A',
+        tags: ['health:ok'],
+        color: '4',
+      }),
+      textNode({
+        id: 'b',
+        x: 300,
+        y: 0,
+        width: 100,
+        height: 50,
+        text: 'B',
+        tags: ['health:failing'],
+        color: '1',
+      }),
+    ],
+    edges: [],
+  }
+  it('draws the legend the editor string omits, and its bounds include the band', () => {
+    const editor = renderCanvasToSvg(tagged, { measure: fakeMeasure })
+    const exported = renderCanvasForExport(tagged, { measure: fakeMeasure })
+    expect(editor.svg).not.toContain('data-wb-legend')
+    expect(exported.svg).toContain('data-wb-legend')
+    expect(exported.svg).toContain('>health<')
+    expect(exported.bounds.x).toBeLessThan(editor.bounds.x)
+    expect(exported.bounds.w).toBeGreaterThan(editor.bounds.w)
+  })
+  it('an untagged board exports the same envelope the editor draws', () => {
+    const plain: SpatialCanvas = {
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'A' })],
+      edges: [],
+    }
+    expect(renderCanvasForExport(plain, { measure: fakeMeasure }).bounds).toEqual(
+      renderCanvasToSvg(plain, { measure: fakeMeasure }).bounds,
+    )
   })
 })

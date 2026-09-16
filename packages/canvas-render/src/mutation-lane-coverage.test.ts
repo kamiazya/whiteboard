@@ -167,9 +167,21 @@ describe('the mutation lane covers what it says it covers', () => {
     // `LineBreaker` call and its options object, with no branch of its own,
     // and it exists only so the wrapper's granularity ladder and the
     // junction rule cannot come to disagree about where a line may break.
+    // 76 since the legend (ADR-0040 decision 6), all three modules outside
+    // the lane. `legend/legend-geometry.ts` is constants and the panel's row
+    // list, pinned by the band tests' exact viewBox numbers — a survivor
+    // there is a different constant, which those numbers refuse.
+    // `legend/canvas-legend.ts` is a reading OFF the facet score —
+    // which keys it lists and which swatch each class gets — pinned by
+    // examples that plant one board each (a carried key, an uncarried
+    // colour, a frame that carries and is not listed, an edge key), the
+    // same shape as the instruments it reads. `svg/legend.ts` is document
+    // chrome whose every decision is a coordinate, pinned by the backend's
+    // byte-level examples; a survivor there would be a legend two pixels
+    // over, which no reader could call a defect.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 14,
-      production: 73,
+      production: 76,
     })
   })
 

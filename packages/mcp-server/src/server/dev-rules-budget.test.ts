@@ -347,7 +347,14 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // rule a session in canvas-render pays for because the columns it adds are
 // the ones a diff to the score is judged by; the retired classification
 // facet's paragraph went with it, so the net is one section, not two.
-const CANVAS_RENDER_BUDGET = 136
+//
+// 136 -> 137 (ADR-0040 increment 4b): the legend — read off the score, attached
+// by the layout, drawn by the backend into an enveloped document and omitted
+// from the keyed projection — is one paragraph a session in canvas-render
+// pays for because each of those four facts is a seam a change here can
+// break in silence (a legend on a miniature, or a second copy in canvas
+// space).
+const CANVAS_RENDER_BUDGET = 137
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

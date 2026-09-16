@@ -2025,3 +2025,24 @@ instruments are. Hand-checked instead, and that check earned its place: it
 found a treatment map keyed by the node where an id was wanted — which made
 every board read as spending nothing, the very answer the corpus was expected
 to give.
+
+**The legend is the layout's answer, read off the score** (ADR-0040 decision
+6; `legend/canvas-legend.ts`). `canvasLegend(canvas, appearance)` lists every
+scoped-tag key a population's colour is `carried` by, each value with the
+swatch its class is drawn in — resolved by the same appearance the layout
+paints with, so a legend can never show a colour the box does not wear — and
+one `uncarried` flag per population for colour spent with no key. A frame, a
+kind or a stencil that carries the colour is NOT listed: it has no values a
+legend can name. `layoutSpatialCanvas` attaches it to the top-level scene as
+`scene.legend` (never to a miniature), the SVG backend draws it in the
+top-left corner of an ENVELOPED document (`svg/legend.ts`, sized by a glyph
+estimate since the backend has no measurer) and leaves a fragment alone, and
+`renderSceneToKeyedSvg` omits it because the editor draws the same data as
+its own overlay. The legend covers no content: `sceneDocumentBounds`
+(`scene-bounds.ts`) is the scene's bounds plus a band on the left sized by
+`legend/legend-geometry.ts`, a DERIVED envelope reserves it itself, and a
+caller passing its own viewBox reserves it with that function
+(`sceneEnvelope` in server-core, `renderCanvasForExport` in apps/web).
+Measured before the band: the panel sat over the first box of every tagged
+board. `sceneBounds` itself is untouched, so a legend moves no digest, no
+drawing score and no editor coordinate.

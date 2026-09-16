@@ -74,8 +74,12 @@ export type SvgElements = {
     'stroke-linejoin'?: 'round'
     role?: SvgRole
     'data-wb-key'?: string
+    /** The legend's handle (svg/legend.ts): document chrome an editor overlay replaces. */
+    'data-wb-legend'?: string
   }
   rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
+  /** One segment — the legend's edge swatch. Edges themselves are polylines. */
+  line: PaintAttrs & { x1: number; y1: number; x2: number; y2: number; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.
   // 'middle' is the only anchor emitted: body runs are left-anchored by

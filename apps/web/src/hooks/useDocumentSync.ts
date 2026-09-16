@@ -27,7 +27,7 @@ import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
-import { renderCanvasToSvg } from '../lib/spatial/scene-render.js'
+import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
 import { themeFacesNamedBy } from '../lib/theme-fonts.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
@@ -453,7 +453,7 @@ export function useDocumentSync(
   const exportScene = useCallback(
     async (format: SceneExportFormat): Promise<Blob | null> => {
       const exportedCanvas = sessionRef.current?.getCanvas() ?? canvas
-      const { svg, bounds } = renderCanvasToSvg(exportedCanvas, {
+      const { svg, bounds } = renderCanvasForExport(exportedCanvas, {
         measure: createBrowserMeasureText(),
         // Pinned to 'light' regardless of the UI theme: an exported SVG/PNG
         // is a saved artifact, and a user's display preference must never
