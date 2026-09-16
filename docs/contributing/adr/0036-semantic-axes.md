@@ -157,6 +157,63 @@ distinct, and none of them the plain rect an undressed box already draws, puts
 the set at the ceiling of the silhouette vocabulary: six. A seventh stencil
 needs a seventh silhouette, not a seventh entry.
 
+### 6. The second axis gets a WORD: `semantic.class/v0` (2026-09-16)
+
+§5 freed the colour channel for a status axis and never said what fills it.
+The lane measured the gap over three rounds (ADR-0031's nineteenth to
+twenty-first readings): asked to tell kind and health apart at once, nine
+trials of nine dressed the KIND with a stencil, coloured the HEALTH, and
+wrote a node facet for it **zero** times — 30 `color` writes, 0 facets, 0
+`wb_facet_set` calls, 0 declarations. Four remedies that told the model about
+`visual.axes/v0` all read 0 of 3, and the raw inputs say why none could
+work: every bundled facet was `visual.*` (how a box is DRAWN, not what it
+IS), so there was no registered word for "health", and `node.add` took no
+`facets` at all. The first axis was one word inline; the second was an
+invented key, one `wb_facet_set` per box, and a canvas declaration.
+
+**Decided (user, 2026-09-16), the first of four options:** one bundled
+generic facet, `semantic.class/v0` with payload `{axis, value}` — both
+lowercase identifiers — so "health/failing", "priority/high" and
+"phase/design" are PAYLOAD under one registered schema. That is
+[ADR-0013](0013-facet-system.md)'s escape valve applied a second time, the
+road [ADR-0034](0034-stencil-and-recipe.md) §4 took for stencils. Not taken:
+a workspace axis-library document (symmetric with ADR-0034 §4, heavier than
+the evidence while the stencil library is at increment 1); formalising
+invention (a hint, the refuted shape); a domain facet per axis (the schema
+proliferation ADR-0013 avoided). It lives in a second ORDINARY bundled
+plugin, `semantic`, because §1's line is what a facet SAYS and this one says
+what a box is; the plugin sits in `plugin-visual` for now, its own package
+when it grows a second facet or an editor.
+
+**It is a partition the score knows by name, with no declaration.** §1
+refused "every facet is an axis" because `visual.shape/v0` says how a box
+draws. This facet says what a box is, which is the same reason `stencil` is
+built in, so it joins `frame`, `kind` and `stencil` — and a canvas that
+ALSO lists it in `visual.axes/v0` names it once, not twice. The one place to
+overrule this is `declaredPartitions` in `facet-score.ts`.
+
+**And it has an inline write path.** `facets` beside `op` on `node.add` and
+`node.patch`, validated exactly as `wb_facet_set` validates (declared targets,
+then the facet's own schema; an unregistered key passes through on both
+paths), merged by key with `null` deleting. Beside `op` like `stencil` and
+priced the same way: two candidates on rung 1, a generic record at +600
+visible / undescribed +0 against a dedicated field at +750 / +4, and the
+record chosen; the same field inside the draft was priced at +1,020. It
+landed at **+590 visible, +2 parameters, undescribed unchanged**, and +846
+on the errand that reads the facet list — the declared price of declaring a
+facet.
+
+**That is C1 up, and this ADR does not pretend otherwise.** The field is the
+first change on this lane that acts on what the model WRITES rather than
+what it reads, and its worth is round 18's to decide on C13 and C14. If that
+reading is 0 of 3 with the field unused, the FIELD withdraws and the facet
+and the partition stay — they cost nothing a model reads every turn.
+
+Two ceilings, named so they are upgrades and not surprises: one
+classification per box (a board needing "health" AND "priority" wants a
+record payload and an instrument that reads a path inside it), and the
+plugin's home.
+
 ## Consequences
 
 - ADR-0033's columns keep their meanings; `channels` and `contested` sit beside
@@ -165,6 +222,10 @@ needs a seventh silhouette, not a seventh entry.
 - ADR-0034's stencil is unchanged in what it IS and constrained in what it may
   SPEND: it is still a named appearance applied to one node, and §5 says the
   appearance should stop including a colour once a second axis is real.
+- **The second axis has a registered word and an inline write path (§6).**
+  `semantic.class/v0` is the first non-`visual` bundled facet and the first
+  built-in partition beside `stencil`; a box can say what it is and how it
+  is doing in one op. Whether a model does is round 18's reading.
 - **`channels.X` now says WHICH axis carries it** — CLOSED, in its own
   increment as this bullet said it would be. It read `carried` for both a
   board that declares a status axis and lets a stencil's colour win and one

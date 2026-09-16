@@ -348,10 +348,20 @@ describe('what the tool table costs to read', () => {
       // measured rather than reasoned: the same -4/-12 appears against
       // main's new base as it did against the old one.
       wb_canvas_edit: {
-        visibleBytes: 15043,
-        wireBytes: 38013,
+        // +590 visible / +2 parameters for `facets` on node.add and
+        // node.patch: the inline write path for a box's SECOND axis
+        // (`semantic.class/v0`, ADR-0036 §6). Op level like `stencil`, so it
+        // is emitted once per op and not once per arm — the same field
+        // inside the draft was priced at +1,020. Both parameters described,
+        // so `undescribed` does not move. Justified by nothing on this
+        // board: it is the first change on the two-axis lane that acts on
+        // what the model WRITES rather than what it reads, and its worth is
+        // round 18's to decide (C13 and C14), after rounds 15-17 read
+        // 0 of 3 with zero node facets written across nine trials.
+        visibleBytes: 15633,
+        wireBytes: 38603,
         descriptionWords: 169,
-        parameters: 221,
+        parameters: 223,
         undescribed: 154,
         strays: 'refused',
         names: [],
@@ -731,9 +741,14 @@ describe('what the tool table costs to read', () => {
       // `visibleBytes` exactly where the line above left it — the only
       // change in this file so far that bought something without touching
       // the column a model pays on every turn.
-      visibleBytes: 38296,
-      wireBytes: 115895,
-      parameters: 345,
+      //
+      // Then +590 visible / +2 parameters for `wb_canvas_edit`'s inline
+      // `facets` (see its row): the second axis's write path, priced against
+      // the in-draft alternative and chosen as the cheaper of two candidates
+      // (+600 generic record vs +750 dedicated field, undescribed +0 vs +4).
+      visibleBytes: 38886,
+      wireBytes: 116485,
+      parameters: 347,
       undescribed: 221,
     })
   })

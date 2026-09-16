@@ -315,6 +315,15 @@ vocabulary by hand. Making the draft `.strict()` with a redirect turned that
 into one refused call. What remained was a retry, and a retry is not worth
 1,020 bytes a turn — nor 304.
 
+**And when a field IS bought, its PLACE is most of its price.** The
+classification write path (`facets` on node.add / node.patch, ADR-0036 §6)
+was priced as two candidates before either was built: a generic
+`extensionFacetsSchema` record at +600 visible / undescribed +0, a dedicated
+`{axis, value}` field at +750 / +4 — both beside `op`, so emitted once per
+op; the same one field inside the draft was +1,020. The cheaper on both C1
+and C3 was taken and landed at +590. A field's cost is decided by how many
+times the emitter repeats it, before a word of description is written.
+
 **So: price the refusal before buying the accommodation.** A good error
 message is the cheapest thing on this table — it costs bytes only when it
 fires, while a field costs bytes on every turn forever. Reach for the schema

@@ -31,6 +31,7 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   resolveNodeShape,
   resolveNodeStencil,
+  SEMANTIC_CLASS_KEY,
   VISUAL_AXES_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 
@@ -251,7 +252,23 @@ function declaredPartitions(
   // read as fully carried.
   const byStencil = new Map<string, string>(boxes.map((b) => [b.id, resolveNodeStencil(b) ?? '']))
   out.push({ name: 'stencil', partition: byStencil })
+  // The classification facet is an axis BY CONSTRUCTION, on ADR-0036 §1's
+  // own criterion: `visual.shape/v0` says how a box is drawn and is not one;
+  // `semantic.class/v0` says what a box IS on a named dimension, which is
+  // exactly what a stencil says and why `stencil` is known here by name. A
+  // board coloured by class therefore owes nothing whether or not the
+  // canvas also lists the key in `visual.axes/v0` — and if it does, the
+  // declared loop below skips it, so `carriedBy` names it once.
+  //
+  // Absent is its own class, by the same rule as an undressed box: keyed
+  // through `facetPayloadKey`, which answers a stable key for `undefined`
+  // distinct from every real payload.
+  out.push({
+    name: SEMANTIC_CLASS_KEY,
+    partition: new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, SEMANTIC_CLASS_KEY)])),
+  })
   for (const key of declaredAxisKeys(canvas)) {
+    if (key === SEMANTIC_CLASS_KEY) continue
     // Named by the facet KEY, which is what the canvas itself wrote — so a
     // reading points at the declaration rather than at a position in a list.
     out.push({ name: key, partition: new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])) })

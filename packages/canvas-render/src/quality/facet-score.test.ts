@@ -395,6 +395,64 @@ describe('channel attribution', () => {
 })
 
 /**
+ * The classification facet as a BUILT-IN partition (ADR-0036 §6).
+ *
+ * `semantic.class/v0` says what a box IS on a named dimension, which is
+ * ADR-0036 §1's own criterion for an axis — the reason a stencil is a
+ * partition the score knows by name without any declaration. So a board
+ * coloured by class owes nothing even when `visual.axes/v0` is absent, and
+ * a board that ALSO declares the key names it once, not twice.
+ *
+ * Measured reason (ADR-0031 §17-21): nine trials coloured health and wrote
+ * a node facet for it zero times, and the declaration was the step every
+ * refuted remedy aimed at. A registered facet the model can write inline is
+ * the first change on that lane that gives it a word rather than a hint.
+ */
+describe('facet vocabulary: the classification facet is an axis by construction', () => {
+  const classed = (axis: string, value: string, color?: string) => ({
+    ...(color === undefined ? {} : { color }),
+    facets: { 'semantic.class/v0': { axis, value } },
+  })
+  // Same pixels as the `withStatus` case above: one red box among plain
+  // ones. The only difference is that each box now SAYS its health.
+  const fleet = [
+    box('api', 0, 0, classed('health', 'ok')),
+    box('db', 300, 0, classed('health', 'failing', '1')),
+    box('cache', 600, 0, classed('health', 'ok')),
+  ]
+
+  it('reads colour as carried by the classification with NO axes declaration on the canvas', () => {
+    const s = score(fleet)
+    expect(s.channels.colour).toEqual({ use: 'carried', carriedBy: ['semantic.class/v0'] })
+    expect(s.contested).toBe(0)
+  })
+
+  it('names the classification once when the canvas also declares it as an axis', () => {
+    const declared = scoreFacets({
+      nodes: [...fleet],
+      edges: [],
+      facets: { 'visual.axes/v0': { axes: ['semantic.class/v0'] } },
+    } as SpatialCanvas)
+    expect(declared.channels.colour).toEqual({
+      use: 'carried',
+      carriedBy: ['semantic.class/v0'],
+    })
+  })
+
+  it('a box with no classification is its own class, so a half-classified board still reads', () => {
+    // `cache` says nothing. It is the '' class, exactly as an undressed box
+    // is under `stencil`, and its default colour is constant within that
+    // class — so colour still carries the partition rather than reading as
+    // contested for want of one payload.
+    const half = [fleet[0] as SpatialNode, fleet[1] as SpatialNode, box('cache', 600, 0)]
+    expect(score(half).channels.colour).toEqual({
+      use: 'carried',
+      carriedBy: ['semantic.class/v0'],
+    })
+  })
+})
+
+/**
  * A board declaring its OWN axis.
  *
  * Until now the only distinctions this score could see were the three it
