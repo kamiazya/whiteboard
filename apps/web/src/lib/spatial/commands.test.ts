@@ -1380,11 +1380,13 @@ describe('set-node-tags / set-edge-tags / set-canvas-tags', () => {
   })
 
   it('the canvas twin writes the board’s own tags, and an empty list leaves the envelope clean', () => {
-    const tagged = applyCommand(board(), { kind: 'set-canvas-tags', tags: ['team:core'] })
+    const before = board()
+    const tagged = applyCommand(before, { kind: 'set-canvas-tags', tags: ['team:core'] })
     expect(tagged.tags).toEqual(['team:core'])
-    // Nothing else on the envelope moves, and no node or edge is touched.
-    expect(tagged.nodes).toBe(board().nodes.length === 2 ? tagged.nodes : tagged.nodes)
-    expect(nodeTags(tagged, 'b')).toEqual(['keep:me'])
+    // Nothing else on the envelope moves, and no node or edge is touched:
+    // the same references, not equal copies.
+    expect(tagged.nodes).toBe(before.nodes)
+    expect(tagged.edges).toBe(before.edges)
     const cleared = applyCommand(tagged, { kind: 'set-canvas-tags', tags: [] })
     expect(cleared).not.toHaveProperty('tags')
   })

@@ -46,7 +46,7 @@ import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
-import { collectCanvasTags } from '../../lib/spatial/tags.js'
+import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import { cn } from '../../lib/utils.js'
 import { TagChipsEditor } from '../tags/TagChipsEditor.js'
 import { CANVAS_SETTINGS_WIDGETS, type CanvasSettingsWidget } from './facet-widgets/index.js'
@@ -105,7 +105,16 @@ export function CanvasDisplaySettings({
       <span className="text-xs font-medium">Tags</span>
       <TagChipsEditor
         tags={canvas.tags ?? []}
-        onChange={(tags) => run({ kind: 'set-canvas-tags', tags })}
+        // The CHANGE against the ref's tags, not the shown list copied over
+        // them: `run` chains on `canvasRef.current`, and under a slow parent
+        // the row still shows the list before the previous commit landed —
+        // a whole-list write from it would erase that commit.
+        onChange={(after) =>
+          run({
+            kind: 'set-canvas-tags',
+            tags: retag(canvasRef.current.tags, canvas.tags ?? [], after),
+          })
+        }
         suggestions={collectCanvasTags(canvas)}
       />
     </div>

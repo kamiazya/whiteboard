@@ -7,7 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -169,4 +169,47 @@ it('a tag finished in the panel’s tag row lands on every selected box, keeping
   expect(latest.canvas.nodes.find((n) => n.id === 'b')?.tags).toEqual(['tier:web', 'health:ok'])
   // The chip shows on the panel, with its own remove control.
   expect(panel.querySelector('button[aria-label="Remove tag health:ok"]')).not.toBeNull()
+})
+
+// The same slow-parent case on a box: the panel still shows the list from
+// before the first commit landed, and the second write must not erase it.
+it('two tags finished in the panel under a deferred parent both land on the box', async () => {
+  const latest: { canvas: SpatialCanvas } = { canvas: initial }
+  function DeferredHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
+    latest.canvas = canvas
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => {
+            setTimeout(() => {
+              latest.canvas = next
+              setCanvas(next)
+            }, 30)
+          }}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<DeferredHost />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
+  const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
+  const entry = [...menu.querySelectorAll('button')].find((b) => b.textContent?.includes('Facets'))
+  fireEvent.click(entry as HTMLElement)
+  const box = () =>
+    container.querySelector(
+      '[data-testid="facet-form-panel"] input[aria-label="Add tag"]',
+    ) as HTMLInputElement
+  fireEvent.change(box(), { target: { value: 'health:ok' } })
+  fireEvent.keyDown(box(), { key: 'Enter' })
+  fireEvent.change(box(), { target: { value: 'tier:web' } })
+  fireEvent.keyDown(box(), { key: 'Enter' })
+  await vi.waitFor(() =>
+    expect(latest.canvas.nodes.find((n) => n.id === 'a')?.tags).toEqual(['health:ok', 'tier:web']),
+  )
 })

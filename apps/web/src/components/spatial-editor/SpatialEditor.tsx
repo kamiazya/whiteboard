@@ -2739,18 +2739,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 tagSuggestions={collectCanvasTags(canvas)}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
                 onTagsChange={(after) => {
+                  // Every write is the CHANGE the row showed being made,
+                  // applied to the object's tags as the eager chain holds
+                  // them (`canvasRef.current`), never the shown list copied
+                  // over: under a slow parent the row still shows the list
+                  // before the previous commit landed, and on a selection
+                  // of five the four other boxes carry tags of their own.
                   if (edgeTarget !== undefined) {
+                    const current = canvasRef.current.edges.find((e) => e.id === edgeTarget.id)
                     applyResult({
                       state: { kind: 'idle' },
                       commands: [
-                        { kind: 'set-edge-tags' as const, id: edgeTarget.id, tags: after },
+                        {
+                          kind: 'set-edge-tags' as const,
+                          id: edgeTarget.id,
+                          tags: retag(current?.tags, edgeTarget.tags ?? [], after),
+                        },
                       ],
                     })
                     return
                   }
-                  // The CHANGE reaches every selected box, applied to each
-                  // box's own tags: the row showed one box, and copying its
-                  // list over five would erase what the other four carried.
                   const before = target?.tags ?? []
                   const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
                   const ids =
@@ -2762,7 +2770,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   applyResult({
                     state: { kind: 'idle' },
                     commands: ids.flatMap((id) => {
-                      const node = canvas.nodes.find((entry) => entry.id === id)
+                      const node = canvasRef.current.nodes.find((entry) => entry.id === id)
                       return node === undefined
                         ? []
                         : [

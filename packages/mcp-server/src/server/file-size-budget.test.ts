@@ -453,7 +453,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +31 for the Facets panel's tag row (ADR-0040 decision 6): the write
   // that fans a tag edit out over the selection as a CHANGE to each box's
   // own list (`retag`), beside the facet write that already fans out.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2816,
+  // +8: the tag fan-out reads each object's CURRENT tags off the eager
+  // chain's ref rather than the prop, so a second commit under a slow
+  // parent cannot erase the first.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2824,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
