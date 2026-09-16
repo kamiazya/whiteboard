@@ -1,5 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 
 /**
  * A canvas occupying every field position the model can hold.
@@ -24,14 +24,13 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
         facets: { 'visual.shape/v0': { kind: 'rect' } },
       }),
       fileNode({ id: 'n2', x: 1, y: 1, width: 2, height: 2, file: 'a.png', subpath: '#x' }),
-      { id: 'n3', type: 'link', x: 2, y: 2, width: 2, height: 2, url: 'https://e.test/' },
-      {
+      linkNode({ id: 'n3', x: 2, y: 2, width: 2, height: 2, url: 'https://e.test/' }),
+      groupNode({
         // The embed rides the GROUP, which is the one node kind with no content
         // of its own for it to displace. On any other kind it takes the single
         // resource slot OCIF gives a node and the content moves onto an
         // extension — real, and a second variable this fixture does not want.
         id: 'n4',
-        type: 'group',
         x: 3,
         y: 3,
         width: 4,
@@ -40,7 +39,7 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
         background: 'b.png',
         backgroundStyle: 'cover',
         embed: { documentId: '01M231FG6BGKKWW4BAA6Z1C945', versionRef: 'v1' },
-      },
+      }),
     ],
     edges: [
       {

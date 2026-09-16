@@ -119,6 +119,23 @@ export const spatialNodeSchema = sharedNodeFieldsSchema
     backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
   })
   .strict()
+  // The frame's fields belong to the frame, so a node that SHOWS something
+  // may not carry them. `frameLabel`/`frameBackground`/`frameBackgroundStyle`
+  // already answer `undefined` for such a node, which made the combination
+  // dead weight rather than a second meaning — and `codecs.property.test.ts`'s
+  // confluence property found what dead weight costs: JSON Canvas projects a
+  // node it cannot read as a `group`, so a background rode back onto a node
+  // one way round the formats and was dropped the other. An unrepresentable
+  // state rather than a tie-break, the same answer `nodeResourceSchema` gives
+  // to a resource carrying its bytes AND a location.
+  .refine(
+    (node) =>
+      node.resource === undefined ||
+      (node.label === undefined &&
+        node.background === undefined &&
+        node.backgroundStyle === undefined),
+    { error: "a node that shows a resource is not a frame and has no frame's fields" },
+  )
 
 export type SpatialNode = z.infer<typeof spatialNodeSchema>
 

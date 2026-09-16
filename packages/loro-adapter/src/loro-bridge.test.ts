@@ -6,7 +6,8 @@ import type {
   SpatialNode,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { nodeKind, nodeText, withNodeText } from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
@@ -54,15 +55,14 @@ const FILE_NODE: SpatialNode = fileNode({
   subpath: '#page1',
 })
 
-const LINK_NODE: SpatialNode = {
+const LINK_NODE: SpatialNode = linkNode({
   id: 'node-3',
-  type: 'link',
   x: 0,
   y: 0,
   width: 400,
   height: 300,
   url: 'https://example.com',
-}
+})
 
 const GROUP_NODE: SpatialNode = groupNode({
   id: 'node-4',
@@ -210,15 +210,15 @@ describe('loro-bridge', () => {
 
     writeSpatialCanvas(doc, { nodes: [TEXT_NODE], edges: [] })
 
-    const updated: SpatialNode = { ...TEXT_NODE, text: 'Updated text', x: 999 }
+    const updated: SpatialNode = { ...withNodeText(TEXT_NODE, 'Updated text'), x: 999 }
     writeSpatialCanvas(doc, { nodes: [updated], edges: [] })
 
     const result = readSpatialCanvas(doc)
     expect(result.nodes).toHaveLength(1)
     const node0 = result.nodes[0]
-    expect(node0.type).toBe('text')
-    if (node0.type === 'text') {
-      expect(node0.text).toBe('Updated text')
+    expect(node0 !== undefined && nodeKind(node0)).toBe('text')
+    if (node0 !== undefined) {
+      expect(nodeText(node0)).toBe('Updated text')
     }
     expect(node0.x).toBe(999)
   })
@@ -242,14 +242,14 @@ describe('loro-bridge', () => {
     const doc = makeDoc()
     writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [] })
 
-    const updated: SpatialNode = { ...TEXT_NODE, text: 'fine-grained update' }
+    const updated: SpatialNode = withNodeText(TEXT_NODE, 'fine-grained update')
     writeSpatialNode(doc, updated)
 
     const result = readSpatialCanvas(doc)
     expect(result.nodes).toHaveLength(2)
     const node0 = result.nodes.find((n) => n.id === TEXT_NODE.id)
-    expect(node0?.type).toBe('text')
-    if (node0?.type === 'text') expect(node0.text).toBe('fine-grained update')
+    expect(node0 !== undefined && nodeKind(node0)).toBe('text')
+    if (node0 !== undefined) expect(nodeText(node0)).toBe('fine-grained update')
     expect(result.nodes.find((n) => n.id === FILE_NODE.id)).toEqual(FILE_NODE)
   })
 
@@ -1219,10 +1219,11 @@ describe('reconcileSpatialCanvas', () => {
     doc.getMap('nodes').set('from-the-future', { type: 'hologram', shimmer: true })
 
     const prev = readSpatialCanvas(doc)
-    reconcileSpatialCanvas(doc, prev, { nodes: [{ ...A, text: 'alpha edited' }], edges: [] })
+    reconcileSpatialCanvas(doc, prev, { nodes: [withNodeText(A, 'alpha edited')], edges: [] })
 
     const after = readSpatialCanvas(doc)
-    expect(after.nodes.find((n) => n.id === 'a')).toMatchObject({ text: 'alpha edited' })
+    const a = after.nodes.find((n) => n.id === 'a')
+    expect(a !== undefined && nodeText(a)).toBe('alpha edited')
     expect(after.nodes.find((n) => n.id === 'b')).toBeUndefined()
     expect(doc.getMap('nodes').get('from-the-future')).toEqual({ type: 'hologram', shimmer: true })
   })

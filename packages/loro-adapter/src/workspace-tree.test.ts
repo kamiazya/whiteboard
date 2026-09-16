@@ -8,6 +8,7 @@
  * where the answers are written down so a later change cannot quietly pick
  * different ones.
  */
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -211,9 +212,8 @@ describe('workspace tree', () => {
       peer.import(doc.export({ mode: 'update', from }))
       const mergedRead = readSpatialCanvas(documentContainers(peer, ID_A))
       expect(mergedRead.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 5, y: 5 })
-      expect(mergedRead.nodes.find((n) => n.id === 'n-b')).toMatchObject({
-        text: 'peer-renamed',
-      })
+      const nB = mergedRead.nodes.find((n) => n.id === 'n-b')
+      expect(nB !== undefined && nodeText(nB)).toBe('peer-renamed')
     })
 
     it('an entry removed from the source is deleted from the node', () => {
@@ -345,7 +345,8 @@ describe('workspace tree', () => {
       expect(adopted?.path).toBe('imported/design')
       const read = readSpatialCanvas(documentContainers(doc, ID_A))
       expect(read.nodes).toHaveLength(1)
-      expect(read.nodes[0]?.type === 'text' ? read.nodes[0].text : null).toBe('moved in')
+      const only = read.nodes[0]
+      expect(only !== undefined && nodeText(only)).toBe('moved in')
     })
 
     it('answers null without writing when the id is already in the tree', () => {
@@ -440,7 +441,8 @@ describe('projection at a checkout', () => {
     if (past === null) return
     const nodes = readSpatialCanvas(past).nodes
     expect(nodes.map((n) => n.id)).toEqual(['n-a'])
-    expect(nodes[0]?.type === 'text' ? nodes[0].text : null).toBe('v1')
+    const first = nodes[0]
+    expect(first !== undefined && nodeText(first)).toBe('v1')
   })
 })
 
@@ -465,7 +467,9 @@ describe('reconcileDocContent (restore = a new edit equal to the past)', () => {
     reconcileDocContent(live, past)
     const nodes = readSpatialCanvas(live).nodes
     expect(nodes.map((n) => n.id)).toEqual(['n-a'])
-    expect(nodes[0]).toMatchObject({ x: 0, y: 0, text: 'v1' })
+    expect(nodes[0]).toMatchObject({ x: 0, y: 0 })
+    const restored = nodes[0]
+    expect(restored !== undefined && nodeText(restored)).toBe('v1')
   })
 
   it('an equal past commits no ops, and a movable-list root reconciles too', () => {

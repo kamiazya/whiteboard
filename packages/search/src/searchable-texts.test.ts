@@ -1,5 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fullTextSearch } from './full-text.js'
 import { searchableTexts } from './searchable-texts.js'
@@ -36,15 +36,14 @@ describe('searchableTexts', () => {
   it('gives a canvas a link node’s url', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        {
+        linkNode({
           id: 'l1',
-          type: 'link',
           url: 'https://example.com/runbooks/oncall',
           x: 0,
           y: 0,
           width: 100,
           height: 40,
-        },
+        }),
       ],
       edges: [],
     }
@@ -94,15 +93,14 @@ describe('a canvas through searchableTexts and into fullTextSearch', () => {
   it('finds a document by the host of a link node it holds', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        {
+        linkNode({
           id: 'l1',
-          type: 'link',
           url: 'https://runbooks.example.com/oncall',
           x: 0,
           y: 0,
           width: 100,
           height: 40,
-        },
+        }),
       ],
       edges: [],
     }

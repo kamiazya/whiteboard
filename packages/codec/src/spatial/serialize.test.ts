@@ -8,12 +8,11 @@ const baseNode = { id: 'n1', x: 0, y: 0, width: 10, height: 10 } as const
 
 const canvasWithExtension: SpatialCanvas = {
   nodes: [
-    {
+    textNode({
       ...baseNode,
-      type: 'text',
       text: '',
       embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
-    },
+    }),
   ],
   edges: [],
 }
@@ -54,11 +53,11 @@ describe('serializeSpatial', () => {
   it('strict mode re-validates the degraded document and throws if it is not schema-valid', async () => {
     vi.resetModules()
     vi.doMock('./degrade.js', () => ({
-      // Simulates a strictDegrade bug: leaves the document invalid (missing
-      // required `type`) instead of a schema-valid strict document.
+      // Simulates a strictDegrade bug: leaves the document invalid (a node
+      // with no `id`) instead of a schema-valid strict document.
       strictDegrade: (canvas: SpatialCanvas) => ({
         ...canvas,
-        nodes: canvas.nodes.map(({ type: _type, ...rest }) => rest),
+        nodes: canvas.nodes.map(({ id: _id, ...rest }) => rest),
       }),
     }))
 

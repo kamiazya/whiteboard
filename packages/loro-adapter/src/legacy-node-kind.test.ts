@@ -1,4 +1,3 @@
-import { LoroDoc } from 'loro-crdt'
 import {
   isFrame,
   nodeFile,
@@ -7,6 +6,7 @@ import {
   nodeText,
   nodeUrl,
 } from '@kamiazya/whiteboard-model'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas } from './loro-bridge.js'
 

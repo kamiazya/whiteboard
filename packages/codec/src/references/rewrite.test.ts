@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
@@ -68,8 +69,9 @@ describe('rewriteCanvasReferences', () => {
     // read are never deleted by a resync.
     expect(out.changedNodes.map((n) => n.id)).toEqual(['t1', 'f1'])
     const nodes = out.canvas.nodes
-    expect(nodes[0]).toMatchObject({ text: 'see [[archive/login]]' })
-    expect(nodes[1]).toMatchObject({ file: 'archive/login' })
+    const [rewrittenText, rewrittenFile] = nodes
+    expect(rewrittenText !== undefined && nodeText(rewrittenText)).toBe('see [[archive/login]]')
+    expect(rewrittenFile !== undefined && nodeFile(rewrittenFile)).toBe('archive/login')
     // An untouched node keeps its identity, not just its value.
     expect(nodes[2]).toBe(canvas.nodes[2])
   })

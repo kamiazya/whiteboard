@@ -8,7 +8,7 @@ A whiteboard document is not a JSON Canvas file. JSON Canvas 1.0 is a **projecti
 tested projection rather than an identity: a round-trip property over the expressible subset,
 and this table for everything else.
 
-The model can hold **57** field positions. **23** of them are something the format
+The model can hold **56** field positions. **22** of them are something the format
 can state; **34** reach a reader only through the single extension key, or not at all.
 
 Two export modes, and the difference between them is exactly the `x-whiteboard` rows below:
@@ -18,7 +18,7 @@ Two export modes, and the difference between them is exactly the `x-whiteboard` 
 - **`strict`** — plain JSON Canvas 1.0, the extension key removed entirely
   (`wb_document_get` with `options.strict: true`).
 
-## Stated by JSON Canvas 1.0 — 19
+## Stated by JSON Canvas 1.0 — 17
 
 Every reader of the format gets these, in both export modes. Nothing is lost and nothing needs the extension key.
 
@@ -36,21 +36,20 @@ Every reader of the format gets these, in both export modes. Nothing is lost and
 | `nodes[].background` | survives both modes |
 | `nodes[].backgroundStyle` | survives both modes |
 | `nodes[].color` | survives both modes |
-| `nodes[].file` | survives both modes |
 | `nodes[].id` | survives both modes |
 | `nodes[].label` | survives both modes |
-| `nodes[].subpath` | survives both modes |
-| `nodes[].text` | survives both modes |
-| `nodes[].type` | survives both modes |
-| `nodes[].url` | survives both modes |
+| `nodes[].resource.content` | survives both modes |
+| `nodes[].resource.location` | survives both modes |
+| `nodes[].resource.subpath` | survives both modes |
 
-## Stated, but not exactly — 4
+## Stated, but not exactly — 5
 
 The format has the field and cannot hold the value. What a reader gets instead is named per row; the document still draws in the right place.
 
 | field | what a reader gets |
 | --- | --- |
 | `nodes[].height` | crosses as the nearest integer pixel |
+| `nodes[].resource.mimeType` | crosses as the format's node kind |
 | `nodes[].width` | crosses as the nearest integer pixel |
 | `nodes[].x` | crosses as the nearest integer pixel |
 | `nodes[].y` | crosses as the nearest integer pixel |

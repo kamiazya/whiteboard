@@ -115,14 +115,23 @@ describe('workspace-record growth scoreboard', () => {
     // edit, forever, for a key that was not there. This scoreboard is the only
     // thing that said so — nothing else in the suite can see an op that costs
     // bytes and changes no state.
-    expect(n.updateBytes).toBe(156960)
+    //
+    // 156960 -> 184960 (+18%, ~28B per edit) when ADR-0038 decision 3 made
+    // what a node shows a RESOURCE. That is the shape's price and not a bug:
+    // a text edit used to write one flat `text` key and now writes a nested
+    // `{ mimeType, content }`, so every edit carries `text/markdown` and two
+    // more key names. Recorded rather than absorbed, because it is the one
+    // cost of the decision nothing else in the repo measures — and because
+    // 28B is what a discriminant on the resource would have to beat if the
+    // exhaustiveness question in `node-content.ts` is ever reopened.
+    expect(n.updateBytes).toBe(184960)
     // The stored-snapshot price of the same history — Loro's snapshot
     // encoding compresses it to ~8B/edit. 11699 -> 11040 for the same reason
     // the delta log shrank: 1000 fewer no-op deletes in the history; 11040 ->
     // 11136 when the ink plane joined the pre-attached set, which is the
     // create-time price of one more container across ten documents and not a
     // per-edit cost — `updateBytes` above did not move.
-    expect(n.fullBytes).toBe(11136)
+    expect(n.fullBytes).toBe(11313)
     // The reclaim: a shallow cut at the current frontier collapses the whole
     // edit history. It is no longer byte-IDENTICAL to the create-time record:
     // since the comments container (ADR-0024) joined the pre-attached set, a
@@ -134,7 +143,9 @@ describe('workspace-record growth scoreboard', () => {
     // create-time size — the reclaim story ("compaction takes back everything
     // the edits added") is the invariant, byte identity was only its
     // strongest available form.
-    expect(n.shallowBytes).toBe(3456)
+    // 3456 -> 3550: a node stored as a resource is one nested object rather
+    // than two flat keys, and the cut keeps the CURRENT state.
+    expect(n.shallowBytes).toBe(3550)
     expect(n.shallowBytes).toBeLessThanOrEqual(build(10, 0).afterCreateBytes)
     // A CEILING sized on a measurement, not a delay: `build(10, 100)` is 1000
     // synchronous edits, each with a commit and an `export({ mode: 'update' })`,

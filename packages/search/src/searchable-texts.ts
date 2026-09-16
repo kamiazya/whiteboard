@@ -67,7 +67,10 @@ export function searchableTexts(content: SearchableContent): string[] {
   if (content.kind === 'markdown') return [content.body]
   const texts: string[] = []
   for (const node of content.canvas.nodes) {
-    const own = SEARCHABLE[nodeKind(node)](node)
+    // A node showing a resource nothing in the registry claims contributes
+    // nothing: this build cannot read it, so it has no text a reader sees.
+    const kind = nodeKind(node)
+    const own = kind === undefined ? undefined : SEARCHABLE[kind](node)
     if (own !== undefined) texts.push(own)
   }
   for (const edge of content.canvas.edges) if (edge.label !== undefined) texts.push(edge.label)

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { nodeText } from '../node-content.js'
 import { spatialNodeSchema } from '../spatial.js'
 import { fileNode, groupNode, linkNode, textNode } from './nodes.js'
 
@@ -6,7 +7,8 @@ describe('node builders', () => {
   it('builds a text node the model accepts, from semantic fields only', () => {
     const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hello' })
     expect(spatialNodeSchema.parse(node)).toEqual(node)
-    expect(node).toMatchObject({ id: 'a', text: 'hello' })
+    expect(node.id).toBe('a')
+    expect(nodeText(node)).toBe('hello')
   })
 
   it('builds the other three arms', () => {
@@ -34,14 +36,17 @@ describe('node builders', () => {
    * The pin the module header promises: a builder's input names what a node
    * MEANS, never how the model stores it. `type` is the stored discriminant
    * that ADR-0038 decision 3 dissolves, so accepting it here would let a
-   * fixture spell the very thing the builders exist to hide — and the
-   * migration would have to be done twice. `@ts-expect-error` fails the
-   * typecheck in BOTH directions: if the input ever widens to admit `type`,
-   * the directive becomes unused and the build breaks.
+   * fixture spell the very thing the builders exist to hide. `@ts-expect-error`
+   * fails the typecheck in BOTH directions: if the input ever widens to admit
+   * `type`, the directive becomes unused and the build breaks.
+   *
+   * Decision 3 has landed, so there is a second rung under it now: a `type`
+   * smuggled past the types rides through as an ordinary key, and the model
+   * is `.strict()`, so the parse refuses it by name.
    */
   it('refuses the stored discriminant as an input', () => {
     // @ts-expect-error `type` is stored, not meant
     const node = textNode({ id: 'a', x: 0, y: 0, width: 1, height: 1, text: '', type: 'text' })
-    expect(spatialNodeSchema.parse(node)).toEqual(node)
+    expect(() => spatialNodeSchema.parse(node)).toThrow(/type/)
   })
 })

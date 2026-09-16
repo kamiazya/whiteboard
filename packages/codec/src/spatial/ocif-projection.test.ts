@@ -36,16 +36,28 @@ describe('what the two formats reach, read side by side', () => {
     // element shape the format gives a per-end marker. Under the old shape one
     // element served both meanings, so those positions were `degraded` for
     // every edge whether or not that edge was ink.
+    //
+    // ADR-0038 decision 3 then took OCIF's resource into the model, and the
+    // two tables moved in OPPOSITE directions on the same five rows — which
+    // is the clearest thing either table has said about what the decision
+    // bought. Five model positions (`type`/`text`/`file`/`url`/`subpath`)
+    // became four (`resource.mimeType`/`content`/`location`/`subpath`), so
+    // the totals fall by one each. JSON Canvas: 19 -> 17 native, 4 -> 5
+    // degraded, because the format has a node KIND and no media type, and
+    // `mimeType` now has to cross as one. OCIF: 5 -> 4 degraded with its
+    // native count UNMOVED at 23 — the row that was degraded is simply GONE,
+    // since the discriminator OCIF had no field for is no longer a field of
+    // ours, and the three content rows it kept natively it still keeps.
     expect(kinds(JSON_CANVAS_PROJECTION)).toEqual({
-      native: 19,
+      native: 17,
       extension: 34,
-      degraded: 4,
+      degraded: 5,
       dropped: 0,
     })
     expect(kinds(OCIF_PROJECTION)).toEqual({
       native: 23,
       extension: 29,
-      degraded: 5,
+      degraded: 4,
       dropped: 0,
     })
   })
@@ -69,6 +81,9 @@ describe('what the two formats reach, read side by side', () => {
       'nodes[].embed.documentId',
       'nodes[].facets/*',
       'nodes[].height',
+      // OCIF's resource carries a media type; JSON Canvas's node kind does
+      // not, so `image/png` on a file node comes back as the generic stream.
+      'nodes[].resource.mimeType',
       'nodes[].width',
       'nodes[].x',
       'nodes[].y',
@@ -91,8 +106,7 @@ describe('what the two formats reach, read side by side', () => {
       'nodes[].backgroundStyle',
       'nodes[].color',
       'nodes[].label',
-      'nodes[].subpath',
-      'nodes[].type',
+      'nodes[].resource.subpath',
     ])
   })
 
