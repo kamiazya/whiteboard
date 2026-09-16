@@ -93,6 +93,20 @@ describe('tag matching', () => {
     expect(searchDocuments(docs, 'q3').map((d) => d.documentId)).toEqual(['B', 'A'])
   })
 
+  // A chip the strip counted from a board's boxes must find that board when
+  // pressed, or the strip offers a filter that selects nothing.
+  it('a #query finds a board by a tag its boxes carry, and a plain query does not read those', () => {
+    const board: WorkspaceDocumentEntry = {
+      documentId: 'D',
+      path: 'boards/uptime',
+      name: 'Uptime board',
+      kind: 'spatial',
+      carriedTags: ['health:ok'],
+    }
+    expect(searchDocuments([...docs, board], '#health:ok').map((d) => d.documentId)).toEqual(['D'])
+    expect(searchDocuments([...docs, board], 'health').map((d) => d.documentId)).toEqual([])
+  })
+
   it('a #query matches ONLY the exact tag, never path or name', () => {
     // 'release' is also a path segment of A — but #q3 must not read paths.
     expect(searchDocuments(docs, '#q3').map((d) => d.documentId)).toEqual(['B', 'A'])

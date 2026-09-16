@@ -175,6 +175,7 @@ describe('createDaemonFilesSource tags', () => {
           // field is a parse failure, which the reader degrades to tagless.
           jsonResponse({
             documents: [{ documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', tags: ['release', 'q3'] }],
+            contents: [],
             inUse: [
               { tag: 'q3', documents: 1, boards: 0, nodes: 0, edges: 0 },
               { tag: 'release', documents: 1, boards: 0, nodes: 0, edges: 0 },
@@ -341,6 +342,51 @@ describe('createDaemonFilesSource loadMarkdown', () => {
   })
 })
 
+describe('createDaemonFilesSource carried tags', () => {
+  it('carries what a board’s boxes carry onto its entry, apart from its own tags', async () => {
+    const stub = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/names'))
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      if (url.endsWith('/document-tags'))
+        return Promise.resolve(
+          jsonResponse({
+            documents: [],
+            contents: [{ documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', tags: ['health:ok'] }],
+            inUse: [
+              {
+                tag: 'health:ok',
+                key: 'health',
+                value: 'ok',
+                documents: 0,
+                boards: 0,
+                nodes: 2,
+                edges: 0,
+              },
+            ],
+          }),
+        )
+      if (url.endsWith('/documents'))
+        return Promise.resolve(
+          jsonResponse({
+            documents: [
+              {
+                path: 'board',
+                id: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+                updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
+              },
+            ],
+          }),
+        )
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    const entries = await createDaemonFilesSource(stub, BASE, 'ws').listDocuments()
+    expect(entries[0]?.tags).toBeUndefined()
+    expect(entries[0]?.carriedTags).toEqual(['health:ok'])
+  })
+})
+
 describe('createDaemonFilesSource tags in use', () => {
   it('answers the route’s in-use rows, and a failed fetch is the caller’s to catch', async () => {
     const inUse = [
@@ -349,7 +395,7 @@ describe('createDaemonFilesSource tags in use', () => {
     const fetchImpl = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.endsWith('/document-tags'))
-        return Promise.resolve(jsonResponse({ documents: [], inUse }))
+        return Promise.resolve(jsonResponse({ documents: [], contents: [], inUse }))
       return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
     }) as unknown as typeof globalThis.fetch
     const source = createDaemonFilesSource(fetchImpl, BASE, 'ws')

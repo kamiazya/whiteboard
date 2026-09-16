@@ -195,15 +195,28 @@ export function createLocalFilesSource(
       // ponytail: O(N) doc loads per listing; cache per-document when a
       // measured workspace makes the panel open slowly.
       const tagsById = new Map<string, readonly string[]>()
+      const carriedById = new Map<string, readonly string[]>()
       for (const entry of entries) {
         if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
         try {
           const doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
+          if (entry.kind === 'markdown') {
+            const tags = readCoreFacets(doc)?.tags
+            if (tags !== undefined && tags.length > 0) tagsById.set(entry.documentId, tags)
+            continue
+          }
           // A board's own tags are the document's (ADR-0040 decision 2);
-          // what its boxes carry is the vocabulary's, counted below.
-          const tags =
-            entry.kind === 'markdown' ? readCoreFacets(doc)?.tags : readSpatialCanvas(doc).tags
-          if (tags !== undefined && tags.length > 0) tagsById.set(entry.documentId, tags)
+          // what its boxes and edges carry rides beside them, deduplicated,
+          // so the `#tag` filter finds the board (decision 3) — the browser
+          // spelling of the daemon's `/document-tags` `contents`.
+          const canvas = readSpatialCanvas(doc)
+          if (canvas.tags !== undefined && canvas.tags.length > 0) {
+            tagsById.set(entry.documentId, canvas.tags)
+          }
+          const carried = new Set<string>()
+          for (const node of canvas.nodes) for (const tag of node.tags ?? []) carried.add(tag)
+          for (const edge of canvas.edges) for (const tag of edge.tags ?? []) carried.add(tag)
+          if (carried.size > 0) carriedById.set(entry.documentId, [...carried])
         } catch {
           // unreadable or never written: no tags to show
         }
@@ -216,6 +229,9 @@ export function createLocalFilesSource(
         ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
         ...(tagsById.has(entry.documentId)
           ? { tags: tagsById.get(entry.documentId) as readonly string[] }
+          : {}),
+        ...(carriedById.has(entry.documentId)
+          ? { carriedTags: carriedById.get(entry.documentId) as readonly string[] }
           : {}),
         ...(stamps.has(entry.documentId)
           ? { updatedAt: stamps.get(entry.documentId) as string }

@@ -366,6 +366,10 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     const source = createLocalFilesSource()
     const entries = await source.listDocuments()
     expect(entries.find((e) => e.path === 'board')?.tags).toEqual(['team:core', 'q3'])
+    // What the boxes and the edge carry, once each, beside the board's own —
+    // never on the note, which has nothing inside.
+    expect(entries.find((e) => e.path === 'board')?.carriedTags).toEqual(['health:ok', 'link:slow'])
+    expect(entries.find((e) => e.path === 'note')?.carriedTags).toBeUndefined()
     expect(await source.listTagsInUse?.()).toEqual([
       { tag: 'health:ok', key: 'health', value: 'ok', documents: 0, boards: 0, nodes: 2, edges: 0 },
       { tag: 'link:slow', key: 'link', value: 'slow', documents: 0, boards: 0, nodes: 0, edges: 1 },

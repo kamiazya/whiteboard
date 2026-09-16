@@ -286,6 +286,18 @@ export function WorkspaceFilesPanel({
         : source.listTagsInUse().catch(() => null),
     [source],
   )
+  // Rows land only from the LATEST ask. The workspace-load effect and the
+  // revision effect each ask, and the earlier ask can answer after the
+  // later one — which would show the vocabulary from before the write that
+  // bumped the revision until the next one. A counter rather than a
+  // per-effect flag, since the two effects do not know about each other.
+  const tagsRequest = useRef(0)
+  const loadTagsInUse = useCallback(() => {
+    const token = ++tagsRequest.current
+    return readTagsInUse().then((rows) => {
+      if (token === tagsRequest.current) setTagsInUse(rows)
+    })
+  }, [readTagsInUse])
 
   // Through a ref so it never joins an effect's dependencies: a host that
   // passes an inline arrow would otherwise re-run the workspace-load effect
@@ -425,10 +437,7 @@ export function WorkspaceFilesPanel({
         lastCardCount.current = entries.length
         setDocuments(entries)
       })
-      .then(() => readTagsInUse())
-      .then((rows) => {
-        if (!cancelled) setTagsInUse(rows)
-      })
+      .then(() => loadTagsInUse())
       .catch((err) => {
         if (cancelled) return
         setListStatus(err instanceof WorkspaceMissingError ? 'not-found' : 'error')
@@ -445,9 +454,7 @@ export function WorkspaceFilesPanel({
   useEffect(() => {
     if (revision === undefined) return
     let cancelled = false
-    readTagsInUse().then((rows) => {
-      if (!cancelled) setTagsInUse(rows)
-    })
+    void loadTagsInUse()
     readList()
       .then((entries) => {
         if (cancelled) return

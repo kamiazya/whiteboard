@@ -137,6 +137,10 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // new keeper answers, the strip would offer chips whose press searches
   // the store now on screen for tags it never carried.
   tagsInUse: 'cleared on switch',
+  // A COUNTER: it names nothing that belongs to a workspace, and a stale
+  // answer is dropped by comparison, so a switch needs no reset of it.
+  tagsRequest:
+    'no subject: a monotonic request counter for the tag rows, naming nothing that belongs to a workspace',
 
   listStatus: 'no subject: a load outcome for the list as a whole, reset by the same effect',
   // Reset inside the block's identity check rather than beside the rest —

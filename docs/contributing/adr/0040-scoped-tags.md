@@ -248,7 +248,12 @@ warned against.
   `GET /document-tags` `inUse` and the browser keeper's own count over notes,
   boards, boxes and edges (`lib/tags-in-use.ts`, the twin of server-core's),
   grouped by key with a count of what carries each tag. The browser keeper's
-  list also carries a board's own tags now, which it did not before.*
+  list also carries a board's own tags now, which it did not before. A chip
+  the strip counted from boxes finds its board when pressed: the projection
+  answers `contents` — what each board's nodes and edges carry — beside
+  `documents`, the browser keeper reads the same off the canvas, and the
+  `#tag` filter matches either (decision 3), while a card still shows only
+  a document's own tags (decision 2).*
 
 ### 7. The tool surface is measured, not assumed
 

@@ -55,6 +55,11 @@ export function createDaemonFilesSource(
         ])
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
         const tagsById = new Map((tagRes?.documents ?? []).map((doc) => [doc.documentId, doc.tags]))
+        // What a board's boxes and edges carry, so the `#tag` filter finds
+        // the board a chip counted from boxes is about (ADR-0040 decision 3).
+        const carriedById = new Map(
+          (tagRes?.contents ?? []).map((doc) => [doc.documentId, doc.tags]),
+        )
         return res.documents.map((entry) => ({
           documentId: entry.id,
           path: entry.path,
@@ -64,6 +69,9 @@ export function createDaemonFilesSource(
           ...(entry.contentDigest === undefined ? {} : { contentDigest: entry.contentDigest }),
           ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
           ...(tagsById.has(entry.id) ? { tags: tagsById.get(entry.id) as readonly string[] } : {}),
+          ...(carriedById.has(entry.id)
+            ? { carriedTags: carriedById.get(entry.id) as readonly string[] }
+            : {}),
           ...(pinIndex.has(entry.path) ? { pinOrder: pinIndex.get(entry.path) as number } : {}),
         }))
       } catch (err) {

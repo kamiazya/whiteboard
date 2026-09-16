@@ -38,6 +38,17 @@ export const documentTagsOutputSchema = z
     documents: z.array(
       z.object({ documentId: documentIdSchema, tags: z.array(z.string()).min(1) }).strict(),
     ),
+    /**
+     * What a board's NODES and EDGES carry, per board, deduplicated — the
+     * filter's other half (ADR-0040 decision 3): a board is found by a tag
+     * one of its boxes carries, so a client filtering on a chip the
+     * vocabulary counted from boxes reads this beside `documents`. Only
+     * boards with something carried inside; a board's own tags are in
+     * `documents`, and a note has nothing inside to carry one.
+     */
+    contents: z.array(
+      z.object({ documentId: documentIdSchema, tags: z.array(z.string()).min(1) }).strict(),
+    ),
     /** Every tag in use anywhere in the workspace, with counts — the vocabulary a picker offers. */
     inUse: z.array(tagInUseSchema),
   })
@@ -59,15 +70,23 @@ export async function computeDocumentTags(
   const entries = await deps.documentIndex.listDocuments({ workspaceId: input.workspaceId })
   const content = await cache.factsFor(deps, input.workspaceId, entries)
   const documents: DocumentTagsOutput['documents'] = []
+  const contents: DocumentTagsOutput['contents'] = []
   for (const entry of entries) {
-    const tags = content
-      .get(entry.documentId)
-      ?.bearers.find((bearer) => bearer.what === 'document' || bearer.what === 'board')?.tags
-    if (tags === undefined || tags.length === 0) continue
-    documents.push({ documentId: entry.documentId, tags: [...tags] })
+    const bearers = content.get(entry.documentId)?.bearers ?? []
+    const own = bearers.find(
+      (bearer) => bearer.what === 'document' || bearer.what === 'board',
+    )?.tags
+    if (own !== undefined && own.length > 0)
+      documents.push({ documentId: entry.documentId, tags: [...own] })
+    const carried = new Set<string>()
+    for (const bearer of bearers) {
+      if (bearer.what !== 'node' && bearer.what !== 'edge') continue
+      for (const tag of bearer.tags) carried.add(tag)
+    }
+    if (carried.size > 0) contents.push({ documentId: entry.documentId, tags: [...carried] })
   }
   const bearers = entries.flatMap((entry) => content.get(entry.documentId)?.bearers ?? [])
-  return { documents, inUse: tagsInUse(bearers) }
+  return { documents, contents, inUse: tagsInUse(bearers) }
 }
 
 const COUNTED: Record<TagBearer['what'], keyof Omit<TagInUse, 'tag' | 'key' | 'value'>> = {
