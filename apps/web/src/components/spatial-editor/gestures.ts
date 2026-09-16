@@ -35,6 +35,7 @@ import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
+  boxContains,
   type ResizeHandleKind,
   resizeBoxByDelta,
   scaleBoxWithin,
@@ -419,13 +420,45 @@ function reducePointerUpConnecting(
   state: ConnectSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
   createId: () => string,
+  canvas: SpatialCanvas,
 ): GestureResult {
-  // Releasing over empty space cancels. Releasing over the SOURCE node
-  // keeps the connect armed: that is the first click of the object-first
-  // click-A-click-B flow (the press and its own release both land on A),
-  // and in the drag flow it just means "still choosing a target".
-  if (event.targetNodeId === undefined) return idle
+  // Releasing over the SOURCE node keeps the connect armed: that is the
+  // first click of the object-first click-A-click-B flow (the press and its
+  // own release both land on A), and in the drag flow it just means "still
+  // choosing a target".
+  //
+  // Releasing over EMPTY canvas draws a line. It used to cancel, and could
+  // not have done anything else: an edge is a RELATION and cannot end in
+  // empty space, so there was nothing to make. ADR-0038 decision 2 split ink
+  // from relation, and a line's end is exactly the `{kind:'point'}` this
+  // release has been carrying all along.
+  //
+  // The click flow is unaffected, which is worth stating because it looks
+  // like it should be: cancelling an armed connect means pressing empty
+  // canvas, and `pointerdown-empty` resets to idle BEFORE its pointerup
+  // arrives, so this arm never sees it. The only gesture that changed is a
+  // real drag off the connect handle.
   if (event.targetNodeId === state.fromNodeId) return stateOnly(state)
+  if (event.targetNodeId === undefined) {
+    const source = findNode(canvas, state.fromNodeId)
+    // A release still inside the source box is not a drag anywhere: the
+    // handle is drawn on the node and can overhang it, and a line from a box
+    // to itself is zero-length ink that cannot then be clicked to remove.
+    if (source !== undefined && boxContains(source, event.point)) return idle
+    return {
+      state: { kind: 'idle' },
+      commands: [
+        {
+          kind: 'create-line',
+          line: {
+            id: createId(),
+            from: { kind: 'node', node: state.fromNodeId },
+            to: { kind: 'point', point: { x: event.point.x, y: event.point.y } },
+          },
+        },
+      ],
+    }
+  }
   return {
     state: { kind: 'idle' },
     commands: [
@@ -635,7 +668,7 @@ export function reduceGesture(
         case 'resizing':
           return reducePointerUpResizing(state, event)
         case 'connecting':
-          return reducePointerUpConnecting(state, event, createId)
+          return reducePointerUpConnecting(state, event, createId, canvas)
         case 'bending':
           return reducePointerUpBending(state, event)
         case 'editing-text':

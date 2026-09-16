@@ -312,15 +312,54 @@ describe('connect gesture', () => {
     expect(result.state.kind).toBe('idle')
   })
 
-  it('dropping a connect drag with no target under the pointer emits no command', () => {
+  it('dropping a connect drag over empty canvas draws a LINE to the release point', () => {
+    // An edge is a RELATION and cannot end in empty space (ADR-0038
+    // decision 2); ink that can is a LINE. So the gesture that used to
+    // cancel here now mints one, which is also the affordance a freehand
+    // stroke will need.
     const c = canvas()
     let result = reduceGesture(createIdleState(), c, {
       type: 'pointerdown-connect',
       nodeId: 'a',
     })
-    result = reduceGesture(result.state, c, { type: 'pointerup', point: { x: 500, y: 500 } })
-    expect(result.commands).toEqual([])
+    result = reduceGesture(
+      result.state,
+      c,
+      { type: 'pointerup', point: { x: 500, y: 500 } },
+      { createId: () => 'line-1' },
+    )
+    expect(result.commands).toEqual([
+      {
+        kind: 'create-line',
+        line: {
+          id: 'line-1',
+          from: { kind: 'node', node: 'a' },
+          to: { kind: 'point', point: { x: 500, y: 500 } },
+        },
+      },
+    ])
     expect(result.state.kind).toBe('idle')
+  })
+
+  it('draws no line when the release lands back inside the source node', () => {
+    // The connect handle is drawn ON the node and can overhang it, so a
+    // press-and-release that never left would otherwise mint a degenerate
+    // line starting and ending inside one box — ink nobody asked for and,
+    // being zero-length, ink they could not then click to remove.
+    const c = canvas()
+    const source = c.nodes[0]
+    if (source === undefined) throw new Error('fixture has no node')
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-connect',
+      nodeId: source.id,
+    })
+    result = reduceGesture(
+      result.state,
+      c,
+      { type: 'pointerup', point: { x: source.x + 1, y: source.y + 1 } },
+      { createId: () => 'line-1' },
+    )
+    expect(result.commands).toEqual([])
   })
 
   it('releasing over the source node creates no edge and KEEPS the connect armed (click-A-click-B)', () => {

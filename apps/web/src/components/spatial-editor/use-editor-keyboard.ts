@@ -9,7 +9,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { applyCommand } from '../../lib/spatial/commands.js'
+import { applyCommand, deleteInkCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
   type ResizeHandleKind,
@@ -177,10 +177,11 @@ export function useEditorKeyboard({
       const tag = target?.tagName
       if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !target?.isContentEditable) {
         e.preventDefault()
-        applyResult({
-          state: { kind: 'idle' },
-          commands: [{ kind: 'delete-edge', id: selectedEdgeId } as const],
-        })
+        // The selected ink may be an EDGE or a LINE — the scene hands both
+        // out as `kind: 'edge'` nodes, so the selection never knew which.
+        // `deleteInkCommand` is the one place that looks.
+        const remove = deleteInkCommand(canvas, selectedEdgeId)
+        if (remove !== undefined) applyResult({ state: { kind: 'idle' }, commands: [remove] })
         setSelectedEdgeId(null)
         return
       }

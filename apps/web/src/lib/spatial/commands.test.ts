@@ -18,7 +18,12 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
+import {
+  applyCommand,
+  buildFragmentInsertCommand,
+  deleteInkCommand,
+  type EditorCommand,
+} from './commands.js'
 
 function baseCanvas(): SpatialCanvas {
   return {
@@ -1328,5 +1333,101 @@ describe('set-edge-facet', () => {
         payload: { routing: 'straight' },
       }),
     ).toBe(next)
+  })
+})
+
+describe('lines in the editor', () => {
+  // A LINE is ink (ADR-0038 decision 2): it may end nowhere, and it asserts
+  // nothing about what is related to what. The editor could already DRAW one
+  // and accept one through a proposal, but had no command that mints or
+  // removes one — so a line reached a board only from MCP or a proposal, and
+  // could not be taken back off it.
+  const lineCanvas = (): SpatialCanvas => ({
+    ...baseCanvas(),
+    lines: [
+      {
+        id: 'l1',
+        from: { kind: 'node', node: 'a' },
+        to: { kind: 'point', point: { x: 400, y: 400 } },
+      },
+    ],
+  })
+
+  it('mints a line from a node to a free point', () => {
+    const next = applyCommand(baseCanvas(), {
+      kind: 'create-line',
+      line: {
+        id: 'l9',
+        from: { kind: 'node', node: 'a' },
+        to: { kind: 'point', point: { x: 300, y: 250 } },
+      },
+    })
+    expect(next.lines).toEqual([
+      {
+        id: 'l9',
+        from: { kind: 'node', node: 'a' },
+        to: { kind: 'point', point: { x: 300, y: 250 } },
+      },
+    ])
+    // The canvas it came from stays a valid one, which is what stops a
+    // command sequence producing something the schema would refuse.
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('refuses a colliding line id as a no-op, the way every other create does', () => {
+    const canvas = lineCanvas()
+    const next = applyCommand(canvas, {
+      kind: 'create-line',
+      line: {
+        id: 'l1',
+        from: { kind: 'point', point: { x: 0, y: 0 } },
+        to: { kind: 'point', point: { x: 1, y: 1 } },
+      },
+    })
+    expect(next).toBe(canvas)
+  })
+
+  it('removes a line by id', () => {
+    const next = applyCommand(lineCanvas(), { kind: 'delete-line', id: 'l1' })
+    expect(next.lines).toEqual([])
+  })
+
+  it('is a no-op for a line id the canvas does not hold', () => {
+    const canvas = lineCanvas()
+    expect(applyCommand(canvas, { kind: 'delete-line', id: 'nope' })).toBe(canvas)
+  })
+
+  it('takes a line with it when the node one of its ends names is deleted', () => {
+    // The same referential-integrity rule `delete-node` already enforces for
+    // edges. A line ending on a node that is gone would be a dangling
+    // reference the schema's own id check refuses.
+    const next = applyCommand(lineCanvas(), { kind: 'delete-node', id: 'a' })
+    expect(next.lines ?? []).toEqual([])
+  })
+
+  it('picks the delete that matches the collection the selected ink is in', () => {
+    // The editor holds ONE selected-ink id, because the SCENE is where an
+    // edge and a line become the same thing: canvas-render routes
+    // `[...edges, ...lines]` and both come out as `kind: 'edge'` scene nodes
+    // carrying their own id, so hit-testing and the selection highlight
+    // already work on a line without knowing it is one. Deleting is the
+    // step that has to know, and this is the one place that decides.
+    const canvas: SpatialCanvas = {
+      ...lineCanvas(),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    expect(deleteInkCommand(canvas, 'e1')).toEqual({ kind: 'delete-edge', id: 'e1' })
+    expect(deleteInkCommand(canvas, 'l1')).toEqual({ kind: 'delete-line', id: 'l1' })
+    // An id in neither collection gets no command at all, rather than a
+    // delete aimed at a guess — a stale selection must not remove something
+    // that happens to share its id in the other collection.
+    expect(deleteInkCommand(canvas, 'gone')).toBeUndefined()
+  })
+
+  it('keeps a line whose ends name no deleted node', () => {
+    // The other side of the guard: a free-ended line is nobody's dependent,
+    // so deleting an unrelated node must not sweep it away.
+    const next = applyCommand(lineCanvas(), { kind: 'delete-node', id: 'b' })
+    expect(next.lines).toHaveLength(1)
   })
 })

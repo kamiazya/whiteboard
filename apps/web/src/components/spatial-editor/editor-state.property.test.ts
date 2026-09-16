@@ -313,6 +313,19 @@ const COMMAND_COVERAGE = {
   'delete-node': 'covered',
   'create-edge': 'covered',
   'delete-edge': 'covered',
+  // `covered` because the ledger SAID SO, not because it was claimed. Both
+  // went in as `not modelled` and direction 4 failed this one — "the run
+  // produced it 2 times" — which is the connect gesture's empty release
+  // arriving through the model's own pointerup arm now that it mints ink
+  // instead of cancelling.
+  'create-line': 'covered',
+  // Still genuinely unreached: the model drives gestures, and no gesture
+  // deletes ink — that is a keypress against a selection. `applyCommand` is
+  // covered by commands.test.ts, the collection-picking by its
+  // `deleteInkCommand` case, and the select-then-delete flow by
+  // line-ink.browser.test.tsx.
+  'delete-line':
+    'not modelled: no gesture deletes ink; the Delete keypress against a selected line is line-ink.browser.test.tsx',
   'reorder-nodes': 'covered',
   'set-body':
     'not modelled: the markdown editor writes the document body, which is not in the canvas at all — applyCommand returns the same reference',
