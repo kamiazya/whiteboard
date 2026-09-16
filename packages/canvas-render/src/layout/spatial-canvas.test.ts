@@ -69,14 +69,14 @@ function fakeParseBody(text: string): MdastRoot {
         {
           type: 'heading',
           depth: 1,
-          children: [buildTextNode({ value: text.slice(2) })],
+          children: [{ type: 'text' as const, value: text.slice(2) }],
         },
       ],
     }
   }
   return {
     type: 'root',
-    children: [{ type: 'paragraph', children: [buildTextNode({ value: text })] }],
+    children: [{ type: 'paragraph', children: [{ type: 'text' as const, value: text }] }],
   }
 }
 
@@ -1049,7 +1049,7 @@ describe('a text node keeps its body inside its own box', () => {
       type: 'root',
       children: text.split(/\n\s*\n/).map((para) => ({
         type: 'paragraph',
-        children: [buildTextNode({ value: para })],
+        children: [{ type: 'text' as const, value: para }],
       })),
     }
   }

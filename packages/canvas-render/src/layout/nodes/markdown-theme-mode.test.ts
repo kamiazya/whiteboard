@@ -17,11 +17,11 @@ import { layoutSpatialCanvas } from '../spatial-canvas.js'
 const BODY: MdastRoot = {
   type: 'root',
   children: [
-    { type: 'heading', depth: 2, children: [textNode({ value: 'Head' })] },
-    { type: 'paragraph', children: [textNode({ value: 'prose' })] },
+    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Head' }] },
+    { type: 'paragraph', children: [{ type: 'text', value: 'prose' }] },
     {
       type: 'blockquote',
-      children: [{ type: 'paragraph', children: [textNode({ value: 'quoted' })] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'quoted' }] }],
     },
   ],
 }

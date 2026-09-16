@@ -130,7 +130,7 @@ describe('renderSceneToKeyedSvg over a comment scene', () => {
     }
     const parseBody = (text: string): MdastRoot => ({
       type: 'root',
-      children: [{ type: 'paragraph', children: [textNode({ value: text })] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
     })
     const canvas: SpatialCanvas = {
       nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
@@ -194,7 +194,7 @@ describe('the keyed projection marks the annotation layer', () => {
   }
   const parseBody = (text: string): MdastRoot => ({
     type: 'root',
-    children: [{ type: 'paragraph', children: [textNode({ value: text })] }],
+    children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
   })
   const canvas: SpatialCanvas = {
     nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],

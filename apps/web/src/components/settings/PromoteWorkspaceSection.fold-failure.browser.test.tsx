@@ -72,7 +72,7 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
       kind: 'spatial',
     })
     const doc = new LoroDoc()
-    doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 8, height: 4 }))
+    doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 8, height: 4, text: '' }))
     doc.commit()
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 

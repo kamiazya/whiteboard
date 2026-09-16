@@ -21,7 +21,7 @@ const bigLink = (id: string, x: number) =>
     width: 320,
     height: 240,
     url: `https://example.com/${id}`,
-  }) as const
+  })
 
 function makeHost(initial: SpatialCanvas) {
   function Host() {

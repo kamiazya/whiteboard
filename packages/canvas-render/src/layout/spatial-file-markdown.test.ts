@@ -54,13 +54,13 @@ const canvasOf = (over?: Partial<SpatialNode>): SpatialCanvas => ({
 
 const paragraph = (value: string): MdastRoot['children'][number] => ({
   type: 'paragraph',
-  children: [textNode({ value })],
+  children: [{ type: 'text' as const, value }],
 })
 
 const BODY: MdastRoot = {
   type: 'root',
   children: [
-    { type: 'heading', depth: 1, children: [textNode({ value: 'Release notes' })] },
+    { type: 'heading', depth: 1, children: [{ type: 'text', value: 'Release notes' }] },
     paragraph('Shipped the markdown file node.'),
   ],
 }
@@ -281,7 +281,7 @@ describe('malformed bodies never abort the canvas', () => {
           baseOptions({
             parseBody: () => ({
               type: 'root',
-              children: [{ type: 'paragraph', children: [textNode({ value: 'SIBLING' })] }],
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'SIBLING' }] }],
             }),
             resolveReference: () => ({ markdown: body, facets: CARD }),
           }),

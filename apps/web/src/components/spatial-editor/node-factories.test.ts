@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
-import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { isFrame, nodeFile, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { NEW_NODE_WIDTH } from './gestures.js'
 import {
@@ -25,7 +25,8 @@ import {
 describe('node factories', () => {
   it('textNodeDefaults centers a NEW_NODE_WIDTH/HEIGHT box on the given point, rounding to integers', () => {
     const node = textNodeDefaults('id-1', { x: 100.4, y: 50.6 }, 'hello')
-    expect(node).toMatchObject(textNode({ id: 'id-1', text: 'hello' }))
+    expect(node.id).toBe('id-1')
+    expect(nodeText(node)).toBe('hello')
     expect(Number.isInteger(node.x)).toBe(true)
     expect(Number.isInteger(node.y)).toBe(true)
   })
@@ -33,26 +34,30 @@ describe('node factories', () => {
   it('linkNodeDefaults uses the shorter LINK_NODE_HEIGHT default (60)', () => {
     const node = linkNodeDefaults('id-2', { x: 0, y: 0 }, 'https://example.com')
     expect(LINK_NODE_HEIGHT).toBe(60)
-    expect(node).toMatchObject(linkNode({ url: 'https://example.com', height: 60 }))
+    expect(nodeUrl(node)).toBe('https://example.com')
+    expect(node.height).toBe(60)
   })
 
   it('fileNodeDefaults uses the shorter LINK_NODE_HEIGHT default (60)', () => {
     const node = fileNodeDefaults('id-3', { x: 0, y: 0 }, 'notes.canvas')
-    expect(node).toMatchObject(fileNode({ file: 'notes.canvas', height: 60 }))
+    expect(nodeFile(node)).toBe('notes.canvas')
+    expect(node.height).toBe(60)
   })
 
   it('imageNodeDefaults uses the 240x180 default', () => {
     expect(IMAGE_NODE_WIDTH).toBe(240)
     expect(IMAGE_NODE_HEIGHT).toBe(180)
     const node = imageNodeDefaults('id-4', { x: 0, y: 0 }, 'photo.png')
-    expect(node).toMatchObject(fileNode({ file: 'photo.png', width: 240, height: 180 }))
+    expect(nodeFile(node)).toBe('photo.png')
+    expect(node).toMatchObject({ width: 240, height: 180 })
   })
 
   it('groupNodeDefaults uses the 320x200 default', () => {
     expect(GROUP_FRAME_WIDTH).toBe(320)
     expect(GROUP_FRAME_HEIGHT).toBe(200)
     const node = groupNodeDefaults('id-5', { x: 0, y: 0 })
-    expect(node).toMatchObject(groupNode({ width: 320, height: 200 }))
+    expect(isFrame(node)).toBe(true)
+    expect(node).toMatchObject({ width: 320, height: 200 })
   })
 
   it('every factory centers its box: point sits at (x + width/2, y + height/2)', () => {

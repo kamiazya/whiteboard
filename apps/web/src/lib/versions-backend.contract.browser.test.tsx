@@ -172,7 +172,9 @@ function daemonHarness(): VersionsBackendHarness {
       return json({
         kind: 'spatial',
         canvas: {
-          nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: content.get(id) })],
+          nodes: [
+            textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: content.get(id) ?? '' }),
+          ],
           edges: [],
         },
       })

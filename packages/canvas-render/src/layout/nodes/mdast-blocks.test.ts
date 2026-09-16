@@ -1,6 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import { groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
@@ -17,8 +17,8 @@ describe('layoutMdastBlocks — semantic provenance', () => {
   const root: MdastRoot = {
     type: 'root',
     children: [
-      { type: 'heading', depth: 1, children: [textNode({ value: 'Title' })] },
-      { type: 'heading', depth: 2, children: [textNode({ value: 'Sub' })] },
+      { type: 'heading', depth: 1, children: [{ type: 'text', value: 'Title' }] },
+      { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Sub' }] },
       {
         type: 'list',
         ordered: true,
@@ -26,14 +26,16 @@ describe('layoutMdastBlocks — semantic provenance', () => {
           {
             type: 'listItem',
             children: [
-              { type: 'paragraph', children: [textNode({ value: 'one' })] },
+              { type: 'paragraph', children: [{ type: 'text', value: 'one' }] },
               {
                 type: 'list',
                 ordered: false,
                 children: [
                   {
                     type: 'listItem',
-                    children: [{ type: 'paragraph', children: [textNode({ value: 'nested' })] }],
+                    children: [
+                      { type: 'paragraph', children: [{ type: 'text', value: 'nested' }] },
+                    ],
                   },
                 ],
               },
@@ -41,17 +43,18 @@ describe('layoutMdastBlocks — semantic provenance', () => {
           },
           {
             type: 'listItem',
-            children: [{ type: 'paragraph', children: [textNode({ value: 'two' })] }],
+            children: [{ type: 'paragraph', children: [{ type: 'text', value: 'two' }] }],
           },
         ],
       },
       {
         type: 'paragraph',
         children: [
-          linkNode({
+          {
+            type: 'link',
             url: 'https://example.com',
-            children: [textNode({ value: 'link text' })],
-          }),
+            children: [{ type: 'text', value: 'link text' }],
+          },
         ],
       },
       {
@@ -154,8 +157,8 @@ describe('layoutMdastBlocks — golden block layout', () => {
   const root: MdastRoot = {
     type: 'root',
     children: [
-      { type: 'heading', depth: 1, children: [textNode({ value: 'Doc' })] },
-      { type: 'paragraph', children: [textNode({ value: 'Intro paragraph.' })] },
+      { type: 'heading', depth: 1, children: [{ type: 'text', value: 'Doc' }] },
+      { type: 'paragraph', children: [{ type: 'text', value: 'Intro paragraph.' }] },
       {
         type: 'list',
         ordered: true,
@@ -163,14 +166,16 @@ describe('layoutMdastBlocks — golden block layout', () => {
           {
             type: 'listItem',
             children: [
-              { type: 'paragraph', children: [textNode({ value: 'first' })] },
+              { type: 'paragraph', children: [{ type: 'text', value: 'first' }] },
               {
                 type: 'list',
                 ordered: false,
                 children: [
                   {
                     type: 'listItem',
-                    children: [{ type: 'paragraph', children: [textNode({ value: 'nested' })] }],
+                    children: [
+                      { type: 'paragraph', children: [{ type: 'text', value: 'nested' }] },
+                    ],
                   },
                 ],
               },
@@ -184,8 +189,8 @@ describe('layoutMdastBlocks — golden block layout', () => {
           {
             type: 'tableRow',
             children: [
-              { type: 'tableCell', children: [textNode({ value: 'a' })] },
-              { type: 'tableCell', children: [textNode({ value: 'b' })] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'a' }] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'b' }] },
             ],
           },
         ],
@@ -193,7 +198,7 @@ describe('layoutMdastBlocks — golden block layout', () => {
       { type: 'code', value: 'const x = 1', lang: 'ts' },
       {
         type: 'blockquote',
-        children: [{ type: 'paragraph', children: [textNode({ value: 'quoted' })] }],
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'quoted' }] }],
       },
       { type: 'thematicBreak' },
     ],
@@ -222,7 +227,7 @@ describe('layoutMdastBlocks — node-kind coverage', () => {
               type: 'linkReference',
               identifier: 'full',
               referenceType: 'full',
-              children: [textNode({ value: 'full ref' })],
+              children: [{ type: 'text', value: 'full ref' }],
             },
             {
               type: 'linkReference',
@@ -237,7 +242,7 @@ describe('layoutMdastBlocks — node-kind coverage', () => {
               children: [],
             },
             { type: 'imageReference', identifier: 'img', referenceType: 'shortcut' },
-            { type: 'delete', children: [textNode({ value: 'struck' })] },
+            { type: 'delete', children: [{ type: 'text', value: 'struck' }] },
             { type: 'break' },
             { type: 'embed', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
           ],
@@ -318,7 +323,7 @@ describe('layoutMdastBlocks — default math fallback', () => {
       type: 'root',
       children: [
         { type: 'math', value: 'x^2', meta: null },
-        { type: 'paragraph', children: [textNode({ value: 'after' })] },
+        { type: 'paragraph', children: [{ type: 'text', value: 'after' }] },
       ],
     }
     const scene = layoutMdastBlocks(root, {
@@ -359,9 +364,9 @@ describe('layoutMdastBlocks — inline cursor', () => {
         {
           type: 'paragraph',
           children: [
-            textNode({ value: 'plain ' }),
-            { type: 'strong', children: [textNode({ value: 'bold' })] },
-            textNode({ value: ' tail' }),
+            { type: 'text', value: 'plain ' },
+            { type: 'strong', children: [{ type: 'text', value: 'bold' }] },
+            { type: 'text', value: ' tail' },
           ],
         },
       ],
@@ -404,9 +409,9 @@ describe('layoutMdastBlocks — inline cursor', () => {
         {
           type: 'paragraph',
           children: [
-            textNode({ value: 'first line' }),
+            { type: 'text', value: 'first line' },
             { type: 'break' },
-            textNode({ value: 'second line' }),
+            { type: 'text', value: 'second line' },
           ],
         },
       ],
@@ -429,16 +434,16 @@ describe('layoutMdastBlocks — inline cursor', () => {
         {
           type: 'paragraph',
           children: [
-            textNode({ value: 'line one' }),
+            { type: 'text', value: 'line one' },
             { type: 'break' },
-            textNode({ value: 'line two' }),
+            { type: 'text', value: 'line two' },
             { type: 'break' },
-            textNode({ value: 'line three' }),
+            { type: 'text', value: 'line three' },
           ],
         },
         // A following block's y must start after all 3 lines, proving the
         // block cursor also advanced by the full multi-line height.
-        { type: 'paragraph', children: [textNode({ value: 'next block' })] },
+        { type: 'paragraph', children: [{ type: 'text', value: 'next block' }] },
       ],
     }
     const scene = layoutMdastBlocks(root, options)
@@ -458,7 +463,7 @@ describe('layoutMdastBlocks — text run baseline', () => {
   it('carries a measured ascent baseline while leaving bbox.y as the line top', () => {
     const root: MdastRoot = {
       type: 'root',
-      children: [{ type: 'heading', depth: 1, children: [textNode({ value: 'Heading' })] }],
+      children: [{ type: 'heading', depth: 1, children: [{ type: 'text', value: 'Heading' }] }],
     }
     const scene = layoutMdastBlocks(root, options)
     const heading = scene.nodes.find((n) => n.kind === 'heading')
@@ -486,7 +491,7 @@ describe('layoutMdastBlocks — word wrap', () => {
     const narrow = { measure, maxWidth: 60, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
-      children: [{ type: 'paragraph', children: [textNode({ value: 'one two three four' })] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three four' }] }],
     }
     const scene = layoutMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
@@ -511,7 +516,7 @@ describe('layoutMdastBlocks — word wrap', () => {
     const narrow = { measure, maxWidth: 10, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
-      children: [{ type: 'paragraph', children: [textNode({ value: 'unbreakabletoken' })] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'unbreakabletoken' }] }],
     }
     const scene = layoutMdastBlocks(root, narrow)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
@@ -529,7 +534,7 @@ describe('layoutMdastBlocks — word wrap', () => {
     const tiny = { measure, maxWidth: 1, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
-      children: [{ type: 'paragraph', children: [textNode({ value: 'ab' })] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'ab' }] }],
     }
     const scene = layoutMdastBlocks(root, tiny)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
@@ -543,7 +548,7 @@ describe('layoutMdastBlocks — word wrap', () => {
       const bad = { measure, maxWidth: badWidth, fontFamily: 'sans-serif' }
       const root: MdastRoot = {
         type: 'root',
-        children: [{ type: 'paragraph', children: [textNode({ value: 'one two three' })] }],
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three' }] }],
       }
       expect(() => layoutMdastBlocks(root, bad)).not.toThrow()
     }
@@ -608,8 +613,8 @@ describe('layoutMdastBlocks — word wrap', () => {
         {
           type: 'paragraph',
           children: [
-            textNode({ value: 'longer line ' }),
-            { type: 'strong', children: [textNode({ value: 'word' })] },
+            { type: 'text', value: 'longer line ' },
+            { type: 'strong', children: [{ type: 'text', value: 'word' }] },
           ],
         },
       ],
@@ -651,8 +656,8 @@ describe('layoutMdastBlocks — word wrap', () => {
         {
           type: 'paragraph',
           children: [
-            textNode({ value: 'aaaaa' }),
-            { type: 'strong', children: [textNode({ value: ` bb ${'c'.repeat(21)}` })] },
+            { type: 'text', value: 'aaaaa' },
+            { type: 'strong', children: [{ type: 'text', value: ` bb ${'c'.repeat(21)}` }] },
           ],
         },
       ],
@@ -704,7 +709,7 @@ describe('layoutMdastBlocks — single render path', () => {
   it('produces a deep-equal scene for preview, spatial-text-node, and export callers', () => {
     const root: MdastRoot = {
       type: 'root',
-      children: [{ type: 'paragraph', children: [textNode({ value: 'shared content' })] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'shared content' }] }],
     }
     const preview = layoutMdastBlocks(root, options)
     const spatialTextNode = layoutMdastBlocks(root, options)
@@ -728,12 +733,13 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
           type: 'paragraph',
           children: [
             { type: 'inlineCode', value: 'inline code' },
-            textNode({ value: ' and a ' }),
-            linkNode({
+            { type: 'text', value: ' and a ' },
+            {
+              type: 'link',
               url: 'https://example.com',
-              children: [textNode({ value: 'link' })],
-            }),
-            textNode({ value: ' too.' }),
+              children: [{ type: 'text', value: 'link' }],
+            },
+            { type: 'text', value: ' too.' },
           ],
         },
       ],
@@ -771,7 +777,7 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
   it('collapses interior whitespace sequences to the single space XML will paint', () => {
     const root: MdastRoot = {
       type: 'root',
-      children: [{ type: 'paragraph', children: [textNode({ value: 'kept  double\nsoft' })] }],
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'kept  double\nsoft' }] }],
     }
     const scene = layoutMdastBlocks(root, options)
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
@@ -786,9 +792,9 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
         {
           type: 'paragraph',
           children: [
-            { type: 'strong', children: [textNode({ value: 'a' })] },
-            textNode({ value: ' ' }),
-            { type: 'strong', children: [textNode({ value: 'b' })] },
+            { type: 'strong', children: [{ type: 'text', value: 'a' }] },
+            { type: 'text', value: ' ' },
+            { type: 'strong', children: [{ type: 'text', value: 'b' }] },
           ],
         },
       ],
@@ -810,7 +816,7 @@ describe('layoutMdastBlocks — embed body resolution', () => {
   type Flow = import('@kamiazya/whiteboard-model/mdast').MdastFlowContent
   const para = (text: string): Flow => ({
     type: 'paragraph',
-    children: [textNode({ value: text })],
+    children: [{ type: 'text', value: text }],
   })
   const embedPara = (documentId: string): Flow => ({
     type: 'paragraph',
@@ -914,7 +920,10 @@ describe('layoutMdastBlocks — embed body resolution', () => {
     const root: MdastRoot = rootOf([
       {
         type: 'paragraph',
-        children: [textNode({ value: 'see ' }), { type: 'embed', documentId: A }],
+        children: [
+          { type: 'text', value: 'see ' },
+          { type: 'embed', documentId: A },
+        ],
       },
     ])
     const scene = layoutMdastBlocks(root, {
@@ -936,7 +945,7 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   })
   const para = (text: string): Flow => ({
     type: 'paragraph',
-    children: [textNode({ value: text })],
+    children: [{ type: 'text', value: text }],
   })
   const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
   const canvas: SpatialCanvas = {
@@ -1067,10 +1076,10 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
     edges: [],
   }
   const note: MdastRoot = rootOf([
-    { type: 'heading', depth: 2, children: [textNode({ value: 'Plan' })] },
-    { type: 'paragraph', children: [textNode({ value: 'plan body' })] },
-    { type: 'heading', depth: 2, children: [textNode({ value: 'Launch' })] },
-    { type: 'paragraph', children: [textNode({ value: 'launch body' })] },
+    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Plan' }] },
+    { type: 'paragraph', children: [{ type: 'text', value: 'plan body' }] },
+    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Launch' }] },
+    { type: 'paragraph', children: [{ type: 'text', value: 'launch body' }] },
   ])
   const textsOf = (nodes: readonly unknown[]): string[] => {
     const out: string[] = []
@@ -1131,7 +1140,7 @@ describe('layoutMdastBlocks — a #fragment narrows an embed to the part it name
         {
           type: 'paragraph',
           children: [
-            textNode({ value: 'see ' }),
+            { type: 'text', value: 'see ' },
             { type: 'wikiLink', documentId: A, fragment: 'Launch' },
           ],
         },
@@ -1191,18 +1200,18 @@ describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () 
           {
             type: 'tableRow',
             children: [
-              { type: 'tableCell', children: [textNode({ value: 'k' })] },
-              { type: 'tableCell', children: [textNode({ value: 'v' })] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'k' }] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'v' }] },
             ],
           },
           {
             type: 'tableRow',
             children: [
-              { type: 'tableCell', children: [textNode({ value: 'one' })] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'one' }] },
               {
                 type: 'tableCell',
                 children: [
-                  textNode({ value: 'a cell whose content is long enough that it must wrap' }),
+                  { type: 'text', value: 'a cell whose content is long enough that it must wrap' },
                 ],
               },
             ],
@@ -1210,8 +1219,8 @@ describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () 
           {
             type: 'tableRow',
             children: [
-              { type: 'tableCell', children: [textNode({ value: 'two' })] },
-              { type: 'tableCell', children: [textNode({ value: 'second row' })] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'two' }] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'second row' }] },
             ],
           },
         ],
@@ -1275,7 +1284,7 @@ describe('layoutMdastBlocks — task list markers', () => {
           {
             type: 'listItem',
             ...(checked === undefined ? {} : { checked }),
-            children: [{ type: 'paragraph', children: [textNode({ value: 'ship it' })] }],
+            children: [{ type: 'paragraph', children: [{ type: 'text', value: 'ship it' }] }],
           },
         ],
       },
