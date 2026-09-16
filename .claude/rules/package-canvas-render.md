@@ -2003,6 +2003,23 @@ which is why ADR-0034 makes the record load-bearing rather than bookkeeping.
 The corpus baseline does not move: no corpus board wears a stencil, so the
 partition has one class and is dropped.
 
+**A SCOPED-TAG KEY is the fourth declared partition, and the edges get a
+reading of their own** ([ADR-0040](../../docs/contributing/adr/0040-scoped-tags.md)
+decision 3). A key K partitions the boxes when every box carries at most one
+value under it — the untagged as their own `''` class, like an undressed box —
+and `carriedBy` names it by the key (`health`), which needs no declaration:
+this is the reading `semantic.class/v0` had until the ADR retired it, and
+that partition is gone. When any box carries two values under K the key is
+reported in `multi` with the count and partitions nothing: colour cannot mean
+two things on one box. Plain tags and the board's own tags are never a
+partition. `edges` is the same reading over EVERY edge, judged separately (a
+key can partition the boxes and be `multi` on the edges), with one channel —
+the edge's colour — carried or contested by an edge key exactly as a box's
+colour is by a box key, and counted in `contested` beside the two box
+channels. A second edge channel (the stroke's style) is not claimed until a
+board spends it. The corpus baseline does not move: no corpus board carries a
+tag or colours an edge.
+
 The score is OUTSIDE the mutation lane, for the reason the other two
 instruments are. Hand-checked instead, and that check earned its place: it
 found a treatment map keyed by the node where an id was wanted — which made

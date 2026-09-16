@@ -27,11 +27,15 @@
  */
 
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  type CanvasEdge,
+  parseScopedTag,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import {
   resolveNodeShape,
   resolveNodeStencil,
-  SEMANTIC_CLASS_KEY,
   VISUAL_AXES_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 
@@ -131,8 +135,32 @@ export interface FacetScore {
    * wrong.
    */
   readonly channels: { readonly colour: ChannelReading; readonly shape: ChannelReading }
-  /** How many channels are `contested`. 0, 1 or 2. */
+  /**
+   * Scoped-tag keys that are NOT a partition of the boxes because some box
+   * carries two or more values under them
+   * ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
+   * decision 3), with how many boxes do. No channel can be carried by such
+   * a key: colour cannot mean two things on one box, and a legend that said
+   * it did would be a promise the drawing does not keep. Judged per board.
+   */
+  readonly multi: readonly MultiKey[]
+  /**
+   * The EDGES' reading, over their own population — every edge on the
+   * board, the untagged ones as their own class — and judged separately
+   * from the boxes: a key can partition the boxes and be `multi` on the
+   * edges. One channel, the edge's colour; a second (the stroke's style) is
+   * not claimed until a board shows a distinction spent on it.
+   */
+  readonly edges: { readonly colour: ChannelReading; readonly multi: readonly MultiKey[] }
+  /** How many channels are `contested`, the edge channel included. 0 to 3. */
   readonly contested: number
+}
+
+/** @see FacetScore.multi */
+export interface MultiKey {
+  readonly key: string
+  /** How many elements carry two or more values under the key. */
+  readonly count: number
 }
 
 /** @see FacetScore.channels */
@@ -140,8 +168,8 @@ export type ChannelUse = 'carried' | 'contested' | 'unused'
 
 /**
  * What a channel is doing, and — when it is carrying something — WHICH
- * declared distinctions it carries, by name: `frame`, `kind`, `stencil`, or
- * the facet key of a declared axis.
+ * declared distinctions it carries, by name: `frame`, `kind`, `stencil`, a
+ * scoped-tag key, or the facet key of a declared axis.
  *
  * `use === 'carried'` exactly when `carriedBy` is non-empty; they are two
  * readings of one fact and a test holds them together.
@@ -252,23 +280,15 @@ function declaredPartitions(
   // read as fully carried.
   const byStencil = new Map<string, string>(boxes.map((b) => [b.id, resolveNodeStencil(b) ?? '']))
   out.push({ name: 'stencil', partition: byStencil })
-  // The classification facet is an axis BY CONSTRUCTION, on ADR-0036 §1's
-  // own criterion: `visual.shape/v0` says how a box is drawn and is not one;
-  // `semantic.class/v0` says what a box IS on a named dimension, which is
-  // exactly what a stencil says and why `stencil` is known here by name. A
-  // board coloured by class therefore owes nothing whether or not the
-  // canvas also lists the key in `visual.axes/v0` — and if it does, the
-  // declared loop below skips it, so `carriedBy` names it once.
-  //
-  // Absent is its own class, by the same rule as an undressed box: keyed
-  // through `facetPayloadKey`, which answers a stable key for `undefined`
-  // distinct from every real payload.
-  out.push({
-    name: SEMANTIC_CLASS_KEY,
-    partition: new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, SEMANTIC_CLASS_KEY)])),
-  })
+  // A scoped-tag key is an axis BY CONSTRUCTION, on ADR-0036 §1's own
+  // criterion: `health:failing` says what a box IS on a named dimension,
+  // which is exactly what a stencil says and why `stencil` is known here by
+  // name. So a board coloured by a key owes nothing and declares nothing —
+  // the reading `semantic.class/v0` had before ADR-0040 retired it. The
+  // `multi` half is reported by `scoreFacets`, since a key one box carries
+  // twice partitions nothing.
+  out.push(...tagPartitions(boxes, (b) => b.tags).partitions)
   for (const key of declaredAxisKeys(canvas)) {
-    if (key === SEMANTIC_CLASS_KEY) continue
     // Named by the facet KEY, which is what the canvas itself wrote — so a
     // reading points at the declaration rather than at a position in a list.
     out.push({ name: key, partition: new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])) })
@@ -327,6 +347,56 @@ function facetPayloadKeyOf(node: SpatialNode, key: string): string {
   return facetPayloadKey(node.facets?.[key])
 }
 
+/**
+ * The scoped-tag keys of a population, split into the ones that partition it
+ * and the ones that do not (ADR-0040 decision 3).
+ *
+ * A key K partitions when every element carries AT MOST one value under it;
+ * an element carrying none is the `''` class, the way a box in no frame is,
+ * so a half-classified board still reads and is not silently narrowed to
+ * the elements somebody got round to. When any element carries two or more
+ * values, K is `multi` with the count of such elements and partitions
+ * nothing. Plain tags have no key and are never a partition; the board's own
+ * tags are one object's and are not one either.
+ *
+ * Named by the KEY, which is what the element itself wrote — so a reading
+ * points at the tag a person can see rather than at a position in a list.
+ * A key cannot collide with the three built-in names or a facet key: the
+ * identifier grammar admits no `.` or `/`, and `frame`, `kind` and
+ * `stencil` are refused below rather than left to luck.
+ */
+function tagPartitions<T extends { readonly id: string }>(
+  elements: readonly T[],
+  tagsOf: (element: T) => readonly string[] | undefined,
+): { partitions: NamedPartition[]; multi: MultiKey[] } {
+  const values = new Map<string, Map<string, string[]>>()
+  for (const element of elements) {
+    for (const tag of tagsOf(element) ?? []) {
+      const scoped = parseScopedTag(tag)
+      if (scoped === undefined || BUILT_IN_PARTITIONS.has(scoped.key)) continue
+      const perElement = values.get(scoped.key) ?? new Map<string, string[]>()
+      perElement.set(element.id, [...(perElement.get(element.id) ?? []), scoped.value])
+      values.set(scoped.key, perElement)
+    }
+  }
+  const partitions: NamedPartition[] = []
+  const multi: MultiKey[] = []
+  for (const [key, perElement] of [...values].sort(([a], [b]) => a.localeCompare(b))) {
+    const count = [...perElement.values()].filter((list) => list.length >= 2).length
+    if (count > 0) {
+      multi.push({ key, count })
+      continue
+    }
+    partitions.push({
+      name: key,
+      partition: new Map(elements.map((e) => [e.id, perElement.get(e.id)?.[0] ?? ''])),
+    })
+  }
+  return { partitions, multi }
+}
+
+const BUILT_IN_PARTITIONS: ReadonlySet<string> = new Set(['frame', 'kind', 'stencil'])
+
 const classesOf = (partition: Partition): Map<string, string[]> => {
   const classes = new Map<string, string[]>()
   for (const [id, cls] of partition) classes.set(cls, [...(classes.get(cls) ?? []), id])
@@ -346,15 +416,13 @@ const classesOf = (partition: Partition): Map<string, string[]> => {
  * that decides something.
  */
 function channelUse(
-  read: (t: Treatment) => string,
-  boxes: readonly SpatialNode[],
-  treatment: ReadonlyMap<string, Treatment>,
+  channelOf: (id: string) => string,
+  ids: readonly string[],
   partitions: readonly NamedPartition[],
 ): ChannelReading {
-  const channelOf = (id: string) => read(treatment.get(id) ?? DEFAULT_TREATMENT)
   // One value everywhere is not a distinction, and checking it first is what
   // makes the second condition above implicit.
-  if (new Set(boxes.map((b) => channelOf(b.id))).size <= 1) {
+  if (new Set(ids.map(channelOf)).size <= 1) {
     return { use: 'unused', carriedBy: [] }
   }
   // EVERY partition it is constant within, not the first. A channel can
@@ -439,14 +507,41 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
     }
   }
 
+  const ids = boxes.map((b) => b.id)
+  const of = (read: (t: Treatment) => string) => (id: string) =>
+    read(treatment.get(id) ?? DEFAULT_TREATMENT)
   const channels = {
-    colour: channelUse((t) => t.colour, boxes, treatment, partitions),
-    shape: channelUse((t) => t.shape, boxes, treatment, partitions),
+    colour: channelUse(
+      of((t) => t.colour),
+      ids,
+      partitions,
+    ),
+    shape: channelUse(
+      of((t) => t.shape),
+      ids,
+      partitions,
+    ),
+  } as const
+
+  // The edges, over their own population. Only a tag key can partition them
+  // — an edge has no frame, kind or stencil — and only their colour is read.
+  const edgeTags = tagPartitions(canvas.edges, (e: CanvasEdge) => e.tags)
+  const edgeColour = new Map(canvas.edges.map((e) => [e.id, e.color ?? '']))
+  const edges = {
+    colour: channelUse(
+      (id) => edgeColour.get(id) ?? '',
+      canvas.edges.map((e) => e.id),
+      edgeTags.partitions.filter((p) => new Set(p.partition.values()).size >= 2),
+    ),
+    multi: edgeTags.multi,
   } as const
 
   return {
     channels,
-    contested: Object.values(channels).filter((r) => r.use === 'contested').length,
+    multi: tagPartitions(boxes, (b) => b.tags).multi,
+    edges,
+    contested: [...Object.values(channels), edges.colour].filter((r) => r.use === 'contested')
+      .length,
     partitions: partitions.length,
     constructs: allClasses.length,
     deficit,

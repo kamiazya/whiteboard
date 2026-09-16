@@ -127,8 +127,13 @@ surprises:
   A key K is then a PARTITION when every box carries at most one value
   under K — needing no declaration, the reading `semantic.class/v0` had —
   and colour is `carried(K)` only when it is constant within every class,
-  the untagged class included: five failing boxes in red and one untagged
-  box in red read as carried, one untagged box in green reads as contested.
+  the untagged class included: five failing boxes in red, one healthy in
+  green and one untagged in red read as carried, while two untagged boxes,
+  one red and one green, read as contested — the untagged class is judged
+  like any other, never skipped. (Corrected when increment 2 calibrated it:
+  the first wording had a single untagged box in green reading as
+  contested, which the stated rule does not give — one box is constant
+  within its own class.)
   When any box carries two or more values under K, K is not a partition:
   the score reports it as `multi` with the count of such boxes, and no
   channel can read `carried(K)`. A key that is a partition on one board and
