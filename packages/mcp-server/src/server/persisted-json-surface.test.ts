@@ -94,6 +94,11 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'is the reclaim protocol rather than the shape. mkdir-lock.test.ts drives that protocol, ' +
       'including a lock left by a dead holder',
   ),
+  'server/security/webauthn-assertion.ts': notModelled(
+    'the clientDataJSON a browser sends inside a WebAuthn assertion, so this package is the reader ' +
+      'alone and the authenticator the writer. webauthn-assertion.test.ts builds every field a ' +
+      'real one carries and refuses each malformed shape without throwing',
+  ),
   'server/release/sbom-artifact-state.ts': notModelled(
     'the sidecar is written by a .mjs release script rather than by this package, and ' +
       'sbom-fingerprint.test.ts already asserts that every sidecar that writer can produce parses ' +
