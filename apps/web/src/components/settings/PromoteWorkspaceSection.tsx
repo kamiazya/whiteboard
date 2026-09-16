@@ -524,11 +524,18 @@ export function PromoteWorkspaceSection({
                     </Button>
                   </>
                 )}
-                {passkey.kind === 'registering' && (
-                  <p role="status" aria-live="polite">
-                    Waiting for your passkey…
-                  </p>
-                )}
+                {/* Mounted before it speaks (polite-live-region.test.ts):
+                    a status region that arrives with its message is
+                    announced inconsistently, so this one is always in the
+                    tree and only its text changes. */}
+                <p
+                  role="status"
+                  aria-live="polite"
+                  data-testid="promote-passkey-status"
+                  className={passkey.kind === 'registering' ? undefined : 'sr-only'}
+                >
+                  {passkey.kind === 'registering' ? 'Waiting for your passkey…' : ''}
+                </p>
                 {passkey.kind === 'error' && (
                   <>
                     <p>Registering the passkey failed: {passkey.detail}</p>
