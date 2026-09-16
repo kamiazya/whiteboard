@@ -73,5 +73,10 @@
     "name": "ci-gate",
     "status": "completed",
     "conclusion": "success"
+  },
+  {
+    "name": "test-shared",
+    "status": "completed",
+    "conclusion": "success"
   }
 ]

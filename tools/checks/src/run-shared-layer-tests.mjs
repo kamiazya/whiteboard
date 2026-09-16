@@ -3,7 +3,7 @@
 // @whiteboard/checks — run-shared-layer-tests.
 //
 // CI entry point for the "Test shared-layer packages + arch-lint" step
-// (ci.yml, test-unit job, shard 2). Derives the project list from root
+// (ci.yml, test-shared job). Derives the project list from root
 // vitest.config.ts (see vitest-projects.mjs) instead of a hand-listed set of
 // `--project=` flags, so a new shared-layer package is picked up by CI the
 // moment it registers a node-mode project, with no ci.yml edit.

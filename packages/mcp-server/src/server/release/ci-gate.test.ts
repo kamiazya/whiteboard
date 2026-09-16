@@ -130,12 +130,16 @@ describe('the gate judges the run, and refuses everything but success', () => {
 
   it('passes a real green run of this workflow', () => {
     // Captured from an actual run, so the fixture cannot drift into a shape
-    // the gate happens to like.
+    // the gate happens to like. A job added to the workflow after a capture
+    // is appended to it as a plain success row (today: `test-shared`), since
+    // `needs` is read live and a needed job absent from the run is one of
+    // the failures this gate reports — re-capture when a run is at hand.
     expect(run(fixture('green'))).toEqual([])
   })
 
   it('fails a real red run of this workflow', () => {
-    // The same capture from the run whose dry-run-docker job really failed.
+    // The same capture from the run whose dry-run-docker job really failed
+    // (plus the appended row above, which a red run cannot be re-captured for).
     // This is what settles the question the `needs` form could not: the gate
     // sees per-leg conclusions, so whether a matrix job's single `needs`
     // result turns to `failure` never arises.

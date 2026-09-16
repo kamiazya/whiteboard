@@ -233,14 +233,16 @@ describe('ci.yml runs every node vitest project registered in root vitest.config
     expect([...derivedNames, ...exemptedNames].sort()).toEqual(nonBrowserNames)
   })
 
-  it('ci.yml invokes the derivation script in a test-unit step', () => {
+  it('ci.yml invokes the derivation script in the test-shared job', () => {
     // Scoped to the job AND read without comments, because this one step is
     // what runs every derived project: commenting it out, or moving it to a
     // job that does not run on a pull request, silently retires all nine.
     // Measured against the unscoped version — it passed 14/14 with the step
-    // commented out.
-    const testUnit = readCiJob('test-unit')
-    expect(testUnit).toMatch(/run:\s*node tools\/checks\/src\/run-shared-layer-tests\.mjs/)
+    // commented out. Its own job rather than a test-unit shard: measured on
+    // one run it was the critical path, 2m14s serial behind mcp-node's
+    // shard 2, with every other job finished a minute earlier.
+    const testShared = readCiJob('test-shared')
+    expect(testShared).toMatch(/run:\s*node tools\/checks\/src\/run-shared-layer-tests\.mjs/)
   })
 
   it('every PROJECTS_RUN_ELSEWHERE exemption is actually covered in ci.yml by its declared mechanism', () => {
