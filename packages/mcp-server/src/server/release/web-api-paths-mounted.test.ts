@@ -28,6 +28,7 @@ import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-r
 import { createDaemonIdentity } from '../security/daemon-identity.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
+import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -136,6 +137,7 @@ function mountedApiRoutes(): string[] {
       grants: createPairingGrantStore(pairingDir),
       codes: createPairingCodeStore(),
       tokens: createPairingTokenStore(),
+      credentials: createWebAuthnCredentialStore(pairingDir),
     },
   })
 

@@ -22,6 +22,7 @@ import { createApp } from '../app.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
+import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -70,6 +71,7 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
         grants: createPairingGrantStore(pairingDir),
         codes: createPairingCodeStore(),
         tokens: createPairingTokenStore(),
+        credentials: createWebAuthnCredentialStore(pairingDir),
       },
       serverDeps: resolveServerDeps(createContainer()),
     })

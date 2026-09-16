@@ -7,6 +7,11 @@ export { applyDocumentUpdate } from './operations/apply-document-update.js'
 export type { ApplyWorkspaceDocumentUpdateInput } from './operations/apply-workspace-document-update.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export type {
+  PromoteWorkspaceInput,
+  PromoteWorkspaceResult,
+} from './operations/promote-workspace.js'
+export { promoteWorkspace } from './operations/promote-workspace.js'
+export type {
   RestoreProgress,
   RestoreProgressEvent,
   RestoreVersionInput,
@@ -187,6 +192,7 @@ export type {
 } from './versions/version-entry.js'
 export {
   attestationSchema,
+  base64urlSchema,
   operatorInfoSchema,
   requestOperatorSchema,
   versionEntrySchema,

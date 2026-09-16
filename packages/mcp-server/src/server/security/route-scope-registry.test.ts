@@ -207,6 +207,26 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
+  it('promotion needs both the canvas write and the versions write', () => {
+    expect(resolveApiRouteScope('POST', '/api/w/ws-1/workspace-document/promote')).toEqual({
+      kind: 'scoped',
+      scopes: ['canvas:write', 'versions:write'],
+    })
+  })
+
+  it('credential pins sit at the grant-management bar (runtime:admin)', () => {
+    for (const [method, path] of [
+      ['POST', '/api/pairing/credentials'],
+      ['GET', '/api/pairing/credentials'],
+      ['DELETE', '/api/pairing/credentials/Y3JlZC0x'],
+    ] as const) {
+      expect(resolveApiRouteScope(method, path)).toEqual({
+        kind: 'scoped',
+        scopes: ['runtime:admin'],
+      })
+    }
+  })
+
   it('GET /api/runtime/ping is a declared public route', () => {
     expect(resolveApiRouteScope('GET', '/api/runtime/ping')).toEqual({ kind: 'public' })
   })

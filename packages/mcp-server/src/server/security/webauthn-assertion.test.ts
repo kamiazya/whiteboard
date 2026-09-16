@@ -13,7 +13,11 @@ import { createHash, sign as cryptoSign, generateKeyPairSync, type KeyObject } f
 import { attestationSchema } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
-import { decodeAttestation, verifyWebAuthnAssertion } from './webauthn-assertion.js'
+import {
+  decodeAttestation,
+  parseAuthenticatorData,
+  verifyWebAuthnAssertion,
+} from './webauthn-assertion.js'
 
 const UP = 0x01
 const UV = 0x04
@@ -335,5 +339,88 @@ describe('attestationSchema and decodeAttestation', () => {
     expect(attestationSchema.safeParse({ ...base, signature: 'a+b/c' }).success).toBe(false)
     expect(attestationSchema.safeParse({ ...base, signature: '' }).success).toBe(false)
     expect(attestationSchema.safeParse({ ...base, kind: 'other' }).success).toBe(false)
+  })
+})
+
+/**
+ * Registration authenticatorData: the assertion layout plus, under the AT
+ * flag, the attested credential data — aaguid (16) || credentialIdLength (2)
+ * || credentialId || a COSE key this parser does not read (the key reaches
+ * the daemon as SPKI, which `node:crypto` already understands).
+ */
+function registrationAuthData({
+  rpId,
+  flags,
+  signCount,
+  credentialId,
+  coseKeyBytes = Buffer.alloc(77),
+}: {
+  rpId: string
+  flags: number
+  signCount: number
+  credentialId: Uint8Array
+  coseKeyBytes?: Buffer
+}): Buffer {
+  const head = Buffer.alloc(37)
+  sha256(rpId).copy(head, 0)
+  head[32] = flags
+  head.writeUInt32BE(signCount, 33)
+  const length = Buffer.alloc(2)
+  length.writeUInt16BE(credentialId.length, 0)
+  return Buffer.concat([head, Buffer.alloc(16, 0xaa), length, credentialId, coseKeyBytes])
+}
+
+describe('parseAuthenticatorData', () => {
+  const AT = 0x40
+  const rpId = 'kamiazya-whiteboard.pages.dev'
+  const origin = `https://${rpId}`
+  const challenge = Buffer.from('0123456789abcdef0123456789abcdef')
+  const credentialIdArb = fc.uint8Array({ minLength: 16, maxLength: 64 })
+
+  fcTest.prop(
+    [rpIdArb, signCountArb, credentialIdArb, fc.boolean(), fc.boolean()],
+    withDefaults({ numRuns: 60 }),
+  )(
+    'reads the flags, the count and the attested credential id back',
+    (rpId, signCount, credentialId, be, uv) => {
+      const flags = UP | (uv ? UV : 0) | (be ? BE : 0) | AT
+      const parsed = parseAuthenticatorData(
+        registrationAuthData({ rpId, flags, signCount, credentialId }),
+      )
+      expect(parsed).not.toBeNull()
+      expect(Buffer.from(parsed?.rpIdHash ?? []).equals(sha256(rpId))).toBe(true)
+      expect(parsed?.flags).toEqual({
+        userPresent: true,
+        userVerified: uv,
+        backupEligible: be,
+        backupState: false,
+      })
+      expect(parsed?.signCount).toBe(signCount)
+      expect(Buffer.from(parsed?.credentialId ?? []).equals(Buffer.from(credentialId))).toBe(true)
+    },
+  )
+
+  it('reports no credential id for an assertion, whose AT flag is clear', () => {
+    const parsed = parseAuthenticatorData(
+      build({ ...keypair(), rpId, origin, challenge, flags: UP | UV, signCount: 3 })
+        .authenticatorData,
+    )
+    expect(parsed?.credentialId).toBeUndefined()
+    expect(parsed?.signCount).toBe(3)
+  })
+
+  it('answers null for bytes too short for what their flags promise', () => {
+    expect(parseAuthenticatorData(Buffer.alloc(36))).toBeNull()
+    const truncated = registrationAuthData({
+      rpId,
+      flags: UP | UV | AT,
+      signCount: 1,
+      credentialId: Buffer.alloc(32, 1),
+    }).subarray(0, 37 + 16 + 2 + 10)
+    expect(parseAuthenticatorData(truncated)).toBeNull()
+    // AT set with nothing after the header at all.
+    const bare = Buffer.alloc(37)
+    bare[32] = UP | AT
+    expect(parseAuthenticatorData(bare)).toBeNull()
   })
 })

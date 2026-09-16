@@ -48,35 +48,6 @@ export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export const requestOperatorSchema = operatorInfoSchema.omit({ actor: true }).strict()
 export type RequestOperator = z.infer<typeof requestOperatorSchema>
 
-/**
- * One row of a document's version history, as every surface publishes it —
- * the HTTP list route, the `version_created` broadcast, and the
- * `wb_version_*` tools. The server hydrates missing legacy metadata before
- * answering, so `branchName` is always present on the wire.
- */
-export const versionEntrySchema = z.object({
-  id: z.string(),
-  path: z.string(),
-  createdAt: z.string(),
-  elementCount: z.number().finite(),
-  label: z.string().optional(),
-  auto: z.boolean(),
-  operator: operatorInfoSchema.optional(),
-  branchName: z.string(),
-  /**
-   * The version this point was produced by RESTORING, when it was.
-   *
-   * A restore reconciles a past state onto the live document, so what comes
-   * out is a descendant of both the state you were on and the one you went
-   * back to — a merge. The shape of that is already derivable from the
-   * stored frontiers, and the shape is not the part a reader is missing:
-   * `cmpFrontiers` can say two points diverged and rejoined, and can never
-   * say WHY. This is the merge commit's message.
-   */
-  restoredFrom: z.string().optional(),
-})
-export type VersionEntry = z.infer<typeof versionEntrySchema>
-
 const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 
 /**
@@ -101,7 +72,7 @@ function isCanonicalBase64url(value: string): boolean {
  * and a non-canonical tail are refused rather than normalised, so exactly
  * one spelling of a value travels.
  */
-const base64urlSchema = z
+export const base64urlSchema = z
   .string()
   .min(1)
   .regex(/^[A-Za-z0-9_-]+$/, 'unpadded base64url')
@@ -130,6 +101,42 @@ export const attestationSchema = z.object({
   signature: base64urlSchema,
 })
 export type Attestation = z.infer<typeof attestationSchema>
+
+/**
+ * One row of a document's version history, as every surface publishes it —
+ * the HTTP list route, the `version_created` broadcast, and the
+ * `wb_version_*` tools. The server hydrates missing legacy metadata before
+ * answering, so `branchName` is always present on the wire.
+ */
+export const versionEntrySchema = z.object({
+  id: z.string(),
+  path: z.string(),
+  createdAt: z.string(),
+  elementCount: z.number().finite(),
+  label: z.string().optional(),
+  auto: z.boolean(),
+  operator: operatorInfoSchema.optional(),
+  branchName: z.string(),
+  /**
+   * The version this point was produced by RESTORING, when it was.
+   *
+   * A restore reconciles a past state onto the live document, so what comes
+   * out is a descendant of both the state you were on and the one you went
+   * back to — a merge. The shape of that is already derivable from the
+   * stored frontiers, and the shape is not the part a reader is missing:
+   * `cmpFrontiers` can say two points diverged and rejoined, and can never
+   * say WHY. This is the merge commit's message.
+   */
+  restoredFrom: z.string().optional(),
+  /**
+   * The evidence a person was present when this row was written, when the
+   * operation asked for it (ADR-0039 decision 4). Beside the claim, never its
+   * source: the row is human-reviewed by `operator.kind` and `auto`, and this
+   * is what a reader's "verified" badge rests on. Absent means not asked.
+   */
+  attestation: attestationSchema.optional(),
+})
+export type VersionEntry = z.infer<typeof versionEntrySchema>
 
 /**
  * A version as the MCP tools answer it: what an agent acts on, and nothing

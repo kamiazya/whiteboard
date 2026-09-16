@@ -46,6 +46,12 @@ export {
   decodeBase64UrlText,
   encodeBase64UrlText,
 } from './pairing-link.js'
+export type { PromoteWorkspaceRequest, PromoteWorkspaceResponse } from './promotion.js'
+export {
+  promoteWorkspaceRequestSchema,
+  promoteWorkspaceResponseSchema,
+  promotionChallengeInput,
+} from './promotion.js'
 export type { DaemonPingResponse, RuntimeVerifyResponse } from './runtime.js'
 export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime.js'
 

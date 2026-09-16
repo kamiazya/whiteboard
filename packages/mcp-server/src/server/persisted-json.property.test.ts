@@ -30,6 +30,7 @@ import {
   serverModeRecordSchema,
   writeServerModeRecord,
 } from './security/server-mode-record.js'
+import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import { mirrorBlobsIntoBackup, readBackupBlobManifest } from './store/backup-blob-mirror.js'
 import { backupIsInProgress, withBackupMarker } from './store/backup-in-progress.js'
 import { serverBackupResultSchema } from './store/backup-pass.js'
@@ -151,6 +152,48 @@ describe('the pairing grants file', () => {
       expect(new URL(origin).origin).toBe(origin)
     }
     expect(new Set(reopened.origins()).size).toBe(reopened.origins().length)
+  })
+})
+
+describe('the webauthn credentials file', () => {
+  const b64uArb = fc
+    .uint8Array({ minLength: 16, maxLength: 64 })
+    .map((bytes) => Buffer.from(bytes).toString('base64url'))
+  const registrationArb = fc.record({
+    origin: fc.constantFrom(
+      'https://latest.kamiazya-whiteboard.pages.dev',
+      'http://localhost:5173',
+    ),
+    rpId: fc.constantFrom('latest.kamiazya-whiteboard.pages.dev', 'localhost'),
+    credentialId: b64uArb,
+    publicKeyJwk: fc.record({
+      kty: fc.constant('EC' as const),
+      crv: fc.constant('P-256' as const),
+      x: b64uArb,
+      y: b64uArb,
+    }),
+    backupEligible: fc.boolean(),
+    signCount: fc.integer({ min: 0, max: 0xffffffff }),
+  })
+
+  fcTest.prop(
+    [fc.array(registrationArb, { minLength: 1, maxLength: 6 }), fc.nat()],
+    withDefaults({ numRuns: 60 }),
+  )('lists after a restart exactly the pins it listed before', async (inputs, seed) => {
+    const dataDir = await freshDir('credentials')
+    const store = createWebAuthnCredentialStore(dataDir)
+    for (const input of inputs) store.register(input)
+    const pin = store.list()[seed % store.list().length]
+    if (pin !== undefined && seed % 3 === 0) store.revoke(pin.origin, pin.credentialId)
+    if (pin !== undefined && seed % 3 === 1) {
+      store.recordSignCount(pin.origin, pin.credentialId, pin.signCount + 1)
+    }
+
+    const reopened = createWebAuthnCredentialStore(dataDir)
+    expect(reopened.list()).toEqual(store.list())
+    for (const listed of reopened.list()) {
+      expect(reopened.find(listed.origin, listed.credentialId)).toEqual(listed)
+    }
   })
 })
 

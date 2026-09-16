@@ -42,6 +42,10 @@
       "types": "./src/api-contracts/pairing-link.ts",
       "import": "./src/api-contracts/pairing-link.ts"
     },
+    "./api-contracts/promotion": {
+      "types": "./src/api-contracts/promotion.ts",
+      "import": "./src/api-contracts/promotion.ts"
+    },
     "./api-contracts/roundtrip.test-helper": {
       "types": "./src/api-contracts/roundtrip.test-helper.ts",
       "import": "./src/api-contracts/roundtrip.test-helper.ts"

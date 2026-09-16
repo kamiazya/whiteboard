@@ -35,6 +35,7 @@ import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
+import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
@@ -278,6 +279,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     grants: pairingGrants,
     codes: createPairingCodeStore(),
     tokens: createPairingTokenStore(),
+    credentials: createWebAuthnCredentialStore(getDataDir()),
   }
   const envWebOrigins = options.allowedWebOrigins ?? []
   const allowedWebOrigins = () => {

@@ -29,6 +29,7 @@ export class InMemoryVersionHistory implements VersionHistory {
       branchName: options.branchName ?? 'main',
       ...(options.label === undefined ? {} : { label: options.label }),
       ...(options.operator === undefined ? {} : { operator: options.operator }),
+      ...(options.attestation === undefined ? {} : { attestation: options.attestation }),
     }
     this.rows.set(entry.id, { entry, snapshot: doc.export({ mode: 'snapshot' }) })
     return entry
