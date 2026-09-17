@@ -12,7 +12,7 @@
  * intent — takes it as a value.
  */
 import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
-import { parseScopedTag } from '@kamiazya/whiteboard-model'
+import { parseScopedTag, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { readTagLibrary, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '../server-deps.js'
@@ -91,4 +91,18 @@ export function refuseAgainstLibrary(
       )
     }
   }
+}
+
+/**
+ * Whether a render of this canvas can read anything from a library: the
+ * board, a node or an edge carries a tag. A caller asks this BEFORE
+ * loading the library, so an untagged board — the common one — costs no
+ * listing and no document read.
+ */
+export function carriesATag(canvas: SpatialCanvas): boolean {
+  return (
+    (canvas.tags?.length ?? 0) > 0 ||
+    canvas.nodes.some((node) => (node.tags?.length ?? 0) > 0) ||
+    canvas.edges.some((edge) => (edge.tags?.length ?? 0) > 0)
+  )
 }

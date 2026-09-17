@@ -170,9 +170,14 @@ has written nothing to its first, which a test pins by reading the first
 back. The library is loaded only when the input carries `tags`, so a
 facets-only write lists the workspace zero times (pinned by counting
 listings). `wb_facet_list` answers it as `tagLibrary` from the one listing
-it already takes; `wb_scene_render` passes it to layout only when the
-canvas carries a tag, so an untagged board costs no listing. Only this
-write path is checked: the editor and the `/api` routes are 5b's.
+it already takes, and `GET /document-tags` (`computeDocumentTags`) as
+`library` — the raw record, `{}` for none — beside `inUse`, because a
+picker wants both layers in one round trip and that listing is already
+taken there. `wb_scene_render` passes it to layout only when the canvas
+carries a tag (`carriesATag`, exported for the daemon's export path to ask
+the same question), so an untagged board costs no listing. Only this
+write path is checked: the editor and the `/api` document routes are
+5b-2's.
 
 ## Common mistakes (append as review finds them)
 

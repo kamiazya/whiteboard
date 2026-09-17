@@ -1,9 +1,11 @@
 import { documentIdSchema, parseScopedTag, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { tagLibrarySchema } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
 import type { TagBearer } from '../references/extract.js'
 import type { ServerDeps } from '../server-deps.js'
+import { workspaceTagLibrary } from './tag-library.js'
 
 export const documentTagsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
 export type DocumentTagsInput = z.infer<typeof documentTagsInputSchema>
@@ -51,6 +53,14 @@ export const documentTagsOutputSchema = z
     ),
     /** Every tag in use anywhere in the workspace, with counts — the vocabulary a picker offers. */
     inUse: z.array(tagInUseSchema),
+    /**
+     * What the workspace DECLARES (ADR-0040 decision 5's other layer): the
+     * document at `tags`, read as a value — `{}` when there is none, so a
+     * client never has to tell "declares nothing" from "did not answer".
+     * Beside `inUse` because a picker wants both in one round trip, and the
+     * listing that finds the library is the one already taken here.
+     */
+    library: tagLibrarySchema,
   })
   .strict()
 export type DocumentTagsOutput = z.infer<typeof documentTagsOutputSchema>
@@ -86,7 +96,8 @@ export async function computeDocumentTags(
     if (carried.size > 0) contents.push({ documentId: entry.documentId, tags: [...carried] })
   }
   const bearers = entries.flatMap((entry) => content.get(entry.documentId)?.bearers ?? [])
-  return { documents, contents, inUse: tagsInUse(bearers) }
+  const library = await workspaceTagLibrary(deps, input.workspaceId, 'refuse', entries)
+  return { documents, contents, inUse: tagsInUse(bearers), library }
 }
 
 const COUNTED: Record<TagBearer['what'], keyof Omit<TagInUse, 'tag' | 'key' | 'value'>> = {

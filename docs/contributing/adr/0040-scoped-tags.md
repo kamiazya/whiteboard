@@ -375,9 +375,15 @@ fixes the direction):
 5. **The library**: the declared layer of decision 5.
    - 5a (landed): the `visual.tags/v0` facet and its reader; the write
      check in `wb_facet_set`; the declaration in `wb_facet_list`; colour by
-     intent in the layout, reached today by `wb_scene_render` alone; smoke.
-   - 5b: the editor reads the library — suggestions from the declared keys
-     and values (with the in-use vocabulary of the follow-up to increment
-     4c), the declared colour in the editor's own render and legend, and
-     the tag row refusing what the library forbids; the daemon's export
-     routes passing the library to layout as `wb_scene_render` does.
+     intent in the layout, reached by `wb_scene_render`; smoke.
+   - 5b-1 (landed): the daemon's export routes pass the library to layout
+     as `wb_scene_render` does — read only for a tagged board, and only
+     after probing that the document exists, since the headless read path
+     answers a missing path with an empty document it keeps; and
+     `GET /document-tags` answers the declaration as `library` beside the
+     in-use rows, from the listing it already takes, so a client reads both
+     layers in one round trip.
+   - 5b-2: the editor reads the library — suggestions from the declared
+     keys and values (with the in-use vocabulary of the follow-up to
+     increment 4c), the declared colour in the editor's own render and
+     legend, and the tag row refusing what the library forbids.

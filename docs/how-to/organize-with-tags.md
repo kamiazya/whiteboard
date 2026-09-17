@@ -84,9 +84,9 @@ What the library changes:
   declared colour, and has no colour of its own, is drawn in that colour by
   `wb_scene_render`, so the legend lists the key because the library said
   so rather than because someone coloured every box by hand. A colour set on the box itself always wins, and a
-  box carrying two declared colours under two keys gets neither. The editor
-  and the daemon's export routes draw the declared colour in a later
-  release.
+  box carrying two declared colours under two keys gets neither. An SVG or
+  PNG export taken through the daemon draws it the same way. The editor's
+  own view draws the declared colour in a later release.
 - **The declaration is discoverable.** `wb_facet_list` with a
   `workspaceId` answers the library under `tagLibrary` beside the tags in
   use, so an agent can read the vocabulary it will be held to.

@@ -91,3 +91,18 @@ scan says.
   disabled `/api/debug` router. It is scoped to `routes/` because
   `c.notFound()` is CORRECT three times in `app.ts`: RFC 9728 discovery
   answers a bare 404 by design, and the two UI catch-alls serve a browser.
+
+## The export reads the workspace's tag library (ADR-0040 decision 5)
+
+`export/headless-export.ts`'s `libraryFor` hands `renderSpatialCanvasTo{Png,Svg}`
+the document at `tags` as `HeadlessExportOptions.tagLibrary`, so `/export`
+and `/export-svg` draw the picture `wb_scene_render` draws: a box or an edge
+carrying a declared value and no colour of its own in that colour, the
+legend naming the key. Two guards, each held by an example and
+mutation-checked: it asks only for a board that CARRIES a tag
+(`carriesATag`, server-core's), so the common untagged board costs no
+read; and it probes `documentExists` before `getDoc`, because the headless
+read path answers a missing path with an EMPTY document it then keeps —
+without the probe every export of every workspace would mint a `tags`
+document. `headless-renderer.tag-library.test.ts` holds the threading
+through the real renderer, since the export test mocks it.

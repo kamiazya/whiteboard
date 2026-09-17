@@ -11,7 +11,7 @@ import {
   readDocumentKind,
   readMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { documentIdSchema, type SpatialCanvas, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scene.js'
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
@@ -19,7 +19,7 @@ import { loadReferenceGraph } from '../render/reference-graph.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
-import { workspaceTagLibrary } from './tag-library.js'
+import { carriesATag, workspaceTagLibrary } from './tag-library.js'
 
 /**
  * `DocRef`'s document arm carries `workspaceId` (the record a consumer
@@ -148,10 +148,3 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
 }
 
 /** Whether anything on the board carries a tag — the only case a tag library can change the picture. */
-function carriesATag(canvas: SpatialCanvas): boolean {
-  return (
-    (canvas.tags?.length ?? 0) > 0 ||
-    canvas.nodes.some((node) => (node.tags?.length ?? 0) > 0) ||
-    canvas.edges.some((edge) => (edge.tags?.length ?? 0) > 0)
-  )
-}

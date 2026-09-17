@@ -1,6 +1,11 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  writeDocumentKind,
+  writeFacets,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -33,7 +38,7 @@ vi.mock('./headless-renderer.js', () => ({
 const { exportCanvasHeadless, exportCanvasHeadlessSvg, _hasLegacyElementsForTests } = await import(
   './headless-export.js'
 )
-const { saveDocument } = await import('../store/document-store.js')
+const { saveDocument, documentExists } = await import('../store/document-store.js')
 const { clearCache } = await import('../store/doc-cache.js')
 
 beforeEach(async () => {
@@ -153,6 +158,65 @@ describe('exportCanvasHeadless', () => {
 
     const snapshotAfter = doc.export({ mode: 'snapshot' })
     expect(Buffer.from(snapshotAfter).equals(Buffer.from(snapshotBefore))).toBe(true)
+  })
+})
+
+describe('the workspace tag library reaches the export (ADR-0040 decision 5)', () => {
+  const library = { health: { exclusive: true, values: { ok: { color: '4' }, failing: {} } } }
+  const libraryDoc = () => {
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, 'markdown')
+    writeFacets(doc, { 'visual.tags/v0': { keys: library } } as never)
+    doc.commit()
+    return doc
+  }
+  const board = (tags?: string[]) => {
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, 'spatial')
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({
+          id: 'n1',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          text: 'api',
+          ...(tags ? { tags } : {}),
+        }),
+      ],
+      edges: [],
+    })
+    doc.commit()
+    return doc
+  }
+  const optionsOf = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls[0]?.[1] as { tagLibrary?: unknown } | undefined
+
+  it('hands the renderer the library the document at `tags` declares, for a tagged board', async () => {
+    await saveDocument('ws_lib', 'tags', libraryDoc())
+    await saveDocument('ws_lib', 'design', board(['health:ok']))
+    await exportCanvasHeadlessSvg({ workspaceId: 'ws_lib', path: 'design' })
+    expect(optionsOf(renderSvgSpy)?.tagLibrary).toEqual(library)
+    await exportCanvasHeadless({ workspaceId: 'ws_lib', path: 'design' })
+    expect(optionsOf(renderSpy)?.tagLibrary).toEqual(library)
+  })
+
+  it('hands none when no document sits at `tags` — and creates none by asking', async () => {
+    await saveDocument('ws_nolib', 'design', board(['health:ok']))
+    await exportCanvasHeadlessSvg({ workspaceId: 'ws_nolib', path: 'design' })
+    expect(optionsOf(renderSvgSpy)?.tagLibrary).toBeUndefined()
+    // The headless read path answers a missing document with an EMPTY one,
+    // so the library lookup must probe existence first or every export
+    // would mint a `tags` document.
+    expect(await documentExists('ws_nolib', 'tags')).toBe(false)
+  })
+
+  it('does not read the library for a board that carries no tag', async () => {
+    await saveDocument('ws_untagged', 'tags', libraryDoc())
+    await saveDocument('ws_untagged', 'design', board())
+    await exportCanvasHeadlessSvg({ workspaceId: 'ws_untagged', path: 'design' })
+    expect(optionsOf(renderSvgSpy)?.tagLibrary).toBeUndefined()
   })
 })
 

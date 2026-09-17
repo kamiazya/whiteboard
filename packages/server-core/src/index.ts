@@ -158,6 +158,7 @@ export {
 // CONVENTION, so it is exported rather than spelled again by anything that
 // has to put a library there or find one.
 export { STENCIL_LIBRARY_PATH } from './tools/stencil-library.js'
+export { carriesATag, TAG_LIBRARY_PATH } from './tools/tag-library.js'
 export type { VersionListInput, VersionListOutput } from './tools/version-list.js'
 export {
   createVersionListTool,

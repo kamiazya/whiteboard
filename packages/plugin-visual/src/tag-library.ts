@@ -73,6 +73,13 @@ export const visualTagsFacetSchema = z.object({
   keys: z.record(identifierSchema, tagKeyDeclarationSchema),
 })
 
+/**
+ * The library as a VALUE, for a contract that carries one (the daemon's
+ * `GET /document-tags`): the facet's `keys` record, so the wire and the
+ * facet cannot disagree about what a declaration is.
+ */
+export const tagLibrarySchema = visualTagsFacetSchema.shape.keys
+
 export type TagValueDeclaration = z.infer<typeof tagValueDeclarationSchema>
 export type TagKeyDeclaration = z.infer<typeof tagKeyDeclarationSchema>
 export type VisualTagsFacet = z.infer<typeof visualTagsFacetSchema>

@@ -159,6 +159,18 @@ above does not describe them. A daemon with no Japanese face and a browser with
 one disagree about the same canvas — which is why installing a font is worth
 doing even when the on-screen canvas looks fine.
 
+## Tags, the legend and the workspace's tag library
+
+A board whose boxes or edges carry scoped tags exports with its **legend** in the top-left
+corner whenever the board's colours follow a key, exactly as the editor shows it (see
+[organize with tags](../how-to/organize-with-tags.md#read-the-legend)). When the workspace
+declares a [tag library](../how-to/organize-with-tags.md#declare-the-vocabulary) — the document
+at `tags` — a box or an edge carrying a value the library colours, and having no colour of its
+own, is drawn in the declared colour by `wb_scene_render` and by the daemon's `POST …/export`
+and `POST …/export-svg` alike, so the legend lists the key by declaration rather than by
+observation. A colour set on the element itself always wins. An untagged board never reads the
+library, and a workspace without one exports as stored.
+
 ## Themes and `style`
 
 A canvas may name a theme in its `visual.theme/v0` facet (bundled: `visual.sketch`,
