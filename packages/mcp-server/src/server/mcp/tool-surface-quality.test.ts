@@ -513,10 +513,19 @@ describe('what the tool table costs to read', () => {
       // by what carries each tag. Output-only on the wire, so a model reads
       // the clause and pays for nothing else until it asks with a
       // workspaceId.
+      //
+      // +141 visible / +23 words and +696 wire for ADR-0040 increment 5
+      // (the DECLARED layer): the description says a workspace's tag
+      // library is answered — the document at `tags`, a description,
+      // exclusivity and the admitted values with a colour each — and the
+      // `tagLibrary` output array carries it. Again output-only on the
+      // wire; the visible bytes are the one clause that tells a model where
+      // the vocabulary a write is refused against can be READ, which is
+      // what keeps `wb_facet_set`'s refusal a one-call recovery.
       wb_facet_list: {
-        visibleBytes: 1067,
-        wireBytes: 2862,
-        descriptionWords: 76,
+        visibleBytes: 1208,
+        wireBytes: 3558,
+        descriptionWords: 99,
         parameters: 3,
         undescribed: 0,
         strays: 'refused',
@@ -538,10 +547,19 @@ describe('what the tool table costs to read', () => {
       // own: `wb_tag_rename` measured 987 visible bytes and 5 parameters as
       // a row a model would read on every turn, against an arm inside the
       // one write verb it already reaches for. Round 19 reads the first.
+      //
+      // +195 visible / +35 words / 0 parameters for ADR-0040 increment 5:
+      // one sentence saying a workspace's tag library (the document at
+      // `tags`, shown by wb_facet_list) may restrict a key's values or make
+      // it one value at a time, and that a tag outside it is refused before
+      // anything is written. Priced as a description because the refusal
+      // text alone would leave a model learning the rule by being refused
+      // (C11's evidence is what the model is told AFTER); a sentence that
+      // names the neighbour to read the vocabulary from is C4.
       wb_facet_set: {
-        visibleBytes: 3072,
-        wireBytes: 3917,
-        descriptionWords: 141,
+        visibleBytes: 3267,
+        wireBytes: 4112,
+        descriptionWords: 176,
         parameters: 12,
         undescribed: 1,
         strays: 'refused',
@@ -776,14 +794,22 @@ describe('what the tool table costs to read', () => {
       // bundled facet it was the write path for, `semantic.class/v0`, costs
       // nothing here: a facet is output of `wb_facet_list`, not input to
       // anything a model reads every turn.
-      visibleBytes: 39012,
+      //
+      // Then +336 visible / 0 parameters / +891 wire for ADR-0040
+      // increment 5 (the tag library): a clause on wb_facet_list and a
+      // sentence on wb_facet_set, each priced at its row. No input gained a
+      // parameter — the library is a DOCUMENT, written with the facet write
+      // the surface already has.
+      visibleBytes: 39348,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
       // Then +716 visible / +3 parameters / +1,249 wire for ADR-0040
       // increment 3 (wb_facet_set's tags on every target and rename;
       // wb_facet_list's in-use tags), each priced at its row.
-      wireBytes: 119144,
+      // Then +891 wire for increment 5: wb_facet_list's `tagLibrary` output
+      // (+696) and wb_facet_set's sentence (+195).
+      wireBytes: 120035,
       parameters: 348,
       undescribed: 221,
     })

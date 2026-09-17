@@ -362,7 +362,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // two consequences a session here has to carry: the pnpm patch that makes
 // the lane real, and that every score and survivor list before it was read
 // through that filter.
-const CANVAS_RENDER_BUDGET = 139
+//
+// 139 -> 140 (ADR-0040 increment 5a): colour by intent is applied to the
+// CANVAS before layout, not in the appearance resolver — one paragraph a
+// session here pays for because the obvious place to put a library's colour
+// is the resolver, and there the score behind the legend would never see it.
+const CANVAS_RENDER_BUDGET = 140
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

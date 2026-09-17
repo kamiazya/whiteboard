@@ -1,9 +1,11 @@
 import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import { canvasColorSchema } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { computeTagsInUse, tagInUseSchema } from './document-tags.js'
 import { listWorkspaceDocuments, workspaceFacetRegistry } from './stencil-library.js'
+import { workspaceTagLibrary } from './tag-library.js'
 
 /**
  * What facets this deployment registered, so an agent can DISCOVER a key
@@ -203,6 +205,36 @@ export const facetListOutputSchema = z
      * must not pay for a workspace it never named.
      */
     tags: z.array(tagInUseSchema).optional(),
+    /**
+     * What the workspace DECLARES (ADR-0040 decision 5's other layer): the
+     * keys its tag library names, by name, each with its description,
+     * whether it is one value at a time, and — when the key restricts them
+     * — the values it admits, each with the colour a box or an edge carrying
+     * it is drawn in. Present only with a `workspaceId`, empty for a
+     * workspace that declared nothing; a key without `values` admits any.
+     */
+    tagLibrary: z
+      .array(
+        z
+          .object({
+            key: z.string(),
+            description: z.string().optional(),
+            exclusive: z.boolean().optional(),
+            values: z
+              .array(
+                z
+                  .object({
+                    value: z.string(),
+                    color: canvasColorSchema.optional(),
+                    description: z.string().optional(),
+                  })
+                  .strict(),
+              )
+              .optional(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict()
 export type FacetListOutput = z.infer<typeof facetListOutputSchema>
@@ -211,7 +243,7 @@ export function createFacetListTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_list' as const,
     description:
-      'List what a write may name: facets (the exact key to write, the owning plugin, which objects each may be attached to, the payload schema) and assets (the stencil, theme and icon ids a write names by id). This deployment\u2019s, plus — when workspaceId is given — the stencils the workspace defines in its own library and the tags it already uses, counted by what carries them. Optionally filtered to one target or one asset kind.',
+      'List what a write may name: facets (the exact key to write, the owning plugin, which objects each may be attached to, the payload schema) and assets (the stencil, theme and icon ids a write names by id). This deployment\u2019s, plus — when workspaceId is given — the stencils the workspace defines in its own library, the tags it already uses, counted by what carries them, and the keys its tag library declares (the document at `tags`: per key a description, exclusivity, and the admitted values with a colour each). Optionally filtered to one target or one asset kind.',
     inputSchema: facetListInputSchema,
     outputSchema: facetListOutputSchema,
     execute: async (input: FacetListInput): Promise<FacetListOutput> => {
@@ -284,10 +316,37 @@ export function createFacetListTool(deps: ServerDeps) {
       const tags =
         parsed.workspaceId === undefined || listed === undefined
           ? {}
-          : { tags: await computeTagsInUse(deps, parsed.workspaceId, listed) }
+          : {
+              tags: await computeTagsInUse(deps, parsed.workspaceId, listed),
+              tagLibrary: declaredKeys(
+                await workspaceTagLibrary(deps, parsed.workspaceId, 'refuse', listed),
+              ),
+            }
       return { facets, assets, ...otherTargets(allFacets, parsed.target), ...tags }
     },
   }
+}
+
+/**
+ * The library as an answer: arrays rather than the record it is stored as,
+ * so a reader gets the same order every call (`readTagLibrary` already
+ * sorted both levels) and an absent field for what was not declared.
+ */
+function declaredKeys(library: TagLibrary): NonNullable<FacetListOutput['tagLibrary']> {
+  return Object.entries(library).map(([key, declaration]) => ({
+    key,
+    ...(declaration.description === undefined ? {} : { description: declaration.description }),
+    ...(declaration.exclusive === undefined ? {} : { exclusive: declaration.exclusive }),
+    ...(declaration.values === undefined
+      ? {}
+      : {
+          values: Object.entries(declaration.values).map(([value, declared]) => ({
+            value,
+            ...(declared.color === undefined ? {} : { color: declared.color }),
+            ...(declared.description === undefined ? {} : { description: declared.description }),
+          })),
+        }),
+  }))
 }
 
 /**

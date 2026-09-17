@@ -9,7 +9,11 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { bundledPlugins, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  bundledPlugins,
+  VISUAL_STENCILS_KEY,
+  VISUAL_TAGS_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import {
@@ -20,6 +24,7 @@ import {
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createFacetListTool, facetListOutputSchema } from './facet-list.js'
 import { STENCIL_LIBRARY_PATH } from './stencil-library.js'
+import { TAG_LIBRARY_PATH } from './tag-library.js'
 
 const planning = definePlugin({
   id: 'planning',
@@ -86,6 +91,9 @@ describe('wb_facet_list', () => {
       'planning.due/v0',
       'visual.stencils/v0',
       'visual.symbol/v0',
+      // …and `visual.tags/v0` for the same reason: it is what makes a
+      // document a TAG library (ADR-0040 decision 5).
+      'visual.tags/v0',
     ])
   })
 
@@ -113,7 +121,7 @@ describe('wb_facet_list', () => {
     expect(nodeOnly.otherTargets).toEqual({
       canvas: ['visual.axes/v0', 'visual.edges/v0', 'visual.theme/v0'],
       edge: ['visual.edges/v0'],
-      document: ['visual.stencils/v0'],
+      document: ['visual.stencils/v0', 'visual.tags/v0'],
     })
     // `visual.symbol/v0` attaches to canvas, node AND document, so the
     // filter KEPT it — and it must not also be listed under its other
@@ -551,5 +559,67 @@ describe('wb_facet_list: the tags a workspace already USES (ADR-0040 decision 5)
     const deps = await withTags()
     const result = await createFacetListTool(deps).execute({})
     expect(result).not.toHaveProperty('tags')
+  })
+})
+
+describe('wb_facet_list and a workspace tag library (ADR-0040 decision 5)', () => {
+  const WORKSPACE_ID = 'ws-tags'
+  const OTHER_ID = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
+  const TAGS_ID = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
+  async function withTagLibrary(declared = true) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, OTHER_ID, (doc) => writeDocumentKind(doc, 'markdown'))
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, OTHER_ID)
+    if (!declared) return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+    await seedDoc(store, TAGS_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, {
+        [VISUAL_TAGS_KEY]: {
+          keys: {
+            tier: { values: { web: {}, db: { color: '2' } } },
+            health: {
+              description: 'Serving?',
+              exclusive: true,
+              values: { ok: { color: '4' }, failing: { color: '1', description: 'Paged' } },
+            },
+            owner: { description: 'On call' },
+          },
+        },
+      } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: TAGS_ID,
+      path: TAG_LIBRARY_PATH,
+      kind: 'markdown',
+    })
+    return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+  }
+
+  test('answers the declared keys by name, each with its values by name, only with a workspaceId', async () => {
+    const deps = await withTagLibrary()
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(result.tagLibrary).toEqual([
+      {
+        key: 'health',
+        description: 'Serving?',
+        exclusive: true,
+        values: [
+          { value: 'failing', color: '1', description: 'Paged' },
+          { value: 'ok', color: '4' },
+        ],
+      },
+      { key: 'owner', description: 'On call' },
+      { key: 'tier', values: [{ value: 'db', color: '2' }, { value: 'web' }] },
+    ])
+    expect(facetListOutputSchema.safeParse(result).success).toBe(true)
+    expect((await createFacetListTool(deps).execute({})).tagLibrary).toBeUndefined()
+  })
+
+  test('a workspace with no library answers an empty declaration, not an absent one', async () => {
+    // Absent means "not asked"; empty means "asked, and nothing declared".
+    const deps = await withTagLibrary(false)
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(result.tagLibrary).toEqual([])
   })
 })

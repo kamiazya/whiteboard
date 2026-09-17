@@ -179,9 +179,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // chrome whose every decision is a coordinate, pinned by the backend's
     // byte-level examples; a survivor there would be a legend two pixels
     // over, which no reader could call a defect.
+    // 77 since colour by intent (ADR-0040 decision 5), and 15 mutated:
+    // `tags/declared-colours.ts` is IN, because its three properties share
+    // nothing with it — own colour preserved, coloured iff exactly one
+    // colour is declared, idempotent and colour-only — and each of its
+    // decisions (the contested case, the identity return, the edge branch)
+    // is mutation-shaped.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 14,
-      production: 76,
+      mutated: 15,
+      production: 77,
     })
   })
 

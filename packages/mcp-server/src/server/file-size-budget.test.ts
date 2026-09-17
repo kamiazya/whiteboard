@@ -400,7 +400,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // green over a board that said nothing had happened.
   // +4: the legend attached to the top-level scene (ADR-0040 decision 6) —
   // derived in legend/canvas-legend.ts, so the layout only asks and attaches.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2467,
+  // +10: the tag library option (ADR-0040 decision 5) — declared here, applied
+  // in tags/declared-colours.ts, so the layout only passes the canvas through.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2477,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor

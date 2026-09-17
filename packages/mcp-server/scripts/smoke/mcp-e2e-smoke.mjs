@@ -841,6 +841,118 @@ async function main() {
   }
   console.log('[e2e] wb_document_search → a board found by a node tag, the node named')
 
+  // The workspace's TAG LIBRARY (ADR-0040 decision 5's declared layer), end
+  // to end, for the reason the stencil library is: the declaration is a
+  // record of records in a document facet, serialised into OKF frontmatter
+  // and parsed back, and only then does a write get refused against it or a
+  // box get drawn in the colour a value declares. `health` admits three
+  // values with a colour each and is one value at a time; `region` is one
+  // value at a time with no colours; `phase` (already on the board) declares
+  // nothing and so admits any value.
+  const beforeLibrary = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
+  const tagLibraryDoc = await createDocument({ path: 'tags', kind: 'markdown' })
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [tagLibraryDoc.documentId],
+    facets: {
+      'visual.tags/v0': {
+        keys: {
+          health: {
+            description: 'Whether the component is serving',
+            exclusive: true,
+            values: { ok: { color: '4' }, degraded: { color: '2' }, failing: { color: '1' } },
+          },
+          region: { exclusive: true, values: { eu: {}, us: {} } },
+          phase: {},
+        },
+      },
+    },
+  })
+  // DISCOVERY first: the one call that tells a model what a write will be
+  // refused against, read back through the registry-free reader (a tag
+  // library is data, not a plugin).
+  const declared = await callTool('wb_facet_list', { workspaceId: WORKSPACE_ID })
+  const healthKey = (declared.tagLibrary ?? []).find((key) => key.key === 'health')
+  const degradedValue = healthKey?.values?.find((value) => value.value === 'degraded')
+  if (healthKey?.exclusive !== true || degradedValue?.color !== '2') {
+    throw new Error(
+      `wb_facet_list did not answer the tag library: ${JSON.stringify(declared.tagLibrary)}`,
+    )
+  }
+  console.log('[e2e] wb_facet_list(workspaceId) → the tag library a workspace declares')
+  // An admitted write lands; an undeclared value and a second value under
+  // an exclusive key are each refused BEFORE anything is written, with the
+  // library's answer in the refusal.
+  const admitted = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    nodeId: 'redis',
+    tags: { add: ['region:eu'] },
+  })
+  if (
+    JSON.stringify(admitted.updated[0]?.tags) !== JSON.stringify(['health:degraded', 'region:eu'])
+  ) {
+    throw new Error(`an admitted tag was not written: ${JSON.stringify(admitted)}`)
+  }
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      nodeId: 'redis',
+      tags: { add: ['health:unknown'] },
+    },
+    'a value the tag library does not admit',
+    'is not admitted',
+  )
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      nodeId: 'redis',
+      tags: { add: ['region:us'] },
+    },
+    'a second value under a key the library makes exclusive',
+    'one value at a time',
+  )
+  const afterRefusals = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  const redisAfter = JSON.parse(afterRefusals.documents[0].content).nodes.find(
+    (n) => n.id === 'redis',
+  )
+  if (
+    JSON.stringify(redisAfter?.['x-whiteboard']?.tags) !==
+    JSON.stringify(['health:degraded', 'region:eu'])
+  ) {
+    throw new Error(`a refused write left a mark: ${JSON.stringify(redisAfter)}`)
+  }
+  // Colour BY INTENT: the box carries health:degraded and no colour of its
+  // own, so the render paints it in the value's declared colour — which is
+  // what makes a library more than a validator. Read as a fill the render
+  // gained since the library was written: `degraded` declares preset 2,
+  // which nothing else on this board wears, and `#ffedd5` is that preset's
+  // light fill (`SPATIAL_LIGHT_PALETTE.presets['2'].fill`). The legend's
+  // KEYS are deliberately not asserted here: `lake` wears its stencil's
+  // colour for another reason, so once redis is painted the facet score
+  // reads the colour channel as contested and the legend lists no key —
+  // the instrument's honest answer on this board, and the second fill the
+  // render gains is that note's grey. A clean board's legend is pinned at
+  // the unit layer.
+  const byIntent = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
+  const fillsOf = (svg) => new Set([...svg.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]))
+  const gained = [...fillsOf(byIntent.svg)].filter((fill) => !fillsOf(beforeLibrary.svg).has(fill))
+  if (!gained.includes('#ffedd5')) {
+    throw new Error(
+      `wb_scene_render did not paint the tagged box in its declared colour (gained fills: ${JSON.stringify(gained)})`,
+    )
+  }
+  console.log(
+    '[e2e] tag library → admitted write lands, undeclared and exclusive refused, painted by intent',
+  )
+
   // A FREE END (ADR-0037 slice 3): an edge from a node to a bare point on
   // the canvas. Here rather than only at the unit layer because the endpoint
   // is a discriminated union crossing a process boundary in BOTH directions

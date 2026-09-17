@@ -6,6 +6,7 @@ import {
   readSpatialCanvas,
   writeCoreFacets,
   writeDocumentKind,
+  writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { SCOPED_TAG_RULE } from '@kamiazya/whiteboard-model'
@@ -33,6 +34,7 @@ import {
   NodeAndEdgeTargetError,
   NodeTargetNeedsOneDocumentError,
 } from './facet-set.js'
+import { TAG_LIBRARY_PATH, TagLibraryError } from './tag-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -1126,6 +1128,169 @@ describe('wb_facet_set and a workspace stencil library', () => {
     } as never)
 
     expect(listings).toBe(0)
+  })
+})
+
+describe('wb_facet_set and a workspace tag library (ADR-0040 decision 5)', () => {
+  const LIBRARY_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W0'
+  const SECOND_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W1'
+  const library = {
+    health: { exclusive: true, values: { ok: { color: '4' }, failing: { color: '1' } } },
+    region: { values: { eu: {}, us: {} } },
+  }
+
+  async function boardUnderLibrary(keys: Record<string, unknown> = library) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'api',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'api',
+            tags: ['health:ok'],
+          }),
+        ],
+        edges: [],
+      })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, LIBRARY_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, { 'visual.tags/v0': { keys } } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: LIBRARY_ID,
+      path: TAG_LIBRARY_PATH,
+      kind: 'markdown',
+    })
+    return store
+  }
+
+  test('refuses a value the library does not admit, on a node, before anything is written', async () => {
+    const store = await boardUnderLibrary()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'api',
+        tags: { add: ['health:degraded'] },
+      }),
+    ).rejects.toThrow(TagLibraryError)
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'api',
+        tags: { add: ['health:degraded'] },
+      }),
+    ).rejects.toThrow(/health:degraded.*node api.*failing, ok/)
+  })
+
+  test('refuses a second value under an exclusive key, and admits one under a key that is not', async () => {
+    const store = await boardUnderLibrary()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'api',
+        tags: { add: ['health:failing'] },
+      }),
+    ).rejects.toThrow(/health is one value at a time.*node api.*health:ok and health:failing/)
+    const two = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'api',
+      tags: { add: ['region:eu', 'region:us'] },
+    })
+    expect(two.updated[0]?.tags).toEqual(['health:ok', 'region:eu', 'region:us'])
+  })
+
+  test('a rename through the board is checked on every node it reaches', async () => {
+    const store = await boardUnderLibrary()
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { rename: [{ from: 'health:ok', to: 'health:degraded' }] },
+      }),
+    ).rejects.toThrow(/health:degraded.*node api/)
+  })
+
+  test('a markdown document’s own tags are checked too', async () => {
+    const store = await boardUnderLibrary()
+    await seedDoc(store, SECOND_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags: [] })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, SECOND_ID)
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [SECOND_ID],
+        tags: { add: ['region:asia'] },
+      }),
+    ).rejects.toThrow(/region:asia.*document.*eu, us/)
+  })
+
+  test('a batch refused on its second document has written nothing to its first', async () => {
+    // `region` exclusive; the note (second in the batch) already carries
+    // region:eu, so adding region:us is refused there — and the board,
+    // first in the batch and unobjectionable on its own, must be untouched.
+    const store = await boardUnderLibrary({
+      region: { exclusive: true, values: { eu: {}, us: {} } },
+    })
+    await seedDoc(store, SECOND_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags: ['region:eu'] })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, SECOND_ID, 'note')
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID, SECOND_ID],
+        tags: { add: ['region:us'] },
+      }),
+    ).rejects.toThrow(TagLibraryError)
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    if (loaded === null) throw new Error('nothing stored')
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    expect(readSpatialCanvas(doc).tags).toBeUndefined()
+  })
+
+  test('a tag write lists the workspace once to find the library; a facets-only write never does', async () => {
+    const store = await boardUnderLibrary()
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    const tool = createFacetSetTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'api',
+      tags: { add: ['region:eu'] },
+    })
+    expect(listings).toBe(1)
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'api',
+      facets: { 'example.kanban/v1': { status: 'todo' } },
+    } as never)
+    expect(listings).toBe(1)
   })
 })
 
