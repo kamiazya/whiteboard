@@ -25,6 +25,9 @@ export const MUTATED = [
   'src/layout/edges/diagonal-ink.ts',
   'src/layout/edges/edge-crossing-sweep.ts',
   'src/layout/edges/grid-route.ts',
+  // Colour by intent (ADR-0040 decision 5): three properties over random
+  // boards and libraries, stated from the declaration rather than the code.
+  'src/tags/declared-colours.ts',
   // Serialization: escaping and character legality, byte-identical output.
   'src/svg/format.ts',
   'src/svg/hoist.ts',

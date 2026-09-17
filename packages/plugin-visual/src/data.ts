@@ -30,6 +30,7 @@ import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
 import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
 import { visualStencilsFacetSchema } from './stencil-library.js'
 import { VISUAL_STENCILS } from './stencils.js'
+import { visualTagsFacetSchema } from './tag-library.js'
 import { VISUAL_THEMES } from './themes.js'
 
 /**
@@ -448,6 +449,19 @@ export const visualPlugin = definePlugin({
       // signal rather than a half-rendered payload. The affordance for
       // growing a vocabulary is editing the document, which is the whole
       // reason a library is one.
+    }),
+    defineFacet({
+      name: 'tags',
+      displayName: 'Tag library',
+      version: 'v0',
+      // A DOCUMENT only, for the reason `stencils` is: this facet says which
+      // tags a document DECLARES for a workspace, not which tags anything
+      // wears — those are core OKF and no facet's (ADR-0040 decision 2).
+      targets: ['document'],
+      schema: visualTagsFacetSchema,
+      // No `editor`: a record of records is outside the derived form's
+      // vocabulary, and the affordance for growing a vocabulary is editing
+      // the document, which is what a library is.
     }),
   ],
   // The vendored set, registered as ADR-0013 decision 3 assets so a

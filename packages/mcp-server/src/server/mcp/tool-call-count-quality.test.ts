@@ -253,7 +253,12 @@ describe('what an errand costs in tool calls', () => {
         // — the listing no longer carries the second plugin's facet, its
         // schema and its editor spec. What a box means left the registry
         // for the tags a node carries, which this errand does not read.
-        responseBytes: 10190,
+        // Then 10,190 -> 12,162: +1,972 is `visual.tags/v0` joining the list
+        // (ADR-0040 decision 5's declared layer, the tag LIBRARY document's
+        // facet) — its schema is a record of keys each holding a record of
+        // values, so it is the widest facet schema the listing carries, and
+        // the errand pays to see it exactly as it paid for the axes facet.
+        responseBytes: 12162,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the

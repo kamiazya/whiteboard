@@ -34,6 +34,63 @@ board, so an SVG or PNG export carries it too; in the editor it collapses
 to its title. When colour is used but no key explains it, the legend says
 so in one line instead of guessing.
 
+## Declare the vocabulary
+
+A workspace can say up front which keys exist, which values a key admits,
+what colour each value is drawn in, and whether a key is **one value at a
+time**. That declaration is a **tag library**: an ordinary markdown
+document at the path `tags` carrying the `visual.tags/v0` facet, the same
+shape as the [stencil library](define-your-own-stencils.md#growing-the-vocabulary).
+Today it is written through the MCP server — one `wb_facet_set` call on
+that document:
+
+```json
+{
+  "workspaceId": "…",
+  "documentIds": ["<the document at tags>"],
+  "facets": {
+    "visual.tags/v0": {
+      "keys": {
+        "health": {
+          "description": "Whether the component is serving",
+          "exclusive": true,
+          "values": {
+            "ok": { "color": "4" },
+            "degraded": { "color": "3" },
+            "failing": { "color": "1" }
+          }
+        },
+        "region": { "exclusive": true, "values": { "eu": {}, "us": {} } },
+        "phase": {}
+      }
+    }
+  }
+}
+```
+
+A key with no `values` admits any value; a key with `values` admits only
+those. A key that is not `exclusive` may carry several values on one object
+(`region:eu` and `region:us` together), which is the default.
+
+What the library changes:
+
+- **A write outside it is refused before anything is written.** Tagging a
+  box `health:unknown`, or adding `region:us` to a box already carrying
+  `region:eu` under an exclusive key, is refused by `wb_facet_set` with the
+  admitted values in the message, and a batch refused on one document has
+  written nothing to the others. The editor's tag rows do not read the
+  library yet, so a tag typed there is not checked against it.
+- **Colour by intent.** A box or an edge that carries a value with a
+  declared colour, and has no colour of its own, is drawn in that colour by
+  `wb_scene_render`, so the legend lists the key because the library said
+  so rather than because someone coloured every box by hand. A colour set on the box itself always wins, and a
+  box carrying two declared colours under two keys gets neither. The editor
+  and the daemon's export routes draw the declared colour in a later
+  release.
+- **The declaration is discoverable.** `wb_facet_list` with a
+  `workspaceId` answers the library under `tagLibrary` beside the tags in
+  use, so an agent can read the vocabulary it will be held to.
+
 ## Find by tag
 
 In the document browser:

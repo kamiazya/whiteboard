@@ -19,6 +19,7 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -30,6 +31,7 @@ import {
   NodeNotFoundError,
 } from './errors.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
+import { refuseAgainstLibrary, workspaceTagLibrary } from './tag-library.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
@@ -251,7 +253,7 @@ export function createFacetSetTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_set' as const,
     description:
-      "Tag documents, boards, nodes and edges, or set facets on them. `tags` adds and removes tags by name — on one or more markdown documents (OKF core tags), on a spatial document's board, or with nodeId / edgeId on one node or one edge — leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme and visual.edges/v0 routes every edge), or — with nodeId or edgeId — on one node or one edge of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. One payload covers every document named, so tagging five notes is one call.",
+      "Tag documents, boards, nodes and edges, or set facets on them. `tags` adds and removes tags by name — on one or more markdown documents (OKF core tags), on a spatial document's board, or with nodeId / edgeId on one node or one edge — leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme and visual.edges/v0 routes every edge), or — with nodeId or edgeId — on one node or one edge of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. A workspace's tag library (the document at `tags`; wb_facet_list shows it) may restrict a key's values or make it one value at a time, and a tag outside it is refused before anything is written. One payload covers every document named, so tagging five notes is one call.",
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
@@ -337,6 +339,26 @@ export function createFacetSetTool(deps: ServerDeps) {
       // and the caller reading that error has no way to learn it happened.
       for (const documentId of input.documentIds) {
         await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
+      }
+
+      // What the workspace's tag library forbids is refused BEFORE any
+      // document is written, for the reason the check above runs first:
+      // the third document's refusal must not leave the first two tagged.
+      // The library is read once per batch (a listing plus a read), and
+      // only for a batch that writes tags — a facets-only write gets the
+      // same answer either way and must not pay for it. With no library
+      // the pre-pass costs nothing further: every set passes, so no
+      // document is loaded twice.
+      if (input.tags !== undefined) {
+        const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
+        if (Object.keys(library).length > 0) {
+          for (const documentId of input.documentIds) {
+            const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
+            for (const { what, tags } of tagSetsAfter(doc, input, documentId)) {
+              refuseAgainstLibrary(library, tags, what)
+            }
+          }
+        }
       }
 
       const updated: FacetSetOutput['updated'] = []
@@ -515,6 +537,55 @@ async function setOne(
   await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
 
   return { documentId, facets: mergedFacets, ...(tags === undefined ? {} : { tags }) }
+}
+
+/**
+ * Every tag set a write to `documentId` would leave behind, each named
+ * for a refusal — the node's, the edge's, the board's and every node's
+ * and edge's a rename reaches, or the note's own. A target the write
+ * cannot reach (no such node, the wrong kind) answers nothing here and
+ * leaves `setOne` to refuse it by name.
+ */
+function tagSetsAfter(
+  doc: LoroDoc,
+  input: FacetSetInput,
+  documentId: string,
+): { what: string; tags: string[] }[] {
+  const change = input.tags
+  if (change === undefined) return []
+  const kind = readDocumentKind(doc)
+  if (input.nodeId !== undefined || input.edgeId !== undefined) {
+    if (kind !== 'spatial') return []
+    const canvas = readSpatialCanvas(doc)
+    const element =
+      input.nodeId !== undefined
+        ? canvas.nodes.find((node) => node.id === input.nodeId)
+        : canvas.edges.find((edge) => edge.id === input.edgeId)
+    if (element === undefined) return []
+    const what = input.nodeId !== undefined ? `node ${input.nodeId}` : `edge ${input.edgeId}`
+    return [{ what, tags: applyTagChange(element.tags, change) }]
+  }
+  if (input.target === 'canvas' || kind === 'spatial') {
+    if (kind === 'markdown') return []
+    const canvas = readSpatialCanvas(doc)
+    const sets = [{ what: 'the board', tags: applyTagChange(canvas.tags, change) }]
+    const renames = change.rename ?? []
+    if (renames.length === 0) return sets
+    for (const node of canvas.nodes) {
+      if (node.tags !== undefined) {
+        sets.push({ what: `node ${node.id}`, tags: applyTagChange(node.tags, { rename: renames }) })
+      }
+    }
+    for (const edge of canvas.edges) {
+      if (edge.tags !== undefined) {
+        sets.push({ what: `edge ${edge.id}`, tags: applyTagChange(edge.tags, { rename: renames }) })
+      }
+    }
+    return sets
+  }
+  const core = readCoreFacets(doc)
+  if (core === undefined) return []
+  return [{ what: `document ${documentId}`, tags: applyTagChange(core.tags, change) }]
 }
 
 /**

@@ -214,6 +214,29 @@ delivers the whole UX finding without it, and because a library document
 that nobody has needed yet is the "we ship it for them" failure ADR-0034
 warned against.
 
+*Landed (increment 5a):* the library is the document at `tags` carrying
+`visual.tags/v0` — per key a description, `exclusive`, and `values` each
+with a colour and a description — read by `readTagLibrary` in
+`plugin-visual`. One thing differs from the paragraph above, and it is
+recorded rather than quietly done: the library is handed to its readers as
+DATA, not composed into a synthetic plugin. A stencil library composes
+because a stencil id has to RESOLVE through the registry a tool writes
+against; nothing in the registry reads a tag, so a composition would have
+been a registry that changed for no reader. Three readers take the value:
+`wb_facet_set` refuses, before any write, a tag outside a key's admitted
+values or a second value under an exclusive key, on the tag set each
+target would END UP carrying (a rename through a board is checked on every
+node it reaches; a batch refused on one document has written nothing to the
+others); `wb_facet_list` answers the declaration as `tagLibrary` beside the
+in-use counts; and the layout applies `withDeclaredColours` to the canvas
+before laying it out, so a box or an edge carrying a declared value and no
+colour of its own is drawn in that colour — on the canvas rather than in
+the appearance resolver, so the facet score, the appearance and the legend
+read one intent. An own colour wins; two declared colours under two keys
+give none. Only the MCP write path is checked today: the editor's tag rows
+and the `/api` document routes neither read the library nor refuse
+against it, which is increment 5b's.
+
 ### 6. The reading surfaces: chips in the editor, a legend on the board
 
 - **Facets panel**: the Meaning group's form is replaced by a tag row on the
@@ -349,4 +372,12 @@ fixes the direction):
    boards, the document header sharing it; group order declared; the legend
    on the board and in export; a tags panel for the workspace's vocabulary
    in use.
-5. **The library** (when asked for): the declared layer of decision 5.
+5. **The library**: the declared layer of decision 5.
+   - 5a (landed): the `visual.tags/v0` facet and its reader; the write
+     check in `wb_facet_set`; the declaration in `wb_facet_list`; colour by
+     intent in the layout, reached today by `wb_scene_render` alone; smoke.
+   - 5b: the editor reads the library — suggestions from the declared keys
+     and values (with the in-use vocabulary of the follow-up to increment
+     4c), the declared colour in the editor's own render and legend, and
+     the tag row refusing what the library forbids; the daemon's export
+     routes passing the library to layout as `wb_scene_render` does.

@@ -2070,3 +2070,20 @@ caller passing its own viewBox reserves it with that function
 Measured before the band: the panel sat over the first box of every tagged
 board. `sceneBounds` itself is untouched, so a legend moves no digest, no
 drawing score and no editor coordinate.
+
+**Colour BY INTENT is applied to the CANVAS before layout, never in the
+appearance resolver** (ADR-0040 decision 5's declared layer;
+`tags/declared-colours.ts`). `withDeclaredColours(canvas, library)` gives a
+box or an edge that carries a value with a declared colour, and has no
+colour of its own, that colour; `SpatialLayoutOptions.tagLibrary` (a
+`TagLibrary`, plugin-visual's type) is what a caller passes, and
+`layoutSpatialCanvasWithAnchors` applies it first. On the canvas so that
+the facet score, the appearance and the legend read ONE intent: a legend
+judged by a score that reads `node.color` would never list a key the
+library coloured if the colour lived in the resolver alone. Two rules,
+each mutation-checked: an own colour wins (the library is a default, not a
+theme), and a box carrying declared colours under two keys gets none — a
+first-wins rule painted one key's meaning over the other's, and the
+property caught it. The same canvas object comes back when nothing changes,
+so an un-libraried layout keeps the frozen-singleton property the editor's
+`useMemo` relies on. In the mutation lane.

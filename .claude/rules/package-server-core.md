@@ -154,6 +154,26 @@ use by what carries it. `wb_facet_list` lists the workspace ONCE and hands the
 listing to both the library and the counts, which a test holds by counting
 listings.
 
+**The tag LIBRARY is data, read where it is needed** (ADR-0040 decision 5,
+increment 5a; `tools/tag-library.ts`). `workspaceTagLibrary(deps, ws,
+unknownWorkspace, listed?)` answers what the document at `TAG_LIBRARY_PATH`
+(`tags`) declares, or `{}` — the same shape and the same `'deployment' |
+'refuse'` choice as `workspaceFacetRegistry`, but it composes nothing: a
+stencil id has to resolve through the registry, and nothing in the registry
+reads a tag. `refuseAgainstLibrary(library, tags, what)` throws
+`TagLibraryError` for a value a key does not admit or a second value under
+an exclusive key, and `wb_facet_set` runs it as a PRE-PASS over the tag set
+each target would end up carrying (`tagSetsAfter`: the node or edge named, or
+the board and every node and edge a rename reaches, or the document),
+before any document is written — so a batch refused on its second document
+has written nothing to its first, which a test pins by reading the first
+back. The library is loaded only when the input carries `tags`, so a
+facets-only write lists the workspace zero times (pinned by counting
+listings). `wb_facet_list` answers it as `tagLibrary` from the one listing
+it already takes; `wb_scene_render` passes it to layout only when the
+canvas carries a tag, so an untagged board costs no listing. Only this
+write path is checked: the editor and the `/api` routes are 5b's.
+
 ## Common mistakes (append as review finds them)
 
 - Importing a store/sync implementation directly instead of taking it via

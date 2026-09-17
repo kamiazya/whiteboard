@@ -373,3 +373,21 @@ stayed green — two affordances aiming at the same pixel.
   cannot disagree about what `visual.sketch` is. Nothing in `ui.tsx`
   changes for a canvas facet: the canvas-settings vessel in apps/web is
   where a tier-2 canvas facet is rendered.
+
+## The tag library facet (ADR-0040 decision 5)
+
+- `visual.tags/v0` (document target, `data.ts`; `tag-library.ts`) is the
+  DECLARED layer of scoped tags: `keys`, each with a `description`, an
+  `exclusive` flag and `values` each carrying a `color` (a canvas preset)
+  and a `description`. Keys and values are checked against
+  `TAG_IDENTIFIER_PATTERN`, so a key the library declares is one a tag can
+  spell. It is the same shape as `visual.stencils/v0` — a record of records
+  in a document facet at a well-known path — and it deliberately has NO
+  registry reader: `readTagLibrary(facets)` answers a `TagLibrary` value
+  (keys and values sorted, a malformed facet reading as `{}`), and
+  `declaredColourOf(library, tag)` is the one lookup the layout needs. A
+  stencil library composes into the registry because a stencil id must
+  resolve through it; nothing in the registry reads a tag, so composing a
+  tag library would change a registry for no reader. The facet has no
+  editor form (`facetForm` answers `unsupported`), which is the honest
+  state until the editor reads it (5b).

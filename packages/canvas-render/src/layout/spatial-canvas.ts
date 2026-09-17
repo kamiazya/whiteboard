@@ -45,7 +45,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts, endNode, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
+import type { TagLibrary, VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type {
@@ -72,6 +72,7 @@ import {
   withReferenceSeams,
 } from '../references/seams.js'
 import { sceneBounds } from '../scene-bounds.js'
+import { withDeclaredColours } from '../tags/declared-colours.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import {
@@ -299,6 +300,13 @@ export interface SpatialLayoutOptions {
    * set beside it wins, for a caller probing one in isolation.
    */
   readonly references?: ReferenceSeams
+  /**
+   * The workspace's tag library (ADR-0040 decision 5): a box or an edge
+   * carrying a value it colours, and no colour of its own, is drawn in that
+   * colour — applied to the CANVAS (`withDeclaredColours`) so the score, the
+   * appearance and the legend agree. Absent (a digest), drawn as stored.
+   */
+  readonly tagLibrary?: TagLibrary
   /**
    * What a text node's `[[target]]` resolves to, applied to its parsed body
    * the way a note's caller applies it before layout. Filled from
@@ -1455,9 +1463,11 @@ export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayou
  * second computation beside it.
  */
 export function layoutSpatialCanvasWithAnchors(
-  canvas: SpatialCanvas,
+  stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
+  // Intent first, so every reader below sees the same colours.
+  const canvas = withDeclaredColours(stored, options.tagLibrary)
   return layoutSpatialCanvasInternal(canvas, {
     ...withSpatialReferenceSeams(options),
     ...resolveContributions(canvas, options),

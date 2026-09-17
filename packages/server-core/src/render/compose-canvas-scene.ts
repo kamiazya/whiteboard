@@ -12,6 +12,7 @@ import {
   sceneDocumentBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { getLogger } from '../log.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
@@ -60,6 +61,14 @@ export interface ComposeCanvasSceneOptions {
    * what the digest wants: it never draws a theme, so it never asks.
    */
   readonly fontAvailable?: (family: string) => boolean
+  /**
+   * The workspace's tag library (ADR-0040 decision 5), for colour by
+   * intent and a legend that lists a key by declaration. Absent keeps the
+   * scene a function of the canvas alone — which the digest requires: a
+   * change signal for THIS document must not move because another
+   * document, the library, did.
+   */
+  readonly tagLibrary?: TagLibrary
 }
 
 /**
@@ -91,6 +100,7 @@ export function composeCanvasScene(
     ...(options?.style === undefined ? {} : { style: options.style }),
     ...(options?.fontAvailable === undefined ? {} : { fontAvailable: options.fontAvailable }),
     ...(options?.threads === undefined ? {} : { threads: options.threads }),
+    ...(options?.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's
     // words: a node's intrinsic size, not its zoom.
