@@ -1,6 +1,7 @@
 import {
   writeCoreFacets,
   writeDocumentKind,
+  writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -64,6 +65,7 @@ describe('GET /document-tags', () => {
 const WORKSPACE_ID = 'ws-tags'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W1'
 const BOARD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W2'
+const LIBRARY_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W3'
 
 describe('the workspace tag projection', () => {
   const seeded = async () => {
@@ -136,5 +138,32 @@ describe('the workspace tag projection', () => {
       },
       { tag: 'retro', documents: 1, boards: 0, nodes: 0, edges: 0 },
     ])
+    // No document at `tags`: nothing declared, and the field says so rather
+    // than being absent, so a client never has to tell "none" from "old".
+    expect(out.library).toEqual({})
+  })
+
+  it('answers the tag library the workspace declares beside the vocabulary in use', async () => {
+    const deps = await seeded()
+    const store = deps.documentStore as FakeDocumentStore
+    await seedDoc(store, LIBRARY_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, {
+        'visual.tags/v0': {
+          keys: { health: { exclusive: true, values: { ok: { color: '4' }, failing: {} } } },
+        },
+      } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: LIBRARY_ID,
+      path: 'tags',
+      kind: 'markdown',
+    })
+    const out = await computeDocumentTags(deps, { workspaceId: WORKSPACE_ID })
+    expect(out.library).toEqual({
+      health: { exclusive: true, values: { failing: {}, ok: { color: '4' } } },
+    })
+    expect(documentTagsOutputSchema.parse(out).library).toEqual(out.library)
   })
 })

@@ -176,6 +176,7 @@ describe('createDaemonFilesSource tags', () => {
           jsonResponse({
             documents: [{ documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', tags: ['release', 'q3'] }],
             contents: [],
+            library: {},
             inUse: [
               { tag: 'q3', documents: 1, boards: 0, nodes: 0, edges: 0 },
               { tag: 'release', documents: 1, boards: 0, nodes: 0, edges: 0 },
@@ -353,6 +354,7 @@ describe('createDaemonFilesSource carried tags', () => {
           jsonResponse({
             documents: [],
             contents: [{ documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', tags: ['health:ok'] }],
+            library: {},
             inUse: [
               {
                 tag: 'health:ok',
@@ -395,7 +397,7 @@ describe('createDaemonFilesSource tags in use', () => {
     const fetchImpl = vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.endsWith('/document-tags'))
-        return Promise.resolve(jsonResponse({ documents: [], contents: [], inUse }))
+        return Promise.resolve(jsonResponse({ documents: [], contents: [], inUse, library: {} }))
       return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
     }) as unknown as typeof globalThis.fetch
     const source = createDaemonFilesSource(fetchImpl, BASE, 'ws')

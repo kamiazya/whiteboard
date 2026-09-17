@@ -36,6 +36,7 @@ import {
   type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, readFontFamilyName, resolveExportFontFaces } from './export-font.js'
@@ -80,6 +81,14 @@ export interface HeadlessExportOptions {
    * like `theme`.
    */
   style?: SpatialRenderStyle
+  /**
+   * The workspace's tag library (ADR-0040 decision 5), when the caller
+   * loaded one: a box or an edge carrying a value it colours, and no colour
+   * of its own, is drawn in that colour and the legend lists the key — the
+   * same picture `wb_scene_render` draws. Absent, the canvas is drawn as
+   * stored.
+   */
+  tagLibrary?: TagLibrary
 }
 
 const DEFAULT_PADDING_PX = 10
@@ -203,6 +212,7 @@ export function buildSpatialScene(
   mode: ExportThemeMode = 'light',
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,
+  tagLibrary?: TagLibrary,
 ): Scene {
   return layoutSpatialCanvas(canvas, {
     measure,
@@ -210,6 +220,7 @@ export function buildSpatialScene(
     onDegrade,
     ...(style === undefined ? {} : { style }),
     ...(fontAvailable === undefined ? {} : { fontAvailable }),
+    ...(tagLibrary === undefined ? {} : { tagLibrary }),
   })
 }
 
@@ -230,7 +241,14 @@ function buildSvg(
   // An empty string is not a colour: it reads as unset, the way an absent
   // field does, rather than as a background nobody can name.
   const background = options.background ? options.background : palette.surface
-  const scene = buildSpatialScene(canvas, measure, mode, options.style, fontAvailable)
+  const scene = buildSpatialScene(
+    canvas,
+    measure,
+    mode,
+    options.style,
+    fontAvailable,
+    options.tagLibrary,
+  )
   const svg = renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
     background,
