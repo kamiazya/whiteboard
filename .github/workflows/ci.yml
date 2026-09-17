@@ -99,7 +99,10 @@ jobs:
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 
       # canvas-viewer is small enough to skip sharding; run it once (shard 1)
-      # so it isn't duplicated across the matrix.
+      # so it isn't duplicated across the matrix. Shard 2 carries only its
+      # half of mcp-node: the shared-layer step it used to run afterwards is
+      # the `test-shared` job below, since serial behind this shard it was
+      # the run's critical path.
       - name: Test canvas-viewer-node
         if: matrix.shard == 1
         run: pnpm exec vitest run --project=canvas-viewer-node
@@ -108,20 +111,41 @@ jobs:
         if: matrix.shard == 1
         run: pnpm exec vitest run --project=canvas-viewer-jsdom
 
-      # The shared-layer package suites and arch-lint, all small and fast —
-      # run once (shard 2, balancing canvas-viewer on shard 1). This is also
-      # what fails CI when a generated artifact (e.g.
-      # docs/reference/x-whiteboard.schema.json) drifts from its source
-      # schema: file-snapshot tests only reject in CI-mode runs like this one.
-      #
-      # The project list is DERIVED (tools/checks/src/vitest-projects.mjs),
-      # not hand-listed: every non-browser vitest project in root
-      # vitest.config.ts that isn't covered by another CI step
-      # (PROJECTS_RUN_ELSEWHERE in that file) runs here automatically, so a
-      # new shared-layer package is covered by CI the moment it registers a
-      # project, with no edit to this file.
+  # The shared-layer package suites and arch-lint. This is also what fails CI
+  # when a generated artifact (e.g. docs/reference/x-whiteboard.schema.json)
+  # drifts from its source schema: file-snapshot tests only reject in CI-mode
+  # runs like this one.
+  #
+  # Its own job rather than a step on test-unit's shard 2, where it lived
+  # first. Measured on one run (2026-09-16): the whole graph settled in 5m01s
+  # and this step was the last 2m14s of it, serial behind mcp-node's shard 2
+  # (1m44s), with every other job finished a minute or more earlier. Moving it
+  # out costs one more checkout+install (~35-45s) on its own runner and takes
+  # ~1m15s off the wall clock, which then belongs to test-browser. It is not
+  # in the branch-protection required list (see verify's comment): `ci-gate`
+  # is what gates it.
+  #
+  # The project list is DERIVED (tools/checks/src/vitest-projects.mjs), not
+  # hand-listed: every non-browser vitest project in root vitest.config.ts
+  # that isn't covered by another CI step (PROJECTS_RUN_ELSEWHERE in that
+  # file) runs here automatically, so a new shared-layer package is covered
+  # by CI the moment it registers a project, with no edit to this file.
+  test-shared:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job never performs authenticated git operations; keep the
+          # job token away from dependency/build tooling.
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Test shared-layer packages + arch-lint
-        if: matrix.shard == 2
         run: node tools/checks/src/run-shared-layer-tests.mjs
 
   test-jsdom:
@@ -663,6 +687,7 @@ jobs:
     needs:
       - check
       - test-unit
+      - test-shared
       - test-jsdom
       - test-browser
       - stress-changed-tests
