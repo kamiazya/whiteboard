@@ -71,8 +71,44 @@ describe('withDeclaredColours', () => {
     ])
   })
 
+  // The four below are one example each for a mutant the lane reported
+  // surviving on this file: a tag the library says nothing about beside a
+  // coloured one, two keys agreeing on a colour, an absent library over a
+  // scoped tag, and an edge coloured where no node is.
+  it('keeps the colour when an undeclared tag sits beside the declared one, in either order', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [box('a', ['health:ok', 'owner:core']), box('b', ['region:eu', 'health:failing'])],
+      edges: [],
+    }
+    expect(withDeclaredColours(canvas, library).nodes.map((n) => n.color)).toEqual(['4', '1'])
+  })
+
+  it('colours a thing whose two keys agree on the colour — that is one intent, not two', () => {
+    const agreeing: TagLibrary = { ...library, env: { values: { prod: { color: '4' } } } }
+    const canvas: SpatialCanvas = { nodes: [box('a', ['health:ok', 'env:prod'])], edges: [] }
+    expect(withDeclaredColours(canvas, agreeing).nodes[0]?.color).toBe('4')
+  })
+
+  it('answers the same canvas object for no library at all, even over a scoped tag', () => {
+    const canvas: SpatialCanvas = { nodes: [box('a', ['health:ok'])], edges: [] }
+    expect(withDeclaredColours(canvas, undefined)).toBe(canvas)
+  })
+
+  it('colours an edge when no node changes, and answers a new canvas for it', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [box('a'), box('b')],
+      edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['health:ok'] }],
+    }
+    const out = withDeclaredColours(canvas, library)
+    expect(out).not.toBe(canvas)
+    expect(out.edges[0]?.color).toBe('4')
+  })
+
   it('answers the same canvas object when nothing is coloured, so a memo keyed on identity holds', () => {
-    const canvas: SpatialCanvas = { nodes: [box('a', ['draft']), box('b')], edges: [] }
+    const canvas: SpatialCanvas = {
+      nodes: [box('a', ['draft']), box('b')],
+      edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['owner:core'] }],
+    }
     expect(withDeclaredColours(canvas, library)).toBe(canvas)
     expect(withDeclaredColours(canvas, {})).toBe(canvas)
   })

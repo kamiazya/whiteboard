@@ -110,6 +110,15 @@ export const MUTATED = [
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // `tags ?? []` only matters when the element carries no `tags` at all, and
+  // then the substitute is iterated as a tag: a string with no colon is not
+  // a scoped tag, `parseScopedTag` answers `undefined`, and the loop
+  // continues to the same `undefined` the empty array gives. Any colon-free
+  // substitute is equivalent; one with a colon would not be, and the mutator
+  // never writes one.
+  'src/tags/declared-colours.ts': {
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
+  },
   // Every one of these makes `mayCluster` answer TRUE more often, which buys
   // the segmenter path — the correct one everywhere — at the price of walking
   // text that did not need it. The invariant is on `mayCluster`, backed by a
