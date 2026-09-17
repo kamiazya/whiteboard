@@ -15,6 +15,11 @@
  * means for its object (a removed field, everywhere it is stored).
  */
 import { parseScopedTag, tagWriteSchema } from '@kamiazya/whiteboard-model'
+import {
+  type TagLibrary,
+  type TagLibraryObjection,
+  tagLibraryObjection,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { X } from 'lucide-react'
 import { useId, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
@@ -26,6 +31,27 @@ export interface TagChipsEditorProps {
   readonly suggestions?: readonly string[]
   /** The box's element id, for a visible `<label htmlFor>` the caller draws. */
   readonly inputId?: string
+  /**
+   * What the workspace DECLARES (ADR-0040 decision 5): its admitted values
+   * are offered under the key being typed, and a tag the library forbids —
+   * a value a key does not admit, a second value under an exclusive key —
+   * is refused with the rule, the way the MCP write path refuses it.
+   */
+  readonly library?: TagLibrary
+}
+
+/** Every `key:value` a library declares, so the datalist offers them beside what is in use. */
+export function declaredTags(library: TagLibrary): string[] {
+  return Object.entries(library).flatMap(([key, declared]) =>
+    Object.keys(declared.values ?? {}).map((value) => `${key}:${value}`),
+  )
+}
+
+/** The sentence the row shows for what the library holds against the tag set. */
+function objectionSentence(objection: TagLibraryObjection): string {
+  return objection.kind === 'undeclared'
+    ? `${objection.key} admits ${objection.admitted.join(', ')} — "${objection.tag}" is not one of them`
+    : `${objection.key} is one value at a time; this would carry ${objection.carried.join(' and ')}`
 }
 
 /** What the datalist offers for the draft as typed. */
@@ -46,8 +72,15 @@ export function tagCompletions(draft: string, suggestions: readonly string[]): s
   return [...offered].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 }
 
-export function TagChipsEditor({ tags, onChange, suggestions = [], inputId }: TagChipsEditorProps) {
+export function TagChipsEditor({
+  tags,
+  onChange,
+  suggestions = [],
+  inputId,
+  library,
+}: TagChipsEditorProps) {
   const listId = useId()
+  const offered = library === undefined ? suggestions : [...suggestions, ...declaredTags(library)]
   const [draft, setDraft] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
 
@@ -62,6 +95,15 @@ export function TagChipsEditor({ tags, onChange, suggestions = [], inputId }: Ta
     const checked = tagWriteSchema.safeParse(tag)
     if (!checked.success) {
       setRefusal(checked.error.issues[0]?.message ?? 'not a valid tag')
+      return
+    }
+    // The library's rule, judged on the set the thing would END UP carrying
+    // — the same judgement `wb_facet_set` refuses with — so a row and a
+    // tool cannot disagree about what the workspace admits.
+    const objection =
+      library === undefined ? undefined : tagLibraryObjection(library, [...tags, tag])
+    if (objection !== undefined) {
+      setRefusal(objectionSentence(objection))
       return
     }
     onChange([...tags, tag])
@@ -113,7 +155,7 @@ export function TagChipsEditor({ tags, onChange, suggestions = [], inputId }: Ta
           className="text-foreground placeholder:text-muted-foreground min-w-24 flex-1 bg-transparent text-xs outline-none"
         />
         <datalist id={listId}>
-          {tagCompletions(draft, suggestions).map((completion) => (
+          {tagCompletions(draft, offered).map((completion) => (
             <option key={completion} value={completion} />
           ))}
         </datalist>

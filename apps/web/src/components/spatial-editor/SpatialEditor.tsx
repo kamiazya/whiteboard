@@ -67,7 +67,7 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
   type ReactNode,
@@ -232,6 +232,15 @@ export interface SpatialEditorProps {
    * `resolvedTheme` or its nodes/edges go invisible in dark mode.
    */
   readonly theme?: ResolvedTheme
+  /**
+   * The workspace's tag library (ADR-0040 decision 5), when the keeper
+   * answered one: a box or an edge carrying a value it colours, and no
+   * colour of its own, is drawn in that colour and the legend lists the key;
+   * every tag row offers its values and refuses what it forbids.
+   */
+  readonly tagLibrary?: TagLibrary
+  /** Tags in use anywhere in the workspace, offered by every tag row beside the board's own. */
+  readonly tagSuggestions?: readonly string[]
   /**
    * The tool active on mount. Pages resolve it from the canvas's own shape
    * and the tab's last choice (`resolveInitialTool`): an empty canvas opens
@@ -409,6 +418,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     {
       canvas,
       onChange,
+      tagLibrary,
+      tagSuggestions,
       externalVersion,
       measure,
       createId,
@@ -563,6 +574,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         showResolved: showResolvedComments,
         threads,
         proposals,
+        tagLibrary,
         fontsGeneration,
       },
       fileSeamOptions,
@@ -675,6 +687,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         lockedNodeIds,
         resolvedMeasure,
         theme,
+        tagLibrary,
         fileSeamOptions,
         scene,
         anchors,
@@ -2741,7 +2754,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 // second classification is a pick. Recomputed per render
                 // while the panel is open: one pass over the nodes' facets.
                 suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
-                tagSuggestions={collectCanvasTags(canvas)}
+                tagSuggestions={[...collectCanvasTags(canvas), ...(tagSuggestions ?? [])]}
+                {...(tagLibrary === undefined ? {} : { tagLibrary })}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
                 onTagsChange={(after) => {
                   // Every write is the CHANGE the row showed being made,

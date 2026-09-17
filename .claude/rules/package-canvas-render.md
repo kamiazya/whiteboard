@@ -2086,4 +2086,8 @@ theme), and a box carrying declared colours under two keys gets none — a
 first-wins rule painted one key's meaning over the other's, and the
 property caught it. The same canvas object comes back when nothing changes,
 so an un-libraried layout keeps the frozen-singleton property the editor's
-`useMemo` relies on. In the mutation lane.
+`useMemo` relies on. `layoutSpatialEdges` applies it too, for the reason it
+resolves the theme: a live drag drew edges in the stored colour over a
+committed scene that drew them by intent, and the live-drag parity property
+now draws a library and tagged edges (its stub resolver reads `edge.color`,
+or the step would be invisible to it). In the mutation lane.

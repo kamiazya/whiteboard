@@ -17,8 +17,8 @@ board's own tags are in the Display settings, under the theme.
 Every tag row works the same way: type a tag and press Enter or a comma to
 finish it, and press a chip's × to remove it. A tag is either a plain word
 (`draft`) or a **scoped** `key:value` pair (`health:failing`), and the box
-offers what the board already uses — the keys before you type a colon, the
-values under that key after it. A tag with a colon that is not `key:value`
+offers what the board and the rest of the workspace already use — the keys
+before you type a colon, the values under that key after it. A tag with a colon that is not `key:value`
 (`Health:OK`) is refused with the rule; correct it and finish again.
 
 With several boxes selected, a tag added or removed on one is added or
@@ -41,8 +41,8 @@ what colour each value is drawn in, and whether a key is **one value at a
 time**. That declaration is a **tag library**: an ordinary markdown
 document at the path `tags` carrying the `visual.tags/v0` facet, the same
 shape as the [stencil library](define-your-own-stencils.md#growing-the-vocabulary).
-Today it is written through the MCP server — one `wb_facet_set` call on
-that document:
+It is written through the MCP server — one `wb_facet_set` call on that
+document:
 
 ```json
 {
@@ -78,15 +78,19 @@ What the library changes:
   box `health:unknown`, or adding `region:us` to a box already carrying
   `region:eu` under an exclusive key, is refused by `wb_facet_set` with the
   admitted values in the message, and a batch refused on one document has
-  written nothing to the others. The editor's tag rows do not read the
-  library yet, so a tag typed there is not checked against it.
+  written nothing to the others. Every tag row in the editor refuses the
+  same tag by the same rule, and keeps what you typed so you can fix it.
+- **The rows complete from the declaration.** Under a declared key, a tag
+  row offers the admitted values beside whatever the workspace already
+  uses, on notes, boards, boxes and edges alike.
 - **Colour by intent.** A box or an edge that carries a value with a
-  declared colour, and has no colour of its own, is drawn in that colour by
-  `wb_scene_render`, so the legend lists the key because the library said
-  so rather than because someone coloured every box by hand. A colour set on the box itself always wins, and a
-  box carrying two declared colours under two keys gets neither. An SVG or
-  PNG export taken through the daemon draws it the same way. The editor's
-  own view draws the declared colour in a later release.
+  declared colour, and has no colour of its own, is drawn in that colour —
+  on the board, in an SVG or PNG export, and by `wb_scene_render` — so the
+  legend lists the key because the library said so rather than because
+  someone coloured every box by hand. A colour set on the box itself always
+  wins, and a box carrying two declared colours under two keys gets
+  neither. The board reads the library when it opens; after editing the
+  `tags` document, reopen the board to see the change.
 - **The declaration is discoverable.** `wb_facet_list` with a
   `workspaceId` answers the library under `tagLibrary` beside the tags in
   use, so an agent can read the vocabulary it will be held to.

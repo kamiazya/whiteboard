@@ -21,7 +21,14 @@ const measure = createFakeMeasure()
 
 const appearance: SpatialAppearanceResolver = {
   resolveNode: () => ({ radius: 4 }),
-  resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
+  // An edge's colour reaches its stroke, as the real theme's resolver does:
+  // colour by intent (ADR-0040 decision 5) lands as `edge.color` on the
+  // canvas before layout, and a stub blind to it would let the edge-only
+  // producer skip that step unnoticed.
+  resolveEdge: (edge) => ({
+    stroke: edge.color === undefined ? '#606060' : `#c0${edge.color}0${edge.color}0`,
+    strokeWidth: 1.5,
+  }),
   resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
 }
 
@@ -452,10 +459,21 @@ const denseNodeArb = (id: string): fc.Arbitrary<SpatialNode> =>
       // half of this parity the live overlay keeps forgetting, and a facet
       // registered next month has to arrive in this generator on its own.
       facets: facetsArb(bundledFacetRegistry, 'node'),
+      // A scoped tag the scenario's LIBRARY may colour (ADR-0040 decision
+      // 5): a box whose colour arrives by intent is an obstacle painted one
+      // way in the committed scene, and the edge-only producer has to paint
+      // an edge into it the same way.
+      tags: fc.option(
+        fc.constantFrom('health:ok', 'health:failing').map((tag) => [tag]),
+        {
+          nil: undefined,
+        },
+      ),
     })
-    .map(({ facets, ...n }) => {
+    .map(({ facets, tags, ...n }) => {
       const base = n.type === 'text' ? { ...n, text: 'n' } : { ...n, label: 'G' }
-      return (facets === undefined ? base : { ...base, facets }) as SpatialNode
+      const tagged = tags === undefined ? base : { ...base, tags }
+      return (facets === undefined ? tagged : { ...tagged, facets }) as SpatialNode
     })
 
 /**
@@ -480,11 +498,20 @@ const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
       // property compares — so a generator that drew none would agree about
       // canvases where the two entry points have nothing to disagree over.
       facets: edgeFacetsArb,
+      // An edge's own tag, which the library may colour: the one channel
+      // colour by intent changes on the very nodes this property compares.
+      tags: fc.option(
+        fc.constantFrom('health:ok', 'health:failing').map((tag) => [tag]),
+        {
+          nil: undefined,
+        },
+      ),
     })
-    .map(({ label, facets, ...edge }) => ({
+    .map(({ label, facets, tags, ...edge }) => ({
       ...edge,
       ...(label === undefined ? {} : { label }),
       ...(facets === undefined ? {} : { facets }),
+      ...(tags === undefined ? {} : { tags }),
     }))
 
 /** The routing a scenario draws with, as the `visual.edges/v0` payload's two fields. */
@@ -534,6 +561,12 @@ const dragScenarioArb = fc.record({
   // The look asked for: a theme is drawn under `'document'` and never
   // under the library's clean default, so both have to be drawn.
   style: fc.constantFrom(undefined, 'document' as const),
+  // The workspace's tag library, or none: a declared colour lands on the
+  // canvas before either layout reads it, and the edge-only producer
+  // shipped once without that step.
+  tagLibrary: fc.constantFrom(undefined, {
+    health: { values: { ok: { color: '4' as const }, failing: { color: '1' as const } } },
+  }),
   carried: fc.uniqueArray(fc.constantFrom(...denseIds), { minLength: 1, maxLength: 3 }),
   dx: fc.constantFrom(-200, -80, 40, 160, 320),
   dy: fc.constantFrom(-160, -40, 80, 240),
@@ -556,7 +589,7 @@ function scenarioCanvas(scenario: {
 describe('live-drag parity property (PBT)', () => {
   fcTest.prop([dragScenarioArb], withDefaults())(
     'mid-drag edge layout equals the committed layout of the moved canvas, obstacles and jumps included',
-    ({ nodes, edges, routing, envelope, style, carried, dx, dy }) => {
+    ({ nodes, edges, routing, envelope, style, tagLibrary, carried, dx, dy }) => {
       const carriedSet = new Set<string>(carried)
       const movedCanvas = scenarioCanvas({
         nodes: nodes.map((n) => (carriedSet.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n)),
@@ -564,7 +597,7 @@ describe('live-drag parity property (PBT)', () => {
         routing,
         envelope,
       })
-      const options = { measure, parseBody: fakeParseBody, appearance, style }
+      const options = { measure, parseBody: fakeParseBody, appearance, style, tagLibrary }
       const committed = layoutSpatialCanvas(movedCanvas, options).nodes
       const live = layoutSpatialEdges(movedCanvas, options)
       expect(live.length).toBeGreaterThan(0)
@@ -589,6 +622,24 @@ describe('live-drag parity property (PBT)', () => {
           .sort(),
       )
     }
+  })
+
+  it('the library the generator draws actually changes the edges it compares', () => {
+    // The library's half of the anti-vacuity: a scenario whose EDGE suffix
+    // moves when the library is dropped is proof the generator reaches the
+    // colour-by-intent step the property is about — an edge carrying a
+    // declared value, drawn in the declared colour.
+    const moved = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing, envelope }) => {
+      const canvas = scenarioCanvas({ nodes, edges, routing, envelope })
+      const library = {
+        health: { values: { ok: { color: '4' as const }, failing: { color: '1' as const } } },
+      }
+      const base = { measure, parseBody: fakeParseBody, appearance }
+      const withLibrary = layoutSpatialEdges(canvas, { ...base, tagLibrary: library })
+      const without = layoutSpatialEdges(canvas, base)
+      return JSON.stringify(withLibrary) !== JSON.stringify(without)
+    })
+    expect(moved.length).toBeGreaterThan(0)
   })
 
   it('the canvas facets the generator draws actually change the layout it compares', () => {

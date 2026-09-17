@@ -190,12 +190,14 @@ describe('stale /w/:workspace/d/:path deep link', () => {
     // Held at the INDEX, which is what the page's listing actually reads.
     // The double's own `listDocuments` is not on that path any more, so
     // suspending it suspended nothing and the test covered the fast case
-    // twice.
+    // twice. EVERY listing is held, not the first: the page also lists the
+    // workspace for its tag vocabulary (ADR-0040 decision 5), and holding
+    // one call by ordinal held that read instead while the page's own list
+    // took the fast path — the same shape as the earlier miss, one call
+    // over. Nothing the document needs to load goes through here.
     const listDocuments = store.index.listDocuments.bind(store.index)
-    let calls = 0
     store.index.listDocuments = async (input) => {
-      calls += 1
-      if (calls === 1) await held
+      await held
       return listDocuments(input)
     }
 

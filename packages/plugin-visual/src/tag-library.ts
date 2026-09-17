@@ -27,6 +27,7 @@ import {
   type CanvasColor,
   canvasColorSchema,
   type ExtensionFacets,
+  parseScopedTag,
   TAG_IDENTIFIER_PATTERN,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -136,4 +137,60 @@ export function declaredColourOf(
   scoped: { readonly key: string; readonly value: string },
 ): CanvasColor | undefined {
   return library[scoped.key]?.values?.[scoped.value]?.color
+}
+
+/**
+ * What a library holds against a tag SET — the whole set a thing would
+ * carry after a write: a value a key does not admit, or two values under a
+ * key declared exclusive. Undefined is admission. A plain tag and an
+ * undeclared key pass; ADR-0040 decision 3 keeps a rule nobody declared
+ * from refusing a write, and the library is the one place a rule is
+ * declared.
+ *
+ * DATA rather than a message, because two writers share the judgement and
+ * neither the sentence: the MCP write path names the target it refused for
+ * and where the library lives, and the editor's tag row speaks to the
+ * person typing. One judgement, so the two cannot drift.
+ */
+export type TagLibraryObjection =
+  | {
+      readonly kind: 'undeclared'
+      readonly tag: string
+      readonly key: string
+      /** The values the key admits, sorted, for the sentence that names them. */
+      readonly admitted: readonly string[]
+    }
+  | {
+      readonly kind: 'exclusive'
+      readonly key: string
+      /** Every tag under the key the thing would carry, in the set's order. */
+      readonly carried: readonly string[]
+    }
+
+export function tagLibraryObjection(
+  library: TagLibrary,
+  tags: readonly string[],
+): TagLibraryObjection | undefined {
+  const carriedUnder = new Map<string, string[]>()
+  for (const tag of tags) {
+    const scoped = parseScopedTag(tag)
+    if (scoped === undefined) continue
+    const declared = library[scoped.key]
+    if (declared === undefined) continue
+    if (declared.values !== undefined && declared.values[scoped.value] === undefined) {
+      return {
+        kind: 'undeclared',
+        tag,
+        key: scoped.key,
+        admitted: Object.keys(declared.values).sort(),
+      }
+    }
+    carriedUnder.set(scoped.key, [...(carriedUnder.get(scoped.key) ?? []), tag])
+  }
+  for (const [key, carried] of carriedUnder) {
+    if (library[key]?.exclusive === true && carried.length > 1) {
+      return { kind: 'exclusive', key, carried }
+    }
+  }
+  return undefined
 }

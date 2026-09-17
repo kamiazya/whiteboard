@@ -22,6 +22,7 @@ import {
 } from '@kamiazya/whiteboard-facet-engine'
 import { DerivedFacetForm, type FacetEditor } from '@kamiazya/whiteboard-facet-ui'
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 
 /**
  * What the panel is about. A tagged union rather than two optional props,
@@ -76,6 +77,8 @@ export interface FacetFormPanelProps {
   readonly onTagsChange: (tags: readonly string[]) => void
   /** Tags the board already carries, offered by the tag row paired by key. */
   readonly tagSuggestions?: readonly string[]
+  /** The workspace's tag library: offered under a key, and refused where it forbids (ADR-0040 decision 5). */
+  readonly tagLibrary?: TagLibrary
   /**
    * Where the inspector sits: a column beside the canvas, or a sheet under
    * it. Decided from the EDITOR SHELL's width — the panel's own column comes
@@ -97,6 +100,7 @@ export function FacetFormPanel({
   onWrite,
   onTagsChange,
   tagSuggestions,
+  tagLibrary,
   editors = NODE_FACET_EDITORS,
   variant = 'dock',
   suggestions,
@@ -116,6 +120,7 @@ export function FacetFormPanel({
         tags={tags}
         onChange={onTagsChange}
         {...(tagSuggestions === undefined ? {} : { suggestions: tagSuggestions })}
+        {...(tagLibrary === undefined ? {} : { library: tagLibrary })}
       />
     </div>
   )

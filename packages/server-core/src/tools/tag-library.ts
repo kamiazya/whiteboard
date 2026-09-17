@@ -12,8 +12,12 @@
  * intent — takes it as a value.
  */
 import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
-import { parseScopedTag, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { readTagLibrary, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  readTagLibrary,
+  type TagLibrary,
+  tagLibraryObjection,
+} from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
@@ -71,26 +75,19 @@ export function refuseAgainstLibrary(
   tags: readonly string[],
   what: string,
 ): void {
-  const valuesUnder = new Map<string, string[]>()
-  for (const tag of tags) {
-    const scoped = parseScopedTag(tag)
-    if (scoped === undefined) continue
-    const declared = library[scoped.key]
-    if (declared === undefined) continue
-    if (declared.values !== undefined && declared.values[scoped.value] === undefined) {
-      throw new TagLibraryError(
-        `tag "${tag}" on ${what} is not admitted: ${WHERE} declares ${scoped.key} as one of ${Object.keys(declared.values).sort().join(', ')}`,
-      )
-    }
-    valuesUnder.set(scoped.key, [...(valuesUnder.get(scoped.key) ?? []), tag])
+  // The judgement is plugin-visual's, shared with the editor's tag row;
+  // only the sentence is this path's — it names the target and where the
+  // library lives, which a person typing into a row does not need told.
+  const objection = tagLibraryObjection(library, tags)
+  if (objection === undefined) return
+  if (objection.kind === 'undeclared') {
+    throw new TagLibraryError(
+      `tag "${objection.tag}" on ${what} is not admitted: ${WHERE} declares ${objection.key} as one of ${objection.admitted.join(', ')}`,
+    )
   }
-  for (const [key, carried] of valuesUnder) {
-    if (library[key]?.exclusive === true && carried.length > 1) {
-      throw new TagLibraryError(
-        `${key} is one value at a time in ${WHERE}, and this write leaves ${what} with ${carried.join(' and ')}`,
-      )
-    }
-  }
+  throw new TagLibraryError(
+    `${objection.key} is one value at a time in ${WHERE}, and this write leaves ${what} with ${objection.carried.join(' and ')}`,
+  )
 }
 
 /**

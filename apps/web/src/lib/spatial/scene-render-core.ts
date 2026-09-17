@@ -40,6 +40,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
@@ -81,6 +82,13 @@ export interface RenderCanvasCoreOptions {
    * exactly where the committed scene placed it, or the press jumps it.
    */
   readonly commentObstacles?: readonly BoundingBox[]
+  /**
+   * The workspace's tag library (ADR-0040 decision 5), when the keeper
+   * answered one: a box or an edge carrying a value it colours, and no
+   * colour of its own, is drawn in that colour and the legend lists the
+   * key — the picture the daemon's export and `wb_scene_render` draw.
+   */
+  readonly tagLibrary?: TagLibrary
   /**
    * Draw resolved comments too, muted (canvas-render's `showResolved`).
    * Per-user VIEW state — it threads through every render of this surface
@@ -160,6 +168,7 @@ export function renderCanvasToSvgWith(
     threads: options.threads,
     proposals: options.proposals,
     onDegrade: options.onDegrade,
+    tagLibrary: options.tagLibrary,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

@@ -340,3 +340,20 @@ as fixtures, so "the lane imports it" was true of exactly the entries it was
 supposed to refuse. Its twin is
 `packages/mcp-server/src/server/persisted-json-surface.test.ts`.
 
+## The workspace's tag vocabulary reaches a page through ONE hook
+
+`hooks/use-tag-vocabulary.ts` reads both layers of ADR-0040 decision 5 —
+what is in use (`listTagsInUse`) and what the library declares
+(`readTagLibrary`) — from the keeper's `WorkspaceFilesSource`, once per
+source, and the page hands the value down as `model.tags`: to the editor
+(`tagLibrary` for the layout, the drag overlay and the export taken from
+the editor; `tagSuggestions` for the Facets panel's row), to the board's
+display settings and to the note header's row. The judgement a row refuses
+with is plugin-visual's `tagLibraryObjection`, the one `wb_facet_set` uses,
+so a row and the tool cannot admit different tags. Once per source and
+never per document, because the browser keeper answers the in-use list by
+opening every document; a session may be one tag behind, and says so in
+the how-to. A page test that holds the index's listing to model "the list
+has not arrived" must hold EVERY call, not the first — the page lists for
+its vocabulary too, and a held first call was that read while the page's
+own list took the fast path (`BrowserDocumentPage.stale-link.test.tsx`).

@@ -1,4 +1,5 @@
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
@@ -214,11 +215,17 @@ export function DocumentFacetsEditor({
   facets,
   onChange,
   typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
+  tagSuggestions,
+  tagLibrary,
 }: {
   readonly facets: StoredCoreFacets
   readonly onChange?: (next: StoredCoreFacets) => void
   /** Offered as datalist completions for `type`; the field stays free text. */
   readonly typeSuggestions?: readonly string[]
+  /** The workspace's vocabulary in use, so a note completes from what the workspace already says (ADR-0040 decision 6). */
+  readonly tagSuggestions?: readonly string[]
+  /** The workspace's tag library: offered under a key, and refused where it forbids (decision 5). */
+  readonly tagLibrary?: TagLibrary
 }) {
   const suggestionsId = useId()
   const tags = facets.tags ?? []
@@ -314,6 +321,8 @@ export function DocumentFacetsEditor({
           inputId={`${suggestionsId}-tag`}
           tags={tags}
           onChange={(next) => onChange?.(withTags(next))}
+          {...(tagSuggestions === undefined ? {} : { suggestions: tagSuggestions })}
+          {...(tagLibrary === undefined ? {} : { library: tagLibrary })}
         />
       </div>
     </div>

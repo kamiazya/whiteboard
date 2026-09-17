@@ -389,5 +389,13 @@ stayed green — two affordances aiming at the same pixel.
   stencil library composes into the registry because a stencil id must
   resolve through it; nothing in the registry reads a tag, so composing a
   tag library would change a registry for no reader. The facet has no
-  editor form (`facetForm` answers `unsupported`), which is the honest
-  state until the editor reads it (5b).
+  editor form (`facetForm` answers `unsupported`): a library is authored as
+  a document.
+- `tagLibraryObjection(library, tags)` is the ONE judgement of what a
+  library holds against a tag set — a value a key does not admit, a second
+  value under an exclusive key — answered as DATA. Two writers render it:
+  `wb_facet_set` (server-core) names the target and where the library
+  lives; the editor's tag row speaks to the person typing. It lives here,
+  the data half, because apps/web may import this package and not
+  server-core, and one judgement is what keeps a row and a tool from
+  admitting different things.
