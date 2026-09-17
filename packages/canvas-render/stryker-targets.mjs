@@ -115,9 +115,13 @@ export const KNOWN_EQUIVALENT = {
   // a scoped tag, `parseScopedTag` answers `undefined`, and the loop
   // continues to the same `undefined` the empty array gives. Any colon-free
   // substitute is equivalent; one with a colon would not be, and the mutator
-  // never writes one.
+  // never writes one. The empty-library half of the guard is a SHORTCUT:
+  // with no key declared nothing colours, `changed` stays false and the same
+  // canvas comes back either way, so dropping the check only walks the
+  // elements for nothing — the identity example passes on both sides.
   'src/tags/declared-colours.ts': {
     'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
+    'ConditionalExpression: Object.keys(library).length === 0 -> false': 1,
   },
   // Every one of these makes `mayCluster` answer TRUE more often, which buys
   // the segmenter path — the correct one everywhere — at the price of walking
