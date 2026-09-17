@@ -42,7 +42,7 @@ import {
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
@@ -58,6 +58,10 @@ export interface CanvasDisplaySettingsProps {
   readonly facetRegistry?: FacetRegistry
   /** Widget lookup; a test seam — production uses the registered widgets. */
   readonly widgets?: Readonly<Record<string, CanvasSettingsWidget>>
+  /** The workspace's vocabulary in use, offered beside the board's own tags (ADR-0040 decision 6). */
+  readonly tagSuggestions?: readonly string[]
+  /** The workspace's tag library: offered under a key, and refused where it forbids (decision 5). */
+  readonly tagLibrary?: TagLibrary
 }
 
 export function CanvasDisplaySettings({
@@ -65,6 +69,8 @@ export function CanvasDisplaySettings({
   onChange,
   facetRegistry = bundledFacetRegistry,
   widgets = CANVAS_SETTINGS_WIDGETS,
+  tagSuggestions,
+  tagLibrary,
 }: CanvasDisplaySettingsProps) {
   // Eager command chaining: two picks from the same open popover can land
   // before a slow parent commits the first, and the second must build on
@@ -115,7 +121,8 @@ export function CanvasDisplaySettings({
             tags: retag(canvasRef.current.tags, canvas.tags ?? [], after),
           })
         }
-        suggestions={collectCanvasTags(canvas)}
+        suggestions={[...collectCanvasTags(canvas), ...(tagSuggestions ?? [])]}
+        {...(tagLibrary === undefined ? {} : { library: tagLibrary })}
       />
     </div>
   )

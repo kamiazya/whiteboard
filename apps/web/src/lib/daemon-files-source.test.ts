@@ -408,4 +408,16 @@ describe('createDaemonFilesSource tags in use', () => {
     ) as unknown as typeof globalThis.fetch
     await expect(createDaemonFilesSource(down, BASE, 'ws').listTagsInUse?.()).rejects.toThrow()
   })
+
+  it('answers the tag library the route carries, so the editor reads the declaration in the same round trip', async () => {
+    const library = { health: { exclusive: true, values: { ok: { color: '4' }, failing: {} } } }
+    const fetchImpl = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/document-tags'))
+        return Promise.resolve(jsonResponse({ documents: [], contents: [], inUse: [], library }))
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    const source = createDaemonFilesSource(fetchImpl, 'http://daemon.test', 'ws-1')
+    await expect(source.readTagLibrary?.()).resolves.toEqual(library)
+  })
 })

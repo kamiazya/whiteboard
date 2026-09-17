@@ -14,6 +14,7 @@ import {
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import {
   fullTextSearch,
@@ -153,6 +154,19 @@ export function createLocalFilesSource(
   }
 
   return {
+    async readTagLibrary() {
+      // One well-known path, the daemon's convention (`TAG_LIBRARY_PATH`):
+      // nothing here can ask the index which document carries a facet
+      // either, and the two keepers must agree on where a library lives.
+      const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+      const library = entries.find((entry) => entry.path === 'tags')
+      if (library === undefined) return {}
+      try {
+        return readTagLibrary(readFacets(await loadCurrentDoc(library)))
+      } catch {
+        return {}
+      }
+    },
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       const bearers: TagBearer[] = []

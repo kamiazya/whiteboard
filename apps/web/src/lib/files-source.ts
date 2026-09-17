@@ -1,5 +1,6 @@
 import type { WorkspaceDocumentTagsResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind, ExtensionFacets } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 /**
@@ -102,6 +103,13 @@ export interface WorkspaceFilesSource {
    * case the panel derives a document-only strip from the entries.
    */
   listTagsInUse?(): Promise<readonly TagInUse[]>
+  /**
+   * What the workspace DECLARES (ADR-0040 decision 5): the tag library the
+   * document at `tags` carries, or `{}`. The editor's tag rows offer its
+   * values and refuse what it forbids, and the editor's own render draws by
+   * it. OPTIONAL for the same reason `listTagsInUse` is.
+   */
+  readTagLibrary?(): Promise<TagLibrary>
 }
 
 /** One row of the vocabulary: the daemon-client contract's own row shape. */

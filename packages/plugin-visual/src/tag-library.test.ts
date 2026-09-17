@@ -5,7 +5,12 @@
 // workspace like every other document — the shape ADR-0034 fixed for
 // stencils, with a vocabulary of KEYS in place of a vocabulary of stencils.
 import { describe, expect, it } from 'vitest'
-import { bundledFacetRegistry, readTagLibrary, VISUAL_TAGS_KEY } from './index.js'
+import {
+  bundledFacetRegistry,
+  readTagLibrary,
+  tagLibraryObjection,
+  VISUAL_TAGS_KEY,
+} from './index.js'
 
 describe('the tag-library facet', () => {
   it('attaches to a DOCUMENT, which is what a library is', () => {
@@ -82,5 +87,45 @@ describe('readTagLibrary', () => {
     expect(readTagLibrary(undefined)).toEqual({})
     expect(readTagLibrary({ 'visual.shape/v0': { kind: 'hexagon' } })).toEqual({})
     expect(readTagLibrary({ [VISUAL_TAGS_KEY]: { keys: { Health: {} } } })).toEqual({})
+  })
+})
+
+describe('tagLibraryObjection', () => {
+  // The one JUDGEMENT both writers share — the MCP write path's refusal and
+  // the editor's tag row — as data, so each renders its own sentence.
+  const library = {
+    health: { exclusive: true, values: { ok: { color: '4' as const }, failing: {} } },
+    region: { values: { eu: {}, us: {} } },
+    owner: {},
+  }
+
+  it('objects to a value a key does not admit, naming the admitted ones sorted', () => {
+    expect(tagLibraryObjection(library, ['health:degraded'])).toEqual({
+      kind: 'undeclared',
+      tag: 'health:degraded',
+      key: 'health',
+      admitted: ['failing', 'ok'],
+    })
+  })
+
+  it('objects to a second value under an exclusive key, naming what would be carried', () => {
+    expect(tagLibraryObjection(library, ['health:ok', 'health:failing'])).toEqual({
+      kind: 'exclusive',
+      key: 'health',
+      carried: ['health:ok', 'health:failing'],
+    })
+  })
+
+  it('does not object to a plain tag, an undeclared key, two values under a non-exclusive key, or an admitted value', () => {
+    expect(
+      tagLibraryObjection(library, [
+        'draft',
+        'phase:design',
+        'region:eu',
+        'region:us',
+        'owner:me',
+        'health:ok',
+      ]),
+    ).toBeUndefined()
   })
 })

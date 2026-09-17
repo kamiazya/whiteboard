@@ -35,9 +35,24 @@ export function createDaemonFilesSource(
   daemonBaseUrl: string,
   workspaceId: string,
 ): WorkspaceFilesSource {
+  // Both tag readers are one route; a caller asking for both in one breath
+  // (the vocabulary hook) pays one round trip, and the next ask after they
+  // settle fetches afresh.
+  let tagsInFlight: ReturnType<typeof getWorkspaceDocumentTags> | null = null
+  const documentTags = () => {
+    tagsInFlight ??= getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId).finally(
+      () => {
+        tagsInFlight = null
+      },
+    )
+    return tagsInFlight
+  }
   return {
     async listTagsInUse() {
-      return (await getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId)).inUse
+      return (await documentTags()).inUse
+    },
+    async readTagLibrary() {
+      return (await documentTags()).library
     },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       try {

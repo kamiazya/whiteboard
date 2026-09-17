@@ -383,7 +383,14 @@ fixes the direction):
      `GET /document-tags` answers the declaration as `library` beside the
      in-use rows, from the listing it already takes, so a client reads both
      layers in one round trip.
-   - 5b-2: the editor reads the library — suggestions from the declared
-     keys and values (with the in-use vocabulary of the follow-up to
-     increment 4c), the declared colour in the editor's own render and
-     legend, and the tag row refusing what the library forbids.
+   - 5b-2 (landed): the editor reads the library through the keeper's
+     files source (`readTagLibrary` beside `listTagsInUse`, both keepers),
+     once per open document — the declared colour on the editor's own
+     surface, in a live drag and in an export taken from the editor, the
+     legend with it; every tag row (note header, box, edge, board)
+     completing from the declared values and the workspace's in-use
+     vocabulary; and the row refusing what the library forbids by the SAME
+     judgement `wb_facet_set` refuses with (`tagLibraryObjection`,
+     plugin-visual — data, so each writer keeps its own sentence). What is
+     still not checked: the `/api` document routes, which write frontmatter
+     tags without reading the library.

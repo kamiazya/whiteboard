@@ -162,7 +162,9 @@ unknownWorkspace, listed?)` answers what the document at `TAG_LIBRARY_PATH`
 stencil id has to resolve through the registry, and nothing in the registry
 reads a tag. `refuseAgainstLibrary(library, tags, what)` throws
 `TagLibraryError` for a value a key does not admit or a second value under
-an exclusive key, and `wb_facet_set` runs it as a PRE-PASS over the tag set
+an exclusive key — the judgement is plugin-visual's `tagLibraryObjection`,
+shared with the editor's tag row; only the sentence is this package's —
+and `wb_facet_set` runs it as a PRE-PASS over the tag set
 each target would end up carrying (`tagSetsAfter`: the node or edge named, or
 the board and every node and edge a rename reaches, or the document),
 before any document is written — so a batch refused on its second document

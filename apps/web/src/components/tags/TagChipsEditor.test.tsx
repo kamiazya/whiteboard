@@ -76,4 +76,38 @@ describe('TagChipsEditor', () => {
     fireEvent.change(box(), { target: { value: 'health:' } })
     expect(options()).toEqual(['health:failing', 'health:ok'])
   })
+
+  it('refuses what the workspace library forbids, with the rule, and keeps the draft', () => {
+    const onChange = vi.fn()
+    const library = {
+      health: { exclusive: true, values: { ok: { color: '4' as const }, failing: {} } },
+    }
+    render(<TagChipsEditor tags={['health:ok']} onChange={onChange} library={library} />)
+    commit('health:degraded')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert').textContent).toMatch(/health.*failing, ok/)
+    expect(box().value).toBe('health:degraded')
+    commit('health:failing')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert').textContent).toMatch(/one value at a time/)
+    commit('region:eu')
+    expect(onChange).toHaveBeenLastCalledWith(['health:ok', 'region:eu'])
+  })
+
+  it('offers the values the library declares under the key being typed, beside what is in use', () => {
+    const library = { health: { values: { ok: {}, failing: {} } } }
+    render(
+      <TagChipsEditor
+        tags={[]}
+        onChange={vi.fn()}
+        library={library}
+        suggestions={['health:degraded']}
+      />,
+    )
+    fireEvent.change(box(), { target: { value: 'health:' } })
+    const offered = [...document.querySelectorAll('datalist option')].map((o) =>
+      o.getAttribute('value'),
+    )
+    expect(offered).toEqual(['health:degraded', 'health:failing', 'health:ok'])
+  })
 })

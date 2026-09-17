@@ -2409,13 +2409,15 @@ function composeEdgesAndLabels(
  * result, which is the one-producer-per-geometry rule this export upholds.
  */
 export function layoutSpatialEdges(
-  canvas: SpatialCanvas,
+  stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): SceneNode[] {
   // Through the same theme resolution the full layout applies to this
   // canvas: the ink, the routing default and the paint an edge takes are
   // the theme's, and a second entry point that skipped it drew a live drag
-  // crisp and straight over a pencilled, curved committed render.
+  // crisp and straight over a pencilled, curved committed render. The
+  // library's colour by intent is the same kind of thing, applied first.
+  const canvas = withDeclaredColours(stored, options.tagLibrary)
   return composeEdgesAndLabels(
     canvas,
     withCanvasTheme(canvas, {

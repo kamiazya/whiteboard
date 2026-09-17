@@ -25,6 +25,7 @@
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   type FileRefLabel,
@@ -101,6 +102,8 @@ export function useWorkerScene(
     readonly threads?: readonly CommentThread[]
     /** This document's open proposals, drawn in place (ADR-0029 decision 1). */
     readonly proposals?: readonly Proposal[]
+    /** The workspace's tag library (ADR-0040 decision 5); plain data, crosses to the worker. */
+    readonly tagLibrary?: TagLibrary
     /**
      * How many theme faces have landed in this tab (`useThemeFontsGeneration`).
      * Not read by the layout — it asks `hasLoadedFace` itself — but a change
@@ -137,6 +140,7 @@ export function useWorkerScene(
       base.showResolved,
       base.threads,
       base.proposals,
+      base.tagLibrary,
       base.fontsGeneration,
       fileSeamOptions,
     ],
@@ -179,6 +183,7 @@ export function useWorkerScene(
       showResolved: options.showResolved,
       threads: options.threads,
       proposals: options.proposals,
+      tagLibrary: options.tagLibrary,
       // Not sent to the worker — it asks `hasLoadedFace` itself — but a
       // change here is what makes an OFFLOADED scene lay out again once a
       // theme's face lands; the synchronous path re-runs off `options`.
@@ -195,6 +200,7 @@ export function useWorkerScene(
       options.showResolved,
       options.threads,
       options.proposals,
+      options.tagLibrary,
       options.fontsGeneration,
     ],
   )
@@ -267,6 +273,7 @@ export function useWorkerScene(
       showResolved: inputs.showResolved,
       threads: inputs.threads,
       proposals: inputs.proposals,
+      tagLibrary: inputs.tagLibrary,
     }
     worker.postMessage(request)
     return () => {

@@ -402,7 +402,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // derived in legend/canvas-legend.ts, so the layout only asks and attaches.
   // +10: the tag library option (ADR-0040 decision 5) — declared here, applied
   // in tags/declared-colours.ts, so the layout only passes the canvas through.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2477,
+  // +2: the edge-only entry point applies the library too, so a live drag
+  // draws an edge in its declared colour — the same step the theme takes.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2479,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -462,7 +464,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // parent cannot erase the first.
   // +5: the legend overlay (ADR-0040 decision 6), mounted from the scene
   // the worker answered — one line of wiring and its comment.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2829,
+  // +14: two props for ADR-0040 decision 5 — the workspace's tag library
+  // and its in-use vocabulary — each threaded to the layout, the drag
+  // overlay and the Facets panel's tag row; the reading of both lives in
+  // the pages' hook, not here.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2843,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

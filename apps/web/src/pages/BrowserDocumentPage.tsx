@@ -23,6 +23,7 @@ import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
+import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -51,6 +52,7 @@ import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
+import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { loroTextSync } from '../lib/loro-codemirror-sync.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
@@ -246,6 +248,14 @@ function useBrowserDocument(
     documentKind === 'markdown',
     signalCheckpoint,
   )
+  // The workspace's tag vocabulary (ADR-0040 decision 5), read through the
+  // same files source the document browser uses over the same stores, once
+  // per page — the browser keeper answers it by opening every document.
+  const tagsSource = useMemo(
+    () => createLocalFilesSource({ index: store, loro: resolvedLoro }),
+    [store, resolvedLoro],
+  )
+  const tagVocabulary = useTagVocabulary(tagsSource)
   // Binds CodeMirror straight to the document's 'body' text container: each
   // change is written at its OWN position, and an external change moves the
   // local caret exactly. The hook's doc subscription keeps body state and the
@@ -894,6 +904,7 @@ function useBrowserDocument(
       },
     },
     spatial: {},
+    ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),
     slots: {
       rowAlerts: (
         <>

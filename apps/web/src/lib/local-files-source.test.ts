@@ -377,4 +377,26 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
       { tag: 'team:core', key: 'team', value: 'core', documents: 0, boards: 1, nodes: 0, edges: 0 },
     ])
   })
+
+  it('reads the tag library the document at `tags` declares, and answers none without one', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const store = new LoroStore()
+    const before = createLocalFilesSource()
+    await expect(before.readTagLibrary?.()).resolves.toEqual({})
+    const library = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'tags',
+      kind: 'markdown',
+    })
+    const doc = new Loro()
+    writeFacets(doc, {
+      'visual.tags/v0': { keys: { health: { exclusive: true, values: { ok: { color: '4' } } } } },
+    } as never)
+    await store.save(library.documentId, doc.export({ mode: 'snapshot' }))
+    const source = createLocalFilesSource()
+    await expect(source.readTagLibrary?.()).resolves.toEqual({
+      health: { exclusive: true, values: { ok: { color: '4' } } },
+    })
+  })
 })
