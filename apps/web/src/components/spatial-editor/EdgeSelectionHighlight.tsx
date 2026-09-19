@@ -29,17 +29,23 @@ export function EdgeSelectionHighlight({
       }}
     >
       <title>Selected connection</title>
-      {selected.map((edge) => (
-        <polyline
-          key={edge.id}
-          data-testid="edge-selection-highlight"
-          points={edge.path.map((p) => `${p.x},${p.y}`).join(' ')}
-          fill="none"
-          stroke="var(--manipulation)"
-          strokeWidth={3}
-          strokeLinecap="round"
-        />
-      ))}
+      {/* ONE element for the whole selection, each stroke a subpath. A
+          keyed list of <polyline>s is the obvious shape and was tried: in
+          the editor's tree (not in isolation) it tripped React's
+          "`key` is not a prop" warning, which the browser setup turns into a
+          failure. One element also keeps `data-testid` unique, which strict
+          locators require. */}
+      <path
+        data-testid="edge-selection-highlight"
+        d={selected
+          .map((edge) => `M ${edge.path.map((point) => `${point.x} ${point.y}`).join(' L ')}`)
+          .join(' ')}
+        fill="none"
+        stroke="var(--manipulation)"
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
