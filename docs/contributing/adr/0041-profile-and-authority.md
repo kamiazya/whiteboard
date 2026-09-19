@@ -170,10 +170,10 @@ inferred join does not.
 ### What is deferred, and what triggers it
 
 - **Revocation reaching an offline replica** — [ADR-0042](0042-offline-revocation.md),
-  decided the same day on a different axis than this ADR expected: the policy
-  chooses whether a replica EXISTS rather than how long it lives, because a
-  lease over a plaintext cache is advisory. An expiring lease as a real
-  guarantee still waits on E2EE.
+  decided the same day: the policy chooses whether a replica exists, and where
+  one does it is encrypted at rest under a key the keeper withholds on
+  revocation. Cryptographic rather than advisory, and not E2EE — the keeper
+  holds the plaintext either way.
 - **The user DID method** stays deferred with ADR-0035 decision 2's trigger.
   This ADR is written so that nothing waits on it.
 - **The concrete policy surface** — how an administrator states an order — is

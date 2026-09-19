@@ -1,172 +1,179 @@
-# ADR-0042: An offline policy decides whether a replica exists, not how long it lives
+# ADR-0042: An offline policy decides whether a replica exists, and revocation withholds its key
 
 **Status:** Accepted — human gate 2026-09-19. Design of record; nothing
 implemented. Split out of [ADR-0041](0041-profile-and-authority.md), which
-decides profiles and authority and defers this. Constrains
-[ADR-0023](0023-replica-model.md) decision 2's offline-readable replica with an
-organisation policy, and leaves a hard guarantee over already-cached bytes to
-[ADR-0035](0035-device-keys-and-keeper.md)'s deferred E2EE case.
+decides profiles and authority. Constrains [ADR-0023](0023-replica-model.md)
+decision 2's offline-readable replica with an organisation policy, and makes
+the revocation cryptographic rather than advisory. The cold-start-offline case
+is the one part deferred, and it shares a gesture with
+[ADR-0039](0039-passkey-attestation.md) decision 6.
 
 ## Context
 
 ADR-0041 decision 3 gives a keeper L1 (access to a resource) and L2
 (acceptance of a credential). Both are a state change at the keeper, and
-neither reaches a holder that is not listening.
+neither reaches a holder that is not listening. ADR-0023 decision 2 makes a
+replica readable while the keeper is unreachable — a feature, and the
+obstacle.
 
-ADR-0023 decision 2 makes a replica readable while the keeper is unreachable.
-That is a feature and it is the obstacle: an enterprise asking for immediate
-revocation is asking for it to stop being true.
+### Two earlier framings of this were wrong, in opposite directions
 
-### A lease over a plaintext cache is an advisory, not a guarantee
+**The first** offered a lease with a TTL and declined to choose, pending
+deployment evidence. **The second** rejected the lease outright and kept only
+"cache or do not cache", on the ground that a lease over a plaintext store is
+advisory: `docs/explanation/security-model.md` records that a browser keeper's
+IndexedDB content "remain[s] readable by whatever later owns the origin", with
+"no equivalent fix available", so an expired lease is the *application*
+declining to render bytes still on the disk.
 
-The first framing of this ADR offered "a lease with a TTL" as the way to bound
-exposure. Measured against what this project already documents about its own
-storage, that option is weaker than it sounds.
+That reasoning was sound and its conclusion was too narrow, because it assumed
+the only thing an expiry could take away was **the data**. The owner's
+correction: expire the **key** instead. A replica whose bytes are ciphertext
+is useless to a revoked holder without anything being deleted, and a
+reconnection that restores authorisation restores the key rather than
+re-downloading the workspace.
 
-`docs/explanation/security-model.md` states that a browser keeper's canvases,
-files and CRDT history in IndexedDB "remain readable by whatever later owns the
-origin", and that there is "no equivalent fix available" — the data has to be
-addressable by the origin for the runtime to work. So when a lease lapses, what
-happens is that **the application declines to render bytes that are still on
-the disk**. An honest client honours it. Anything with origin access does not
-have to.
+That also corrects a claim the second framing made: that a bounded tier waits
+on ADR-0035's deferred E2EE. It does not, and the two are different problems.
 
-That reframes the whole question. The three options are not equally strong:
+| | who is kept out | what it costs |
+|---|---|---|
+| E2EE (ADR-0035, deferred) | **the keeper itself** | user-held keys, per-device wrapping, a recovery story |
+| encryption at rest under a keeper-held key | anyone holding the replica **without the keeper's cooperation** | one key per workspace |
 
-| | guarantee over bytes already cached |
-|---|---|
-| no cache exists | **real** — there is nothing to read |
-| lease expires | advisory — depends on the client |
-| cache forever | none, by design |
+The keeper already holds the plaintext — it is the keeper. Encrypting the
+replica hides nothing from it and is far cheaper than E2EE, while being
+exactly the mechanism revocation needs.
 
-The only mechanism that would make an expiring lease a real guarantee is
-content encrypted under a key the client must fetch. That is ADR-0035's
-deferred E2EE case, whose candidate (`prf`-derived wrapping) that ADR records
-as unevenly supported and carrying its own recovery dependency. It is not
-available to build on today.
+### The lesson about where a key may live is already paid for
 
-### The admin can evaluate one of these questions and not the other
-
-ADR-0023 decision 1 rejected a global cache-strategy setting because "a mode
-toggle would name a mechanism users cannot evaluate; the keeper names the thing
-they actually decide about". The same test applies here and separates the
-options cleanly:
-
-- *"Do our people need to work offline?"* — an administrator can answer this.
-- *"What is the correct TTL in hours?"* — an administrator cannot, because that
-  number is the maximum exposure window and the maximum offline working time
-  read from two sides, and nothing tells them where to put it.
-
-### Reading and editing offline are two different risks
-
-Named by the owner, and absent from the first framing:
-
-- **reading** offline is an exposure risk — content is on a machine the
-  organisation no longer controls;
-- **editing** offline is a different one — a person revoked while disconnected
-  reconnects carrying edits, and the keeper must decide what to do with them.
-
-A CRDT makes the second harder than it looks. Loro operations carry no wall
-clock the keeper trusts, so "accept everything authored before the revocation"
-is not a query the merge can answer.
+`browser-idb.ts`'s v5 → v6 migration deleted the `reconnectKeypairs` store
+because, as ADR-0039 puts it, a key beside the content can be invoked by
+whoever can also rewrite the content. The same applies here and is the single
+implementation trap: **a content key persisted in IndexedDB collapses this
+design back to the advisory case.** The key comes from the network, per
+session, and lives in memory.
 
 ## Decision
 
-### 1. The policy chooses whether a replica exists, not how long it may live
+### 1. The policy chooses whether a replica exists
 
 An organisation states, per workspace and defaulting from an organisation-wide
-setting, whether its workspaces may be replicated to a client at all. That is
-the axis, because it is the one with a real guarantee at one end and a question
-an administrator can answer.
+setting, whether its workspaces may be replicated to a client at all. This is
+the shape Google Workspace uses for offline access — an administrator turns it
+on or off for a group — and it is a question an administrator can answer,
+where "what is the correct TTL in hours?" is not.
 
-This is the shape Google Workspace uses for offline access, which the owner
-raised as prior art: an administrator turns offline access on or off for a
-group, rather than tuning how stale an offline copy may be.
+### 2. A replica is encrypted at rest, under a key the keeper holds
 
-### 2. Three tiers, and the middle one is honest about what it buys
+Where a replica exists, what is written to IndexedDB is ciphertext under a
+per-workspace content key. The client receives that key on authorising and
+holds it **in memory only** — never in a store, for the reason above.
 
-| tier | replica of an organisation workspace | revocation takes effect | cost |
+### 3. Revocation withholds the key; that is the whole mechanism
+
+A revoked client reconnects, is refused the key, and its replica is ciphertext
+from then on. Nothing has to be deleted for the guarantee to hold, and nothing
+has to be re-downloaded when access continues.
+
+**Deleting the local replica is therefore housekeeping, not security.** A
+client may free the space, and an honest one will, but the guarantee does not
+rest on it — which is the honest version of a claim the previous framing had
+to hedge as "best-effort".
+
+Not deleting has a second benefit worth stating, because it is the case an
+administrator will meet: **a revocation reversed by mistake costs nothing**.
+Restoring access restores the key, and the replica is readable again.
+
+### 4. Un-merged offline edits are discarded with everything else
+
+A person revoked while disconnected reconnects carrying edits. They are not
+merged, and **no export path is offered**.
+
+They are edits to a document the organisation owns, made after it decided that
+person should stop contributing; handing them back would reopen the route the
+revocation just closed. An earlier draft proposed a one-time export key on the
+reasoning that a person should not lose their work — the owner rejected it,
+and correctly: the work is not the person's to take.
+
+No deletion step is needed here either. The edits sit under the same withheld
+key as the rest of the replica.
+
+The person is still **told**, because silence would be read as a bug rather
+than a decision: *removed from this workspace; changes made since then were
+not sent.* That is honesty about what happened, not a copy of the content.
+
+### 5. Three tiers
+
+| tier | replica | revocation takes effect | offline work |
 |---|---|---|---|
-| **no-offline** | not created; reads require the keeper | immediately, by construction | no offline work at all |
-| **offline** (default) | created, no expiry | at the next reconnect | bytes cached before revocation stay readable |
-| **bounded** | created, lease with a TTL | at the next reconnect, or at lapse | an *advisory* bound; see Context |
+| **no-offline** | not created | immediately, by construction | none |
+| **offline** (default) | encrypted, key per session | at the next reconnect | within a session that began online |
+| **bounded** | encrypted, key leased with a TTL | at reconnect, or at lapse | until the lease lapses |
 
-`no-offline` and `offline` are the decision. **`bounded` is specified but not
-built**: until content is encrypted under a fetched key it adds a rarely
-exercised code path in exchange for a guarantee the storage model does not
-support, and shipping it would invite exactly the misreading this ADR exists to
-prevent. Its trigger is E2EE landing.
+All three are buildable. `no-offline` remains the only one whose guarantee
+holds without any assumption about the client, since there is nothing on the
+disk at all; `offline` and `bounded` rest on the key never being persisted.
 
-### 3. Reconnect is where a revocation is applied, and the purge is best-effort
+### 6. Cold-start offline is deferred, and its gesture already has an owner
 
-On reconnecting, a client learns its access was revoked and removes the local
-replica. `demote-browser-workspace.ts` already deletes a browser workspace
-record after a verified move, and the registry row with it, so this is that
-machinery pointed the other way rather than a new one.
+A key held in memory is gone when the tab closes, so reopening offline finds
+ciphertext and no key. Making that work means persisting the key **wrapped by
+something not stored beside it** — WebAuthn's `prf` extension, which ADR-0035
+names as a wrapping mechanism and which unwraps without a network.
 
-**It is best-effort, and must be described that way anywhere it is surfaced.**
-A revoked client is by definition one the organisation no longer controls; a
-purge it is asked to perform is a request. The guarantee that does hold is
-narrower and worth stating on its own: **after revocation, no further content
-reaches that client.** Anything already on the disk was already exfiltratable
-before the revocation was issued, which is what tier `no-offline` exists to
-prevent in the first place.
+Deferred rather than decided, but the reason to wait is thinner than ADR-0035
+suggests: that ADR called `prf` support uneven, and ADR-0039's own measurement
+of 2026-09-13 found it **broadly available on platform authenticators**
+(Safari 18+ and macOS 15, Firefox 139+, Chrome 147 on Windows). The remaining
+cost is the one ADR-0035 names and this ADR does not solve: the passkey
+provider becomes the recovery path.
 
-### 4. Edits made offline by a revoked actor are refused, and kept for their author
-
-They are not merged. The keeper rejects the push, because the alternative is a
-person the organisation has removed writing into its document, and the CRDT
-cannot offer the middle option — Loro operations carry no keeper-trusted
-timestamp, so "accept what predates the revocation" is unanswerable.
-
-The refusal does not destroy the work. The client keeps the un-merged edits
-locally and offers them as an export, so the outcome is "your changes could not
-be sent, here they are" rather than silent loss. A person whose last day was
-spent working on a plane should not discover the work is simply gone.
+When it lands, it should be the **same gesture** as ADR-0039 decision 6's
+user-verification gate: unlocking a workspace and obtaining its key are one
+action, not two prompts for the same intent.
 
 ## Consequences
 
 ### What this makes possible
 
-- An organisation with a compliance requirement can have a real guarantee by
-  choosing `no-offline`, and pays for it in offline capability rather than in a
-  number nobody can justify.
-- Everyone else keeps ADR-0023's behaviour unchanged, which stays the default.
-- "Immediate revocation" becomes a claim this project can make precisely, and
-  only for `no-offline`.
+- Revocation is cryptographic rather than advisory, without E2EE.
+- Reconnecting after a long offline stretch re-keys instead of re-downloading,
+  which is what makes `bounded` usable rather than a penalty.
+- An organisation with a compliance requirement can choose `no-offline` for an
+  absolute guarantee, or `bounded` for one that holds against everything but a
+  client that persists a key it was told not to.
 
 ### What is deferred, and what triggers it
 
-- **`bounded` as a real guarantee** — trigger: E2EE (ADR-0035), which makes an
-  expired lease mean the bytes cannot be read rather than will not be shown.
-- **How a policy is stated and distributed** — an increment. The decision here
-  is the axis and the tiers.
+- **Cold-start offline** — decision 6. Trigger: ADR-0039 decision 6's gate
+  being built, since they are one gesture.
+- **How a policy is stated and distributed** — an increment.
 
 ### What gets harder
 
-- Two storage behaviours for organisation workspaces, and a `no-offline` client
-  must degrade legibly: "this workspace needs a connection" is a different
-  sentence from "cannot reach the keeper", and they must not look the same.
-- Decision 4 asks for an export path that does not exist yet, and a rejected
-  push is a state the editor has to render.
+- Every read of a replica now passes through a decrypt, and the key's lifetime
+  becomes a thing the app must manage correctly. The failure mode is quiet: a
+  key persisted "for convenience" leaves every test green and the guarantee
+  gone. This wants an executable guard, not a prose rule.
+- A `no-offline` client must degrade legibly — "this workspace needs a
+  connection" is a different sentence from "cannot reach the keeper".
+- Decision 4 asks for a message the editor does not have yet.
 
 ## Alternatives considered
 
-**A lease with a TTL as the primary answer.** The first framing. Demoted to a
-specified-but-unbuilt tier once the plaintext-cache fact was checked rather
-than assumed: it reads as the rigorous option and is the one whose guarantee
-the storage model cannot back.
+**A lease over a plaintext cache.** The first framing. Rejected: an expired
+lease is the app declining to render bytes still on the disk.
 
-**Deciding nothing until a deployment with the requirement exists.** This
-ADR's own previous revision. Superseded by the observation that the policy
-axis — cache or no cache — does not need that evidence, because it is not a
-calibration. Only the TTL needed a number, and the TTL is what is deferred.
+**Cache-or-no-cache only, with the bounded tier waiting on E2EE.** The second
+framing. Rejected on the owner's correction — expiring the key is not E2EE and
+does not need it, and deleting the data is a worse way to end access than
+withholding the means to read it.
 
-**Accepting a revoked actor's offline edits up to the revocation time.** The
-apparently fair option; rejected in decision 4 because the CRDT cannot
-establish "up to" against a clock the keeper trusts, so it would be a guess
-presented as a rule.
+**A one-time export key for a revoked person's un-merged edits.** Rejected by
+the owner in favour of discarding them. The edits are the organisation's
+content, and the export would reopen what the revocation closed.
 
-**Deleting the author's un-merged edits on refusal.** Rejected as the kind of
-data loss a person cannot anticipate or recover from, for no security gain —
-the edits are already on their disk either way.
+**Accepting a revoked actor's offline edits up to the revocation time.**
+Rejected: Loro operations carry no keeper-trusted clock, so "up to" cannot be
+established and would be a guess presented as a rule.
