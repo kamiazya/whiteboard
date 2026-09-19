@@ -447,8 +447,15 @@ as one person. What it may not do is decide whether the person exists or
 revoke them: ADR-0035 decision 4 keeps a server a keeper rather than an
 issuer, so lower tiers keep working when a higher one disappears, and the
 identifier is minted low and linked upward rather than replaced. This is a
-design to be recorded as its own ADR (0041) and gated there; nothing of it is
+design to be recorded as its own ADR and gated there; nothing of it is
 implemented.
+
+*Recorded 2026-09-19 as [ADR-0041](0041-profile-and-authority.md), with one
+correction to the direction above: "may not decide whether the person exists
+or revoke them" was too broad. A keeper may revoke access to its own resource
+and may refuse a credential — ADR-0035 decision 4 calls that governance — and
+only revoking the PERSON is forbidden. The propagation of such a revocation to
+an offline replica is [ADR-0042](0042-offline-revocation.md), left open.*
 
 **2026-09-16 — "verified" split into a claim and its evidence.** The first
 draft's decision 5 read: *"The ABSENCE of an attestation is what marks a
