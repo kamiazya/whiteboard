@@ -1174,6 +1174,25 @@ the surface) or stays out (then it measures spontaneous data hygiene, which
 reads 0 of 15) is a decision about what the lane is FOR, and it is not
 taken here.
 
+> **Taken (2026-09-19, user decision): it belongs in the prompt.** The lane
+> measures whether the SURFACE supports a stated intent, not whether a model
+> volunteers an unstated one. The two-axis task's prompt now asks for the
+> board to stand on its own — "somebody opening it next week, who was not in
+> this conversation, should be able to tell from the board itself what the
+> differences between the boxes mean" — in a user's words, naming no
+> mechanism, since a prompt that quotes the surface measures the quote (the
+> twenty-fourth reading measured exactly that hazard one level down, in a
+> description).
+>
+> **Rounds 15 through 20d were all taken under the old prompt and are not
+> comparable with what follows.** The next reading of this task is owed
+> after the instrument gap the twenty-fourth reading found is closed — a
+> board coloured by a declared tag library still scores `colour unused` —
+> and should hold the prompt fixed, or it conflates the two changes.
+>
+> Only this task's prompt changed. The kinds task grades boxes, flows and
+> overlap, and asks nothing of a declaration.
+
 By-products from the refusal texts, filed rather than fixed here:
 `stencil: null` on `node.add` was refused in two trials ("expected string,
 received null") — the model says "no stencil" for a title or a frame the
@@ -1279,6 +1298,8 @@ NOT a plugin's — a tag needs no registry to be a partition — reads the same
 as the registered facet did. Six remedies, one reading, and the open
 question stays the one the twenty-second named: whether the prompt asks
 for the meaning to be recorded is a decision about what the lane is FOR.
+(Taken 2026-09-19 — it does; see the note under the twenty-second, and
+read every round up to 20d as having been taken before it.)
 The inline `tags` field on the canvas ops therefore stays unbought at its
 measured price (+6 undescribed parameters, +300 visible on
 `wb_canvas_edit`); a model that does not reach for the described path on
