@@ -820,6 +820,15 @@ describe('SettingsPage — the active section is mounted once', () => {
     expect(screen.getAllByRole('radiogroup', { name: /theme/i })).toHaveLength(1)
   })
 
+  // /settings is its own branch — the section list renders there and nowhere
+  // else, and the pane still holds General behind it. A mutation that added
+  // the content back to that list was missed by the case above, which renders
+  // /settings/general and never reaches the branch.
+  it('mounts General once at /settings, where the section list renders too', () => {
+    renderAt('/settings')
+    expect(screen.getAllByRole('radiogroup', { name: /theme/i })).toHaveLength(1)
+  })
+
   it('offers a daemon-backed action once, not once per layout chrome', async () => {
     vi.stubGlobal(
       'fetch',
