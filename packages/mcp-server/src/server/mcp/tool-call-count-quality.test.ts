@@ -258,7 +258,36 @@ describe('what an errand costs in tool calls', () => {
         // facet) — its schema is a record of keys each holding a record of
         // values, so it is the widest facet schema the listing carries, and
         // the errand pays to see it exactly as it paid for the axes facet.
-        responseBytes: 12162,
+        //
+        // Then 12,162 -> 13,388: +1,226 is one sentence on `visual.symbol/v0`
+        // saying WHERE a badge is drawn — the minimap, a browser row, the
+        // favicon — and that a canvas does not draw it, with the scoped tag
+        // that does. ADR-0031's twenty-third reading is what it answers: a
+        // trial recorded health as a badge on all five boxes and spent no
+        // colour, so the board showed no health at all, because the name is
+        // the closest word in the table to "show it" and nothing said the
+        // symbol is invisible here.
+        //
+        // Read the doubling before reading the number: the description is
+        // 613 bytes and this row moved 1,226, because an MCP reply carries
+        // its answer TWICE — once as `content` text, once as
+        // `structuredContent`. Every byte a tool ANSWERS is priced at 2x
+        // here, which is worth knowing before pricing the next one.
+        //
+        // 160 of those 613 bytes are the clause naming the tag LIBRARY, and
+        // they were bought by a reading rather than reasoned: the wording
+        // without them said a tag "colours the box", which three trials of
+        // three acted on and the board still showed nothing, because an
+        // undeclared value carries no colour. A description is a promise the
+        // product has to keep.
+        //
+        // And read it beside the row that did NOT move: rung 1 is unchanged
+        // to the byte. A facet's payload schema is in no tool's input table,
+        // so this costs ZERO model-visible bytes on every turn and 1,226 on
+        // the one call that asks what a write may name — the same trade
+        // `otherTargets` took, and the reason the sentence went here rather
+        // than into a tool description.
+        responseBytes: 13388,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
