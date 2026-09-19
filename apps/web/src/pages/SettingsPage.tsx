@@ -25,6 +25,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { FontsCard } from '../components/FontsCard.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
+import { PasskeysCard } from '../components/PasskeysCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { AppVersionRow } from '../components/settings/AppVersionRow.js'
 import { GestureTraceRow } from '../components/settings/GestureTraceRow.js'
@@ -254,6 +255,12 @@ function ConnectionsSection({
       <div className="space-y-6">
         <section aria-label="Paired web apps">
           <PairedOriginsCard />
+        </section>
+        {/* Beside the paired origins because it manages the same thing one
+            layer in: which origins may reach this daemon, and which passkeys
+            it will accept a move from. */}
+        <section aria-label="Passkeys">
+          <PasskeysCard daemonBaseUrl={daemon.baseUrl} />
         </section>
         <section aria-label="Storage">
           <StorageReportCard />

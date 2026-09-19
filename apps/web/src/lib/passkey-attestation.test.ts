@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
   attestPromotion,
+  forgetRegisteredPasskey,
   getRegisteredPasskey,
   type PasskeyCredentials,
   passkeySupported,
@@ -169,6 +170,30 @@ describe('registerPasskey', () => {
         credentials: { create: async () => attestationCredential(), get: async () => null },
       }),
     ).toEqual({ ok: false, reason: 'rejected', detail: 'malformed response' })
+    expect(getRegisteredPasskey(DAEMON, storage)).toBeNull()
+  })
+})
+
+describe('forgetRegisteredPasskey', () => {
+  it('drops this daemon and leaves every other one', async () => {
+    const storage = memoryStorage()
+    storage.setItem(
+      'whiteboard:daemon-passkeys',
+      JSON.stringify({
+        [DAEMON]: { credentialId: b64u(RAW_ID), registeredAt: 'x' },
+        'http://127.0.0.1:4000': { credentialId: 'b3RoZXI', registeredAt: 'y' },
+      }),
+    )
+
+    forgetRegisteredPasskey(`${DAEMON}/`, storage)
+
+    expect(getRegisteredPasskey(DAEMON, storage)).toBeNull()
+    expect(getRegisteredPasskey('http://127.0.0.1:4000', storage)?.credentialId).toBe('b3RoZXI')
+  })
+
+  it('is a no-op where nothing is registered', () => {
+    const storage = memoryStorage()
+    forgetRegisteredPasskey(DAEMON, storage)
     expect(getRegisteredPasskey(DAEMON, storage)).toBeNull()
   })
 })
