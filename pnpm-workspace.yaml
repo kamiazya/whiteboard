@@ -139,13 +139,16 @@ overrides:
   # over text, never sharp's image decoding or adm-zip's archive reading.
   # Drop each entry once transformers depends on a patched range itself.
   #
-  # adm-zip stays at 0.6.0 because there is nowhere else to go: the symlink
-  # advisory GHSA-vwc7-r8mq-g2x9 names >=0.6.1 and adm-zip has published no
-  # such version (latest is 0.6.0, and `^0.6.1` fails the install outright).
-  # It is moderate, so it does not reach the `--audit-level=high` gate; the
-  # entry still lifts the 0.5.x copies. Raise it when 0.6.1 ships.
+  # adm-zip is at 0.6.1, which this entry waited for: the symlink advisory
+  # GHSA-vwc7-r8mq-g2x9 (moderate) named >=0.6.1 while no such version
+  # existed, so the entry sat at ^0.6.0 and lifted the 0.5.x copies only.
+  # 0.6.1 published 2026-09-11 and GHSA-7q85-xj36-vmfc (HIGH, uncontrolled
+  # memory allocation from a declared uncompressed size) names the same
+  # range — so unlike its predecessor it does reach the `--audit-level=high`
+  # gate, and `check` goes red on every branch until this is raised. One
+  # bump clears both advisories.
   sharp@<0.35.4: ^0.35.4
-  adm-zip@<0.6.0: ^0.6.0
+  adm-zip@<0.6.1: ^0.6.1
   # GHSA-gqvv-2mrq-wpjv + GHSA-g6gw-c38x-mqfc + GHSA-crvj-82cr-hjcx
   # (moderate x3), all cleared at 4.13.5. Unlike the entries above this one
   # DOES reach the published runtime: hono is a declared dependency of both
