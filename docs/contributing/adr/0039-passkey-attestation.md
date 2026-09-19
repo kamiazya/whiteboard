@@ -2,10 +2,13 @@
 
 **Status:** Accepted — human gate 2026-09-16. Extends
 [ADR-0035](0035-device-keys-and-keeper.md) and amends the scope of its decision
-1 (that ADR carries the addendum). Design of record; nothing implemented.
-Revised the same day, before acceptance, when review split "verified" into a
-CLAIM and its EVIDENCE — decisions 5, 8 and 9, and the second paragraph of
-decision 2, are that revision; the first draft's decision 5 is kept under
+1 (that ADR carries the addendum). Decisions 1, 2, 3, 5 and 7, the promotion
+row of decision 4, and the History states of decision 9 are **implemented**
+(see *Implementation*, dated 2026-09-17); decision 6 and decision 9's profile
+are design of record, with their 2026-09-17 refinements under *Revisions*.
+Revised the same day as acceptance, before it, when review split "verified"
+into a CLAIM and its EVIDENCE — decisions 5, 8 and 9, and the second paragraph
+of decision 2, are that revision; the first draft's decision 5 is kept under
 *Revisions* because the correction is the point.
 
 ## Context
@@ -322,6 +325,58 @@ is minted locally and needs no DID method yet.
   "2026 redundancies" leaks from the list. Whether a hidden document appears
   by name is a UX decision that needs a person, and no cipher answers it.
 
+## Implementation
+
+Recorded 2026-09-17, against the three pull requests that carried it.
+
+**#1610 — contracts, verifier, daemon.** `attestationSchema` and a canonical
+`base64urlSchema` on the version entry (`server-core/versions/version-entry`);
+`verifyWebAuthnAssertion` and `verifyWebAuthnRegistration` in
+`mcp-server/src/server/security/` (ES256 over
+`authenticatorData || SHA-256(clientDataJSON)`, the rpId hash against the
+registering origin's host, UP and UV required, `BE=0, BS=1` refused, and the
+sign count refused when it does not advance while either side is non-zero);
+a file-backed pin store (`webauthn-credentials.json`) holding the public key
+as JWK, `backupEligible` and the last sign count per origin and credential;
+`POST/GET/DELETE /api/pairing/credentials` under `runtime:admin`, the origin
+taken from the browser-enforced header and required to hold a pairing grant;
+`POST /api/w/:workspaceId/workspace-document/promote`, which verifies before
+it merges and refuses with the verifier's reason as a 403; migration 0027
+(`versions.attestation`); and the `promoteWorkspace` operation, which records
+one explicit (`auto: false`) human version per promoted document with the
+attestation beside it. The challenge is
+`SHA-256(promotionChallengeInput({ workspaceId, snapshotDigest }))`, shared
+through daemon-client so both ends hash the same bytes.
+
+**#1612 — the browser.** `apps/web/src/lib/passkey-attestation.ts` keeps the
+credential id a daemon pinned and the daemon's own `createdAt` for it, keyed
+by that daemon's base URL (decision 1) — never key material, which stays with
+the authenticator; registers with `attestation: 'none'`, ES256 and `userVerification:
+'required'` on the page's own origin; asks the registered credential to sign
+the recomputed challenge at promote, and answers `null` where it cannot ask,
+which the move records as unattested (decision 5's "absence means not
+asked"). Settings › This workspace shows the passkey's state and holds the
+move while a registration is in flight; History shows decision 9's fourth
+state, *human · verified*, from the presence of the attestation alone.
+
+**#1614 — the seam, crossed for real.** `pnpm smoke:passkey-promote` in the
+distribution chain and CI's `verify` job: Chromium's CTAP2 virtual
+authenticator on a paired `localhost` origin against this daemon, through the
+pairing bearer under a browser-enforced Origin. It is what caught the one
+defect this seam has produced — Chromium's `clientDataJSON` carries
+`other_keys_can_be_added_here`, which a strict schema refuses — and restoring
+that strictness fails it.
+
+**Platform matrix, as verified.** Chromium (virtual authenticator, `BE=0`)
+only. Android Chrome, whose Google Password Manager passkeys are the `BE=1`
+case, is next; Safari is out of scope (user decision, 2026-09-17). The facts
+in *Context* stay dated and second-hand until then.
+
+**The promote row's `actor`** is the recording daemon's device DID, as every
+version the daemon writes carries (ADR-0035 decision 2). Confirmed
+2026-09-17: it says which keeper recorded the row, and the person stays
+outside the row until decision 9's profile exists.
+
 ## Alternatives considered
 
 **A non-extractable `CryptoKey` in IndexedDB.** Rejected in decision 1 — it is
@@ -356,6 +411,44 @@ no origin-squatting analogue. Rejected because moment 1 is exactly the boundary
 where the daemon has nothing to check, and moment 2 has no daemon in it at all.
 
 ## Revisions
+
+**2026-09-17 — decision 6 refined to a WORKSPACE gate, and decision 9's
+profile given a direction.** Two things the implementation of decisions 1–5
+had taught, and a user decision on each.
+
+*The gate is per browser workspace, at the switch.* The browser keeps
+several workspaces and the address decides which is active
+(`browser-workspace-id.ts`, ADR-0019), so the switch is already the one moment
+the content in front of a person changes. Asking for user verification there,
+before the incoming workspace mounts, covers every surface the scope
+inventory names in one place: the index page, previews, thumbnails and the
+search corpus are all built from the active workspace, and a locked one never
+becomes active. The document-name leak the *Consequences* raise is thereby
+answered at the UI — a locked workspace's list is never rendered, and the
+switcher shows only workspace names — while remaining true in storage, which
+is decision 6's "not encryption" as before. What was weighed against it and
+accepted: the granularity is coarse (a person partitions sensitive boards
+into a workspace of their own), and for a daemon-kept workspace the gate is a
+screen-side hiding of content any paired origin can still fetch, so the first
+increment covers browser-kept workspaces only. The unlock lasts the **tab
+session** and is shared across same-origin tabs over a `BroadcastChannel`
+(an unlocking tab announces; a new tab asks and adopts), with an explicit
+re-lock. Both were the user's call: a per-document prompt was judged too
+frequent to be used, and a per-tab unlock too surprising once several are
+open.
+
+*The profile carries an authority order.* Decision 9 placed the
+device→user table in a profile without saying who keeps it. The direction
+taken: each keeper — the browser's own storage, a daemon, a server — may hold
+a profile record for a person (a locally minted identifier, a display name,
+the credential ids that are theirs), and a higher-authority keeper's record
+takes precedence for what is SHOWN and for which credentials are reconciled
+as one person. What it may not do is decide whether the person exists or
+revoke them: ADR-0035 decision 4 keeps a server a keeper rather than an
+issuer, so lower tiers keep working when a higher one disappears, and the
+identifier is minted low and linked upward rather than replaced. This is a
+design to be recorded as its own ADR (0041) and gated there; nothing of it is
+implemented.
 
 **2026-09-16 — "verified" split into a claim and its evidence.** The first
 draft's decision 5 read: *"The ABSENCE of an attestation is what marks a

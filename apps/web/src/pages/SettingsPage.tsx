@@ -25,6 +25,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { FontsCard } from '../components/FontsCard.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
+import { PasskeysCard } from '../components/PasskeysCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { AppVersionRow } from '../components/settings/AppVersionRow.js'
 import { GestureTraceRow } from '../components/settings/GestureTraceRow.js'
@@ -213,9 +214,21 @@ function GeneralSection({
 
 // Duplicate mount cost (this renders once per visible layout — mobile detail
 // and desktop pane both exist in the DOM at once, see the module doc comment
-// below) is an accepted tradeoff: PairedOriginsCard/StorageReportCard already
-// own their fetch/error/loading state, and splitting that state out to share
-// across two layouts would add real complexity for a cheap, idempotent GET.
+// below) is an accepted tradeoff: PairedOriginsCard, PasskeysCard and
+// StorageReportCard each own their own fetch/error/loading state, and
+// splitting that out to share across two layouts would add real complexity
+// for a cheap, idempotent GET.
+//
+// The consequence is not only a duplicated read. Two of these cards MUTATE —
+// PairedOriginsCard revokes a grant, PasskeysCard registers and revokes a
+// passkey — and each drops the row from its own list, so the hidden layout's
+// copy keeps showing it. CSS hiding does not unmount, so that copy is stale
+// until the section is left and re-entered, which remounts both. It is
+// reachable only by crossing the `sm` breakpoint in between, and repeating
+// the stale action is safe: a second DELETE of a credential already gone
+// answers 404, which the card renders as "could not remove" rather than
+// removing anything else. Lift the state if a card here ever gains a
+// mutation that is NOT safe to repeat.
 function ConnectionsSection({
   daemon,
   onDisconnected,
@@ -254,6 +267,12 @@ function ConnectionsSection({
       <div className="space-y-6">
         <section aria-label="Paired web apps">
           <PairedOriginsCard />
+        </section>
+        {/* Beside the paired origins because it manages the same thing one
+            layer in: which origins may reach this daemon, and which passkeys
+            it will accept a move from. */}
+        <section aria-label="Passkeys">
+          <PasskeysCard daemonBaseUrl={daemon.baseUrl} />
         </section>
         <section aria-label="Storage">
           <StorageReportCard />

@@ -59,6 +59,55 @@ frequently-reused development port accordingly, and prefer the local
 daemon (loopback-bound, its own token) over browser storage for
 anything you would not want a future occupant of that port to read.
 
+## Passkey attestation (moving a workspace to the daemon)
+
+When you move a browser-kept workspace to a daemon, the daemon receives a
+record it never witnessed being written. You can have that move confirmed by
+a **passkey** (Face ID, Touch ID, Windows Hello, or a security key), and the
+daemon records the confirmation beside the versions it creates — History
+shows those as *verified*. This is
+[ADR-0039](../contributing/adr/0039-passkey-attestation.md); the how-to is
+[Connect to a local daemon](../how-to/connect-to-local-daemon.md).
+
+What a passkey confirmation proves, and what it does not:
+
+- **It proves a person was present.** The signature is made by the
+  authenticator after user verification, over a challenge that names the
+  target workspace and a digest of the exact bytes being moved. It says
+  *someone satisfied user verification for this move of this content*. It
+  does not say which machine they were at: a passkey may be synced across a
+  person's devices, and the daemon records whether the credential is the
+  syncable kind rather than assuming.
+- **No private key enters browser storage.** The section above explains why
+  a key kept in the hosted origin's storage would be worthless here: a later
+  occupant of the origin could invoke it. A passkey's private key stays in
+  the authenticator and cannot be invoked without the person's gesture, so
+  same-origin script — including an agent running on the same page — can
+  press the button but cannot produce the assertion. What the browser keeps
+  is only the credential's identifier, so the next move can name it.
+- **It does not protect the content.** Everything the squatting section says
+  about canvas data still holds. An attestation stops content being passed
+  off as a person's confirmed move; it does not stop the content being read
+  or rewritten in the browser before the move.
+
+How the daemon checks it: a passkey is registered from a paired origin, and
+the daemon pins its public key for that origin (`webauthn-credentials.json`
+in the data directory, alongside the pairing grants). A registration is
+bound to the origin's host, so a passkey made at the hosted app does not
+exist for the daemon's own `/pair` origin, and the other way round. Every
+assertion is verified against that pin before the daemon merges anything —
+a wrong signature, a challenge for another workspace, or a replayed
+assertion (the authenticator's sign count did not advance) is refused, and
+nothing lands. A move made without a passkey is recorded as such; absence
+means the browser could not ask, not that the move was rejected.
+
+A **user-verification gate** — asking for a passkey before a browser-kept
+workspace is shown on this screen — is designed but not shipped. When it
+ships, its copy will say what it does and does not do: it hides content on
+this screen from a shared machine, an unattended tab or someone looking over
+a shoulder; it is not encryption, and a process that later owns the origin
+still reads the storage directly.
+
 ## Daemon impersonation (loopback port squatting, the other direction)
 
 The section above concerns a process inheriting a browser ORIGIN. The

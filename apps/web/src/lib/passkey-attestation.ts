@@ -70,6 +70,24 @@ export function getRegisteredPasskey(
   return loadPasskeys(storage)[daemonKey(daemonBaseUrl)] ?? null
 }
 
+/**
+ * Forgets the passkey registered for this daemon.
+ *
+ * Its caller is the settings card that REVOKES a pin: without this, the
+ * browser keeps naming a credential the daemon no longer holds, and the next
+ * move is refused for a reason the person cannot act on — they revoked it
+ * themselves, one screen earlier.
+ */
+export function forgetRegisteredPasskey(
+  daemonBaseUrl: string,
+  storage: StorageLike = globalThis.localStorage,
+): void {
+  const passkeys = loadPasskeys(storage)
+  if (!(daemonKey(daemonBaseUrl) in passkeys)) return
+  const { [daemonKey(daemonBaseUrl)]: _removed, ...rest } = passkeys
+  storage.setItem(PASSKEYS_KEY, JSON.stringify(rest))
+}
+
 /** Whether this page can ask a passkey at all — a secure context with the WebAuthn API. */
 export function passkeySupported(
   win: { PublicKeyCredential?: unknown; navigator?: { credentials?: unknown } } = globalThis,
