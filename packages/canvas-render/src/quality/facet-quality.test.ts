@@ -54,6 +54,11 @@ const UNSPENT = {
     colour: { use: 'unused', carriedBy: [] },
     shape: { use: 'unused', carriedBy: [] },
   },
+  // No board in the corpus carries a scoped tag, on a box or on an edge, and
+  // none colours an edge — so the tag columns and the edge channel (ADR-0040
+  // decision 3) read as silent as the box channels do.
+  multi: [],
+  edges: { colour: { use: 'unused', carriedBy: [] }, multi: [] },
   contested: 0,
 } as const
 

@@ -3,6 +3,7 @@ import {
   canvasColorSchema,
   canvasCommentSchema,
   canvasEdgeSchema,
+  canvasLineSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
 } from './spatial.js'
@@ -366,5 +367,51 @@ describe('canvasCommentSchema', () => {
       targetEdgeId: 'e1',
     })
     expect(both.success).toBe(false)
+  })
+})
+
+describe('tags on the spatial model (ADR-0040 decision 2)', () => {
+  // The stored shape, not the tool's: ADR-0038 decision 3 made what a node
+  // SHOWS one resource field, so a box is its geometry plus that.
+  const box = {
+    id: 'a',
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+    resource: { mimeType: 'text/markdown', content: 't' },
+  } as const
+
+  it('a node, an edge and the board each carry tags, read verbatim', () => {
+    const parsed = spatialCanvasSchema.parse({
+      nodes: [
+        { ...box, tags: ['health:failing', 'Machine Learning'] },
+        { ...box, id: 'b' },
+      ],
+      edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['link:healthy'] }],
+      tags: ['phase:design'],
+    })
+    expect(parsed.nodes[0]?.tags).toEqual(['health:failing', 'Machine Learning'])
+    expect(parsed.edges[0]?.tags).toEqual(['link:healthy'])
+    expect(parsed.tags).toEqual(['phase:design'])
+  })
+
+  it('reads a malformed scoped tag rather than refusing the element — the grammar is a WRITE check', () => {
+    const parsed = spatialNodeSchema.parse({ ...box, tags: ['Health:failing', 'a:b:c'] })
+    expect(parsed.tags).toEqual(['Health:failing', 'a:b:c'])
+  })
+
+  it('a tags value that is not a list costs the tags, not the element', () => {
+    expect(spatialNodeSchema.parse({ ...box, tags: 'health:failing' }).tags).toBeUndefined()
+  })
+
+  it('a LINE carries no tags: ink makes no claim (ADR-0038 decision 2)', () => {
+    const line = {
+      id: 'l',
+      from: { kind: 'point', point: { x: 0, y: 0 } },
+      to: { kind: 'point', point: { x: 1, y: 1 } },
+      tags: ['x'],
+    }
+    expect(canvasLineSchema.safeParse(line).success).toBe(false)
   })
 })

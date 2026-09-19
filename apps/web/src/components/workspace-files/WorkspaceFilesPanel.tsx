@@ -16,9 +16,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/files-source.js'
+import {
+  type TagInUse,
+  type WorkspaceFilesSource,
+  WorkspaceMissingError,
+} from '../../lib/files-source.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
+import { countTagsInUse } from '../../lib/tags-in-use.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -35,6 +40,7 @@ import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
 import { SelectionBar } from './SelectionBar.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
+import { TagStrip } from './TagStrip.js'
 import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
@@ -236,13 +242,21 @@ export function WorkspaceFilesPanel({
   const [renameBusy, setRenameBusy] = useState(false)
   const [renameError, setRenameError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
-  // Every tag in the workspace, each once, in reading order. The strip is
-  // derived — deleting the last carrier of a tag removes its chip with it.
-  const workspaceTags = useMemo(() => {
-    const seen = new Set<string>()
-    for (const entry of documents ?? []) for (const tag of entry.tags ?? []) seen.add(tag)
-    return [...seen].sort((a, b) => a.localeCompare(b))
-  }, [documents])
+  // The vocabulary in use, as the keeper counts it (ADR-0040 decision 5),
+  // reloaded with the list so deleting the last carrier of a tag removes
+  // its chip. A keeper that does not answer, or has not yet, gets the strip
+  // derived from the entries' own tags — documents only, no counts of what
+  // a board's boxes carry.
+  const [tagsInUse, setTagsInUse] = useState<readonly TagInUse[] | null>(null)
+  const workspaceTags = useMemo<readonly TagInUse[]>(() => {
+    if (tagsInUse !== null) return tagsInUse
+    return countTagsInUse(
+      (documents ?? []).map((entry) => ({
+        what: entry.kind === 'spatial' ? 'board' : 'document',
+        tags: entry.tags ?? [],
+      })),
+    )
+  }, [documents, tagsInUse])
   const activeTag = query.trim().startsWith('#') ? query.trim().slice(1) : null
 
   // One broker for the whole panel. Deliberately NOT keyed on the theme the
@@ -265,6 +279,25 @@ export function WorkspaceFilesPanel({
   const loadOutline = useMemo(() => createRowOutlineLoader({ source, broker }), [source, broker])
 
   const readList = useCallback(() => source.listDocuments(), [source])
+  const readTagsInUse = useCallback(
+    () =>
+      source.listTagsInUse === undefined
+        ? Promise.resolve(null)
+        : source.listTagsInUse().catch(() => null),
+    [source],
+  )
+  // Rows land only from the LATEST ask. The workspace-load effect and the
+  // revision effect each ask, and the earlier ask can answer after the
+  // later one — which would show the vocabulary from before the write that
+  // bumped the revision until the next one. A counter rather than a
+  // per-effect flag, since the two effects do not know about each other.
+  const tagsRequest = useRef(0)
+  const loadTagsInUse = useCallback(() => {
+    const token = ++tagsRequest.current
+    return readTagsInUse().then((rows) => {
+      if (token === tagsRequest.current) setTagsInUse(rows)
+    })
+  }, [readTagsInUse])
 
   // Through a ref so it never joins an effect's dependencies: a host that
   // passes an inline arrow would otherwise re-run the workspace-load effect
@@ -384,6 +417,8 @@ export function WorkspaceFilesPanel({
     // somewhere else.
     setRefreshError(null)
     setPinError(null)
+    // The vocabulary is the departed keeper's until the new one answers.
+    setTagsInUse(null)
     // Guarded by the source's IDENTITY, not by a first-run flag: an
     // `initialFolder` is a deliberate address and must survive mounting,
     // while StrictMode replays this effect with the SAME readList — which a
@@ -402,6 +437,7 @@ export function WorkspaceFilesPanel({
         lastCardCount.current = entries.length
         setDocuments(entries)
       })
+      .then(() => loadTagsInUse())
       .catch((err) => {
         if (cancelled) return
         setListStatus(err instanceof WorkspaceMissingError ? 'not-found' : 'error')
@@ -418,6 +454,7 @@ export function WorkspaceFilesPanel({
   useEffect(() => {
     if (revision === undefined) return
     let cancelled = false
+    void loadTagsInUse()
     readList()
       .then((entries) => {
         if (cancelled) return
@@ -887,23 +924,13 @@ export function WorkspaceFilesPanel({
       )}
 
       {workspaceTags.length > 0 && (
-        /* The one place tag chips are BUTTONS: rows are buttons already,
-           and a button inside a button is neither valid nor reachable by
-           keyboard. The strip filters via the search box (#tag), so the
-           filter stays visible, editable state rather than a hidden mode. */
-        <fieldset aria-label="Filter by tag" className="flex flex-wrap gap-1 border-0 px-2 pb-1">
-          {workspaceTags.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              aria-pressed={activeTag === tag}
-              onClick={() => changeQuery(activeTag === tag ? '' : `#${tag}`)}
-              className="text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded-full border px-2 py-0.5 text-[11px]"
-            >
-              #{tag}
-            </button>
-          ))}
-        </fieldset>
+        /* The strip filters via the search box (#tag), so the filter stays
+           visible, editable state rather than a hidden mode. */
+        <TagStrip
+          tags={workspaceTags}
+          activeTag={activeTag}
+          onToggle={(tag) => changeQuery(activeTag === tag ? '' : `#${tag}`)}
+        />
       )}
       {selection !== null && (
         <div className="px-2 pb-2">

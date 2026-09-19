@@ -33,6 +33,11 @@ distinctions survive a projector, a colour-blind reader and a greyscale print.
 `node.patch` dresses boxes that already exist and takes a selector, so one op can dress every
 box in a group. An explicit `color` beside the stencil wins over the stencil's own.
 
+Leaving `stencil` out says the op names none, and `"stencil": null` says the same thing — so a
+batch that sets it on some boxes and null on others is not refused. On a `node.patch`, null
+leaves the box wearing whatever it already wears; there is no way to take a stencil off, because
+undressing would have to decide what becomes of the colour and the silhouette it wrote.
+
 `wb_facet_list` reports the ids you may use, and a refusal here lists them too — so there is no
 list to memorise and none baked into the tool schema.
 

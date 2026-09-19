@@ -1,17 +1,35 @@
+import { createHash } from 'node:crypto'
 import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import {
+  type PromoteWorkspaceResponse,
+  promoteWorkspaceRequestSchema,
+  promotionChallengeInput,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
-import { applyWorkspaceDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import {
+  type Attestation,
+  applyWorkspaceDocumentUpdate,
+  type OperatorInfo,
+  promoteWorkspace,
+  type ServerDeps,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
+import { decodeAttestation, verifyWebAuthnAssertion } from '../../security/webauthn-assertion.js'
+import type { WebAuthnCredentialStore } from '../../security/webauthn-credential-store.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
+import { defaultHumanDisplayName } from './_shared.js'
 
 // Same ceiling as the per-document update path: a workspace-granularity
 // update carries the same kind of Loro delta, just scoped wider.
 const WORKSPACE_DOC_UPDATE_LIMIT_BYTES = 16 * 1024 * 1024
+// The same record, base64url-inflated by 4/3 inside a JSON body, plus the
+// attestation beside it.
+const WORKSPACE_DOC_PROMOTE_LIMIT_BYTES = 24 * 1024 * 1024
 
 export interface WorkspaceDocumentRouterOptions {
   triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
@@ -19,6 +37,65 @@ export interface WorkspaceDocumentRouterOptions {
   // Production wires this from document.ts; a router built without it falls
   // back to the same wiring via getDefaultServerDeps.
   serverDeps?: ServerDeps
+  /**
+   * The passkeys paired origins pinned (ADR-0039). Absent in a composition
+   * with no pairing (server-mode), where a promote that brings an
+   * attestation is refused as naming an unknown credential.
+   */
+  credentials?: WebAuthnCredentialStore
+  /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
+  daemonActor?: string
+}
+
+const sha256 = (input: Uint8Array | string): Buffer => createHash('sha256').update(input).digest()
+
+/**
+ * What stands between a promote's attestation and the rows it will be
+ * written on. The pin is looked up by the browser-enforced Origin header
+ * and the credential the assertion names; the challenge is recomputed from
+ * the TARGET handle and the exact bytes received, so the signature can only
+ * vouch for this content into this workspace; and two facts the pin holds
+ * are checked against what the assertion says — backup eligibility, which
+ * is fixed for a credential's life (decision 3), and the sign count, which
+ * must advance while either side counts (a clone, or a replay, does not).
+ * Recording the count is the last step, so a refusal records nothing.
+ */
+function verifyPromotionAttestation(input: {
+  attestation: Attestation
+  originHeader: string | undefined
+  handle: string
+  snapshot: Uint8Array
+  credentials: WebAuthnCredentialStore | undefined
+}): { ok: true } | { ok: false; reason: string } {
+  let origin: string
+  try {
+    if (input.originHeader === undefined) return { ok: false, reason: 'origin' }
+    origin = new URL(input.originHeader).origin
+  } catch {
+    return { ok: false, reason: 'origin' }
+  }
+  const pin = input.credentials?.find(origin, input.attestation.credentialId) ?? null
+  if (pin === null) return { ok: false, reason: 'unknownCredential' }
+  const challenge = sha256(
+    promotionChallengeInput({
+      workspaceId: input.handle,
+      snapshotDigest: sha256(input.snapshot).toString('base64url'),
+    }),
+  )
+  const verdict = verifyWebAuthnAssertion(decodeAttestation(input.attestation), {
+    challenge,
+    origin,
+    rpId: pin.rpId,
+    publicKeyJwk: pin.publicKeyJwk,
+  })
+  if (!verdict.ok) return { ok: false, reason: verdict.reason }
+  if (verdict.backupEligible !== pin.backupEligible) {
+    return { ok: false, reason: 'backupEligibility' }
+  }
+  if (!input.credentials?.recordSignCount(origin, pin.credentialId, verdict.signCount)) {
+    return { ok: false, reason: 'signCount' }
+  }
+  return { ok: true }
 }
 
 // The workspace-granularity sync surface (order 7 of the workspace-document
@@ -111,6 +188,100 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       }
 
       const response: UpdateDocumentResponse = { ok: true }
+      return c.json(response)
+    },
+  )
+
+  // Promotion (ADR-0023 + ADR-0039): the browser keeper's whole record
+  // merged in, as the update route would merge it, plus one explicit human
+  // checkpoint per promoted document carrying the person's evidence. The
+  // attestation is verified BEFORE the merge: a refused promote changes
+  // nothing. Without an attestation the rows are written all the same —
+  // the promote is still a person's explicit act (decision 8); what the
+  // badge loses is the evidence, which is the honest reading of a browser
+  // that could not ask a passkey.
+  //
+  // POST /api/w/:workspaceId/workspace-document/promote
+  app.post(
+    '/api/w/:workspaceId/workspace-document/promote',
+    bodyLimit({
+      maxSize: WORKSPACE_DOC_PROMOTE_LIMIT_BYTES,
+      onError: (c) =>
+        c.json(
+          {
+            error: 'payload_too_large',
+            message: `Promotion exceeds ${WORKSPACE_DOC_PROMOTE_LIMIT_BYTES} bytes limit.`,
+          },
+          413,
+        ),
+    }),
+    async (c) => {
+      const handle = c.req.param('workspaceId')
+      try {
+        validateWorkspaceId(handle)
+      } catch (err) {
+        const body = validationErrorBody(err)
+        if (body) return c.json({ title: body.message }, 400)
+        throw err
+      }
+      const workspaceId = await workspaceIdFromHandle(c, handle)
+      const deps = await depsOf()
+      if (!(await deps.workspaceDocuments.exists(workspaceId))) {
+        return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
+      }
+      let json: unknown
+      try {
+        json = await c.req.json()
+      } catch {
+        return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
+      }
+      const parsed = promoteWorkspaceRequestSchema.safeParse(json)
+      if (!parsed.success) {
+        return c.json(
+          {
+            error: 'invalid_body',
+            message: 'snapshot must be base64url and attestation, if present, a WebAuthn assertion',
+          },
+          400,
+        )
+      }
+      const snapshot = new Uint8Array(Buffer.from(parsed.data.snapshot, 'base64url'))
+      const attestation = parsed.data.attestation
+      if (attestation !== undefined) {
+        const verdict = verifyPromotionAttestation({
+          attestation,
+          originHeader: c.req.header('origin'),
+          // The handle as the browser addressed it, which is what it hashed.
+          handle,
+          snapshot,
+          credentials: options.credentials,
+        })
+        if (!verdict.ok) {
+          return c.json({ error: 'attestation_rejected', message: verdict.reason }, 403)
+        }
+      }
+      // The device that wrote the row (ADR-0035 decision 2), as every other
+      // human row this daemon writes; the person's evidence is beside it.
+      const operator: OperatorInfo = {
+        kind: 'human',
+        displayName: defaultHumanDisplayName(),
+        ...(options.daemonActor === undefined ? {} : { actor: options.daemonActor }),
+      }
+      const result = await promoteWorkspace(deps, {
+        workspaceId,
+        snapshot,
+        operator,
+        ...(attestation === undefined ? {} : { attestation }),
+      })
+      if (result.kind === 'malformed-snapshot') {
+        return c.json({ title: 'Malformed workspace record snapshot' }, 400)
+      }
+      const response: PromoteWorkspaceResponse = {
+        ok: true,
+        attested: attestation !== undefined,
+        recorded: [...result.recorded],
+        shadowed: [...result.shadowed],
+      }
       return c.json(response)
     },
   )

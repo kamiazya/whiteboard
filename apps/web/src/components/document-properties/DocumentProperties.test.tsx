@@ -84,7 +84,7 @@ describe('DocumentProperties', () => {
     const withRaw = meta({ facetsRaw: { author: 'kamiazya' } })
     render(<DocumentFacetsEditor facets={withRaw} onChange={onChange} />)
 
-    const tagInput = screen.getByRole('textbox', { name: /add tag/i })
+    const tagInput = screen.getByLabelText(/add tag/i)
     fireEvent.change(tagInput, { target: { value: 'ops' } })
     fireEvent.keyDown(tagInput, { key: 'Enter' })
     expect(onChange).toHaveBeenCalledWith({
@@ -98,7 +98,7 @@ describe('DocumentProperties', () => {
     const onChange = vi.fn()
     const { rerender } = render(<DocumentFacetsEditor facets={meta()} onChange={onChange} />)
 
-    const tagInput = screen.getByRole('textbox', { name: /add tag/i })
+    const tagInput = screen.getByLabelText(/add tag/i)
     fireEvent.change(tagInput, { target: { value: 'ops' } })
     fireEvent.keyDown(tagInput, { key: 'Enter' })
     expect(onChange).toHaveBeenLastCalledWith({ type: 'markdown', tags: ['ops'] })
@@ -111,7 +111,7 @@ describe('DocumentProperties', () => {
   it('does not commit a tag on the Enter that confirms an IME composition', () => {
     const onChange = vi.fn()
     render(<DocumentFacetsEditor facets={meta({ tags: [] })} onChange={onChange} />)
-    const box = screen.getByRole('textbox', { name: /add tag/i })
+    const box = screen.getByLabelText(/add tag/i)
     fireEvent.change(box, { target: { value: '\u4f01\u753b' } })
     fireEvent.keyDown(box, { key: 'Enter', isComposing: true })
     expect(onChange).not.toHaveBeenCalled()
@@ -121,7 +121,7 @@ describe('DocumentProperties', () => {
     const onChange = vi.fn()
     render(<DocumentFacetsEditor facets={meta({ tags: ['ops'] })} onChange={onChange} />)
 
-    const tagInput = screen.getByRole('textbox', { name: /add tag/i })
+    const tagInput = screen.getByLabelText(/add tag/i)
     for (const value of ['ops', '   ']) {
       fireEvent.change(tagInput, { target: { value } })
       fireEvent.keyDown(tagInput, { key: 'Enter' })
@@ -176,7 +176,7 @@ describe('DocumentProperties', () => {
       />,
     )
 
-    const tagInput = screen.getByRole('textbox', { name: /add tag/i })
+    const tagInput = screen.getByLabelText(/add tag/i)
     fireEvent.change(tagInput, { target: { value: 'ops' } })
     fireEvent.keyDown(tagInput, { key: 'Enter' })
     expect(onChange).toHaveBeenCalledWith({

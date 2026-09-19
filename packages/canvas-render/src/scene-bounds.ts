@@ -10,6 +10,7 @@ import type {
 import { edgeArrowPolygons } from './edge-arrows.js'
 import { glowReachPx } from './layout/ink/glow.js'
 import { SKETCH_INK_REACH_PX } from './layout/ink/sketch.js'
+import { LEGEND_MARGIN_PX, legendPanelSize } from './legend/legend-geometry.js'
 
 /**
  * Nodes reachable while walking the scene tree. `ListItemNode`,
@@ -188,4 +189,27 @@ export function sceneBounds(scene: Scene): BoundingBox {
   const w = Math.max(extent.maxX - extent.minX, MIN_SCENE_EXTENT_PX)
   const h = Math.max(extent.maxY - extent.minY, MIN_SCENE_EXTENT_PX)
   return { x: extent.minX, y: extent.minY, w, h }
+}
+
+/**
+ * The box a DOCUMENT of this scene is drawn in: the scene's bounds, plus a
+ * band on the left for the legend when the scene carries one (ADR-0040
+ * decision 6), so the legend the backend draws in the top-left corner
+ * covers no content. Without the band the legend sat over the first box of
+ * every tagged board. The band is the legend's estimated panel plus its
+ * margins; the scene's own bounds — what the digest, the drawing score and
+ * the editor read — are untouched, so a legend never moves an instrument.
+ */
+export function sceneDocumentBounds(scene: Scene): BoundingBox {
+  const bounds = sceneBounds(scene)
+  if (scene.legend === undefined) return bounds
+  const panel = legendPanelSize(scene.legend)
+  if (panel.w === 0) return bounds
+  const band = panel.w + LEGEND_MARGIN_PX * 2
+  return {
+    x: bounds.x - band,
+    y: bounds.y,
+    w: bounds.w + band,
+    h: Math.max(bounds.h, panel.h + LEGEND_MARGIN_PX * 2),
+  }
 }

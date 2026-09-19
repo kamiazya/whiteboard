@@ -1,4 +1,6 @@
+import type { WorkspaceDocumentTagsResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind, ExtensionFacets } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 /**
@@ -94,7 +96,24 @@ export interface WorkspaceFilesSource {
   listTrash?(): Promise<readonly TrashRow[]>
   /** Bring one evacuated document back under the SAME documentId. */
   restoreFromTrash?(documentId: string): Promise<void>
+  /**
+   * The workspace's tag vocabulary in use, counted by what carries it
+   * (ADR-0040 decision 5) — what the filter strip groups and counts. Both
+   * keepers answer it; OPTIONAL only so a test double need not, in which
+   * case the panel derives a document-only strip from the entries.
+   */
+  listTagsInUse?(): Promise<readonly TagInUse[]>
+  /**
+   * What the workspace DECLARES (ADR-0040 decision 5): the tag library the
+   * document at `tags` carries, or `{}`. The editor's tag rows offer its
+   * values and refuse what it forbids, and the editor's own render draws by
+   * it. OPTIONAL for the same reason `listTagsInUse` is.
+   */
+  readTagLibrary?(): Promise<TagLibrary>
 }
+
+/** One row of the vocabulary: the daemon-client contract's own row shape. */
+export type TagInUse = WorkspaceDocumentTagsResponse['inUse'][number]
 
 /** One trash row, as the panel shows it: where it was, and when it went. */
 export interface TrashRow {

@@ -62,6 +62,10 @@ const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
+  'src/components/PasskeysCard.tsx': {
+    reach: 'daemon-itself',
+    why: "lists, registers and removes the passkeys a daemon will accept a move from — the pins are the daemon's, and a browser keeper is what a move comes FROM, so it has none to hold",
+  },
   'src/components/PairedOriginsCard.tsx': {
     reach: 'daemon-itself',
     why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",

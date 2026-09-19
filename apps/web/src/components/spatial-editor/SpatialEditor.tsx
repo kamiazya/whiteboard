@@ -74,7 +74,7 @@ import {
   nodeText,
   nodeUrl,
 } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
   type ReactNode,
@@ -107,6 +107,7 @@ import {
 } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
+import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import {
   canvasToScreen,
   clientPointToRootLocal,
@@ -135,6 +136,7 @@ import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
+import { collectFieldSuggestions } from './facet-widgets/field-suggestions.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
 import { snapGesturePoint } from './gesture-snap.js'
@@ -142,6 +144,7 @@ import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { InkDraftLayer } from './InkDraftLayer.js'
+import { LegendOverlay } from './LegendOverlay.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
@@ -237,6 +240,15 @@ export interface SpatialEditorProps {
    * `resolvedTheme` or its nodes/edges go invisible in dark mode.
    */
   readonly theme?: ResolvedTheme
+  /**
+   * The workspace's tag library (ADR-0040 decision 5), when the keeper
+   * answered one: a box or an edge carrying a value it colours, and no
+   * colour of its own, is drawn in that colour and the legend lists the key;
+   * every tag row offers its values and refuses what it forbids.
+   */
+  readonly tagLibrary?: TagLibrary
+  /** Tags in use anywhere in the workspace, offered by every tag row beside the board's own. */
+  readonly tagSuggestions?: readonly string[]
   /**
    * The tool active on mount. Pages resolve it from the canvas's own shape
    * and the tab's last choice (`resolveInitialTool`): an empty canvas opens
@@ -414,6 +426,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     {
       canvas,
       onChange,
+      tagLibrary,
+      tagSuggestions,
       externalVersion,
       measure,
       createId,
@@ -568,6 +582,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         showResolved: showResolvedComments,
         threads,
         proposals,
+        tagLibrary,
         fontsGeneration,
       },
       fileSeamOptions,
@@ -680,6 +695,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         lockedNodeIds,
         resolvedMeasure,
         theme,
+        tagLibrary,
         fileSeamOptions,
         scene,
         anchors,
@@ -2207,6 +2223,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           press on it reaching the canvas, so hiding bought nothing and cost
           a flicker on every gesture. Hidden only on an empty canvas, where
           an overview of nothing is chrome with no job. */}
+          {/* What the board's colour MEANS, as the layout attached it to the
+          scene (ADR-0040 decision 6). Screen space like the minimap; the keyed
+          projection omits its SVG twin, so the corner is drawn once. */}
+          {scene?.legend !== undefined && <LegendOverlay legend={scene.legend} />}
           {boxes.length > 0 && rootSize.width >= MINIMAP_MIN_ROOT_WIDTH_PX && (
             <MinimapOverlay
               boxes={minimapNodes}
@@ -2813,7 +2833,58 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     : { kind: 'node', node: target as SpatialNode }
                 }
                 registry={bundledFacetRegistry}
+                // What the board already wrote into free-entry fields, so a
+                // second classification is a pick. Recomputed per render
+                // while the panel is open: one pass over the nodes' facets.
+                suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
+                tagSuggestions={[...collectCanvasTags(canvas), ...(tagSuggestions ?? [])]}
+                {...(tagLibrary === undefined ? {} : { tagLibrary })}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
+                onTagsChange={(after) => {
+                  // Every write is the CHANGE the row showed being made,
+                  // applied to the object's tags as the eager chain holds
+                  // them (`canvasRef.current`), never the shown list copied
+                  // over: under a slow parent the row still shows the list
+                  // before the previous commit landed, and on a selection
+                  // of five the four other boxes carry tags of their own.
+                  if (edgeTarget !== undefined) {
+                    const current = canvasRef.current.edges.find((e) => e.id === edgeTarget.id)
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        {
+                          kind: 'set-edge-tags' as const,
+                          id: edgeTarget.id,
+                          tags: retag(current?.tags, edgeTarget.tags ?? [], after),
+                        },
+                      ],
+                    })
+                    return
+                  }
+                  const before = target?.tags ?? []
+                  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
+                  const ids =
+                    target !== undefined && members.has(target.id)
+                      ? [...members]
+                      : target === undefined
+                        ? []
+                        : [target.id]
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: ids.flatMap((id) => {
+                      const node = canvasRef.current.nodes.find((entry) => entry.id === id)
+                      return node === undefined
+                        ? []
+                        : [
+                            {
+                              kind: 'set-node-tags' as const,
+                              id,
+                              tags: retag(node.tags, before, after),
+                            },
+                          ]
+                    }),
+                  })
+                }}
                 onWrite={(key, payload) => {
                   if (edgeTarget !== undefined) {
                     // One edge, because an edge selection is one edge —

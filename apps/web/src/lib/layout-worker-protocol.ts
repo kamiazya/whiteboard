@@ -39,7 +39,7 @@ import type {
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
+import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import type { FaviconRect } from './favicon.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -108,6 +108,8 @@ export type LayoutRequest = LayoutSubject & {
   readonly missingFileRefs?: readonly string[]
   /** Node ids whose body an editor overlay owns — plain data, like the refs. */
   readonly suppressedBodyNodeIds?: readonly string[]
+  /** The workspace's tag library (ADR-0040 decision 5) — plain data, so it crosses as it is. */
+  readonly tagLibrary?: TagLibrary
   /** Draw resolved comments too (the editor's per-user toggle). */
   readonly showResolved?: boolean
   /** The document's conversations, for passage highlights inside text nodes. */

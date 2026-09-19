@@ -1,0 +1,73 @@
+# The dependency audit on a SCHEDULE, because the advisory database moves
+# while the dependency tree stands still.
+#
+# `pnpm audit:prod` otherwise runs in exactly one place: ci.yml's `check`
+# job, per push. Measured 2026-09-19 — main's last `check` passed on
+# 2026-09-17, GHSA-7q85-xj36-vmfc was published against adm-zip <0.6.1
+# after that, and because the audit queries the LIVE advisory database
+# rather than a snapshot, every open branch went red at once with nothing
+# in any diff to explain it. The person who next pushed spent the triage.
+#
+# Dependabot alerts do fire, so the information arrives — but as a security
+# alert, not as "the merge gate is about to fail for everyone", and those
+# are different claims. For this class it also proposes no PR at all: the
+# vulnerable package is transitive behind an override in pnpm-workspace.yaml,
+# so only the override BOUND moves, which Dependabot never touches.
+#
+# A failing scheduled run notifies the repository owner through GitHub's own
+# default, and that is the whole mechanism: the bump becomes somebody's
+# scheduled work instead of the next pusher's ambush. The step summary
+# carries the audit output so the run page names the advisory without
+# anyone opening a log.
+name: audit
+
+on:
+  schedule:
+    # Daily. Offset off the hour for the same reason every other scheduled
+    # workflow here is: GitHub queues on-the-hour crons behind everyone
+    # else's.
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Byte-identical to what ci.yml's `check` job gates on, so this run
+      # PREDICTS that gate rather than approximating it — and plainly, with
+      # no tee or pipeline around it, so scheduled-audit.test.ts can read it
+      # off the parsed step and fail when the two drift apart. Capturing the
+      # output for the summary below was tried and dropped: it made the two
+      # commands differ, which is the one thing this workflow must not do.
+      - name: Audit (high+ vulnerabilities, prod deps only)
+        run: pnpm audit:prod
+
+      - name: Say what a failure means, on the run page
+        if: failure()
+        run: |
+          {
+            echo '## `pnpm audit:prod` is failing on the default branch'
+            echo
+            echo 'Every open branch fails the `check` job of CI until this is cleared,'
+            echo 'with nothing in any diff to explain it. The advisory is named in the'
+            echo 'audit step log above.'
+            echo
+            echo 'A transitive package behind an override in `pnpm-workspace.yaml` is'
+            echo 'raised by moving the override BOUND. Dependabot proposes no PR for'
+            echo 'that class, which is why this workflow exists.'
+          } >> "$GITHUB_STEP_SUMMARY"

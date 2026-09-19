@@ -121,7 +121,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // editor needs no second selection state: the scene already hands an edge
   // and a line out identically, which is the non-obvious fact that kept the
   // rest of this change small.
-  'apps/web/src/lib/spatial/commands.ts': 1128,
+  // +35 for ADR-0040's tag writes: three union arms (`set-node-tags`,
+  // `set-edge-tags`, `set-canvas-tags`) and their cases, each a whole-list
+  // write through `lib/spatial/tags.ts`'s `withTagList`, where the set and
+  // canonical-emptiness rules live rather than here.
+  // 1099 + 66 when the two branches met: ADR-0040's three tag arms and
+  // ADR-0038's two ink arms are independent additions to the same union,
+  // and neither shrank on the merge.
+  'apps/web/src/lib/spatial/commands.ts': 1165,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -190,7 +197,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stored under the node-kind union fails its schema and the read drops what
   // fails — the node VANISHES rather than losing its content. Net of the
   // switch `nodeToFields` no longer needs.
-  'packages/loro-adapter/src/loro-bridge.ts': 1104,
+  // +22 on the merge: a node's stored fields are written once as a
+  // resource (ADR-0038 decision 3) beside the tag write ADR-0040 added,
+  // and the kind switch the resource replaced was the shorter of the two.
+  'packages/loro-adapter/src/loro-bridge.ts': 1126,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -359,7 +369,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // vocabularies can do. Its comment is most of the 46 and says exactly
   // that, because applying the two in the other order silently moves every
   // offset after the first emoji.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1745,
+  // +7: that image asks the caller WHERE its picture is, through the
+  // `resolveReference` seam a body already carries — so a written path can
+  // be a workspace attachment instead of only an absolute URL.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1752,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //
@@ -432,7 +445,20 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // because `nodeKind` has the same four answers the union's discriminant had
   // — plus `undefined`, which is a fifth case the union could not express and
   // the defensive branch now has a real caller for.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2487,
+  // +4: the legend attached to the top-level scene (ADR-0040 decision 6) —
+  // derived in legend/canvas-legend.ts, so the layout only asks and attaches.
+  // +10: the tag library option (ADR-0040 decision 5) — declared here, applied
+  // in tags/declared-colours.ts, so the layout only passes the canvas through.
+  // +2: the edge-only entry point applies the library too, so a live drag
+  // draws an edge in its declared colour — the same step the theme takes.
+  // 2479 -> 1560 when the comment and proposal overlays and the options
+  // vocabulary moved to their own modules (task #84). A pure move: no test
+  // was rewritten and the suite went 1622 -> 1626 on the four cases the
+  // extraction's own guards added.
+  // +22 on the merge: the content seam's accessors and the reasons the
+  // dispatch asks what a node HOLDS, landing in the file the overlay and
+  // options extraction had just cut to 1560.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 1582,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -500,7 +526,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // its state machine is the gesture reducer's `drawing` arm, and what the
   // hand watches is a new `InkDraftLayer.tsx` — so what stayed here is the
   // wiring only, which is what this file is for.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2855,
+  // +31 for the Facets panel's tag row (ADR-0040 decision 6): the write
+  // that fans a tag edit out over the selection as a CHANGE to each box's
+  // own list (`retag`), beside the facet write that already fans out.
+  // +8: the tag fan-out reads each object's CURRENT tags off the eager
+  // chain's ref rather than the prop, so a second commit under a slow
+  // parent cannot erase the first.
+  // +5: the legend overlay (ADR-0040 decision 6), mounted from the scene
+  // the worker answered — one line of wiring and its comment.
+  // +14: two props for ADR-0040 decision 5 — the workspace's tag library
+  // and its in-use vocabulary — each threaded to the layout, the drag
+  // overlay and the Facets panel's tag row; the reading of both lives in
+  // the pages' hook, not here.
+  // 2843 + 83 on the merge: the pen's three pointer branches and the
+  // gesture-mirror read (ADR-0038) beside ADR-0040's tag fan-out, legend
+  // and library props. Two features, no overlap, nothing to reconcile.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2926,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

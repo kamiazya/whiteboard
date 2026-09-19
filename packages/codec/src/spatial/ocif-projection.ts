@@ -210,4 +210,12 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'facets/*': NATIVE,
   'nodes[].facets/*': NATIVE,
   'edges[].facets/*': NATIVE,
+
+  // ── Tags (ADR-0040) ──────────────────────────────────────────────────
+  // OCIF has no classification vocabulary, so the tag set rides an
+  // extension of ours at each of the three sites — and, this being OCIF, a
+  // conforming foreign reader preserves it rather than dropping it.
+  'tags[]': EXTENSION,
+  'nodes[].tags[]': EXTENSION,
+  'edges[].tags[]': EXTENSION,
 }

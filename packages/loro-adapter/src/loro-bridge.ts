@@ -18,6 +18,7 @@ import {
   type StoredCoreFacets,
   spatialNodeSchema,
   storedCoreFacetsSchema,
+  storedTagsSchema,
   type TrustFacets,
   threadFromCanvasComment,
   trustFacetsSchema,
@@ -51,6 +52,8 @@ const LINES_KEY = 'lines'
 const CANVAS_KEY = 'canvas'
 /** The canvas's own facets, one key of the canvas map so its LWW is per-key. */
 const FACETS_FIELD = 'facets'
+/** The board's own tags (ADR-0040): one value under its own key, like the facets. */
+const TAGS_FIELD = 'tags'
 /**
  * The key a canvas's facets, and a node's or edge's facets and embed, were
  * stored under before [ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md):
@@ -147,6 +150,11 @@ function readCanvasFacets(doc: DocumentContainers): ExtensionFacets | undefined 
   const lifted = extensionFacetsSchema.safeParse((legacy as Record<string, unknown>).facets)
   return lifted.success ? lifted.data : undefined
 }
+/** The board's tags, read verbatim; a malformed value costs the tags alone. */
+function readCanvasTags(doc: DocumentContainers): string[] | undefined {
+  const parsed = storedTagsSchema.safeParse(doc.getMap(CANVAS_KEY).get(TAGS_FIELD))
+  return parsed.success ? parsed.data : undefined
+}
 const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,
@@ -211,6 +219,9 @@ function nodeToFields(node: SpatialNode): Fields {
   if (node.color !== undefined) fields.color = node.color
   if (node.embed !== undefined) fields.embed = node.embed
   if (node.facets !== undefined) fields.facets = node.facets
+  // One value, like `bends`: concurrent retagging converges on one set.
+  if (node.tags !== undefined) fields.tags = node.tags
+
   // What a node SHOWS is one field now, so there is no kind to switch on:
   // absence is the frame, and the frame's own fields ride beside it.
   if (node.resource !== undefined) fields.resource = node.resource
@@ -238,6 +249,7 @@ function edgeToFields(edge: CanvasEdge): Fields {
   // with a interleaved third path neither drew.
   if (edge.bends !== undefined) fields.bends = edge.bends
   if (edge.facets !== undefined) fields.facets = edge.facets
+  if (edge.tags !== undefined) fields.tags = edge.tags
   return fields
 }
 
@@ -307,6 +319,8 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
   // canvas that never had one should not pay an oplog op per save for it —
   // measured on the growth scoreboard, which is the only thing that says so.
   else if (canvasMap.get(FACETS_FIELD) !== undefined) canvasMap.delete(FACETS_FIELD)
+  if (canvas.tags !== undefined) canvasMap.set(TAGS_FIELD, canvas.tags)
+  else if (canvasMap.get(TAGS_FIELD) !== undefined) canvasMap.delete(TAGS_FIELD)
   // A write converges the record — but only when there is something to
   // converge. An unconditional delete is one oplog op per save forever, on
   // every document that never had the old key: measured at +10000 bytes on
@@ -577,12 +591,18 @@ export function reconcileSpatialCanvas(
   })
 
   const nextFacets = next.facets
-  if (!same(prev.facets, nextFacets)) {
+  const nextTags = next.tags
+  const facetsMoved = !same(prev.facets, nextFacets)
+  const tagsMoved = !same(prev.tags, nextTags)
+  if (facetsMoved || tagsMoved) {
     const canvasMap = doc.getMap(CANVAS_KEY)
-    if (nextFacets === undefined) {
-      canvasMap.delete(FACETS_FIELD)
-    } else {
-      canvasMap.set(FACETS_FIELD, nextFacets)
+    if (facetsMoved) {
+      if (nextFacets === undefined) canvasMap.delete(FACETS_FIELD)
+      else canvasMap.set(FACETS_FIELD, nextFacets)
+    }
+    if (tagsMoved) {
+      if (nextTags === undefined) canvasMap.delete(TAGS_FIELD)
+      else canvasMap.set(TAGS_FIELD, nextTags)
     }
     doc.commit()
   }
@@ -730,6 +750,7 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   }
 
   const facets = readCanvasFacets(doc)
+  const tags = readCanvasTags(doc)
 
   // The annotation layer is document-level and format-agnostic, so reading it
   // is not this reader's job — `readAnnotations` answers it for a markdown
@@ -746,6 +767,7 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
     // absent `lines` and an empty one say the same thing.
     ...(lines.length > 0 && { lines }),
     ...(facets !== undefined && { facets }),
+    ...(tags !== undefined && { tags }),
     ...(comments.length > 0 && { comments }),
   }
 }

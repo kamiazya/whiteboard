@@ -2,8 +2,18 @@
 // facet write visible to a human, and this makes the human's registered
 // facets discoverable to an agent — which until now had to guess a key.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import { writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
-import { bundledPlugins, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  writeCoreFacets,
+  writeDocumentKind,
+  writeFacets,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import {
+  bundledPlugins,
+  VISUAL_STENCILS_KEY,
+  VISUAL_TAGS_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import {
@@ -14,6 +24,7 @@ import {
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createFacetListTool, facetListOutputSchema } from './facet-list.js'
 import { STENCIL_LIBRARY_PATH } from './stencil-library.js'
+import { TAG_LIBRARY_PATH } from './tag-library.js'
 
 const planning = definePlugin({
   id: 'planning',
@@ -80,7 +91,53 @@ describe('wb_facet_list', () => {
       'planning.due/v0',
       'visual.stencils/v0',
       'visual.symbol/v0',
+      // …and `visual.tags/v0` for the same reason: it is what makes a
+      // document a TAG library (ADR-0040 decision 5).
+      'visual.tags/v0',
     ])
+  })
+
+  /**
+   * The measured gap this closes (ADR-0031's round 15, 0 of 3 trials): asked
+   * to tell two things apart at once, every trial called this tool with
+   * `target: 'node'` — the right question while dressing boxes — and so
+   * never saw `visual.axes/v0`, which is canvas-only and is the ONE facet
+   * that records what a colour MEANS. All three coloured by health and all
+   * three recorded nothing, so the board drew a distinction the document
+   * could not state.
+   *
+   * A description saying so was measured next and changed nothing (round 16,
+   * still `target: 'node'` x3). This is the structural form of the same
+   * repair: what the filter removes is DATA in the answer, not a sentence
+   * the model may or may not act on.
+   */
+  test('a filtered answer still names what the other scopes hold', async () => {
+    const nodeOnly = await tool(createFacetRegistry([...bundledPlugins])).execute({
+      target: 'node',
+    })
+    expect(nodeOnly.facets.map((f) => f.key)).not.toContain('visual.axes/v0')
+    // Pinned whole rather than by `toContain`, so a facet that stops being
+    // reported is a failure and not a silently shorter list.
+    expect(nodeOnly.otherTargets).toEqual({
+      canvas: ['visual.axes/v0', 'visual.edges/v0', 'visual.theme/v0'],
+      edge: ['visual.edges/v0'],
+      document: ['visual.stencils/v0', 'visual.tags/v0'],
+    })
+    // `visual.symbol/v0` attaches to canvas, node AND document, so the
+    // filter KEPT it — and it must not also be listed under its other
+    // scopes. Repeating what the answer already named is what would bury
+    // the entries that are genuinely missing, which is the whole point.
+    expect(Object.values(nodeOnly.otherTargets ?? {}).flat()).not.toContain('visual.symbol/v0')
+  })
+
+  /**
+   * Omitted rather than empty when nothing was filtered — the same rule
+   * `assetRefs` follows, and for the same reason: a key present on every
+   * answer is bytes that say nothing.
+   */
+  test('an unfiltered answer has nothing to say about elsewhere', async () => {
+    const all = await tool().execute({})
+    expect(all.otherTargets).toBeUndefined()
   })
 
   test('the output validates against its own schema', async () => {
@@ -356,6 +413,24 @@ describe('wb_facet_list: a WORKSPACE’s own vocabulary', () => {
     const overTheWire = JSON.parse(JSON.stringify(result))
     expect(facetListOutputSchema.safeParse(overTheWire).success).toBe(true)
   })
+
+  /**
+   * Pinned because a reading depended on it and could otherwise only INFER
+   * it. Round 17's trials all passed `workspaceId`, so "the model was told
+   * about `visual.axes/v0`" rests on the composed registry answering the
+   * same way the deployment's own does — a superset, since a library adds
+   * assets and no facets. Asserting it here makes that a guarantee rather
+   * than a reading of the source.
+   */
+  test('a workspace-composed registry still names the canvas scope it filtered out', async () => {
+    const deps = await withLibrary(lakehouse)
+    const dressing = await createFacetListTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      target: 'node',
+    })
+    expect(dressing.facets.map((f) => f.key)).not.toContain('visual.axes/v0')
+    expect(dressing.otherTargets?.canvas).toContain('visual.axes/v0')
+  })
 })
 
 /**
@@ -403,5 +478,148 @@ describe('assets and facets join', () => {
     expect(result.facets.find((facet) => facet.key === 'planning.due/v0')).not.toHaveProperty(
       'assetRefs',
     )
+  })
+})
+
+describe('wb_facet_list: the tags a workspace already USES (ADR-0040 decision 5)', () => {
+  const WORKSPACE_ID = 'ws-tags'
+  const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W1'
+  const BOARD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W2'
+
+  const withTags = async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, NOTE_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags: ['health:failing', 'Machine Learning'] })
+    })
+    // Seeded with its KIND: the facts extractor branches on the index entry's
+    // kind, and `registerDocumentInWorkspace` registers everything as spatial.
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      path: 'notes/a',
+      kind: 'markdown',
+    })
+    await seedDoc(store, BOARD_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'a',
+            text: 'A',
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+            tags: ['health:failing'],
+          }),
+          textNode({ id: 'b', text: 'B', x: 50, y: 0, width: 10, height: 10, tags: ['health:ok'] }),
+        ],
+        edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['health:failing'] }],
+        tags: ['phase:design'],
+      })
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: BOARD_ID,
+      path: 'boards/fleet',
+      kind: 'spatial',
+    })
+    return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+  }
+
+  test('counts every tag by what carries it, grouped by key for scoped ones', async () => {
+    const deps = await withTags()
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(result.tags).toEqual([
+      { tag: 'Machine Learning', documents: 1, boards: 0, nodes: 0, edges: 0 },
+      {
+        tag: 'health:failing',
+        key: 'health',
+        value: 'failing',
+        documents: 1,
+        boards: 0,
+        nodes: 1,
+        edges: 1,
+      },
+      { tag: 'health:ok', key: 'health', value: 'ok', documents: 0, boards: 0, nodes: 1, edges: 0 },
+      {
+        tag: 'phase:design',
+        key: 'phase',
+        value: 'design',
+        documents: 0,
+        boards: 1,
+        nodes: 0,
+        edges: 0,
+      },
+    ])
+  })
+
+  test('answers no tags at all without a workspaceId: a deployment has a vocabulary and no usage', async () => {
+    const deps = await withTags()
+    const result = await createFacetListTool(deps).execute({})
+    expect(result).not.toHaveProperty('tags')
+  })
+})
+
+describe('wb_facet_list and a workspace tag library (ADR-0040 decision 5)', () => {
+  const WORKSPACE_ID = 'ws-tags'
+  const OTHER_ID = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
+  const TAGS_ID = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
+  async function withTagLibrary(declared = true) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, OTHER_ID, (doc) => writeDocumentKind(doc, 'markdown'))
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, OTHER_ID)
+    if (!declared) return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+    await seedDoc(store, TAGS_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, {
+        [VISUAL_TAGS_KEY]: {
+          keys: {
+            tier: { values: { web: {}, db: { color: '2' } } },
+            health: {
+              description: 'Serving?',
+              exclusive: true,
+              values: { ok: { color: '4' }, failing: { color: '1', description: 'Paged' } },
+            },
+            owner: { description: 'On call' },
+          },
+        },
+      } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: TAGS_ID,
+      path: TAG_LIBRARY_PATH,
+      kind: 'markdown',
+    })
+    return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+  }
+
+  test('answers the declared keys by name, each with its values by name, only with a workspaceId', async () => {
+    const deps = await withTagLibrary()
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(result.tagLibrary).toEqual([
+      {
+        key: 'health',
+        description: 'Serving?',
+        exclusive: true,
+        values: [
+          { value: 'failing', color: '1', description: 'Paged' },
+          { value: 'ok', color: '4' },
+        ],
+      },
+      { key: 'owner', description: 'On call' },
+      { key: 'tier', values: [{ value: 'db', color: '2' }, { value: 'web' }] },
+    ])
+    expect(facetListOutputSchema.safeParse(result).success).toBe(true)
+    expect((await createFacetListTool(deps).execute({})).tagLibrary).toBeUndefined()
+  })
+
+  test('a workspace with no library answers an empty declaration, not an absent one', async () => {
+    // Absent means "not asked"; empty means "asked, and nothing declared".
+    const deps = await withTagLibrary(false)
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(result.tagLibrary).toEqual([])
   })
 })

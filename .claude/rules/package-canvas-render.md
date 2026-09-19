@@ -18,6 +18,32 @@ the code that serves them shares nothing:
 - `layout/` itself — `spatial-canvas.ts`, the composer that draws on both,
   plus the kind-agnostic scene transforms it uses.
 
+**The composer's own file is not the composer's only file.** Two
+independently-featured OVERLAYS and the options vocabulary have their own
+modules, and the direction between them is the point:
+
+- `layout/layout-options.ts` — `SpatialLayoutOptions` (what a caller asks
+  for), `ResolvedLayoutOptions` (the same thing after the entry point has
+  settled geometry, contributions, theme and recursion path once), and
+  `RegionChrome`. Nothing imports the composer to name them.
+- `layout/comments.ts` — the annotation layer (ADR-0024/0025/0026): the
+  pin, the region outline, the bubble.
+- `layout/proposals.ts` — the proposal layer (ADR-0029 decision 1), which
+  reuses the comment layer's constants deliberately.
+- `layout/scene-extent.ts` — `contentExtent`, the one answer to "how far
+  right and down does this laid-out block reach", which both overlays were
+  computing with the same `Math.max(0, ...)` pair.
+
+Both overlays take the body typesetter as a SEAM (`BodyLayoutSeam`) rather
+than importing it. The markdown options a bubble is laid out with are built
+by the composer, which recurses back into `layoutSpatialCanvas` for an
+embedded canvas — importing it would close a cycle, and passing it keeps
+the dependency pointing one way.
+
+`spatial-canvas.ts` re-exports what it used to declare, so no importer had
+to change. That is deliberate: a move that also rewrote every call site
+would be two changes in one diff.
+
 The split was made because the two clusters were measured to have ZERO
 production imports between each other while sitting in one flat directory,
 so the directory gave a reader no signal which of two unrelated engines a
@@ -840,6 +866,20 @@ the table alone.
       claiming `maxWidth` while an atomic run paints past it is what let
       `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
       all agree on a size nothing actually fitted in.
+    - **Kinsoku holds across an INLINE BOUNDARY, not only inside a run**
+      (`layout/nodes/inline-junction.ts`). Every inline node is its own `emit`
+      call, so the junction between two was a break opportunity by accident:
+      `。` after `` `code` ``, after `**強調**` or after an icon opened a
+      line, which this decision forbids. It is asked of
+      `uaxSegments` — the same authority, not a table of its own — and a break
+      it forbids relocates the stretch already on the line rather than
+      splitting a pair no line may split. `forbiddenLineStarts` 4 -> 0, at +2
+      runs and +2 lines on the two rows that relocate. A run that PAINTS
+      answers U+FFFC at both edges: its EM SPACE placeholder would otherwise
+      read to UAX #14 as a space. Left, measured: an ATOMIC run is cut against
+      the width left when PLACED, so a relocated one can fade on a roomy line;
+      moving it down instead costs `inline-code@320` a line and moves no
+      defect column.
     On top of UAX #14, **BudouX narrows the candidates to phrase (文節)
     boundaries for Japanese**, a strict subset of the UAX opportunities, so
     preferring them costs nothing in fit and buys a line that breaks where a
@@ -1345,13 +1385,37 @@ editor half is the one that stands.)
   set of hypotheses to check rather than a worklist to burn down — the
   difference is measured in hours.
   **A survivor `judged by` ZERO tests is a runner artefact, not a
-  hypothesis.** On `tidy.ts` with `coverageAnalysis: 'off'` — every mutant
-  is meant to face all 42 tests — 19 of 65 survivors came back with
-  `testsCompleted 0`, and the six of those checked by hand (the root
-  tie-break, the hop direction, both hop arithmetics, the floor's y
-  block) each failed one to three tests when the same edit was applied.
-  Read that column before the row: `0` says nothing ran, and the edit is
-  still yours to apply. The `tidy.ts` entries the ledger does hold were
+  hypothesis — and it is root-caused now.** On `tidy.ts` with
+  `coverageAnalysis: 'off'` — every mutant is meant to face all 42 tests —
+  19 of 65 survivors came back with `testsCompleted 0`, and the six of
+  those checked by hand (the root tie-break, the hop direction, both hop
+  arithmetics, the floor's y block) each failed one to three tests when the
+  same edit was applied. The cause, found on `sceneDocumentBounds` where
+  15 of 15 mutants came back that way (2026-09-16): `coverageAnalysis:
+  'off'` does NOT make the runner run every test — the vitest runner's
+  setup records per-test coverage regardless, and Stryker core plans a
+  per-mutant `testFilter` from it whenever the dry run returned any. That
+  filter is a regex over test ids the runner builds by joining suite and
+  test names with a SPACE (vitest 4's `getTaskFullName`), and vitest 5
+  matches it against `fullTestName`, which joins them with ` > `. So no
+  test inside a `describe` ever matched: only a top-level `it` could kill,
+  and this package has 36 of those against 1312 nested. Measured on the
+  same mutants in one sandbox: the space-joined regex skips all 617
+  related tests, the ` > ` one runs them and kills. Upstream 10.0.0 still
+  joins with a space, so `patches/@stryker-mutator__vitest-runner@9.6.1.
+  patch` joins with ` > ` in both places the id is built; the same 15 then
+  die in 73 seconds at 1.2 tests a mutant, and the whole file reads 100%
+  (136 killed, 5 timed out, 8 minutes) where it read 89.4% with 15
+  survivors. The file's one recorded equivalent went with it: the
+  `default` arm's mutant was a TIMEOUT in both runs, never a survivor, so
+  the entry was suppressing nothing. `mutation-comment.mjs` lists a
+  zero-test survivor apart from real ones now, under "the lane ran NO test
+  against", so the next runner-vs-vitest disagreement reads as the lane's
+  defect rather than as a function no test pins. Every score and survivor
+  list taken before that date was read through this filter: a kill was a
+  top-level test or a hit-limit timeout, and a survivor list was mostly
+  the filter's. Read that column before the row: `0` says nothing ran, and
+  the edit is still yours to apply. The `tidy.ts` entries the ledger does hold were
   each judged by all 42 and reasoned: `<=` on a floor admits exactly the
   coordinate the shift then lands on, so the mutant costs a no-op
   iteration and nothing else; skipping a zero delta is a guard around an
@@ -1989,8 +2053,67 @@ which is why ADR-0034 makes the record load-bearing rather than bookkeeping.
 The corpus baseline does not move: no corpus board wears a stencil, so the
 partition has one class and is dropped.
 
+**A SCOPED-TAG KEY is the fourth declared partition, and the edges get a
+reading of their own** ([ADR-0040](../../docs/contributing/adr/0040-scoped-tags.md)
+decision 3). A key K partitions the boxes when every box carries at most one
+value under it — the untagged as their own `''` class, like an undressed box —
+and `carriedBy` names it by the key (`health`), which needs no declaration:
+this is the reading `semantic.class/v0` had until the ADR retired it, and
+that partition is gone. When any box carries two values under K the key is
+reported in `multi` with the count and partitions nothing: colour cannot mean
+two things on one box. Plain tags and the board's own tags are never a
+partition. `edges` is the same reading over EVERY edge, judged separately (a
+key can partition the boxes and be `multi` on the edges), with one channel —
+the edge's colour — carried or contested by an edge key exactly as a box's
+colour is by a box key, and counted in `contested` beside the two box
+channels. A second edge channel (the stroke's style) is not claimed until a
+board spends it. The corpus baseline does not move: no corpus board carries a
+tag or colours an edge.
+
 The score is OUTSIDE the mutation lane, for the reason the other two
 instruments are. Hand-checked instead, and that check earned its place: it
 found a treatment map keyed by the node where an id was wanted — which made
 every board read as spending nothing, the very answer the corpus was expected
 to give.
+
+**The legend is the layout's answer, read off the score** (ADR-0040 decision
+6; `legend/canvas-legend.ts`). `canvasLegend(canvas, appearance)` lists every
+scoped-tag key a population's colour is `carried` by, each value with the
+swatch its class is drawn in — resolved by the same appearance the layout
+paints with, so a legend can never show a colour the box does not wear — and
+one `uncarried` flag per population for colour spent with no key. A frame, a
+kind or a stencil that carries the colour is NOT listed: it has no values a
+legend can name. `layoutSpatialCanvas` attaches it to the top-level scene as
+`scene.legend` (never to a miniature), the SVG backend draws it in the
+top-left corner of an ENVELOPED document (`svg/legend.ts`, sized by a glyph
+estimate since the backend has no measurer) and leaves a fragment alone, and
+`renderSceneToKeyedSvg` omits it because the editor draws the same data as
+its own overlay. The legend covers no content: `sceneDocumentBounds`
+(`scene-bounds.ts`) is the scene's bounds plus a band on the left sized by
+`legend/legend-geometry.ts`, a DERIVED envelope reserves it itself, and a
+caller passing its own viewBox reserves it with that function
+(`sceneEnvelope` in server-core, `renderCanvasForExport` in apps/web).
+Measured before the band: the panel sat over the first box of every tagged
+board. `sceneBounds` itself is untouched, so a legend moves no digest, no
+drawing score and no editor coordinate.
+
+**Colour BY INTENT is applied to the CANVAS before layout, never in the
+appearance resolver** (ADR-0040 decision 5's declared layer;
+`tags/declared-colours.ts`). `withDeclaredColours(canvas, library)` gives a
+box or an edge that carries a value with a declared colour, and has no
+colour of its own, that colour; `SpatialLayoutOptions.tagLibrary` (a
+`TagLibrary`, plugin-visual's type) is what a caller passes, and
+`layoutSpatialCanvasWithAnchors` applies it first. On the canvas so that
+the facet score, the appearance and the legend read ONE intent: a legend
+judged by a score that reads `node.color` would never list a key the
+library coloured if the colour lived in the resolver alone. Two rules,
+each mutation-checked: an own colour wins (the library is a default, not a
+theme), and a box carrying declared colours under two keys gets none — a
+first-wins rule painted one key's meaning over the other's, and the
+property caught it. The same canvas object comes back when nothing changes,
+so an un-libraried layout keeps the frozen-singleton property the editor's
+`useMemo` relies on. `layoutSpatialEdges` applies it too, for the reason it
+resolves the theme: a live drag drew edges in the stored colour over a
+committed scene that drew them by intent, and the live-drag parity property
+now draws a library and tagged edges (its stub resolver reads `edge.color`,
+or the step would be invisible to it). In the mutation lane.

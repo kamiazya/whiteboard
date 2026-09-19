@@ -10,6 +10,7 @@ import {
   SearchNeedsQueryOrFilterError,
 } from './document-search.js'
 import { createDocumentSetTool } from './document-set.js'
+import { createFacetSetTool } from './facet-set.js'
 
 const WS = 'ws-1'
 
@@ -141,6 +142,92 @@ describe('wb_document_search', () => {
     // frontmatter, not body — which is why the filter stands alone.
     const byWord = await tool.execute({ workspaceId: WS, query: 'process' })
     expect(byWord.results).toEqual([])
+  })
+
+  // ADR-0040 decision 3: a spatial document matches a tag filter when its
+  // board, any ONE of its nodes or any ONE of its edges carries every listed
+  // tag, and the answer names the matching nodes and edges as excerpts.
+  it('finds a board by a tag one of its nodes carries, and names the node as the excerpt', async () => {
+    const deps = makeDeps()
+    const { create, edit } = await seed(deps)
+    const board = await create('fleet', 'spatial', 'Fleet')
+    await edit.execute({
+      workspaceId: WS,
+      documentId: board.documentId,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'redis', type: 'text', text: 'Redis cache' } },
+        { op: 'node.add', node: { id: 'pg', type: 'text', text: 'Postgres' } },
+        { op: 'edge.add', edge: { id: 'e1', from: { node: 'pg' }, to: { node: 'redis' } } },
+      ],
+    })
+    const facets = createFacetSetTool(deps)
+    await facets.execute({
+      workspaceId: WS,
+      documentIds: [board.documentId],
+      nodeId: 'redis',
+      tags: { add: ['health:failing', 'tier:data'] },
+    })
+    await facets.execute({
+      workspaceId: WS,
+      documentIds: [board.documentId],
+      nodeId: 'pg',
+      tags: { add: ['tier:data'] },
+    })
+    await facets.execute({
+      workspaceId: WS,
+      documentIds: [board.documentId],
+      edgeId: 'e1',
+      tags: { add: ['link:failing'] },
+    })
+    const tool = createDocumentSearchTool(deps)
+
+    const failing = documentSearchOutputSchema.parse(
+      await tool.execute({ workspaceId: WS, tags: ['health:failing'] }),
+    )
+    expect(failing.results.map((r) => r.documentId)).toEqual([board.documentId])
+    expect(failing.results[0]?.contexts).toEqual(['Redis cache'])
+
+    // Every listed tag on ONE bearer: `tier:data` and `health:failing` are
+    // both on redis, so the board matches; `tier:data` and `link:failing`
+    // are on a node and an edge, so it does not.
+    const both = await tool.execute({ workspaceId: WS, tags: ['tier:data', 'health:failing'] })
+    expect(both.results.map((r) => r.documentId)).toEqual([board.documentId])
+    const split = await tool.execute({ workspaceId: WS, tags: ['tier:data', 'link:failing'] })
+    expect(split.results).toEqual([])
+
+    // An edge is named by its label, or by its two ends when it has none.
+    const link = await tool.execute({ workspaceId: WS, tags: ['link:failing'] })
+    expect(link.results[0]?.contexts).toEqual(['Postgres → Redis cache'])
+
+    // Two nodes carry `tier:data`: both are named. Order is the store's,
+    // which promises membership and not sequence.
+    const tier = await tool.execute({ workspaceId: WS, tags: ['tier:data'] })
+    expect([...(tier.results[0]?.contexts ?? [])].sort()).toEqual(['Postgres', 'Redis cache'])
+  })
+
+  it('finds a board by its own tags, with a query as well as without', async () => {
+    const deps = makeDeps()
+    const { create, edit } = await seed(deps)
+    const board = await create('plan', 'spatial', 'Plan')
+    await edit.execute({
+      workspaceId: WS,
+      documentId: board.documentId,
+      mode: 'apply',
+      ops: [{ op: 'node.add', node: { id: 'n', type: 'text', text: 'design the sync protocol' } }],
+    })
+    await createFacetSetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [board.documentId],
+      tags: { add: ['phase:design'] },
+    })
+    const tool = createDocumentSearchTool(deps)
+    const filtered = await tool.execute({ workspaceId: WS, tags: ['phase:design'] })
+    expect(filtered.results.map((r) => r.documentId)).toEqual([board.documentId])
+    const withQuery = await tool.execute({ workspaceId: WS, query: 'sync', tags: ['phase:design'] })
+    expect(withQuery.results.map((r) => r.documentId)).toEqual([board.documentId])
+    const wrongTag = await tool.execute({ workspaceId: WS, query: 'sync', tags: ['phase:build'] })
+    expect(wrongTag.results).toEqual([])
   })
 
   it('refuses a call with neither a query nor a filter, rather than listing everything', async () => {

@@ -17,10 +17,12 @@
 import {
   type ContributionPoint,
   type FacetRegistry,
+  POINT_SECTIONS,
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
 import { DerivedFacetForm, type FacetEditor } from '@kamiazya/whiteboard-facet-ui'
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 
 /**
  * What the panel is about. A tagged union rather than two optional props,
@@ -43,6 +45,8 @@ const storedFacets = (subject: FacetSubject): Record<string, unknown> =>
   subjectOf(subject).facets ?? {}
 
 import { cn } from '../../../lib/utils.js'
+import { TagChipsEditor } from '../../tags/TagChipsEditor.js'
+import type { FieldSuggestions } from './field-suggestions.js'
 import { NODE_FACET_EDITORS } from './index.js'
 
 export interface FacetFormPanelProps {
@@ -66,74 +70,113 @@ export interface FacetFormPanelProps {
   /** `undefined` payload clears the facet, matching set-node-facet / set-edge-facet. */
   readonly onWrite: (key: string, payload: unknown) => void
   /**
+   * The subject's tags as a WHOLE list after an edit (ADR-0040 decision 6).
+   * The vessel decides what the list means for a multi-selection: the
+   * panel shows one object and the change reaches every selected one.
+   */
+  readonly onTagsChange: (tags: readonly string[]) => void
+  /** Tags the board already carries, offered by the tag row paired by key. */
+  readonly tagSuggestions?: readonly string[]
+  /** The workspace's tag library: offered under a key, and refused where it forbids (ADR-0040 decision 5). */
+  readonly tagLibrary?: TagLibrary
+  /**
    * Where the inspector sits: a column beside the canvas, or a sheet under
    * it. Decided from the EDITOR SHELL's width — the panel's own column comes
    * out of the canvas, so a breakpoint read off the canvas re-decides itself
    * every time it opens.
    */
   readonly variant?: 'dock' | 'sheet'
+  /**
+   * Per facet key, per text field: the values the rest of the board already
+   * holds (`collectFieldSuggestions`), offered by the derived form as a
+   * datalist. The vessel supplies it because only the vessel sees the board.
+   */
+  readonly suggestions?: FieldSuggestions
 }
 
 export function FacetFormPanel({
   subject,
   registry,
   onWrite,
+  onTagsChange,
+  tagSuggestions,
+  tagLibrary,
   editors = NODE_FACET_EDITORS,
   variant = 'dock',
+  suggestions,
 }: FacetFormPanelProps) {
-  const groups =
-    subject === undefined ? [] : resolveFacetContributions(registry, SUBJECT_POINT[subject.kind])
+  const point = subject === undefined ? undefined : SUBJECT_POINT[subject.kind]
+  const groups = point === undefined ? [] : resolveFacetContributions(registry, point)
   const stored = subject === undefined ? {} : storedFacets(subject)
   const subjectId = subject === undefined ? '' : subjectOf(subject).id
-  const body =
-    subject === undefined ? (
-      <p className="text-xs text-muted-foreground">Select a node or an edge to edit its facets.</p>
-    ) : (
-      <div className="flex flex-col gap-3">
-        {groups.map((group) => (
-          <div key={group.namespace} className="flex flex-col gap-2">
-            <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">
-              {group.displayName}
-            </span>
-            {group.facets.map((facet) => {
-              const Editor = editors[facet.key]
-              return Editor !== undefined ? (
-                <div key={`${subjectId}:${facet.key}`} className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium">{facet.definition.displayName}</span>
-                  {/* RENDERED, not called. Calling it would splice a plugin's
+  const tags = subject === undefined ? [] : (subjectOf(subject).tags ?? [])
+  // The core tag row: not a contribution, since a tag is OKF core and no
+  // plugin's (ADR-0040), so it is placed by the engine's section order
+  // rather than under a namespace heading.
+  const tagRow = (
+    <div key={`${subjectId}:tags`} className="flex flex-col gap-2">
+      <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">Tags</span>
+      <TagChipsEditor
+        tags={tags}
+        onChange={onTagsChange}
+        {...(tagSuggestions === undefined ? {} : { suggestions: tagSuggestions })}
+        {...(tagLibrary === undefined ? {} : { library: tagLibrary })}
+      />
+    </div>
+  )
+  const facetGroups = groups.map((group) => (
+    <div key={group.namespace} className="flex flex-col gap-2">
+      <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">
+        {group.displayName}
+      </span>
+      {group.facets.map((facet) => {
+        const Editor = editors[facet.key]
+        return Editor !== undefined ? (
+          <div key={`${subjectId}:${facet.key}`} className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium">{facet.definition.displayName}</span>
+            {/* RENDERED, not called. Calling it would splice a plugin's
                       hooks into this panel's own sequence, so two editors in
                       the same position share a hook slot — measured: swapping
                       one editor for another left the second reading the
                       first's state. */}
-                  <Editor
-                    value={stored[facet.key]}
-                    // Straight through the registry, exactly like the derived
-                    // form's own writer — a hand-written editor gets no shorter
-                    // path to storage than a declared one.
-                    write={(payload) => {
-                      if (payload === undefined) return onWrite(facet.key, undefined)
-                      const result = registry.validateFacetWrite(facet.key, payload)
-                      if (result.ok) onWrite(facet.key, result.value)
-                    }}
-                  />
-                </div>
-              ) : (
-                <DerivedFacetForm
-                  // Keyed by the SUBJECT too: a draft belongs to the object it
-                  // was typed against. Retargeting the panel without this
-                  // reuses the instance, so an abandoned edit on one object
-                  // would be shown — and saved — as another's value.
-                  key={`${subjectId}:${facet.key}`}
-                  facetKey={facet.key}
-                  title={facet.definition.displayName}
-                  stored={stored[facet.key]}
-                  registry={registry}
-                  onWrite={onWrite}
-                />
-              )
-            })}
+            <Editor
+              value={stored[facet.key]}
+              // Straight through the registry, exactly like the derived
+              // form's own writer — a hand-written editor gets no shorter
+              // path to storage than a declared one.
+              write={(payload) => {
+                if (payload === undefined) return onWrite(facet.key, undefined)
+                const result = registry.validateFacetWrite(facet.key, payload)
+                if (result.ok) onWrite(facet.key, result.value)
+              }}
+            />
           </div>
-        ))}
+        ) : (
+          <DerivedFacetForm
+            // Keyed by the SUBJECT too: a draft belongs to the object it
+            // was typed against. Retargeting the panel without this
+            // reuses the instance, so an abandoned edit on one object
+            // would be shown — and saved — as another's value.
+            key={`${subjectId}:${facet.key}`}
+            facetKey={facet.key}
+            title={facet.definition.displayName}
+            stored={stored[facet.key]}
+            registry={registry}
+            onWrite={onWrite}
+            {...(suggestions?.[facet.key] === undefined
+              ? {}
+              : { suggestions: suggestions[facet.key] })}
+          />
+        )
+      })}
+    </div>
+  ))
+  const body =
+    point === undefined ? (
+      <p className="text-xs text-muted-foreground">Select a node or an edge to edit its facets.</p>
+    ) : (
+      <div className="flex flex-col gap-3">
+        {POINT_SECTIONS[point].map((section) => (section === 'facets' ? facetGroups : tagRow))}
       </div>
     )
   // Same vessel convention as the other canvas overlays: hand-rolled and

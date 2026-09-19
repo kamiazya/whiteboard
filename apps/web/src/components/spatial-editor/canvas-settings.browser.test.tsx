@@ -494,3 +494,60 @@ it('leaves no aria-pressed selection control anywhere in the panel', async () =>
   )
   expect(pressed).toEqual([])
 })
+
+// ADR-0040 decision 6: the board's own tags are edited from the same panel,
+// in a row after the plugin containers.
+it('carries a Tags row after the plugin rows, and a tag finished there is the board’s', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  await openPanel(container)
+  const panel = menu() as HTMLElement
+  const text = panel.textContent ?? ''
+  expect(text.indexOf('Tags')).toBeGreaterThan(text.indexOf('Edge routing'))
+
+  const box = panel.querySelector('input[aria-label="Add tag"]') as HTMLInputElement
+  expect(box).not.toBeNull()
+  fireEvent.change(box, { target: { value: 'team:core' } })
+  fireEvent.keyDown(box, { key: 'Enter' })
+  expect(latest.canvas.tags).toEqual(['team:core'])
+
+  await vi.waitFor(() =>
+    expect(panel.querySelector('button[aria-label="Remove tag team:core"]')).not.toBeNull(),
+  )
+  fireEvent.click(panel.querySelector('button[aria-label="Remove tag team:core"]') as HTMLElement)
+  expect(latest.canvas).not.toHaveProperty('tags')
+})
+
+// Two tags finished before a slow parent commits the first: the row still
+// shows the list from before the first commit, so a whole-list write from
+// it would erase that commit. The write is the change, applied to the
+// eager chain's tags.
+it('two tags finished under a deferred parent both survive', async () => {
+  const latest = { canvas: initial }
+  function DeferredHost() {
+    const [canvas, setCanvas] = useState(initial)
+    latest.canvas = canvas
+    return (
+      <InspectorPanel kind="display" onClose={() => {}}>
+        <CanvasDisplaySettings
+          canvas={canvas}
+          onChange={(next) => {
+            setTimeout(() => {
+              latest.canvas = next
+              setCanvas(next)
+            }, 30)
+          }}
+        />
+      </InspectorPanel>
+    )
+  }
+  const { container } = render(<DeferredHost />)
+  await openPanel(container)
+  const box = () =>
+    (menu() as HTMLElement).querySelector('input[aria-label="Add tag"]') as HTMLInputElement
+  fireEvent.change(box(), { target: { value: 'team:core' } })
+  fireEvent.keyDown(box(), { key: 'Enter' })
+  fireEvent.change(box(), { target: { value: 'draft' } })
+  fireEvent.keyDown(box(), { key: 'Enter' })
+  await vi.waitFor(() => expect(latest.canvas.tags).toEqual(['team:core', 'draft']))
+})

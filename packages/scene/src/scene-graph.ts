@@ -574,7 +574,42 @@ export type SceneNode =
   | IconSceneNode
   | GlyphSceneNode
 
+/**
+ * What a board's colour MEANS, for the reader
+ * ([ADR-0040](../../../docs/contributing/adr/0040-scoped-tags.md) decision 6):
+ * every scoped-tag key the colour is carried by, with the swatch each value
+ * is drawn in. Data rather than geometry — the SVG backend draws it in a
+ * corner of an exported document, and an editor draws it as its own
+ * overlay — so it is placed once, by whoever owns the corner.
+ */
+export interface LegendSwatch {
+  readonly fill?: string
+  readonly stroke?: string
+}
+
+export interface LegendEntry {
+  /** The value under the key; `''` is the untagged class, listed last. */
+  readonly value: string
+  readonly count: number
+  readonly swatch: LegendSwatch
+}
+
+export interface LegendKey {
+  readonly key: string
+  /** Which population the key partitions: a box swatch is a filled rect, an edge's a line. */
+  readonly of: 'boxes' | 'edges'
+  readonly entries: readonly LegendEntry[]
+}
+
+export interface SceneLegend {
+  readonly keys: readonly LegendKey[]
+  /** Colour spent on a population with no key carrying it: one muted line says so. */
+  readonly uncarried: { readonly boxes: boolean; readonly edges: boolean }
+}
+
 /** A fully laid-out document: ordered top-level scene nodes in paint order. */
 export interface Scene {
   readonly nodes: readonly SceneNode[]
+  /** Present only when the board has something to say about its colour. */
+  readonly legend?: SceneLegend
 }

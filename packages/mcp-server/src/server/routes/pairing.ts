@@ -29,16 +29,26 @@ import { createHash } from 'node:crypto'
 import {
   type CreateGrantResponse,
   createGrantRequestSchema,
+  type ListCredentialsResponse,
   type ListGrantsResponse,
+  listCredentialsResponseSchema,
   listGrantsResponseSchema,
   type PairingTokenResponse,
+  type PinnedCredentialSummary,
   pairingTokenRequestSchema,
   pairingTokenResponseSchema,
+  pinnedCredentialSummarySchema,
+  registerCredentialRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
 import { Hono } from 'hono'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from '../security/pairing-session.js'
+import type {
+  PinnedCredential,
+  WebAuthnCredentialStore,
+} from '../security/webauthn-credential-store.js'
+import { verifyWebAuthnRegistration } from '../security/webauthn-registration.js'
 
 function signTokenResponse(
   identity: DaemonIdentity,
@@ -58,10 +68,27 @@ export interface PairingRouterOptions {
   grants: PairingGrantStore
   codes: PairingCodeStore
   tokens: PairingTokenStore
+  /** The passkeys paired origins have pinned (ADR-0039). */
+  credentials: WebAuthnCredentialStore
   identity: DaemonIdentity
 }
 
-export function createPairingRouter({ grants, codes, tokens, identity }: PairingRouterOptions) {
+function summarize(pin: PinnedCredential): PinnedCredentialSummary {
+  return {
+    credentialId: pin.credentialId,
+    origin: pin.origin,
+    backupEligible: pin.backupEligible,
+    createdAt: pin.createdAt,
+  }
+}
+
+export function createPairingRouter({
+  grants,
+  codes,
+  tokens,
+  credentials,
+  identity,
+}: PairingRouterOptions) {
   const app = new Hono()
 
   app.post('/api/pairing/grants', async (c) => {
@@ -105,6 +132,69 @@ export function createPairingRouter({ grants, codes, tokens, identity }: Pairing
       return c.json({ error: 'unknown grant' }, 404)
     }
     tokens.revokeOrigin(revoked.origin)
+    return c.json({ revoked: true }, 200)
+  })
+
+  // Credential pins (ADR-0039). The ORIGIN is the browser-enforced Origin
+  // header, never a body field, and it must hold a persisted grant: a pin is
+  // the key a later attestation is verified against, so only an origin the
+  // user approved may plant one. The relying party a passkey is bound to is
+  // that origin's host — the app registers with the default `rp.id`, and a
+  // registration against any other party is refused by its rpIdHash.
+  app.post('/api/pairing/credentials', async (c) => {
+    const originHeader = c.req.header('origin')
+    if (!originHeader) {
+      return c.json({ error: 'credential registration requires an Origin header' }, 403)
+    }
+    let origin: URL
+    try {
+      origin = new URL(originHeader)
+    } catch {
+      return c.json({ error: 'malformed Origin header' }, 403)
+    }
+    if (!grants.origins().includes(origin.origin)) {
+      return c.json({ error: 'origin has no pairing grant' }, 403)
+    }
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json({ error: 'invalid JSON body' }, 400)
+    }
+    const parsed = registerCredentialRequestSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+    }
+    const verdict = verifyWebAuthnRegistration(parsed.data, { rpId: origin.hostname })
+    if (!verdict.ok) {
+      return c.json({ error: 'registration_rejected', message: verdict.reason }, 400)
+    }
+    const pin = credentials.register({
+      origin: origin.origin,
+      rpId: origin.hostname,
+      credentialId: parsed.data.credentialId,
+      publicKeyJwk: verdict.publicKeyJwk,
+      backupEligible: verdict.backupEligible,
+      signCount: verdict.signCount,
+    })
+    return c.json(pinnedCredentialSummarySchema.parse(summarize(pin)), 201)
+  })
+
+  app.get('/api/pairing/credentials', (c) => {
+    const response: ListCredentialsResponse = listCredentialsResponseSchema.parse({
+      credentials: credentials.list().map(summarize),
+    })
+    return c.json(response, 200)
+  })
+
+  // Addressed by credential id alone: an id is 16+ authenticator-random
+  // bytes, and a settings UI revoking a pin has the id and not necessarily
+  // the origin it was planted from.
+  app.delete('/api/pairing/credentials/:credentialId', (c) => {
+    const credentialId = c.req.param('credentialId')
+    const matching = credentials.list().filter((pin) => pin.credentialId === credentialId)
+    if (matching.length === 0) return c.json({ error: 'unknown credential' }, 404)
+    for (const pin of matching) credentials.revoke(pin.origin, pin.credentialId)
     return c.json({ revoked: true }, 200)
   })
 

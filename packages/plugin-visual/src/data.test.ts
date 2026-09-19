@@ -135,7 +135,13 @@ describe('resolveCanvasEdgeDefaults / resolveEffectiveCanvasEdgeStyle', () => {
 })
 
 describe('bundledPlugins', () => {
-  it('contains exactly the visual plugin (no privileged extras)', () => {
+  // One ORDINARY plugin, no privileged extras: `visual` goes through the same
+  // registry, validation and ordering as any deployment's own, and a
+  // deployment may disable it. The pin is the exact list, so a second plugin
+  // has to be argued for here rather than slipped in. There WAS a second —
+  // `semantic`, one classification facet — and ADR-0040 retired it: what a
+  // box means is a scoped tag now, core rather than a plugin's.
+  it('contains exactly the one bundled plugin, ordinary', () => {
     expect(bundledPlugins).toEqual([visualPlugin])
   })
 })

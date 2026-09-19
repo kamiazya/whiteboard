@@ -7,6 +7,11 @@ export { applyDocumentUpdate } from './operations/apply-document-update.js'
 export type { ApplyWorkspaceDocumentUpdateInput } from './operations/apply-workspace-document-update.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export type {
+  PromoteWorkspaceInput,
+  PromoteWorkspaceResult,
+} from './operations/promote-workspace.js'
+export { promoteWorkspace } from './operations/promote-workspace.js'
+export type {
   RestoreProgress,
   RestoreProgressEvent,
   RestoreVersionInput,
@@ -153,6 +158,7 @@ export {
 // CONVENTION, so it is exported rather than spelled again by anything that
 // has to put a library there or find one.
 export { STENCIL_LIBRARY_PATH } from './tools/stencil-library.js'
+export { carriesATag, TAG_LIBRARY_PATH } from './tools/tag-library.js'
 export type { VersionListInput, VersionListOutput } from './tools/version-list.js'
 export {
   createVersionListTool,
@@ -179,8 +185,15 @@ export {
   workspaceEditInputSchema,
   workspaceEditOutputSchema,
 } from './tools/workspace-edit.js'
-export type { OperatorInfo, RequestOperator, VersionEntry } from './versions/version-entry.js'
+export type {
+  Attestation,
+  OperatorInfo,
+  RequestOperator,
+  VersionEntry,
+} from './versions/version-entry.js'
 export {
+  attestationSchema,
+  base64urlSchema,
   operatorInfoSchema,
   requestOperatorSchema,
   versionEntrySchema,

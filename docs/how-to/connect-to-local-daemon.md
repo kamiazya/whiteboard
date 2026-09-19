@@ -207,6 +207,30 @@ one step from **Settings → Connections → This workspace**:
    **Reload and continue from the daemon** to switch to working from the
    daemon, or keep working in the browser.
 
+The confirmation also shows whether a **passkey** is registered for this
+daemon. With one, the move asks you to confirm it with your passkey (Face ID,
+Touch ID, Windows Hello, or a security key), and the daemon records that a
+person made the move beside the checkpoint it saves for each document; the
+History panel then shows those points as *verified*. Without one, the move
+still works and is recorded as made without a passkey — you can register one
+right there in the dialog. A passkey belongs to the web app's origin and to
+that daemon: pairing another daemon, or using the app from another address,
+means registering another.
+
+## Manage this daemon's passkeys
+
+**Settings → Connections → Passkeys** lists every passkey this daemon will
+accept a move from — the address it was registered from, whether it is synced
+across your devices or stays on this one, and which of them this browser will
+use. You can register one here rather than waiting for a move, and remove any
+of them.
+
+Removing a passkey does not change history: moves you already confirmed stay
+*verified* in the History panel, because what proves them is kept with the
+version and not with the passkey. What it ends is future confirmations from
+that passkey — register another and the next move is confirmed again. The same
+is true if you lose the device holding it.
+
 The move carries your documents, their full edit history, and the images
 they reference. Documents keep their identity, so links between them keep
 working on the daemon. If a path already exists in the chosen daemon

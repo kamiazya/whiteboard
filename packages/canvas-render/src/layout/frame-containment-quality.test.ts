@@ -136,5 +136,13 @@ describe('frame containment scoreboard', () => {
  * scale for node width (32/24/20 -> 24/20/17) made that heading short enough
  * to keep, so it is 2. An improvement in the figure, not a re-pin: nothing
  * about hiding changed, the content simply fits now.
+ *
+ * `crossed` is 15 since three cases joined `TEXT_WRAPPING_CORPUS` — this
+ * scoreboard iterates the SAME corpus as the wrapping one, so growing it
+ * grows the number of boards both figures cover. Nothing about containment
+ * changed: main measured 10 over the old corpus and 15 over the new one with
+ * no production code touched between the two runs, and `hidden` did not move
+ * at all. The five are the same irreducible case as the ten — a single line
+ * taller than the box.
  */
-const PINNED_DEBT: Debt = { hidden: 2, crossed: 10 }
+const PINNED_DEBT: Debt = { hidden: 2, crossed: 15 }

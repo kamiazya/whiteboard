@@ -15,9 +15,11 @@ import {
   extensionFacetsSchema,
   nodeIdSchema,
   type SpatialNode,
+  tagWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -29,6 +31,7 @@ import {
   NodeNotFoundError,
 } from './errors.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
+import { refuseAgainstLibrary, workspaceTagLibrary } from './tag-library.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
@@ -54,19 +57,42 @@ const MAX_DOCUMENTS = 50
  */
 const tagsChangeSchema = z
   .object({
+    // The scoped-tag grammar (ADR-0040 decision 1) is checked HERE, where a
+    // tag is written, and only on `add`: a removal names what is stored, and
+    // what is stored may have been written by another tool.
     add: z
-      .array(z.string().min(1))
+      .array(tagWriteSchema)
       .optional()
       .describe('Tags to add; one already present is left where it is.'),
     remove: z.array(z.string().min(1)).optional().describe('Tags to drop, by name.'),
+    /**
+     * Vocabulary maintenance (ADR-0040 decision 5): a typo recovered, or two
+     * spellings merged, across everything the named documents hold. Priced
+     * against a tool of its own before landing here — see the ADR.
+     */
+    rename: z
+      .array(
+        z
+          .object({
+            from: z.string().min(1).describe('The tag as it is spelled now.'),
+            to: tagWriteSchema.describe('What to call it; an existing tag merges.'),
+          })
+          .strict(),
+      )
+      .optional()
+      .describe(
+        'Rename tags throughout the documents named — their own tags and every node and edge — or, with nodeId / edgeId, on that object alone.',
+      ),
   })
   .strict()
   // `tags: {}` would pass every later guard and save an unchanged tag
   // list as a new snapshot — the silent no-op the payload guard exists
   // to refuse, arriving one level down.
-  .refine((change) => (change.add?.length ?? 0) + (change.remove?.length ?? 0) > 0, {
-    message: 'name at least one tag to add or remove',
-  })
+  .refine(
+    (change) =>
+      (change.add?.length ?? 0) + (change.remove?.length ?? 0) + (change.rename?.length ?? 0) > 0,
+    { message: 'name at least one tag to add, remove or rename' },
+  )
 
 export const facetSetInputSchema = z
   .object({
@@ -84,7 +110,7 @@ export const facetSetInputSchema = z
     nodeId: nodeIdSchema
       .optional()
       .describe(
-        'Set the facets on this node of a spatial document instead of on the document itself. Takes exactly one documentId, and no tags.',
+        'Write to this node of a spatial document instead of to the document itself. Takes exactly one documentId.',
       ),
     /**
      * Present: the write targets this EDGE of a spatial document (facets
@@ -96,12 +122,12 @@ export const facetSetInputSchema = z
     edgeId: nodeIdSchema
       .optional()
       .describe(
-        'Set the facets on this edge of a spatial document instead of on the document itself. Takes exactly one documentId, and no tags.',
+        'Write to this edge of a spatial document instead of to the document itself. Takes exactly one documentId.',
       ),
     tags: tagsChangeSchema
       .optional()
       .describe(
-        "Change the documents' OKF core tags: add and remove by name, every other tag stays. Markdown documents only.",
+        'Add and remove tags by name on the documents, on a board, or (with nodeId / edgeId) on one node or edge; every other tag stays. A scoped tag is key:value in lowercase identifiers, e.g. health:failing, and one key may carry several values.',
       ),
     /**
      * Where a write with neither `nodeId` nor `edgeId` lands: the documents
@@ -142,7 +168,9 @@ export const facetSetOutputSchema = z
             tags: z
               .array(z.string())
               .optional()
-              .describe("The document's tags after the write, when `tags` was given."),
+              .describe(
+                'The tags on the document, board, node or edge after the write, when `tags` was given.',
+              ),
           })
           .strict(),
       )
@@ -154,20 +182,8 @@ export type FacetSetOutput = z.infer<typeof facetSetOutputSchema>
 /** Neither `tags` nor `facets`: nothing to write, and a silent no-op would read as done. */
 export class FacetSetNeedsPayloadError extends Error {
   constructor() {
-    super(
-      'Nothing to set: pass `tags` (add/remove OKF core tags) or `facets` (extension facets), or both.',
-    )
+    super('Nothing to set: pass `tags` (add/remove tags) or `facets` (extension facets), or both.')
     this.name = 'FacetSetNeedsPayloadError'
-  }
-}
-
-/** Tags are a document's frontmatter; a node has none. */
-export class TagsTargetDocumentError extends Error {
-  constructor() {
-    super(
-      'Tags are OKF frontmatter and belong to the document, not to a node. Omit nodeId to tag the document, or omit tags to set node facets.',
-    )
-    this.name = 'TagsTargetDocumentError'
   }
 }
 
@@ -237,7 +253,7 @@ export function createFacetSetTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_set' as const,
     description:
-      "Tag documents, or set facets on them. `tags` adds and removes OKF core tags by name on one or more markdown documents, leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme and visual.edges/v0 routes every edge), or — with nodeId or edgeId — on one node or one edge of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. One payload covers every document named, so tagging five notes is one call.",
+      "Tag documents, boards, nodes and edges, or set facets on them. `tags` adds and removes tags by name — on one or more markdown documents (OKF core tags), on a spatial document's board, or with nodeId / edgeId on one node or one edge — leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme and visual.edges/v0 routes every edge), or — with nodeId or edgeId — on one node or one edge of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. A workspace's tag library (the document at `tags`; wb_facet_list shows it) may restrict a key's values or make it one value at a time, and a tag outside it is refused before anything is written. One payload covers every document named, so tagging five notes is one call.",
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
@@ -247,9 +263,6 @@ export function createFacetSetTool(deps: ServerDeps) {
       const element = input.nodeId ?? input.edgeId
       if (input.nodeId !== undefined && input.edgeId !== undefined) {
         throw new NodeAndEdgeTargetError()
-      }
-      if (element !== undefined && input.tags !== undefined) {
-        throw new TagsTargetDocumentError()
       }
       if (element !== undefined && input.documentIds.length !== 1) {
         throw new NodeTargetNeedsOneDocumentError(input.documentIds.length)
@@ -328,6 +341,26 @@ export function createFacetSetTool(deps: ServerDeps) {
         await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
       }
 
+      // What the workspace's tag library forbids is refused BEFORE any
+      // document is written, for the reason the check above runs first:
+      // the third document's refusal must not leave the first two tagged.
+      // The library is read once per batch (a listing plus a read), and
+      // only for a batch that writes tags — a facets-only write gets the
+      // same answer either way and must not pay for it. With no library
+      // the pre-pass costs nothing further: every set passes, so no
+      // document is loaded twice.
+      if (input.tags !== undefined) {
+        const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
+        if (Object.keys(library).length > 0) {
+          for (const documentId of input.documentIds) {
+            const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
+            for (const { what, tags } of tagSetsAfter(doc, input, documentId)) {
+              refuseAgainstLibrary(library, tags, what)
+            }
+          }
+        }
+      }
+
       const updated: FacetSetOutput['updated'] = []
       for (const documentId of input.documentIds) {
         updated.push(await setOne(deps, input, documentId, sets, deletions))
@@ -374,16 +407,19 @@ async function setOne(
     // to one that never had it. The node's `embed` is untouched — they are
     // independent fields now, where the format's extension made them two arms
     // of a union and this branch had to preserve the other one by hand.
-    const { facets: _replaced, ...nodeRest } = node
-    const nextNode = (
-      Object.keys(merged).length === 0 ? nodeRest : { ...nodeRest, facets: merged }
-    ) as SpatialNode
+    const { facets: _replaced, tags: _tags, ...nodeRest } = node
+    const tags = input.tags === undefined ? undefined : applyTagChange(node.tags, input.tags)
+    const nextNode = {
+      ...nodeRest,
+      ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
+      ...withTags(tags ?? node.tags),
+    } as SpatialNode
     writeSpatialCanvas(doc, {
       ...canvas,
       nodes: canvas.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
     })
     await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
-    return { documentId, facets: merged }
+    return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
   }
 
   if (input.edgeId !== undefined) {
@@ -411,18 +447,40 @@ async function setOne(
     // The same canonical emptiness the node and canvas branches keep: an
     // empty bucket disappears, so an edge that set a facet and cleared it
     // serializes identically to one that never had it.
-    const { facets: _replaced, ...edgeRest } = edge
-    const nextEdge: CanvasEdge =
-      Object.keys(merged).length === 0 ? edgeRest : { ...edgeRest, facets: merged }
+    const { facets: _replaced, tags: _tags, ...edgeRest } = edge
+    const tags = input.tags === undefined ? undefined : applyTagChange(edge.tags, input.tags)
+    const nextEdge: CanvasEdge = {
+      ...edgeRest,
+      ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
+      ...withTags(tags ?? edge.tags),
+    }
     writeSpatialCanvas(doc, {
       ...canvas,
       edges: canvas.edges.map((candidate) => (candidate.id === edgeId ? nextEdge : candidate)),
     })
     await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
-    return { documentId, facets: merged }
+    return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
   }
 
-  if (input.target === 'canvas') {
+  // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
+  // document has nodes and edges and no frontmatter to put one in, so a
+  // facet stored on one is metadata no reader of that format can surface
+  // — written, kept, and invisible. Its TAGS are another matter: a board is
+  // as taggable as a note (ADR-0040 decision 2), and `target` is not needed
+  // to say so, since a board's tags are the canvas's.
+  //
+  // A document with no kind is allowed through and NOT declared: unlike
+  // an OKF content write this replaces nothing, so it has neither
+  // something to lose nor any evidence to offer about the format.
+  if (kind === 'spatial' && input.target !== 'canvas' && input.facets !== undefined) {
+    throw new DocumentKindMismatchError(
+      documentId,
+      kind,
+      "Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass target: 'canvas' for canvas-target facets (a theme, edge routing), nodeId for node-target facets, set them on the markdown document this one refers to, or write its content with `wb_workspace_edit`'s `document.set` op.",
+    )
+  }
+
+  if (input.target === 'canvas' || kind === 'spatial') {
     // A markdown document has no canvas envelope; a document with no kind
     // is allowed through and NOT declared, for the reason the document
     // branch below gives — this replaces nothing, so it has neither
@@ -437,32 +495,28 @@ async function setOne(
     const canvas = readSpatialCanvas(doc)
     const merged: ExtensionFacets = { ...canvas.facets, ...sets }
     for (const key of deletions) delete merged[key]
+    const tags = input.tags === undefined ? undefined : applyTagChange(canvas.tags, input.tags)
+    // A rename reaches every node and edge too: it is vocabulary
+    // maintenance over the document, not a write to the board alone.
+    const renames = input.tags?.rename ?? []
+    const renamed = <T extends { readonly tags?: readonly string[] }>(element: T): T => {
+      if (renames.length === 0 || element.tags === undefined) return element
+      const { tags: _before, ...rest } = element
+      return { ...rest, ...withTags(applyTagChange(element.tags, { rename: renames })) } as T
+    }
     // The same canonical emptiness the web editor's `withCanvasFacet` keeps:
     // an empty bucket disappears, so a reverted canvas never carries a
     // redundant field forever. The comments beside it are untouched.
-    const { facets: _replaced, ...canvasRest } = canvas
-    writeSpatialCanvas(
-      doc,
-      Object.keys(merged).length === 0 ? canvasRest : { ...canvasRest, facets: merged },
-    )
+    const { facets: _replaced, tags: _tags, ...canvasRest } = canvas
+    writeSpatialCanvas(doc, {
+      ...canvasRest,
+      nodes: canvas.nodes.map((node) => renamed(node)),
+      edges: canvas.edges.map((edge) => renamed(edge)),
+      ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
+      ...withTags(tags ?? canvas.tags),
+    })
     await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
-    return { documentId, facets: merged }
-  }
-
-  // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
-  // document has nodes and edges and no frontmatter to put one in, so a
-  // facet stored on one is metadata no reader of that format can surface
-  // — written, kept, and invisible.
-  //
-  // A document with no kind is allowed through and NOT declared: unlike
-  // an OKF content write this replaces nothing, so it has neither
-  // something to lose nor any evidence to offer about the format.
-  if (kind === 'spatial') {
-    throw new DocumentKindMismatchError(
-      documentId,
-      kind,
-      "Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass target: 'canvas' for canvas-target facets (a theme, edge routing), nodeId for node-target facets, set them on the markdown document this one refers to, or write its content with `wb_workspace_edit`'s `document.set` op.",
-    )
+    return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
   }
 
   const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...sets }
@@ -473,12 +527,7 @@ async function setOne(
   if (input.tags !== undefined) {
     const core = readCoreFacets(doc)
     if (core === undefined) throw new DocumentHasNoFrontmatterError(documentId)
-    const remove = new Set(input.tags.remove ?? [])
-    const kept = (core.tags ?? []).filter((tag) => !remove.has(tag))
-    const added = (input.tags.add ?? []).filter(
-      (tag, i, all) => !kept.includes(tag) && all.indexOf(tag) === i,
-    )
-    tags = [...kept, ...added]
+    tags = applyTagChange(core.tags, input.tags)
     // The whole core bucket goes back, tags included: writeCoreFacets
     // replaces rather than merges, and an omitted `tags` would drop them.
     const { tags: _previous, ...rest } = core
@@ -488,4 +537,84 @@ async function setOne(
   await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
 
   return { documentId, facets: mergedFacets, ...(tags === undefined ? {} : { tags }) }
+}
+
+/**
+ * Every tag set a write to `documentId` would leave behind, each named
+ * for a refusal — the node's, the edge's, the board's and every node's
+ * and edge's a rename reaches, or the note's own. A target the write
+ * cannot reach (no such node, the wrong kind) answers nothing here and
+ * leaves `setOne` to refuse it by name.
+ */
+function tagSetsAfter(
+  doc: LoroDoc,
+  input: FacetSetInput,
+  documentId: string,
+): { what: string; tags: string[] }[] {
+  const change = input.tags
+  if (change === undefined) return []
+  const kind = readDocumentKind(doc)
+  if (input.nodeId !== undefined || input.edgeId !== undefined) {
+    if (kind !== 'spatial') return []
+    const canvas = readSpatialCanvas(doc)
+    const element =
+      input.nodeId !== undefined
+        ? canvas.nodes.find((node) => node.id === input.nodeId)
+        : canvas.edges.find((edge) => edge.id === input.edgeId)
+    if (element === undefined) return []
+    const what = input.nodeId !== undefined ? `node ${input.nodeId}` : `edge ${input.edgeId}`
+    return [{ what, tags: applyTagChange(element.tags, change) }]
+  }
+  if (input.target === 'canvas' || kind === 'spatial') {
+    if (kind === 'markdown') return []
+    const canvas = readSpatialCanvas(doc)
+    const sets = [{ what: 'the board', tags: applyTagChange(canvas.tags, change) }]
+    const renames = change.rename ?? []
+    if (renames.length === 0) return sets
+    for (const node of canvas.nodes) {
+      if (node.tags !== undefined) {
+        sets.push({ what: `node ${node.id}`, tags: applyTagChange(node.tags, { rename: renames }) })
+      }
+    }
+    for (const edge of canvas.edges) {
+      if (edge.tags !== undefined) {
+        sets.push({ what: `edge ${edge.id}`, tags: applyTagChange(edge.tags, { rename: renames }) })
+      }
+    }
+    return sets
+  }
+  const core = readCoreFacets(doc)
+  if (core === undefined) return []
+  return [{ what: `document ${documentId}`, tags: applyTagChange(core.tags, change) }]
+}
+
+/**
+ * The errand's shape applied to a stored set: drop what `remove` names,
+ * then append what `add` names and the set does not yet hold — a tag added
+ * twice is a no-op rather than a second copy (ADR-0040 decision 2).
+ */
+function applyTagChange(
+  current: readonly string[] | undefined,
+  change: {
+    add?: readonly string[]
+    remove?: readonly string[]
+    rename?: readonly { from: string; to: string }[]
+  },
+): string[] {
+  // Rename first, then remove, then add — so `rename` onto a tag already
+  // present MERGES (one copy survives) and a removal names the new spelling.
+  const renamed = (current ?? []).map(
+    (tag) => change.rename?.find((r) => r.from === tag)?.to ?? tag,
+  )
+  const remove = new Set(change.remove ?? [])
+  const kept = renamed.filter((tag, i, all) => !remove.has(tag) && all.indexOf(tag) === i)
+  const added = (change.add ?? []).filter(
+    (tag, i, all) => !kept.includes(tag) && all.indexOf(tag) === i,
+  )
+  return [...kept, ...added]
+}
+
+/** Canonical emptiness for a tag set: an empty list is no field at all. */
+function withTags(tags: readonly string[] | undefined): { tags?: string[] } {
+  return tags === undefined || tags.length === 0 ? {} : { tags: [...tags] }
 }

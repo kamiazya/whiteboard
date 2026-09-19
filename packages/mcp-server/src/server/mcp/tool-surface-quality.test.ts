@@ -172,6 +172,11 @@ describe('what the tool table costs to read', () => {
       // -1,241 wire when `CanvasColor` / `CanvasPoint` / `NodeEmbed` /
       // `Bends` were named in zod's registry: a scene repeats all four, so
       // this row is where the registration pays most.
+      //
+      // +1,000 wire when the model gained `tags` at three sites (ADR-0040
+      // increment 1): the scene's output schema echoes stored boards, boxes
+      // and relations, so it states the field. Visible bytes unmoved — the
+      // tool's INPUT is what a model reads, and nothing was added to it.
       canvas_view: {
         visibleBytes: 733,
         // -850 when `ExtensionFacets` joined the registry. The facets record
@@ -179,7 +184,12 @@ describe('what the tool table costs to read', () => {
         // and a scene repeats it on every node and every edge — which is why
         // an INPUT convergence on wb_canvas_edit shows up loudest on this
         // tool's output.
-        wireBytes: 19650,
+        //
+        // -850 on the merge, exactly the drop the entry above predicted: the
+        // `ExtensionFacets` registration meets a scene that now echoes a tag
+        // list too, and the registration pays for itself on every node and
+        // every edge the answer repeats.
+        wireBytes: 20650,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -224,7 +234,16 @@ describe('what the tool table costs to read', () => {
         // purpose: an invented mechanism reads like a measured one.
         // -334 more from the `ExtensionFacets` registration, on top of the
         // unattributed drop above.
-        wireBytes: 17470,
+        //
+        // +500 when the model gained `tags` (ADR-0040 increment 1): the
+        // output echoes stored elements. Visible bytes unmoved.
+        //
+        // -4778 on the merge, and the two causes are independent: ADR-0038
+        // decision 3 folded five node fields into one resource (the
+        // unattributed drop above), and `ExtensionFacets` is a registered
+        // composite the echo repeats per element. Visible bytes still
+        // unmoved, which is what makes both safe on a table a model reads.
+        wireBytes: 17670,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -381,9 +400,50 @@ describe('what the tool table costs to read', () => {
         // the one safe registration ADR-0031 §3b had listed and left unspent,
         // safe because the record carries no description to be deleted — pays
         // that back and 79 more.
-        visibleBytes: 14964,
         // -413, same two causes.
-        wireBytes: 33456,
+        // UNCHANGED by the second axis's write path, which was landed here
+        // at +590 visible / +2 parameters (`facets` beside `op` on node.add
+        // and node.patch, ADR-0036 §6), read by lane round 18, and
+        // withdrawn: 0 of 3 with the field written zero times in fifty-five
+        // node ops (ADR-0031's twenty-second reading). C1 up for nothing on
+        // C13 or C14 is what §1 refuses, so the row is back where it was,
+        // and the rule that decided it was written before the reading.
+        // +128 visible for `stencil` accepting `null` on node.add and
+        // node.patch (task #93). Two parts, each priced on its own before
+        // being bought: the `.nullable()` is +56 (28 a field, 2 arms) and
+        // the sentence that says what null MEANS is +72.
+        //
+        // What it buys is a whole BATCH, not a field. A parse refusal on
+        // one op loses every op beside it, and `stencil` is the most
+        // frequent unrecognized-key refusal in the stored lane readings —
+        // 6 across 3 of 9, where the runner-up appeared in one. Two of
+        // three round-18 trials wrote `stencil: null` after writing
+        // `within: null` one field over, which is the generalisation the
+        // asymmetry invited.
+        //
+        // The sentence is not decoration and is why this row moved 128
+        // rather than 56: the schema type alone says null is ACCEPTED, and
+        // a reader of a PATCH could take that as "take the stencil off".
+        // It does not — the box keeps what it has — and a caller who
+        // guessed otherwise would silently lose a box's kind.
+        //
+        // -79 on the merge: the node input stopped publishing JSON Canvas
+        // 1.0's `x-whiteboard` extension key and names the model's own
+        // `embed` and `facets`, and the `ExtensionFacets` registration pays
+        // for the four sites the retired composite left inline.
+        visibleBytes: 15092,
+        // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
+        // increment 1): the OUTPUT echoes stored nodes and edges and states
+        // the field; the node drafts and the edge draft/patch deliberately
+        // omit it until decision 7's reading prices the inline form. Letting
+        // it through read +6 parameters / +6 undescribed / +300 visible.
+        // +128, the same bytes: this change is in the input schema, which
+        // the model reads and the wire carries alike.
+        //
+        // -4857 on the merge, the input convergence and the resource fold
+        // together — the same two causes as `canvas_view`'s row, arriving
+        // here through the echo this tool's output carries.
+        wireBytes: 33784,
         descriptionWords: 169,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
@@ -513,10 +573,43 @@ describe('what the tool table costs to read', () => {
       // That is now twice on this tool's subject, and the entry above says
       // what both point at: a join the ANSWER carries is not a sentence a
       // model may or may not act on.
+      //
+      // THAT JOIN NOW EXISTS — `otherTargets` names by scope what the
+      // filter removed, so `target: 'node'` also says `canvas` holds
+      // `visual.axes/v0` — AND IT DID NOT MOVE THE READING EITHER. Round
+      // 17: 0 of 3, `colour contested` x3, unmoved from round 15. Two of
+      // the three trials had the join in front of them (the third passed
+      // `assetKind` alone and never asked). So the sentence two rows up is
+      // now measured and wrong as a general remedy: carrying a fact in the
+      // answer makes it unmissable, not acted on. Four attempts on this
+      // lane have now been refuted — two skill/answer sentences, one
+      // description clause, and this, the first STRUCTURAL one.
+      //
+      // The row moves +176 WIRE and **0 visible**, because a table's price
+      // is its INPUT schema and this is output. The field is kept on a
+      // ground that is not C14 and says so in its own doc comment: a
+      // filtered answer that silently drops a scope is a partial truth.
+      // What was withdrawn is the claim, not the field.
+      //
+      // +65 visible / +13 words and +572 wire when the tool learned to answer
+      // the tags a workspace already USES (ADR-0040 decision 5's in-use
+      // layer): one clause in the description, and an output array counted
+      // by what carries each tag. Output-only on the wire, so a model reads
+      // the clause and pays for nothing else until it asks with a
+      // workspaceId.
+      //
+      // +141 visible / +23 words and +696 wire for ADR-0040 increment 5
+      // (the DECLARED layer): the description says a workspace's tag
+      // library is answered — the document at `tags`, a description,
+      // exclusivity and the admitted values with a colour each — and the
+      // `tagLibrary` output array carries it. Again output-only on the
+      // wire; the visible bytes are the one clause that tells a model where
+      // the vocabulary a write is refused against can be READ, which is
+      // what keeps `wb_facet_set`'s refusal a one-call recovery.
       wb_facet_list: {
-        visibleBytes: 1002,
-        wireBytes: 2114,
-        descriptionWords: 63,
+        visibleBytes: 1208,
+        wireBytes: 3558,
+        descriptionWords: 99,
         parameters: 3,
         undescribed: 0,
         strays: 'refused',
@@ -528,15 +621,41 @@ describe('what the tool table costs to read', () => {
       // that says "tags", which three trials of "tag this note" had never
       // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
       // errors over three trials before, 2 calls and 0 after.
+      //
+      // Re-pinned again for ADR-0040 increment 3: +651 visible / +23 words /
+      // +3 parameters (all described; `undescribed` stays 1). Two things,
+      // priced separately. `tags` now reaches a board, a node and an edge —
+      // a description change, ~+300 of the bytes — because a relation and a
+      // box are classified the way a note is. And `tags.rename` (decision
+      // 5), ~+350 bytes and the three parameters, chosen over a tool of its
+      // own: `wb_tag_rename` measured 987 visible bytes and 5 parameters as
+      // a row a model would read on every turn, against an arm inside the
+      // one write verb it already reaches for. Round 19 reads the first.
+      //
+      // +195 visible / +35 words / 0 parameters for ADR-0040 increment 5:
+      // one sentence saying a workspace's tag library (the document at
+      // `tags`, shown by wb_facet_list) may restrict a key's values or make
+      // it one value at a time, and that a tag outside it is refused before
+      // anything is written. Priced as a description because the refusal
+      // text alone would leave a model learning the rule by being refused
+      // (C11's evidence is what the model is told AFTER); a sentence that
+      // names the neighbour to read the vocabulary from is C4.
       wb_facet_set: {
         // +63 visible, +126 wire, same cause as `wb_document_get` above and
         // the only row where the registration costs MODEL-VISIBLE bytes. It
         // is bought by -79 on `wb_canvas_edit`, the tool that is 39% of
         // everything a model reads.
-        visibleBytes: 2484,
-        wireBytes: 3366,
-        descriptionWords: 118,
-        parameters: 9,
+        //
+        // +63 visible / +126 wire again on the merge, and the two causes are
+        // different: this row carries BOTH the registration's cost above and
+        // ADR-0040's tag-library sentence (the paragraph over this tool). The
+        // trade the registration made still holds — it is bought by -79 on
+        // `wb_canvas_edit` — and the sentence is what a model needs to read
+        // the vocabulary before being refused by it.
+        visibleBytes: 3330,
+        wireBytes: 4238,
+        descriptionWords: 176,
+        parameters: 12,
         undescribed: 1,
         strays: 'refused',
         names: ['wb_facet_list'],
@@ -756,12 +875,54 @@ describe('what the tool table costs to read', () => {
       //
       // Then -4 visible / -20 wire for `node.patch`'s derived geometry (see
       // the `wb_canvas_edit` row). Strictly more accepted, and cheaper.
-      visibleBytes: 38280,
       // -8288: the two rows above, and nothing else. A table whose whole
       // model-visible cost is unchanged while its wire cost falls is the
       // shape a storage change is supposed to have.
-      wireBytes: 106023,
-      parameters: 341,
+      //
+      // Then +176 WIRE for `wb_facet_list`'s `otherTargets` (see its row):
+      // an OUTPUT field, so it moves `wireBytes` alone and leaves
+      // `visibleBytes` exactly where the line above left it — the only
+      // change in this file so far that bought something without touching
+      // the column a model pays on every turn.
+      //
+      //
+      // Then +590 visible / +2 parameters for `wb_canvas_edit`'s inline
+      // `facets`, read at 0 of 3 with the field unused and WITHDRAWN in the
+      // same PR (see its row) — so the totals did not move. The second
+      // bundled facet it was the write path for, `semantic.class/v0`, costs
+      // nothing here: a facet is output of `wb_facet_list`, not input to
+      // anything a model reads every turn.
+      //
+      // Then +336 visible / 0 parameters / +891 wire for ADR-0040
+      // increment 5 (the tag library): a clause on wb_facet_list and a
+      // sentence on wb_facet_set, each priced at its row. No input gained a
+      // parameter — the library is a DOCUMENT, written with the facet write
+      // the surface already has.
+      // Then +128 visible / 0 parameters for `stencil: null` on
+      // `wb_canvas_edit` (task #93), priced at its own row above.
+      //
+      // Then -16 visible / -4 parameters / -4 undescribed / -10,296 wire when
+      // this branch met main. Two independent changes with the same
+      // direction: `wb_canvas_edit`'s node input stopped publishing JSON
+      // Canvas 1.0's `x-whiteboard` key and names the model's own `embed`
+      // and `facets` (-79 visible, -4 parameters, all four of them
+      // undescribed), and ADR-0038 decision 3 folded five node fields into
+      // one resource, which no input publishes and every echoing OUTPUT
+      // repeats. The visible column moves by 63 LESS than the input change
+      // alone, because the same merge brought ADR-0040's tag clauses with
+      // it; the wire column is where the fold shows.
+      visibleBytes: 39460,
+      // +2,000 wire and 0 visible when the model gained `tags` at three sites
+      // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
+      // and state the field; no input gained a parameter.
+      // Then +716 visible / +3 parameters / +1,249 wire for ADR-0040
+      // increment 3 (wb_facet_set's tags on every target and rename;
+      // wb_facet_list's in-use tags), each priced at its row.
+      // Then +891 wire for increment 5: wb_facet_list's `tagLibrary` output
+      // (+696) and wb_facet_set's sentence (+195).
+      // Then +128 wire for `stencil: null`, the same bytes as visible.
+      wireBytes: 109867,
+      parameters: 344,
       undescribed: 217,
     })
   })

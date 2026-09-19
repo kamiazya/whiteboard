@@ -77,6 +77,7 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
   'daemon/daemon-registry.ts': 'round-tripped: the daemon record',
   'server/security/server-mode-record.ts': 'round-tripped: the server-mode record',
   'server/security/pairing-grant-store.ts': 'round-tripped: the pairing grants file',
+  'server/security/webauthn-credential-store.ts': 'round-tripped: the webauthn credentials file',
   'server/store/backup-in-progress.ts': 'round-tripped: the backup-in-progress marker',
   'server/store/backup-blob-mirror.ts': 'round-tripped: the blob manifest',
   'server/store/backup-subprocess.ts': 'round-tripped: the backup result',
@@ -93,6 +94,11 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
     'the owner file holds a pid and a timestamp this process just wrote, and what matters about it ' +
       'is the reclaim protocol rather than the shape. mkdir-lock.test.ts drives that protocol, ' +
       'including a lock left by a dead holder',
+  ),
+  'server/security/webauthn-assertion.ts': notModelled(
+    'the clientDataJSON a browser sends inside a WebAuthn assertion, so this package is the reader ' +
+      'alone and the authenticator the writer. webauthn-assertion.test.ts builds every field a ' +
+      'real one carries and refuses each malformed shape without throwing',
   ),
   'server/release/sbom-artifact-state.ts': notModelled(
     'the sidecar is written by a .mjs release script rather than by this package, and ' +
@@ -114,6 +120,11 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
   'server/routes/ws-validation.ts': notModelled(
     'a frame a CLIENT sends, so this package is the reader alone. The frames the daemon emits are ' +
       "round-tripped by server/routes/ws-emitters.property.test.ts against the browser's own parser",
+  ),
+  'server/store/version-store.ts': notModelled(
+    "a version row's attestation column, written and read by the same store: " +
+      'version-store.test.ts round-trips save({ attestation }) through list(), and a value the ' +
+      'schema refuses reads back as no attestation by design',
   ),
   'server/routes/document/restore.ts':
     'not modelled: a request body, fuzzed from its schema by server/app.routes.fuzz.property.test.ts',

@@ -8,8 +8,8 @@ document ([ADR-0038](../contributing/adr/0038-ocif-projection.md)), beside JSON 
 OKF Markdown. The claim first-party support makes is the same one ADR-0037 made for JSON
 Canvas: a round-trip property over the expressible subset, and this table for everything else.
 
-The model can hold **56** field positions. **27** of them are something OCIF can
-state in its own vocabulary; the remaining **29** ride an extension of ours.
+The model can hold **59** field positions. **27** of them are something OCIF can
+state in its own vocabulary; the remaining **32** ride an extension of ours.
 
 **Nothing is dropped**, and that is the difference worth knowing before choosing a format.
 OCIF’s conformance rules require a reader to preserve an extension it does not understand, so a
@@ -60,7 +60,7 @@ The format has somewhere to put the value and not the same shape for it. What a 
 | `lines[].from.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
 | `lines[].to.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
 
-## Carried on a `@whiteboard/*` extension — 29
+## Carried on a `@whiteboard/*` extension — 32
 
 A conforming reader must PRESERVE an extension it does not understand, so a round trip through a foreign tool deletes none of these. What is lost is comprehension, not data: the tool carries the bytes and cannot act on them. There is no second mode here that drops the key — that is JSON Canvas’s `strict`, and OCIF has no equivalent.
 
@@ -80,6 +80,7 @@ A conforming reader must PRESERVE an extension it does not understand, so a roun
 | `edges[].color` | preserved, not understood |
 | `edges[].from.side` | preserved, not understood |
 | `edges[].label` | preserved, not understood |
+| `edges[].tags[]` | preserved, not understood |
 | `edges[].to.side` | preserved, not understood |
 | `lines[].bends[].x` | preserved, not understood |
 | `lines[].bends[].y` | preserved, not understood |
@@ -95,6 +96,8 @@ A conforming reader must PRESERVE an extension it does not understand, so a roun
 | `nodes[].embed.versionRef` | preserved, not understood |
 | `nodes[].label` | preserved, not understood |
 | `nodes[].resource.subpath` | preserved, not understood |
+| `nodes[].tags[]` | preserved, not understood |
+| `tags[]` | preserved, not understood |
 
 ## Cannot cross at all — 0
 

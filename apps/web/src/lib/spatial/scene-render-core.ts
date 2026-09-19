@@ -31,6 +31,7 @@ import {
   renderSceneToKeyedSvg,
   renderSceneToSvg,
   sceneBounds,
+  sceneDocumentBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import type {
@@ -39,6 +40,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
@@ -80,6 +82,13 @@ export interface RenderCanvasCoreOptions {
    * exactly where the committed scene placed it, or the press jumps it.
    */
   readonly commentObstacles?: readonly BoundingBox[]
+  /**
+   * The workspace's tag library (ADR-0040 decision 5), when the keeper
+   * answered one: a box or an edge carrying a value it colours, and no
+   * colour of its own, is drawn in that colour and the legend lists the
+   * key — the picture the daemon's export and `wb_scene_render` draw.
+   */
+  readonly tagLibrary?: TagLibrary
   /**
    * Draw resolved comments too, muted (canvas-render's `showResolved`).
    * Per-user VIEW state — it threads through every render of this surface
@@ -159,6 +168,7 @@ export function renderCanvasToSvgWith(
     threads: options.threads,
     proposals: options.proposals,
     onDegrade: options.onDegrade,
+    tagLibrary: options.tagLibrary,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))
@@ -168,7 +178,29 @@ export function renderCanvasToSvgWith(
 /** The ONE producer of the editor surface's document-envelope options, so
  * the plain string and the keyed projection below can never disagree. */
 function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
-  return { width: bounds.w, height: bounds.h, viewBox: bounds }
+  // No legend in the editor's own document: the keyed projection cannot
+  // carry one, and the editor draws it as an overlay (ADR-0040 decision 6).
+  return { width: bounds.w, height: bounds.h, viewBox: bounds, legend: 'omit' }
+}
+
+/**
+ * The document a person SAVES: the same layout as the editor surface, drawn
+ * as a whole document with its legend (ADR-0040 decision 6) in the band
+ * `sceneDocumentBounds` reserves for it. The editor's own string above is
+ * the keyed projection's bytes, which omit the legend because the editor
+ * draws it as an overlay — so an export taken from that string would lose
+ * what the screen shows.
+ */
+export function renderCanvasForExportWith(
+  canvas: SpatialCanvas,
+  options: RenderCanvasCoreOptions,
+): { readonly svg: string; readonly bounds: BoundingBox } {
+  const { scene } = renderCanvasToSvgWith(canvas, options)
+  const bounds = sceneDocumentBounds(scene)
+  return {
+    svg: renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds }),
+    bounds,
+  }
 }
 
 /**

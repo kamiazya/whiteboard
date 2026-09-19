@@ -26,6 +26,7 @@ import type {
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { saveDocumentSnapshot } from './document-io.js'
 import { createDocumentSetTool, OkfParseError } from './document-set.js'
+import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
  * The index refuses an unknown workspace in its own words; the tool surface
@@ -126,6 +127,18 @@ export async function wbDocumentCreate(
     if (!preflight.ok) {
       throw new OkfParseError(preflight.error.stage, preflight.error.message)
     }
+    // A tag the workspace's library forbids is refused here for exactly the
+    // reason the parse above is: the delegated write below would otherwise
+    // refuse it AFTER the mint, leaving an empty document squatting the path
+    // the caller was told they did not get. The same check runs again inside
+    // that write, where it belongs — it is the writer's rule, not the
+    // creator's — so a tagged create takes one extra listing, which is what
+    // buys the refusal landing before anything exists.
+    //
+    // `createWorkspace: true` reaches this before the mint, against a
+    // workspace that does not exist yet; the read degrades to "nothing
+    // declared", which is the truth about a workspace being born.
+    await refuseFrontmatterTags(deps, input.workspaceId, preflight.value.frontmatter.tags)
   }
 
   // Workspaces never materialize implicitly: a typo'd or hallucinated

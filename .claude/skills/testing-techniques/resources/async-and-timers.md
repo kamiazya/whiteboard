@@ -89,3 +89,30 @@ test takes to report. Each project's is sized on a measurement recorded beside i
 before changing, and never tighten toward p99, because the max is one test rather than an
 outlier family. Under a full parallel run the same test can cost 20× its isolated time
 (`resources/stability-checks.md`).
+
+### A nested ceiling is a second budget, and contention is what breaks it
+
+`vi.waitFor(..., { timeout: 2000 })` around work a shared runner schedules is not the
+per-test ceiling above — it is a tighter one inside it, and it is the only part of the
+arrangement that can fail. Measured: two `document-store.compact` tests went red together
+on a commit whose re-run was green, and the shard that FAILED ran nine seconds QUICKER
+than the one that passed. Nothing had got slower; something else on the box held the CPU
+for a moment.
+
+When the subject is this repo's own code, wait for the EVENT instead of for a budget. The
+module already tracking the state announces a change, and a test-only seam resolves on it
+— `_awaitAutoCompactFiredForTests` / `_awaitAutoCompactIdleForTests` in
+`server/store/auto-compact.ts`, beside the count seams they replaced polling over. The
+per-test timeout is then the one budget, and a compaction that genuinely never settles
+still reports the test that was waiting for it. Two details such a seam needs:
+
+- **Throw rather than hang when there is nothing to wait for.** "Never scheduled" and
+  "already settled" are the two ways the caller's premise can be wrong, and a hang names
+  neither.
+- **Hold the event loop open for the wait.** The debounce timer being waited on is
+  deliberately `unref`'d, and a waiter whose only remaining handle is that timer would let
+  the loop drain. A runner normally holds its own handles — that is the runner's business,
+  not something a seam should rest on.
+
+`vi.waitFor` stays right for a subject with no such seam: the DOM, or a file another
+process writes.

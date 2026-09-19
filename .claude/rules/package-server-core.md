@@ -137,6 +137,72 @@ paths:
   (`wb-glow`), never by the word `filter`: a drop shadow is a filter too,
   and the e2e smoke failed on exactly that substring once.
 
+## Tags reach every kind of document, and search reads them by BEARER
+
+[ADR-0040](../../docs/contributing/adr/0040-scoped-tags.md): `wb_facet_set`'s
+`tags` change lands on a markdown document's OKF core tags, on a spatial
+document's board (with or without `target: 'canvas'` — a board's tags are the
+canvas's), or with `nodeId` / `edgeId` on one node or one edge; `tags.rename`
+reaches every node and edge of the documents named, and `tagWriteSchema`
+refuses a colon-bearing tag that is not `key:value` where it is written.
+`extractContentFacts` answers `bearers` rather than a flat tag list — the
+document, the board, each tagged node and each tagged edge, with the text a
+reader knows it by — so `wb_document_search`'s filter matches when ONE bearer
+carries every listed tag and names the matching nodes and edges as excerpts,
+and `computeDocumentTags` / `wb_facet_list`'s `tags` count the vocabulary in
+use by what carries it. `wb_facet_list` lists the workspace ONCE and hands the
+listing to both the library and the counts, which a test holds by counting
+listings.
+
+**The tag LIBRARY is data, read where it is needed** (ADR-0040 decision 5,
+increment 5a; `tools/tag-library.ts`). `workspaceTagLibrary(deps, ws,
+unknownWorkspace, listed?)` answers what the document at `TAG_LIBRARY_PATH`
+(`tags`) declares, or `{}` — the same shape and the same `'deployment' |
+'refuse'` choice as `workspaceFacetRegistry`, but it composes nothing: a
+stencil id has to resolve through the registry, and nothing in the registry
+reads a tag. `refuseAgainstLibrary(library, tags, what)` throws
+`TagLibraryError` for a value a key does not admit or a second value under
+an exclusive key — the judgement is plugin-visual's `tagLibraryObjection`,
+shared with the editor's tag row; only the sentence is this package's —
+and `wb_facet_set` runs it as a PRE-PASS over the tag set
+each target would end up carrying (`tagSetsAfter`: the node or edge named, or
+the board and every node and edge a rename reaches, or the document),
+before any document is written — so a batch refused on its second document
+has written nothing to its first, which a test pins by reading the first
+back. The library is loaded only when the input carries `tags`, so a
+facets-only write lists the workspace zero times (pinned by counting
+listings). `wb_facet_list` answers it as `tagLibrary` from the one listing
+it already takes, and `GET /document-tags` (`computeDocumentTags`) as
+`library` — the raw record, `{}` for none — beside `inUse`, because a
+picker wants both layers in one round trip and that listing is already
+taken there. `wb_scene_render` passes it to layout only when the canvas
+carries a tag (`carriesATag`, exported for the daemon's export path to ask
+the same question), so an untagged board costs no listing.
+
+**A BODY is the other way that stored field is written, and it is held to
+the same declaration** (increment 5c). `refuseFrontmatterTags` is the one
+judgement for a writer that takes a whole OKF document — `document.set`,
+`wb_document_create`'s markdown arm, and the `POST /documents` route behind
+them. Such a write replaces the tags wholesale, so the parsed frontmatter IS
+the resulting set and there is no `tagSetsAfter` merge to compute. It runs
+at two call sites deliberately: in the writer, before the document is
+opened, so a refusal leaves the stored body as it stands; and in
+`wb_document_create`'s preflight beside the OKF parse already hoisted ahead
+of ADR-0019's mint, because the delegated write would otherwise refuse AFTER
+the mint and leave an empty document squatting the path the caller was told
+they did not get. A tagged create therefore takes one extra listing, and
+that is what it buys. The listing is skipped when there is no tag to judge
+— `undefined` and `[]` are different values and both count as none, which a
+test pins by counting listings over BOTH shapes (the first mutation check
+survived because only the `undefined` half was exercised).
+
+`TagLibraryError` needs its `mapDocumentError` branch or the route answers
+500 for a refusal only the caller can fix; measured, not assumed.
+
+What no write check can reach is a CRDT update: `applyWorkspaceDocumentUpdate`
+imports state, not an intent, so the editor's own tag row is where that one
+is held (`.claude/rules/app-web.md`).
+
 ## Common mistakes (append as review finds them)
 
 - Importing a store/sync implementation directly instead of taking it via

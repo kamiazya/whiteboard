@@ -21,6 +21,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
@@ -58,6 +59,8 @@ export interface DragLayersInputs {
   lockedNodeIds: ReadonlySet<string> | undefined
   resolvedMeasure: MeasureText
   theme: ResolvedTheme
+  /** The workspace's tag library: a live drag draws an edge in its declared colour, as the committed scene does. */
+  tagLibrary?: TagLibrary
   fileSeamOptions: ReturnType<typeof useFileSeamScene>['fileSeamOptions']
   /** The committed layout the worker (or sync path) delivered. */
   scene: Scene
@@ -96,6 +99,7 @@ export function useDragLayers({
   lockedNodeIds,
   resolvedMeasure,
   theme,
+  tagLibrary,
   fileSeamOptions,
   scene,
   anchors,
@@ -375,6 +379,7 @@ export function useDragLayers({
       {
         ...editorLayoutBase({ measure: dragStatic.measure, theme }),
         edgeSideOverrides: overrides,
+        ...(tagLibrary === undefined ? {} : { tagLibrary }),
       },
     )
     if (!reuse) {

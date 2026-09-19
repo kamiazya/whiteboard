@@ -4,16 +4,23 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   writeDocumentKind,
+  writeFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+  seedDoc,
+} from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasRenderSvgInputSchema, createCanvasRenderSvgTool } from './canvas-render-svg.js'
 import { SnapshotNotFoundError } from './document-io.js'
+import { TAG_LIBRARY_PATH } from './tag-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -304,5 +311,127 @@ describe('wb_scene_render declares a theme family only where the measurer holds 
       style: 'document',
     })
     expect(result.svg).not.toContain('Yomogi')
+  })
+})
+
+describe('wb_scene_render draws the legend (ADR-0040 decision 6)', () => {
+  test('a board whose colour a scoped-tag key carries exports with the key’s values in a legend', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'a',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'api',
+            tags: ['health:ok'],
+            color: '4',
+          }),
+          textNode({
+            id: 'b',
+            x: 300,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'db',
+            tags: ['health:failing'],
+            color: '1',
+          }),
+        ],
+        edges: [],
+      })
+    })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'clean',
+    })
+    const legend = result.svg.slice(result.svg.indexOf('data-wb-legend'))
+    expect(legend).toContain('>health<')
+    expect(legend).toContain('>failing<')
+    expect(legend).toContain('>ok<')
+  })
+})
+
+describe('wb_scene_render and a workspace tag library (ADR-0040 decision 5)', () => {
+  const TAGS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W5'
+  async function taggedBoard(withLibrary: boolean) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a', tags: ['health:ok'] }),
+          textNode({
+            id: 'b',
+            x: 200,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'b',
+            tags: ['health:failing'],
+          }),
+        ],
+        edges: [],
+      })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    if (withLibrary) {
+      await seedDoc(store, TAGS_ID, (doc) => {
+        writeDocumentKind(doc, 'markdown')
+        writeFacets(doc, {
+          [VISUAL_TAGS_KEY]: {
+            keys: { health: { values: { ok: { color: '4' }, failing: { color: '1' } } } },
+          },
+        } as never)
+      })
+      store.documentIndex.seed({
+        workspaceId: WORKSPACE_ID,
+        documentId: TAGS_ID,
+        path: TAG_LIBRARY_PATH,
+        kind: 'markdown',
+      })
+    }
+    return store
+  }
+  const render = (store: FakeDocumentStore) =>
+    createCanvasRenderSvgTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'clean',
+    })
+
+  test('draws the board by intent — the legend lists the key the library colours', async () => {
+    const withIt = await render(await taggedBoard(true))
+    expect(withIt.svg).toContain('data-wb-legend')
+    expect(withIt.svg).toContain('health')
+    const without = await render(await taggedBoard(false))
+    expect(without.svg).not.toContain('data-wb-legend')
+  })
+
+  test('lists the workspace only for a board that carries a tag', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' })],
+        edges: [],
+      })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    await render(store)
+    expect(listings).toBe(0)
   })
 })

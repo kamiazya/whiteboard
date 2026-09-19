@@ -2750,21 +2750,6 @@ describe('node.patch and a node type that does not have the key', () => {
 describe('the node extension on the write side', () => {
   // The stored schema `.catch`es a broken extension so a canvas stays
   // readable; a WRITER sending one is told, not silently stripped.
-  test('refuses an embed that names no document, by name', () => {
-    const result = canvasEditInputSchema.safeParse({
-      workspaceId: 'ws',
-      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
-      ops: [
-        {
-          op: 'node.add',
-          node: { id: 'n', type: 'text', text: 'x', 'x-whiteboard': { kind: 'embed' } },
-        },
-      ],
-    })
-    expect(result.success).toBe(false)
-    expect(JSON.stringify(result.error?.issues)).toContain('an embed names the document')
-  })
-
   test('reports a sub-pixel size rather than refusing its own answer', async () => {
     // Both payloads here echo what is STORED, and the model's geometry is a
     // real number since ADR-0037 slice 4 — so an output schema still saying

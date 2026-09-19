@@ -267,7 +267,10 @@ function DocumentPageBody({
   const nodeInEditor = useNodeInEditor(sync.canvas, sync.onChange, model.scopeKey)
 
   const { exportError, handleExport } = useSceneExport({
-    onExport: sync.exportScene,
+    // The saved picture draws by the library too, so what a person exports
+    // from the editor is what the daemon's export and the screen show.
+    onExport: (format) =>
+      sync.exportScene(format, model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
     filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
     log,
   })
@@ -292,6 +295,9 @@ function DocumentPageBody({
     resolveAlias: files.resolveAlias,
     resolveTitle: files.resolveTitle,
     ...(files.loadReference === undefined ? {} : { load: files.loadReference }),
+    // The same adapter the board resolves its pictures through, so a body's
+    // inline attachment previews here instead of drawing the written path.
+    loadImage: (ref) => files.adapter.loadImageUrl(ref),
   })
 
   const commands = useWhiteboardCommands({
@@ -474,6 +480,9 @@ function DocumentPageBody({
               {...(model.properties.onFacetsChange === undefined
                 ? {}
                 : { onChange: model.properties.onFacetsChange })}
+              {...(model.tags === undefined
+                ? {}
+                : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
             />
           </InspectorPanel>
         ) : inspector === 'display' && documentKind === 'spatial' ? (
@@ -486,7 +495,13 @@ function DocumentPageBody({
              panel takes the slot back. */
           <InspectorPanel kind="display" onClose={() => setInspector(null)}>
             <div className="p-3">
-              <CanvasDisplaySettings canvas={sync.canvas} onChange={sync.onChange} />
+              <CanvasDisplaySettings
+                canvas={sync.canvas}
+                onChange={sync.onChange}
+                {...(model.tags === undefined
+                  ? {}
+                  : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
+              />
             </div>
           </InspectorPanel>
         ) : undefined
@@ -591,6 +606,9 @@ function DocumentPageBody({
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}
                   theme={resolvedTheme}
+                  {...(model.tags === undefined
+                    ? {}
+                    : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
                   // File-node reference = the target's immutable id; the
                   // same rows the link picker offers (open document
                   // excluded), so the two pickers cannot label one

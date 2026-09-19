@@ -19,6 +19,7 @@ import { loadReferenceGraph } from '../render/reference-graph.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
+import { carriesATag, workspaceTagLibrary } from './tag-library.js'
 
 /**
  * `DocRef`'s document arm carries `workspaceId` (the record a consumer
@@ -124,6 +125,12 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
           references,
           style: input.style,
           fontAvailable,
+          // Colour by intent (ADR-0040 decision 5). Read only for a board
+          // that carries a tag: finding a library is a listing plus a
+          // read, and an untagged board has nothing a library could colour.
+          ...(carriesATag(part)
+            ? { tagLibrary: await workspaceTagLibrary(deps, input.workspaceId, 'deployment') }
+            : {}),
           // The export draws what the editor draws: a thread about a passage
           // of a node's text is a highlight behind those words, a node set
           // an outline around them.
@@ -139,3 +146,5 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     },
   }
 }
+
+/** Whether anything on the board carries a tag — the only case a tag library can change the picture. */

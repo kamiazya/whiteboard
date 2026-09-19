@@ -65,15 +65,78 @@ interface PlacedRun {
   readonly run: TextRunNode
   /** Absolute right edge, with every enclosing wrapper's x re-applied. */
   readonly right: number
+  /** Absolute left edge, for deciding which run OPENS a line. */
+  readonly left: number
+  /** Which block laid this run out, so one block's first line is not read as
+   * a break in another's. */
+  readonly block: number
 }
 
-function collect(nodes: readonly WalkNode[], offsetX: number, out: PlacedRun[]): void {
+function collect(
+  nodes: readonly WalkNode[],
+  offsetX: number,
+  out: PlacedRun[],
+  block: number,
+): void {
   for (const node of nodes) {
     if (node.kind === 'textRun') {
-      out.push({ run: node, right: offsetX + node.bbox.x + node.bbox.w })
+      out.push({
+        run: node,
+        right: offsetX + node.bbox.x + node.bbox.w,
+        left: offsetX + node.bbox.x,
+        block,
+      })
+      continue
     }
-    collect(childrenOf(node), offsetX + childOffsetX(node), out)
+    // A container of runs is a block for this purpose: its own first line has
+    // no break before it, whatever character it starts with.
+    const inner = 'runs' in node ? block + 1 + out.length : block
+    collect(childrenOf(node), offsetX + childOffsetX(node), out, inner)
   }
+}
+
+/**
+ * Characters UAX #14 will not put at the start of a line — the closing and
+ * infix-separator classes, in both the CJK and the ASCII forms this corpus
+ * uses.
+ *
+ * Written out rather than asked of `css-line-break`, which is what the
+ * WRAPPER uses: an oracle sharing its subject's machinery agrees with its
+ * mistakes by construction, the failure `routing-metrics.ts` and
+ * `polyline-geometry.independence.test.ts` are each shaped to avoid.
+ */
+const NEVER_OPENS_A_LINE = new Set([
+  ...'。、，．！？：；',
+  ...'」』）］｝〉》〕】〙〗”’',
+  ...'.,!?:;)]}',
+])
+
+/**
+ * Lines opened by one of those characters — a break placed where the source
+ * offers none.
+ *
+ * A block's FIRST line is exempt: nothing was broken before it, so a
+ * paragraph that genuinely begins with a full stop is the author's text
+ * rather than a wrapping defect.
+ */
+function countForbiddenLineStarts(placed: readonly PlacedRun[]): number {
+  const opener = new Map<string, PlacedRun>()
+  const topOf = new Map<number, number>()
+  for (const entry of placed) {
+    const y = entry.run.bbox.y
+    const key = `${entry.block}@${y}`
+    const current = opener.get(key)
+    if (current === undefined || entry.left < current.left) opener.set(key, entry)
+    const top = topOf.get(entry.block)
+    if (top === undefined || y < top) topOf.set(entry.block, y)
+  }
+  let count = 0
+  for (const entry of opener.values()) {
+    if (entry.run.bbox.y === topOf.get(entry.block)) continue
+    const first = [...entry.run.text][0]
+    if (first !== undefined && NEVER_OPENS_A_LINE.has(first)) count += 1
+  }
+  return count
 }
 
 /**
@@ -107,6 +170,7 @@ export interface WrappingMetrics {
   readonly overflowingRuns: number
   readonly maxOverflowPx: number
   readonly bboxUnderreports: number
+  readonly forbiddenLineStarts: number
   // price
   readonly runs: number
   readonly lines: number
@@ -119,7 +183,7 @@ export function wrappingMetrics(
   measureCalls: number,
 ): WrappingMetrics {
   const placed: PlacedRun[] = []
-  collect(scene.nodes, 0, placed)
+  collect(scene.nodes, 0, placed, 0)
   const overflows = placed
     .map((entry) => entry.right - maxWidth)
     .filter((excess) => excess > EPSILON_PX)
@@ -129,6 +193,7 @@ export function wrappingMetrics(
     // make every measurer tweak a diff nobody can read.
     maxOverflowPx: overflows.length === 0 ? 0 : Math.round(Math.max(...overflows)),
     bboxUnderreports: countBboxUnderreports(scene.nodes),
+    forbiddenLineStarts: countForbiddenLineStarts(placed),
     runs: placed.length,
     lines: new Set(placed.map((entry) => entry.run.bbox.y)).size,
     measureCalls,
@@ -140,6 +205,7 @@ export function sumMetrics(all: readonly WrappingMetrics[]): WrappingMetrics {
     overflowingRuns: all.reduce((n, m) => n + m.overflowingRuns, 0),
     maxOverflowPx: all.reduce((n, m) => Math.max(n, m.maxOverflowPx), 0),
     bboxUnderreports: all.reduce((n, m) => n + m.bboxUnderreports, 0),
+    forbiddenLineStarts: all.reduce((n, m) => n + m.forbiddenLineStarts, 0),
     runs: all.reduce((n, m) => n + m.runs, 0),
     lines: all.reduce((n, m) => n + m.lines, 0),
     measureCalls: all.reduce((n, m) => n + m.measureCalls, 0),

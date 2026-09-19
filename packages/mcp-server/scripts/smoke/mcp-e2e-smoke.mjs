@@ -637,6 +637,16 @@ async function main() {
         node: { id: 'dressed', type: 'text', x: 400, y: 0, width: 200, height: 100, text: 'store' },
         stencil: 'visual.datastore',
       },
+      // `stencil: null` says "this op names none" (task #93). Through a
+      // real client because the value has to survive the SDK's own
+      // validation of the input schema, which is where a nullable is
+      // either declared or not — a unit test calling `execute` never
+      // crosses it.
+      {
+        op: 'node.add',
+        node: { id: 'plain', type: 'text', x: 400, y: 200, width: 200, height: 100, text: 'plain' },
+        stencil: null,
+      },
       {
         op: 'edge.add',
         edge: {
@@ -647,7 +657,7 @@ async function main() {
       },
     ],
   })
-  if (seedBatch.applied !== 4 || seedBatch.snapshot.edges[0]?.id !== 'link') {
+  if (seedBatch.applied !== 5 || seedBatch.snapshot.edges[0]?.id !== 'link') {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
 
@@ -689,6 +699,25 @@ async function main() {
       `wb_facet_list did not report the workspace's own stencil: ${JSON.stringify(vocabulary.assets)}`,
     )
   }
+
+  // The FILTERED answer, called explicitly: `otherTargets` is a partial
+  // record, and the SDK validates `structuredContent` against the output
+  // schema at runtime, so a scope-keyed field that drifts back to requiring
+  // every member fails HERE rather than in front of a model. The first
+  // draft used `z.record` with an enum key — which zod 4 makes total — and
+  // this is the call that would have named it.
+  const dressing = await callTool('wb_facet_list', { target: 'node' })
+  if (dressing.facets.some((facet) => facet.key === 'visual.axes/v0')) {
+    throw new Error(
+      'wb_facet_list: visual.axes/v0 is canvas-only and must not survive a node filter',
+    )
+  }
+  if (!dressing.otherTargets?.canvas?.includes('visual.axes/v0')) {
+    throw new Error(
+      `wb_facet_list: a node-filtered answer must still name the canvas scope: ${JSON.stringify(dressing.otherTargets)}`,
+    )
+  }
+  console.log('[e2e] wb_facet_list target=node → otherTargets names canvas: visual.axes/v0')
   // ...and the deployment's own are still beside it: a library EXTENDS a
   // vocabulary rather than replacing one.
   if (!vocabulary.assets.some((asset) => asset.id === 'visual.datastore')) {
@@ -719,6 +748,243 @@ async function main() {
     )
   }
   console.log('[e2e] wb_facet_set + wb_canvas_edit → a stencil the WORKSPACE defines dresses a box')
+
+  // The SECOND axis (ADR-0036 §6): a box says what it IS with `stencil` and
+  // how it is doing with the registered classification facet, and the
+  // classification survives the save beside the stencil. Through
+  // wb_facet_set, because that is the facet's only write path — the inline
+  // field was landed, read at 0 of 3, and withdrawn. Read back through
+  // wb_document_get rather than the reply, because the point is what was
+  // STORED. The SDK validates structuredContent against the output schema
+  // on the way, so a drift there fails here too.
+  const classifiedBatch = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      {
+        op: 'node.add',
+        node: { id: 'redis', type: 'text', x: 1100, y: 0, width: 200, height: 100, text: 'cache' },
+        stencil: 'visual.datastore',
+      },
+    ],
+  })
+  if (classifiedBatch.applied !== 1) {
+    throw new Error(`the stencilled node.add did not apply: ${JSON.stringify(classifiedBatch)}`)
+  }
+  // The second axis is a SCOPED TAG on the node (ADR-0040): written through
+  // wb_facet_set beside the stencil, read back through wb_document_get so
+  // the point is what was STORED, and the SDK validates structuredContent
+  // against the output schema on the way.
+  const classified = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    nodeId: 'redis',
+    tags: { add: ['health:failing'] },
+  })
+  if (JSON.stringify(classified.updated[0]?.tags) !== JSON.stringify(['health:failing'])) {
+    throw new Error(`the node tag was not accepted: ${JSON.stringify(classified)}`)
+  }
+  const classifiedDoc = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  const storedRedis = JSON.parse(classifiedDoc.documents[0].content).nodes.find(
+    (n) => n.id === 'redis',
+  )
+  if (JSON.stringify(storedRedis?.['x-whiteboard']?.tags) !== JSON.stringify(['health:failing'])) {
+    throw new Error(`the node tag did not survive the save: ${JSON.stringify(storedRedis)}`)
+  }
+  if (
+    storedRedis?.['x-whiteboard']?.facets?.['visual.stencil/v0']?.stencil !== 'visual.datastore'
+  ) {
+    throw new Error(`the tag clobbered the stencil: ${JSON.stringify(storedRedis)}`)
+  }
+  console.log('[e2e] wb_facet_set tags on a node → the second axis is stored beside the stencil')
+  // The board and an edge are taggable too, and the vocabulary in use is
+  // what wb_facet_list answers with a workspaceId.
+  const boardTagged = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    tags: { add: ['phase:design'] },
+  })
+  if (JSON.stringify(boardTagged.updated[0]?.tags) !== JSON.stringify(['phase:design'])) {
+    throw new Error(`the board tag was not accepted: ${JSON.stringify(boardTagged)}`)
+  }
+  const inUse = await callTool('wb_facet_list', { workspaceId: WORKSPACE_ID })
+  const failingRow = (inUse.tags ?? []).find((row) => row.tag === 'health:failing')
+  if (failingRow?.key !== 'health' || failingRow?.nodes !== 1) {
+    throw new Error(`wb_facet_list did not count the node tag: ${JSON.stringify(inUse.tags)}`)
+  }
+  console.log('[e2e] wb_facet_list → the tags in use, counted by what carries them')
+  // A rename reaches the board and every node and edge in one call.
+  const renamed = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    tags: { rename: [{ from: 'health:failing', to: 'health:degraded' }] },
+  })
+  if (renamed.updated.length !== 1) {
+    throw new Error(`rename did not answer: ${JSON.stringify(renamed)}`)
+  }
+  const renamedDoc = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  const renamedRedis = JSON.parse(renamedDoc.documents[0].content).nodes.find(
+    (n) => n.id === 'redis',
+  )
+  if (
+    JSON.stringify(renamedRedis?.['x-whiteboard']?.tags) !== JSON.stringify(['health:degraded'])
+  ) {
+    throw new Error(`rename did not reach the node: ${JSON.stringify(renamedRedis)}`)
+  }
+  console.log('[e2e] wb_facet_set tags.rename → reached the node through the board')
+  // The tagged search finds the board by its node, naming the node.
+  const byTag = await callTool('wb_document_search', {
+    workspaceId: WORKSPACE_ID,
+    tags: ['health:degraded'],
+  })
+  if (!byTag.results.some((r) => r.documentId === documentId && r.contexts.includes('cache'))) {
+    throw new Error(
+      `wb_document_search did not find the board by its node tag: ${JSON.stringify(byTag)}`,
+    )
+  }
+  console.log('[e2e] wb_document_search → a board found by a node tag, the node named')
+
+  // The workspace's TAG LIBRARY (ADR-0040 decision 5's declared layer), end
+  // to end, for the reason the stencil library is: the declaration is a
+  // record of records in a document facet, serialised into OKF frontmatter
+  // and parsed back, and only then does a write get refused against it or a
+  // box get drawn in the colour a value declares. `health` admits three
+  // values with a colour each and is one value at a time; `region` is one
+  // value at a time with no colours; `phase` (already on the board) declares
+  // nothing and so admits any value.
+  const beforeLibrary = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
+  const tagLibraryDoc = await createDocument({ path: 'tags', kind: 'markdown' })
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [tagLibraryDoc.documentId],
+    facets: {
+      'visual.tags/v0': {
+        keys: {
+          health: {
+            description: 'Whether the component is serving',
+            exclusive: true,
+            values: { ok: { color: '4' }, degraded: { color: '2' }, failing: { color: '1' } },
+          },
+          region: { exclusive: true, values: { eu: {}, us: {} } },
+          phase: {},
+        },
+      },
+    },
+  })
+  // DISCOVERY first: the one call that tells a model what a write will be
+  // refused against, read back through the registry-free reader (a tag
+  // library is data, not a plugin).
+  const declared = await callTool('wb_facet_list', { workspaceId: WORKSPACE_ID })
+  const healthKey = (declared.tagLibrary ?? []).find((key) => key.key === 'health')
+  const degradedValue = healthKey?.values?.find((value) => value.value === 'degraded')
+  if (healthKey?.exclusive !== true || degradedValue?.color !== '2') {
+    throw new Error(
+      `wb_facet_list did not answer the tag library: ${JSON.stringify(declared.tagLibrary)}`,
+    )
+  }
+  console.log('[e2e] wb_facet_list(workspaceId) → the tag library a workspace declares')
+  // An admitted write lands; an undeclared value and a second value under
+  // an exclusive key are each refused BEFORE anything is written, with the
+  // library's answer in the refusal.
+  const admitted = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    nodeId: 'redis',
+    tags: { add: ['region:eu'] },
+  })
+  if (
+    JSON.stringify(admitted.updated[0]?.tags) !== JSON.stringify(['health:degraded', 'region:eu'])
+  ) {
+    throw new Error(`an admitted tag was not written: ${JSON.stringify(admitted)}`)
+  }
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      nodeId: 'redis',
+      tags: { add: ['health:unknown'] },
+    },
+    'a value the tag library does not admit',
+    'is not admitted',
+  )
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      nodeId: 'redis',
+      tags: { add: ['region:us'] },
+    },
+    'a second value under a key the library makes exclusive',
+    'one value at a time',
+  )
+  // The same declaration holds a write that arrives as a BODY rather than as
+  // a tag op (increment 5c). Without this the library is a rule with a door
+  // beside it: frontmatter tags reach the same stored field.
+  await expectToolError(
+    'wb_workspace_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      ops: [
+        {
+          op: 'document.create',
+          path: 'notes/undeclared',
+          kind: 'markdown',
+          markdown: '---\ntype: note\ntags:\n  - health:unknown\n---\nBody.',
+        },
+      ],
+    },
+    'a frontmatter tag the library does not admit',
+    'is not admitted',
+  )
+  const afterBodyRefusal = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
+  if (afterBodyRefusal.documents.some((entry) => entry.path === 'notes/undeclared')) {
+    throw new Error('a refused body left a document behind at notes/undeclared')
+  }
+  const afterRefusals = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  const redisAfter = JSON.parse(afterRefusals.documents[0].content).nodes.find(
+    (n) => n.id === 'redis',
+  )
+  if (
+    JSON.stringify(redisAfter?.['x-whiteboard']?.tags) !==
+    JSON.stringify(['health:degraded', 'region:eu'])
+  ) {
+    throw new Error(`a refused write left a mark: ${JSON.stringify(redisAfter)}`)
+  }
+  // Colour BY INTENT: the box carries health:degraded and no colour of its
+  // own, so the render paints it in the value's declared colour — which is
+  // what makes a library more than a validator. Read as a fill the render
+  // gained since the library was written: `degraded` declares preset 2,
+  // which nothing else on this board wears, and `#ffedd5` is that preset's
+  // light fill (`SPATIAL_LIGHT_PALETTE.presets['2'].fill`). The legend's
+  // KEYS are deliberately not asserted here: `lake` wears its stencil's
+  // colour for another reason, so once redis is painted the facet score
+  // reads the colour channel as contested and the legend lists no key —
+  // the instrument's honest answer on this board, and the second fill the
+  // render gains is that note's grey. A clean board's legend is pinned at
+  // the unit layer.
+  const byIntent = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
+  const fillsOf = (svg) => new Set([...svg.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]))
+  const gained = [...fillsOf(byIntent.svg)].filter((fill) => !fillsOf(beforeLibrary.svg).has(fill))
+  if (!gained.includes('#ffedd5')) {
+    throw new Error(
+      `wb_scene_render did not paint the tagged box in its declared colour (gained fills: ${JSON.stringify(gained)})`,
+    )
+  }
+  console.log(
+    '[e2e] tag library → admitted write lands, undeclared and exclusive refused, painted by intent',
+  )
 
   // A FREE END (ADR-0037 slice 3): an edge from a node to a bare point on
   // the canvas. Here rather than only at the unit layer because the endpoint
@@ -2056,6 +2322,16 @@ async function main() {
     throw new Error(`wb_document_search reported a semantic rank with no embedder configured`)
   }
   console.log('[e2e] wb_document_search → found the imported body, snippet and lexical rank')
+
+  // The scoped-tag grammar (ADR-0040 decision 1) is checked where a tag is
+  // WRITTEN: a colon makes a tag scoped, and a scoped tag with an uppercase
+  // half is refused with the rule rather than stored as a plain tag.
+  await expectToolError(
+    'wb_facet_set',
+    { workspaceId: WORKSPACE_ID, documentIds: [mdCanvasId], tags: { add: ['Health:failing'] } },
+    'a tag with a colon that is not key:value is refused on write',
+    'not a scoped tag',
+  )
 
   const exported = await readDocument(mdCanvasId)
   if (!exported.content.includes('Imported body.')) {

@@ -347,6 +347,7 @@ self.onmessage = async (
       showResolved: request.showResolved,
       threads: request.threads,
       proposals: request.proposals,
+      tagLibrary: request.tagLibrary,
       onDegrade: (event) => {
         if (event.kind === 'font-missing') fontsMissing.add(event.family)
       },

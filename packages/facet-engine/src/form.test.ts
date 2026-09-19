@@ -205,6 +205,21 @@ describe('an editor spec refines the derived form', () => {
    * vessels deciding it separately is how one surface came to draw a row
    * differently from the next — the drift this whole layer exists to close.
    */
+  it('carries a declared placeholder onto a text field, and nothing onto one that declares none', () => {
+    // A placeholder is the one place a free-entry field can teach what to
+    // type before a refusal does — two identifiers with no example read as
+    // two empty boxes (the Classification form, measured on a reader).
+    const form = deriveFacetForm(z.object({ axis: z.string(), value: z.string() }), {
+      fields: { axis: { widget: 'text', placeholder: 'e.g. health' } },
+    })
+    expect(form.kind).toBe('fields')
+    if (form.kind !== 'fields') return
+    expect(form.fields.map((f) => [f.name, f.placeholder])).toEqual([
+      ['axis', 'e.g. health'],
+      ['value', undefined],
+    ])
+  })
+
   it('resolves a row layout onto the control, defaulting to chips where none is declared', () => {
     const layoutOf = (declared?: 'chips' | 'cards') => {
       const form = deriveFacetForm(schema, {

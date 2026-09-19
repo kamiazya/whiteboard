@@ -20,6 +20,7 @@ import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
+import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
@@ -28,6 +29,7 @@ import {
   linkifyDocumentMentions,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
+import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
@@ -515,6 +517,19 @@ function useDaemonDocument(
   // ad-hoc controller-field checks in the JSX — the machine is shared with
   // BrowserDocumentPage (document-page-state.ts), so the two pages' state
   // vocabularies cannot drift apart silently.
+  // The workspace's tag vocabulary for every tag row and the board's colour
+  // by intent (ADR-0040 decision 5): read through the same files source the
+  // document browser uses, once per workspace.
+  const tagsWorkspaceId = canvas?.workspaceId
+  const tagsSource = useMemo(
+    () =>
+      tagsWorkspaceId === undefined
+        ? null
+        : createDaemonFilesSource(daemonFetch, daemonBaseUrl, tagsWorkspaceId),
+    [daemonFetch, daemonBaseUrl, tagsWorkspaceId],
+  )
+  const tagVocabulary = useTagVocabulary(tagsSource)
+
   const pageState = deriveDaemonPageState({
     loading: controller.loading,
     loadError: controller.loadError,
@@ -709,6 +724,7 @@ function useDaemonDocument(
       agentTouchedNodeIds: agentActivity.touchedNodeIds,
       children: <AgentPresenceChip summary={agentActivity.summary} />,
     },
+    ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),
     ...(canvas
       ? {
           connections: {

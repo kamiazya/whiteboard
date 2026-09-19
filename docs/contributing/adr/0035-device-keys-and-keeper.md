@@ -98,6 +98,21 @@ and relates them; none distributes one key to many devices.
 Consequences, E2EE) it does a *different job* — encrypting content — and is
 itself wrapped per device. The two coexist; one does not replace the other.
 
+**Addendum (2026-09-16): the scope is keys the system stores and uses
+unattended.** [ADR-0039](0039-passkey-attestation.md) narrows this decision
+rather than reversing it. "Each browser profile" holds NO keypair after all —
+the v5 → v6 removal this ADR cites under *One lesson is already paid for*
+generalises to attestation, since a key beside the content can be invoked by
+whoever can also rewrite the content. The browser's signer is a WebAuthn
+credential instead, and a relying party cannot make one device-bound (measured
+2026-09-13: a resident key on a platform with a cloud keychain yields a synced
+passkey; on iOS a device-bound one via WebAuthn is reported as impossible). So
+a passkey is not a device key and is not claimed as one: this decision governs
+the daemon's key, which the system stores and uses unattended; a passkey backs
+a *person's presence* at a moment the person chose. What "person" does and
+does not yet mean — a role, with the user DID's method still deferred below —
+is ADR-0039 decision 2.
+
 ### 2. Only an identifier that survives key rotation may be written into content
 
 A device DID is `did:key:…`, derived from the public key. It cannot rotate,

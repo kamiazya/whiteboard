@@ -221,10 +221,15 @@ export function SetupJourney({
 }
 
 /**
- * The confetti origin for a completed step. The settings page renders the
- * journey twice (hidden mobile + desktop structures), so pick whichever badge
- * is actually laid out — `offsetParent` is null inside a `display: none`
- * subtree.
+ * The confetti origin for a completed step, or nothing when there is nowhere
+ * to fire from. `offsetParent` is null inside a `display: none` subtree, so
+ * this refuses a badge the page is not currently laying out — confetti at a
+ * hidden element lands off screen.
+ *
+ * It used to disambiguate TWO badges: the settings page mounted each section
+ * once per layout and hid one with `sm:` classes. It mounts a section once
+ * now, so the loop is over one element in practice and the check is the
+ * laid-out question alone.
  */
 export function findVisibleJourneyBadge(step: 'protect' | 'install'): HTMLElement | undefined {
   for (const el of Array.from(

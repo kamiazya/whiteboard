@@ -404,6 +404,10 @@ export function createApp(options: AppOptions) {
     }
   })
 
+  // Passkey pins exist only where pairing does (ADR-0039): the promote route
+  // below verifies against them, and a composition without any refuses an
+  // attestation as naming an unknown credential.
+  const credentials = options.authMode === 'local-daemon' ? options.pairing?.credentials : undefined
   if (options.authMode === 'local-daemon' && options.pairing !== undefined) {
     // Pairing-grant routes are local-daemon only by design (the consent
     // model assumes the daemon's own served UI and loopback reachability).
@@ -424,6 +428,7 @@ export function createApp(options: AppOptions) {
       // that cannot rotate. The identity is built above, so this is the one
       // place that answer is known without threading it through the DI graph.
       daemonActor: identity.did,
+      ...(credentials === undefined ? {} : { credentials }),
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
       ...(options.onAutoVersionTrigger === undefined
         ? {}

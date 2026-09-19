@@ -21,6 +21,7 @@ import type { SpatialEditorPaneProps } from '../components/document-editor/Spati
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import type { UseDocumentFileSeamsOptions } from '../hooks/use-document-file-seams.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
+import type { TagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import type { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { linkTargets } from '../lib/link-entries.js'
@@ -129,6 +130,15 @@ export interface DocumentPageModel {
     readonly onBranchesChanged?: () => void
   } | null
   readonly spatial: Pick<SpatialEditorPaneProps, 'editorRef' | 'agentTouchedNodeIds' | 'children'>
+  /**
+   * The workspace's tag vocabulary (ADR-0040 decision 5's two layers), as
+   * the keeper answered it: what is in use anywhere in the workspace, for
+   * every tag row's completions, and what the library declares, for the
+   * rows' refusals and the board's colour by intent. Absent while loading
+   * or for a keeper that cannot answer; a row then completes from the
+   * board alone.
+   */
+  readonly tags?: TagVocabulary
   readonly slots: {
     /** Alerts in the document actions row, before the ⋯ menu. */
     readonly rowAlerts?: ReactNode

@@ -25,6 +25,9 @@ export const MUTATED = [
   'src/layout/edges/diagonal-ink.ts',
   'src/layout/edges/edge-crossing-sweep.ts',
   'src/layout/edges/grid-route.ts',
+  // Colour by intent (ADR-0040 decision 5): three properties over random
+  // boards and libraries, stated from the declaration rather than the code.
+  'src/tags/declared-colours.ts',
   // Serialization: escaping and character legality, byte-identical output.
   'src/svg/format.ts',
   'src/svg/hoist.ts',
@@ -46,6 +49,21 @@ export const MUTATED = [
   // equivariance are properties over random boxes and seeds, and the
   // silhouette per outline kind is pinned by example.
   'src/layout/ink/sketch.ts',
+  // The junction rule that carries kinsoku across an inline boundary. It is a
+  // RULE rather than a ladder of ways to decline, and every one of its
+  // decisions is mutation-shaped: `clusterRun <= lineRun`, the two `=== ''`
+  // sentinels, `.at(0)`/`.at(-1)`, `length > 1`.
+  // Its first report is why `inline-junction.test.ts` exists: 16 of 20
+  // survivors came back `judged by 0 tests` and the rest by one, because
+  // nothing NAMED the module — the boundary suite reaches it through
+  // `layoutMdastBlocks`, and the wrapping scoreboard that would price it is
+  // excluded from the lane for run time. Seven of those survivors were then
+  // applied by hand against the direct tests and every one went red, 1 to 9
+  // tests each. One — `headCharacter`'s whitespace branch — had killed
+  // NOTHING through the layout, since `emit` handles a leading space on its
+  // own path, so it is a gap the direct tests closed rather than a selection
+  // artefact.
+  'src/layout/nodes/inline-junction.ts',
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:
@@ -92,6 +110,19 @@ export const MUTATED = [
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // `tags ?? []` only matters when the element carries no `tags` at all, and
+  // then the substitute is iterated as a tag: a string with no colon is not
+  // a scoped tag, `parseScopedTag` answers `undefined`, and the loop
+  // continues to the same `undefined` the empty array gives. Any colon-free
+  // substitute is equivalent; one with a colon would not be, and the mutator
+  // never writes one. The empty-library half of the guard is a SHORTCUT:
+  // with no key declared nothing colours, `changed` stays false and the same
+  // canvas comes back either way, so dropping the check only walks the
+  // elements for nothing — the identity example passes on both sides.
+  'src/tags/declared-colours.ts': {
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
+    'ConditionalExpression: Object.keys(library).length === 0 -> false': 1,
+  },
   // Every one of these makes `mayCluster` answer TRUE more often, which buys
   // the segmenter path — the correct one everywhere — at the price of walking
   // text that did not need it. The invariant is on `mayCluster`, backed by a
@@ -171,12 +202,6 @@ export const KNOWN_EQUIVALENT = {
     'ObjectLiteral: { changed: false } -> {}': 1,
     'OptionalChaining: elements[0]?.attrs -> elements[0].attrs': 1,
     'StringLiteral: \'string\' -> ""': 1,
-  },
-  // The `default` arm returns `undefined`, which is also what falling out of
-  // the switch returns — so removing it changes nothing. Hand-verified
-  // against the full suite.
-  'src/scene-bounds.ts': {
-    'ConditionalExpression: default: return undefined -> default:': 1,
   },
   // `formatCoord`'s three belt-and-braces guards, each unobservable because of
   // a property of the other two — the reasoning is on the function itself.

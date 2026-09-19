@@ -128,7 +128,7 @@ describe('ContentFactsCache', () => {
     const loads = vi.spyOn(deps.documentStore, 'loadSnapshot')
     const all = await deps.documentIndex.listDocuments({ workspaceId: WS })
     const facts = await cache.factsFor(deps, WS, all)
-    expect(facts.get(empty.documentId)).toEqual({ refs: [], texts: [], tags: undefined })
+    expect(facts.get(empty.documentId)).toEqual({ refs: [], texts: [], bearers: [] })
     // Two seeded documents loaded; the snapshotless one never was.
     expect(loads).toHaveBeenCalledTimes(2)
 
@@ -160,6 +160,8 @@ describe('ContentFactsCache', () => {
       WS,
       await deps.documentIndex.listDocuments({ workspaceId: WS }),
     )
-    expect(facts.get(doc.documentId)?.tags).toEqual(['release'])
+    expect(facts.get(doc.documentId)?.bearers).toEqual([
+      { what: 'document', text: '', tags: ['release'] },
+    ])
   })
 })

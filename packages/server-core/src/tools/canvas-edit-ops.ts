@@ -44,8 +44,15 @@ const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
  * one thing on a table a model reads every turn. Measured when ADR-0037 moved
  * them onto the node: 14 new parameters across the four node types, every one
  * of them undescribed.
+ *
+ * `tags` is held back for a different reason: whether an inline tag field on
+ * a canvas op is worth its bytes is a question
+ * [ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
+ * decision 7 answers by measuring, and until that reading it is not on the
+ * table. Measured on arrival: letting it through added 6 undescribed
+ * parameters and 300 model-visible bytes.
  */
-const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
+const STORED_EXTENSION_FIELDS = { embed: true, facets: true, tags: true } as const
 /**
  * The model's own two fields, reached directly.
  *
@@ -199,7 +206,8 @@ export function draftContent(draft: NodeDraft): {
   }
 }
 
-const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
+// `tags` omitted for the reason the node draft omits it (ADR-0040 decision 7).
+const edgeDraftSchema = canvasEdgeSchema.omit({ tags: true }).partial({ id: true })
 
 /**
  * Ink, which an edge cannot be: a LINE's ends are a node or a bare POINT, so
@@ -309,9 +317,16 @@ const exactlyOneTarget = {
  * the table.
  */
 const STENCIL_FIELD = namespacedIdSchema
+  // `null` is admitted for the same reason `within` admits it one field
+  // over: a model that has just learned "null means none" on this op
+  // generalises, and a parse refusal costs the WHOLE batch rather than the
+  // one field. Measured before buying: `stencil` is the most frequent
+  // unrecognized-key refusal in the stored lane readings (6 across 3 of 9),
+  // and a nullable costs 28 bytes a field — 56 against this tool's 14020.
+  .nullable()
   .optional()
   .describe(
-    'What this box IS, as a registered stencil id — sets its colour and silhouette together; an explicit color wins. wb_facet_list reports the ids this deployment has.',
+    'What this box IS, as a registered stencil id — sets its colour and silhouette together; an explicit color wins. Null or absent: this op names none. wb_facet_list reports the ids this deployment has.',
   )
 
 /**

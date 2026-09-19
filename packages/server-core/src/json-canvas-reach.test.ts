@@ -88,17 +88,22 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     ])
   })
 
-  it('leaves 34 to the extension key — 30 named fields and 4 facet buckets', () => {
+  it('leaves 37 to the extension key — 33 named fields and 4 facet buckets', () => {
     // 16 -> 34, and almost all of it is one collection: a LINE's 18 positions
     // all ride `x-whiteboard.lines`. A line between two nodes COULD be emitted
     // as a JSON Canvas edge and read better in a foreign tool; that is the lie
     // the split removes, since the format's edge asserts a connection the line
     // deliberately does not claim.
-    expect(withKind('extension')).toHaveLength(34)
+    //
+    // 34 -> 37 for `tags[]`, `nodes[].tags[]` and `edges[].tags[]` (ADR-0040
+    // decision 2): the format has no classification vocabulary, so a board's,
+    // a box's and a relation's tag set ride the extension key, and a strict
+    // reader keeps the content and loses what it was called.
+    expect(withKind('extension')).toHaveLength(37)
     expect(census.facetBuckets).toHaveLength(4)
   })
 
-  it('carries 14 further field positions inside those buckets, from one bundled plugin', () => {
+  it('carries the further field positions inside those buckets, from the bundled plugins', () => {
     // Positions, not facets: a facet targeting both a node and the canvas can
     // be written at either, and each is somewhere a reader has to look.
     // 13 -> 14 when the bundled plugin gained `visual.stencil/v0` (ADR-0034).
@@ -113,10 +118,19 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // nothing a reader could act on, and it adds one position rather than
     // two. It is `extension` for the ordinary reason every facet is: JSON
     // Canvas has no vocabulary for "this attribute is a semantic axis".
+    //
+    // 15 -> 17 for `semantic.class/v0`'s `axis` and `value` (ADR-0036 §6):
+    // the first facet from a SECOND bundled plugin, and the first that says
+    // what a box IS rather than how it is drawn. Node only, so two positions
+    // and not four. This is the column growing for the reason it is watched.
+    //
+    // 17 -> 15 when ADR-0040 retired it: what a box IS is a scoped tag now,
+    // which is CORE — three positions in the ledger rather than two in a
+    // bucket — so the facet column gives back what the tag rows took.
     expect(census.facet).toHaveLength(15)
   })
 
-  it('so 49 of the 71 positions a document can hold are outside the format', () => {
+  it('so 52 of the 74 positions a document can hold are outside the format', () => {
     // Both numbers move for DIFFERENT reasons, which is the reading.
     //
     // The denominator grew by 14 because a LINE is a new element with its own
@@ -138,13 +152,27 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // the numerator and denominator by different amounts and for different
     // reasons.
     //
-    // 49/72 -> 49/71 with ADR-0038 decision 3: five node positions became
-    // four, and none of the four is outside the format, so the denominator
-    // alone falls. The share outside RISES to 69.0% on a change that took
-    // nothing away from a JSON Canvas reader — which is the clearest warning
-    // this ratio carries about being read as a quality.
+    // 49/72 -> 51/74: the classification facet's two positions, both halves
+    // again, so the share outside is 68.1% -> 68.9%. Same shape of move as
+    // the axes facet's, one row up.
+    //
+    // 51/74 -> 54/77: the three tag positions (ADR-0040), both halves again,
+    // so the share outside is 68.9% -> 70.1%. Core rather than a facet this
+    // time, and still a concept the format has no word for.
+    //
+    // 54/77 -> 52/75: the classification facet's two positions leave with
+    // it (ADR-0040 decision 4). Net of the tag rows the model says one
+    // position MORE than before the ADR — a relation is classified too.
+    //
+    // 52/75 -> 52/74 with ADR-0038 decision 3: five node positions
+    // (`type`/`text`/`file`/`url`/`subpath`) became four
+    // (`resource.mimeType`/`content`/`location`/`subpath`), and none of the
+    // four is outside the format, so the DENOMINATOR alone falls. The share
+    // outside therefore RISES, to 70.3%, on a change that took nothing away
+    // from a JSON Canvas reader — the clearest warning this ratio carries
+    // about being read as a quality.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(49)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(71)
+    expect(outside).toBe(52)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(74)
   })
 })

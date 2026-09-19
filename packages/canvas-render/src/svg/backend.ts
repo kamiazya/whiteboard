@@ -13,11 +13,12 @@ import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
 import type { ShapeTable } from '../layout/nodes/node-outline.js'
-import { sceneBounds } from '../scene-bounds.js'
+import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
 import { collectDefs } from './defs.js'
 import type { SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
 import { type IconTable, renderIconUse } from './icon.js'
+import { renderLegend } from './legend.js'
 import {
   appearanceAttrs,
   idToken,
@@ -634,6 +635,8 @@ export interface SvgDocumentOptions {
    *  anchoring, this backend to draw. A resolution input, not document
    *  chrome — it does NOT activate the envelope. */
   readonly shapes?: ShapeTable
+  /** `'omit'`: the host draws the legend itself (the editor's overlay). Not an envelope option. */
+  readonly legend?: 'omit'
 }
 
 function hasEnvelopeOptions(
@@ -672,7 +675,11 @@ function expandBox(box: BoundingBox, padding: number): BoundingBox {
 
 function resolveViewBox(scene: Scene, options: SvgDocumentOptions): BoundingBox {
   if (options.viewBox && isUsableViewBox(options.viewBox)) return options.viewBox
-  return expandBox(sceneBounds(scene), sanitizePadding(options.padding))
+  // A derived envelope makes room for the legend it draws; an explicit one
+  // is the caller's, who reserves the band with `sceneDocumentBounds`.
+  const drawsLegend = scene.legend !== undefined && options.legend !== 'omit'
+  const bounds = drawsLegend ? sceneDocumentBounds(scene) : sceneBounds(scene)
+  return expandBox(bounds, sanitizePadding(options.padding))
 }
 
 /** A negative root-element width/height is invalid SVG — falls back to the derived dimension, same as a non-finite value. */
@@ -716,6 +723,8 @@ export interface SvgDocumentParts {
   readonly defs: SvgChild
   readonly background: SvgChild
   readonly body: ReadonlyArray<SvgChild>
+  /** Drawn last, over the content; empty in a fragment. */
+  readonly legend: SvgChild
 }
 
 export function buildSvgDocumentParts(
@@ -751,7 +760,7 @@ export function buildSvgDocumentParts(
       : []
 
   if (!hasEnvelopeOptions(options)) {
-    return { rootAttrs: { xmlns: SVG_XMLNS }, defs, background: [], body }
+    return { rootAttrs: { xmlns: SVG_XMLNS }, defs, background: [], body, legend: [] }
   }
 
   const viewBox = resolveViewBox(scene, options)
@@ -776,10 +785,13 @@ export function buildSvgDocumentParts(
     defs,
     background,
     body,
+    legend: scene.legend && options.legend !== 'omit' ? renderLegend(scene.legend, viewBox) : [],
   }
 }
 
 export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
   const parts = buildSvgDocumentParts(scene, options)
-  return serializeSvg(el('svg', parts.rootAttrs, [parts.defs, parts.background, parts.body]))
+  return serializeSvg(
+    el('svg', parts.rootAttrs, [parts.defs, parts.background, parts.body, parts.legend]),
+  )
 }

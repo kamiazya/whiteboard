@@ -18,6 +18,9 @@ export type {
   GroupSceneNode,
   HeadingBlockNode,
   IconSceneNode,
+  LegendEntry,
+  LegendKey,
+  LegendSwatch,
   LinkProvenance,
   ListBlockNode,
   ListItemNode,
@@ -26,6 +29,7 @@ export type {
   ResolvedEdgeNode,
   Scene,
   SceneInk,
+  SceneLegend,
   SceneNode,
   ShapeId,
   ShapeSceneNode,
@@ -120,6 +124,7 @@ export {
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
+export { canvasLegend } from './legend/canvas-legend.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
 export type { CompositionScore } from './quality/composition-score.js'
@@ -131,7 +136,7 @@ export {
   NEAR_MISS_PX,
   scoreDrawing,
 } from './quality/drawing-score.js'
-export type { FacetScore } from './quality/facet-score.js'
+export type { FacetScore, MultiKey } from './quality/facet-score.js'
 export { scoreFacets } from './quality/facet-score.js'
 export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
 export {
@@ -140,7 +145,7 @@ export {
   type ReferenceSeamsOptions,
   referenceSeams,
 } from './references/seams.js'
-export { referenceTargets } from './references/targets.js'
+export { imageTargets, referenceTargets } from './references/targets.js'
 export {
   type ReferenceExtra,
   type ReferenceWire,
@@ -148,7 +153,7 @@ export {
   referenceWire,
   referenceWireFor,
 } from './references/wire.js'
-export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
+export { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
 export { sceneEntryKeys } from './scene-entry-keys.js'

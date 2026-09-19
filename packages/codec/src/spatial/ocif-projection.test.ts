@@ -37,6 +37,11 @@ describe('what the two formats reach, read side by side', () => {
     // element served both meanings, so those positions were `degraded` for
     // every edge whether or not that edge was ink.
     //
+    // ADR-0040 added three positions — the board's, a box's and a relation's
+    // tag set — and both formats carry them on an extension: `extension`
+    // 34 -> 37 and 29 -> 32, `native` and `dropped` unmoved. Neither format
+    // has a classification vocabulary to state a tag natively.
+    //
     // ADR-0038 decision 3 then took OCIF's resource into the model, and the
     // two tables moved in OPPOSITE directions on the same five rows — which
     // is the clearest thing either table has said about what the decision
@@ -50,13 +55,13 @@ describe('what the two formats reach, read side by side', () => {
     // ours, and the three content rows it kept natively it still keeps.
     expect(kinds(JSON_CANVAS_PROJECTION)).toEqual({
       native: 17,
-      extension: 34,
+      extension: 37,
       degraded: 5,
       dropped: 0,
     })
     expect(kinds(OCIF_PROJECTION)).toEqual({
       native: 23,
-      extension: 29,
+      extension: 32,
       degraded: 4,
       dropped: 0,
     })

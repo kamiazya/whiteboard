@@ -94,11 +94,19 @@ export function summarize(report, knownEquivalent = {}) {
   const undetected = counts.Survived + counts.NoCoverage
   const scored = detected + undetected
   survivors.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1))
+  // A survivor the lane ran ZERO tests against is not a survivor: nothing
+  // judged it. Measured once as the runner's test filter matching no test
+  // inside a `describe` (vitest 5 joins names with ' > ', the runner with a
+  // space) — 15 of 15 on one function, each killed by hand. Listed apart so
+  // the table never presents a runner defect as a line no test pins.
+  const unjudged = survivors.filter((s) => s.status === 'Survived' && s.tests === 0)
+  const judged = survivors.filter((s) => !(s.status === 'Survived' && s.tests === 0))
   return {
     counts,
     total: scored + counts.other,
     score: scored === 0 ? null : (detected / scored) * 100,
-    survivors,
+    survivors: judged,
+    unjudged,
     settled,
     unspent,
   }
@@ -117,7 +125,10 @@ function cell(text) {
 }
 
 export function renderComment(report, marker, knownEquivalent = {}) {
-  const { counts, score, survivors, settled, total, unspent } = summarize(report, knownEquivalent)
+  const { counts, score, survivors, unjudged, settled, total, unspent } = summarize(
+    report,
+    knownEquivalent,
+  )
   if (total === 0) return ''
 
   const recorded = settled === 0 ? '' : ` · ${settled} already recorded as equivalent`
@@ -154,6 +165,21 @@ export function renderComment(report, marker, knownEquivalent = {}) {
     }
     if (survivors.length > MAX_ROWS) {
       lines.push('', `…and ${survivors.length - MAX_ROWS} more — the full report is the artifact.`)
+    }
+  }
+  if (unjudged.length > 0) {
+    lines.push(
+      '',
+      `**${unjudged.length} mutant${unjudged.length === 1 ? '' : 's'} the lane ran NO test against.**`,
+      'Not survivors: nothing judged them. This is the runner failing to select the covering tests',
+      '(seen once as vitest and the runner disagreeing on how a nested test is named), so fix the',
+      'lane before reading anything into the rows.',
+      '',
+      '| where | mutator | survives as |',
+      '| --- | --- | --- |',
+    )
+    for (const s of unjudged.slice(0, MAX_ROWS)) {
+      lines.push(`| \`${s.file}:${s.line}\` | ${s.mutator} | ${cell(s.replacement)} |`)
     }
   }
   if (unspent.length > 0) {

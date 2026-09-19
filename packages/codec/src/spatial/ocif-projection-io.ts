@@ -51,6 +51,17 @@ function ours(type: string, payload: Record<string, unknown>): OcifExtension | u
   return Object.keys(payload).length === 0 ? undefined : { type, ...payload }
 }
 
+/** The tag set as one `@whiteboard/tags` entry, at whichever site holds it. */
+function tagsEntry(tags: readonly string[] | undefined): OcifExtension | undefined {
+  return tags === undefined ? undefined : { type: OCIF_TYPE.tags, tags: [...tags] }
+}
+
+/** The tag set an element's `data` carries, read verbatim; a malformed one is no tags. */
+function tagsFrom(data: readonly OcifExtension[] | undefined): string[] | undefined {
+  const tags = extensionOf(data, OCIF_TYPE.tags)?.tags
+  return Array.isArray(tags) && tags.every((tag) => typeof tag === 'string') ? tags : undefined
+}
+
 /**
  * A facet bucket, as the ordinary OCIF extensions it is: one `data` entry per
  * facet, typed by the facet key.
@@ -170,6 +181,8 @@ function projectNode(
     ...(shadowed ? { kind: nodeKind(node) === 'frame' ? 'group' : nodeKind(node) } : {}),
   })
   if (extras !== undefined) data.push(extras)
+  const tags = tagsEntry(node.tags)
+  if (tags !== undefined) data.push(tags)
 
   const projected: OcifNode = {
     id: node.id,
@@ -235,6 +248,8 @@ function projectEdge(edge: CanvasEdge): OcifNode {
     ...(edge.to.end === undefined ? {} : { toEnd: edge.to.end }),
   })
   if (ends !== undefined) data.push(ends)
+  const tags = tagsEntry(edge.tags)
+  if (tags !== undefined) data.push(tags)
   return { id: edge.id, data }
 }
 
@@ -293,6 +308,8 @@ export function toOcif(canvas: SpatialCanvas): OcifDocument {
   if (canvas.comments !== undefined && canvas.comments.length > 0) {
     canvasData.push({ type: OCIF_TYPE.comments, comments: canvas.comments })
   }
+  const canvasTags = tagsEntry(canvas.tags)
+  if (canvasTags !== undefined) canvasData.push(canvasTags)
   return {
     ocif: OCIF_VERSION,
     nodes: [
@@ -423,6 +440,7 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
       const rest = extensionOf(entry.data, OCIF_TYPE.edgeLabel)
       const bends = extensionOf(entry.data, OCIF_TYPE.bends)?.points
       const facets = facetsFrom(entry.data)
+      const tags = tagsFrom(entry.data)
       const shared = {
         id: entry.id,
         ...(typeof rest?.color === 'string' ? { color: rest.color } : {}),
@@ -441,6 +459,9 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
           ...shared,
           from: liftEdgeEnd('from', ends, edgeExt),
           to: liftEdgeEnd('to', ends, edgeExt),
+          // A relation is classified; ink is not (ADR-0040 decision 2), so
+          // the tag set is lifted onto this arm only.
+          ...(tags === undefined ? {} : { tags }),
         } as CanvasEdge)
       } else {
         const ends = extensionOf(entry.data, OCIF_TYPE.lineEnds)
@@ -461,6 +482,7 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
     const [width, height] = pair(entry.size, 0)
     const embedded = representation?.mimeType === 'application/ocif+json'
     const facets = facetsFrom(entry.data)
+    const nodeTags = tagsFrom(entry.data)
     const shared = {
       id: entry.id,
       x,
@@ -469,6 +491,7 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
       height,
       ...(typeof extras?.color === 'string' ? { color: extras.color } : {}),
       ...(facets === undefined ? {} : { facets }),
+      ...(nodeTags === undefined ? {} : { tags: nodeTags }),
       ...(embedded
         ? {
             embed: {
@@ -521,6 +544,7 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
   }
 
   const canvasFacets = facetsFrom(ocif.data)
+  const canvasTags = tagsFrom(ocif.data)
   const comments = extensionOf(ocif.data, OCIF_TYPE.comments)?.comments
   return {
     nodes,
@@ -528,6 +552,7 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
     // Omitted when empty, matching what the model canonicalises to.
     ...(lines.length === 0 ? {} : { lines }),
     ...(canvasFacets === undefined ? {} : { facets: canvasFacets }),
+    ...(canvasTags === undefined ? {} : { tags: canvasTags }),
     ...(Array.isArray(comments) ? { comments: comments as SpatialCanvas['comments'] } : {}),
   } as SpatialCanvas
 }

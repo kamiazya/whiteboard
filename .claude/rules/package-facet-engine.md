@@ -49,9 +49,11 @@ paths:
   store what `wb_facet_set` would refuse.
 
 - TIER 2, in the same module: an optional `editor` spec on a facet
-  definition, declaring per-field widget/label/quick-band from a CLOSED
-  vocabulary (`text`/`number`/`toggle`/`choice`/`segmented`), or a
-  facet-level `picker` writing whole payloads. Options carry a `FacetGlyph`
+  definition, declaring per-field widget/label/quick-band — and, for a
+  `text`/`number` field, a `placeholder`, the one place free entry can say
+  what to type before a refusal does — from a CLOSED vocabulary
+  (`text`/`number`/`toggle`/`choice`/`segmented`), or a facet-level
+  `picker` writing whole payloads. Options carry a `FacetGlyph`
   — closed in FORM (a plugin cannot add an arm), open in CONTENT: a core
   silhouette, a character, registered icon geometry, or registered geometry
   inked the way a registered THEME inks it. A row also declares its

@@ -44,6 +44,41 @@ async function cardTitled(title: string): Promise<HTMLElement> {
 }
 
 describe('panel state does not outlive its workspace', () => {
+  // The vocabulary is the KEEPER's answer, not derived from the list, so a
+  // switch has to drop it explicitly: until the new keeper answers, the
+  // departed workspace's chips would offer a press that searches the store
+  // now on screen for a tag it never carried.
+  it('the departed workspace’s tag strip is gone before the new keeper answers', async () => {
+    const first = fakeFilesSource({
+      listDocuments: () => Promise.resolve(IN_FIRST),
+      listTagsInUse: () =>
+        Promise.resolve([
+          {
+            tag: 'health:ok',
+            key: 'health',
+            value: 'ok',
+            documents: 0,
+            boards: 1,
+            nodes: 0,
+            edges: 0,
+          },
+        ]),
+    })
+    const second = fakeFilesSource({
+      listDocuments: () => Promise.resolve(IN_SECOND),
+      listTagsInUse: () => new Promise(() => {}),
+    })
+    const { rerender } = render(<WorkspaceFilesPanel source={first} />)
+    await screen.findByRole('button', { name: '#health:ok' })
+
+    rerender(<WorkspaceFilesPanel source={second} />)
+    await cardTitled('Someone else’s notes')
+    expect(
+      screen.queryByRole('button', { name: '#health:ok' }),
+      'a chip from the workspace that left, offered over the one on screen',
+    ).toBeNull()
+  })
+
   it('a rename dialog left open across a workspace switch cannot write into the new workspace', async () => {
     const first = fakeFilesSource({ listDocuments: () => Promise.resolve(IN_FIRST) })
     const second = fakeFilesSource({ listDocuments: () => Promise.resolve(IN_SECOND) })

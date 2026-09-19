@@ -3,7 +3,7 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { overlayReferences, referenceSeams } from './seams.js'
-import { REFERENCE_BUDGET, referenceTargets } from './targets.js'
+import { imageTargets, REFERENCE_BUDGET, referenceTargets } from './targets.js'
 import { referenceSeamsFromWire, referenceWire, referenceWireFor } from './wire.js'
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -17,6 +17,106 @@ const board: SpatialCanvas = {
 function graphOf(entries: Record<string, LoadedReference | null>): ReferenceGraph {
   return new Map(Object.entries(entries))
 }
+
+/**
+ * The counterpart question to `referenceTargets`: not "what documents does
+ * this render need" but "what stored PICTURES does it need". It is separate
+ * because the two answers are disjoint by construction — `referenceTargets`
+ * subtracts image assets, since an asset is not a document — and because a
+ * body's inline `![](asset:…)` is invisible to the wikilink scanner that
+ * answers the first, so before this the seam a body asks could never be
+ * answered for one.
+ */
+describe('imageTargets', () => {
+  it("names a canvas's image file nodes and a body's inline images alike", () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        fileNode({ id: 'i', x: 0, y: 0, width: 10, height: 10, file: 'asset:on-canvas' }),
+        fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'boards/roadmap' }),
+      ],
+      edges: [],
+    }
+    expect(
+      imageTargets({ canvases: [canvas], bodies: ['before ![alt](asset:in-body) after'] }),
+    ).toEqual(['asset:in-body', 'asset:on-canvas'])
+  })
+
+  it("names what a canvas's TEXT nodes write inline, which is the case that was lost", () => {
+    // A text node's body is laid out with the same seams a note's is, so its
+    // inline image is drawn — but nothing collected it, so nothing loaded it.
+    const withText: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 't', x: 0, y: 0, width: 10, height: 10, text: '![](asset:in-text-node)' }),
+      ],
+      edges: [],
+    }
+    expect(imageTargets({ canvases: [withText] })).toEqual(['asset:in-text-node'])
+  })
+
+  it("follows what has loaded, so an embedded note's picture loads too", () => {
+    expect(
+      imageTargets({
+        bodies: ['![[notes/plan]]'],
+        loaded: graphOf({ 'notes/plan': { documentId: NOTE_ID, body: '![](asset:deep)' } }),
+      }),
+    ).toEqual(['asset:deep'])
+  })
+
+  it('reads an angle-bracket destination, which is what the parser sees', () => {
+    // Measured against `parseMarkdownBody`: `![a](<asset:abc>)` yields the mdast
+    // url `asset:abc`, so the layout asks for it — a scan that kept the
+    // brackets skipped the load and the picture silently did not draw, which
+    // is the one direction this scan is not allowed to be cheap in. Angle
+    // brackets also permit a SPACE, where a bare destination cannot.
+    expect(imageTargets({ bodies: ['![a](<asset:abc>) ![b](<asset:two words>)'] })).toEqual([
+      'asset:abc',
+      'asset:two words',
+    ])
+  })
+
+  it('stops at the same budget the document walk does', () => {
+    // `referenceTargets` bounds itself at REFERENCE_BUDGET so a link-dense
+    // workspace is never loaded whole. Sharing that walk without sharing the
+    // bound left this set unbounded, and a keeper starts one read per entry.
+    const many = Array.from({ length: REFERENCE_BUDGET + 50 }, (_, i) => `![](asset:${i})`).join(
+      ' ',
+    )
+    expect(imageTargets({ bodies: [many] })).toHaveLength(REFERENCE_BUDGET)
+  })
+
+  /**
+   * A body is untrusted input, and the first version of this scan was a regex
+   * whose inner `[^\]]*` re-attempted at every `![`. Quadratic, and caught by
+   * CodeQL as `js/polynomial-redos` (high) rather than by anything here.
+   *
+   * The FIXTURE is the part worth reading. `'!['.repeat(n)` alone proves
+   * nothing — it holds no `](`, so the cheap gate returns before either
+   * version scans, and the first guard written here passed against the
+   * restored regex. What reaches the scan is a body that opens with a real
+   * image and then repeats `![`, which is an ordinary shape: measured on the
+   * regex, 37ms at 5000, 568ms at 20000, 2328ms at 40000. The forward pass
+   * does the 40000 case in under a tenth of a millisecond.
+   *
+   * The ceiling sits four orders of magnitude above that measurement and one
+   * below the regression, which is what makes it decisive under a loaded
+   * parallel run rather than a timing test that flakes.
+   */
+  it('scans a pathological body in linear time', () => {
+    const body = `![a](asset:real) ${'!['.repeat(40_000)}`
+    const started = performance.now()
+    expect(imageTargets({ bodies: [body] })).toEqual(['asset:real'])
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
+  it('ignores a URL no keeper holds, which needs no resolution anyway', () => {
+    // An absolute URL already draws, and a bare path is a separate question
+    // (relative to WHAT), so neither is asked for. Asking would be a load
+    // that can only fail.
+    expect(
+      imageTargets({ bodies: ['![](https://example.com/a.png) ![](./b.png) [](asset:link)'] }),
+    ).toEqual([])
+  })
+})
 
 describe('referenceTargets', () => {
   it("names a body's links and embeds, a canvas's file nodes, and what loaded bodies name", () => {

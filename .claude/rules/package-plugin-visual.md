@@ -17,6 +17,20 @@ Nothing about being bundled is load-bearing. The engine does not import this
 package, and `bundledFacetRegistry` here is a convenience for the compositions
 that want the shipped set, not a privileged registry.
 
+## There is no second plugin, and there was one
+
+`bundledPlugins` is `[visualPlugin]`, pinned as the exact list. It was
+`[visualPlugin, semanticPlugin]` for one increment: `semantic.class/v0`
+(`{axis, value}`, node only) recorded what a box IS on a named dimension, as
+a facet, because [ADR-0036](../../docs/contributing/adr/0036-semantic-axes.md)
+§1's criterion made it an axis by construction.
+[ADR-0040](../../docs/contributing/adr/0040-scoped-tags.md) retired it
+unshipped: what a box means is a scoped TAG now (`health:failing`), which is
+core rather than any plugin's, attaches to a board and an edge as well, and
+needs no registry to be a partition. So a facet that says what a thing IS
+does not belong here or in any plugin; it is a tag. What this package keeps
+is what a thing DRAWS.
+
 ## The two halves
 
 | entry | holds | may not hold |
@@ -369,3 +383,29 @@ stayed green — two affordances aiming at the same pixel.
   cannot disagree about what `visual.sketch` is. Nothing in `ui.tsx`
   changes for a canvas facet: the canvas-settings vessel in apps/web is
   where a tier-2 canvas facet is rendered.
+
+## The tag library facet (ADR-0040 decision 5)
+
+- `visual.tags/v0` (document target, `data.ts`; `tag-library.ts`) is the
+  DECLARED layer of scoped tags: `keys`, each with a `description`, an
+  `exclusive` flag and `values` each carrying a `color` (a canvas preset)
+  and a `description`. Keys and values are checked against
+  `TAG_IDENTIFIER_PATTERN`, so a key the library declares is one a tag can
+  spell. It is the same shape as `visual.stencils/v0` — a record of records
+  in a document facet at a well-known path — and it deliberately has NO
+  registry reader: `readTagLibrary(facets)` answers a `TagLibrary` value
+  (keys and values sorted, a malformed facet reading as `{}`), and
+  `declaredColourOf(library, tag)` is the one lookup the layout needs. A
+  stencil library composes into the registry because a stencil id must
+  resolve through it; nothing in the registry reads a tag, so composing a
+  tag library would change a registry for no reader. The facet has no
+  editor form (`facetForm` answers `unsupported`): a library is authored as
+  a document.
+- `tagLibraryObjection(library, tags)` is the ONE judgement of what a
+  library holds against a tag set — a value a key does not admit, a second
+  value under an exclusive key — answered as DATA. Two writers render it:
+  `wb_facet_set` (server-core) names the target and where the library
+  lives; the editor's tag row speaks to the person typing. It lives here,
+  the data half, because apps/web may import this package and not
+  server-core, and one judgement is what keeps a row and a tool from
+  admitting different things.

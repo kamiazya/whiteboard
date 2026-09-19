@@ -159,9 +159,44 @@ describe('the mutation lane covers what it says it covers', () => {
     // declining (a non-finite box, a name the table lacks, a
     // prototype-inherited name answering a function) with a named example
     // apiece, plus construction the pixel goldens compare byte for byte.
+    // 73 since the wrapper's line-break seam was split in two, and the two
+    // go opposite ways. `layout/nodes/inline-junction.ts` is IN, for the
+    // reason its own entry gives: it is a rule whose every decision is
+    // mutation-shaped, not a ladder of ways to decline.
+    // `layout/nodes/uax-segments.ts` is OUT and always will be — it is the
+    // `LineBreaker` call and its options object, with no branch of its own,
+    // and it exists only so the wrapper's granularity ladder and the
+    // junction rule cannot come to disagree about where a line may break.
+    // 76 since the legend (ADR-0040 decision 6), all three modules outside
+    // the lane. `legend/legend-geometry.ts` is constants and the panel's row
+    // list, pinned by the band tests' exact viewBox numbers — a survivor
+    // there is a different constant, which those numbers refuse.
+    // `legend/canvas-legend.ts` is a reading OFF the facet score —
+    // which keys it lists and which swatch each class gets — pinned by
+    // examples that plant one board each (a carried key, an uncarried
+    // colour, a frame that carries and is not listed, an edge key), the
+    // same shape as the instruments it reads. `svg/legend.ts` is document
+    // chrome whose every decision is a coordinate, pinned by the backend's
+    // byte-level examples; a survivor there would be a legend two pixels
+    // over, which no reader could call a defect.
+    // 77 since colour by intent (ADR-0040 decision 5), and 15 mutated:
+    // `tags/declared-colours.ts` is IN, because its three properties share
+    // nothing with it — own colour preserved, coloured iff exactly one
+    // colour is declared, idempotent and colour-only — and each of its
+    // decisions (the contested case, the identity return, the edge branch)
+    // is mutation-shaped.
+    // 81 since `spatial-canvas.ts` gave its overlay layers and its options
+    // vocabulary their own modules (task #84). Four files, no new behaviour
+    // and none in the lane: `comments.ts` and `proposals.ts` are the moved
+    // bodies, already covered by `comments.test.ts` and `proposals.test.ts`
+    // through the same entry point as before; `layout-options.ts` is type
+    // declarations plus one zod union, so there is nothing in it to mutate;
+    // `scene-extent.ts` is the two-line extent the two overlays were each
+    // computing with the same `Math.max(0, ...)` pair, pinned by every
+    // bubble-placement example that reads a bubble's size.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 13,
-      production: 71,
+      mutated: 15,
+      production: 81,
     })
   })
 

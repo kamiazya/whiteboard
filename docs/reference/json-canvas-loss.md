@@ -8,8 +8,8 @@ A whiteboard document is not a JSON Canvas file. JSON Canvas 1.0 is a **projecti
 tested projection rather than an identity: a round-trip property over the expressible subset,
 and this table for everything else.
 
-The model can hold **56** field positions. **22** of them are something the format
-can state; **34** reach a reader only through the single extension key, or not at all.
+The model can hold **59** field positions. **22** of them are something the format
+can state; **37** reach a reader only through the single extension key, or not at all.
 
 Two export modes, and the difference between them is exactly the `x-whiteboard` rows below:
 
@@ -54,7 +54,7 @@ The format has the field and cannot hold the value. What a reader gets instead i
 | `nodes[].x` | crosses as the nearest integer pixel |
 | `nodes[].y` | crosses as the nearest integer pixel |
 
-## Carried on `x-whiteboard` — 34
+## Carried on `x-whiteboard` — 37
 
 Survives the `extended` export and disappears from the `strict` one, which emits plain JSON Canvas 1.0. A reader that drops the key keeps the whole of what the format can state.
 
@@ -72,6 +72,7 @@ Survives the `extended` export and disappears from the `strict` one, which emits
 | `edges[].bends[].x` | dropped by `strict` |
 | `edges[].bends[].y` | dropped by `strict` |
 | `edges[].facets/*` | dropped by `strict` |
+| `edges[].tags[]` | dropped by `strict` |
 | `facets/*` | dropped by `strict` |
 | `lines[].bends[].x` | dropped by `strict` |
 | `lines[].bends[].y` | dropped by `strict` |
@@ -94,6 +95,8 @@ Survives the `extended` export and disappears from the `strict` one, which emits
 | `nodes[].embed.documentId` | dropped by `strict` |
 | `nodes[].embed.versionRef` | dropped by `strict` |
 | `nodes[].facets/*` | dropped by `strict` |
+| `nodes[].tags[]` | dropped by `strict` |
+| `tags[]` | dropped by `strict` |
 
 ## Cannot cross at all — 0
 

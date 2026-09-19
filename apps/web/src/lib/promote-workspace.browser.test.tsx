@@ -45,23 +45,38 @@ function targetDaemonRecord(): LoroDoc {
 }
 
 /**
- * A daemon standing in as three fetch routes: the update POST imports the
+ * A daemon standing in as three fetch routes: the promote POST imports the
  * posted bytes into `target` (the verification, not a mock of it), the file
  * PUT records what arrived, and the documents list answers from the merged
  * target with the collision's loser marked shadowed — the same projection
  * the real route serves.
  */
+function base64UrlToBytes(value: string): Uint8Array {
+  const padded = value.replaceAll('-', '+').replaceAll('_', '/')
+  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
+}
+
 function daemonStub(
   target: LoroDoc,
   putFiles?: Array<{ url: string; contentType: string; bytes: Uint8Array }>,
+  promotes?: Array<{ snapshot: string; attestation?: { credentialId: string } }>,
 ): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
-    if (url.endsWith('/workspace-document/update') && init?.method === 'POST') {
-      target.import(new Uint8Array(init.body as Uint8Array))
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
+    if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
+      const body = JSON.parse(init.body as string) as {
+        snapshot: string
+        attestation?: { credentialId: string }
+      }
+      promotes?.push(body)
+      target.import(base64UrlToBytes(body.snapshot))
+      const recorded = readWorkspaceDocuments(target).map((entry) => entry.documentId)
+      return Response.json({
+        ok: true,
+        attested: body.attestation !== undefined,
+        recorded,
+        shadowed: [],
       })
     }
     if (url.includes('/file/') && init?.method === 'PUT') {
@@ -172,6 +187,87 @@ describe('promoteWorkspace', () => {
     expect(putFiles[0]?.url).toContain(`/file/${FILE_ID}`)
     expect(putFiles[0]?.contentType).toBe('image/png')
     expect([...(putFiles[0]?.bytes ?? [])]).toEqual([...imageBytes])
+  })
+
+  it('the passkey assertion travels beside the very bytes it signed, and the result says attested', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'a',
+      kind: 'markdown',
+    })
+    const promotes: Array<{ snapshot: string; attestation?: { credentialId: string } }> = []
+    const signed: Uint8Array[] = []
+    const result = await promoteWorkspace({
+      fetch: daemonStub(targetDaemonRecord(), [], promotes),
+      daemonBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+      attest: async (snapshot) => {
+        signed.push(snapshot)
+        return {
+          ok: true,
+          attestation: {
+            kind: 'webauthn',
+            credentialId: 'Y3JlZA',
+            authenticatorData: 'YXV0aA',
+            clientDataJSON: 'Y2xpZW50',
+            signature: 'c2ln',
+          },
+        }
+      },
+    })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.attested).toBe(true)
+    expect(promotes).toHaveLength(1)
+    expect(promotes[0]?.attestation?.credentialId).toBe('Y3JlZA')
+    // What was signed is what was sent: the same bytes, byte for byte.
+    expect(base64UrlToBytes(promotes[0]?.snapshot ?? '')).toEqual(signed[0])
+  })
+
+  it('a cancelled passkey prompt moves nothing', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'a',
+      kind: 'markdown',
+    })
+    const promotes: Array<{ snapshot: string }> = []
+    const result = await promoteWorkspace({
+      fetch: daemonStub(targetDaemonRecord(), [], promotes),
+      daemonBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+      attest: async () => ({ ok: false, reason: 'cancelled' }),
+    })
+    expect(result).toEqual({
+      kind: 'failed',
+      reason: 'The passkey prompt was cancelled, so nothing was moved.',
+    })
+    expect(promotes).toEqual([])
+  })
+
+  it('without a passkey the move lands and the result says it carries no evidence', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'a',
+      kind: 'markdown',
+    })
+    const result = await promoteWorkspace({
+      fetch: daemonStub(targetDaemonRecord()),
+      daemonBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+      attest: async () => null,
+    })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.attested).toBe(false)
   })
 
   it('a referenced image whose bytes are gone is reported missing, never a failed promotion', async () => {

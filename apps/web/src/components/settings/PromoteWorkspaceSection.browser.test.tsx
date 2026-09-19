@@ -27,6 +27,7 @@ import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
+import type { PasskeyCredentials } from '../../lib/passkey-attestation.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -44,6 +45,10 @@ interface StubOptions {
   /** An update that stays in flight until the test releases it. */
   updateGate?: Promise<void>
   failUpdateStatus?: number
+  /** Every promote body the daemon received — what travelled, not what was meant to. */
+  promotes?: Array<{ snapshot: string; attestation?: { credentialId: string } }>
+  /** Every credential registration the daemon received. */
+  registrations?: Array<{ credentialId: string; publicKey: string; authenticatorData: string }>
   /** Refuse blob PUTs, so the demote gate has a real failed transfer. */
   failPutStatus?: number
   /** Serve THESE bytes from the snapshot route instead of the merged target. */
@@ -51,7 +56,53 @@ interface StubOptions {
   workspaces?: { workspaceId: string; segment?: string; displayName?: string }[]
 }
 
-/** The three daemon routes the flow touches, answering from `target`. */
+function base64UrlToBytes(value: string): Uint8Array {
+  const padded = value.replaceAll('-', '+').replaceAll('_', '/')
+  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
+}
+
+const b64u = (bytes: Uint8Array): string =>
+  btoa(String.fromCharCode(...bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '')
+
+const RAW_ID = Uint8Array.from({ length: 16 }, (_, i) => i + 1)
+const PASSKEYS_KEY = 'whiteboard:daemon-passkeys'
+
+/** A platform authenticator as the flow sees it: one registration, and assertions that sign whatever they are asked. */
+function fakePasskey(): PasskeyCredentials & { asked: CredentialRequestOptions[] } {
+  const asked: CredentialRequestOptions[] = []
+  return {
+    asked,
+    create: async () =>
+      ({
+        id: b64u(RAW_ID),
+        type: 'public-key',
+        rawId: RAW_ID.buffer,
+        response: {
+          getPublicKey: () => Uint8Array.from([48, 89, 48, 19]).buffer,
+          getAuthenticatorData: () => new Uint8Array(37).buffer,
+        },
+      }) as unknown as Credential,
+    get: async (options) => {
+      asked.push(options)
+      return {
+        id: b64u(RAW_ID),
+        type: 'public-key',
+        rawId: RAW_ID.buffer,
+        response: {
+          authenticatorData: new Uint8Array(37).buffer,
+          clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer,
+          signature: Uint8Array.from([1, 2, 3]).buffer,
+        },
+      } as unknown as Credential
+    },
+  }
+}
+
+/** The daemon routes the flow touches, answering from `target`. */
 function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -60,7 +111,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
         workspaces: opts.workspaces ?? [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       })
     }
-    if (url.endsWith('/workspace-document/update') && init?.method === 'POST') {
+    if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
       if (opts.updateDelayMs) await new Promise((r) => setTimeout(r, opts.updateDelayMs))
       if (opts.updateGate) await opts.updateGate
       if (opts.failUpdateStatus) {
@@ -69,8 +120,35 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
           { status: opts.failUpdateStatus },
         )
       }
-      target.import(new Uint8Array(init.body as Uint8Array))
-      return Response.json({ ok: true })
+      const body = JSON.parse(init.body as string) as {
+        snapshot: string
+        attestation?: { credentialId: string }
+      }
+      opts.promotes?.push(body)
+      target.import(base64UrlToBytes(body.snapshot))
+      return Response.json({
+        ok: true,
+        attested: body.attestation !== undefined,
+        recorded: readWorkspaceDocuments(target).map((entry) => entry.documentId),
+        shadowed: [],
+      })
+    }
+    if (url.endsWith('/api/pairing/credentials') && init?.method === 'POST') {
+      const body = JSON.parse(init.body as string) as {
+        credentialId: string
+        publicKey: string
+        authenticatorData: string
+      }
+      opts.registrations?.push(body)
+      return Response.json(
+        {
+          credentialId: body.credentialId,
+          origin: location.origin,
+          backupEligible: true,
+          createdAt: '2026-09-16T00:00:00.000Z',
+        },
+        { status: 201 },
+      )
     }
     if (url.includes('/file/') && init?.method === 'PUT') {
       if (opts.putDelayMs) await new Promise((r) => setTimeout(r, opts.putDelayMs))
@@ -185,11 +263,143 @@ beforeEach(async () => {
   // and view-mode state out from under concurrently running files
   // (view-mode-isolation.test.ts guards exactly this).
   localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(PASSKEYS_KEY)
   await clearWhiteboardDb()
 })
 afterEach(cleanup)
 
 describe('PromoteWorkspaceSection', () => {
+  it('with a passkey registered here, the move is confirmed with it, the assertion travels, and the result says so', async () => {
+    await seedTwoDocuments()
+    localStorage.setItem(
+      PASSKEYS_KEY,
+      JSON.stringify({ [BASE]: { credentialId: b64u(RAW_ID), registeredAt: 'x' } }),
+    )
+    const passkey = fakePasskey()
+    const promotes: StubOptions['promotes'] = []
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), { promotes })}
+        passkeyCredentials={passkey}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    expect((await screen.findByTestId('promote-passkey')).textContent).toMatch(
+      /you will be asked to confirm the move with it/i,
+    )
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/your passkey confirmed this move/i)
+    // One assertion, for the credential registered here, with user verification.
+    expect(passkey.asked).toHaveLength(1)
+    expect(passkey.asked[0]?.publicKey?.userVerification).toBe('required')
+    expect(promotes).toHaveLength(1)
+    expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
+  })
+
+  it('without a passkey the dialog offers to register one; registering pins it on the daemon and the move then asks for it', async () => {
+    await seedTwoDocuments()
+    const passkey = fakePasskey()
+    const promotes: StubOptions['promotes'] = []
+    const registrations: StubOptions['registrations'] = []
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), { promotes, registrations })}
+        passkeyCredentials={passkey}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    expect((await screen.findByTestId('promote-passkey')).textContent).toMatch(
+      /no passkey for this daemon yet/i,
+    )
+    await userEvent.click(screen.getByTestId('promote-register-passkey'))
+    await waitFor(() =>
+      expect(screen.getByTestId('promote-passkey').textContent).toMatch(/is registered/i),
+    )
+    expect(registrations).toHaveLength(1)
+    expect(registrations[0]?.credentialId).toBe(b64u(RAW_ID))
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(
+      /your passkey confirmed this move/i,
+    )
+    expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
+  })
+
+  it('while a passkey is being registered the move waits, so it cannot slip through unattested', async () => {
+    await seedTwoDocuments()
+    const passkey = fakePasskey()
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const create = passkey.create
+    passkey.create = async (options) => {
+      await gate
+      return create(options)
+    }
+    const promotes: StubOptions['promotes'] = []
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), { promotes, registrations: [] })}
+        passkeyCredentials={passkey}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-register-passkey'))
+    await waitFor(() =>
+      expect(screen.getByTestId('promote-passkey-status').textContent).toMatch(/waiting/i),
+    )
+    const confirm = screen.getByTestId('promote-confirm') as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+    // A click that lands anyway (a stale handle, a programmatic call) moves nothing.
+    confirm.click()
+    expect(promotes).toHaveLength(0)
+    release()
+    await waitFor(() =>
+      expect(screen.getByTestId('promote-passkey').textContent).toMatch(/is registered/i),
+    )
+    expect((screen.getByTestId('promote-confirm') as HTMLButtonElement).disabled).toBe(false)
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(
+      /your passkey confirmed this move/i,
+    )
+    expect(promotes).toHaveLength(1)
+    expect(promotes[0]?.attestation?.credentialId).toBe(b64u(RAW_ID))
+  })
+
+  it('a browser without passkeys is told so, and the move is recorded without one', async () => {
+    await seedTwoDocuments()
+    const promotes: StubOptions['promotes'] = []
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), { promotes })}
+        passkeyCredentials={null}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    expect((await screen.findByTestId('promote-passkey')).textContent).toMatch(
+      /cannot use passkeys/i,
+    )
+    expect(screen.queryByTestId('promote-register-passkey')).toBeNull()
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(
+      /recorded without a passkey/i,
+    )
+    expect(promotes[0]?.attestation).toBeUndefined()
+  })
+
   it('confirmation dialog traps focus and Escape returns it to the trigger', async () => {
     await seedTwoDocuments()
     render(

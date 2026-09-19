@@ -3,7 +3,7 @@
 // targets — no surface ever names a plugin or facet key itself.
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { resolveFacetContributions } from './contributions.js'
+import { POINT_SECTIONS, resolveFacetContributions } from './contributions.js'
 import { createFacetRegistry, defineFacet, definePlugin } from './registry.js'
 
 const planning = definePlugin({
@@ -91,5 +91,17 @@ describe('plugin displayName', () => {
   it('carries the plugin displayName through to the group heading', () => {
     const groups = resolveFacetContributions(registry, 'canvasSettings')
     expect(groups[0]?.displayName).toBe('Styling')
+  })
+})
+
+// ADR-0040 decision 6 decides a point's SECTION order — the plugins'
+// containers first, the core tag row after — here, once, rather than leaving
+// each vessel to put the row where it likes. A vessel iterates this and
+// renders what each section names.
+describe('POINT_SECTIONS', () => {
+  it('every point puts the plugin containers before the tag row', () => {
+    for (const point of ['inspector.node', 'inspector.edge', 'canvasSettings'] as const) {
+      expect(POINT_SECTIONS[point]).toEqual(['facets', 'tags'])
+    }
   })
 })

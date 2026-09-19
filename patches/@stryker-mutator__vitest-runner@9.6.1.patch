@@ -1,0 +1,40 @@
+diff --git a/dist/src/stryker-setup.js b/dist/src/stryker-setup.js
+index aecfacb..70a08c0 100644
+--- a/dist/src/stryker-setup.js
++++ b/dist/src/stryker-setup.js
+@@ -63,7 +63,14 @@ function collectTestName({ name, suite, }) {
+         nameParts.unshift(currentSuite.name);
+         currentSuite = currentSuite.suite;
+     }
+-    return nameParts.join(' ').trim();
++    // PATCHED (whiteboard): vitest >= 5 matches `testNamePattern` against a
++    // test's `fullTestName`, which joins suite and test names with ' > '
++    // (vitest/dist/task-utils.js `createTaskName`), where vitest <= 4 joined
++    // them with a space. This id is what the per-mutant filter regex is built
++    // from, so with a space no test inside a `describe` ever matched: the
++    // mutant ran zero tests and was reported Survived. Upstream 10.0.0 still
++    // joins with a space.
++    return nameParts.join(' > ').trim();
+ }
+ function toRawTestId(test) {
+     return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test)}`;
+diff --git a/dist/src/test-helpers.js b/dist/src/test-helpers.js
+index 56cc786..7810c8f 100644
+--- a/dist/src/test-helpers.js
++++ b/dist/src/test-helpers.js
+@@ -8,7 +8,14 @@ export function collectTestName({ name, suite, }) {
+         nameParts.unshift(currentSuite.name);
+         currentSuite = currentSuite.suite;
+     }
+-    return nameParts.join(' ').trim();
++    // PATCHED (whiteboard): vitest >= 5 matches `testNamePattern` against a
++    // test's `fullTestName`, which joins suite and test names with ' > '
++    // (vitest/dist/task-utils.js `createTaskName`), where vitest <= 4 joined
++    // them with a space. This id is what the per-mutant filter regex is built
++    // from, so with a space no test inside a `describe` ever matched: the
++    // mutant ran zero tests and was reported Survived. Upstream 10.0.0 still
++    // joins with a space.
++    return nameParts.join(' > ').trim();
+ }
+ export function toRawTestId(test) {
+     return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test)}`;

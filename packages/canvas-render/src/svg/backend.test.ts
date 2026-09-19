@@ -1088,3 +1088,97 @@ describe('emphasis paints — the flags layout preserves must reach the SVG', ()
     expect(plain).not.toContain('text-decoration')
   })
 })
+
+// ADR-0040 decision 6: the legend the layout attached is drawn into an
+// EXPORTED document (one with the envelope), in the top-left corner of the
+// viewBox, and never into a bare fragment — a fragment is composed into a
+// larger document that places its own chrome.
+describe('renderSceneToSvg — legend', () => {
+  const scene: Scene = {
+    nodes: [{ kind: 'thematicBreak', bbox: { x: 100, y: 200, w: 100, h: 10 } }],
+    legend: {
+      keys: [
+        {
+          key: 'health',
+          of: 'boxes',
+          entries: [
+            { value: 'failing', count: 1, swatch: { fill: '#fee', stroke: '#c00' } },
+            { value: 'ok', count: 2, swatch: { fill: '#efe', stroke: '#080' } },
+          ],
+        },
+        {
+          key: 'link',
+          of: 'edges',
+          entries: [{ value: 'slow', count: 1, swatch: { stroke: '#c60' } }],
+        },
+      ],
+      uncarried: { boxes: false, edges: true },
+    },
+  }
+
+  it('draws the keys, their values and their swatches inside the envelope, after the content', () => {
+    const svg = renderSceneToSvg(scene, { viewBox: { x: 100, y: 200, w: 400, h: 300 }, padding: 0 })
+    const legendAt = svg.indexOf('data-wb-legend')
+    expect(legendAt).toBeGreaterThan(svg.indexOf('<rect x="100" y="200"'))
+    const legend = svg.slice(legendAt)
+    for (const text of ['health', 'failing', 'ok', 'link', 'slow']) {
+      expect(legend).toContain(`>${text}<`)
+    }
+    // A box swatch is a filled, stroked rect; an edge swatch is a line.
+    expect(legend).toContain('fill="#fee" stroke="#c00"')
+    expect(legend).toContain('<line')
+    expect(legend).toContain('stroke="#c60"')
+    // The uncarried line, muted, for the population it is about.
+    expect(legend).toContain('edge colour: no key carries it')
+    // Anchored at the viewBox corner, not at the scene's origin.
+    expect(svg).toMatch(/<g data-wb-legend="" transform="translate\(112 212\)"/)
+  })
+
+  it('is not drawn into a fragment, and is skipped when asked', () => {
+    expect(renderSceneToSvg(scene)).not.toContain('data-wb-legend')
+    expect(
+      renderSceneToSvg(scene, { viewBox: { x: 0, y: 0, w: 400, h: 300 }, legend: 'omit' }),
+    ).not.toContain('data-wb-legend')
+  })
+
+  it('a scene with no legend is byte-identical to before', () => {
+    const { legend: _legend, ...bare } = scene
+    expect(renderSceneToSvg(bare, { padding: 5 })).not.toContain('legend')
+  })
+})
+
+describe('renderSceneToSvg — the legend’s band', () => {
+  const legend = {
+    keys: [
+      {
+        key: 'health',
+        of: 'boxes' as const,
+        entries: [{ value: 'ok', count: 1, swatch: { fill: '#efe', stroke: '#080' } }],
+      },
+    ],
+    uncarried: { boxes: false, edges: false },
+  }
+  const scene: Scene = {
+    nodes: [{ kind: 'thematicBreak', bbox: { x: 100, y: 200, w: 100, h: 10 } }],
+    legend,
+  }
+
+  it('a derived envelope reserves a band on the left, so the legend covers no content', () => {
+    const svg = renderSceneToSvg(scene, { padding: 0 })
+    // The panel: 16+16+6+6*7=80 wide, 16+2*18=52 tall; the band adds two
+    // margins (104), and the height grows to hold the panel and its margins.
+    expect(svg).toContain('viewBox="-4 200 204 76"')
+    expect(svg).toContain('<g data-wb-legend="" transform="translate(8 212)"')
+    // The content itself did not move.
+    expect(svg).toContain('<rect x="100" y="200" width="100" height="10"')
+  })
+
+  it('an omitted legend reserves nothing, and an explicit viewBox is the caller’s', () => {
+    expect(renderSceneToSvg(scene, { padding: 0, legend: 'omit' })).toContain(
+      'viewBox="100 200 100 10"',
+    )
+    expect(renderSceneToSvg(scene, { viewBox: { x: 100, y: 200, w: 100, h: 10 } })).toContain(
+      'viewBox="100 200 100 10"',
+    )
+  })
+})

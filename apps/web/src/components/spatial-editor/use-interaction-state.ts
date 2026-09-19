@@ -89,8 +89,20 @@ export function useInteractionState({ canvas }: InteractionStateInputs) {
    */
   const navigationRef = useRef<NavigationState>(createIdleNavigation())
 
+  // The eager chain's canvas: `applyResult` writes each commit back here so
+  // the next command builds on it before the parent re-renders. It follows
+  // the PROP only when the prop changes identity — assigning it on every
+  // render, as this once did, reset it to the pre-commit prop on the
+  // re-render `setGestureState` causes inside `applyResult` itself, so a
+  // second commit under a slow parent computed from the stale prop and
+  // erased the first (measured: two tags finished in the Facets panel under
+  // a 30ms parent left the box carrying only the second).
   const canvasRef = useRef(canvas)
-  canvasRef.current = canvas
+  const canvasPropRef = useRef(canvas)
+  if (canvasPropRef.current !== canvas) {
+    canvasPropRef.current = canvas
+    canvasRef.current = canvas
+  }
 
   // Mirror for callbacks that outlive their render — the long-press timer
   // fires ~500ms after the closure that armed it, by which time the press

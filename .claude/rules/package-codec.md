@@ -111,7 +111,11 @@ rather than in a string, so joining its runs yields `tightenthis`.
   (`edgeExtensionSchema`) rather than the node's facets-only arm: since ADR-0037 slice 4 an edge
   carries something the format cannot state, and it is geometry rather than content. One canonicalisation goes with it — an extension object with
   nothing in it is not emitted, because absence says the same thing — and it is pinned by
-  example rather than left to the round-trip property. Adding a model field means adding its ledger entry —
+  example rather than left to the round-trip property. A board's, a node's and an edge's `tags`
+  ride the same extension key beside the facets (ADR-0040), `extension` in both ledgers — neither
+  format has a classification vocabulary — and on OCIF as one `@whiteboard/tags` entry per site
+  rather than a `data` entry typed by a facet key, because a tag is core and not a plugin's.
+  Adding a model field means adding its ledger entry —
   `native` / `extension` / `degraded(to)` / `dropped(why)`, the last two owing a real reason.
   The ledger is the ONLY thing that classifies a field now. `censusSpatialModel` used to split
   its answer by whether a path was spelled under `x-whiteboard`, which worked only while the
@@ -288,7 +292,8 @@ rather than in a string, so joining its runs yields `tightenthis`.
   strikethrough flanking-rule interactions, reference-style links/definitions, and non-HTML-shaped
   `html` node values, a line ending at a block's first or last text — the block boundary itself,
   which the writer emits raw where it encodes a boundary space as `&#x20;` — a blank line inside a
-  text value (a paragraph break), a line ending inside a code span or inline math (CommonMark reads
+  text value, or inside an image's `alt` or a link's/image's `title`, which the writer
+  emits raw (a paragraph break; the `alt` half found by seed 1557987087), a line ending inside a code span or inline math (CommonMark reads
   it as a space and the writer writes one whenever the next character could open a block; in an
   ATX-only heading it splits the heading), and a destination starting with `<` (the writer leaves
   it raw where the parser reads a pointy-bracket destination) — the last two pinned by

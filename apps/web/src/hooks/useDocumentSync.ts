@@ -13,6 +13,7 @@ import type {
   SpatialCanvas,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
@@ -27,7 +28,7 @@ import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
-import { renderCanvasToSvg } from '../lib/spatial/scene-render.js'
+import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
 import { themeFacesNamedBy } from '../lib/theme-fonts.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
@@ -41,6 +42,11 @@ export { dispatchIdentityEvent }
 // canvas-render's SVG backend + this hook's own Canvas-2D raster path are the
 // only export routes now that Excalidraw's exportToBlob/exportToSvg are gone.
 export type SceneExportFormat = 'png' | 'svg'
+
+/** What an export from the editor takes beside its format. */
+export interface SceneExportOptions {
+  readonly tagLibrary?: TagLibrary
+}
 
 export interface UseDocumentSyncResult {
   syncStatus: SyncStatus
@@ -130,7 +136,7 @@ export interface UseDocumentSyncResult {
   // null when the requested format is unavailable in this environment (e.g.
   // 'png' with no real Canvas 2D context, such as jsdom) — callers treat
   // that the same as "export unavailable right now" rather than throwing.
-  exportScene: (format: SceneExportFormat) => Promise<Blob | null>
+  exportScene: (format: SceneExportFormat, options?: SceneExportOptions) => Promise<Blob | null>
 }
 
 /** Stable identity so an unlocked canvas never re-renders the editor. */
@@ -451,14 +457,17 @@ export function useDocumentSync(
   // editor handle involved, so exportScene works identically whether or not
   // a SpatialEditor is currently mounted.
   const exportScene = useCallback(
-    async (format: SceneExportFormat): Promise<Blob | null> => {
+    async (format: SceneExportFormat, options: SceneExportOptions = {}): Promise<Blob | null> => {
       const exportedCanvas = sessionRef.current?.getCanvas() ?? canvas
-      const { svg, bounds } = renderCanvasToSvg(exportedCanvas, {
+      const { svg, bounds } = renderCanvasForExport(exportedCanvas, {
         measure: createBrowserMeasureText(),
         // Pinned to 'light' regardless of the UI theme: an exported SVG/PNG
         // is a saved artifact, and a user's display preference must never
         // change its bytes.
         theme: 'light',
+        // The library's colour by intent is part of the picture (ADR-0040
+        // decision 5), so the saved artifact carries it like the daemon's.
+        ...(options.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
       })
       if (format === 'svg') {
         return new Blob([svg], { type: 'image/svg+xml' })

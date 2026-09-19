@@ -269,6 +269,14 @@ export interface FacetFormField {
   readonly control: FacetFormControl
   readonly required: boolean
   /**
+   * Shown inside an empty `text` / `number` box. The one place free entry
+   * can say what to type BEFORE a refusal does: two identifier fields with
+   * no example read as two empty boxes, and the lowercase rule behind them
+   * is invisible until Save. Ignored by the other controls, which carry
+   * their own vocabulary.
+   */
+  readonly placeholder?: string
+  /**
    * Whether this field belongs in a one-tap quick band (a context-menu
    * row) as well as the full editor. Only a spec can say so — a derived
    * field defaults to false, because a surface with room for one row
@@ -282,6 +290,8 @@ export interface FacetFieldSpec {
   readonly widget: 'text' | 'number' | 'toggle' | 'choice' | 'segmented'
   readonly label?: string
   readonly quick?: boolean
+  /** `text` / `number` only: an example of what goes in the box. */
+  readonly placeholder?: string
   /** Required by `segmented`; ignored by the other widgets. */
   readonly options?: readonly FacetSegmentedOption[]
   /** `segmented` only. Defaults to `chips`. */
@@ -377,6 +387,7 @@ function fieldsOf(
       control: specControl(spec) ?? derived,
       required,
       quick: spec?.quick ?? false,
+      ...(spec?.placeholder === undefined ? {} : { placeholder: spec.placeholder }),
     })
   }
   return fields

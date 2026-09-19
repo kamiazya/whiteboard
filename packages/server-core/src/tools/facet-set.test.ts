@@ -6,8 +6,10 @@ import {
   readSpatialCanvas,
   writeCoreFacets,
   writeDocumentKind,
+  writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { SCOPED_TAG_RULE } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
@@ -31,8 +33,8 @@ import {
   NodeAndCanvasTargetError,
   NodeAndEdgeTargetError,
   NodeTargetNeedsOneDocumentError,
-  TagsTargetDocumentError,
 } from './facet-set.js'
+import { TAG_LIBRARY_PATH, TagLibraryError } from './tag-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -42,6 +44,27 @@ function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
     documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
   })
+}
+
+/** The document as the store holds it now, for reading back what a write stored. */
+async function reloadDoc(store: FakeDocumentStore): Promise<LoroDoc> {
+  const loaded = await store.loadSnapshot({
+    docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+  })
+  if (loaded === null) throw new Error('nothing stored')
+  const doc = new LoroDoc()
+  doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+  return doc
+}
+
+async function markdownWithTagsOutside(tags: string[]): Promise<FakeDocumentStore> {
+  const store = new FakeDocumentStore()
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+  await seedDoc(store, DOCUMENT_ID, (doc) => {
+    writeDocumentKind(doc, 'markdown')
+    writeCoreFacets(doc, { type: 'note', tags })
+  })
+  return store
 }
 
 describe('wb_facet_set tool', () => {
@@ -361,6 +384,196 @@ describe('node-target writes (nodeId)', () => {
     })
     return { documentStore, tool: createFacetSetTool(makeDeps(documentStore)) }
   }
+
+  test('tags land on a NODE with nodeId: add keeps what is there, remove drops by name, a duplicate is a no-op', async () => {
+    const { documentStore, tool } = await spatialWith()
+    const first = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { add: ['health:failing', 'urgent'] },
+    })
+    expect(first.updated[0]).toEqual({
+      documentId: DOCUMENT_ID,
+      facets: {},
+      tags: ['health:failing', 'urgent'],
+    })
+    const second = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { add: ['health:failing', 'health:degraded'], remove: ['urgent'] },
+    })
+    // Several values under one key are allowed (ADR-0040 decision 3).
+    expect(second.updated[0]?.tags).toEqual(['health:failing', 'health:degraded'])
+    const stored = readSpatialCanvas(await reloadDoc(documentStore))
+    expect(stored.nodes.find((n) => n.id === 'n1')?.tags).toEqual([
+      'health:failing',
+      'health:degraded',
+    ])
+    // The neighbour is untouched.
+    expect(stored.nodes.find((n) => n.id === 'n2')?.tags).toBeUndefined()
+  })
+
+  test('removing the last tag leaves no empty list on the node', async () => {
+    const { documentStore, tool } = await spatialWith()
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { add: ['x'] },
+    })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { remove: ['x'] },
+    })
+    expect(result.updated[0]?.tags).toEqual([])
+    const stored = readSpatialCanvas(await reloadDoc(documentStore))
+    expect(stored.nodes.find((n) => n.id === 'n1')).not.toHaveProperty('tags')
+  })
+
+  test('tags and facets travel in one call to a node', async () => {
+    const { documentStore, tool } = await spatialWith()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { add: ['health:ok'] },
+      facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+    })
+    expect(result.updated[0]).toEqual({
+      documentId: DOCUMENT_ID,
+      facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+      tags: ['health:ok'],
+    })
+    const node = readSpatialCanvas(await reloadDoc(documentStore)).nodes.find((n) => n.id === 'n1')
+    expect(node?.facets).toEqual({ 'visual.shape/v0': { kind: 'hexagon' } })
+    expect(node?.tags).toEqual(['health:ok'])
+  })
+
+  test('tags land on an EDGE with edgeId: a relation is classified too (ADR-0040 decision 2)', async () => {
+    const { documentStore, tool } = await spatialWithEdge()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      edgeId: 'e1',
+      tags: { add: ['link:failing'] },
+    })
+    expect(result.updated[0]?.tags).toEqual(['link:failing'])
+    expect(readSpatialCanvas(await reloadDoc(documentStore)).edges[0]?.tags).toEqual([
+      'link:failing',
+    ])
+  })
+
+  test('tags land on the BOARD of a spatial document when no node or edge is named', async () => {
+    const { documentStore, tool } = await spatialWith()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['phase:design'] },
+    })
+    expect(result.updated[0]).toEqual({
+      documentId: DOCUMENT_ID,
+      facets: {},
+      tags: ['phase:design'],
+    })
+    expect(readSpatialCanvas(await reloadDoc(documentStore)).tags).toEqual(['phase:design'])
+    // `target: 'canvas'` names the same object; a board's tags ARE the canvas's.
+    const again = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      tags: { remove: ['phase:design'], add: ['phase:build'] },
+    })
+    expect(again.updated[0]?.tags).toEqual(['phase:build'])
+  })
+
+  test('rename turns one tag into another throughout the documents named: board, every node and every edge', async () => {
+    const { documentStore, tool } = await spatialWithEdge()
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['health:degraded'] },
+    })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { add: ['health:degraded', 'x'] },
+    })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      edgeId: 'e1',
+      tags: { add: ['health:degraded'] },
+    })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { rename: [{ from: 'health:degraded', to: 'health:failing' }] },
+    })
+    expect(result.updated[0]?.tags).toEqual(['health:failing'])
+    const stored = readSpatialCanvas(await reloadDoc(documentStore))
+    expect(stored.tags).toEqual(['health:failing'])
+    expect(stored.nodes.find((n) => n.id === 'n1')?.tags).toEqual(['health:failing', 'x'])
+    expect(stored.edges[0]?.tags).toEqual(['health:failing'])
+  })
+
+  test('rename onto a tag already present MERGES rather than duplicating, and with nodeId touches that node alone', async () => {
+    const { documentStore, tool } = await spatialWithEdge()
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { add: ['a', 'b'] },
+    })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n2',
+      tags: { add: ['a'] },
+    })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'n1',
+      tags: { rename: [{ from: 'a', to: 'b' }] },
+    })
+    expect(result.updated[0]?.tags).toEqual(['b'])
+    const stored = readSpatialCanvas(await reloadDoc(documentStore))
+    expect(stored.nodes.find((n) => n.id === 'n2')?.tags).toEqual(['a'])
+  })
+
+  test('rename on a markdown document rewrites its core tags, and the new name obeys the grammar', async () => {
+    const store = await markdownWithTagsOutside(['health:degraded', 'retro'])
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { rename: [{ from: 'health:degraded', to: 'health:failing' }] },
+    })
+    expect(result.updated[0]?.tags).toEqual(['health:failing', 'retro'])
+    expect(
+      facetSetInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { rename: [{ from: 'x', to: 'Health:failing' }] },
+      }).success,
+    ).toBe(false)
+  })
+
+  test('facets alone on a spatial document still need a target, tags alone do not', async () => {
+    const { tool } = await spatialWith()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        facets: { 'example.kanban/v1': { status: 'done' } },
+      }),
+    ).rejects.toThrow(DocumentKindMismatchError)
+  })
 
   test("sets a node-target facet into the node's facets bucket", async () => {
     const { documentStore, tool } = await spatialWith()
@@ -866,31 +1079,6 @@ describe('tags (OKF core), the errand a caller is usually doing', () => {
     ).toBe(true)
   })
 
-  test('tags belong to a document, so nodeId and tags together are refused', async () => {
-    const store = await markdownWithTags([])
-    await expect(
-      createFacetSetTool(makeDeps(store)).execute({
-        workspaceId: WORKSPACE_ID,
-        documentIds: [DOCUMENT_ID],
-        nodeId: 'n1',
-        tags: { add: ['x'] },
-      }),
-    ).rejects.toThrow(TagsTargetDocumentError)
-  })
-
-  test('a spatial document has no frontmatter to tag', async () => {
-    const store = new FakeDocumentStore()
-    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    await seedDoc(store, DOCUMENT_ID, (doc) => writeDocumentKind(doc, 'spatial'))
-    await expect(
-      createFacetSetTool(makeDeps(store)).execute({
-        workspaceId: WORKSPACE_ID,
-        documentIds: [DOCUMENT_ID],
-        tags: { add: ['x'] },
-      }),
-    ).rejects.toThrow(DocumentKindMismatchError)
-  })
-
   test('a markdown document with no frontmatter yet is told where a tag would go', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
@@ -940,5 +1128,193 @@ describe('wb_facet_set and a workspace stencil library', () => {
     } as never)
 
     expect(listings).toBe(0)
+  })
+})
+
+describe('wb_facet_set and a workspace tag library (ADR-0040 decision 5)', () => {
+  const LIBRARY_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W0'
+  const SECOND_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W1'
+  const library = {
+    health: { exclusive: true, values: { ok: { color: '4' }, failing: { color: '1' } } },
+    region: { values: { eu: {}, us: {} } },
+  }
+
+  async function boardUnderLibrary(keys: Record<string, unknown> = library) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'api',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'api',
+            tags: ['health:ok'],
+          }),
+        ],
+        edges: [],
+      })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, LIBRARY_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, { 'visual.tags/v0': { keys } } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: LIBRARY_ID,
+      path: TAG_LIBRARY_PATH,
+      kind: 'markdown',
+    })
+    return store
+  }
+
+  test('refuses a value the library does not admit, on a node, before anything is written', async () => {
+    const store = await boardUnderLibrary()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'api',
+        tags: { add: ['health:degraded'] },
+      }),
+    ).rejects.toThrow(TagLibraryError)
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'api',
+        tags: { add: ['health:degraded'] },
+      }),
+    ).rejects.toThrow(/health:degraded.*node api.*failing, ok/)
+  })
+
+  test('refuses a second value under an exclusive key, and admits one under a key that is not', async () => {
+    const store = await boardUnderLibrary()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'api',
+        tags: { add: ['health:failing'] },
+      }),
+    ).rejects.toThrow(/health is one value at a time.*node api.*health:ok and health:failing/)
+    const two = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'api',
+      tags: { add: ['region:eu', 'region:us'] },
+    })
+    expect(two.updated[0]?.tags).toEqual(['health:ok', 'region:eu', 'region:us'])
+  })
+
+  test('a rename through the board is checked on every node it reaches', async () => {
+    const store = await boardUnderLibrary()
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { rename: [{ from: 'health:ok', to: 'health:degraded' }] },
+      }),
+    ).rejects.toThrow(/health:degraded.*node api/)
+  })
+
+  test('a markdown document’s own tags are checked too', async () => {
+    const store = await boardUnderLibrary()
+    await seedDoc(store, SECOND_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags: [] })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, SECOND_ID)
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [SECOND_ID],
+        tags: { add: ['region:asia'] },
+      }),
+    ).rejects.toThrow(/region:asia.*document.*eu, us/)
+  })
+
+  test('a batch refused on its second document has written nothing to its first', async () => {
+    // `region` exclusive; the note (second in the batch) already carries
+    // region:eu, so adding region:us is refused there — and the board,
+    // first in the batch and unobjectionable on its own, must be untouched.
+    const store = await boardUnderLibrary({
+      region: { exclusive: true, values: { eu: {}, us: {} } },
+    })
+    await seedDoc(store, SECOND_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags: ['region:eu'] })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, SECOND_ID, 'note')
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID, SECOND_ID],
+        tags: { add: ['region:us'] },
+      }),
+    ).rejects.toThrow(TagLibraryError)
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    if (loaded === null) throw new Error('nothing stored')
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    expect(readSpatialCanvas(doc).tags).toBeUndefined()
+  })
+
+  test('a tag write lists the workspace once to find the library; a facets-only write never does', async () => {
+    const store = await boardUnderLibrary()
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    const tool = createFacetSetTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'api',
+      tags: { add: ['region:eu'] },
+    })
+    expect(listings).toBe(1)
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      nodeId: 'api',
+      facets: { 'example.kanban/v1': { status: 'todo' } },
+    } as never)
+    expect(listings).toBe(1)
+  })
+})
+
+describe('the scoped-tag grammar is checked where a tag is written (ADR-0040 decision 1)', () => {
+  test('a tag with a colon that is not key:value is refused with the rule', () => {
+    const result = facetSetInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['Health:failing'] },
+    })
+    expect(result.success).toBe(false)
+    if (result.success) return
+    const message = result.error.issues.map((issue) => issue.message).join('\n')
+    expect(message).toContain('Health:failing')
+    expect(message).toContain(SCOPED_TAG_RULE)
+  })
+
+  test('a plain tag and a well-formed scoped tag pass; removal is by name and never checked', () => {
+    expect(
+      facetSetInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { add: ['Machine Learning', 'health:failing'], remove: ['Health:failing'] },
+      }).success,
+    ).toBe(true)
   })
 })

@@ -38,6 +38,8 @@ type PassedThrough = Pick<
   | 'agentTouchedNodeIds'
   | 'threads'
   | 'proposals'
+  | 'tagLibrary'
+  | 'tagSuggestions'
 >
 
 export interface SpatialEditorPaneProps extends PassedThrough {

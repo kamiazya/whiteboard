@@ -17,12 +17,16 @@ import {
   type CreateGrantResponse,
   createGrantRequestSchema,
   createGrantResponseSchema,
+  type ListCredentialsResponse,
   type ListGrantsResponse,
+  listCredentialsResponseSchema,
   listGrantsResponseSchema,
   type PairingTokenResponse,
   pairingTokenNonceSchema,
   pairingTokenRequestSchema,
   pairingTokenResponseSchema,
+  type RegisterCredentialRequest,
+  registerCredentialRequestSchema,
 } from './pairing.js'
 import { roundtrip } from './roundtrip.test-helper.js'
 
@@ -197,5 +201,48 @@ describe('createGrantRequestSchema / createGrantResponseSchema roundtrip', () =>
   it('rejects an extra field on either side (strict)', () => {
     expect(createGrantRequestSchema.safeParse({ ...request, extra: 1 }).success).toBe(false)
     expect(createGrantResponseSchema.safeParse({ ...response, extra: 1 }).success).toBe(false)
+  })
+})
+
+describe('credential pin schemas', () => {
+  const request: RegisterCredentialRequest = {
+    credentialId: 'Y3JlZC0x',
+    publicKey: 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE',
+    authenticatorData: 'YXV0aA',
+  }
+
+  it('roundtrips a registration request and refuses padding, an origin field, and a missing key', () => {
+    const result: RegisterCredentialRequest = roundtrip(registerCredentialRequestSchema, request)
+    expect(result).toEqual(request)
+    expect(
+      registerCredentialRequestSchema.safeParse({ ...request, credentialId: 'Y3JlZA==' }).success,
+    ).toBe(false)
+    // The origin is the Origin header's to say, never the body's.
+    expect(
+      registerCredentialRequestSchema.safeParse({ ...request, origin: 'https://a.example' })
+        .success,
+    ).toBe(false)
+    const { publicKey: _omit, ...missing } = request
+    expect(registerCredentialRequestSchema.safeParse(missing).success).toBe(false)
+  })
+
+  it('roundtrips the list response and refuses a pin that carries its key', () => {
+    const valid: ListCredentialsResponse = {
+      credentials: [
+        {
+          credentialId: 'Y3JlZC0x',
+          origin: 'https://latest.kamiazya-whiteboard.pages.dev',
+          backupEligible: true,
+          createdAt: '2026-09-16T00:00:00.000Z',
+        },
+      ],
+    }
+    const result: ListCredentialsResponse = roundtrip(listCredentialsResponseSchema, valid)
+    expect(result).toEqual(valid)
+    expect(
+      listCredentialsResponseSchema.safeParse({
+        credentials: [{ ...valid.credentials[0], publicKeyJwk: { kty: 'EC' } }],
+      }).success,
+    ).toBe(false)
   })
 })

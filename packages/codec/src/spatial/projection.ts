@@ -146,6 +146,14 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   'facets/*': EXTENSION,
   'nodes[].facets/*': EXTENSION,
   'edges[].facets/*': EXTENSION,
+
+  // Tags (ADR-0040 decision 2). JSON Canvas 1.0 has no classification
+  // vocabulary of its own, so a board's, a box's and a relation's tags ride
+  // the extension key at each site and a strict reader keeps the content
+  // and loses what it was called. A line carries none, so there is no row.
+  'tags[]': EXTENSION,
+  'nodes[].tags[]': EXTENSION,
+  'edges[].tags[]': EXTENSION,
 }
 
 export interface LossEntry {
@@ -229,6 +237,7 @@ export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
     ...(canvas.comments !== undefined && { comments: canvas.comments }),
     ...(canvas.lines !== undefined && { lines: canvas.lines.map(projectLine) }),
     ...(canvas.facets !== undefined && { facets: canvas.facets }),
+    ...(canvas.tags !== undefined && { tags: canvas.tags }),
   }
   return {
     nodes: canvas.nodes.map(projectNode),
@@ -257,6 +266,7 @@ export function fromJsonCanvas(wire: JsonCanvasDocument): SpatialCanvas {
     ...(extension?.comments !== undefined && { comments: extension.comments }),
     ...(extension?.lines !== undefined && { lines: extension.lines }),
     ...(extension?.facets !== undefined && { facets: extension.facets }),
+    ...(extension?.tags !== undefined && { tags: extension.tags }),
   }
 }
 
@@ -278,6 +288,7 @@ function liftNode(node: JsonCanvasNode): SpatialNode {
     ...(node.color !== undefined && { color: node.color }),
     ...(embed !== undefined && { embed }),
     ...(extension?.facets !== undefined && { facets: extension.facets }),
+    ...(extension?.tags !== undefined && { tags: extension.tags }),
   }
   // The FORMAT keeps its four-armed discriminant — JSON Canvas 1.0 is not
   // changing — and the model no longer has one (ADR-0038 decision 3), so this
@@ -326,6 +337,7 @@ function liftEdge(edge: JsonCanvasEdge): CanvasEdge {
     ...(edge.color !== undefined && { color: edge.color }),
     ...(edge.label !== undefined && { label: edge.label }),
     ...(edge['x-whiteboard']?.facets !== undefined && { facets: edge['x-whiteboard'].facets }),
+    ...(edge['x-whiteboard']?.tags !== undefined && { tags: edge['x-whiteboard'].tags }),
     ...(edge['x-whiteboard']?.bends !== undefined && { bends: edge['x-whiteboard'].bends }),
   }
 }
@@ -408,9 +420,10 @@ function liftEndpoint(
  */
 function edgeExtension(edge: CanvasEdge): JsonCanvasEdge['x-whiteboard'] {
   const bends = edge.bends?.map((bend) => ({ x: roundPixel(bend.x), y: roundPixel(bend.y) }))
-  if (edge.facets === undefined && bends === undefined) return undefined
+  if (edge.facets === undefined && edge.tags === undefined && bends === undefined) return undefined
   return {
     ...(edge.facets !== undefined && { facets: edge.facets }),
+    ...(edge.tags !== undefined && { tags: edge.tags }),
     ...(bends !== undefined && { bends }),
   }
 }
@@ -482,8 +495,12 @@ function nodeExtension(node: SpatialNode): JsonCanvasNode['x-whiteboard'] {
       documentId: node.embed.documentId,
       ...(node.embed.versionRef !== undefined && { versionRef: node.embed.versionRef }),
       ...(node.facets !== undefined && { facets: node.facets }),
+      ...(node.tags !== undefined && { tags: node.tags }),
     }
   }
-  if (node.facets !== undefined) return { facets: node.facets }
-  return undefined
+  if (node.facets === undefined && node.tags === undefined) return undefined
+  return {
+    ...(node.facets !== undefined && { facets: node.facets }),
+    ...(node.tags !== undefined && { tags: node.tags }),
+  }
 }

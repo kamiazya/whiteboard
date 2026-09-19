@@ -139,13 +139,15 @@ overrides:
   # over text, never sharp's image decoding or adm-zip's archive reading.
   # Drop each entry once transformers depends on a patched range itself.
   #
-  # adm-zip stays at 0.6.0 because there is nowhere else to go: the symlink
-  # advisory GHSA-vwc7-r8mq-g2x9 names >=0.6.1 and adm-zip has published no
-  # such version (latest is 0.6.0, and `^0.6.1` fails the install outright).
-  # It is moderate, so it does not reach the `--audit-level=high` gate; the
-  # entry still lifts the 0.5.x copies. Raise it when 0.6.1 ships.
+  # adm-zip was pinned at 0.6.0 with a note to raise it when 0.6.1 shipped:
+  # the symlink advisory GHSA-vwc7-r8mq-g2x9 (moderate) named >=0.6.1 and no
+  # such version existed. 0.6.1 shipped, and what forced the move is a second
+  # advisory against the same range — GHSA-7q85-xj36-vmfc, uncontrolled
+  # memory allocation from a declared uncompressed size, HIGH, so unlike the
+  # symlink one it reaches the `--audit-level=high` gate and fails CI's
+  # `check` job on every branch until the override is raised.
   sharp@<0.35.4: ^0.35.4
-  adm-zip@<0.6.0: ^0.6.0
+  adm-zip@<0.6.1: ^0.6.1
   # GHSA-gqvv-2mrq-wpjv + GHSA-g6gw-c38x-mqfc + GHSA-crvj-82cr-hjcx
   # (moderate x3), all cleared at 4.13.5. Unlike the entries above this one
   # DOES reach the published runtime: hono is a declared dependency of both
@@ -223,3 +225,11 @@ allowBuilds:
 
 patchedDependencies:
   mdast-util-gfm-task-list-item@2.0.0: patches/mdast-util-gfm-task-list-item@2.0.0.patch
+  # The runner builds each mutant's test filter from ids that join suite and
+  # test names with a space; vitest 5 matches that regex against names joined
+  # with ' > ', so a test inside a `describe` never matched and a mutant
+  # covered only by such tests ran ZERO tests and was reported Survived —
+  # 15 of 15 on scene-bounds.ts's legend band, each killed by hand. Upstream
+  # 10.0.0 still joins with a space. Measured 2026-09-16; see
+  # package-canvas-render.md's mutation section.
+  '@stryker-mutator/vitest-runner@9.6.1': patches/@stryker-mutator__vitest-runner@9.6.1.patch

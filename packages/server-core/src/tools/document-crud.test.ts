@@ -604,3 +604,66 @@ describe('wbDocumentDelete document teardown seam', () => {
     expect(events).toEqual([])
   })
 })
+
+describe('wbDocumentCreate and a workspace tag library (ADR-0040 decision 5)', () => {
+  // Declared through the ordinary authoring path — a document at `tags`
+  // whose OKF frontmatter carries the facet — so the fixture exercises the
+  // same write a person or an agent would make.
+  const LIBRARY = [
+    '---',
+    'type: note',
+    'facets:',
+    '  visual.tags/v0:',
+    '    keys:',
+    '      health:',
+    '        exclusive: true',
+    '        values:',
+    '          ok: { color: "4" }',
+    '          failing: { color: "1" }',
+    '---',
+    'The vocabulary this workspace holds itself to.',
+  ].join('\n')
+
+  async function workspaceWithLibrary(): Promise<ServerDeps> {
+    const deps = await makeDeps()
+    await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'tags',
+      kind: 'markdown',
+      markdown: LIBRARY,
+    })
+    return deps
+  }
+
+  it('refuses a frontmatter tag the library does not admit, and mints no document for it', async () => {
+    const deps = await workspaceWithLibrary()
+
+    await expect(
+      wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'services/api',
+        kind: 'markdown',
+        markdown: '---\ntype: note\ntags:\n  - health:unknown\n---\nBody.',
+      }),
+    ).rejects.toThrow(/health:unknown/)
+
+    // The refusal is taken before the mint, the way the OKF parse already
+    // is: a refused body leaves no empty document behind for the caller to
+    // find and wonder about.
+    const listed = await wbDocumentList(deps, { workspaceId: WS })
+    expect(listed.documents.map((entry) => entry.path)).toEqual(['tags'])
+  })
+
+  it('creates a document carrying a tag the library admits', async () => {
+    const deps = await workspaceWithLibrary()
+
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'services/api',
+      kind: 'markdown',
+      markdown: '---\ntype: note\ntags:\n  - health:ok\n---\nBody.',
+    })
+
+    expect(created.path).toBe('services/api')
+  })
+})

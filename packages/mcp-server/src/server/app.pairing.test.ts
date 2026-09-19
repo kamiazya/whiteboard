@@ -26,6 +26,7 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createPairingGrantStore } = await import('./security/pairing-grant-store.js')
+const { createWebAuthnCredentialStore } = await import('./security/webauthn-credential-store.js')
 const { computeS256Challenge, createPairingCodeStore, createPairingTokenStore } = await import(
   './security/pairing-session.js'
 )
@@ -39,6 +40,7 @@ function makeApp() {
     grants,
     codes: createPairingCodeStore(),
     tokens: createPairingTokenStore(),
+    credentials: createWebAuthnCredentialStore(join(tmp.dir, 'data')),
   }
   const envOrigins: readonly string[] = []
   const app = createApp({

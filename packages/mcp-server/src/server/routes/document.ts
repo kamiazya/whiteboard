@@ -1,6 +1,7 @@
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
+import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import {
@@ -50,6 +51,8 @@ export interface DocumentRouterOptions {
   onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
   /** This daemon as an OKF actor — see `VersionsRouterOptions.daemonActor`. */
   daemonActor?: string
+  /** Passkey pins for the promote route (ADR-0039); see `WorkspaceDocumentRouterOptions`. */
+  credentials?: WebAuthnCredentialStore
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -102,6 +105,8 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
     createWorkspaceDocumentRouter({
       triggerAutoVersion,
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+      ...(options.credentials === undefined ? {} : { credentials: options.credentials }),
+      ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
     }),
   )
   app.route(

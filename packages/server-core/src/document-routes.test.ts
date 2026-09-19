@@ -97,6 +97,52 @@ describe('canvas CRUD routes', () => {
     }
   })
 
+  it('POST a markdown document whose tag the workspace library forbids returns 400, not 500', async () => {
+    const app = makeApp()
+    // The library is a document like any other, declared through the same
+    // route the refused create below uses.
+    const library = [
+      '---',
+      'type: note',
+      'facets:',
+      '  visual.tags/v0:',
+      '    keys:',
+      '      health:',
+      '        values:',
+      '          ok: { color: "4" }',
+      '          failing: { color: "1" }',
+      '---',
+      'The vocabulary this workspace holds itself to.',
+    ].join('\n')
+    await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'tags',
+        kind: 'markdown',
+        markdown: library,
+        createWorkspace: true,
+      }),
+    })
+
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'services/api',
+        kind: 'markdown',
+        markdown: '---\ntype: note\ntags:\n  - health:unknown\n---\nBody.',
+      }),
+    })
+
+    // A well-formed request the workspace's own declaration refuses: only
+    // the caller can pick an admitted value, so it is theirs to fix.
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      error: expect.stringContaining('health:unknown'),
+    })
+  })
+
   it('GET list returns 200 with an array', async () => {
     const app = makeApp()
     await app.request('/api/v1/workspaces/ws-1/documents', {

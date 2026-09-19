@@ -280,8 +280,19 @@ describe('the two-axis verifier', () => {
     return { ...(node.facets ?? {}), 'ops.status/v0': { status } }
   }
 
+  /**
+   * The same box, its health recorded as a SCOPED TAG (ADR-0040): the key
+   * `health` partitions the boxes with no declaration, which is the reading
+   * `semantic.class/v0` used to have and no longer does.
+   */
+  const healthTag = (status: string) => [`health:${status}`]
+
   /** The JSON Canvas projection `wb_document_get` answers, with facets. */
-  const fleetContent = (boxes: readonly Box[], axes: readonly string[]) =>
+  const fleetContent = (
+    boxes: readonly Box[],
+    axes: readonly string[],
+    tagsOf?: (status: string) => readonly string[],
+  ) =>
     JSON.stringify({
       nodes: boxes.map((b, i) => ({
         id: b.id,
@@ -292,7 +303,10 @@ describe('the two-axis verifier', () => {
         width: 200,
         height: 80,
         color: b.color,
-        'x-whiteboard': { facets: dressed(b.stencil, b.status) },
+        'x-whiteboard': {
+          facets: dressed(b.stencil, b.status),
+          ...(tagsOf === undefined ? {} : { tags: tagsOf(b.status) }),
+        },
       })),
       edges: [],
       'x-whiteboard': { facets: { 'visual.axes/v0': { axes: [...axes] } } },
@@ -313,6 +327,18 @@ describe('the two-axis verifier', () => {
 
   it('passes a board whose colour carries a DECLARED axis and whose shape carries the stencil', async () => {
     await expect(verify(fleetContent(FLEET_BOXES, ['ops.status/v0']))).resolves.toMatchObject({
+      ok: true,
+    })
+  })
+
+  it('passes a board whose colour carries a SCOPED TAG key with NO axis declared', async () => {
+    // The end-to-end proof that a tag key reaches the lane: same pixels as
+    // the declared case, the health recorded as `health:<status>` on each
+    // box, and `visual.axes/v0` absent. The case below is its negative
+    // control — the same board with an invented facet key and no
+    // declaration refuses — so the pair discriminates on exactly the thing
+    // the key buys.
+    await expect(verify(fleetContent(FLEET_BOXES, [], healthTag))).resolves.toMatchObject({
       ok: true,
     })
   })

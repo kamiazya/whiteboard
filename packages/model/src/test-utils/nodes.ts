@@ -26,6 +26,7 @@ interface NodeFields {
   color?: CanvasColor
   embed?: NodeEmbed
   facets?: ExtensionFacets
+  tags?: string[]
 }
 
 /**

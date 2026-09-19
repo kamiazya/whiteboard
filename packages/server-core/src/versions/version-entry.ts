@@ -48,6 +48,60 @@ export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export const requestOperatorSchema = operatorInfoSchema.omit({ actor: true }).strict()
 export type RequestOperator = z.infer<typeof requestOperatorSchema>
 
+const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+
+/**
+ * RFC 4648 §3.5's canonical form, which the alphabet alone does not give: a
+ * length of 1 mod 4 encodes no whole byte, and the bits of the last
+ * character that no byte reaches must be zero — `AB` and `AA` would
+ * otherwise decode to the same byte, and a wire contract that admits two
+ * spellings of one value is not one encoding.
+ */
+function isCanonicalBase64url(value: string): boolean {
+  const remainder = value.length % 4
+  if (remainder === 1) return false
+  if (remainder === 0) return true
+  const last = BASE64URL_ALPHABET.indexOf(value.charAt(value.length - 1))
+  const unusedBits = remainder === 2 ? 4 : 2
+  return last >= 0 && (last & ((1 << unusedBits) - 1)) === 0
+}
+
+/**
+ * Canonical unpadded base64url — what WebAuthn hands a page, and what
+ * `Buffer` reads back without a padding step. Padding, the `+/` alphabet
+ * and a non-canonical tail are refused rather than normalised, so exactly
+ * one spelling of a value travels.
+ */
+export const base64urlSchema = z
+  .string()
+  .min(1)
+  .regex(/^[A-Za-z0-9_-]+$/, 'unpadded base64url')
+  .refine(isCanonicalBase64url, 'canonical unpadded base64url')
+
+/**
+ * The evidence a person was present when a row was written (ADR-0039).
+ *
+ * The RAW assertion, not a verdict: `authenticatorData`, `clientDataJSON` and
+ * the ES256 signature exactly as the authenticator emitted them, so anyone
+ * holding the pinned public key can re-verify later. That is why `actor` is
+ * not here — decision 7 keeps the credential out of content and ADR-0035
+ * decision 2 keeps a browser row's `actor` empty; the credential is named by
+ * `credentialId` and resolved through the daemon's pin. Backup eligibility
+ * is not a field either: it is a flag inside `authenticatorData`, and storing
+ * it twice is how the two would drift.
+ *
+ * `kind` is a discriminator with one member so a second attestation format
+ * can arrive as a union rather than a rewrite.
+ */
+export const attestationSchema = z.object({
+  kind: z.literal('webauthn'),
+  credentialId: base64urlSchema,
+  authenticatorData: base64urlSchema,
+  clientDataJSON: base64urlSchema,
+  signature: base64urlSchema,
+})
+export type Attestation = z.infer<typeof attestationSchema>
+
 /**
  * One row of a document's version history, as every surface publishes it —
  * the HTTP list route, the `version_created` broadcast, and the
@@ -74,6 +128,13 @@ export const versionEntrySchema = z.object({
    * say WHY. This is the merge commit's message.
    */
   restoredFrom: z.string().optional(),
+  /**
+   * The evidence a person was present when this row was written, when the
+   * operation asked for it (ADR-0039 decision 4). Beside the claim, never its
+   * source: the row is human-reviewed by `operator.kind` and `auto`, and this
+   * is what a reader's "verified" badge rests on. Absent means not asked.
+   */
+  attestation: attestationSchema.optional(),
 })
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 

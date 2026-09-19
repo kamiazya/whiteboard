@@ -35,7 +35,25 @@ export function createDaemonFilesSource(
   daemonBaseUrl: string,
   workspaceId: string,
 ): WorkspaceFilesSource {
+  // Both tag readers are one route; a caller asking for both in one breath
+  // (the vocabulary hook) pays one round trip, and the next ask after they
+  // settle fetches afresh.
+  let tagsInFlight: ReturnType<typeof getWorkspaceDocumentTags> | null = null
+  const documentTags = () => {
+    tagsInFlight ??= getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId).finally(
+      () => {
+        tagsInFlight = null
+      },
+    )
+    return tagsInFlight
+  }
   return {
+    async listTagsInUse() {
+      return (await documentTags()).inUse
+    },
+    async readTagLibrary() {
+      return (await documentTags()).library
+    },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       try {
         // Names ride alongside the list for their pinned[] — pin order is
@@ -52,6 +70,11 @@ export function createDaemonFilesSource(
         ])
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
         const tagsById = new Map((tagRes?.documents ?? []).map((doc) => [doc.documentId, doc.tags]))
+        // What a board's boxes and edges carry, so the `#tag` filter finds
+        // the board a chip counted from boxes is about (ADR-0040 decision 3).
+        const carriedById = new Map(
+          (tagRes?.contents ?? []).map((doc) => [doc.documentId, doc.tags]),
+        )
         return res.documents.map((entry) => ({
           documentId: entry.id,
           path: entry.path,
@@ -61,6 +84,9 @@ export function createDaemonFilesSource(
           ...(entry.contentDigest === undefined ? {} : { contentDigest: entry.contentDigest }),
           ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
           ...(tagsById.has(entry.id) ? { tags: tagsById.get(entry.id) as readonly string[] } : {}),
+          ...(carriedById.has(entry.id)
+            ? { carriedTags: carriedById.get(entry.id) as readonly string[] }
+            : {}),
           ...(pinIndex.has(entry.path) ? { pinOrder: pinIndex.get(entry.path) as number } : {}),
         }))
       } catch (err) {

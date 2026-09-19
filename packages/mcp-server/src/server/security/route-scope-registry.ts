@@ -72,6 +72,11 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // whole workspace document. Same tier as the per-document equivalents —
   // a workspace-granularity update is still a canvas mutation, just scoped
   // wider, and the snapshot answers the same content canvas:read grants.
+  // Promotion merges the record AND writes explicit checkpoints for it
+  // (ADR-0039), so it needs what both of those need.
+  if (/^\/api\/w\/[^/]+\/workspace-document\/promote$/.test(path) && method === 'POST') {
+    return { kind: 'scoped', scopes: ['canvas:write', 'versions:write'] }
+  }
   if (/^\/api\/w\/[^/]+\/workspace-document\/(snapshot|update)$/.test(path)) {
     return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
   }
@@ -212,6 +217,13 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // management surface, including DELETE /api/pairing/grants/:grantId)
   // sit behind the same bar.
   if (path === '/api/pairing/grants' || path.startsWith('/api/pairing/grants/')) {
+    return { kind: 'scoped', scopes: ['runtime:admin'] }
+  }
+  // Credential pins (ADR-0039) sit at the same bar as grants: a pin is what
+  // an attestation is verified against, so planting or revoking one is the
+  // consent surface's, not a scoped OAuth client's. A paired origin's
+  // session token reaches it the way it reaches grant management.
+  if (path === '/api/pairing/credentials' || path.startsWith('/api/pairing/credentials/')) {
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
 

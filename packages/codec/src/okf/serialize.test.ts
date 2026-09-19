@@ -36,6 +36,21 @@ describe('serializeOkf', () => {
     expect(result.value.body).toBe('body text')
   })
 
+  it('keeps a last value that ends in a Unicode space, which JS trimEnd() would take', () => {
+    // U+2000 and U+00A0 are whitespace to `String.prototype.trimEnd` and
+    // printable characters to YAML, so yaml writes them bare at the end of
+    // the last line; a trimEnd() over the whole text then left `view:` with
+    // nothing after it, and parseOkf read the value back as null. Found by
+    // the round-trip property (seed -1838762366).
+    for (const view of ['\u2000', 'x\u00a0']) {
+      const text = serializeOkf({ frontmatter: { type: 'note', view }, body: '' })
+      const result = parseOkf(text)
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.value.frontmatter.view).toBe(view)
+    }
+  })
+
   it('surfaces a typed error instead of throwing when a facet value is not yaml-safe', () => {
     expect(() =>
       serializeOkf({

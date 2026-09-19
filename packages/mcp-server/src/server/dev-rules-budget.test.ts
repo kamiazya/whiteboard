@@ -127,7 +127,17 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // the mutation checks and the scoping argument are `lefthook.yml`'s comment
   // and `pre-push-entry.test.ts`, which is where someone editing the gate
   // reads them. The first draft put all of that here and cost two buckets.
-  '.claude/rules/dev-flow.md': 29,
+  //
+  // 30 since the scheduled advisory watch (`audit.yml`) joined the cloud
+  // gates. It belongs in the always-on map rather than a skill because it
+  // answers a question a session asks while its OWN push is red for no
+  // reason it can see — is this my diff? — and the answer is a scheduled
+  // run whose failure predates the push. The entry is the mechanism and
+  // the one class nothing else watches (a transitive package behind a
+  // `pnpm-workspace.yaml` override, where only the bound moves and
+  // Dependabot opens no PR); the workflow's own header carries the
+  // measurement.
+  '.claude/rules/dev-flow.md': 30,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat
@@ -192,7 +202,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 24
+const ALWAYS_ON_TOTAL_BUDGET = 25
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
@@ -331,7 +341,51 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // nobody deletes it looking for dead code or invents a router to justify it.
 // Plus the note that an edge with a FREE end is not routed yet, which is a
 // decision rather than an omission.
-const CANVAS_RENDER_BUDGET = 133
+//
+// 134 for kinsoku across an INLINE BOUNDARY, and the bytes go to two things a
+// reader cannot get from the diff. That deciding WHERE a line may break is
+// still delegated to UAX #14 at the junction too — so nobody answers the next
+// such report with a character table, which is the shape the fix does not
+// take. And that an ATOMIC run is still cut against the width it had when it
+// was placed, so a relocated one can fade on a line with room: without that
+// sentence the next reader finds a fade beside empty space and reads the
+// junction rule as broken. The entry was cut from 1900 chars to fit one
+// bucket rather than two; what went was provenance the commit already holds.
+//
+// 134 -> 136 (ADR-0040 increment 2): the facet score's fourth partition — a
+// scoped-tag key, with the `multi` rule and the edges' own reading — is a
+// rule a session in canvas-render pays for because the columns it adds are
+// the ones a diff to the score is judged by; the retired classification
+// facet's paragraph went with it, so the net is one section, not two.
+//
+// 136 -> 137 (ADR-0040 increment 4b): the legend — read off the score, attached
+// by the layout, drawn by the backend into an enveloped document and omitted
+// from the keyed projection — is one paragraph a session in canvas-render
+// pays for because each of those four facts is a seam a change here can
+// break in silence (a legend on a miniature, or a second copy in canvas
+// space).
+//
+// 137 -> 139 (the mutation lane's filter): the paragraph on a survivor judged
+// by zero tests grew from "a runner artefact" to its cause — Stryker's
+// per-mutant test filter joining names with a space where vitest 5 matches
+// ` > `, so no test inside a `describe` ever ran against a mutant — and the
+// two consequences a session here has to carry: the pnpm patch that makes
+// the lane real, and that every score and survivor list before it was read
+// through that filter.
+//
+// 139 -> 140 (ADR-0040 increment 5a): colour by intent is applied to the
+// CANVAS before layout, not in the appearance resolver — one paragraph a
+// session here pays for because the obvious place to put a library's colour
+// is the resolver, and there the score behind the legend would never see it.
+//
+// 140 -> 142 (task #84): the composer's own file is no longer the only file
+// the composer lives in. Two overlay layers and the options vocabulary got
+// their own modules, and what a reader has to be told is not the file list
+// but the DIRECTION — the overlays name the options without importing the
+// thing that builds them, and take the body typesetter as a seam because
+// importing it would close a cycle. A file list would go stale; the rule
+// that decides where the next overlay goes does not.
+const CANVAS_RENDER_BUDGET = 142
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
