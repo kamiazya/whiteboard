@@ -489,7 +489,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // node once instead of four `node?.type` tests that each narrowed their own
   // arm. The block is what costs, and it is not optional — an early return
   // would skip the `applyResult(result)` this handler ends with.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2791,
+  // 2791 -> 2855 for the pen. Three branches, one per pointer phase, each a
+  // few lines of dispatch plus the reason it is where it is: the press has
+  // to sit after the annotation layer's chrome and take capture eagerly,
+  // neither the samples nor the release may be snapped, and the samples are
+  // reduced from the gesture MIRROR rather than the render's closure —
+  // `pointermove` outruns React's commit, and a stroke accumulates where
+  // every other gesture recomputes, so reading the closure drops all but the
+  // first sample. The stroke's own arithmetic is `lib/spatial/freehand.ts`,
+  // its state machine is the gesture reducer's `drawing` arm, and what the
+  // hand watches is a new `InkDraftLayer.tsx` — so what stayed here is the
+  // wiring only, which is what this file is for.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2855,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

@@ -141,6 +141,7 @@ import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import { InkDraftLayer } from './InkDraftLayer.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
@@ -732,6 +733,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         setSnapGuides(null)
       }
       setGestureState(result.state)
+      // The mirror is advanced HERE as well as at render, because a handler
+      // that runs before React re-renders would otherwise reduce against the
+      // previous gesture. It matters for exactly one gesture — a stroke,
+      // which accumulates rather than recomputing from its start — and the
+      // browser delivers `pointermove` faster than React commits.
+      gestureStateRef.current = result.state
       if (result.selectedId !== undefined) {
         applySelection({ type: 'set-primary', id: result.selectedId })
         // A node becoming primary means no edge is selected. Enforced HERE,
@@ -1066,6 +1073,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         pressedProposalRef.current = { id: hitProposalId, startScreen: screenPoint }
         return
       }
+      // The draw tool makes the board a sheet of paper: a press starts a
+      // stroke, with no hit-test at all. It sits after the annotation
+      // layer's own chrome, which floats above the document and keeps its
+      // press. Capture is taken HERE rather than on the first move (the
+      // rule just below), or a stroke that leaves the root stops at its
+      // edge and the release is never seen.
+      if (tool === 'draw') {
+        capturePointer(root, e.pointerId)
+        applyResult(
+          reduceGesture(gestureState, canvas, {
+            type: 'pointerdown-draw',
+            point,
+            zoom: viewport.zoom,
+          }),
+        )
+        return
+      }
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
       // the press bubbled from never receives its click. Capture is taken
@@ -1340,7 +1364,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
         return
       }
-      if (gestureState.kind === 'idle') return
+      if (gestureState.kind === 'idle' && gestureStateRef.current.kind !== 'drawing') return
+      // Unsnapped: snapping lines an object up with its neighbours, and a
+      // hand-drawn stroke has no such intent — a guide would redraw it.
+      //
+      // Reduced from the PREVIOUS state through a functional update rather
+      // than through `applyResult`, and that is the difference between a
+      // stroke and a straight line: `pointermove` is a continuous event, so
+      // the browser delivers several before React re-renders, and a handler
+      // reducing from its own render's `gestureState` has each move
+      // overwrite the last. Measured on a 61-sample wave drawn in one turn:
+      // ONE bend survived. No other gesture needs this — they all recompute
+      // from their start snapshot and the current point, and accumulate
+      // nothing.
+      if (gestureStateRef.current.kind === 'drawing') {
+        applyResult(
+          reduceGesture(gestureStateRef.current, canvasRef.current, {
+            type: 'pointermove',
+            point: screenToCanvas(screenPoint, viewport),
+          }),
+        )
+        return
+      }
       const snapped = snapGesturePoint(
         screenToCanvas(screenPoint, viewport),
         e.metaKey || e.ctrlKey,
@@ -1503,6 +1548,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
+      // Unsnapped like its samples: the ink ends where the hand stopped.
+      if (gestureStateRef.current.kind === 'drawing') {
+        applyResult(
+          reduceGesture(
+            gestureStateRef.current,
+            canvasRef.current,
+            { type: 'pointerup', point: screenToCanvas(screenPoint, viewport) },
+            { createId },
+          ),
+        )
+        return
+      }
       // Snapped with the same helper the preview used, so the box commits
       // exactly where the last frame drew it.
       const point = snapGesturePoint(
@@ -2482,6 +2539,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }
             />
             {marquee !== null && <MarqueeOverlay marquee={marquee} zoom={viewport.zoom} />}
+            {gestureState.kind === 'drawing' && (
+              <InkDraftLayer
+                points={gestureState.points}
+                zoom={viewport.zoom}
+                stroke={palette.edgeStroke}
+              />
+            )}
             {snapGuides !== null && (
               <SnapGuidesOverlay guides={snapGuides} boxes={boxes} zoom={viewport.zoom} />
             )}

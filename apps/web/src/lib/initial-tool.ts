@@ -3,9 +3,9 @@ import type { EditorTool } from './editor-tool.js'
 const KEY = 'wb.lastTool'
 
 /**
- * Only the two resting tools are remembered. `connect` is a transient
- * drawing mode — restoring it would drop the user into edge-drawing on a
- * canvas they just opened.
+ * Only the two resting tools are remembered. `connect` and `draw` are
+ * transient marking modes — restoring either would drop the user into
+ * drawing on a canvas they just opened.
  */
 type RestingTool = Extract<EditorTool, 'select' | 'hand'>
 

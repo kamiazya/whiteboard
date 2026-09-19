@@ -97,6 +97,28 @@ This is the distinction OCIF makes and JSON Canvas does not, which is the
 whole argument for taking it: it is not our taste, it is a second designer
 arriving at the same place from outside.
 
+*Supplement (2026-09-19): freehand is a line, and v1 carries no pressure.*
+A hand-drawn stroke lands in `lines` — its ends are the two points the pointer
+went down and came up at, and everything in between is the line's `bends`. No
+third concept, no fourth collection, and nothing for a projection's ledger to
+grow: both tables already carry every position a line has.
+
+PRESSURE is the one thing that shape cannot hold, and it is deliberately
+DROPPED for v1 rather than modelled ahead of a user. When a stroke needs it, it
+arrives as a `stroke` FACET on the line — a plugin's field, the way every other
+per-element extra is (ADR-0013) — so the core model, both projections and their
+two ledgers stay exactly as they are. The rejected alternatives are a core
+`samples` field (a row in every ledger, degraded in both formats, for a feature
+nobody has asked for) and a fourth collection (a new element kind, and the
+`lines` split exists precisely to avoid needing one).
+
+What a stroke stores is bounded rather than raw: the samples are simplified to
+the turns that carry its shape, and a budget caps what one stroke can write
+into a document the CRDT merges forever (`apps/web/src/lib/spatial/
+freehand.ts`). A straight stroke still stores a point, because a point-ended
+line with no bends is ROUTED — measured, a stroke drawn past one node came back
+as an orthogonal detour.
+
 ### 3. TEXT is a resource, not a field on a node kind.
 
 The node-kind union (`text | file | link | group`) is inherited from JSON

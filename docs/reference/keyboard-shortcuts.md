@@ -19,9 +19,10 @@ Two rules hold for the whole table:
 | — | Hand (pan) — the tool a canvas opens in; drag anywhere to pan |
 | — | Select — click to select, drag to marquee |
 | — | Connect — click one node, then another, to draw an edge |
+| — | Draw — drag across the board to leave a freehand stroke |
 | `Space` + drag | Pan from any tool, without leaving it |
 
-The three tools live in the bottom dock. On touch, two-finger drag pans and
+The four tools live in the bottom dock. On touch, two-finger drag pans and
 pinch zooms in every tool.
 
 ## Selection and editing

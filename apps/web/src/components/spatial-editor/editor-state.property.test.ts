@@ -67,6 +67,7 @@ import {
   recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
+import type { EditorTool } from '../../lib/editor-tool.js'
 import {
   applyCommand,
   buildFragmentInsertCommand,
@@ -378,6 +379,7 @@ const GESTURE_EVENT_COVERAGE = {
   'pointerdown-handle': 'covered',
   'pointerdown-connect': 'covered',
   'pointerdown-empty': 'covered',
+  'pointerdown-draw': 'covered',
   'dblclick-empty': 'covered',
   'delete-selection': 'covered',
   pointermove: 'covered',
@@ -467,6 +469,8 @@ interface Stats {
   handPressesIgnored: number
   handEntries: number
   connectArms: number
+  /** Strokes that really became ink — not presses in the draw tool. */
+  inkStrokes: number
   toolSwitches: number
   /** Move commits that carried at least one node besides the grabbed one. */
   carriedMoves: number
@@ -519,7 +523,7 @@ interface Real {
    * all, and `connect` re-routes a node press to `pointerdown-connect`
    * instead of starting a move.
    */
-  tool: 'select' | 'hand' | 'connect'
+  tool: EditorTool
   /**
    * The rubber-band rectangle, armed by a press that hit no node. While
    * it is armed the pointer NEVER reaches the gesture reducer again —
@@ -2058,7 +2062,7 @@ class ClipboardFlow implements fc.Command<Model, Real> {
  * is that no press can change the canvas.
  */
 class SwitchTool implements fc.Command<Model, Real> {
-  constructor(private readonly next: 'select' | 'hand' | 'connect') {}
+  constructor(private readonly next: EditorTool) {}
   check(): boolean {
     return true
   }
@@ -2112,6 +2116,46 @@ class WithTool implements fc.Command<Model, Real> {
   }
   toString(): string {
     return `withTool(${this.tool},#${this.from}→#${this.to})`
+  }
+}
+
+/**
+ * A freehand stroke, tool switch included — ink is only reachable in the
+ * draw tool, and a uniform draw would have to land the switch immediately
+ * before the press to reach this arm at all (the same reason `WithTool`
+ * exists).
+ *
+ * It mirrors `handlePointerDown`'s draw branch: no hit-test, no selection
+ * transition, and the samples unsnapped. The middle sample is deliberately
+ * off the chord, so the stroke has a turn to keep and the run exercises the
+ * simplification rather than only its two-point case.
+ */
+class DrawStroke implements fc.Command<Model, Real> {
+  constructor(
+    private readonly from: Point,
+    private readonly delta: Point,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    new SwitchTool('draw').run(model, real)
+    const to = { x: this.from.x + this.delta.x, y: this.from.y + this.delta.y }
+    const before = real.canvas.lines?.length ?? 0
+    dispatch(real, { type: 'pointerdown-draw', point: this.from, zoom: 1 }, this.toString())
+    dispatch(
+      real,
+      {
+        type: 'pointermove',
+        point: { x: (this.from.x + to.x) / 2 + 30, y: (this.from.y + to.y) / 2 - 30 },
+      },
+      `${this.toString()}:move`,
+    )
+    dispatch(real, { type: 'pointerup', point: to }, `${this.toString()}:up`)
+    if ((real.canvas.lines?.length ?? 0) > before) real.stats.inkStrokes += 1
+  }
+  toString(): string {
+    return `draw(${this.from.x},${this.from.y}+${this.delta.x},${this.delta.y})`
   }
 }
 
@@ -2313,6 +2357,7 @@ const allCommands = [
   fc
     .tuple(fc.constantFrom<'hand' | 'connect'>('hand', 'connect'), indexArb, indexArb)
     .map(([t, from, to]) => new WithTool(t, from, to)),
+  fc.tuple(pointArb, nonZeroDeltaArb).map(([from, delta]) => new DrawStroke(from, delta)),
   fc.constant(new GroupSelection()),
   fc
     .tuple(fc.constantFrom<'multi' | 'group'>('multi', 'group'), nonZeroDeltaArb)
@@ -2346,6 +2391,7 @@ describe('editor composite state (command-based)', () => {
     handPressesIgnored: 0,
     handEntries: 0,
     connectArms: 0,
+    inkStrokes: 0,
     toolSwitches: 0,
     carriedMoves: 0,
     groupOrMultiDrags: 0,
@@ -2408,7 +2454,7 @@ describe('editor composite state (command-based)', () => {
     // handoffs 33-44, mid-gesture external replacements 39-54,
     // multi-selections 430-515, nudges 70-98, duplicates 18-30, effective
     // reorders 43-54 (of which forward/backward 16-24), locks applied
-    // 15-28, select-alls 119-139, edge selections 83-95, edge deletes
+    // 15-28, ink strokes 74-85, select-alls 119-139, edge selections 83-95, edge deletes
     // 19-34, copies 33-46, cuts 53-72, cut-moves 13-20, paste-inserts
     // 38-59, reconnections 5-19 (see below), marquee selections 23-30,
     // hand-swallowed presses 53-70, hand entries 43-56, connect arms
@@ -2488,6 +2534,7 @@ describe('editor composite state (command-based)', () => {
     atLeast(stats.handPressesIgnored, 17, 'hand mode never swallowed a press')
     atLeast(stats.handEntries, 14, 'hand mode was never entered')
     atLeast(stats.connectArms, 14, 'the connect tool never armed')
+    atLeast(stats.inkStrokes, 24, 'the draw tool never made ink')
     atLeast(stats.toolSwitches, 60, 'the tool never changed')
     atLeast(stats.carriedMoves, 18, 'no drag ever carried a second node')
     atLeast(stats.groupOrMultiDrags, 18, 'no group or multi-selection was ever dragged')

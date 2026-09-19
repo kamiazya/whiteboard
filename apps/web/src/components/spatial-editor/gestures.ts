@@ -33,6 +33,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
   type Box,
   boxContains,
@@ -109,6 +110,21 @@ interface BendSnapshot {
   readonly waypoints: readonly Point[]
 }
 
+/**
+ * A freehand stroke in progress: every sample the pointer has emitted since
+ * it went down, in canvas coordinates.
+ *
+ * The one gesture that keeps intermediate points, and it has to — see the
+ * `pointermove` arm. `zoom` rides along because what counts as jitter, and
+ * what counts as a tap, are screen distances, and the release has no viewport
+ * to ask.
+ */
+interface DrawSnapshot {
+  readonly kind: 'drawing'
+  readonly points: readonly Point[]
+  readonly zoom: number
+}
+
 interface IdleSnapshot {
   readonly kind: 'idle'
 }
@@ -120,6 +136,7 @@ export type GestureState =
   | ConnectSnapshot
   | EditTextSnapshot
   | BendSnapshot
+  | DrawSnapshot
 
 export function createIdleState(): GestureState {
   return { kind: 'idle' }
@@ -162,6 +179,12 @@ export type GestureEvent =
       readonly dy: number
     }
   | { readonly type: 'pointerdown-empty' }
+  /**
+   * The pen went down on the board. Carries the viewport's zoom for the
+   * screen-sized thresholds in `freehandLine`, since nothing downstream of
+   * here knows the magnification the stroke was drawn at.
+   */
+  | { readonly type: 'pointerdown-draw'; readonly point: Point; readonly zoom: number }
   | { readonly type: 'dblclick-empty'; readonly point: Point }
   | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
@@ -241,6 +264,10 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
     }
     case 'bending':
       return canvas.edges.some((edge) => edge.id === state.edgeId)
+    case 'drawing':
+      // A stroke is drawn ON the board, not on anything in it, so no
+      // element arriving or leaving can invalidate it.
+      return true
   }
 }
 
@@ -569,6 +596,11 @@ export function reduceGesture(
         commands: [{ kind: 'delete-node', id: event.nodeId }],
         selectedId: null,
       }
+    case 'pointerdown-draw':
+      return withPendingTextCommit(
+        state,
+        stateOnly({ kind: 'drawing', points: [event.point], zoom: event.zoom }),
+      )
     case 'pointerdown':
       return withPendingTextCommit(state, reducePointerDown(event, canvas))
     case 'pointerdown-handle':
@@ -660,6 +692,16 @@ export function reduceGesture(
       // its own component-local pointer state (see `computeDragPreview` in
       // drag-preview.ts) — this reducer has no opinion on it one way or the
       // other, and no visual state ever needs to round-trip through here.
+      //
+      // A STROKE is the exception, and it is not a relaxation of that rule
+      // so much as the case the rule cannot cover: the samples ARE the
+      // gesture, and there is nothing to recompute them from at the release.
+      // So the drawing arm accumulates, and the preview reads the same list
+      // the commit will — one path, rather than a component-local copy that
+      // can disagree with what is written.
+      if (state.kind === 'drawing') {
+        return stateOnly({ ...state, points: [...state.points, event.point] })
+      }
       return stateOnly(state)
     case 'pointerup':
       switch (state.kind) {
@@ -671,6 +713,11 @@ export function reduceGesture(
           return reducePointerUpConnecting(state, event, createId, canvas)
         case 'bending':
           return reducePointerUpBending(state, event)
+        case 'drawing': {
+          const line = freehandLine(createId(), [...state.points, event.point], state.zoom)
+          if (line === undefined) return idle
+          return { state: { kind: 'idle' }, commands: [{ kind: 'create-line', line }] }
+        }
         case 'editing-text':
           // A double-press opens the editor on the SECOND pointerdown; that
           // press's own pointerup arrives afterwards and must not tear the

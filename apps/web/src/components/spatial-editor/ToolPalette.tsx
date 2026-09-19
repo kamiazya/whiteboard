@@ -33,6 +33,7 @@ import {
   Image as ImageIcon,
   Link,
   MousePointer2,
+  Pencil,
   Plus,
   Spline,
   StickyNote,
@@ -187,7 +188,7 @@ export function ToolPalette({
       data-testid="tool-palette"
       role="toolbar"
       aria-label="Canvas tools"
-      className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
+      className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md"
     >
       {leading !== undefined && (
         <>
@@ -198,51 +199,74 @@ export function ToolPalette({
       {/* Hand leads the tool group: it is the DEFAULT (navigation-first,
           user decision 2026-08-08), so it sits leftmost where the active
           mode reads first. */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-testid="hand-tool-button"
-            aria-pressed={tool === 'hand'}
-            aria-label="Hand (pan)"
-            onClick={() => onToolChange('hand')}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <Hand aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Hand — drag to pan</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-testid="select-tool-button"
-            aria-pressed={tool === 'select'}
-            aria-label="Select"
-            onClick={() => onToolChange('select')}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <MousePointer2 aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Select</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            data-testid="connect-tool-button"
-            aria-pressed={tool === 'connect'}
-            aria-label="Connect"
-            onClick={() => onToolChange('connect')}
-            className={TOOL_BUTTON_CLASS}
-          >
-            <Spline aria-hidden="true" className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Connect nodes</TooltipContent>
-      </Tooltip>
+      {/* The TOOLS scroll, and nothing else does. The dock is capped to the
+          editor's width, so something has to give on a phone; a tool that has
+          scrolled out of view is still reachable, where a dock hanging off
+          the screen edge is not. The scroller wraps only this group so the
+          "+" menu — which opens upward, inside this same container — is not
+          clipped by an overflow it never needed. */}
+      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-testid="hand-tool-button"
+              aria-pressed={tool === 'hand'}
+              aria-label="Hand (pan)"
+              onClick={() => onToolChange('hand')}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <Hand aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Hand — drag to pan</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-testid="select-tool-button"
+              aria-pressed={tool === 'select'}
+              aria-label="Select"
+              onClick={() => onToolChange('select')}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <MousePointer2 aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Select</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-testid="connect-tool-button"
+              aria-pressed={tool === 'connect'}
+              aria-label="Connect"
+              onClick={() => onToolChange('connect')}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <Spline aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Connect nodes</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-testid="draw-tool-button"
+              aria-pressed={tool === 'draw'}
+              aria-label="Draw"
+              onClick={() => onToolChange('draw')}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <Pencil aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Draw — freehand ink</TooltipContent>
+        </Tooltip>
+      </div>
       <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
       <Tooltip>
         <TooltipTrigger asChild>

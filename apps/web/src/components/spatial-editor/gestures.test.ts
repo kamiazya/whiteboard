@@ -764,3 +764,101 @@ describe('cancel-text-edit removes a node that only existed for the cancelled ed
     expect(typed.commands).toEqual([{ kind: 'set-text', id: 'n-typed', text: 'hello' }])
   })
 })
+
+describe('drawing a freehand stroke', () => {
+  const draw = (points: readonly { x: number; y: number }[]) => {
+    const c = canvas()
+    const first = points[0] as { x: number; y: number }
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-draw',
+      point: first,
+      zoom: 1,
+    })
+    for (const point of points.slice(1)) {
+      result = reduceGesture(result.state, c, { type: 'pointermove', point })
+    }
+    return reduceGesture(result.state, c, {
+      type: 'pointerup',
+      point: points[points.length - 1] as { x: number; y: number },
+      ...{},
+    })
+  }
+
+  it('mints one line carrying the path the pointer took', () => {
+    const result = draw([
+      { x: 0, y: 0 },
+      { x: 40, y: 60 },
+      { x: 90, y: 10 },
+      { x: 140, y: 80 },
+    ])
+    expect(result.state.kind).toBe('idle')
+    expect(result.commands).toHaveLength(1)
+    const [command] = result.commands
+    expect(command?.kind).toBe('create-line')
+    if (command?.kind !== 'create-line') throw new Error('expected a create-line')
+    expect(command.line.from).toEqual({ kind: 'point', point: { x: 0, y: 0 }, end: 'none' })
+    expect(command.line.to).toEqual({ kind: 'point', point: { x: 140, y: 80 }, end: 'none' })
+    expect(command.line.bends).toEqual([
+      { x: 40, y: 60 },
+      { x: 90, y: 10 },
+    ])
+  })
+
+  // The samples ARE the gesture: a stroke cannot be recomputed from where it
+  // started and where it ended, which is the one case the file's
+  // recompute-at-pointerup policy cannot serve.
+  it('keeps the samples on the gesture while the pointer is down', () => {
+    const c = canvas()
+    const down = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-draw',
+      point: { x: 0, y: 0 },
+      zoom: 1,
+    })
+    const moved = reduceGesture(down.state, c, { type: 'pointermove', point: { x: 10, y: 10 } })
+    expect(moved.state).toEqual({
+      kind: 'drawing',
+      zoom: 1,
+      points: [
+        { x: 0, y: 0 },
+        { x: 10, y: 10 },
+      ],
+    })
+    expect(moved.commands).toEqual([])
+  })
+
+  it('draws nothing for a tap', () => {
+    expect(
+      draw([
+        { x: 5, y: 5 },
+        { x: 5, y: 5 },
+      ]).commands,
+    ).toEqual([])
+  })
+
+  it('abandons the stroke when the platform cancels the pointer', () => {
+    const c = canvas()
+    const down = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-draw',
+      point: { x: 0, y: 0 },
+      zoom: 1,
+    })
+    const moved = reduceGesture(down.state, c, { type: 'pointermove', point: { x: 80, y: 80 } })
+    const cancelled = reduceGesture(moved.state, c, { type: 'pointercancel' })
+    expect(cancelled.state.kind).toBe('idle')
+    expect(cancelled.commands).toEqual([])
+  })
+
+  // A stroke is drawn ON the board rather than on anything in it, so a
+  // canvas arriving mid-stroke — a remote edit, a sync — must not take the
+  // stroke away from the hand that is still drawing it.
+  it('survives a canvas swap that lands mid-stroke', () => {
+    const c = canvas()
+    const down = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-draw',
+      point: { x: 0, y: 0 },
+      zoom: 1,
+    })
+    const swapped = reduceGesture(down.state, c, { type: 'canvas-replaced', canvas: c })
+    expect(swapped.state.kind).toBe('drawing')
+  })
+})
