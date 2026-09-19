@@ -493,4 +493,30 @@ describe('backupDataDir and files that must not travel', () => {
       await rm(roots.root, { recursive: true, force: true })
     }
   })
+
+  // The macaroon root key was copied for exactly as long as it existed. A
+  // restore does not rotate it, so a backup holding it mints tokens against
+  // the LIVE daemon — the leak is worse than the daemon token's, which at
+  // least dies with the next spawn. `backup-secret-surface.test.ts` is the
+  // ledger that makes the next such file answer for itself; this is the
+  // assertion that the filter actually drops this one, which a ledger over
+  // the exclusion LIST cannot show.
+  it('leaves the macaroon root key out of the copy', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await writeFile(
+        join(roots.src, 'macaroon-root-key.json'),
+        '{"version":1,"alg":"HMAC-SHA-256","rootKey":"c3VwZXItc2VjcmV0LXJvb3Qta2V5"}',
+      )
+      await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
+
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+
+      const copied = await readdir(roots.backup)
+      expect(copied).not.toContain('macaroon-root-key.json')
+      expect(copied).toContain('whiteboard.db')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
 })

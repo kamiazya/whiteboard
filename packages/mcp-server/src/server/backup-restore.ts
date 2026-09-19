@@ -2,6 +2,7 @@ import { cp, lstat, mkdir, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
+import { MACAROON_ROOT_KEY_FILENAME } from './security/macaroon-root-key.js'
 import type { BackupBlobReferences } from './store/backup-blob-mirror.js'
 import { mirrorRootFor, readBackupBlobManifest } from './store/backup-blob-mirror.js'
 import { BACKUP_MARKER_FILENAME } from './store/backup-in-progress.js'
@@ -181,10 +182,36 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
  *   support, kept for months. It was never present during a backup until
  *   backups could be taken hot, so enabling that is what would have started
  *   leaking it.
+ * - The macaroon root key is the secret every act-plane token chains from
+ *   (ADR-0043), and a restore does NOT rotate it — so a backup holding it
+ *   lets whoever has the backup mint a macaroon with any scopes that
+ *   verifies against the LIVE daemon. It costs only reissuance to lose,
+ *   which `macaroon-root-key.ts` already calls the expected price of
+ *   regeneration, so the exclusion is cheap and the leak is not.
  * - The in-progress marker is this command's own bookkeeping, and a copy of
  *   it in a restored data directory claims a backup is running there.
+ *
+ * This list is the exclusion; `backup-secret-surface.test.ts` is what makes
+ * a file ADDED to the data dir answer for itself, because the copy is
+ * recursive and the default is therefore "copied". The macaroon key was
+ * copied for exactly as long as it existed, which is how that ledger earned
+ * its place.
  */
-const NEVER_COPIED = [PENDING_WRITES_DIRNAME, DAEMON_RECORD_FILENAME, BACKUP_MARKER_FILENAME]
+const NEVER_COPIED = [
+  PENDING_WRITES_DIRNAME,
+  DAEMON_RECORD_FILENAME,
+  MACAROON_ROOT_KEY_FILENAME,
+  BACKUP_MARKER_FILENAME,
+]
+
+/**
+ * Exported for `backup-secret-surface.test.ts`, which classifies every file
+ * the daemon writes into its data directory against this list. The list is
+ * the exclusion; the ledger is what makes adding a file to the data dir ask
+ * whether it belongs in a backup, since the copy is recursive and the default
+ * is therefore "copied".
+ */
+export const NEVER_COPIED_FOR_TESTS: readonly string[] = NEVER_COPIED
 
 /**
  * The database and everything SQLite keeps beside it.
