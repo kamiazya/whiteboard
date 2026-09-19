@@ -1227,7 +1227,7 @@ badge channel or a description that says where a symbol is drawn.
 > canvas draws changed, so counting the badge would credit a distinction no
 > reader of the board can see (the 2026-09-11 correction in ADR-0033 §1).
 
-**The twenty-fourth reading (2026-09-19), lane rounds 20a–20c.** Three runs
+**The twenty-fourth reading (2026-09-19), lane rounds 20a–20d.** Four runs
 of the two-axis task, three trials each, on ONE tree differing only in this
 sentence — so the comparison is the sentence and nothing else.
 

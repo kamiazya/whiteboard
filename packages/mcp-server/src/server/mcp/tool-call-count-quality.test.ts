@@ -283,7 +283,7 @@ describe('what an errand costs in tool calls', () => {
         //
         // And read it beside the row that did NOT move: rung 1 is unchanged
         // to the byte. A facet's payload schema is in no tool's input table,
-        // so this costs ZERO model-visible bytes on every turn and 910 on
+        // so this costs ZERO model-visible bytes on every turn and 1,226 on
         // the one call that asks what a write may name — the same trade
         // `otherTargets` took, and the reason the sentence went here rather
         // than into a tool description.
