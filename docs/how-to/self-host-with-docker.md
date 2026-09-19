@@ -243,15 +243,16 @@ reach the shared database skips the pass rather than assuming it is alone.
   excluded, the restored daemon's `did:key` differs from the original's:
   every paired browser must pair again, and version attestations signed by
   the old identity no longer verify against the current one. Past versions
-  and their history are intact — only the signature's *attribution* is, and
-  the timeline shows those entries as signed by a device it no longer knows.
+  and their history are intact; what changes is the signature's
+  *attribution*, and the timeline shows those entries as signed by a device
+  it no longer knows.
 
-  This is deliberate. A signing key that travels in a backup is a forgery
-  capability that outlives the machine it came from, and unlike a broken
-  pairing that is not recoverable. If you need a restore that keeps the
-  identity, copy `daemon-identity.json` across by hand, over a channel you
-  would trust with a private key — and understand that wherever the copy
-  lands can sign as that daemon.
+  This is deliberate. A broken pairing is recoverable — pair again. A signing
+  key that travels in a backup is a forgery capability that outlives the
+  machine it came from, and that is not recoverable. If you need a restore
+  that keeps the identity, copy `daemon-identity.json` across by hand, over a
+  channel you would trust with a private key — and understand that wherever
+  the copy lands can sign as that daemon.
 
 - **The data directory holds three database files, not one.** The database
   runs in WAL mode, so `whiteboard.db` is accompanied by `whiteboard.db-wal`
