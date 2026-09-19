@@ -127,7 +127,17 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // the mutation checks and the scoping argument are `lefthook.yml`'s comment
   // and `pre-push-entry.test.ts`, which is where someone editing the gate
   // reads them. The first draft put all of that here and cost two buckets.
-  '.claude/rules/dev-flow.md': 29,
+  //
+  // 30 since the scheduled advisory watch (`audit.yml`) joined the cloud
+  // gates. It belongs in the always-on map rather than a skill because it
+  // answers a question a session asks while its OWN push is red for no
+  // reason it can see — is this my diff? — and the answer is a scheduled
+  // run whose failure predates the push. The entry is the mechanism and
+  // the one class nothing else watches (a transitive package behind a
+  // `pnpm-workspace.yaml` override, where only the bound moves and
+  // Dependabot opens no PR); the workflow's own header carries the
+  // measurement.
+  '.claude/rules/dev-flow.md': 30,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat
@@ -192,7 +202,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 24
+const ALWAYS_ON_TOTAL_BUDGET = 25
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
