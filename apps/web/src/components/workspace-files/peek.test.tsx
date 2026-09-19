@@ -9,6 +9,26 @@ import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 // document without committing to it. The object menu gains a Preview verb —
 // only where the pane is absent, because where it renders, selection
 // already answers the same question.
+//
+// WHY THIS FAMILY STAYS IN JSDOM, decided 2026-09-19 rather than left
+// unstated. The sibling dialogs in this panel have `.browser.test.tsx`
+// coverage and this one does not, which reads like an omission and is a
+// decision.
+//
+// What a real browser would add here is nothing this file does not already
+// hold. `PeekDialog.tsx` is a 52-line wrapper whose own logic is the open
+// predicate, the close, the title and an Open button; the SVG render path
+// inside it is exercised against a real browser by
+// `panel-one-render.browser.test.tsx` and `row-render.browser.test.tsx`,
+// and the pointer gate it hangs off is asserted here in BOTH directions —
+// coarse offers the verb, fine does not. What is left is Radix's own
+// dialog, and a test that drives a library through our wrapper measures
+// the library.
+//
+// The rename dialog is the contrasting case and the reason this note names
+// it: that one WRITES — a rename and a move land in the store — so it earns
+// the browser test this does not. Coverage by symmetry is how a suite grows
+// tests nobody reads; the rule is what the test would catch.
 
 afterEach(cleanup)
 
