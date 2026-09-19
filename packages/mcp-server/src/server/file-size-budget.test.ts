@@ -507,7 +507,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +16 for `rectAtEnd`: a free end is a DEGENERATE box at its point, which
   // is the whole of what lets this file draw one without a second routing
   // path beside the one it has.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2170,
+  // Raised 2170 -> 2177: the bent branch carries `rounded` now, with the
+  // reason it did not before.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2177,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
@@ -700,7 +702,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,
   'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
-  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1200,
+  // Raised 1200 -> 1240 for the curved-line layout case: the seam the
+  // freehand pen rides, from facet through style to a rounded scene node.
+  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1240,
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   'packages/canvas-render/src/tidy.test.ts': 1176,
@@ -711,7 +715,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 829,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 833,
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
