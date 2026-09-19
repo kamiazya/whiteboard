@@ -336,6 +336,24 @@ async function main() {
   }
   console.log('[e2e] document.create → body written in one call')
 
+  // A string with no `---` block is the BODY, and the server mints the
+  // frontmatter around it. Through the published artifact because the
+  // wrapping happens server-side: a client sends prose and reads back a
+  // document, and nothing in the input schema says the two differ.
+  const bareBody = await createDocument({
+    path: 'e2e-bare-body',
+    kind: 'markdown',
+    markdown: 'Prose with no frontmatter at all.',
+  })
+  const bareBack = await readDocument(bareBody.documentId)
+  if (!bareBack.content.includes('type: note')) {
+    throw new Error(`a bare body was not typed as a note: ${bareBack.content}`)
+  }
+  if (!bareBack.content.includes('Prose with no frontmatter at all.')) {
+    throw new Error(`a bare body did not survive as the body: ${bareBack.content}`)
+  }
+  console.log('[e2e] document.create → a bare body is minted as a note')
+
   // Axis B on a read: the two documents come back in ONE call, each in its
   // own format, and an id nothing was created under lands in `failed`
   // rather than taking the other two with it. Provable only through a

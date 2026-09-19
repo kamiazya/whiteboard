@@ -658,8 +658,10 @@ describe('what the tool table costs to read', () => {
         names: ['wb_canvas_edit'],
       },
       wb_workspace_edit: {
-        visibleBytes: 2287,
-        wireBytes: 3252,
+        // +60 on both: `markdown` now says a string with no `---` block is
+        // the BODY, typed `note` (#112). The bytes buy knowing WHICH type.
+        visibleBytes: 2347,
+        wireBytes: 3312,
         descriptionWords: 44,
         parameters: 18,
         undescribed: 14,
@@ -775,7 +777,6 @@ describe('what the tool table costs to read', () => {
       // restated (see `wb_canvas_edit` above). Strictly more accepted, four
       // bytes cheaper.
       //
-      //
       // Then +142 on the WIRE alone, and nothing else: `assetRefs` on
       // `wb_facet_list`'s answer, plus `visual.axes/v0` and a sixth
       // silhouette (ADR-0036). `visibleBytes`, `parameters` and
@@ -807,7 +808,6 @@ describe('what the tool table costs to read', () => {
       // change in this file so far that bought something without touching
       // the column a model pays on every turn.
       //
-      //
       // Then +590 visible / +2 parameters for `wb_canvas_edit`'s inline
       // `facets`, read at 0 of 3 with the field unused and WITHDRAWN in the
       // same PR (see its row) — so the totals did not move. The second
@@ -820,9 +820,9 @@ describe('what the tool table costs to read', () => {
       // sentence on wb_facet_set, each priced at its row. No input gained a
       // parameter — the library is a DOCUMENT, written with the facet write
       // the surface already has.
-      // Then +128 visible / 0 parameters for `stencil: null` on
-      // `wb_canvas_edit` (task #93), priced at its own row above.
-      visibleBytes: 39476,
+      // Then +128 visible / 0 parameters for `stencil: null` (#93) and +60
+      // for `document.create`'s bare body (#112), each priced at its own row.
+      visibleBytes: 39536,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -831,8 +831,8 @@ describe('what the tool table costs to read', () => {
       // wb_facet_list's in-use tags), each priced at its row.
       // Then +891 wire for increment 5: wb_facet_list's `tagLibrary` output
       // (+696) and wb_facet_set's sentence (+195).
-      // Then +128 wire for `stencil: null`, the same bytes as visible.
-      wireBytes: 120163,
+      // Then +128 wire for `stencil: null` and +60 for the bare body, the same as visible.
+      wireBytes: 120223,
       parameters: 348,
       undescribed: 221,
     })

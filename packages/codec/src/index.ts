@@ -5,7 +5,7 @@ export {
   parseMarkdownBody,
   stringifyMarkdownBody,
 } from './markdown/pipeline.js'
-export { parseOkf } from './okf/parse.js'
+export { hasOkfFrontmatter, parseOkf } from './okf/parse.js'
 export type {
   OkfMarkdownDocument,
   OkfMarkdownFrontmatter,

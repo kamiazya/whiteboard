@@ -58,7 +58,13 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
       markdown: z
         .string()
         .optional()
-        .describe('The document as OKF Markdown. Omit to create it empty.'),
+        // +61 visible bytes, and the BEHAVIOUR is what removes the retry —
+        // a bare body now works whether or not this says so. The sentence
+        // buys predictability: a caller who cares what `type` it gets
+        // should not have to find out by reading the document back.
+        .describe(
+          'The document as OKF Markdown; without a `---` block the string is the body, typed `note`. Omit to create it empty.',
+        ),
     })
     .strict(),
   z

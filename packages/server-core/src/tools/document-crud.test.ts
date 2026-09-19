@@ -12,6 +12,7 @@ import {
   wbDocumentList,
   wbDocumentResolve,
 } from './document-crud.js'
+import { exportOkf } from './export-okf.js'
 
 const WS = 'ws-1'
 
@@ -665,5 +666,80 @@ describe('wbDocumentCreate and a workspace tag library (ADR-0040 decision 5)', (
     })
 
     expect(created.path).toBe('services/api')
+  })
+})
+
+/**
+ * A bare markdown body is a legitimate input, not a mistake (user decision,
+ * 2026-09-19).
+ *
+ * The signal: the `markdown` parameter's own description already said "as
+ * OKF Markdown — frontmatter and body", and models still sent a bare body in
+ * 2 of 4 trials across the eval lane's rounds 20a-20d, each paying a retry.
+ * A description that is read and not followed twice in four is a finding
+ * about the SHAPE, not about the wording.
+ */
+describe('wb_document_create accepts a body without frontmatter', () => {
+  const BODY = '# Tag library\n\nShared vocabulary for boards in this workspace.'
+
+  it('takes the whole string as the body and records a type', async () => {
+    const deps = await makeDeps()
+
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'notes/bare',
+      kind: 'markdown',
+      markdown: BODY,
+    })
+
+    const exported = await exportOkf(deps, {
+      workspaceId: WS,
+      documentId: created.documentId,
+    })
+    expect(exported.markdown).toContain(BODY)
+    // `note` rather than nothing: the schema requires a `type`, this tool has
+    // no parameter for one, and a caller who wants another sends full OKF.
+    expect(exported.markdown).toContain('type: note')
+  })
+
+  it('leaves a full OKF string alone, frontmatter and all', async () => {
+    const deps = await makeDeps()
+
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'notes/declared',
+      kind: 'markdown',
+      markdown: '---\ntype: issue\ntitle: Declared\n---\n\nThe body.',
+    })
+
+    const exported = await exportOkf(deps, {
+      workspaceId: WS,
+      documentId: created.documentId,
+    })
+    // The caller's own type survives — the bare-body path must not reach a
+    // string that already declares one.
+    expect(exported.markdown).toContain('type: issue')
+    expect(exported.markdown).not.toContain('type: note')
+    expect(exported.markdown).toContain('The body.')
+  })
+
+  it('still refuses a frontmatter block the schema rejects', async () => {
+    const deps = await makeDeps()
+
+    // The discriminator is whether the string OPENS with a frontmatter
+    // block, taken before parsing — not a sniff of the failure text. A
+    // malformed frontmatter is a mistake to report; wrapping it as a body
+    // would bury the caller's own error inside a document.
+    await expect(
+      wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'notes/broken',
+        kind: 'markdown',
+        markdown: '---\ntype: 7\n---\n\nbody\n',
+      }),
+    ).rejects.toThrow(/type/)
+
+    const listed = await wbDocumentList(deps, { workspaceId: WS })
+    expect(listed.documents.map((entry) => entry.path)).not.toContain('notes/broken')
   })
 })
