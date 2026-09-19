@@ -1216,21 +1216,63 @@ badge channel or a description that says where a symbol is drawn.
 > the byte: a facet's payload schema is in no tool's INPUT table, so this
 > costs zero model-visible bytes on every turn. Rung 2 moved on the one
 > errand that asks what a write may name — `wear a stencil this workspace
-> defines`, response 12,162 -> 13,072. The description is 453 bytes and the
-> row moved 910, because an MCP reply carries its answer twice, as `content`
-> text and as `structuredContent`; every byte a tool ANSWERS is priced at 2x
-> on that scoreboard. Calls unchanged. This is the same trade
+> defines`, response 12,162 -> 13,388. The description is 613 bytes and the
+> row moved 1,226, because an MCP reply carries its answer twice, as
+> `content` text and as `structuredContent`; every byte a tool ANSWERS is
+> priced at 2x on that scoreboard. Calls unchanged. This is the same trade
 > `wb_facet_list`'s `otherTargets` took, and the reason the sentence is on
 > the facet rather than in a tool description.
 >
 > The facet score still counts TWO channels, not three: nothing about what a
 > canvas draws changed, so counting the badge would credit a distinction no
 > reader of the board can see (the 2026-09-11 correction in ADR-0033 §1).
->
-> Whether it WORKS is unmeasured here. ADR-0031's own rule for a description
-> change is rung 3 on the tasks that touch the tool, and the one study that
-> measured it found description fixes regress a sixth of cases — so this is
-> a hypothesis with its price paid and its reading owed, not a fix.
+
+**The twenty-fourth reading (2026-09-19), lane rounds 20a–20c.** Three runs
+of the two-axis task, three trials each, on ONE tree differing only in this
+sentence — so the comparison is the sentence and nothing else.
+
+| run | the sentence | pass@1 | `wb_facet_set` tag writes | what the score read |
+|---|---|---|---|---|
+| 20a | absent | 0/3 | **0 of 15** | `colour contested` x3 |
+| 20b | present, example `health:failing` | 1/3 | 15 of 15 | `contested` 0/3 |
+| 20c | present, example `priority:high` | 0/3 | 15 of 15 | `colour unused` x3 |
+| 20d | present, naming the tag LIBRARY | 1/3 | 15 of 15 | one `colour carried(health)` |
+
+**The first remedy in this lane's history to move the tag-write behaviour
+at all.** Round 19 read "0 of 3, and no trial wrote a tag" with
+`wb_facet_set`'s own description saying tags at +651 visible bytes. This
+sentence, at ZERO visible bytes, took tag writes from 0 of 15 to 15 of 15 —
+every node, every trial, all three runs that carried it — and retired
+`colour contested`, the shape rounds 15 through 19 read every time.
+
+**20b's pass was bought by the quote, and 20c is how that was found.**
+`health:failing` is the very distinction the task grades, so the reading
+could not tell a surface that TEACHES from one that ANSWERS. Swapping the
+example for a word no task uses dropped the pass back to 0 of 3 with the
+tag writes unchanged. The rule against a description quoting its task is
+not hygiene; it was worth a whole pass here.
+
+**What 20c then exposed is a PRODUCT finding, and it is the reason this
+task has read 0 of 3 since round 15.** Every trial wrote the right tags and
+declared a `visual.tags/v0` library giving each value a colour — and
+`scoreFacets` still read `colour unused`, because it takes the canvas
+alone and the library lives in another document. The renderer joins them;
+the instrument cannot. Confirmed by looking at the boards rather than the
+verdicts: all three of 20c's SVGs are drawn in the health colours, two of
+them on trials the verifier failed. **The axis built to judge ADR-0040's
+"declare it once, the board draws it" is blind to exactly that.** Filed;
+it is its own increment, not this one's.
+
+**The last clause was bought by a reading, not reasoned.** 20c's wording
+said a tag "colours the box" flat, which is true only of a declared value;
+three trials acted on it and the board showed nothing. 20d names the
+library and says plainly that an undeclared tag is drawn in nothing. A
+description is a promise the product has to keep.
+
+Honest bound on all of it: pass^k is 0 in every run, n is 3 a side, and
+what moved is a BEHAVIOUR (the tag write) rather than the pass column. The
+pass column is currently measuring the instrument gap above as if it were
+the model.
 
 What this adds to the twenty-second: the write path for a word that is
 NOT a plugin's — a tag needs no registry to be a partition — reads the same

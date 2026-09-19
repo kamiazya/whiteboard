@@ -144,9 +144,22 @@ export const visualSymbolFacetSchema = z
    * at full size is not that, which is why the canvas stopped drawing it.
    * So the sentence names both halves, and the channel that would have
    * worked: a scoped tag, which colours the box and appears in the legend.
+   *
+   * Its EXAMPLE is deliberately a word no eval task uses. A description
+   * that quotes the task it is measured on measures the quote: the first
+   * draft said `health:failing`, which is the very distinction the
+   * two-axis task grades — and measured, that wording passed a trial the
+   * neutral one did not, so the quote was buying the pass.
+   *
+   * It names the LIBRARY because the first wording promised what the
+   * product does not do by default. "It colours the box" was read and
+   * acted on — three trials of three tagged every node, where the same
+   * task had never produced a single tag write before — and the board
+   * still showed nothing, because an undeclared value carries no colour.
+   * A description is a promise the product has to keep.
    */
   .describe(
-    'What SYMBOLISES this object, for surfaces too small to read it: the minimap, a row in the document browser, the tab favicon. NOT drawn on a canvas \u2014 a node at full size already shows its own content \u2014 so a badge written to say what a box IS or how it is DOING is invisible to anyone reading the board. To record state or kind on a board, write a scoped tag instead (`health:failing`): it colours the box and appears in the board legend.',
+    'What SYMBOLISES this object, for surfaces too small to read it: the minimap, a row in the document browser, the tab favicon. NOT drawn on a canvas \u2014 a node at full size already shows its own content \u2014 so a badge written to say what a box IS or how it is DOING is invisible to anyone reading the board. To record state or kind on a board, write a scoped tag instead (`priority:high`) AND declare its key in the workspace tag library: a declared value carries a colour, so the boxes wearing it are drawn in it and the board legend names it. A tag nobody declared is recorded and drawn in nothing.',
   )
 
 export type VisualSymbolFacet = z.infer<typeof visualSymbolFacetSchema>
