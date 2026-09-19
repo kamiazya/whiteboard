@@ -629,7 +629,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 874,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
-  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 885,
+  // 885 -> 892, raised deliberately rather than shrunk: the file gained a
+  // test that makes a standing flake diagnosable, and paid for most of it by
+  // deleting six copies of one helper. What is left over is the test itself.
+  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 892,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
   'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
   'packages/server-core/src/tools/canvas-edit.test.ts': 3110,
