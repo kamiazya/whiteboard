@@ -66,7 +66,11 @@ type StateCoverage =
 const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
   gestureState: 'modelled',
   selectionState: 'modelled',
-  selectedEdgeId: 'modelled',
+  // Was `selectedEdgeId`, one id. `selectedEdgeId` survives as a DERIVED
+  // first-of-the-list for the single-target surfaces, so it is no longer
+  // state and no longer scanned.
+  selectedInkIds:
+    'not modelled: the property models ONE selected id and asserts E2 (the selected ink still exists) against the canvas; a band selects several, which it does not reach yet. Staleness itself IS gated — `retainInk` drops ids on canvas replacement and on a lock, which is the gate the two selection defects lacked',
   pendingCut: 'modelled',
 
   viewport:
