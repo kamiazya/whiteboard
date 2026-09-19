@@ -31,6 +31,7 @@ import {
 } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
+import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
@@ -274,6 +275,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // The allowlist PROVIDER folds granted origins into the env-configured
   // set per request, so an Approve on /pair takes effect on /api, /mcp,
   // and WS without a restart (see the tri-surface provider contract test).
+  // ADR-0043 decision 4's root key, loaded or created once here so both the
+  // `/api` guard and the websocket upgrade chain from the SAME secret. A
+  // second `createMacaroonRootKey` call would read the same file and agree,
+  // but two call sites is two places for one to be forgotten — and a
+  // forgotten one does not fail loudly, it refuses every macaroon.
+  const macaroonRootKey = createMacaroonRootKey({ dataDir: getDataDir() }).rootKey
   const pairingGrants = createPairingGrantStore(getDataDir())
   const pairing = {
     grants: pairingGrants,
@@ -345,6 +352,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     oauthClientRegistry: options.oauthClientRegistry,
     wsTicketStore,
     pairing,
+    macaroonRootKey,
     serverDeps,
     // host is the bare form normalizeBindHost produced for server.listen();
     // pairing-link.ts parses this string with `new URL(...)`, which needs
@@ -484,6 +492,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         allowedWebOrigins,
         wsTicketStore.redeemTicket,
         pairing.tokens,
+        macaroonRootKey,
       )
       if (!decision.accept) {
         const statusCode = decision.statusCode ?? 401

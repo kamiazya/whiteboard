@@ -187,10 +187,18 @@ export function createApp(options: AppOptions) {
     // while every other method (GET included — see auth.js) falls through to
     // the auth chain unchanged.
     app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
-    // Either credential: the daemon token (full authority, unchanged) or an
-    // OAuth access token, which is additionally checked against the route's
-    // declared scope. Both fail identically.
-    app.use('/api/*', createDaemonAuthMiddleware(token, oauthAuthz?.store, options.pairing?.tokens))
+    // Three credentials: the daemon token (full authority, unchanged), an
+    // OAuth access token, and a macaroon — the last two additionally checked
+    // against the route's declared scope. All fail identically.
+    app.use(
+      '/api/*',
+      createDaemonAuthMiddleware(
+        token,
+        oauthAuthz?.store,
+        options.pairing?.tokens,
+        options.macaroonRootKey,
+      ),
+    )
   }
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
