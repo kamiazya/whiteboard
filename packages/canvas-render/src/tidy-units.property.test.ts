@@ -26,13 +26,37 @@ const span = fc.integer({ min: 1, max: 300 })
 
 const rect: fc.Arbitrary<Rect> = fc.record({ x: coord, y: coord, w: span, h: span })
 
-/** A rect with no area — a line or a point, which a drawer can still make. */
-const degenerateRect: fc.Arbitrary<Rect> = fc.record({
-  x: coord,
-  y: coord,
-  w: fc.constantFrom(0, 0, 5),
-  h: fc.constantFrom(0, 5, 0),
-})
+/**
+ * A rect with no area — a line or a point, which a drawer can still make —
+ * placed NEAR the frame it will be asked about.
+ *
+ * Both halves were wrong first, and the mutation lane's dry run is what
+ * said so: drawing `w` and `h` from `constantFrom(0, 0, 5)` and
+ * `constantFrom(0, 5, 0)` admits (5, 5), which has area 25 and is not
+ * degenerate at all — and for such a box the two predicates are SUPPOSED to
+ * disagree. Exactly one dimension is zero now, so the shape is degenerate
+ * by construction rather than by most draws.
+ *
+ * Placing it against `outer` is the other half. Two rects drawn
+ * independently from a 1000x1000 plane almost never meet, so both
+ * predicates answered false and the property asserted next to nothing —
+ * 200 local runs never reached the case CI's first different seed shrank
+ * straight to.
+ */
+const degenerateNear = (outer: Rect): fc.Arbitrary<Rect> =>
+  fc
+    .tuple(
+      fc.integer({ min: -10, max: outer.w + 10 }),
+      fc.integer({ min: -10, max: outer.h + 10 }),
+      fc.integer({ min: 0, max: Math.max(outer.w, outer.h) + 10 }),
+      fc.boolean(),
+    )
+    .map(([dx, dy, size, flat]) => ({
+      x: outer.x + dx,
+      y: outer.y + dy,
+      w: flat ? size : 0,
+      h: flat ? 0 : size,
+    }))
 
 /** An `inner` placed strictly inside `outer`, so containment holds by construction. */
 const containedPair: fc.Arbitrary<{ outer: Rect; inner: Rect }> = fc
@@ -159,12 +183,27 @@ describe('membership by majority, against containment', () => {
     },
   )
 
-  fcTest.prop([rect, degenerateRect], withDefaults())(
-    'a box with no area is a member exactly when it is inside',
-    (outer, inner) => {
-      expect(mostlyInside(outer, inner)).toBe(fullyContains(outer, inner))
-    },
-  )
+  const degenerate = { inside: 0, outside: 0 }
+
+  fcTest.prop(
+    [rect.chain((outer) => fc.tuple(fc.constant(outer), degenerateNear(outer)))],
+    withDefaults(),
+  )('a box with no area is a member exactly when it is inside', ([outer, inner]) => {
+    // Half of nothing is nothing, so the majority test alone answers false
+    // for a box sitting squarely in the frame; the degenerate branch is
+    // what makes the two predicates agree here.
+    const contained = fullyContains(outer, inner)
+    expect(mostlyInside(outer, inner)).toBe(contained)
+    if (contained) degenerate.inside += 1
+    else degenerate.outside += 1
+  })
+
+  it('drew a flat box both inside the frame and out of it', () => {
+    // Both answers, or the equivalence above is asserted over one of them —
+    // which is how it passed 200 runs while admitting a box with area.
+    expect(degenerate.inside).toBeGreaterThan(0)
+    expect(degenerate.outside).toBeGreaterThan(0)
+  })
 
   fcTest.prop([disjointPair], withDefaults())(
     'a frame never claims a box it does not touch',
