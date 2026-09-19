@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -131,4 +131,66 @@ describe('createMacaroonRootKey — the key does not reach the log', () => {
       logs.restore()
     }
   })
+})
+
+// PROBED, never inferred: these need a mode they SET to be a mode the store
+// READS BACK. Not the root question — the guard reads `statSync().mode`
+// rather than attempting a denied read, so uid 0 changes nothing.
+function probeChmodIsObservable(): boolean {
+  const probeDir = mkdtempSync(join(tmpdir(), 'wb-mode-probe-'))
+  try {
+    const file = join(probeDir, 'f')
+    writeFileSync(file, 'x')
+    chmodSync(file, 0o644)
+    return (statSync(file).mode & 0o777) === 0o644
+  } catch {
+    return false
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true })
+  }
+}
+const CHMOD_IS_OBSERVABLE = probeChmodIsObservable()
+
+// The reachability half of `secret-file-mode.test.ts`: that module's own
+// tests pass whether or not either key store ever calls it, which is the
+// exact shape that let this PR ship a verification path with no production
+// caller. These two assert the CALL.
+describe('createMacaroonRootKey refuses a leaked key file', () => {
+  it.skipIf(!CHMOD_IS_OBSERVABLE)(
+    'throws on a group-readable root key instead of rotating past it',
+    () => {
+      const dataDir = mkdtempSync(join(tmpdir(), 'wb-macaroon-leaked-'))
+      try {
+        const { rootKey } = createMacaroonRootKey({ dataDir })
+        const filepath = join(dataDir, 'macaroon-root-key.json')
+        chmodSync(filepath, 0o640)
+
+        expect(() => createMacaroonRootKey({ dataDir })).toThrow(/group or other/i)
+        // Not rotated: the file the operator has to chmod is still the one
+        // every issued token chains from.
+        chmodSync(filepath, 0o600)
+        expect(createMacaroonRootKey({ dataDir }).rootKey).toEqual(rootKey)
+      } finally {
+        rmSync(dataDir, { recursive: true, force: true })
+      }
+    },
+  )
+
+  it.skipIf(!CHMOD_IS_OBSERVABLE)(
+    'writes the key owner-only even over a leftover temp file',
+    () => {
+      const dataDir = mkdtempSync(join(tmpdir(), 'wb-macaroon-tmp-'))
+      try {
+        const filepath = join(dataDir, 'macaroon-root-key.json')
+        writeFileSync(`${filepath}.tmp`, 'stale')
+        chmodSync(`${filepath}.tmp`, 0o644)
+
+        createMacaroonRootKey({ dataDir })
+
+        expect(statSync(filepath).mode & 0o777).toBe(0o600)
+      } finally {
+        rmSync(dataDir, { recursive: true, force: true })
+      }
+    },
+  )
 })

@@ -25,10 +25,11 @@
  * the OS user boundary.
  */
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import { assertSecretFileIsOwnerOnly, writeSecretFileAtomicSync } from './secret-file-mode.js'
 
 const log = getLogger('macaroon-root-key')
 
@@ -85,14 +86,16 @@ function generateAndPersist(filepath: string): Uint8Array {
     alg: 'HMAC-SHA-256',
     rootKey: Buffer.from(key).toString('base64url'),
   }
-  mkdirSync(dirname(filepath), { recursive: true, mode: 0o700 })
-  const tmpPath = `${filepath}.tmp`
-  writeFileSync(tmpPath, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
-  renameSync(tmpPath, filepath)
+  writeSecretFileAtomicSync(filepath, `${JSON.stringify(record, null, 2)}\n`)
   return key
 }
 
 export function createMacaroonRootKey({ dataDir }: { dataDir: string }): MacaroonRootKey {
   const filepath = join(dataDir, MACAROON_ROOT_KEY_FILENAME)
+  // Before the read, not inside `tryLoad`: an unreadable key is regenerated —
+  // a rotation this file's header calls its bluntest instrument — and a
+  // LEAKED one must not be silently rotated past. So this propagates rather
+  // than folding into the null that means "make a new one".
+  assertSecretFileIsOwnerOnly(filepath)
   return { rootKey: tryLoad(filepath) ?? generateAndPersist(filepath) }
 }
