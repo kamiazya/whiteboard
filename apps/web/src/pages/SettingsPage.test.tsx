@@ -40,24 +40,24 @@ function renderAt(path: string, daemon?: { baseUrl: string; token: string | null
 describe('SettingsPage — routing layout', () => {
   it('/settings shows the mobile section list and the desktop General content', () => {
     renderAt('/settings')
-    const mobile = screen.getByTestId('settings-mobile')
-    const desktop = screen.getByTestId('settings-desktop')
+    const list = screen.getByTestId('settings-nav-mobile')
+    const section = screen.getByTestId('settings-section')
 
     // Mobile: a list of section rows, no section content.
-    expect(within(mobile).getByText('General')).toBeTruthy()
-    expect(within(mobile).getByText('Data & app')).toBeTruthy()
-    expect(within(mobile).getByText('Connections')).toBeTruthy()
-    expect(within(mobile).queryByRole('radiogroup')).toBeNull()
+    expect(within(list).getByText('General')).toBeTruthy()
+    expect(within(list).getByText('Data & app')).toBeTruthy()
+    expect(within(list).getByText('Connections')).toBeTruthy()
+    expect(within(list).queryByRole('radiogroup')).toBeNull()
 
     // Desktop: General content shown by default, single instance.
-    expect(within(desktop).getByRole('radiogroup', { name: /theme/i })).toBeTruthy()
+    expect(within(section).getByRole('radiogroup', { name: /theme/i })).toBeTruthy()
   })
 
   it('/settings/data shows the mobile detail view with a back-to-settings link', () => {
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByRole('link', { name: /settings/i })).toBeTruthy()
-    expect(within(mobile).getByText('Protect your data')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByRole('link', { name: /settings/i })).toBeTruthy()
+    expect(within(section).getByText('Protect your data')).toBeTruthy()
   })
 
   it('the back button falls back to the app root when settings was opened directly', () => {
@@ -65,8 +65,8 @@ describe('SettingsPage — routing layout', () => {
       initialEntries: ['/settings'],
     })
     render(<RouterProvider router={router} />)
-    const desktop = screen.getByTestId('settings-desktop')
-    fireEvent.click(within(desktop).getByRole('button', { name: /back/i }))
+    const sidebar = screen.getByTestId('settings-nav-desktop')
+    fireEvent.click(within(sidebar).getByRole('button', { name: /back/i }))
     expect(router.state.location.pathname).toBe('/')
   })
 
@@ -83,12 +83,12 @@ describe('SettingsPage — routing layout', () => {
       initialIndex: 1,
     })
     render(<RouterProvider router={router} />)
-    const desktop = screen.getByTestId('settings-desktop')
+    const sidebar = screen.getByTestId('settings-nav-desktop')
     // Wander: General -> Data & app -> Connections and back to General.
-    fireEvent.click(within(desktop).getByRole('link', { name: /data & app/i }))
-    fireEvent.click(within(desktop).getByRole('link', { name: /connections/i }))
-    fireEvent.click(within(desktop).getByRole('link', { name: /general/i }))
-    fireEvent.click(within(desktop).getByRole('button', { name: /back/i }))
+    fireEvent.click(within(sidebar).getByRole('link', { name: /data & app/i }))
+    fireEvent.click(within(sidebar).getByRole('link', { name: /connections/i }))
+    fireEvent.click(within(sidebar).getByRole('link', { name: /general/i }))
+    fireEvent.click(within(sidebar).getByRole('button', { name: /back/i }))
     expect(router.state.location.pathname).toBe('/w/default/d/abc')
   })
 
@@ -101,9 +101,9 @@ describe('SettingsPage — routing layout', () => {
       initialIndex: 1,
     })
     render(<RouterProvider router={router} />)
-    const desktop = screen.getByTestId('settings-desktop')
-    fireEvent.click(within(desktop).getByRole('link', { name: /data & app/i }))
-    fireEvent.click(within(desktop).getByRole('link', { name: /connections/i }))
+    const sidebar = screen.getByTestId('settings-nav-desktop')
+    fireEvent.click(within(sidebar).getByRole('link', { name: /data & app/i }))
+    fireEvent.click(within(sidebar).getByRole('link', { name: /connections/i }))
     await act(async () => {
       await router.navigate(-1)
     })
@@ -114,10 +114,10 @@ describe('SettingsPage — routing layout', () => {
 describe('SettingsPage — General', () => {
   it('renders theme options and allows switching', () => {
     renderAt('/settings')
-    const desktop = screen.getByTestId('settings-desktop')
-    const lightBtn = within(desktop).getByRole('radio', { name: /light/i })
-    const darkBtn = within(desktop).getByRole('radio', { name: /dark/i })
-    const systemBtn = within(desktop).getByRole('radio', { name: /system/i })
+    const section = screen.getByTestId('settings-section')
+    const lightBtn = within(section).getByRole('radio', { name: /light/i })
+    const darkBtn = within(section).getByRole('radio', { name: /dark/i })
+    const systemBtn = within(section).getByRole('radio', { name: /system/i })
 
     expect(systemBtn.getAttribute('aria-checked')).toBe('true')
     expect(lightBtn.getAttribute('aria-checked')).toBe('false')
@@ -129,8 +129,8 @@ describe('SettingsPage — General', () => {
 
   it('WebMCP toggle persists to user-settings', () => {
     renderAt('/settings')
-    const desktop = screen.getByTestId('settings-desktop')
-    const toggle = within(desktop).getByRole('switch')
+    const section = screen.getByTestId('settings-section')
+    const toggle = within(section).getByRole('switch')
     expect(toggle.getAttribute('aria-checked')).toBe('true')
 
     fireEvent.click(toggle)
@@ -142,8 +142,8 @@ describe('SettingsPage — General', () => {
 
   it('selecting a favicon style persists it to user-settings', () => {
     renderAt('/settings')
-    const desktop = screen.getByTestId('settings-desktop')
-    fireEvent.click(within(desktop).getByRole('radio', { name: /dot/i }))
+    const section = screen.getByTestId('settings-section')
+    fireEvent.click(within(section).getByRole('radio', { name: /dot/i }))
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
     expect(stored.appearance?.faviconStyle).toBe('dot')
   })
@@ -160,8 +160,8 @@ describe('SettingsPage — General', () => {
       }),
     )
     renderAt('/settings')
-    const desktop = screen.getByTestId('settings-desktop')
-    expect(within(desktop).getByRole('radio', { name: /dot/i }).getAttribute('aria-checked')).toBe(
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByRole('radio', { name: /dot/i }).getAttribute('aria-checked')).toBe(
       'true',
     )
   })
@@ -189,14 +189,14 @@ describe('SettingsPage — Data & app setup journey', () => {
   it('shows the protect step granted when the browser persisted storage', async () => {
     stubStorage({ persisted: true })
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText('granted')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(await within(section).findByText('granted')).toBeTruthy()
   })
 
   it('says the browser manages persistence where the API is unavailable', async () => {
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText('managed by the browser')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(await within(section).findByText('managed by the browser')).toBeTruthy()
   })
 
   it('a browser that declines Protect says so, instead of leaving the row unchanged', async () => {
@@ -204,36 +204,36 @@ describe('SettingsPage — Data & app setup journey', () => {
     // refused. The refusal is the case that used to look like a dead button.
     stubStorage({ persisted: false, persistResult: false })
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    fireEvent.click(await within(mobile).findByRole('button', { name: 'Protect' }))
+    const section = screen.getByTestId('settings-section')
+    fireEvent.click(await within(section).findByRole('button', { name: 'Protect' }))
     expect(
-      await within(mobile).findByText(/browser turned this down|not granted it yet/i),
+      await within(section).findByText(/browser turned this down|not granted it yet/i),
     ).toBeTruthy()
   })
 
   it('explains persistence without storage jargon', async () => {
     stubStorage({ persisted: false })
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    await within(mobile).findByRole('button', { name: 'Protect' })
-    expect(within(mobile).queryByText(/eviction/i)).toBeNull()
-    expect(within(mobile).getByText(/delete.*(free up|space)|running low/i)).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    await within(section).findByRole('button', { name: 'Protect' })
+    expect(within(section).queryByText(/eviction/i)).toBeNull()
+    expect(within(section).getByText(/delete.*(free up|space)|running low/i)).toBeTruthy()
   })
 
   it('describes the daemon step without developer vocabulary', async () => {
     stubStorage({ persisted: true })
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    await within(mobile).findByText('granted')
-    expect(within(mobile).queryByText(/daemon|AI agent/i)).toBeNull()
+    const section = screen.getByTestId('settings-section')
+    await within(section).findByText('granted')
+    expect(within(section).queryByText(/daemon|AI agent/i)).toBeNull()
   })
 
   it('Protect asks for persistence and celebrates the live grant exactly once', async () => {
     stubStorage({ persisted: false, persistResult: true })
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    fireEvent.click(await within(mobile).findByRole('button', { name: 'Protect' }))
-    expect(await within(mobile).findByText('granted')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    fireEvent.click(await within(section).findByRole('button', { name: 'Protect' }))
+    expect(await within(section).findByText('granted')).toBeTruthy()
     // celebrate fires from a passive effect on the same commit that renders
     // "granted", and the handler's promise chain runs outside act — so a
     // synchronous assertion here races the effect flush under load. Wait for
@@ -244,16 +244,16 @@ describe('SettingsPage — Data & app setup journey', () => {
   it('never celebrates a step that was already complete when the page opened', async () => {
     stubStorage({ persisted: true })
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    await within(mobile).findByText('granted')
+    const section = screen.getByTestId('settings-section')
+    await within(section).findByText('granted')
     expect(celebrate).not.toHaveBeenCalled()
   })
 
   it('shows the manual-install hint when no install prompt was captured', async () => {
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
+    const section = screen.getByTestId('settings-section')
     expect(
-      await within(mobile).findByText(/menu may offer install or add to home screen/i),
+      await within(section).findByText(/menu may offer install or add to home screen/i),
     ).toBeTruthy()
   })
 
@@ -267,8 +267,8 @@ describe('SettingsPage — Data & app setup journey', () => {
     window.dispatchEvent(event)
 
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    fireEvent.click(await within(mobile).findByRole('button', { name: 'Install' }))
+    const section = screen.getByTestId('settings-section')
+    fireEvent.click(await within(section).findByRole('button', { name: 'Install' }))
     expect(prompt).toHaveBeenCalledTimes(1)
   })
 
@@ -276,47 +276,47 @@ describe('SettingsPage — Data & app setup journey', () => {
     stubStorage({ persisted: true })
     initInstallPromptCapture()
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    await within(mobile).findByText('granted')
+    const section = screen.getByTestId('settings-section')
+    await within(section).findByText('granted')
     expect(celebrate).not.toHaveBeenCalled()
 
     await act(async () => {
       window.dispatchEvent(new Event('appinstalled'))
     })
-    expect(await within(mobile).findByText('installed')).toBeTruthy()
+    expect(await within(section).findByText('installed')).toBeTruthy()
     expect(celebrate).toHaveBeenCalledTimes(1)
   })
 
   it('links the daemon step to the Connections section when not connected', async () => {
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    const link = await within(mobile).findByRole('link', { name: 'How to connect' })
+    const section = screen.getByTestId('settings-section')
+    const link = await within(section).findByRole('link', { name: 'How to connect' })
     expect(link.getAttribute('href')).toBe('/settings/connections')
   })
 
   it('marks the daemon step connected when a daemon is provided', async () => {
     renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText('connected')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(await within(section).findByText('connected')).toBeTruthy()
   })
 })
 
 describe('SettingsPage — App version row', () => {
   it('degrades to managed-by-the-environment without a service worker registration', () => {
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByText('managed by the environment')).toBeTruthy()
-    expect(within(mobile).queryByRole('button', { name: /check for updates/i })).toBeNull()
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByText('managed by the environment')).toBeTruthy()
+    expect(within(section).queryByRole('button', { name: /check for updates/i })).toBeNull()
   })
 
   it('offers a manual check when a registration is bound', async () => {
     const check = vi.fn().mockResolvedValue(undefined)
     bindCheckForUpdates(check)
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByText('up to date')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByText('up to date')).toBeTruthy()
     await act(async () => {
-      fireEvent.click(within(mobile).getByRole('button', { name: 'Check for updates' }))
+      fireEvent.click(within(section).getByRole('button', { name: 'Check for updates' }))
     })
     expect(check).toHaveBeenCalledTimes(1)
   })
@@ -326,10 +326,10 @@ describe('SettingsPage — App version row', () => {
     const apply = vi.fn().mockResolvedValue(undefined)
     bindApplyUpdate(apply)
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByText('update ready')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByText('update ready')).toBeTruthy()
     await act(async () => {
-      fireEvent.click(within(mobile).getByRole('button', { name: 'Update now' }))
+      fireEvent.click(within(section).getByRole('button', { name: 'Update now' }))
     })
     expect(apply).toHaveBeenCalledTimes(1)
   })
@@ -345,17 +345,17 @@ describe('SettingsPage — Connections', () => {
 
   it('shows a not-connected row when no daemon is provided', () => {
     renderAt('/settings/connections')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByText(/not connected/i)).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByText(/not connected/i)).toBeTruthy()
   })
 
   // Fonts are the daemon's, not this browser's: it is the daemon that
   // rasterises an export, so an empty list would be the wrong answer here.
   it('/settings/fonts says a daemon is needed before it offers any font', () => {
     renderAt('/settings/fonts')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByText(/not connected/i)).toBeTruthy()
-    expect(within(mobile).queryByRole('button', { name: /^Install / })).toBeNull()
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByText(/not connected/i)).toBeTruthy()
+    expect(within(section).queryByRole('button', { name: /^Install / })).toBeNull()
   })
 
   it('/settings/fonts lists the daemon catalogue when one is connected', async () => {
@@ -381,8 +381,10 @@ describe('SettingsPage — Connections', () => {
       }),
     )
     renderAt('/settings/fonts', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByRole('button', { name: 'Install Noto Sans JP' })).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(
+      await within(section).findByRole('button', { name: 'Install Noto Sans JP' }),
+    ).toBeTruthy()
   })
 
   // Discoverable before its precondition is met: the move to a daemon is
@@ -390,10 +392,10 @@ describe('SettingsPage — Connections', () => {
   // unpaired, not a control that materialises only once it is usable.
   it('offers the workspace move disabled until a daemon is connected', () => {
     renderAt('/settings/connections')
-    const mobile = screen.getByTestId('settings-mobile')
-    const button = within(mobile).getByTestId('promote-workspace-open')
+    const section = screen.getByTestId('settings-section')
+    const button = within(section).getByTestId('promote-workspace-open')
     expect(button.hasAttribute('disabled')).toBe(true)
-    expect(within(mobile).getByText(/connect a daemon to move/i)).toBeTruthy()
+    expect(within(section).getByText(/connect a daemon to move/i)).toBeTruthy()
   })
 
   it('enables the workspace move when a daemon is connected', async () => {
@@ -409,8 +411,8 @@ describe('SettingsPage — Connections', () => {
       }),
     )
     renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
-    const mobile = screen.getByTestId('settings-mobile')
-    const button = await within(mobile).findByTestId('promote-workspace-open')
+    const section = screen.getByTestId('settings-section')
+    const button = await within(section).findByTestId('promote-workspace-open')
     expect(button.hasAttribute('disabled')).toBe(false)
   })
 
@@ -427,10 +429,10 @@ describe('SettingsPage — Connections', () => {
       }),
     )
     renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText('Paired web apps')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(await within(section).findByText('Paired web apps')).toBeTruthy()
     expect(
-      await within(mobile).findByRole('button', { name: /refresh storage usage/i }),
+      await within(section).findByRole('button', { name: /refresh storage usage/i }),
     ).toBeTruthy()
   })
 })
@@ -453,8 +455,8 @@ describe('SettingsPage — disconnecting from a daemon', () => {
 
   it('offers the action, and says what it does NOT do', async () => {
     renderConnections()
-    const desktop = screen.getByTestId('settings-desktop')
-    const button = await within(desktop).findByTestId('settings-disconnect')
+    const pane = screen.getByTestId('settings-section')
+    const button = await within(pane).findByTestId('settings-disconnect')
     expect(button).toBeTruthy()
     // "Disconnect" reads like a destructive word, so the copy has to deny the
     // destruction it implies.
@@ -475,8 +477,8 @@ describe('SettingsPage — disconnecting from a daemon', () => {
     expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe(DAEMON)
 
     const onDisconnected = renderConnections()
-    const desktop = screen.getByTestId('settings-desktop')
-    fireEvent.click(await within(desktop).findByTestId('settings-disconnect'))
+    const section = screen.getByTestId('settings-section')
+    fireEvent.click(await within(section).findByTestId('settings-disconnect'))
 
     const storage = createUserSettingsStore().load().storage
     expect(storage.dismissedDaemonBaseUrls).toContain(DAEMON)
@@ -501,12 +503,12 @@ describe('SettingsPage — disconnecting from a daemon', () => {
 describe('the Developer section', () => {
   it('is where gesture diagnostics live, not Data & app', () => {
     renderAt('/settings/developer')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(within(mobile).getByText('Gesture diagnostics')).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(within(section).getByText('Gesture diagnostics')).toBeTruthy()
 
     cleanup()
     renderAt('/settings/data')
-    const dataMobile = screen.getByTestId('settings-mobile')
+    const dataMobile = screen.getByTestId('settings-section')
     // Data & app keeps the app-version row; diagnostics moved out from
     // under it, so a user looking for either is not asked to guess.
     expect(within(dataMobile).getByText('App version')).toBeTruthy()
@@ -515,9 +517,11 @@ describe('the Developer section', () => {
 
   it('is listed alongside the other sections', () => {
     renderAt('/settings')
-    expect(within(screen.getByTestId('settings-mobile')).getByText('Developer')).toBeTruthy()
+    // Both navs list it: the section list below `sm`, the sidebar at and
+    // above it. The content pane holds General here and neither list.
+    expect(within(screen.getByTestId('settings-nav-mobile')).getByText('Developer')).toBeTruthy()
     expect(
-      within(screen.getByTestId('settings-desktop')).getByRole('link', { name: /developer/i }),
+      within(screen.getByTestId('settings-nav-desktop')).getByRole('link', { name: /developer/i }),
     ).toBeTruthy()
   })
 })
@@ -531,11 +535,11 @@ describe('the back controls', () => {
    */
   it('carry an accessible name and no visible text', () => {
     renderAt('/settings')
-    const desktopBack = within(screen.getByTestId('settings-desktop')).getByRole('button', {
+    const desktopBack = within(screen.getByTestId('settings-nav-desktop')).getByRole('button', {
       name: /back/i,
     })
     expect(desktopBack.textContent).toBe('')
-    const mobileBack = within(screen.getByTestId('settings-mobile')).getByRole('button', {
+    const mobileBack = within(screen.getByTestId('settings-nav-mobile')).getByRole('button', {
       name: /back/i,
     })
     expect(mobileBack.textContent).toBe('')
@@ -543,7 +547,7 @@ describe('the back controls', () => {
 
   it('the mobile section detail returns to the list with a named glyph too', () => {
     renderAt('/settings/data')
-    const link = within(screen.getByTestId('settings-mobile')).getByRole('link', {
+    const link = within(screen.getByTestId('settings-section')).getByRole('link', {
       name: /settings/i,
     })
     expect(link.textContent).toBe('')
@@ -565,8 +569,8 @@ describe('SettingsPage — storage evidence wiring', () => {
       configurable: true,
     })
     renderAt('/settings/data')
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText(/2\.5 MiB used/)).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(await within(section).findByText(/2\.5 MiB used/)).toBeTruthy()
   })
 
   it('feeds the journey the companion storage total when connected', async () => {
@@ -599,8 +603,8 @@ describe('SettingsPage — storage evidence wiring', () => {
       }),
     )
     renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
-    const mobile = screen.getByTestId('settings-mobile')
-    expect(await within(mobile).findByText(/103\.0 MiB on this computer/)).toBeTruthy()
+    const section = screen.getByTestId('settings-section')
+    expect(await within(section).findByText(/103\.0 MiB on this computer/)).toBeTruthy()
   })
 
   it('shows no companion figure when the report fetch fails', async () => {
@@ -609,10 +613,10 @@ describe('SettingsPage — storage evidence wiring', () => {
       vi.fn(async () => new Response('nope', { status: 500 })),
     )
     renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
-    const mobile = screen.getByTestId('settings-mobile')
+    const section = screen.getByTestId('settings-section')
     // The step itself still reports connected — only the figure is absent.
-    expect(await within(mobile).findByText('connected')).toBeTruthy()
-    expect(mobile.querySelector('[data-journey-detail="daemon"]')).toBeNull()
+    expect(await within(section).findByText('connected')).toBeTruthy()
+    expect(section.querySelector('[data-journey-detail="daemon"]')).toBeNull()
   })
 })
 
@@ -713,8 +717,8 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
         swapTo={{ baseUrl: DAEMON_A.baseUrl, token: DAEMON_A.token }}
       />,
     )
-    const mobile = screen.getByTestId('settings-mobile')
-    await within(mobile).findByText('Paired web apps')
+    const section = screen.getByTestId('settings-section')
+    await within(section).findByText('Paired web apps')
     const baseline = await waitForStableCount(() => counts.grants)
     expect(baseline).toBeGreaterThanOrEqual(1)
 
@@ -747,8 +751,8 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
     vi.stubGlobal('fetch', countingFetch(counts))
 
     render(<DaemonSwapHarness path="/settings/connections" initial={DAEMON_A} swapTo={DAEMON_B} />)
-    const mobile = screen.getByTestId('settings-mobile')
-    await within(mobile).findByText('Paired web apps')
+    const section = screen.getByTestId('settings-section')
+    await within(section).findByText('Paired web apps')
     const baseline = await waitForStableCount(() => counts.grants)
 
     fireEvent.click(screen.getByTestId('swap-daemon'))
@@ -767,8 +771,8 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
         swapTo={{ baseUrl: DAEMON_A.baseUrl, token: null }}
       />,
     )
-    const mobile = screen.getByTestId('settings-mobile')
-    await within(mobile).findByText('Paired web apps')
+    const section = screen.getByTestId('settings-section')
+    await within(section).findByText('Paired web apps')
     const baseline = await waitForStableCount(() => counts.grants)
 
     fireEvent.click(screen.getByTestId('swap-daemon'))
@@ -784,7 +788,7 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
         </MemoryRouter>,
       ),
     ).not.toThrow()
-    expect(within(screen.getByTestId('settings-mobile')).getByText(/not connected/i)).toBeTruthy()
+    expect(within(screen.getByTestId('settings-section')).getByText(/not connected/i)).toBeTruthy()
     cleanup()
     expect(() =>
       render(
@@ -793,6 +797,109 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
         </MemoryRouter>,
       ),
     ).not.toThrow()
-    expect(within(screen.getByTestId('settings-mobile')).getByText(/not connected/i)).toBeTruthy()
+    expect(within(screen.getByTestId('settings-section')).getByText(/not connected/i)).toBeTruthy()
+  })
+})
+
+// The page renders both layout chromes at once and lets CSS pick one. That is
+// deliberate and stays. What must NOT follow from it is a second copy of the
+// section's CONTENT: two mounted instances of a stateful card each fetch, each
+// hold their own list, and each mutation lands on one of them — so the hidden
+// copy keeps offering a row the daemon no longer has, and becomes visible the
+// moment the viewport crosses `sm`.
+describe('SettingsPage — the active section is mounted once', () => {
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  it('mounts a section once, so no two copies of its controls can diverge', () => {
+    renderAt('/settings/general')
+    expect(screen.getAllByRole('radiogroup', { name: /theme/i })).toHaveLength(1)
+  })
+
+  // /settings is its own branch — the section list renders there and nowhere
+  // else, and the pane still holds General behind it. A mutation that added
+  // the content back to that list was missed by the case above, which renders
+  // /settings/general and never reaches the branch.
+  it('mounts General once at /settings, where the section list renders too', () => {
+    renderAt('/settings')
+    expect(screen.getAllByRole('radiogroup', { name: /theme/i })).toHaveLength(1)
+  })
+
+  it('offers a daemon-backed action once, not once per layout chrome', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/pairing/credentials')) {
+          return jsonResponse({
+            credentials: [
+              {
+                credentialId: 'Y3JlZC1vbmU',
+                origin: 'https://example.test',
+                backupEligible: true,
+                createdAt: '2026-09-18T00:00:00.000Z',
+              },
+            ],
+          })
+        }
+        return jsonResponse({}, 404)
+      }),
+    )
+    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+
+    // findAll, not find: with two copies a single-element query throws on the
+    // ambiguity, which reports as a broken query rather than as the duplicate
+    // the count assertions below are here to name.
+    await screen.findAllByText('https://example.test')
+    // One card, one row, one Remove button — a second of each is a second
+    // list that this one's revoke will not reach.
+    expect(screen.getAllByTestId('passkeys-card')).toHaveLength(1)
+    expect(screen.getAllByTestId('passkey-Y3JlZC1vbmU')).toHaveLength(1)
+    expect(
+      screen.getAllByRole('button', {
+        name: 'Remove the passkey registered from https://example.test',
+      }),
+    ).toHaveLength(1)
+  })
+
+  it('leaves no copy of a revoked passkey anywhere on the page', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/pairing/credentials')) {
+          if (init?.method === 'DELETE') return jsonResponse({ revoked: true })
+          return jsonResponse({
+            credentials: [
+              {
+                credentialId: 'Y3JlZC1vbmU',
+                origin: 'https://example.test',
+                backupEligible: true,
+                createdAt: '2026-09-18T00:00:00.000Z',
+              },
+            ],
+          })
+        }
+        return jsonResponse({}, 404)
+      }),
+    )
+    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+
+    await screen.findAllByText('https://example.test')
+    // The first copy is the one a person on a narrow viewport is looking at.
+    const removeButtons = screen.getAllByRole('button', {
+      name: 'Remove the passkey registered from https://example.test',
+    })
+    fireEvent.click(removeButtons[0] as HTMLElement)
+
+    // queryAll, not query: the defect this guards is a SECOND row surviving,
+    // which a single-element query reports as "found it" rather than failing.
+    await waitFor(() => {
+      expect(screen.queryAllByTestId('passkey-Y3JlZC1vbmU')).toHaveLength(0)
+    })
   })
 })

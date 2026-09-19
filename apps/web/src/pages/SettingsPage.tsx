@@ -212,23 +212,10 @@ function GeneralSection({
   )
 }
 
-// Duplicate mount cost (this renders once per visible layout — mobile detail
-// and desktop pane both exist in the DOM at once, see the module doc comment
-// below) is an accepted tradeoff: PairedOriginsCard, PasskeysCard and
-// StorageReportCard each own their own fetch/error/loading state, and
-// splitting that out to share across two layouts would add real complexity
-// for a cheap, idempotent GET.
-//
-// The consequence is not only a duplicated read. Two of these cards MUTATE —
-// PairedOriginsCard revokes a grant, PasskeysCard registers and revokes a
-// passkey — and each drops the row from its own list, so the hidden layout's
-// copy keeps showing it. CSS hiding does not unmount, so that copy is stale
-// until the section is left and re-entered, which remounts both. It is
-// reachable only by crossing the `sm` breakpoint in between, and repeating
-// the stale action is safe: a second DELETE of a credential already gone
-// answers 404, which the card renders as "could not remove" rather than
-// removing anything else. Lift the state if a card here ever gains a
-// mutation that is NOT safe to repeat.
+// Each card here owns its own fetch/error/loading state, which is the right
+// shape now that the page mounts this section once: one instance, one read,
+// and a mutation lands on the list the person is looking at. See
+// SettingsPage's doc comment for what mounting it twice used to cost.
 function ConnectionsSection({
   daemon,
   onDisconnected,
@@ -413,22 +400,30 @@ const SECTION_TITLE: Record<SettingsSection, string> = {
 
 /**
  * Routed settings surface (theme, favicon style, WebMCP, storage, daemon
- * connections). Renders BOTH the mobile (section list / section detail) and desktop
- * (sidebar + content pane) layouts at once, switching which is visible via
- * `sm:` CSS classes rather than JS — this keeps the split unit-testable in
- * jsdom, which has no viewport to react to, at the cost of mounting the
- * current section's content twice while it's the active route (see
- * ConnectionsSection's fetch-cost note above).
+ * connections).
+ *
+ * The layout switches on `sm:` CSS classes rather than JS, so it stays
+ * unit-testable in jsdom, which has no viewport to react to — and it also
+ * means a resize never remounts what is on screen. What varies between the
+ * two layouts is CHROME: a section list and a back-to-settings row below
+ * `sm`, a sidebar at and above it. The section's CONTENT is mounted exactly
+ * once, and that is load-bearing rather than tidiness. It used to be mounted
+ * once per layout, which gave every stateful card two instances: two fetches
+ * on arrival, two independent lists, and a mutation that reached only the one
+ * the person clicked — so the hidden copy kept offering a row the daemon no
+ * longer had, and became the visible one the moment the viewport crossed
+ * `sm`. `SettingsPage.test.tsx`'s "the active section is mounted once" block
+ * holds the invariant.
  */
 export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const parsed = parseSettingsRoute(location.pathname)
   const routeSection = parsed?.section ?? null
-  // /settings (no section in the URL) is the mobile section list; desktop
-  // has no "index" state of its own and always shows a section, so it
-  // defaults to General.
-  const desktopSection: SettingsSection = routeSection ?? 'general'
+  // /settings (no section in the URL) is the narrow layout's section list;
+  // the wide one has no "index" state of its own and always shows a section,
+  // so it defaults to General.
+  const activeSection: SettingsSection = routeSection ?? 'general'
 
   const { theme, setTheme } = useThemeMode()
   const [faviconStyle, setFaviconStyle] = useState<FaviconStyle>(
@@ -583,10 +578,11 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      {/* Mobile (<sm): section list at /settings, full-width detail at
-          /settings/<section>. */}
-      <div className="sm:hidden" data-testid="settings-mobile">
-        {routeSection === null ? (
+      {/* The section list, which exists only below `sm` and only at /settings:
+          the wide layout has no index state, it shows a section with the
+          sidebar beside it. */}
+      {routeSection === null && (
+        <div className="sm:hidden" data-testid="settings-nav-mobile">
           <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b px-4 py-3">
               <Tooltip>
@@ -619,33 +615,19 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
               ))}
             </nav>
           </div>
-        ) : (
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 border-b px-4 py-3">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    to={settingsPath()}
-                    replace
-                    state={location.state}
-                    aria-label="Back to settings"
-                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    <ChevronLeft className="size-4" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent>Back to settings</TooltipContent>
-              </Tooltip>
-              <h1 className="text-sm font-semibold">{SECTION_TITLE[routeSection]}</h1>
-            </div>
-            <div className="p-4">{sectionContent(routeSection, sharedProps)}</div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Desktop (sm and up): sidebar + content pane. */}
-      <div className="hidden h-full sm:flex sm:justify-center" data-testid="settings-desktop">
-        <nav className="w-56 shrink-0 border-r p-4">
+      {/* ONE mount of the active section, with both chromes around it: the
+          sidebar appears at `sm`, the back-to-settings row below it. Hidden
+          below `sm` at /settings, where the list above is the whole screen. */}
+      <div
+        className={`h-full sm:flex sm:justify-center ${routeSection === null ? 'hidden sm:flex' : ''}`}
+      >
+        <nav
+          className="hidden w-56 shrink-0 border-r p-4 sm:block"
+          data-testid="settings-nav-desktop"
+        >
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -666,9 +648,9 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
                 to={settingsPath(section)}
                 replace
                 state={location.state}
-                aria-current={desktopSection === section ? 'page' : undefined}
+                aria-current={activeSection === section ? 'page' : undefined}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                  desktopSection === section
+                  activeSection === section
                     ? 'bg-accent text-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
@@ -679,9 +661,34 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
             ))}
           </div>
         </nav>
-        <div className="w-full min-w-0 max-w-2xl overflow-y-auto p-6">
-          <h1 className="mb-4 text-base font-semibold">{SECTION_TITLE[desktopSection]}</h1>
-          {sectionContent(desktopSection, sharedProps)}
+        <div
+          className="w-full min-w-0 sm:max-w-2xl sm:overflow-y-auto"
+          data-testid="settings-section"
+        >
+          {/* One title for both chromes — a second copy behind a `sm:` class
+              would be a second element with the same text for any query. */}
+          <div className="flex items-center gap-2 border-b px-4 py-3 sm:border-b-0 sm:px-6 sm:pb-0 sm:pt-6">
+            {routeSection !== null && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    to={settingsPath()}
+                    replace
+                    state={location.state}
+                    aria-label="Back to settings"
+                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground sm:hidden"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent>Back to settings</TooltipContent>
+              </Tooltip>
+            )}
+            <h1 className="text-sm font-semibold sm:text-base">{SECTION_TITLE[activeSection]}</h1>
+          </div>
+          <div className="p-4 sm:px-6 sm:pb-6 sm:pt-4">
+            {sectionContent(activeSection, sharedProps)}
+          </div>
         </div>
       </div>
     </div>
