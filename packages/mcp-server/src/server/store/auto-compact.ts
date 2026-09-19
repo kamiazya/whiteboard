@@ -30,6 +30,14 @@ import type { VersionStore } from './version-store.js'
 function clearAllAutoCompactTimers(): void {
   for (const t of autoCompactTimers.values()) clearTimeout(t)
   autoCompactTimers.clear()
+  // Reaps the test-only waiting below as well, and the order matters: the
+  // keep-alives go first, then the announce releases every waiter, which
+  // re-checks and returns on the very next microtask. The loop cannot drain
+  // in between, and a waiter that was abandoned (its test timed out, so its
+  // `finally` will never run) has its handle cleared here instead of
+  // outliving the file. Both cancellation paths reach this function, which
+  // is why it is the one place that needs to know.
+  releaseLoopHolders()
   announceAutoCompactStateChange()
 }
 
@@ -177,6 +185,14 @@ export function _inFlightAutoCompactCountForTests(): number {
   return inFlightAutoCompacts.size
 }
 
+// Test-only introspection: how many waits are holding the event loop open.
+// It is what lets a test prove the reap above happens — an interval that was
+// never cleared is invisible from the outside, and the leak it causes shows
+// up much later as a shard that will not exit.
+export function _loopHoldersCountForTests(): number {
+  return loopHolders.size
+}
+
 // Test-only introspection: lets a test deterministically wait until
 // disposeAutoCompact() has begun (and is therefore refusing reschedules)
 // before triggering a reschedule attempt, instead of racing a wall-clock
@@ -213,6 +229,19 @@ function nextAutoCompactStateChange(): Promise<void> {
   })
 }
 
+// Live keep-alives, tracked rather than left to their own `finally`.
+// A wait that never settles never reaches that `finally`: vitest abandons
+// the test at its timeout, but the promise stays pending, and an interval
+// that is deliberately NOT unref'd then keeps the worker's loop alive for
+// the rest of the run. So the two cancellation paths reap them, in
+// `clearAllAutoCompactTimers` above.
+const loopHolders = new Set<ReturnType<typeof setInterval>>()
+
+function releaseLoopHolders(): void {
+  for (const holder of loopHolders) clearInterval(holder)
+  loopHolders.clear()
+}
+
 /**
  * Hold the event loop open for the duration of a wait.
  *
@@ -223,10 +252,12 @@ function nextAutoCompactStateChange(): Promise<void> {
  */
 async function whileHoldingTheLoopOpen(wait: () => Promise<void>): Promise<void> {
   const keepAlive = setInterval(() => undefined, 1_000)
+  loopHolders.add(keepAlive)
   try {
     await wait()
   } finally {
     clearInterval(keepAlive)
+    loopHolders.delete(keepAlive)
   }
 }
 

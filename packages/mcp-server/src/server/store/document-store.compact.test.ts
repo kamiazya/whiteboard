@@ -28,6 +28,7 @@ const {
   _isDisposingAutoCompactForTests,
   _awaitAutoCompactFiredForTests,
   _awaitAutoCompactIdleForTests,
+  _loopHoldersCountForTests,
 } = await import('./auto-compact.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
@@ -578,6 +579,53 @@ describe('auto-compact disposal', () => {
       await readLastCompactedAt(),
       'the compaction settled but wrote no lastCompactedAt',
     ).not.toBeNull()
+  })
+
+  it("releases an abandoned wait's keep-alive when the timers are cleared, instead of leaving it running", async () => {
+    const store = await buildCompactableCanvas('abandoned-wait')
+    let releaseCompaction: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      releaseCompaction = resolve
+    })
+    const gatedStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestWorkspaceFrontiers') {
+          return async (workspaceId: string) => {
+            await gate
+            return target.earliestWorkspaceFrontiers(workspaceId)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+
+    expect(_loopHoldersCountForTests()).toBe(0)
+    scheduleAutoCompact('session1', 'abandoned-wait', gatedStore, { debounceMs: 1 })
+    await _awaitAutoCompactFiredForTests()
+
+    // Started and deliberately NOT awaited: this is a wait whose test timed
+    // out, so its own `finally` will never run. The keep-alive it holds is
+    // not unref'd by design, so without a reap it would keep the worker's
+    // event loop alive for the rest of the run — a leak that shows up much
+    // later as a shard that will not exit, blaming nothing.
+    void _awaitAutoCompactIdleForTests()
+    try {
+      expect(_loopHoldersCountForTests()).toBe(1)
+
+      uninstallAutoCompact()
+      expect(
+        _loopHoldersCountForTests(),
+        'the abandoned wait is still holding the event loop open',
+      ).toBe(0)
+    } finally {
+      // Same reason as the gated test above: a failed assertion here would
+      // otherwise leave the compaction held, and afterEach awaits it — so
+      // the run would report `Hook timed out in 10000ms` against the
+      // afterEach instead of the sentence that actually failed. Measured on
+      // the mutant, which produced both messages before this `finally`.
+      releaseCompaction()
+    }
+    await disposeAutoCompact()
   })
 
   it('_awaitAutoCompactFiredForTests says so rather than hanging when nothing is pending or in flight', async () => {
