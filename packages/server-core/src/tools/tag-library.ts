@@ -103,3 +103,30 @@ export function carriesATag(canvas: SpatialCanvas): boolean {
     canvas.edges.some((edge) => (edge.tags?.length ?? 0) > 0)
   )
 }
+
+/**
+ * The library check for a writer that takes a whole OKF BODY — `document.set`
+ * and `wb_document_create`'s markdown arm, and the `POST /documents` route
+ * behind it. Such a write replaces the document's tags wholesale, so the
+ * frontmatter's own list IS the set it would end up carrying and there is no
+ * merge to compute (`tagSetsAfter` is what does that on the tag-op path).
+ *
+ * Without this, a body is the way around `wb_facet_set`'s check: the same
+ * forbidden tag, written as frontmatter instead of as a tag op.
+ *
+ * The listing is taken only when there is a tag to judge, so a tagless body
+ * lists the workspace zero times — the same cost rule the tag-op path
+ * follows, and pinned the same way.
+ */
+export async function refuseFrontmatterTags(
+  deps: ServerDeps,
+  workspaceId: string,
+  tags: readonly string[] | undefined,
+): Promise<void> {
+  if (tags === undefined || tags.length === 0) return
+  refuseAgainstLibrary(
+    await workspaceTagLibrary(deps, workspaceId, 'deployment'),
+    tags,
+    'the document',
+  )
+}

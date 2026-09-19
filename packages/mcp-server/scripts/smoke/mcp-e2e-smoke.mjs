@@ -916,6 +916,29 @@ async function main() {
     'a second value under a key the library makes exclusive',
     'one value at a time',
   )
+  // The same declaration holds a write that arrives as a BODY rather than as
+  // a tag op (increment 5c). Without this the library is a rule with a door
+  // beside it: frontmatter tags reach the same stored field.
+  await expectToolError(
+    'wb_workspace_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      ops: [
+        {
+          op: 'document.create',
+          path: 'notes/undeclared',
+          kind: 'markdown',
+          markdown: '---\ntype: note\ntags:\n  - health:unknown\n---\nBody.',
+        },
+      ],
+    },
+    'a frontmatter tag the library does not admit',
+    'is not admitted',
+  )
+  const afterBodyRefusal = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
+  if (afterBodyRefusal.documents.some((entry) => entry.path === 'notes/undeclared')) {
+    throw new Error('a refused body left a document behind at notes/undeclared')
+  }
   const afterRefusals = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
     documentIds: [documentId],

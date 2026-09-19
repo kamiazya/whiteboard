@@ -78,8 +78,16 @@ What the library changes:
   box `health:unknown`, or adding `region:us` to a box already carrying
   `region:eu` under an exclusive key, is refused by `wb_facet_set` with the
   admitted values in the message, and a batch refused on one document has
-  written nothing to the others. Every tag row in the editor refuses the
-  same tag by the same rule, and keeps what you typed so you can fix it.
+  written nothing to the others. A document whose markdown body declares
+  such a tag in its own properties is refused the same way — when it is
+  created and when it is replaced — and a refused create leaves no document
+  behind. Every tag row in the editor refuses the same tag by the same rule,
+  and keeps what you typed so you can fix it.
+
+  One write is not held to it: what the editor syncs as you type. A sync
+  message carries the document's state rather than a request to change it,
+  so there is nothing there to refuse; the row you type into is where that
+  write is checked.
 - **The rows complete from the declaration.** Under a declared key, a tag
   row offers the admitted values beside whatever the workspace already
   uses, on notes, boards, boxes and edges alike.
