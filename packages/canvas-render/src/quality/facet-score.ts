@@ -22,8 +22,9 @@
  * supply — so the claim stays at the level the counting supports.
  *
  * **More facets is NOT better**, and the columns are shaped so a board
- * cannot score well by spending more: an appearance matching no declared
- * distinction is `excess`, and one appearance carrying two is `overload`.
+ * cannot score well by spending more: an appearance cutting a declared
+ * distinction is `excess`, one carrying two is `overload`, and one spent on
+ * a board that declares nothing at all is `undeclared`.
  */
 
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
@@ -88,8 +89,30 @@ export interface FacetScore {
    *
    * Exclusive with `overload` by construction; see the comment at the loop
    * that decides between them for what testing them independently cost.
+   *
+   * Requires a construct to cut, so it is 0 on a board that declares no
+   * partition — `undeclared` is that board's column (user, 2026-09-19).
    */
   readonly excess: number
+  /**
+   * UNDECLARED: treatments spent on a board that declares NO partition, so
+   * there is no construct for them to carry, overload or cut.
+   *
+   * Split out of `excess` because with `partitions: 0` EVERY spent treatment
+   * fell there by construction, which made the column unable to tell
+   * "decorated meaninglessly" from "well drawn and undeclared" — it reported
+   * the second as the first. The reading that found it: a flowchart drawn
+   * yellow for a step, cyan for a decision and green for a terminal, which
+   * reads well to a person, scored `excess 3`.
+   *
+   * The concern behind that reading survives here rather than being dropped:
+   * the colour carries a distinction the DOCUMENT does not record, so no
+   * machine, later reader or export can recover that cyan meant "decision".
+   * What changed is only that it is no longer indistinguishable from a real
+   * mismatch — and `channels` says which channel it was, which a count
+   * cannot.
+   */
+  readonly undeclared: number
   /**
    * DISCRIMINABILITY (V4, Moody's visual distance): the FEWEST channels two
    * treatments in use differ on, of the TWO a board draws. `0` means fewer
@@ -481,7 +504,17 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
   // and charged the same board both.
   let overload = 0
   let excess = 0
+  let undeclared = 0
   for (const [, worn] of wearers) {
+    // With nothing declared there is no class to be inside, to span, or to
+    // cut, so the three-way split below has no question to answer and used
+    // to answer `excess` for want of an alternative. `partitions` and
+    // `allClasses` are empty together — a partition reaching this point has
+    // at least two classes, since `declaredPartitions` filters the rest.
+    if (partitions.length === 0) {
+      undeclared++
+      continue
+    }
     const insideSomeClass = allClasses.some((members) => {
       const set = new Set(members)
       return [...worn].every((id) => set.has(id))
@@ -551,6 +584,7 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
     deficit,
     overload,
     excess,
+    undeclared,
     distance: Number.isFinite(distance) ? distance : 0,
     treatments: inUse.length,
     redundancy,

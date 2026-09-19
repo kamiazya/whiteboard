@@ -15,6 +15,7 @@ const score = (over: Record<string, unknown>) => ({
   distance: 0,
   overload: 0,
   excess: 0,
+  undeclared: 0,
   channels: {
     colour: { use: 'unused', carriedBy: [] },
     shape: { use: 'unused', carriedBy: [] },
@@ -67,6 +68,14 @@ describe('the facet line', () => {
   it('names overload and excess only when they are owed', () => {
     expect(facetLine(score({ constructs: 6, excess: 3 }))).toContain('excess 3')
     expect(facetLine(score({ constructs: 6 }))).not.toContain('excess')
+  })
+
+  it('counts undeclared treatments beside `declares nothing`, where they can occur', () => {
+    // The channel clause says WHICH channel went unrecorded; this says what
+    // it cost in appearances. `undeclared` is only ever non-zero with
+    // nothing declared, so it belongs to this branch and to no other.
+    expect(facetLine(score({ undeclared: 3 }))).toContain('declares nothing, undeclared 3')
+    expect(facetLine(score({}))).not.toContain('undeclared')
   })
 
   it('says nothing at all when the board was not scored', () => {
