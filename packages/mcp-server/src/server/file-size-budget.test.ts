@@ -665,17 +665,26 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
  * A shrink-only ratchet never demands shrinkage, so it does not fight a
  * test that honestly needs its setup — it only stops one growing unwatched.
  */
+// Ten entries moved when ADR-0038's branch met ADR-0040's: two features
+// touching the same files, and a test file grows with what it covers. The
+// large ones are the two pinned SCOREBOARDS (`tool-surface-quality`, +89, and
+// `editor-state.property`, +72) and the two command ledgers
+// (`commands.test`, +111, `canvas-edit.test`, +33) — each one a table where a
+// moved row is a reason somebody has to write down, so the growth IS the
+// record. `gestures.test` and this file itself are new entries rather than
+// raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/App.test.tsx': 1611,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 968,
-  'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2136,
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2634,
+  'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2706,
+  'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
-  'apps/web/src/lib/document-sync-session.test.ts': 2766,
-  'apps/web/src/lib/spatial/commands.test.ts': 1393,
+  'apps/web/src/lib/document-sync-session.test.ts': 2768,
+  'apps/web/src/lib/spatial/commands.test.ts': 1504,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
@@ -687,21 +696,25 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,
   'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
-  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1194,
+  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1200,
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   'packages/canvas-render/src/tidy.test.ts': 1176,
   'packages/canvas-viewer/src/widget-entry.test.tsx': 1266,
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1307,
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1308,
   'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
   'packages/mcp-server/src/server/app.test.ts': 1339,
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 874,
+  // Its own entry, and it counts ITSELF: the number is what the file is
+  // after the entry is in it, which is why this one is 10 past the reading
+  // that first flagged it.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 825,
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 885,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
   'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
-  'packages/server-core/src/tools/canvas-edit.test.ts': 3110,
+  'packages/server-core/src/tools/canvas-edit.test.ts': 3143,
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 
