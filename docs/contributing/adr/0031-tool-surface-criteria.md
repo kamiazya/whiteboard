@@ -1317,6 +1317,38 @@ what moved is a BEHAVIOUR (the tag write) rather than the pass column. The
 pass column is currently measuring the instrument gap above as if it were
 the model.
 
+**The twenty-fifth reading (2026-09-19), round 21: 3 of 3, pass^k 1.** The
+first time this task has passed reliably; rounds 15 through 20d read 0 or 1
+of 3. Every trial: `colour carried(health), shape carried(stencil)`, 21
+calls mean, $1.13 for the three.
+
+**It cannot say which change did it, and the honest reading leans on the
+verifier.** Two things landed between 20d and 21 — the prompt now asks for
+the board to stand on its own (#1640), and the verifier scores the canvas
+the layout would draw (#1641). No run separates them. But 20c's three
+trials had ALREADY written the right tags and declared a library with a
+colour per value, under the old prompt; only the scoring was wrong. So the
+verifier correction alone is enough to account for the flip, and the
+prompt's contribution is unmeasured rather than demonstrated. A round that
+wants to price the prompt has to hold the verifier fixed and change only
+that, which is a run nobody has spent.
+
+**The run also caught the same defect in the sibling caller, in its own
+output.** The verdict read `colour carried(health)` while the `drawing`
+column beside it read `colour unused` — one board, one run, two answers,
+because only the verifier had been fixed and the runner's board scoring
+still read the stored canvas. It reached more than the facet column: the
+layout there was built without the library too, so contrast and treatment
+counts were taken off colours nobody draws. Fixed, and the conversion is
+now one exported definition rather than two copies, since two copies is
+exactly how these drifted. A single trial afterwards reads
+`colour carried(health), shape carried(stencil)` in BOTH columns.
+
+Worth keeping as a shape: **a run whose own two columns disagree about one
+board is the cheapest instrument bug there is to find, and it only shows up
+because both numbers are printed on the same line.** Neither column alone
+looked wrong.
+
 What this adds to the twenty-second: the write path for a word that is
 NOT a plugin's — a tag needs no registry to be a partition — reads the same
 as the registered facet did. Six remedies, one reading, and the open

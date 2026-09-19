@@ -29,7 +29,7 @@ import { isCliAvailable } from '../smoke/lib/cli-available.mjs'
 import { seed, WORKSPACE_ID } from './fixture.mjs'
 import { facetLine } from './lib/report-line.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
-import { TASKS } from './tasks.mjs'
+import { TASKS, tagLibrary } from './tasks.mjs'
 
 // The drawing score reads a laid-out scene, and both packages that build
 // one are source-only; `tsx` resolves them the way the server launcher
@@ -42,6 +42,7 @@ const {
   scoreComposition,
   scoreDrawing,
   scoreFacets,
+  withDeclaredColours,
 } = await import('@kamiazya/whiteboard-canvas-render')
 const { parseSpatial } = await import('@kamiazya/whiteboard-codec')
 
@@ -126,6 +127,9 @@ async function captureBoards(wb, task, trial) {
   if (OUT === undefined || !Array.isArray(task.boards)) return []
   const listed = await wb.call('wb_document_list', { workspaceId: WORKSPACE_ID })
   const figures = `${OUT.replace(/\.json$/, '')}-boards`
+  // Read ONCE per capture: a workspace declares one library, and every board
+  // in this task is drawn against it.
+  const library = await tagLibrary(wb)
   const drawing = []
   for (const path of task.boards) {
     const entry = listed.documents.find((d) => d.path === path)
@@ -150,10 +154,20 @@ async function captureBoards(wb, task, trial) {
       const parsed = parseSpatial(content)
       if (!parsed.ok)
         throw new Error(`the document does not parse as a canvas: ${parsed.error.message}`)
-      const canvas = parsed.value
+      // The canvas AS DRAWN, which is what the SVG above already is: the
+      // layout resolves a declared tag colour onto the node before laying
+      // anything out, and `wb_scene_render` passes the library. Scoring the
+      // stored canvas instead reported a board nobody draws — round 21 read
+      // `colour carried(health)` in the verdict and `colour unused` in this
+      // column, for the same board in the same run, because the verifier had
+      // been fixed and this had not. It reaches every column, not just the
+      // facet one: contrast and treatment counts are read off the same
+      // colours.
+      const canvas = withDeclaredColours(parsed.value, library)
       const scene = layoutSpatialCanvas(canvas, {
         measure: constantRatioMeasureText,
         appearance: DRAWING_APPEARANCE,
+        tagLibrary: library,
       })
       drawing.push({
         board: path,
