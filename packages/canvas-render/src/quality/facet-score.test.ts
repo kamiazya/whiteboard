@@ -113,6 +113,44 @@ describe('facet vocabulary: a planted mistake moves the column that names it', (
     ])
     expect(s.excess).toBe(1)
     expect(s.deficit).toBe(0)
+    // A board WITH a partition never owes `undeclared`: there is a class to
+    // cut, so the cut is what the reading is about.
+    expect(s.undeclared).toBe(0)
+  })
+
+  it('a board that declares nothing owes `undeclared`, not `excess`', () => {
+    // The `deploy-flow` shape from the 2026-09-12 lane reading: no frame,
+    // one kind, no stencil, no tag — so `declaredPartitions` filters every
+    // candidate out — and three colours a human reads well (step, decision,
+    // terminal).
+    //
+    // With no class to cut, EVERY spent treatment fell to `excess` by
+    // construction, so the column could not tell "decorated meaninglessly"
+    // from "well drawn and undeclared" and reported the second as the
+    // first. `excess` is now what it says it is — a treatment cutting a
+    // DECLARED construct — and the other case has its own name.
+    const s = score([
+      box('a', 40, 60, { color: '4' }),
+      box('b', 260, 60, { color: '5' }),
+      box('c', 480, 60, { color: '2' }),
+    ])
+    expect(s.partitions).toBe(0)
+    expect(s.excess).toBe(0)
+    expect(s.undeclared).toBe(3)
+  })
+
+  it('names WHICH channel went unrecorded, which the count cannot', () => {
+    // The finding the split protects is not the number: a reader repairing
+    // this board needs to know it was the COLOUR nobody wrote down. The
+    // channel column already said so and was drowned out by a count that
+    // fired on every dressed undeclared board.
+    const s = score([
+      box('a', 40, 60, { color: '4' }),
+      box('b', 260, 60, { color: '5' }),
+      box('c', 480, 60, { color: '2' }),
+    ])
+    expect(s.channels.colour.use).toBe('contested')
+    expect(s.channels.shape.use).toBe('unused')
   })
 
   it('two channels on one distinction is REDUNDANCY, reported and not owed', () => {
