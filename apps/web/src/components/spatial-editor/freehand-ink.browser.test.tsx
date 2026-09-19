@@ -9,20 +9,21 @@
 // change for it.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
 const start: SpatialCanvas = { nodes: [], edges: [] }
 
-function makeHost() {
-  const latest = { canvas: start }
+function makeHost(from: SpatialCanvas = start) {
+  const latest = { canvas: from }
   function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+    const [canvas, setCanvas] = useState<SpatialCanvas>(from)
     latest.canvas = canvas
     return (
       <div style={{ width: 800, height: 600 }}>
@@ -140,4 +141,67 @@ it('leaves the board alone when the pen only taps it', async () => {
 
   await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
   expect(latest.canvas.nodes).toEqual([])
+})
+
+it('hands the drawn ink to the select tool, which can then delete it', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  // A stroke whose turns are sharp enough that simplification keeps them, so
+  // the press below can be aimed at a segment the stored path really has.
+  drawStroke(root, [
+    [120, 400],
+    [240, 180],
+    [380, 420],
+    [520, 200],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
+
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+  // Midway along the first segment — on the ink, and nowhere near a node.
+  await userEvent.click(root, { position: { x: 180, y: 290 } })
+
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+
+  await userEvent.keyboard('{Delete}')
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
+})
+
+it('selects ink drawn ACROSS a note, where the note is what lies under the press', async () => {
+  // The case an empty board cannot show, and the one a real board is made of:
+  // a scribble goes over what is already there. The press lands inside the
+  // note's box AND on the ink, and the ink is what was drawn on top — so the
+  // ink is what a press on it selects. Before this the node won at the first
+  // branch and the line hit-test never ran, leaving ink over any content
+  // unselectable and therefore undeletable except by undo.
+  const { Host, latest } = makeHost({
+    nodes: [textNode({ id: 'a', x: 250, y: 200, width: 300, height: 200, text: 'note' })],
+    edges: [],
+  })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [150, 300],
+    [300, 260],
+    [500, 340],
+    [650, 300],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
+
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+  // A stored bend that sits INSIDE the note — the press is on both.
+  const over = latest.canvas.lines?.[0]?.bends?.find(
+    (b) => b.x > 250 && b.x < 550 && b.y > 200 && b.y < 400,
+  )
+  expect(over).toBeDefined()
+  await userEvent.click(root, { position: { x: over?.x ?? 0, y: over?.y ?? 0 } })
+
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+  await userEvent.keyboard('{Delete}')
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
+  // The note the ink crossed is still there: deleting ink is not deleting
+  // what it was drawn over.
+  expect(latest.canvas.nodes).toHaveLength(1)
 })

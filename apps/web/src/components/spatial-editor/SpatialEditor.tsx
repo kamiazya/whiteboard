@@ -144,6 +144,7 @@ import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { InkDraftLayer } from './InkDraftLayer.js'
+import { inkUnder } from './ink-hit.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
@@ -603,6 +604,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * open its bubble on the path (canvas-render's `commentAnchor`), the
      * same producer the layer pins it with.
      */
+    /**
+     * How near a press has to land to count as on a drawn path, in CANVAS
+     * units: the budget is a screen distance, so zooming out widens it in
+     * document space and the stroke stays as easy to hit with a finger.
+     */
+    const inkTolerance = EDGE_HIT_TOLERANCE_PX / viewport.zoom
     const edgePathOf = useCallback(
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
       [edgePaths],
@@ -999,7 +1006,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
-      const hitId = hitTest(selectableBoxes, point)
+      // Ink first: a stroke is drawn ON what it crosses, so a press on it
+      // selects it rather than the note underneath (see `ink-hit.ts` for why
+      // this is lines only). Answering `undefined` for the node makes every
+      // branch below treat the press as one on ink over empty board, which
+      // is what it is.
+      const hitInk = inkUnder(edgePaths, point, inkTolerance, isEdgeLocked)
+      const hitId = hitInk !== undefined ? undefined : hitTest(selectableBoxes, point)
       // A press on the canvas surface shuts the open conversation, the way
       // a pointerdown outside a menu shuts the menu. It is the one dismissal
       // a phone has: there is no Escape, and the card covers the bubble
@@ -1234,7 +1247,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // The MENU hit-tests every node, locked included — a locked node has
       // to stay right-clickable or Unlock would be unreachable. Only the
       // selection side effect below is skipped for it.
-      const hitId = hitTest(boxes, point)
+      const hitId =
+        inkUnder(edgePaths, point, inkTolerance, () => false) !== undefined
+          ? undefined
+          : hitTest(boxes, point)
       // Hand mode keeps CONTENT out of reach — a press pans, nothing
       // selects, nothing edits — but a conversation about what is on screen
       // is not content, and a reader panning has as much reason to open one
