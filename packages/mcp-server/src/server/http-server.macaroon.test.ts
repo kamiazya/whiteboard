@@ -3,9 +3,13 @@ import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
 import { getDataDir } from '../shared/data-dir-secure.js'
+import {
+  claimIsolatedDataDir,
+  releaseIsolatedDataDir,
+} from '../shared/test-utils/isolated-data-dir.js'
 import { type RunningServer, startHttpServer } from './http-server.js'
 import { mintMacaroon } from './security/macaroon.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
@@ -29,6 +33,18 @@ import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 // create: after the server has started, that returns the SAME key the server
 // holds. A test that minted its own key instead would prove only that the
 // module works.
+
+// A real server migrates whatever `getDataDir()` answers, and
+// `http-server.test.ts` starts real servers too. Sharing the default dir with
+// it means two worker processes migrating one sqlite file at once, which is
+// how this file first turned that one red rather than itself.
+let scratchDataDir: string
+beforeAll(() => {
+  scratchDataDir = claimIsolatedDataDir('macaroon-wiring')
+})
+afterAll(() => {
+  releaseIsolatedDataDir(scratchDataDir)
+})
 
 let nextPortBase = 4700
 async function acquirePort(): Promise<number> {
