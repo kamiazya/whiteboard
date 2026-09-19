@@ -6,8 +6,9 @@ profile and settles the direction its 2026-09-17 revision recorded. Stands on
 [ADR-0035](0035-device-keys-and-keeper.md) decision 4 (a keeper is not an
 issuer) and rides [ADR-0023](0023-replica-model.md)'s keeper model rather than
 adding a second one. The propagation of a revocation to a replica that is
-offline is deferred to [ADR-0042](0042-offline-revocation.md), which is where
-the one real conflict with local-first behaviour lives.
+offline — the one real conflict with local-first behaviour — is
+[ADR-0042](0042-offline-revocation.md), taken the same day on an axis this ADR
+did not anticipate.
 
 ## Context
 
@@ -168,11 +169,11 @@ inferred join does not.
 
 ### What is deferred, and what triggers it
 
-- **Revocation reaching an offline replica** — [ADR-0042](0042-offline-revocation.md).
-  A replica that is readable while disconnected is an ADR-0023 feature, and an
-  immediate-revocation requirement wants a lease that takes it away. Deferred
-  because the trade is real and the deployment evidence to settle it does not
-  exist yet.
+- **Revocation reaching an offline replica** — [ADR-0042](0042-offline-revocation.md),
+  decided the same day on a different axis than this ADR expected: the policy
+  chooses whether a replica EXISTS rather than how long it lives, because a
+  lease over a plaintext cache is advisory. An expiring lease as a real
+  guarantee still waits on E2EE.
 - **The user DID method** stays deferred with ADR-0035 decision 2's trigger.
   This ADR is written so that nothing waits on it.
 - **The concrete policy surface** — how an administrator states an order — is
