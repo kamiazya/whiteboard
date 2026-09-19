@@ -519,4 +519,29 @@ describe('backupDataDir and files that must not travel', () => {
       await rm(roots.root, { recursive: true, force: true })
     }
   })
+
+  // The one exclusion here with a real cost, so it is asserted rather than
+  // left to the ledger: a restored daemon generates a fresh identity, which
+  // changes its did:key and breaks every pairing. Weighed and accepted
+  // (2026-09-19) because that is recoverable and a signing key living on in
+  // a backup is not. If this test is ever deleted, the decision is being
+  // reversed — do that deliberately, in `backup-restore.ts`'s comment too.
+  it('leaves the daemon identity private key out of the copy', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await writeFile(
+        join(roots.src, 'daemon-identity.json'),
+        '{"version":1,"alg":"Ed25519","publicJwk":{},"privateJwk":{"d":"super-secret-seed"}}',
+      )
+      await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
+
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+
+      const copied = await readdir(roots.backup)
+      expect(copied).not.toContain('daemon-identity.json')
+      expect(copied).toContain('whiteboard.db')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
 })

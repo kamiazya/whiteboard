@@ -227,12 +227,31 @@ reach the shared database skips the pass rather than assuming it is alone.
 
   `restore` still requires the target to be stopped and empty: it is putting
   a whole data directory back, not reading one.
-- **A backup never carries `daemon.json`.** That file holds the Bearer token
-  the daemon authenticates HTTP and WS with, and is written owner-only for
-  that reason. A backup directory is the opposite of owner-only, so it is
-  excluded — along with the staging directory for in-flight writes and the
-  backup's own progress marker. A restored deployment writes a fresh daemon
-  record on first start.
+- **A backup never carries a key or a live credential.** A backup directory
+  is the opposite of owner-only — it is copied to another disk, shipped to
+  support, kept for months — so three files are excluded, along with the
+  staging directory for in-flight writes and the backup's own progress
+  marker:
+
+  | excluded | what it holds | what a restore does instead |
+  |---|---|---|
+  | `daemon.json` | the Bearer token the daemon authenticates HTTP and WS with | writes a fresh record on first start; nothing is lost |
+  | `macaroon-root-key.json` | the secret every scoped token chains from | generates a fresh key; **any token issued before the backup stops working** and has to be reissued |
+  | `daemon-identity.json` | the daemon's Ed25519 private key and the source of its `did:key` | generates a fresh identity — see the warning below |
+
+  **A restored deployment is a new identity.** Because the identity key is
+  excluded, the restored daemon's `did:key` differs from the original's:
+  every paired browser must pair again, and version attestations signed by
+  the old identity no longer verify against the current one. Past versions
+  and their history are intact — only the signature's *attribution* is, and
+  the timeline shows those entries as signed by a device it no longer knows.
+
+  This is deliberate. A signing key that travels in a backup is a forgery
+  capability that outlives the machine it came from, and unlike a broken
+  pairing that is not recoverable. If you need a restore that keeps the
+  identity, copy `daemon-identity.json` across by hand, over a channel you
+  would trust with a private key — and understand that wherever the copy
+  lands can sign as that daemon.
 
 - **The data directory holds three database files, not one.** The database
   runs in WAL mode, so `whiteboard.db` is accompanied by `whiteboard.db-wal`

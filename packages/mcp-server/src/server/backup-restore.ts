@@ -2,6 +2,7 @@ import { cp, lstat, mkdir, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
+import { DAEMON_IDENTITY_FILENAME } from './security/daemon-identity.js'
 import { MACAROON_ROOT_KEY_FILENAME } from './security/macaroon-root-key.js'
 import type { BackupBlobReferences } from './store/backup-blob-mirror.js'
 import { mirrorRootFor, readBackupBlobManifest } from './store/backup-blob-mirror.js'
@@ -188,6 +189,17 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
  *   verifies against the LIVE daemon. It costs only reissuance to lose,
  *   which `macaroon-root-key.ts` already calls the expected price of
  *   regeneration, so the exclusion is cheap and the leak is not.
+ * - The daemon's Ed25519 private key signs version attestations (ADR-0039)
+ *   and is the source of its `did:key`. Excluding it is the one exclusion
+ *   here with a real cost: a restored daemon generates a fresh identity, so
+ *   its did:key changes, every pairing has to be redone, and attestations
+ *   signed by the old identity no longer verify against the current one.
+ *   That cost was weighed and accepted (2026-09-19) because it is
+ *   RECOVERABLE — re-pair, and read old attestations as history — while a
+ *   signing key sitting in a backup is a forgery capability that outlives
+ *   the machine it came from, and that is not. Encrypting the backup under
+ *   a passphrase is the answer that keeps both, and it is a feature rather
+ *   than a list entry.
  * - The in-progress marker is this command's own bookkeeping, and a copy of
  *   it in a restored data directory claims a backup is running there.
  *
@@ -201,6 +213,7 @@ const NEVER_COPIED = [
   PENDING_WRITES_DIRNAME,
   DAEMON_RECORD_FILENAME,
   MACAROON_ROOT_KEY_FILENAME,
+  DAEMON_IDENTITY_FILENAME,
   BACKUP_MARKER_FILENAME,
 ]
 

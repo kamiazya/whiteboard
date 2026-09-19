@@ -47,7 +47,7 @@ const BACKUP_DISPOSITION = {
     "never-copied: this command's own bookkeeping; a copy in a restored dir claims a backup is running there.",
 
   'daemon-identity.json':
-    'copied: UNDER REVIEW. It is an Ed25519 private key and the leak argument applies, but excluding it changes the daemon did:key on restore, which breaks every pairing and leaves past version attestations unverifiable (ADR-0039). Unlike the macaroon key this is a real tradeoff, so the behaviour is unchanged until it is decided rather than flipped in passing.',
+    'never-copied: the Ed25519 private key that signs version attestations and is the source of the daemon did:key. Decided 2026-09-19 against a real cost — a restored daemon gets a fresh identity, so pairings must be redone and old attestations no longer verify. Taken because that is recoverable and a signing key in a backup is not.',
   'pairing-grants.json':
     'copied: a record of which origins the user trusted, not a key — the session tokens minted against a grant are memory-only (pairing-token-store.ts). A restore that lost it would silently un-pair every origin.',
   'webauthn-credentials.json':
