@@ -573,11 +573,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 2843 + 83 on the merge: the pen's three pointer branches and the
   // gesture-mirror read (ADR-0038) beside ADR-0040's tag fan-out, legend
   // and library props. Two features, no overlap, nothing to reconcile.
-  // Raised 2926 -> 2942 for the ink-first hit test: ink drawn over a node
-  // was unselectable, because the node hit-test settled the press before
-  // the line one ran. The decision itself moved OUT, to `ink-hit.ts`; what
-  // is left here is the two call sites and their reasons.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2942,
+  // Raised 2926 -> 2951 across the two ink-selection fixes: ink drawn over a
+  // node was unselectable (the node hit-test settled the press before the
+  // line one ran), and the marquee looked at boxes only. Both decisions live
+  // OUT of this file, in `ink-hit.ts`; what is left here is the call sites
+  // and their reasons.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2951,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -715,7 +716,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 833,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 834,
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,

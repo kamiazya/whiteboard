@@ -16,7 +16,7 @@ export interface CanvasReplacementInputs {
   gestureState: GestureState
   setGestureState: (state: GestureState) => void
   applySelection: (event: SelectionEvent) => void
-  setSelectedEdgeId: (update: (current: string | null) => string | null) => void
+  retainInk: (keep: (id: string) => boolean) => void
   setLivePoint: (point: null) => void
   setSnapGuides: (guides: null) => void
 }
@@ -27,7 +27,7 @@ export function useCanvasReplacement({
   gestureState,
   setGestureState,
   applySelection,
-  setSelectedEdgeId,
+  retainInk,
   setLivePoint,
   setSnapGuides,
 }: CanvasReplacementInputs): void {
@@ -88,9 +88,7 @@ export function useCanvasReplacement({
     // gate: every site that reads it filters by what is laid out, which
     // is why a stale id there is invisible rather than inert.
     if (missingEdges.size > 0) {
-      setSelectedEdgeId((current) =>
-        current !== null && missingEdges.has(current) ? null : current,
-      )
+      retainInk((id) => !missingEdges.has(id))
     }
     // Mirror gestures.ts's canvas-replaced abort/continue answer into the
     // preview: an abort (result.state no longer in-flight) must retire the

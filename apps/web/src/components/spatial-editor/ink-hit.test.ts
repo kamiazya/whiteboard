@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inkUnder } from './ink-hit.js'
+import { inkUnder, inkWithin } from './ink-hit.js'
 
 const straight = [
   { x: 0, y: 0 },
@@ -37,5 +37,66 @@ describe('inkUnder', () => {
     expect(inkUnder([{ id: 'ink', path: peak, ink: true }], { x: 50, y: 58 }, 6, never)?.id).toBe(
       'ink',
     )
+  })
+})
+
+describe('inkWithin', () => {
+  const band = { x: 0, y: 0, w: 100, h: 100 }
+  const ink = (id: string, path: readonly { x: number; y: number }[]) => ({ id, path, ink: true })
+
+  it('takes ink whose path runs inside the band', () => {
+    expect(
+      inkWithin(
+        [
+          ink('a', [
+            { x: 10, y: 10 },
+            { x: 90, y: 90 },
+          ]),
+        ],
+        band,
+        never,
+      ),
+    ).toEqual(['a'])
+  })
+
+  it('takes ink that only CROSSES the band, with no point inside it', () => {
+    // The common case a containment test would silently leave behind: a
+    // stroke that runs clean through the band and out the other side.
+    expect(
+      inkWithin(
+        [
+          ink('a', [
+            { x: -50, y: 50 },
+            { x: 150, y: 50 },
+          ]),
+        ],
+        band,
+        never,
+      ),
+    ).toEqual(['a'])
+  })
+
+  it('leaves ink the band never reached', () => {
+    expect(
+      inkWithin(
+        [
+          ink('a', [
+            { x: 200, y: 200 },
+            { x: 300, y: 300 },
+          ]),
+        ],
+        band,
+        never,
+      ),
+    ).toEqual([])
+  })
+
+  it('leaves an EDGE and locked ink alone', () => {
+    const crossing = [
+      { x: 10, y: 10 },
+      { x: 90, y: 90 },
+    ]
+    expect(inkWithin([{ id: 'e', path: crossing }], band, never)).toEqual([])
+    expect(inkWithin([ink('a', crossing)], band, (id) => id === 'a')).toEqual([])
   })
 })

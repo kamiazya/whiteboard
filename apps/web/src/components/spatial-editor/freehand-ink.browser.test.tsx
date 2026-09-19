@@ -47,18 +47,18 @@ function pointerAt(root: HTMLElement) {
   return (x: number, y: number) => ({ clientX: rect.left + x, clientY: rect.top + y })
 }
 
-const down = (at: ReturnType<typeof pointerAt>, x: number, y: number) =>
+const down = (at: ReturnType<typeof pointerAt>, x: number, y: number, pointerId = 71) =>
   new PointerEvent('pointerdown', {
     bubbles: true,
-    pointerId: 71,
+    pointerId,
     button: 0,
     isPrimary: true,
     ...at(x, y),
   })
-const move = (at: ReturnType<typeof pointerAt>, x: number, y: number) =>
-  new PointerEvent('pointermove', { bubbles: true, pointerId: 71, buttons: 1, ...at(x, y) })
-const up = (at: ReturnType<typeof pointerAt>, x: number, y: number) =>
-  new PointerEvent('pointerup', { bubbles: true, pointerId: 71, ...at(x, y) })
+const move = (at: ReturnType<typeof pointerAt>, x: number, y: number, pointerId = 71) =>
+  new PointerEvent('pointermove', { bubbles: true, pointerId, buttons: 1, ...at(x, y) })
+const up = (at: ReturnType<typeof pointerAt>, x: number, y: number, pointerId = 71) =>
+  new PointerEvent('pointerup', { bubbles: true, pointerId, ...at(x, y) })
 
 /**
  * Drives one stroke, in root-relative pixels — which are canvas coordinates
@@ -191,10 +191,26 @@ it('selects ink drawn ACROSS a note, where the note is what lies under the press
   await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
 
   await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
-  // A stored bend that sits INSIDE the note — the press is on both.
-  const over = latest.canvas.lines?.[0]?.bends?.find(
-    (b) => b.x > 250 && b.x < 550 && b.y > 200 && b.y < 400,
-  )
+  // Aimed at the MIDPOINT of a stored segment, not at a bend, and that is
+  // load-bearing: ink is drawn as a curve, whose corners leave the polyline
+  // at each segment's midpoint and bulge toward the vertex. So a midpoint is
+  // exactly ON the drawn path by construction, while the vertex itself is
+  // the one place the ink no longer passes through. Measured: aiming at a
+  // bend missed the 6px budget and read as the hit-test failing.
+  const line = latest.canvas.lines?.[0]
+  const drawn = [
+    line?.from.kind === 'point' ? line.from.point : undefined,
+    ...(line?.bends ?? []),
+    line?.to.kind === 'point' ? line.to.point : undefined,
+  ].filter((p): p is { x: number; y: number } => p !== undefined)
+  const inNote = (p: { x: number; y: number }) => p.x > 250 && p.x < 550 && p.y > 200 && p.y < 400
+  const over = drawn
+    .slice(0, -1)
+    .map((p, i) => {
+      const next = drawn[i + 1] as { x: number; y: number }
+      return { x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 }
+    })
+    .find(inNote)
   expect(over).toBeDefined()
   await userEvent.click(root, { position: { x: over?.x ?? 0, y: over?.y ?? 0 } })
 
@@ -204,4 +220,65 @@ it('selects ink drawn ACROSS a note, where the note is what lies under the press
   // The note the ink crossed is still there: deleting ink is not deleting
   // what it was drawn over.
   expect(latest.canvas.nodes).toHaveLength(1)
+})
+
+it('rubber-bands over ink and takes only the strokes the band touched', async () => {
+  // How a scribble gets erased. Selecting ink one stroke at a time is fine
+  // for one line and hopeless for the handful a scribble actually is, and
+  // the marquee is the gesture everybody reaches for — it looked at nodes
+  // only, so dragging a band over ink selected nothing and Delete removed
+  // nothing.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [100, 120],
+    [180, 60],
+    [260, 140],
+  ])
+  drawStroke(root, [
+    [100, 420],
+    [180, 480],
+    [260, 400],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(2)
+  // And wait until the SCENE has them, not merely the canvas. The band reads
+  // the laid-out paths, which arrive from the layout worker a beat after the
+  // canvas does — a band resolved before that finds nothing and reads
+  // exactly like the feature not working. Ink is the only curve on an empty
+  // board, so a quadratic in the committed surface is the stroke itself.
+  await expect.poll(() => root.querySelectorAll('path[d*="Q"]').length).toBeGreaterThanOrEqual(2)
+
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+  // A band around the UPPER stroke only.
+  //
+  // The press ARMS the band in React state and the move reads it back, so
+  // the move has to follow a commit. What it waits ON is the band's own
+  // `<rect>`, not the `<svg>` that wraps it: an SVG with no width/height
+  // measures 300x150 whatever it contains, so a wrapper-sized wait is true
+  // the instant the press lands and the release still races the move.
+  // Measured: that wait passed immediately and the band resolved as a tap,
+  // reading exactly like the band ignoring ink.
+  const at = pointerAt(root)
+  const bandWidth = () =>
+    Number(
+      page.getByTestId('marquee-rect').element().querySelector('rect')?.getAttribute('width') ?? 0,
+    )
+  root.dispatchEvent(down(at, 60, 40, 72))
+  await expect.element(page.getByTestId('marquee-rect')).toBeInTheDocument()
+  root.dispatchEvent(move(at, 300, 200, 72))
+  await expect.poll(bandWidth).toBeGreaterThan(100)
+  root.dispatchEvent(up(at, 300, 200, 72))
+
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+  await userEvent.keyboard('{Delete}')
+
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
+  // The one it kept is the LOWER stroke — the band never reached it.
+  expect(latest.canvas.lines?.[0]?.from).toEqual({
+    kind: 'point',
+    point: { x: 100, y: 420 },
+    end: 'none',
+  })
 })

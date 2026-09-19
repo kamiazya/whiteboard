@@ -7,7 +7,7 @@
 // called ahead of useWorkerScene.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { DocumentPickerState, LinkDialogState } from './CanvasContextMenu.js'
 
 export interface EditSessionStateInputs {
@@ -22,7 +22,43 @@ export function useEditSessionState({ canvas, selectedId }: EditSessionStateInpu
    * person's toggle cannot change what another person sees.
    */
   const [showResolvedComments, setShowResolvedComments] = useState(false)
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  /**
+   * The ink the selection holds — edges and lines alike, since the scene
+   * hands both out the same way and only `deleteInkCommand` has cause to
+   * ask which collection.
+   *
+   * A LIST rather than one id, because the marquee is how a scribble gets
+   * erased: several strokes at once is the ordinary case, and a single-slot
+   * selection made the band's answer "whichever one, arbitrarily". A press
+   * still selects exactly one, which is why the single-target derivations
+   * below stay honest.
+   */
+  const [selectedInkIds, setSelectedInkIds] = useState<readonly string[]>([])
+  /**
+   * The ink a SINGLE-target surface acts on: the context menu, the lock
+   * toggle, the label editor, the facet panel. Each is about one object by
+   * its nature, and with a multi-selection the first is the one the press
+   * that started it chose.
+   */
+  const selectedEdgeId = selectedInkIds[0] ?? null
+  const setSelectedEdgeId = useCallback(
+    (id: string | null) => setSelectedInkIds(id === null ? [] : [id]),
+    [],
+  )
+  /**
+   * Drops the ink a predicate no longer vouches for — gone from the canvas,
+   * or locked out from under the selection. One shape for both, because the
+   * selection's rule is the same either way: an id nothing lays out is
+   * invisible rather than inert, and a stale one reaches Delete.
+   */
+  const retainInk = useCallback(
+    (keep: (id: string) => boolean) =>
+      setSelectedInkIds((current) => {
+        const next = current.filter(keep)
+        return next.length === current.length ? current : next
+      }),
+    [],
+  )
   /**
    * A cut waiting for its paste — the front half of a move. Pure view
    * state (never persisted or synced): the nodes stay in the document,
@@ -78,6 +114,9 @@ export function useEditSessionState({ canvas, selectedId }: EditSessionStateInpu
     setShowResolvedComments,
     selectedEdgeId,
     setSelectedEdgeId,
+    selectedInkIds,
+    setSelectedInkIds,
+    retainInk,
     pendingCut,
     setPendingCut,
     edgeLabelEditId,

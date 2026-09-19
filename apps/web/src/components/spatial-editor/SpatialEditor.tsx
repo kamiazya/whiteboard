@@ -144,7 +144,7 @@ import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { InkDraftLayer } from './InkDraftLayer.js'
-import { inkUnder } from './ink-hit.js'
+import { inkUnder, inkWithin } from './ink-hit.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
@@ -558,6 +558,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setShowResolvedComments,
       selectedEdgeId,
       setSelectedEdgeId,
+      selectedInkIds,
+      setSelectedInkIds,
+      retainInk,
       pendingCut,
       setPendingCut,
       edgeLabelEditId,
@@ -667,7 +670,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         selectedId,
         extraIds,
         selectedEdgeId,
-        setSelectedEdgeId,
+        retainInk,
         setEdgeLabelEditId,
         gestureState,
         setGestureState,
@@ -683,7 +686,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       gestureState,
       setGestureState,
       applySelection,
-      setSelectedEdgeId,
+      retainInk,
       setLivePoint,
       setSnapGuides,
     })
@@ -1573,9 +1576,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           )
           .map((entry) => entry.id)
         applySelection({ type: 'set-members', ids: hitIds })
-        // A drag that began on an edge line was a marquee, not an edge click
-        // — drop the press-time edge selection so Delete acts on the nodes.
-        setSelectedEdgeId(null)
+        // The band takes ink too. It used to drop the press-time selection
+        // and look at boxes only, so dragging over a scribble selected
+        // nothing — and a scribble is exactly what a band is for, since ink
+        // arrives several strokes at a time. The press-time single selection
+        // is REPLACED rather than kept: a drag that began on a stroke was a
+        // marquee, and the band's own answer is the whole answer.
+        setSelectedInkIds(inkWithin(edgePaths, rect, isEdgeLocked))
         return
       }
       if (root === null) return
@@ -1889,6 +1896,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       extraIds,
       selectedEdgeId,
       setSelectedEdgeId,
+      selectedInkIds,
+      setSelectedInkIds,
       pendingCut,
       setPendingCut,
       spaceDownRef,
@@ -2737,8 +2746,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 obstacles={commentDrag.obstacles}
               />
             )}
-            {selectedEdgeId !== null && (
-              <EdgeSelectionHighlight selectedEdgeId={selectedEdgeId} edgePaths={edgePaths} />
+            {selectedInkIds.length > 0 && (
+              <EdgeSelectionHighlight selectedEdgeIds={selectedInkIds} edgePaths={edgePaths} />
             )}
             {selectedEdge !== undefined && (
               <EdgeBendLayer

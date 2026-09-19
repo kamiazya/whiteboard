@@ -43,6 +43,9 @@ export interface EditorKeyboardInputs {
   selectedNode: SpatialNode | undefined
   extraIds: ReadonlySet<string>
   selectedEdgeId: string | null
+  /** Every selected stroke — Delete and Escape act on all of them. */
+  selectedInkIds: readonly string[]
+  setSelectedInkIds: (ids: readonly string[]) => void
   setSelectedEdgeId: (id: string | null) => void
   pendingCut: object | null
   setPendingCut: (next: null) => void
@@ -72,6 +75,8 @@ export function useEditorKeyboard({
   selectedNode,
   extraIds,
   selectedEdgeId,
+  selectedInkIds,
+  setSelectedInkIds,
   setSelectedEdgeId,
   pendingCut,
   setPendingCut,
@@ -163,26 +168,37 @@ export function useEditorKeyboard({
     }
     // Keyboard equivalent of pointercancel: discards an in-flight
     // resize/move/connect gesture without committing it.
-    if (e.key === 'Escape' && selectedEdgeId !== null) {
+    if (e.key === 'Escape' && selectedInkIds.length > 0) {
       e.preventDefault()
-      setSelectedEdgeId(null)
+      setSelectedInkIds([])
       return
     }
     if (
       (e.key === 'Delete' || e.key === 'Backspace') &&
-      selectedEdgeId !== null &&
+      selectedInkIds.length > 0 &&
       gestureState.kind !== 'editing-text'
     ) {
       const target = e.target as HTMLElement | null
       const tag = target?.tagName
       if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !target?.isContentEditable) {
         e.preventDefault()
-        // The selected ink may be an EDGE or a LINE — the scene hands both
+        // Each selected id may be an EDGE or a LINE — the scene hands both
         // out as `kind: 'edge'` nodes, so the selection never knew which.
         // `deleteInkCommand` is the one place that looks.
-        const remove = deleteInkCommand(canvas, selectedEdgeId)
-        if (remove !== undefined) applyResult({ state: { kind: 'idle' }, commands: [remove] })
-        setSelectedEdgeId(null)
+        const removals = selectedInkIds
+          .map((id) => deleteInkCommand(canvas, id))
+          .filter((command) => command !== undefined)
+        // Nodes the same band caught go in the SAME press. A marquee is one
+        // gesture and reads as one selection, so a Delete that took the
+        // strokes and left the notes standing — or needed a second press for
+        // them — would be answering a question nobody asked.
+        const nodeIds = selection === undefined ? [] : [selection.id, ...extraIds]
+        applyResult({
+          state: { kind: 'idle' },
+          commands: [...removals, ...nodeIds.map((id) => ({ kind: 'delete-node' as const, id }))],
+          ...(nodeIds.length > 0 ? { selectedId: null } : {}),
+        })
+        setSelectedInkIds([])
         return
       }
     }
