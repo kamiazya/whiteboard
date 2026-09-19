@@ -29,13 +29,20 @@
  * always prints: there `colour unused` beside `shape carried(stencil)` is
  * itself a reading, since it says a second axis has a free channel to use.
  *
- * @param {{ constructs: number, deficit: number, treatments: number, distance: number, overload: number, excess: number, channels?: Record<string, { use: string, carriedBy: readonly string[] }> } | undefined} facets
+ * `undeclared` belongs to the FIRST branch and only to it: it counts
+ * treatments spent where nothing is declared, and `constructs === 0` is what
+ * that means, so it can never be non-zero below. Printed as a count beside
+ * `declares nothing` because the channel clause says WHICH channel went
+ * unrecorded and not how many appearances it cost.
+ *
+ * @param {{ constructs: number, deficit: number, treatments: number, distance: number, overload: number, excess: number, undeclared?: number, channels?: Record<string, { use: string, carriedBy: readonly string[] }> } | undefined} facets
  */
 export function facetLine(facets) {
   if (facets === undefined) return ''
   if (facets.constructs === 0) {
     const spent = Object.values(facets.channels ?? {}).some((r) => r.use !== 'unused')
-    return `; facets: declares nothing${spent ? channelClause(facets.channels) : ''}`
+    const undeclared = (facets.undeclared ?? 0) > 0 ? `, undeclared ${facets.undeclared}` : ''
+    return `; facets: declares nothing${undeclared}${spent ? channelClause(facets.channels) : ''}`
   }
   const owed = ['overload', 'excess'].filter((c) => facets[c] > 0).map((c) => `${c} ${facets[c]}`)
   const misuse = owed.length === 0 ? '' : `, ${owed.join(' ')}`

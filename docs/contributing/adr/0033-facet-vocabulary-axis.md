@@ -126,6 +126,31 @@ say. Decoration reads as meaning whether or not it was meant to, so a
 treatment lining up with nothing is a distinction the reader looks for and
 does not find.
 
+**Addendum (user decision, 2026-09-19): V3 requires a construct to cut, and
+the board that declares none has its own column.** The 2026-09-12 lane
+reading scored a flowchart `excess 3` — yellow for a step, cyan for a
+decision, green for a terminal, which reads WELL to a person. With
+`partitions: 0` there is no class to be inside, to span, or to cut, so the
+three-way split below had no question to answer and returned `excess` for
+want of an alternative. Every spent treatment on such a board fell there BY
+CONSTRUCTION, which is the one thing a column must not do: it could not tell
+"decorated meaninglessly" from "well drawn and undeclared", and reported the
+second as the first.
+
+So `excess` is now what it says it is, and **UNDECLARED** counts treatments
+spent where nothing is declared. The concern behind the original reading
+survives rather than being dropped — the colour carries a distinction the
+DOCUMENT does not record, so no machine, later reader or export can recover
+that cyan meant "decision" — but it is no longer indistinguishable from a
+real mismatch, and `channels` already said WHICH channel it was, which a
+count cannot.
+
+Nothing in the pinned corpus moves: every board there is undressed, so both
+columns read 0 before and after. The reading that found this lives in the
+eval lane, and the lane's printed line was already taking its
+`declares nothing` branch for these boards — the over-reach was in the
+SCORE, not in what a reader saw.
+
 **The three cases are exclusive, and that was decided by the calibration
 rather than designed.** The first implementation tested overload and excess
 independently — spans two classes, and is not inside one — and every

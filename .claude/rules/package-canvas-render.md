@@ -2007,9 +2007,17 @@ and `visual.edges/v0` are canvas-wide, so none of the three is a distinction
 channel. The columns are Moody's semiotic clarity (*The Physics of
 Notations*, IEEE TSE 2009): `deficit` (a construct nothing visible carries),
 `overload` (one treatment worn by two whole constructs), `excess` (a
-treatment whose wearers cut a construct rather than covering it), plus
-`distance` (visual distance, the fewest channels two treatments differ on)
-and the reported-only `treatments` and `redundancy`.
+treatment whose wearers cut a construct rather than covering it),
+`undeclared` (a treatment spent where the board declares no partition at
+all), plus `distance` (visual distance, the fewest channels two treatments
+differ on) and the reported-only `treatments` and `redundancy`.
+
+`undeclared` was split out of `excess` on 2026-09-19 (user decision, ADR-0033
+addendum) because with `partitions: 0` there is no class to cut, so EVERY
+spent treatment fell to `excess` by construction — the column could not tell
+a meaningless decoration from a well-drawn undeclared board, and reported the
+second as the first. It is silent on the whole pinned corpus, which is
+undressed; the reading that found it is the eval lane's.
 
 **More facets is not better, and the columns are shaped so it cannot be.**
 A coverage count would reward exactly the board this axis exists to catch.

@@ -46,6 +46,10 @@ const UNSPENT = {
   deficit: 0,
   overload: 0,
   excess: 0,
+  // Every board here declares at least a kind, and none spends a treatment,
+  // so the column split out of `excess` is silent for the second reason as
+  // well as the first — there is nothing spent to be undeclared ABOUT.
+  undeclared: 0,
   distance: 0,
   treatments: 1,
   redundancy: 0,
