@@ -94,8 +94,17 @@ function scanFiles(): string[] {
     .sort()
 }
 
+/**
+ * The repo-relative path in the form BOTH ledgers are keyed with.
+ *
+ * Normalised because the ledgers hold forward slashes and `join` produces
+ * backslashes on Windows, where an unnormalised key matches nothing — so
+ * every listed file would be reported as unlisted, which reads as the guard
+ * finding real debt. The two filters above already normalise for the same
+ * reason; this helper did not, and served both ledgers.
+ */
 function relativeToRepo(absolutePath: string): string {
-  return absolutePath.slice(REPO_ROOT.length + 1)
+  return absolutePath.slice(REPO_ROOT.length + 1).replaceAll('\\', '/')
 }
 
 /**
@@ -495,6 +504,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the pages' hook, not here.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2843,
 }
+
+describe('the path form both ledgers are keyed with', () => {
+  // Feeds the helper a backslash tail on the real root: it exercises the
+  // normalisation, not a Windows run, which nothing here can do. Without it
+  // the assertion reads back the backslashes, which is exactly what would
+  // reach a ledger lookup there.
+  it('answers forward slashes, whatever separator the walk produced', () => {
+    expect(relativeToRepo(`${join(REPO_ROOT, 'packages')}\\mcp-server\\src\\x.ts`)).toBe(
+      'packages/mcp-server/src/x.ts',
+    )
+  })
+})
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
   const files = scanFiles()
