@@ -107,8 +107,15 @@ const workspacePackages = () => {
  *
  * A workspace that declares nothing answers `{}`, and the resolver then
  * returns the canvas unchanged.
+ *
+ * EXPORTED because the lane has two places that read a board and they must
+ * read the same one: this file's verifiers, and the runner's `drawing`
+ * column. Round 21 caught them disagreeing about a single board in a single
+ * run — `colour carried(health)` in the verdict, `colour unused` in the
+ * column beside it — because only the verifier had been fixed. One
+ * definition, so the next caller cannot drift from it.
  */
-const tagLibrary = async (wb) => {
+export const tagLibrary = async (wb) => {
   const answered = await wb.call('wb_facet_list', { workspaceId: WORKSPACE_ID })
   return Object.fromEntries(
     (answered.tagLibrary ?? []).map(({ key, description, exclusive, values }) => [
