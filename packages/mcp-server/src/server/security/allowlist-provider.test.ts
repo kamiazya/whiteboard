@@ -68,15 +68,15 @@ describe('allowlist provider is evaluated per request on every surface', () => {
     expect(await run()).toBe(200)
   })
 
-  it('WS upgrade admits an origin granted after the authorizer received the provider', () => {
+  it('WS upgrade admits an origin granted after the authorizer received the provider', async () => {
     const { provider, grant } = makeProvider()
     const headers = { host: '127.0.0.1:3099', origin: GRANTED }
 
-    expect(authorizeWsUpgrade(headers, undefined, provider)).toEqual({
+    expect(await authorizeWsUpgrade(headers, undefined, provider)).toEqual({
       accept: false,
       statusCode: 403,
     })
     grant(GRANTED)
-    expect(authorizeWsUpgrade(headers, undefined, provider).accept).toBe(true)
+    expect((await authorizeWsUpgrade(headers, undefined, provider)).accept).toBe(true)
   })
 })

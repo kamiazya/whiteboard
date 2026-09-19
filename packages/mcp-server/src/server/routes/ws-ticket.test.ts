@@ -90,7 +90,7 @@ describe('POST /api/ws-ticket', () => {
     })
     const { ticket } = await res.json()
 
-    const decision = authorizeWsUpgrade(
+    const decision = await authorizeWsUpgrade(
       {
         host: 'localhost:3099',
         'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,

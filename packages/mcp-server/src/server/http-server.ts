@@ -466,40 +466,53 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       protocols.has(WHITEBOARD_WS_PROTOCOL) ? WHITEBOARD_WS_PROTOCOL : false,
   })
 
+  // Async because `authorizeWsUpgrade` verifies a macaroon's HMAC chain
+  // through WebCrypto, which has no synchronous form. Node does not await an
+  // 'upgrade' listener, so the whole body is wrapped: an exception that
+  // escaped would be an unhandled rejection leaving the socket open and the
+  // client hanging, where a destroyed socket is the correct failure.
   server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
-    if (!url.pathname.startsWith('/ws/')) {
-      socket.destroy()
-      return
-    }
-    const decision = authorizeWsUpgrade(
-      req.headers,
-      options.token,
-      allowedWebOrigins,
-      wsTicketStore.redeemTicket,
-      pairing.tokens,
-    )
-    if (!decision.accept) {
-      const statusCode = decision.statusCode ?? 401
-      const statusText = statusCode === 403 ? 'Forbidden' : 'Unauthorized'
-      socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`)
-      socket.destroy()
-      return
-    }
-    try {
-      parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
-    } catch (error) {
-      const issue = validationErrorBody(error)
-      const body = issue ? JSON.stringify(issue) : ''
-      socket.write(
-        `HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+    void (async () => {
+      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+      if (!url.pathname.startsWith('/ws/')) {
+        socket.destroy()
+        return
+      }
+      const decision = await authorizeWsUpgrade(
+        req.headers,
+        options.token,
+        allowedWebOrigins,
+        wsTicketStore.redeemTicket,
+        pairing.tokens,
       )
+      if (!decision.accept) {
+        const statusCode = decision.statusCode ?? 401
+        const statusText = statusCode === 403 ? 'Forbidden' : 'Unauthorized'
+        socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`)
+        socket.destroy()
+        return
+      }
+      try {
+        parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
+      } catch (error) {
+        const issue = validationErrorBody(error)
+        const body = issue ? JSON.stringify(issue) : ''
+        socket.write(
+          `HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+        )
+        socket.destroy()
+        return
+      }
+      touch()
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        void handleWsUpgrade(req, ws, decision.scopes, serverDeps)
+      })
+    })().catch((err) => {
+      // Fail closed. The socket is half-open at this point and nothing else
+      // will close it; a client left hanging on a silent error is the worse
+      // outcome than a dropped connection it can retry.
+      getLogger('http-server').error({ err }, 'websocket upgrade failed; destroying the socket')
       socket.destroy()
-      return
-    }
-    touch()
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      void handleWsUpgrade(req, ws, decision.scopes, serverDeps)
     })
   })
 
