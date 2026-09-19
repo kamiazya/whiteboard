@@ -594,7 +594,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // -10 is what moving the per-kind decisions to `element-pick.ts` gave
   // back — three hit-tests two hundred lines apart became one call, and the
   // context menu's two duplicate edge probes went with them.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3015,
+  // 3015 -> 3016: the node lock became a predicate beside the path lock
+  // instead of a swapped box list, so the menu's "locked included" is one
+  // statement per kind rather than two different mechanisms.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3016,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -732,7 +735,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 855,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 858,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

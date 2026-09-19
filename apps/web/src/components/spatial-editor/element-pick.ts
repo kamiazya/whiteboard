@@ -167,18 +167,50 @@ export function pickContentWithin(
 export interface PickInputs {
   /** Every drawn path the scene laid out, edges and ink alike. */
   readonly paths: readonly DrawnPath[]
-  /** Boxes a pointer may target — the caller has already dropped locked ones. */
+  /** EVERY box the scene laid out; the probes drop the locked ones themselves. */
   readonly boxes: readonly NodeBox[]
   /** How near counts as "on a path", in CANVAS units (the caller divides by zoom). */
   readonly tolerance: number
+  /**
+   * The two locks, asked the same way.
+   *
+   * They used to be asked differently — a path's lock was a predicate the
+   * probe applied, while a node's was applied by the CALLER, which handed
+   * over a box list with the locked ones already gone. Same rule, two
+   * shapes, and the difference was invisible: a surface reading one of them
+   * had no reason to think the other worked another way. A caller that
+   * wants locked things pickable anyway — the context menu, so Unlock stays
+   * reachable — now says so once per kind instead of swapping a list for
+   * one and passing a predicate for the other.
+   */
+  readonly isNodeLocked: (id: string) => boolean
   readonly isEdgeLocked: (id: string) => boolean
+}
+
+/**
+ * The boxes a pointer may target: a locked node is invisible to it.
+ *
+ * Exported because the pick is not the only reader — the connect gesture,
+ * its overlay and the drag preview all need the same list — but it is the
+ * one place the rule is written. Filtering the LIST rather than rejecting
+ * the answer is load-bearing: `hitTest` answers the topmost box, so a
+ * locked node lying over an unlocked one must not swallow the press.
+ */
+export function pointableBoxes(
+  boxes: readonly NodeBox[],
+  isNodeLocked: (id: string) => boolean,
+): readonly NodeBox[] {
+  const pointable = boxes.filter((entry) => !isNodeLocked(entry.id))
+  // The same array when nothing is locked, which is the common case and
+  // what keeps a `useMemo` over this from invalidating every render.
+  return pointable.length === boxes.length ? boxes : pointable
 }
 
 /** The probes a PRESS contends with, in `CONTENT_PICK_ORDER`. */
 export function pressProbes(inputs: PickInputs): Record<ContentKind, PointProbe | SkippedProbe> {
   return {
     lines: (at) => inkUnder(inputs.paths, at, inputs.tolerance, inputs.isEdgeLocked)?.id,
-    nodes: (at) => hitTest(inputs.boxes, at),
+    nodes: (at) => hitTest(pointableBoxes(inputs.boxes, inputs.isNodeLocked), at),
     // Locked edges are invisible here, which is what keeps a locked edge out
     // of the selection and therefore out of Delete, the label editor
     // (double-press) and every restyle command, at one point instead of at
@@ -196,7 +228,7 @@ export function bandProbes(inputs: PickInputs): Record<ContentKind, BandProbe | 
   return {
     lines: (band) => inkWithin(inputs.paths, band, inputs.isEdgeLocked),
     nodes: (band) =>
-      inputs.boxes
+      pointableBoxes(inputs.boxes, inputs.isNodeLocked)
         .filter(
           (entry) =>
             entry.box.x < band.x + band.w &&

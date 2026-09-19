@@ -88,7 +88,7 @@ const ELEMENT_SURFACES = {
     'context menu':
       'not modelled: the menu is a component — which verbs it offers is JSX, not a decision this layer can produce. context-menu.browser.test.tsx drives the real one',
     delete: 'covered',
-    lock: "not modelled: a node lock is applied by the CALLER, which hands `pressProbes` a box list that already excludes locked nodes — so a property here would be asserting its own filtering rather than the editor's. node-lock.browser.test.tsx drives the real filter, and this asymmetry with the path lock (which the probe applies itself) is worth knowing before a third kind picks one of the two",
+    lock: 'covered',
     'selection highlight':
       'not modelled: the highlight is rendered geometry, so what it proves is pixels on a page. multi-select.browser.test.tsx reads the real overlay',
   },
@@ -204,7 +204,13 @@ const bandAround = (points: readonly Point[]) => {
   return { x, y, w: Math.max(...xs) - x + 10, h: Math.max(...ys) - y + 10 }
 }
 
-const emptyInputs = { paths: [], boxes: [], tolerance: TOLERANCE, isEdgeLocked: () => false }
+const emptyInputs = {
+  paths: [],
+  boxes: [],
+  tolerance: TOLERANCE,
+  isNodeLocked: () => false,
+  isEdgeLocked: () => false,
+}
 
 const lineOf = (id: string, path: readonly Point[]): CanvasLine => ({
   id,
@@ -230,10 +236,12 @@ const placedNode = boxArb.map(
     id: 'the-node',
     inputs: (locked) => ({
       ...emptyInputs,
-      // A locked node never reaches the probes: the caller drops it from the
-      // box list (`selectableBoxes`). That is the asymmetry the ledger's
-      // nodes/lock cell records.
-      boxes: locked ? [] : ([{ id: 'the-node', box }] satisfies readonly NodeBox[]),
+      // The board as it really is, locked boxes included — the probe applies
+      // the lock, exactly as it does for a path. It used to be the caller's
+      // job here, so this property was handed an empty list and asserted its
+      // own filtering.
+      boxes: [{ id: 'the-node', box }] satisfies readonly NodeBox[],
+      isNodeLocked: (probed: string) => locked && probed === 'the-node',
     }),
     on: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
     band: { x: box.x - 5, y: box.y - 5, w: box.width + 10, h: box.height + 10 },
@@ -263,7 +271,7 @@ const placedPath = (kind: 'lines' | 'edges') =>
       inputs: (locked) => ({
         ...emptyInputs,
         paths: [drawn],
-        isEdgeLocked: (probed) => locked && probed === id,
+        isEdgeLocked: (probed: string) => locked && probed === id,
       }),
       on: path[0] as Point,
       band: bandAround(path),
@@ -370,9 +378,34 @@ describe('every element kind, through every surface that has to know about it', 
     'a locked element is never picked, whatever its kind',
     (placed) => {
       expect(pickContentAt(pressProbes(placed.inputs(true)), placed.on)).toBeUndefined()
-      // Only the kinds whose probe applies the lock ITSELF are claimed; the
-      // node lock is the caller's and the ledger says so.
-      if (placed.kind !== 'nodes') produced(placed.kind, 'lock')
+      produced(placed.kind, 'lock')
+    },
+  )
+
+  fcTest.prop([boxArb, fc.integer({ min: 4, max: 40 })], withDefaults())(
+    'a locked box lying over an unlocked one does not swallow the press',
+    (box, inset) => {
+      // Why the rule filters the LIST rather than rejecting the answer.
+      // `hitTest` answers the TOPMOST box, so checking the lock afterwards
+      // would make a locked node a hole in the board: the press would find
+      // nothing where an unlocked box is plainly visible under it.
+      const under = { id: 'under', box }
+      const over = {
+        id: 'over',
+        box: {
+          x: box.x - inset,
+          y: box.y - inset,
+          width: box.width + inset * 2,
+          height: box.height + inset * 2,
+        },
+      } satisfies NodeBox
+      const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      const probes = pressProbes({
+        ...emptyInputs,
+        boxes: [under, over],
+        isNodeLocked: (id: string) => id === 'over',
+      })
+      expect(pickContentAt(probes, at)).toEqual({ kind: 'nodes', id: 'under' })
     },
   )
 

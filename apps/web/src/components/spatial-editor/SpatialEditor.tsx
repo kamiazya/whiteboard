@@ -715,8 +715,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const pickInputs = {
       paths: edgePaths,
-      boxes: selectableBoxes,
+      boxes,
       tolerance: inkTolerance,
+      isNodeLocked: isLocked,
       isEdgeLocked,
     }
     /**
@@ -724,7 +725,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * included. A locked object has to stay right-clickable or Unlock would
      * be unreachable — only the selection side effect is skipped for it.
      */
-    const menuPickInputs = { ...pickInputs, boxes, isEdgeLocked: () => false }
+    const menuPickInputs = { ...pickInputs, isNodeLocked: () => false, isEdgeLocked: () => false }
 
     // The drag/resize/connect render layers (ghost, backdrop, live edges,
     // live resize, preview geometry, and the committed surface's mount-once
