@@ -123,3 +123,65 @@ describe('createDaemonIdentity', () => {
     }
   })
 })
+
+// PROBED, never inferred: these need a mode they SET to be a mode the store
+// READS BACK. Not the root question — the guard reads `statSync().mode`
+// rather than attempting a denied read, so uid 0 changes nothing.
+function probeChmodIsObservable(): boolean {
+  const probeDir = mkdtempSync(join(tmpdir(), 'wb-mode-probe-'))
+  try {
+    const file = join(probeDir, 'f')
+    writeFileSync(file, 'x')
+    chmodSync(file, 0o644)
+    return (statSync(file).mode & 0o777) === 0o644
+  } catch {
+    return false
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true })
+  }
+}
+const CHMOD_IS_OBSERVABLE = probeChmodIsObservable()
+
+// The twin of the macaroon case, and the reason #32 was deferred until both
+// could land together: these two stores are deliberate copies of each other's
+// posture, so a guard on one and not the other is the drift that made the
+// original nitpick worth answering at all.
+describe('createDaemonIdentity refuses a leaked identity file', () => {
+  it.skipIf(!CHMOD_IS_OBSERVABLE)(
+    'throws on a group-readable identity instead of regenerating',
+    () => {
+      const dataDir = mkdtempSync(join(tmpdir(), 'wb-identity-leaked-'))
+      try {
+        const before = createDaemonIdentity({ dataDir }).did
+        const filepath = join(dataDir, 'daemon-identity.json')
+        chmodSync(filepath, 0o604)
+
+        expect(() => createDaemonIdentity({ dataDir })).toThrow(/group or other/i)
+        // Regenerating would change the daemon's did:key and break every
+        // existing pairing, so refusing has to be what happens.
+        chmodSync(filepath, 0o600)
+        expect(createDaemonIdentity({ dataDir }).did).toBe(before)
+      } finally {
+        rmSync(dataDir, { recursive: true, force: true })
+      }
+    },
+  )
+
+  it.skipIf(!CHMOD_IS_OBSERVABLE)(
+    'writes the identity owner-only even over a leftover temp file',
+    () => {
+      const dataDir = mkdtempSync(join(tmpdir(), 'wb-identity-tmp-'))
+      try {
+        const filepath = join(dataDir, 'daemon-identity.json')
+        writeFileSync(`${filepath}.tmp`, 'stale')
+        chmodSync(`${filepath}.tmp`, 0o644)
+
+        createDaemonIdentity({ dataDir })
+
+        expect(statSync(filepath).mode & 0o777).toBe(0o600)
+      } finally {
+        rmSync(dataDir, { recursive: true, force: true })
+      }
+    },
+  )
+})

@@ -10,6 +10,7 @@ import {
   normalizeHostHeader,
   normalizeOriginHostname,
 } from '../security/cors-loopback.js'
+import { verifyMacaroon } from '../security/macaroon.js'
 import { timingSafeEqualStrings } from '../security/timing-safe.js'
 import {
   type AllowedWebOrigins,
@@ -84,7 +85,7 @@ export type RedeemTicketFn = (ticket: string) => {
   clientId: string
 } | null
 
-export function authorizeWsUpgrade(
+export async function authorizeWsUpgrade(
   headers: IncomingHttpHeaders,
   token?: string,
   allowedOrigins: AllowedWebOrigins = [],
@@ -94,7 +95,10 @@ export function authorizeWsUpgrade(
   // only when the upgrade's own Origin header matches the origin the token
   // was minted for.
   pairingTokens?: { validate(token: string, origin: string): boolean },
-): WsUpgradeDecision {
+  // ADR-0043 decision 9: absent until a composition root supplies one, so a
+  // daemon that mints no macaroons carries no macaroon branch at all.
+  macaroonRootKey?: Uint8Array,
+): Promise<WsUpgradeDecision> {
   if (!isAllowedBrowserOrigin(headers.origin, headers.host, allowedOrigins)) {
     return { accept: false, statusCode: 403 }
   }
@@ -157,6 +161,29 @@ export function authorizeWsUpgrade(
     const rawToken = offeredToken.slice(DAEMON_TOKEN_WS_PROTOCOL_PREFIX.length)
     if (origin !== null && pairingTokens.validate(rawToken, origin)) {
       return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+    }
+  }
+
+  // A macaroon rides the same subprotocol carrier as the daemon token, and is
+  // tried last so neither of the two credentials above pays for its
+  // verification. It is the second credential here — after the OAuth ticket —
+  // whose grant is NARROWER than the full set, and `routes/ws.ts` enforces
+  // that grant on every text message and every binary update against
+  // `ws-scope-registry.ts`, so a narrower array here really narrows what the
+  // socket can do rather than being a value nobody reads.
+  //
+  // No `requiredScopes` is imposed at the handshake: what a socket may do is
+  // decided per operation downstream, so the upgrade's job is to establish
+  // that the token is genuine and unexpired and to hand its grant along. This
+  // is the same shape the ticket branch takes with `redeemed.scopes`.
+  if (macaroonRootKey !== undefined) {
+    const verdict = await verifyMacaroon({
+      token: offeredToken.slice(DAEMON_TOKEN_WS_PROTOCOL_PREFIX.length),
+      rootKey: macaroonRootKey,
+      context: { requiredScopes: [], now: Date.now() },
+    })
+    if (verdict.ok) {
+      return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: verdict.scopes }
     }
   }
   return { accept: false, statusCode: 401 }

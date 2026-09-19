@@ -51,13 +51,27 @@ and the flattened version is wrong. An **OAuth grant** is scope-checked on HTTP 
 upgrade through its connection ticket carries `redeemed.scopes` — exactly what
 the grant held, never `ALL_AUTH_SCOPES`, as `ws-auth.ts` says in so many
 words. That path already implements everything decision 4 asks for. The
-**daemon token** and the **pairing token** do not: neither is scope-checked on
-HTTP (`createLocalTokenAuthStrategy` ignores `requiredScopes` by a stated
-single-tenant concession; `isAuthorizedPairingOrigin` returns a bare boolean
-and the middleware calls `next()`), and both yield `ALL_AUTH_SCOPES` on a
-websocket upgrade. The pairing token is the sharper case: ADR-0005 made it
-narrow on the axes it designed for — bound to one origin, expiring — and it
-is unnarrowed on the scope axis.
+**daemon token** and the **pairing token** do not. Neither is scope-checked on
+HTTP: `createDaemonAuthMiddleware` — the middleware `app.ts` actually mounts
+on `/api/*` — answers a matching daemon token with `next()` without consulting
+the route registry at all, and `isAuthorizedPairingOrigin` likewise returns a
+bare boolean. Both yield `ALL_AUTH_SCOPES` on a websocket upgrade. The pairing
+token is the sharper case: ADR-0005 made it narrow on the axes it designed for
+— bound to one origin, expiring — and it is unnarrowed on the scope axis.
+
+**Correction (2026-09-19, while implementing decision 9).** Two earlier
+versions of this paragraph blamed `createLocalTokenAuthStrategy`'s stated
+single-tenant concession for the unscoped daemon-token path. The CONCLUSION
+was right and the mechanism was not: that function is referenced only by its
+own tests, its own comments and this ADR, and is mounted nowhere. Nor is
+`createAuthStrategyMiddleware` around it. The sync `AuthStrategy` interface
+they belong to appears to have been superseded by server-mode's
+`AsyncAuthStrategy` without anything removing it, and `knip` does not flag
+either, because a test importing an export counts as using it. The concession
+comment is still accurate about the intent it records; it is just not what
+runs. Recorded rather than quietly edited, because the citation survived one
+correction pass that fixed the pairing half and left this one — a wrong
+mechanism under a right conclusion is exactly the shape that does.
 
 So this ADR is not introducing attenuation to the codebase. It is asking why
 the credential an agent actually uses is the one that does not have it.
@@ -230,9 +244,23 @@ is, and they are the conditions under which it stays acceptable:
 - `daemon-identity.ts`'s `buildSignedPayload` already solves the adjacent
   trap (unambiguous part boundaries via JSON-array encoding) and is the
   pattern to follow;
-- [libmacaroons](https://github.com/rescrv/libmacaroons) publishes test
-  vectors, so the implementation is checked against the reference rather than
-  against itself.
+- the CONSTRUCTION is checked against the reference rather than against
+  itself. [libmacaroons](https://github.com/rescrv/libmacaroons)' README
+  worked example is a known-answer test for the chain, and the same values
+  appear in at least six independent implementations (C, Java, JavaScript,
+  C#, Python, Erlang), so reproducing them is independent implementations
+  agreeing rather than this one agreeing with itself.
+
+  **Construction and serialization are separate, and only the first is
+  checked.** libmacaroons' `macaroon-test-serialization.c` vectors are the
+  second kind — one macaroon in its V1 and V2 wire formats — and cannot
+  match a module that serializes to its own JSON. That costs only
+  interoperability, which a single-issuer single-verifier daemon does not
+  need. This distinction is recorded because the first draft of this ADR
+  cited "libmacaroons publishes test vectors" without saying which, and the
+  implementation then found the cited vectors were the ones that do not
+  apply — followed by a second error, concluding from that that no external
+  check was available at all.
 
 If any of those stops being true, decision 6 applies instead.
 

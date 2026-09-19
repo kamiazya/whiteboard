@@ -60,6 +60,12 @@ interface LocalDaemonAppOptions {
   /** Daemon signing identity (security/daemon-identity.ts). Injectable for
    *  tests; when omitted, createApp loads-or-creates it from the data dir. */
   identity?: DaemonIdentity
+  /** The macaroon chain's root key (ADR-0043 decision 4). When absent the
+   *  `/api` guard carries no macaroon branch at all, so a daemon that mints
+   *  none pays nothing — and a composition root that forgets to pass it
+   *  silently refuses every macaroon, which is why `http-server.ts` supplies
+   *  it rather than leaving each caller to remember. */
+  macaroonRootKey?: Uint8Array
   /** This daemon's own bare origin (e.g. `http://127.0.0.1:3099`), threaded
    *  into wb_pairing_link_create so the tool embeds the daemon's real
    *  address instead of reading it from process.env. Absent in ad-hoc/test

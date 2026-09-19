@@ -179,6 +179,7 @@ const REDACTED_PATHS = [
   'secret',
   'apiKey',
   'privateJwk',
+  'rootKey',
   'd',
   '*.token',
   '*.daemonToken',
@@ -191,6 +192,7 @@ const REDACTED_PATHS = [
   '*.secret',
   '*.apiKey',
   '*.privateJwk',
+  '*.rootKey',
   '*.d',
 ]
 
