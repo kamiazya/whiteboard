@@ -414,6 +414,19 @@ describe('every test file belongs to a vitest project', () => {
     expect(hit.every((p) => p.isBrowser)).toBe(true)
   })
 
+  it('a .window-state.browser.test file is isolated from the shared browser project', () => {
+    // A test that leaves the browser WINDOW in a state the next resizing file
+    // cannot tolerate gets its own project, and so its own browser instance.
+    // Both halves matter and each was a real failure mode: landing in
+    // `web-browser` too is the flake itself, and landing in NEITHER (which is
+    // what happened first, when the new project inherited the base's
+    // mirror-image exclude) reads as "no such tests" rather than as a
+    // misconfiguration. See vitest.browser-window-state.config.ts.
+    const hit = matchedProjects('apps/web/src/probe.window-state.browser.test.tsx')
+    expect(hit.map((p) => p.name)).toEqual(['web-browser-window-state'])
+    expect(hit.every((p) => p.isBrowser)).toBe(true)
+  })
+
   it('a .browser.test.ts under canvas-viewer/src runs only in browser projects', () => {
     const hit = matchedProjects('packages/canvas-viewer/src/probe.browser.test.ts')
     expect(hit.length).toBeGreaterThan(0)

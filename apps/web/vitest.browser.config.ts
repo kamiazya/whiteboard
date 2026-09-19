@@ -66,6 +66,10 @@ export default defineConfig({
     // BOTH extensions: a `.browser.test.ts` (no x) matched by neither this
     // include nor web-jsdom (which excludes it) would silently never run.
     include: ['src/**/*.browser.test.tsx', 'src/**/*.browser.test.ts'],
+    // A test that leaves the WINDOW in a state the next resizing file cannot
+    // tolerate runs in its own project, and so its own browser instance —
+    // see vitest.browser-window-state.config.ts for what was measured.
+    exclude: ['src/**/*.window-state.browser.test.tsx', 'src/**/*.window-state.browser.test.ts'],
     // Browser mode's 15s default is a real ceiling here, not a safety net: a
     // test that mounts a page, drives Radix through a portal and waits on
     // IndexedDB spends most of its budget on machine time, and vitest runs
