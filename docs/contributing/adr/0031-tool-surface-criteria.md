@@ -1174,6 +1174,25 @@ the surface) or stays out (then it measures spontaneous data hygiene, which
 reads 0 of 15) is a decision about what the lane is FOR, and it is not
 taken here.
 
+> **Taken (2026-09-19, user decision): it belongs in the prompt.** The lane
+> measures whether the SURFACE supports a stated intent, not whether a model
+> volunteers an unstated one. The two-axis task's prompt now asks for the
+> board to stand on its own — "somebody opening it next week, who was not in
+> this conversation, should be able to tell from the board itself what the
+> differences between the boxes mean" — in a user's words, naming no
+> mechanism, since a prompt that quotes the surface measures the quote (the
+> twenty-fourth reading measured exactly that hazard one level down, in a
+> description).
+>
+> **Rounds 15 through 20d were all taken under the old prompt and are not
+> comparable with what follows.** The next reading of this task is owed
+> after the instrument gap the twenty-fourth reading found is closed — a
+> board coloured by a declared tag library still scores `colour unused` —
+> and should hold the prompt fixed, or it conflates the two changes.
+>
+> Only this task's prompt changed. The kinds task grades boxes, flows and
+> overlap, and asks nothing of a declaration.
+
 By-products from the refusal texts, filed rather than fixed here:
 `stencil: null` on `node.add` was refused in two trials ("expected string,
 received null") — the model says "no stencil" for a title or a frame the
@@ -1199,11 +1218,144 @@ closest word in the table to "show it", and the table did not say the
 symbol is invisible here. Filed as a finding; the answer is either a drawn
 badge channel or a description that says where a symbol is drawn.
 
+> **Answered (2026-09-19, user decision): the DESCRIPTION, not the channel.**
+> Drawing the badge on a canvas would reverse a decision this project
+> already made with its own argument — the badge was removed because a node
+> at full size repeats what its own label already says, and a symbol is for
+> a surface too small to read. That is still true, so the remedy is to say
+> so where the model reads.
+>
+> `visual.symbol/v0`'s payload schema now carries one sentence naming where
+> a badge IS drawn (the minimap, a row in the document browser, the tab
+> favicon), that a canvas does not draw it, and the channel that records
+> state on a board — a scoped tag, which colours the box and appears in the
+> legend (ADR-0040).
+>
+> **What it cost, and the column it did not move.** Rung 1 is unchanged to
+> the byte: a facet's payload schema is in no tool's INPUT table, so this
+> costs zero model-visible bytes on every turn. Rung 2 moved on the one
+> errand that asks what a write may name — `wear a stencil this workspace
+> defines`, response 12,162 -> 13,388. The description is 613 bytes and the
+> row moved 1,226, because an MCP reply carries its answer twice, as
+> `content` text and as `structuredContent`; every byte a tool ANSWERS is
+> priced at 2x on that scoreboard. Calls unchanged. This is the same trade
+> `wb_facet_list`'s `otherTargets` took, and the reason the sentence is on
+> the facet rather than in a tool description.
+>
+> The facet score still counts TWO channels, not three: nothing about what a
+> canvas draws changed, so counting the badge would credit a distinction no
+> reader of the board can see (the 2026-09-11 correction in ADR-0033 §1).
+
+**The twenty-fourth reading (2026-09-19), lane rounds 20a–20d.** Four runs
+of the two-axis task, three trials each, on ONE tree differing only in this
+sentence — so the comparison is the sentence and nothing else.
+
+| run | the sentence | pass@1 | `wb_facet_set` tag writes | what the score read |
+|---|---|---|---|---|
+| 20a | absent | 0/3 | **0 of 15** | `colour contested` x3 |
+| 20b | present, example `health:failing` | 1/3 | 15 of 15 | `contested` 0/3 |
+| 20c | present, example `priority:high` | 0/3 | 15 of 15 | `colour unused` x3 |
+| 20d | present, naming the tag LIBRARY | 1/3 | 15 of 15 | one `colour carried(health)` |
+
+**The first remedy in this lane's history to move the tag-write behaviour
+at all.** Round 19 read "0 of 3, and no trial wrote a tag" with
+`wb_facet_set`'s own description saying tags at +651 visible bytes. This
+sentence, at ZERO visible bytes, took tag writes from 0 of 15 to 15 of 15 —
+every node, every trial, all three runs that carried it — and retired
+`colour contested`, the shape rounds 15 through 19 read every time.
+
+**20b's pass was bought by the quote, and 20c is how that was found.**
+`health:failing` is the very distinction the task grades, so the reading
+could not tell a surface that TEACHES from one that ANSWERS. Swapping the
+example for a word no task uses dropped the pass back to 0 of 3 with the
+tag writes unchanged. The rule against a description quoting its task is
+not hygiene; it was worth a whole pass here.
+
+**What 20c then exposed is a real finding, and it is the reason this task
+has read 0 of 3 since round 15.** Every trial wrote the right tags and
+declared a `visual.tags/v0` library giving each value a colour — and the
+verifier still read `colour unused`. Confirmed by looking at the boards
+rather than the verdicts: all three of 20c's SVGs are drawn in the health
+colours, two of them on trials the verifier failed. Filed; it is its own
+increment, not this one's.
+
+> **Correction (2026-09-19, same day): the cause first written here was
+> wrong, and naming it wrongly is worth more than deleting it.** This said
+> `scoreFacets` "takes the canvas alone and the library lives in another
+> document — the renderer joins them; the instrument cannot". It can.
+> `layoutSpatialCanvas` calls `withDeclaredColours(stored, tagLibrary)`
+> BEFORE it lays anything out, so by the time the score and the legend read
+> the canvas the declared colour is on the node.
+>
+> The evidence that refutes it was already in hand when it was written: the
+> boards rendered a real `health` legend with swatches, and `canvasLegend`
+> derives its keys from `score.channels.colour.carriedBy` — so the score
+> HAD to be reading `carried` in the render path while the lane reported
+> `unused`. A diagnosis that contradicts an observation you already have is
+> the cheapest kind to catch, and it was published anyway.
+>
+> The actual cause was one layer out: the two-axis VERIFIER scored the raw
+> stored document straight out of `wb_document_get`, never loading the
+> library and never resolving it — a canvas nobody draws. Fixed by having
+> it read the library through `wb_facet_list` (the tool a model would use,
+> since the lane has tool calls and nothing else) and score
+> `withDeclaredColours(parsed.value, library)`. The positive control in
+> `tasks.test.ts` is the board the lane actually produced: declared tags, a
+> library with a colour per value, and no stored colour on any box.
+>
+> The general rule it leaves behind: **a caller that SCORES a canvas must
+> score the one the layout would draw.** The export carries that sentence.
+
+**The last clause was bought by a reading, not reasoned.** 20c's wording
+said a tag "colours the box" flat, which is true only of a declared value;
+three trials acted on it and the board showed nothing. 20d names the
+library and says plainly that an undeclared tag is drawn in nothing. A
+description is a promise the product has to keep.
+
+Honest bound on all of it: pass^k is 0 in every run, n is 3 a side, and
+what moved is a BEHAVIOUR (the tag write) rather than the pass column. The
+pass column is currently measuring the instrument gap above as if it were
+the model.
+
+**The twenty-fifth reading (2026-09-19), round 21: 3 of 3, pass^k 1.** The
+first time this task has passed reliably; rounds 15 through 20d read 0 or 1
+of 3. Every trial: `colour carried(health), shape carried(stencil)`, 21
+calls mean, $1.13 for the three.
+
+**It cannot say which change did it, and the honest reading leans on the
+verifier.** Two things landed between 20d and 21 — the prompt now asks for
+the board to stand on its own (#1640), and the verifier scores the canvas
+the layout would draw (#1641). No run separates them. But 20c's three
+trials had ALREADY written the right tags and declared a library with a
+colour per value, under the old prompt; only the scoring was wrong. So the
+verifier correction alone is enough to account for the flip, and the
+prompt's contribution is unmeasured rather than demonstrated. A round that
+wants to price the prompt has to hold the verifier fixed and change only
+that, which is a run nobody has spent.
+
+**The run also caught the same defect in the sibling caller, in its own
+output.** The verdict read `colour carried(health)` while the `drawing`
+column beside it read `colour unused` — one board, one run, two answers,
+because only the verifier had been fixed and the runner's board scoring
+still read the stored canvas. It reached more than the facet column: the
+layout there was built without the library too, so contrast and treatment
+counts were taken off colours nobody draws. Fixed, and the conversion is
+now one exported definition rather than two copies, since two copies is
+exactly how these drifted. A single trial afterwards reads
+`colour carried(health), shape carried(stencil)` in BOTH columns.
+
+Worth keeping as a shape: **a run whose own two columns disagree about one
+board is the cheapest instrument bug there is to find, and it only shows up
+because both numbers are printed on the same line.** Neither column alone
+looked wrong.
+
 What this adds to the twenty-second: the write path for a word that is
 NOT a plugin's — a tag needs no registry to be a partition — reads the same
 as the registered facet did. Six remedies, one reading, and the open
 question stays the one the twenty-second named: whether the prompt asks
 for the meaning to be recorded is a decision about what the lane is FOR.
+(Taken 2026-09-19 — it does; see the note under the twenty-second, and
+read every round up to 20d as having been taken before it.)
 The inline `tags` field on the canvas ops therefore stays unbought at its
 measured price (+6 undescribed parameters, +300 visible on
 `wb_canvas_edit`); a model that does not reach for the described path on
