@@ -114,28 +114,62 @@ plane.**
 
 ### 3. Read authority attenuates by key derivation
 
-ADR-0042's per-workspace content key becomes the root of a derivation tree:
+ADR-0042's per-workspace content key becomes the **root of a derivation tree
+rather than the key the bytes are under**. This amends ADR-0042 decision 2,
+which says a replica is ciphertext under the per-workspace key: a document's
+ciphertext is under its own derived key, and the workspace key is what that
+key is derived from. Without this, a holder given a document key holds
+something that opens nothing, and document-level delegation is a sentence with
+no mechanism behind it.
+
+The derivation is specified rather than sketched, because two implementations
+that disagree about the encoding derive different keys and the failure is
+silent:
 
 ```
-documentKey = HKDF(workspaceKey, info = documentId)
+documentKey = HKDF-Expand(
+  PRK  = HKDF-Extract(salt = workspaceKeySalt, IKM = workspaceKey),
+  info = utf8(JSON.stringify(["wb-doc-key-v1", documentId, epoch])),
+  L    = 32,
+)                                          // HMAC-SHA-256 throughout
 ```
+
+- **SHA-256**, and 32 bytes out, matching the AES-256-GCM the content is under.
+- **Extract and expand are separate** ([RFC 5869](https://datatracker.ietf.org/doc/html/rfc5869)).
+  `workspaceKeySalt` is a per-workspace random salt stored beside the
+  ciphertext; it is not a secret and does not travel with the key.
+- **`info` is domain-separated and unambiguously encoded** — the JSON-array
+  form `daemon-identity.ts`'s `buildSignedPayload` already uses here, so
+  `["a","bc"]` and `["ab","c"]` cannot collide. A bare concatenation of an id
+  and an epoch is exactly the ambiguity that trick exists to remove.
 
 A holder given `documentKey` can read that document and cannot compute the
-workspace key or a sibling's, because HKDF ([RFC 5869](https://datatracker.ietf.org/doc/html/rfc5869))
-does not invert. Attenuation here is **arithmetic, not a rule somebody
-enforces** — which is the whole reason to prefer it to a policy field.
+workspace key or a sibling's, because HKDF does not invert. Attenuation here
+is **arithmetic, not a rule somebody enforces** — which is the whole reason to
+prefer it to a policy field.
 
-Everything ADR-0042 decided is unchanged: the key still arrives from the
+Everything else ADR-0042 decided is unchanged: the key still arrives from the
 network per session and still lives in memory only. A derived key is subject
 to the same rule; persisting one at any level collapses that level back to the
 advisory case.
 
-The tension this buys is stated rather than hidden: **derivation makes
-delegation cheap and revocation expensive**, because a derived key cannot be
-un-derived and the parent has to be rotated to take it back. ADR-0042 decision
-5 already bounds what is handed out — a session on the `offline` tier, a TTL
-lease on `bounded` — so the rotation cost falls on the level actually
-delegated rather than on the whole tree.
+**`epoch` is what makes revocation affordable, and it is the reason the term
+is in the `info` string at all.** Derivation makes delegation cheap and
+revocation expensive: a derived key cannot be un-derived, so taking it back
+means changing one of its inputs. Without an epoch the only input available is
+`workspaceKey`, and rotating that changes **every sibling document key and
+requires the whole workspace to be re-encrypted** — a cost out of all
+proportion to withdrawing one document from one holder. Bumping a single
+document's epoch re-keys that document alone.
+
+What that costs, said plainly rather than left for the implementation to
+discover: the epoch is stored per document beside its ciphertext, and bumping
+it means re-encrypting **that document**. Workspace-wide rotation remains
+available and remains workspace-wide; it is the right move when the workspace
+key itself is suspect, and the wrong one for an ordinary revocation. ADR-0042
+decision 5 bounds what is handed out in the first place — a session on the
+`offline` tier, a TTL lease on `bounded` — so an expiry usually settles this
+before any rotation is needed.
 
 ### 4. Act authority attenuates by an HMAC chain — the macaroon model
 
@@ -161,9 +195,15 @@ keeps one schema language in the codebase.
 detail.** This is capability security's known weakness and the withdrawn draft
 was right to state it: the daemon cannot reach into a holder and take a token
 back, so decision 1's "declining to hand out the next one" is only as prompt
-as the lifetime of the last one. **Authority on the act plane is therefore not
-offline-verifiable** — an enterprise revocation requirement is priced against
-the reissue interval, not against a signature.
+as the lifetime of the last one.
+
+Say precisely which half of that is unavailable, because the loose version is
+wrong: **a token's validity is verifiable offline** — the chain checks against
+the root key with no network — and what is not is **whether a still-valid
+token has been revoked since it was issued**. Revocation enforcement, not
+verification, is what waits for a connection. An enterprise revocation
+requirement is therefore priced against the reissue interval, not against a
+signature.
 
 The standard mitigation is the one ADR-0042 already took on the read plane:
 short lifetimes, reissued on connect. A deny-list is the alternative and is
