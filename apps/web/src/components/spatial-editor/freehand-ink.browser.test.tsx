@@ -282,3 +282,43 @@ it('rubber-bands over ink and takes only the strokes the band touched', async ()
     end: 'none',
   })
 })
+
+it('offers Delete on the ink itself, for a device with no Delete key', async () => {
+  // The keyboard was the only way to remove a stroke: the menu resolved its
+  // target out of `canvas.edges`, where a LINE is not, so a press on ink fell
+  // through to the empty-canvas menu. A phone has no Delete key, which makes
+  // that the whole affordance — ink you can draw and cannot take back.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [120, 400],
+    [240, 180],
+    [380, 420],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+
+  // Right-click ON the stroke: the midpoint of a stored segment, which the
+  // drawn curve passes through by construction.
+  const line = latest.canvas.lines?.[0]
+  const first = line?.from.kind === 'point' ? line.from.point : { x: 0, y: 0 }
+  const bend = line?.bends?.[0] ?? { x: 0, y: 0 }
+  const on = { x: (first.x + bend.x) / 2, y: (first.y + bend.y) / 2 }
+  const rect = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      clientX: rect.left + on.x,
+      clientY: rect.top + on.y,
+    }),
+  )
+
+  // Waited for the menu itself before reaching into it: `getByRole(...)
+  // .element()` resolves synchronously and throws when the menu has not
+  // rendered yet, which reads as the verb being absent.
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await userEvent.click(await page.getByRole('menuitem', { name: 'Delete' }).element())
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
+})
