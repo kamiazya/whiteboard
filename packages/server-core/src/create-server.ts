@@ -49,6 +49,7 @@ import {
   linkifyMentionsInputSchema,
   NamelessLinkifyTargetError,
 } from './tools/linkify-mentions.js'
+import { TagLibraryError } from './tools/tag-library.js'
 import { createThreadEditTool } from './tools/thread-edit.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
@@ -309,6 +310,13 @@ function mapDocumentError(c: Context, err: unknown) {
   // the reason names the stage, and only the caller can supply a body that
   // reaches the next one.
   if (err instanceof OkfParseError) {
+    return c.json({ error: err.message }, 400)
+  }
+  // A tag the workspace's own library does not admit (ADR-0040 decision 5).
+  // 400 for the same reason: the request is well-formed and the server is
+  // fine — only the caller can send a value the declaration admits, and the
+  // message names the ones it does.
+  if (err instanceof TagLibraryError) {
     return c.json({ error: err.message }, 400)
   }
   throw err

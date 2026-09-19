@@ -391,6 +391,23 @@ fixes the direction):
      completing from the declared values and the workspace's in-use
      vocabulary; and the row refusing what the library forbids by the SAME
      judgement `wb_facet_set` refuses with (`tagLibraryObjection`,
-     plugin-visual — data, so each writer keeps its own sentence). What is
-     still not checked: the `/api` document routes, which write frontmatter
-     tags without reading the library.
+     plugin-visual — data, so each writer keeps its own sentence).
+   - 5c (landed): the writers that take a whole OKF BODY read it too —
+     `document.set` and `wb_document_create`'s markdown arm, and the
+     `POST /documents` route behind them. Without it the library was a rule
+     with a door beside it: `tags:` in frontmatter reaches the same stored
+     field a tag op writes, so the same forbidden value landed unchallenged.
+     One judgement (`refuseFrontmatterTags`) at two call sites: the writer's
+     own, taken before the document is opened so a refusal leaves the stored
+     body as it stands, and `wb_document_create`'s preflight beside the OKF
+     parse already hoisted there — otherwise the delegated write refuses
+     AFTER the mint and leaves an empty document squatting the path the
+     caller was told they did not get. That costs a tagged create one extra
+     listing, which is what buys the refusal landing before anything exists;
+     a body carrying no tag, declared empty or absent, lists the workspace
+     zero times. `TagLibraryError` maps to 400 on the route (measured: 500
+     without it — the refusal is the caller's to fix, not a server fault).
+
+     What CANNOT be refused, and is not claimed to be: a CRDT sync frame.
+     It carries state rather than an intent, so there is no write to hold
+     — the editor's own tag row (5b-2) is where that one is checked.

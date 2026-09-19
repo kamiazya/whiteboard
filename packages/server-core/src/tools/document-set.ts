@@ -17,6 +17,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
+import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
  * Whether a canvas is one this tool could itself have written, and so holds
@@ -140,6 +141,12 @@ export function createDocumentSetTool(deps: ServerDeps) {
       }
 
       const { frontmatter, body } = parsed.value
+
+      // What the workspace DECLARES about its tags reaches this writer too
+      // (ADR-0040 decision 5) — taken before the document is opened, so a
+      // refusal leaves the stored body as it stands.
+      await refuseFrontmatterTags(deps, input.workspaceId, frontmatter.tags)
+
       const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
       // Captured before anything below writes, because both are what the
       // document said a moment ago rather than what it is about to say.

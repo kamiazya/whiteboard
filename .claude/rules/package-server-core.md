@@ -177,9 +177,31 @@ it already takes, and `GET /document-tags` (`computeDocumentTags`) as
 picker wants both layers in one round trip and that listing is already
 taken there. `wb_scene_render` passes it to layout only when the canvas
 carries a tag (`carriesATag`, exported for the daemon's export path to ask
-the same question), so an untagged board costs no listing. Only this
-write path is checked: the editor and the `/api` document routes are
-5b-2's.
+the same question), so an untagged board costs no listing.
+
+**A BODY is the other way that stored field is written, and it is held to
+the same declaration** (increment 5c). `refuseFrontmatterTags` is the one
+judgement for a writer that takes a whole OKF document — `document.set`,
+`wb_document_create`'s markdown arm, and the `POST /documents` route behind
+them. Such a write replaces the tags wholesale, so the parsed frontmatter IS
+the resulting set and there is no `tagSetsAfter` merge to compute. It runs
+at two call sites deliberately: in the writer, before the document is
+opened, so a refusal leaves the stored body as it stands; and in
+`wb_document_create`'s preflight beside the OKF parse already hoisted ahead
+of ADR-0019's mint, because the delegated write would otherwise refuse AFTER
+the mint and leave an empty document squatting the path the caller was told
+they did not get. A tagged create therefore takes one extra listing, and
+that is what it buys. The listing is skipped when there is no tag to judge
+— `undefined` and `[]` are different values and both count as none, which a
+test pins by counting listings over BOTH shapes (the first mutation check
+survived because only the `undefined` half was exercised).
+
+`TagLibraryError` needs its `mapDocumentError` branch or the route answers
+500 for a refusal only the caller can fix; measured, not assumed.
+
+What no write check can reach is a CRDT update: `applyWorkspaceDocumentUpdate`
+imports state, not an intent, so the editor's own tag row is where that one
+is held (`.claude/rules/app-web.md`).
 
 ## Common mistakes (append as review finds them)
 

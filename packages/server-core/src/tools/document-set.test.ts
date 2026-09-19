@@ -4,6 +4,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   writeDocumentKind,
+  writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -20,6 +21,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createDocumentSetTool } from './document-set.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
+import { TAG_LIBRARY_PATH } from './tag-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -371,5 +373,101 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(exported.frontmatter.title).toBeUndefined()
+  })
+})
+
+describe('wb_document_set and a workspace tag library (ADR-0040 decision 5)', () => {
+  const LIBRARY_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W0'
+  const library = {
+    health: { exclusive: true, values: { ok: { color: '4' }, failing: { color: '1' } } },
+    region: { values: { eu: {}, us: {} } },
+  }
+
+  async function noteUnderLibrary(): Promise<FakeDocumentStore> {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, LIBRARY_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, { 'visual.tags/v0': { keys: library } } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: LIBRARY_ID,
+      path: TAG_LIBRARY_PATH,
+      kind: 'markdown',
+    })
+    return store
+  }
+
+  test('refuses a frontmatter tag the library does not admit, before anything is written', async () => {
+    const store = await noteUnderLibrary()
+    const deps = makeDeps(store)
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      markdown: '---\ntype: note\n---\nThe body as it stands.',
+    })
+
+    await expect(
+      createDocumentSetTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        markdown: '---\ntype: note\ntags:\n  - health:unknown\n---\nA rewritten body.',
+      }),
+    ).rejects.toThrow(/health:unknown.*not admitted.*failing, ok/s)
+
+    // Nothing written: the refusal is taken before the document is opened,
+    // so the body the caller would have replaced is still the old one.
+    expect(readMarkdownBody(await loadDoc(store, DOCUMENT_ID))).toBe('The body as it stands.')
+  })
+
+  test('refuses a second value under an exclusive key', async () => {
+    const deps = makeDeps(await noteUnderLibrary())
+
+    await expect(
+      createDocumentSetTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        markdown: '---\ntype: note\ntags:\n  - health:ok\n  - health:failing\n---\nBody.',
+      }),
+    ).rejects.toThrow(/health is one value at a time/)
+  })
+
+  test('writes a tag the library admits, and a plain tag under no declared key', async () => {
+    const store = await noteUnderLibrary()
+    const deps = makeDeps(store)
+
+    await createDocumentSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      markdown: '---\ntype: note\ntags:\n  - health:ok\n  - region:eu\n  - draft\n---\nBody.',
+    })
+
+    const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+    expect(exported.frontmatter.tags).toEqual(['health:ok', 'region:eu', 'draft'])
+  })
+
+  test('a write carrying no tag never lists the workspace, declared empty or absent', async () => {
+    const store = await noteUnderLibrary()
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    const deps = makeDeps(store)
+
+    // Both shapes, because they are different values: no `tags` key parses
+    // to `undefined`, and `tags: []` survives the parse as an empty array.
+    // Judging the second would cost a listing to conclude nothing.
+    for (const frontmatter of ['type: note', 'type: note\ntags: []']) {
+      await createDocumentSetTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        markdown: `---\n${frontmatter}\n---\nNo tags here.`,
+      })
+    }
+
+    expect(listings).toBe(0)
   })
 })
