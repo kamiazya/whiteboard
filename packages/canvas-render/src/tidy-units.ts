@@ -1,4 +1,12 @@
 import { type CanvasEdge, isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
+// `fullyContains` is ONE predicate, and it was two byte-identical copies —
+// this file's and `edge-rules`' — until the mutation lane reported eight
+// survivors in this one. The copy there is exercised by name; the copy here
+// was exercised by nothing, so dropping its x-containment check left all
+// 1631 canvas-render tests green (measured before deleting it). Occlusion
+// and frame membership ask the same geometric question, and a second copy is
+// only a second thing that can be wrong.
+import { fullyContains } from './layout/edges/edge-rules.js'
 /**
  * What a tidy is about: the boxes, the OPTIONS a caller sets, and the UNITS
  * the passes actually move — an outermost frame and everything more than
@@ -100,15 +108,6 @@ export interface Unit {
   readonly movable: boolean
   dx: number
   dy: number
-}
-
-export function fullyContains(outer: Rect, inner: Rect): boolean {
-  return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
-    inner.x + inner.w <= outer.x + outer.w &&
-    inner.y + inner.h <= outer.y + outer.h
-  )
 }
 
 /**
