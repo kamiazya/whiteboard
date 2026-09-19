@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   attenuateMacaroon,
+  hmacSha256,
   type MacaroonCaveat,
   mintMacaroon,
   parseMacaroon,
@@ -208,8 +209,9 @@ describe('macaroon — parsing is total', () => {
 })
 
 // A pinned construction, computed once and committed. It is NOT an external
-// reference — see the note in `macaroon.ts` on why libmacaroons' published
-// vectors do not apply to this serialization — so it proves nothing about
+// reference — libmacaroons' SERIALIZATION vectors cannot match this module's
+// own JSON format, and the reference check that does apply is the
+// construction one in the next describe. So this proves nothing about
 // correctness against the literature. What it does catch is silent DRIFT:
 // change a domain-separation tag, the `info` field order, the JSON-array
 // encoding, or the chain's direction, and these values move.
@@ -254,5 +256,54 @@ describe('macaroon — the construction is pinned against silent drift', () => {
     })
 
     expect(sig(minted)).toBe('jGjU-SvrdXypbhChgoYEW181HXWCNE8SFJ0R7JSOf_k')
+  })
+})
+
+describe('macaroon — the construction matches the published reference', () => {
+  // libmacaroons' README worked example. The same values appear in at least
+  // six independent implementations (C, Java, JavaScript, C#, Python,
+  // Erlang), which is what makes reproducing them an EXTERNAL check rather
+  // than another way of asking this module whether it agrees with itself.
+  //
+  // It is deliberately narrow. This module does not use libmacaroons'
+  // serialization and adds domain-separation tags its chain does not have, so
+  // no vector can check a whole token. What it pins is that `hmacSha256` puts
+  // the key and the message where the reference puts them — swap those two
+  // arguments and all fourteen behavioural tests above still pass (measured),
+  // because the chain stays one-way and nothing observable changes.
+  //
+  // The golden values above move under that swap too, so they would catch one
+  // introduced later. The difference is that only this vector validates the
+  // ORIGINAL choice: goldens taken from a born-swapped implementation would
+  // be swapped goldens, and would agree with it forever.
+  const SECRET = 'this is our super secret key; only we should know it'
+  const IDENTIFIER = 'we used our secret key'
+  // libmacaroons derives the chain's starting key from the secret rather than
+  // using it raw; without this step the root signature is `5c748a4d…`.
+  const KEY_GENERATOR = 'macaroons-key-generator'
+
+  const utf8 = (value: string) => new TextEncoder().encode(value)
+  const hex = (bytes: Uint8Array) =>
+    [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  const rootSignature = async () =>
+    hmacSha256(await hmacSha256(utf8(KEY_GENERATOR), utf8(SECRET)), utf8(IDENTIFIER))
+
+  it("reproduces libmacaroons' root signature", async () => {
+    expect(hex(await rootSignature())).toBe(
+      'e3d9e02908526c4c0039ae15114115d97fdd68bf2ba379b342aaf0f617d0552f',
+    )
+  })
+
+  it("reproduces libmacaroons' signature after three first-party caveats", async () => {
+    let signature = await rootSignature()
+    for (const caveat of [
+      'account = 3735928559',
+      'time < 2020-01-01T00:00',
+      'email = alice@example.org',
+    ]) {
+      signature = await hmacSha256(signature, utf8(caveat))
+    }
+
+    expect(hex(signature)).toBe('ddf553e46083e55b8d71ab822be3d8fcf21d6bf19c40d617bb9fb438934474b6')
   })
 })

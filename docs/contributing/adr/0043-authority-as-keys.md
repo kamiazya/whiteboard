@@ -230,9 +230,23 @@ is, and they are the conditions under which it stays acceptable:
 - `daemon-identity.ts`'s `buildSignedPayload` already solves the adjacent
   trap (unambiguous part boundaries via JSON-array encoding) and is the
   pattern to follow;
-- [libmacaroons](https://github.com/rescrv/libmacaroons) publishes test
-  vectors, so the implementation is checked against the reference rather than
-  against itself.
+- the CONSTRUCTION is checked against the reference rather than against
+  itself. [libmacaroons](https://github.com/rescrv/libmacaroons)' README
+  worked example is a known-answer test for the chain, and the same values
+  appear in at least six independent implementations (C, Java, JavaScript,
+  C#, Python, Erlang), so reproducing them is independent implementations
+  agreeing rather than this one agreeing with itself.
+
+  **Construction and serialization are separate, and only the first is
+  checked.** libmacaroons' `macaroon-test-serialization.c` vectors are the
+  second kind — one macaroon in its V1 and V2 wire formats — and cannot
+  match a module that serializes to its own JSON. That costs only
+  interoperability, which a single-issuer single-verifier daemon does not
+  need. This distinction is recorded because the first draft of this ADR
+  cited "libmacaroons publishes test vectors" without saying which, and the
+  implementation then found the cited vectors were the ones that do not
+  apply — followed by a second error, concluding from that that no external
+  check was available at all.
 
 If any of those stops being true, decision 6 applies instead.
 

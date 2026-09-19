@@ -34,26 +34,38 @@
  * by the verifier, so this follows the construction rather than departing
  * from it, and keeps one schema language in the codebase.
  *
- * **What is NOT checked here, stated because the ADR promised it.**
- * ADR-0043 decision 5 names "libmacaroons publishes test vectors, so the
- * implementation is checked against the reference rather than against
- * itself" as one of three conditions under which hand-rolling this was
- * judged acceptable. That condition is not met and cannot be met by this
- * module: libmacaroons' vectors are SERIALIZATION vectors — the same
- * macaroon rendered in its V1 (base64 packet) and V2 (binary) formats —
- * and they exercise its wire format, not the abstract chain. This module
- * uses its own JSON serialization and adds domain-separation tags that
- * libmacaroons' chain does not have, so its signatures differ by design
- * and no vector can match.
+ * **What is checked against the reference, and what only against itself.**
+ * ADR-0043 decision 5 makes an external check one of three conditions under
+ * which hand-rolling this was judged acceptable, and the distinction that
+ * makes it satisfiable is between a macaroon's CONSTRUCTION and its
+ * SERIALIZATION.
  *
- * What stands in its place is weaker and is not pretended otherwise: the
- * primitive is WebCrypto's HMAC-SHA-256 rather than a hand-written one, and
- * `macaroon.test.ts` pins the construction with committed golden values so
- * a silent change to a tag or an encoding fails. Neither is an independent
- * implementation agreeing with this one. Adopting libmacaroons' wire format
- * outright is the option that would buy the real check; it was not taken
- * here, and that is a decision someone can revisit rather than a gap nobody
- * noticed.
+ * libmacaroons' `macaroon-test-serialization.c` vectors are the second kind
+ * — the same macaroon rendered in its V1 (base64 packet) and V2 (binary)
+ * formats — and none of them can match this module, which serializes to its
+ * own JSON and adds the domain-separation tags above. That is by design and
+ * costs only interoperability, which a single-issuer single-verifier daemon
+ * does not need.
+ *
+ * The CONSTRUCTION is checked. libmacaroons' README worked example is a
+ * known-answer test for the chain itself, and the same values appear in at
+ * least six independent implementations (C, Java, JavaScript, C#, Python,
+ * Erlang), so reproducing them is an external check in the sense that
+ * matters: independent implementations agreeing. `macaroon.test.ts`
+ * reproduces both the root signature and the three-caveat chain through
+ * `hmacSha256` below.
+ *
+ * That check earns its place on one failure mode specifically: swapping
+ * `hmacSha256`'s two arguments, which leaves the chain one-way — so no
+ * caveat can be stripped and nothing observable changes — while the
+ * construction silently stops being the published one. Measured: under that
+ * swap all fourteen behavioural tests in `macaroon.test.ts` still pass.
+ *
+ * The golden values also move under it, so they would catch a swap
+ * introduced LATER. What only the reference vector can do is validate the
+ * original choice: goldens generated from a born-swapped implementation
+ * would be swapped goldens, agreeing with it forever. Verified: the swapped
+ * variant produces `ff36e6e1…` where the reference is `e3d9e029…`.
  */
 import { z } from 'zod'
 import { ALL_AUTH_SCOPES, AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
@@ -140,7 +152,15 @@ function canonicalCaveat(caveat: MacaroonCaveat): readonly string[] {
   }
 }
 
-async function hmac(key: Uint8Array, message: Uint8Array): Promise<Uint8Array> {
+/**
+ * HMAC-SHA-256, the only cryptographic primitive this module uses.
+ *
+ * Exported solely so `macaroon.test.ts` can reproduce libmacaroons' published
+ * signatures through the SAME call the chain makes — a test that reimplemented
+ * it would check its own copy's argument order rather than this one's, which
+ * is the whole failure mode the reference vector exists to catch.
+ */
+export async function hmacSha256(key: Uint8Array, message: Uint8Array): Promise<Uint8Array> {
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
     key as BufferSource,
@@ -156,9 +176,9 @@ async function chain(
   tokenId: string,
   caveats: readonly MacaroonCaveat[],
 ): Promise<Uint8Array> {
-  let signature = await hmac(rootKey, payload([ROOT_TAG, tokenId]))
+  let signature = await hmacSha256(rootKey, payload([ROOT_TAG, tokenId]))
   for (const caveat of caveats) {
-    signature = await hmac(signature, payload([CAVEAT_TAG, ...canonicalCaveat(caveat)]))
+    signature = await hmacSha256(signature, payload([CAVEAT_TAG, ...canonicalCaveat(caveat)]))
   }
   return signature
 }
@@ -209,7 +229,7 @@ export async function attenuateMacaroon(token: string, caveat: MacaroonCaveat): 
   const current = base64UrlToBytes(macaroon.sig)
   if (current === null) throw new Error('cannot attenuate a malformed macaroon')
 
-  const next = await hmac(current, payload([CAVEAT_TAG, ...canonicalCaveat(caveat)]))
+  const next = await hmacSha256(current, payload([CAVEAT_TAG, ...canonicalCaveat(caveat)]))
   return serializeMacaroon({
     id: macaroon.id,
     caveats: [...macaroon.caveats, caveat],
