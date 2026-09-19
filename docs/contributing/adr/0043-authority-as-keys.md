@@ -2,11 +2,12 @@
 
 **Status:** Proposed — design of record; nothing implemented. Gives
 [ADR-0041](0041-profile-and-authority.md)'s "authority" and
-[ADR-0042](0042-offline-revocation.md)'s content key one mechanism, and closes
-the confused deputy that [ADR-0005](0005-hosted-origin-authorization.md)'s
-local-token concession leaves open. Stands on
-[ADR-0035](0035-device-keys-and-keeper.md) decision 1's rule about where a key
-may live, which is what decides the format survey in decision 7.
+[ADR-0042](0042-offline-revocation.md)'s content key one mechanism, and brings
+the attenuation [ADR-0005](0005-hosted-origin-authorization.md) built for
+hosted origins to the local-daemon mode it deliberately left unscoped. Stands
+on [ADR-0035](0035-device-keys-and-keeper.md) decision 1 **and its 2026-09-16
+addendum** — the addendum decides the format survey in decision 7, and
+decision 1's own "a user-level key does a different job" is decision 2 here.
 
 ## Context
 
@@ -39,10 +40,29 @@ new.
 | `jose` is already a dependency | `packages/mcp-server/package.json` | JOSE primitives need no new dependency |
 | the browser holds **no** private key, by a deliberate removal | `browser-idb.ts` v5 → v6 deletes `reconnectKeypairs` | the browser cannot be a signing principal |
 | the browser CAN verify Ed25519 | `daemon-identity-pin.ts` (`crypto.subtle.verify`) | moving to public-key signatures later costs nothing browser-side |
-| eleven scopes and a route registry exist, and local-daemon ignores them | `route-scope-registry.ts`, `auth-strategy.ts` | the vocabulary to attenuate *to* is already written |
+| eleven scopes and a route registry exist | `route-scope-registry.ts`, `auth-strategy.ts` | the vocabulary to attenuate *to* is already written |
+| one credential is already attenuated end to end | `auth.ts` (`hasRequiredScopes`), `ws-auth.ts` (`redeemed.scopes`) | attenuation is an existing shape here, not a new one |
+| the other two are not | daemon token and pairing token: no scope check on HTTP, `ALL_AUTH_SCOPES` on a websocket upgrade | this is what decision 9 narrows |
 | issuer and verifier are the same process in local-daemon mode | `app.ts`, `server-mode-http.ts` | a symmetric-key scheme's usual weakness does not apply |
 
-The third row is the one that decides decision 7. `browser-idb.ts` removed the
+The two credential rows are worth separating, because a summary flattens them
+and the flattened version is wrong. An **OAuth grant** is scope-checked on HTTP by
+`isAuthorizedOAuthGrant` → `hasRequiredScopes`, and an accepted websocket
+upgrade through its connection ticket carries `redeemed.scopes` — exactly what
+the grant held, never `ALL_AUTH_SCOPES`, as `ws-auth.ts` says in so many
+words. That path already implements everything decision 4 asks for. The
+**daemon token** and the **pairing token** do not: neither is scope-checked on
+HTTP (`createLocalTokenAuthStrategy` ignores `requiredScopes` by a stated
+single-tenant concession; `isAuthorizedPairingOrigin` returns a bare boolean
+and the middleware calls `next()`), and both yield `ALL_AUTH_SCOPES` on a
+websocket upgrade. The pairing token is the sharper case: ADR-0005 made it
+narrow on the axes it designed for — bound to one origin, expiring — and it
+is unnarrowed on the scope axis.
+
+So this ADR is not introducing attenuation to the codebase. It is asking why
+the credential an agent actually uses is the one that does not have it.
+
+The row about the browser's keypair is the one that decides decision 7. `browser-idb.ts` removed the
 keypair store because a non-extractable key sitting beside the content can be
 invoked by whatever script can also rewrite the content — ADR-0035 decision
 1's 2026-09-16 addendum generalises it. Any scheme that requires the *audience*
@@ -80,7 +100,13 @@ gets past the check gets everything the check was guarding. The read plane is
 cryptography: a holder without the key has ciphertext, whatever it does with
 its disk, and whether or not it is online.
 
-This is stated as a decision rather than a note because collapsing it is the
+The split is not new here. ADR-0035 decision 1 already draws it — a signing
+key belongs to a device, and "a user-level key is not the opposite of this
+… it does a *different job* — encrypting content". This ADR names the two
+jobs *authority* and puts them on one model without claiming they are one
+mechanism.
+
+It is stated as a decision rather than a note because collapsing it is the
 predictable failure of this ADR. "Keys are the authority model" reads as if
 both planes had the strength of the second, and **ADR-0042's claim that
 revocation is cryptographic rather than advisory is true only of the read
@@ -106,9 +132,10 @@ advisory case.
 
 The tension this buys is stated rather than hidden: **derivation makes
 delegation cheap and revocation expensive**, because a derived key cannot be
-un-derived and the parent has to be rotated to take it back. ADR-0042's answer
-already covers it — what is handed out is time-bounded — and the cost is then
-bounded to the level actually delegated, not to the whole tree.
+un-derived and the parent has to be rotated to take it back. ADR-0042 decision
+5 already bounds what is handed out — a session on the `offline` tier, a TTL
+lease on `bounded` — so the rotation cost falls on the level actually
+delegated rather than on the whole tree.
 
 ### 4. Act authority attenuates by an HMAC chain — the macaroon model
 
@@ -129,6 +156,25 @@ Caveats are **Zod-schema'd predicates, not a policy language**. A macaroon's
 first-party caveats are opaque to the format and interpreted by the verifier,
 so this is the format's own design rather than a deviation from it, and it
 keeps one schema language in the codebase.
+
+**An issued token works until it expires, and that is a cost rather than a
+detail.** This is capability security's known weakness and the withdrawn draft
+was right to state it: the daemon cannot reach into a holder and take a token
+back, so decision 1's "declining to hand out the next one" is only as prompt
+as the lifetime of the last one. **Authority on the act plane is therefore not
+offline-verifiable** — an enterprise revocation requirement is priced against
+the reissue interval, not against a signature.
+
+The standard mitigation is the one ADR-0042 already took on the read plane:
+short lifetimes, reissued on connect. A deny-list is the alternative and is
+deliberately not chosen here — it reintroduces the lookup decision 1 exists to
+avoid, and a list that must be consulted on every request is an ACL wearing a
+capability's clothes.
+
+The two planes differ here too, and in the direction that matters: a withheld
+content key stops a holder that never reconnects, while an unexpired token
+does not. **Where a revocation must bite an offline holder, it is ADR-0042's
+mechanism that bites, not this one.**
 
 ### 5. Implement it here rather than importing it
 
@@ -177,15 +223,18 @@ Both require the **audience** of a delegation to hold a signing keypair —
 [UCAN](https://github.com/ucan-wg/spec) v1.0.0 identifies principals by
 `did:key` and needs the delegate to sign its invocation; ZCAP-LD's invocation
 is a separately signed document. The browser deliberately holds no private key
-(Context, row three), so adopting either means reversing that decision or
+(the Context row about `reconnectKeypairs`), so adopting either means
+reversing that decision or
 minting a per-session key in memory and inheriting a cold-start problem on top
 of ADR-0042's.
 
 Two further reasons, in descending weight:
 
-- UCAN roots authority in the **user**; ADR-0041 decision 6 roots it in
-  **resource ownership**. Adopting a model whose direction is the opposite of
-  the one just decided would make both harder to read.
+- UCAN roots authority in the **user**; this project roots it in **resource
+  ownership** — ADR-0035 decision 4's "authority over a resource, not a claim
+  about an identity", which ADR-0041 decision 3 turns into L1/L2 and decision
+  6 applies to the right to leave. Adopting a model whose direction is the
+  opposite of the one just decided would make both harder to read.
 - [ZCAP-LD](https://w3c-ccg.github.io/zcap-spec/) is a W3C CCG work item at
   v0.4.0-rc, not a Recommendation, and brings JSON-LD contexts and Data
   Integrity proofs to a daemon on loopback.
@@ -197,6 +246,12 @@ a problem this project does not have.
 
 Carried unchanged from the withdrawn draft; they are what any future mechanism
 is judged against.
+
+They keep the field's word, **capability**, rather than this ADR's, so that a
+reader can match them against the literature. The two are the same thing at
+different altitudes: a capability is the general notion, and in this codebase
+it is always a key — a macaroon on the act plane, a derived content key on the
+read plane. Nothing is a capability here that is not one of those two.
 
 1. **No ambient authority.** Authority arrives with the request, in something
    the caller holds. A caller does not acquire an access by being recognised.
@@ -214,24 +269,30 @@ route is judged against: **no route may be a path from a narrow credential to
 a wider one.** A route that hands out authority must require the authority it
 hands out.
 
+Today's unscoped daemon and pairing tokens do not violate it — nothing widens,
+because nothing was narrow to begin with. That is the weaker failure and the
+one decision 9 addresses: an invariant about not widening says nothing at all
+when every credential starts at the top.
+
 ### 9. Two first applications, in no fixed order
 
 Both are named because leaving the first application unstated is what left the
 withdrawn draft unapplied. Which is built first is a sequencing decision, not
 one this ADR makes.
 
-- **What an agent holds.** Today an agent reaching the daemon carries the
-  local token, and there is no narrower thing to give it.
-  `createLocalTokenAuthStrategy`'s success path **ignores `requiredScopes`
-  entirely** by a stated single-tenant concession, so on HTTP no scope is
-  checked at all; an accepted websocket upgrade goes further and hands out
-  `ALL_AUTH_SCOPES` wholesale — `runtime:admin` and `mcp:call` included. The
-  human operating it holds the same thing, so a prompt that
-  persuades the agent reaches everything the human can reach: a confused
-  deputy in the classic shape. ADR-0039 decision 4's human gesture is evidence
-  *after* the reach exists; decision 4 here narrows the reach. Narrowing it
-  means undoing part of that concession, which is a behaviour change and needs
-  its own increment.
+- **What an agent holds.** An agent reaching the daemon carries the daemon
+  token, and there is no narrower thing to give it: no scope is checked on
+  HTTP, and a websocket upgrade carries `ALL_AUTH_SCOPES` — `runtime:admin`
+  and `mcp:call` included. The human operating it holds the same thing, so a
+  prompt that persuades the agent reaches everything the human can reach: a
+  confused deputy in the classic shape. ADR-0039 decision 4's human gesture is
+  evidence *after* the reach exists; decision 4 here narrows the reach.
+
+  What this asks for is not new machinery but **the OAuth grant path's
+  attenuation, on the credential an agent actually uses**. Narrowing it means
+  undoing part of a concession that was made knowingly, so it is a behaviour
+  change with its own increment — and the pairing token, unnarrowed on the
+  scope axis for the same reason, comes with it.
 - **The content-key tree.** Decision 3 over ADR-0042's per-workspace key.
   Smaller, and on the stronger plane.
 
@@ -262,6 +323,9 @@ one this ADR makes.
 - **Two planes is one more distinction to keep straight**, and decision 2 is
   the one a summary will flatten. Any copy, log line or doc that says
   "cryptographically revoked" has to mean the read plane.
+- **Act-plane revocation is bounded by a token lifetime**, so "revoked"
+  in an administrator's UI means "will stop working within N", and the copy
+  has to say which N rather than implying immediacy.
 - **A key persisted "for convenience" at any level of the derivation tree
   leaves every test green and the guarantee gone.** ADR-0042 already named
   this for the root; a tree multiplies the places it can happen. This wants an
