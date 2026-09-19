@@ -45,7 +45,15 @@ export function parseOkf(text: string): CodecParseResult<OkfMarkdownDocument> {
   if (match === null) {
     return codecFailure(
       'frontmatter-schema',
-      'document does not start with a --- frontmatter block',
+      // Names the SHAPE, because "does not start with a --- block" tells a
+      // caller what is wrong and not what to send. Measured: three trials
+      // across the eval lane's rounds 20a-20d passed a bare markdown body
+      // here and each paid a retry.
+      //
+      // `type` is the one key the schema requires (`coreFacetsSchema`, every
+      // other field optional), and this exact string is verified to parse by
+      // a test rather than read off the schema by eye.
+      'document does not start with a --- frontmatter block. A minimal OKF document is `---`, a `type:` line, `---`, then the body',
     )
   }
   const [, yamlText, body] = match

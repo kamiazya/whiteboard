@@ -75,12 +75,41 @@ export type DocumentSetOutput = z.infer<typeof documentSetOutputSchema>
  */
 const UNATTRIBUTED_ACTOR = 'process:whiteboard-server'
 
+/**
+ * The field-level detail a schema-stage failure already carries, rendered
+ * into the sentence a caller reads.
+ *
+ * `CodecParseError.issues` has said since it was written that it exists "so
+ * a caller can render field-level detail", and for as long as it has said so
+ * both call sites passed only the stage and the message — leaving a caller
+ * told "frontmatter failed OKF schema validation" while the key that failed
+ * sat one field away. Measured in three of the eval lane's trials, each
+ * paying a retry.
+ *
+ * BOUNDED at three: a deeply malformed payload can raise dozens, and a wall
+ * of them is as unreadable as none. The count is stated when it is cut so a
+ * caller knows the list is not the whole of it.
+ */
+function detail(issues: readonly { path: PropertyKey[]; message: string }[]): string {
+  if (issues.length === 0) return ''
+  const named = issues
+    .slice(0, 3)
+    .map((issue) => {
+      const path = issue.path.map(String).join('.')
+      return path === '' ? issue.message : `${path}: ${issue.message}`
+    })
+    .join('; ')
+  const rest = issues.length - 3
+  return ` — ${named}${rest > 0 ? ` (and ${rest} more)` : ''}`
+}
+
 export class OkfParseError extends Error {
   constructor(
     public readonly stage: string,
     message: string,
+    issues: readonly { path: PropertyKey[]; message: string }[] = [],
   ) {
-    super(`OKF parse failed at ${stage}: ${message}`)
+    super(`OKF parse failed at ${stage}: ${message}${detail(issues)}`)
     this.name = 'OkfParseError'
   }
 }
@@ -137,7 +166,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
 
       const parsed = parseOkf(input.markdown)
       if (!parsed.ok) {
-        throw new OkfParseError(parsed.error.stage, parsed.error.message)
+        throw new OkfParseError(parsed.error.stage, parsed.error.message, parsed.error.issues)
       }
 
       const { frontmatter, body } = parsed.value
