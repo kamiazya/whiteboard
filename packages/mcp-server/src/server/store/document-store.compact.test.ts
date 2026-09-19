@@ -524,17 +524,60 @@ describe('auto-compact disposal', () => {
       return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
     }
 
-    // The held-open cut lookup is what makes "only once" observable: a seam
-    // that returned early would read the stamp while it is still null.
-    scheduleAutoCompact('session1', 'idle-seam', withDelayedEarliestFrontiers(store, 100), {
-      debounceMs: 1,
+    // Held open by a GATE the test releases, not by a sleep. The first draft
+    // used `withDelayedEarliestFrontiers(store, 100)` and read the stamp
+    // before waiting, and CI's 5x stress of the changed file failed it once
+    // in five with `expected null not to be null` — a message that names
+    // neither of the two things that produce it (the compaction never ran, or
+    // it ran and wrote nothing). A duration can close before the action under
+    // test; a condition cannot, and each step below now fails saying which
+    // one broke.
+    let releaseCompaction: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      releaseCompaction = resolve
     })
-    expect(await readLastCompactedAt()).toBeNull()
+    const gatedStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestWorkspaceFrontiers') {
+          return async (workspaceId: string) => {
+            await gate
+            return target.earliestWorkspaceFrontiers(workspaceId)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
 
-    await _awaitAutoCompactIdleForTests()
+    scheduleAutoCompact('session1', 'idle-seam', gatedStore, { debounceMs: 1 })
+    // Throws naming the premise if the schedule was a no-op, instead of
+    // leaving that to be inferred from a null stamp three lines later.
+    await _awaitAutoCompactFiredForTests()
+
+    let idleResolved = false
+    const idle = _awaitAutoCompactIdleForTests().then(() => {
+      idleResolved = true
+    })
+    try {
+      // setImmediate runs after the microtask queue has drained, so a seam
+      // that returned without waiting has resolved by here — no clock, and
+      // no counting of microtask hops.
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(idleResolved, 'the seam resolved while the compaction was still held').toBe(false)
+    } finally {
+      // In a `finally` because a failed assertion above would otherwise leave
+      // the compaction gated shut forever, and this describe's afterEach
+      // awaits it — so the test would HANG instead of reporting the sentence
+      // it just failed on. Verified by running the mutant: without this, the
+      // whole file times out and names nothing.
+      releaseCompaction()
+    }
+    await idle
 
     expect(_inFlightAutoCompactCountForTests()).toBe(0)
-    expect(await readLastCompactedAt()).not.toBeNull()
+    expect(
+      await readLastCompactedAt(),
+      'the compaction settled but wrote no lastCompactedAt',
+    ).not.toBeNull()
   })
 
   it('_awaitAutoCompactFiredForTests says so rather than hanging when nothing is pending or in flight', async () => {
