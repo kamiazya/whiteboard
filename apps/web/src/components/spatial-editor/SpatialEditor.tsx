@@ -99,12 +99,7 @@ import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
-import {
-  distanceToPolyline,
-  findFreeSpot,
-  hitTest,
-  indexNodeBoxes,
-} from '../../lib/spatial/geometry.js'
+import { findFreeSpot, hitTest, indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import {
@@ -140,6 +135,13 @@ import { isInFlightGesture } from './drag-preview.js'
 import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
+import {
+  bandProbes,
+  pickContentAt,
+  pickContentWithin,
+  pressProbes,
+  shiftPress,
+} from './element-pick.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { collectFieldSuggestions } from './facet-widgets/field-suggestions.js'
 import { isFollowableUrl } from './followable-url.js'
@@ -149,7 +151,7 @@ import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { InkDraftLayer } from './InkDraftLayer.js'
-import { inkUnder, inkWithin, withGroupMates } from './ink-hit.js'
+import { withGroupMates } from './ink-hit.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
@@ -703,6 +705,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setSnapGuides,
     })
 
+    /**
+     * Everything a press or a band needs to know about the board, in the one
+     * shape `element-pick.ts` builds its probes from. The editor supplies
+     * DATA; which kinds are contended for, in what order, and with which
+     * probe is that module's — so the property judging those decisions
+     * judges the ones this component actually runs, rather than a copy of
+     * them written in a test.
+     */
+    const pickInputs = {
+      paths: edgePaths,
+      boxes: selectableBoxes,
+      tolerance: inkTolerance,
+      isEdgeLocked,
+    }
+    /**
+     * The same board, as the MENU sees it: every node and every path, locked
+     * included. A locked object has to stay right-clickable or Unlock would
+     * be unreachable — only the selection side effect is skipped for it.
+     */
+    const menuPickInputs = { ...pickInputs, boxes, isEdgeLocked: () => false }
+
     // The drag/resize/connect render layers (ghost, backdrop, live edges,
     // live resize, preview geometry, and the committed surface's mount-once
     // patch container) — one derivation hook, no state of its own. See
@@ -1040,13 +1063,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
-      // Ink first: a stroke is drawn ON what it crosses, so a press on it
-      // selects it rather than the note underneath (see `ink-hit.ts` for why
-      // this is lines only). Answering `undefined` for the node makes every
-      // branch below treat the press as one on ink over empty board, which
-      // is what it is.
-      const hitInk = inkUnder(edgePaths, point, inkTolerance, isEdgeLocked)
-      const hitId = hitInk !== undefined ? undefined : hitTest(selectableBoxes, point)
+      // WHICH KIND the press lands on, decided in one place for every kind
+      // the model holds (`element-pick.ts`). It used to be three hit-tests
+      // two hundred lines apart, so the priority between them was a property
+      // of where each had been written — and a kind nobody had written was
+      // simply never tested for. Each branch below reads the one answer.
+      const pick = pickContentAt(pressProbes(pickInputs), point)
+      // Answering `undefined` for the node when ink won makes every branch
+      // below treat the press as one on ink over empty board, which is what
+      // it is.
+      const hitInkId = pick?.kind === 'lines' ? pick.id : undefined
+      const hitId = pick?.kind === 'nodes' ? pick.id : undefined
       // A press on the canvas surface shuts the open conversation, the way
       // a pointerdown outside a menu shuts the menu. It is the one dismissal
       // a phone has: there is no Escape, and the card covers the bubble
@@ -1181,44 +1208,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // logical target within the OS-conventional window is stable against
       // re-renders because it compares node ids, not DOM identity.
       // Shift-click builds a multi-selection instead of starting a gesture.
-      if (e.shiftKey && hitId !== undefined) {
-        toggleSelectionMember(selectedId, hitId)
-        return
+      // What it MEANS per kind is `element-pick.ts`'s: the two arms used to
+      // be written where each was first needed, which is how ink came to
+      // fall through the node arm entirely. A kind it answers `none` for
+      // falls through to the replacing paths below, carrying its reason.
+      if (e.shiftKey) {
+        const shift = shiftPress(pick, selectedInkIds, canvas.lines, withGroupMates)
+        if (shift.kind === 'nodes') {
+          toggleSelectionMember(selectedId, shift.id)
+          return
+        }
+        if (shift.kind === 'lines') {
+          setSelectedInkIds(shift.ids)
+          return
+        }
       }
-      // Shift on INK, which the branch above cannot see: ink wins the press
-      // by leaving `hitId` undefined, so without this the press fell through
-      // to the empty-canvas branch — collapsing the node extras and
-      // REPLACING the ink selection. Holding shift destroyed the selection
-      // it was meant to grow.
-      if (e.shiftKey && hitInk !== undefined) {
-        const mark = withGroupMates([hitInk.id], canvas.lines)
-        // A mark already held is REMOVED, which is what shift means
-        // everywhere else in this editor: a press on a member toggles it.
-        const held = new Set(selectedInkIds)
-        const whole = mark.every((id) => held.has(id))
-        setSelectedInkIds(
-          whole
-            ? selectedInkIds.filter((id) => !mark.includes(id))
-            : [...new Set([...selectedInkIds, ...mark])],
-        )
-        return
-      }
-      // Edge hit-test runs at the press so the double-press pairing can
+      // The pick's answer for a path, which is an EDGE or a LINE: the press
+      // paths below treat the two alike, because the selection state does —
+      // `deleteInkCommand` is the one place that looks at which it is. It is
+      // read here rather than probed again so the double-press pairing can
       // distinguish "double-click on an edge" (open its label editor) from
-      // "double-click on empty space" (create a node) — both have
+      // "double-click on empty space" (create a node); both have
       // hitId === undefined.
-      // Locked edges are invisible to this hit-test, which is what keeps a
-      // locked edge out of the selection and therefore out of Delete, the
-      // label editor (double-press), and every restyle command.
-      const hitEdge =
-        hitId === undefined
-          ? edgePaths.find(
-              (edge) =>
-                !isEdgeLocked(edge.id) &&
-                distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
-            )
-          : undefined
-      const pressKey = hitId ?? (hitEdge !== undefined ? `edge:${hitEdge.id}` : 'empty')
+      const hitPathId = hitInkId ?? (pick?.kind === 'edges' ? pick.id : undefined)
+      const pressKey = hitId ?? (hitPathId !== undefined ? `edge:${hitPathId}` : 'empty')
       const now = e.timeStamp
       const isDoublePress =
         lastPressRef.current !== null &&
@@ -1230,10 +1243,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (hitId === undefined) {
         setMarquee({ start: point, current: point })
         applySelection({ type: 'collapse-extras' })
-        if (hitEdge !== undefined) {
+        if (hitPathId !== undefined) {
           // The whole MARK, not the one stroke pressed: a handwritten
           // character is several strokes and a person pressing one means it.
-          setSelectedInkIds(withGroupMates([hitEdge.id], canvas.lines))
+          setSelectedInkIds(withGroupMates([hitPathId], canvas.lines))
           applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
           return
         }
@@ -1310,13 +1323,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         })
         return
       }
-      // The MENU hit-tests every node, locked included — a locked node has
-      // to stay right-clickable or Unlock would be unreachable. Only the
-      // selection side effect below is skipped for it.
-      const hitId =
-        inkUnder(edgePaths, point, inkTolerance, () => false) !== undefined
-          ? undefined
-          : hitTest(boxes, point)
+      const menuPick = pickContentAt(pressProbes(menuPickInputs), point)
+      const hitId = menuPick?.kind === 'nodes' ? menuPick.id : undefined
+      // An edge and a line alike: the menu builder resolves which it is out
+      // of the canvas, the same way the selection does.
+      const hitPathId =
+        menuPick !== undefined && menuPick.kind !== 'nodes' ? menuPick.id : undefined
       // Hand mode keeps CONTENT out of reach — a press pans, nothing
       // selects, nothing edits — but a conversation about what is on screen
       // is not content, and a reader panning has as much reason to open one
@@ -1325,18 +1337,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // nothing along the way: an editing affordance surfacing mid-pan was
       // the harm (user report 2026-08-08), and a comment verb is not one.
       if (tool === 'hand') {
-        const hitEdge =
-          hitId === undefined
-            ? edgePaths.find(
-                (edge) =>
-                  distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
-              )
-            : undefined
         setContextMenu({
           x: screenPoint.x,
           y: screenPoint.y,
           nodeId: hitId,
-          edgeId: hitEdge?.id,
+          edgeId: hitPathId,
           point,
           verbs: 'annotation',
         })
@@ -1358,24 +1363,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         )
         setSelectedEdgeId(null)
       }
-      // Same edge tolerance as the click path: the object under the pointer
-      // gets ITS menu, so an edge line must not read as empty space.
-      const hitEdge =
-        hitId === undefined
-          ? edgePaths.find(
-              (edge) =>
-                distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
-            )
-          : undefined
-      if (hitEdge !== undefined) {
-        setSelectedEdgeId(hitEdge.id)
+      if (hitPathId !== undefined) {
+        setSelectedEdgeId(hitPathId)
         applySelection({ type: 'clear' })
       }
       setContextMenu({
         x: screenPoint.x,
         y: screenPoint.y,
         nodeId: hitId,
-        edgeId: hitEdge?.id,
+        edgeId: hitPathId,
         point,
       })
     }
@@ -1629,23 +1625,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           w: Math.abs(marquee.current.x - marquee.start.x),
           h: Math.abs(marquee.current.y - marquee.start.y),
         }
-        const hitIds = selectableBoxes
-          .filter(
-            (entry) =>
-              entry.box.x < rect.x + rect.w &&
-              entry.box.x + entry.box.width > rect.x &&
-              entry.box.y < rect.y + rect.h &&
-              entry.box.y + entry.box.height > rect.y,
-          )
-          .map((entry) => entry.id)
-        applySelection({ type: 'set-members', ids: hitIds })
-        // The band takes ink too. It used to drop the press-time selection
-        // and look at boxes only, so dragging over a scribble selected
+        // What the band gathers, asked of every kind the model holds rather
+        // than of the two this gesture happened to know about. It looked at
+        // boxes ONLY until a person dragged over a scribble and selected
         // nothing — and a scribble is exactly what a band is for, since ink
-        // arrives several strokes at a time. The press-time single selection
-        // is REPLACED rather than kept: a drag that began on a stroke was a
-        // marquee, and the band's own answer is the whole answer.
-        setSelectedInkIds(withGroupMates(inkWithin(edgePaths, rect, isEdgeLocked), canvas.lines))
+        // arrives several strokes at a time.
+        const gathered = pickContentWithin(bandProbes(pickInputs), rect)
+        applySelection({ type: 'set-members', ids: [...gathered.nodes] })
+        // The press-time single selection is REPLACED rather than kept: a
+        // drag that began on a stroke was a marquee, and the band's own
+        // answer is the whole answer.
+        setSelectedInkIds(withGroupMates(gathered.lines, canvas.lines))
         return
       }
       if (root === null) return
