@@ -22,7 +22,12 @@
  * drives these functions over generated canvases and tallies which kinds
  * the run actually produced.
  */
-import type { CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  type CanvasEdge,
+  type CanvasLine,
+  endNode,
+  type SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import { distanceToPolyline, hitTest, type NodeBox } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { type DrawnPath, inkUnder, inkWithin, type Rect } from './ink-hit.js'
@@ -102,7 +107,16 @@ export interface SkippedProbe {
 }
 
 export type PointProbe = (point: Point) => string | undefined
-export type BandProbe = (rect: Rect) => readonly string[]
+/**
+ * `gathered` is what the kinds BEFORE this one in `CONTENT_PICK_ORDER`
+ * answered, so a kind whose rule depends on another's can state it. Only
+ * edges do: a relation comes along when the band took both the nodes it
+ * connects.
+ */
+export type BandProbe = (
+  rect: Rect,
+  gathered: Partial<Record<ContentKind, readonly string[]>>,
+) => readonly string[]
 
 const isSkipped = (probe: unknown): probe is SkippedProbe =>
   typeof probe === 'object' && probe !== null && 'skipped' in probe
@@ -137,11 +151,14 @@ export function pickContentAt(
  * Everything a band gathers, per kind.
  *
  * Answers for every content kind, so a kind a band does not take is a
- * `SkippedProbe` carrying its reason rather than an absence. `edges` is one
- * today: an edge follows the nodes it connects, so a band over a diagram
- * arguably means the nodes AND their relations — but that is a product
- * decision nobody has taken, and taking it here would be taking it by
- * accident.
+ * `SkippedProbe` carrying its reason rather than an absence — an empty
+ * answer reads identically to a broken probe and to a kind nobody thought
+ * about, which is the failure this module is against. Nothing is skipped
+ * today.
+ *
+ * Kinds are asked in `CONTENT_PICK_ORDER` and each is handed what the ones
+ * before it answered, because one rule genuinely depends on another's: an
+ * edge comes along when the band took both of the nodes it connects.
  */
 export function pickContentWithin(
   probes: Record<ContentKind, BandProbe | SkippedProbe>,
@@ -150,7 +167,7 @@ export function pickContentWithin(
   const answer = {} as Record<ContentKind, readonly string[]>
   for (const kind of CONTENT_PICK_ORDER) {
     const probe = probes[kind]
-    answer[kind] = isSkipped(probe) ? [] : probe(rect)
+    answer[kind] = isSkipped(probe) ? [] : probe(rect, answer)
   }
   return answer
 }
@@ -167,6 +184,11 @@ export function pickContentWithin(
 export interface PickInputs {
   /** Every drawn path the scene laid out, edges and ink alike. */
   readonly paths: readonly DrawnPath[]
+  /**
+   * The relations themselves, which the paths cannot say: a band takes an
+   * edge by WHAT IT CONNECTS rather than by where its line happens to run.
+   */
+  readonly edges: readonly CanvasEdge[]
   /** EVERY box the scene laid out; the probes drop the locked ones themselves. */
   readonly boxes: readonly NodeBox[]
   /** How near counts as "on a path", in CANVAS units (the caller divides by zoom). */
@@ -237,9 +259,32 @@ export function bandProbes(inputs: PickInputs): Record<ContentKind, BandProbe | 
             entry.box.y + entry.box.height > band.y,
         )
         .map((entry) => entry.id),
-    edges: {
-      skipped:
-        'an edge follows the nodes it connects, so a band over a diagram arguably means the nodes AND their relations — a product decision nobody has taken, and taking it here would be taking it by accident',
+    // An edge is a RELATION, so the band takes it when it took both ends —
+    // never by where its line runs. That distinction is the whole reason
+    // this probe reads `inputs.edges` rather than the paths beside it: a
+    // router steers a line around the boxes between its ends, so an edge
+    // whose line crosses the band may connect nothing in it, and one wholly
+    // inside the band may be drawn looping outside it (user decision,
+    // 2026-09-19). Taking a touched line instead would also cut a relation
+    // in half — one endpoint gathered, the other not — which is the state a
+    // selection of relations must not be able to reach.
+    //
+    // Locked edges are already out: they are dropped from the node-lock's
+    // sibling the same way the press drops them.
+    edges: (_band, gathered) => {
+      const inside = new Set(gathered.nodes ?? [])
+      return inputs.edges
+        .filter((edge) => !inputs.isEdgeLocked(edge.id))
+        .filter((edge) => {
+          // `endNode` and not a comparison of the two: an end that names no
+          // node answers `undefined`, and the model's own note says two of
+          // those must never read as agreeing. Both ends have to BE nodes
+          // the band took, so an undefined end fails on its own.
+          const from = endNode(edge.from)
+          const to = endNode(edge.to)
+          return from !== undefined && to !== undefined && inside.has(from) && inside.has(to)
+        })
+        .map((edge) => edge.id)
     },
   }
 }
@@ -252,20 +297,19 @@ export function bandProbes(inputs: PickInputs): Record<ContentKind, BandProbe | 
  * node arm tests `hitId`, which ink deliberately leaves undefined so a
  * stroke can win a press — so for a long time shift over ink fell through
  * to the branch that REPLACES, and holding shift destroyed the selection it
- * was meant to grow. A kind whose answer is "nothing yet" says so here,
- * with its reason, instead of being the kind nobody wrote an arm for.
+ * was meant to grow.
  */
 export type ShiftPress =
   /** Toggle this node's membership; the caller owns the node selection. */
   | { readonly kind: 'nodes'; readonly id: string }
-  /** The next ink selection, whole marks in and whole marks out. */
-  | { readonly kind: 'lines'; readonly ids: readonly string[] }
-  /** Shift does nothing for this kind, and says why. */
+  /** The next PATH selection — ink and edges share one, so this is both. */
+  | { readonly kind: 'paths'; readonly ids: readonly string[] }
+  /** Shift does nothing here, and says why. */
   | { readonly kind: 'none'; readonly because: string }
 
 export function shiftPress(
   pick: ContentPick | undefined,
-  heldInkIds: readonly string[],
+  heldPathIds: readonly string[],
   lines: readonly CanvasLine[] | undefined,
   /**
    * `withGroupMates`, passed in rather than imported: this module owns the
@@ -278,24 +322,26 @@ export function shiftPress(
 ): ShiftPress {
   if (pick === undefined) return { kind: 'none', because: 'the press landed on empty board' }
   if (pick.kind === 'nodes') return { kind: 'nodes', id: pick.id }
-  if (pick.kind === 'lines') {
-    // The whole MARK: a handwritten character is several strokes carrying
-    // one group id, and a person pressing one of them means the character.
-    const mark = groupMates([pick.id], lines)
-    const held = new Set(heldInkIds)
-    // A mark already held is REMOVED, which is what shift means everywhere
-    // else in this editor: a press on a member toggles it.
-    const whole = mark.every((id) => held.has(id))
-    return {
-      kind: 'lines',
-      ids: whole
-        ? heldInkIds.filter((id) => !mark.includes(id))
-        : [...new Set([...heldInkIds, ...mark])],
-    }
-  }
+  // An edge and a line take the SAME arm, and that is the whole of what
+  // opening shift for edges cost: the two already share one selection state,
+  // and `groupMates` answers an edge id alone, because a group of one is
+  // what carrying no group already means. What had to change first was
+  // elsewhere — the verbs behind the selection. `toggle-lock` dispatched to
+  // a single edge, so a second selected edge would have been silently
+  // ignored; it takes the set now.
+  //
+  // The whole MARK, for ink: a handwritten character is several strokes
+  // carrying one group id, and a person pressing one of them means the
+  // character.
+  const mark = groupMates([pick.id], lines)
+  const held = new Set(heldPathIds)
+  // A mark already held is REMOVED, which is what shift means everywhere
+  // else in this editor: a press on a member toggles it.
+  const whole = mark.every((id) => held.has(id))
   return {
-    kind: 'none',
-    because:
-      "shift never adds an EDGE, in either direction — it also drops a held edge when a node is shift-pressed. What separates an edge from ink here is the verbs behind the selection: a stroke's (Delete, Ungroup) already act on a set, while an edge's dispatch to a single target, so `toggle-lock` would lock a surviving relation instead of the nodes being gathered. Opening it means giving those verbs a set, which is a product decision nobody has asked for",
+    kind: 'paths',
+    ids: whole
+      ? heldPathIds.filter((id) => !mark.includes(id))
+      : [...new Set([...heldPathIds, ...mark])],
   }
 }

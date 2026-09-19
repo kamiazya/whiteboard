@@ -206,6 +206,7 @@ const bandAround = (points: readonly Point[]) => {
 
 const emptyInputs = {
   paths: [],
+  edges: [],
   boxes: [],
   tolerance: TOLERANCE,
   isNodeLocked: () => false,
@@ -224,10 +225,10 @@ const lineOf = (id: string, path: readonly Point[]): CanvasLine => ({
 
 // An edge's end names a node and nothing else — ADR-0038 decision 2 took the
 // discriminator off it, which is the whole difference from a line's end.
-const edgeOf = (id: string): CanvasEdge => ({
+const edgeOf = (id: string, from = 'n-from', to = 'n-to'): CanvasEdge => ({
   id,
-  from: { node: 'n-from' },
-  to: { node: 'n-to' },
+  from: { node: from },
+  to: { node: to },
 })
 
 const placedNode = boxArb.map(
@@ -271,6 +272,7 @@ const placedPath = (kind: 'lines' | 'edges') =>
       inputs: (locked) => ({
         ...emptyInputs,
         paths: [drawn],
+        ...(kind === 'edges' ? { edges: [edgeOf(id)] } : {}),
         isEdgeLocked: (probed: string) => locked && probed === id,
       }),
       on: path[0] as Point,
@@ -337,7 +339,10 @@ describe('every element kind, through every surface that has to know about it', 
       const gathered = pickContentWithin(probes, placed.band)
       const probe = probes[placed.kind]
       if (typeof probe === 'function') {
-        expect(gathered[placed.kind]).toContain(placed.id)
+        // An EDGE is the one kind a band does not take by its own geometry,
+        // so a lone edge with its ends outside the band is correctly left
+        // behind; the case that gathers one is its own property below.
+        if (placed.kind !== 'edges') expect(gathered[placed.kind]).toContain(placed.id)
       } else {
         // A kind the band skips answers nothing AND owes a sentence — a
         // reason under a clause is the omission with a word in front of it.
@@ -360,11 +365,13 @@ describe('every element kind, through every surface that has to know about it', 
         case 'nodes':
           expect(shift.id).toBe(placed.id)
           break
-        case 'lines':
+        case 'paths':
           // Shift GROWS or SHRINKS, never replaces: every id it answers was
           // either held already or is the mark just pressed. This is the
           // statement the two shipped defects would have failed — one
-          // replaced the held ink, the other dropped it entirely.
+          // replaced the held ink, the other dropped it entirely. An EDGE
+          // takes this same arm since 2026-09-19, which is the whole of
+          // what opening shift for edges cost here.
           for (const id of shift.ids) expect([...held, placed.id]).toContain(id)
           break
         default:
@@ -381,6 +388,57 @@ describe('every element kind, through every surface that has to know about it', 
       produced(placed.kind, 'lock')
     },
   )
+
+  const bandEdges = { taken: 0, leftBehind: 0 }
+
+  fcTest.prop([boxArb, boxArb, fc.boolean(), fc.boolean()], withDefaults())(
+    'a band takes a relation when it took both of its ends, and never half of one',
+    (a, b, bandHoldsA, bandHoldsB) => {
+      // The rule stated by CONSTRUCTION: the generator decides which ends
+      // the band covers, and the property asks whether the relation came
+      // along. It never computes an intersection with the edge's LINE,
+      // which is the whole point — a router steers that line around the
+      // boxes between its ends, so where it runs says nothing about what it
+      // connects (user decision, 2026-09-19).
+      const boxes = [
+        { id: 'a', box: { x: a.x, y: a.y, width: a.width, height: a.height } },
+        { id: 'b', box: { x: b.x + 2000, y: b.y + 2000, width: b.width, height: b.height } },
+      ] satisfies readonly NodeBox[]
+      // The band covers whichever ends were drawn in, and sits in a far
+      // corner when it holds neither.
+      const covered = [...(bandHoldsA ? [boxes[0]] : []), ...(bandHoldsB ? [boxes[1]] : [])]
+      const rect =
+        covered.length === 0
+          ? { x: 9e4, y: 9e4, w: 10, h: 10 }
+          : {
+              x: Math.min(...covered.map((e) => e.box.x)) - 5,
+              y: Math.min(...covered.map((e) => e.box.y)) - 5,
+              w:
+                Math.max(...covered.map((e) => e.box.x + e.box.width)) -
+                Math.min(...covered.map((e) => e.box.x)) +
+                10,
+              h:
+                Math.max(...covered.map((e) => e.box.y + e.box.height)) -
+                Math.min(...covered.map((e) => e.box.y)) +
+                10,
+            }
+      const gathered = pickContentWithin(
+        bandProbes({ ...emptyInputs, boxes, edges: [edgeOf('rel', 'a', 'b')] }),
+        rect,
+      )
+      const bothEnds = bandHoldsA && bandHoldsB
+      expect(gathered.edges).toEqual(bothEnds ? ['rel'] : [])
+      // A relation is never gathered with one end, which is the state a
+      // selection of relations must not be able to reach.
+      if (bothEnds) bandEdges.taken += 1
+      else bandEdges.leftBehind += 1
+    },
+  )
+
+  it('drew a band over both ends and over fewer, so neither answer is untested', () => {
+    expect(bandEdges.taken).toBeGreaterThan(0)
+    expect(bandEdges.leftBehind).toBeGreaterThan(0)
+  })
 
   fcTest.prop([boxArb, fc.integer({ min: 4, max: 40 })], withDefaults())(
     'a locked box lying over an unlocked one does not swallow the press',

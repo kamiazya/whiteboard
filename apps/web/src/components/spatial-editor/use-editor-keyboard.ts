@@ -42,8 +42,7 @@ export interface EditorKeyboardInputs {
   selection: { id: string; box: Box } | undefined
   selectedNode: SpatialNode | undefined
   extraIds: ReadonlySet<string>
-  selectedEdgeId: string | null
-  /** Every selected stroke — Delete and Escape act on all of them. */
+  /** Every selected stroke or edge — Delete, Escape and the lock act on all of them. */
   selectedInkIds: readonly string[]
   setSelectedInkIds: (ids: readonly string[]) => void
   setSelectedEdgeId: (id: string | null) => void
@@ -74,7 +73,6 @@ export function useEditorKeyboard({
   selection,
   selectedNode,
   extraIds,
-  selectedEdgeId,
   selectedInkIds,
   setSelectedInkIds,
   setSelectedEdgeId,
@@ -110,19 +108,37 @@ export function useEditorKeyboard({
    * value — a lock is not an edit to the document.
    */
   const toggleSelectionLock = (): boolean => {
-    // An edge selection is exclusive with a node selection, so this is a
-    // dispatch, not a merge.
-    if (edgeLockEnabled && selectedEdgeId !== null) {
-      onToggleEdgeLock?.(selectedEdgeId, !isEdgeLocked(selectedEdgeId))
-      return true
-    }
-    if (!lockEnabled || onToggleNodeLock === undefined || selection === undefined) return false
-    const ids = [selection.id, ...extraIds]
-    // The primary's current state decides the direction, so a mixed
-    // selection lands on ONE state instead of flipping each node.
-    const next = !isLocked(selection.id)
-    for (const id of ids) onToggleNodeLock(id, next)
-    if (next) {
+    // A MERGE, not a dispatch. It dispatched — edges first, else nodes —
+    // while an edge selection was exclusive with a node one, so there was
+    // never a mixed selection to merge. Shift adds edges now (user
+    // decision, 2026-09-19), and a dispatch would have locked the one
+    // relation and silently left every selected node and every other
+    // selected edge alone.
+    const paths = edgeLockEnabled ? selectedInkIds : []
+    const nodes =
+      lockEnabled && onToggleNodeLock !== undefined && selection !== undefined
+        ? [selection.id, ...extraIds]
+        : []
+    if (paths.length === 0 && nodes.length === 0) return false
+    // ONE direction for the whole selection, taken from the primary — the
+    // same rule the node half already had, so a mixed selection lands on
+    // one state instead of flipping each member. A node primary decides for
+    // everything when there is one; otherwise the leading path does.
+    //
+    // Measured, that rule is currently indistinguishable from flipping each
+    // member, and the reason is worth knowing before anyone simplifies it:
+    // a locked element cannot BE in a selection. The hit-test skips one,
+    // and `useLockPolicy` drops one that a peer locks mid-selection
+    // (`retainInk`, `drop-locked`) — so every member is unlocked when this
+    // runs and `next` is always `true`. This shortcut can only ever LOCK;
+    // unlocking is the context menu's. The rule stays stated rather than
+    // collapsed to `true`, because it is the SELECTION model that makes the
+    // two agree, and a change there would silently make this wrong.
+    const next =
+      selection !== undefined ? !isLocked(selection.id) : !isEdgeLocked(paths[0] as string)
+    for (const id of paths) onToggleEdgeLock?.(id, next)
+    for (const id of nodes) onToggleNodeLock?.(id, next)
+    if (next && nodes.length > 0) {
       applySelection({ type: 'clear' })
     }
     return true

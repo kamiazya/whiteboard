@@ -8,7 +8,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -210,4 +210,72 @@ it('without the host seam the edge lock is inert — no menu entry, nothing bloc
   const labels = menuLabels(container)
   expect(labels).not.toContain('Lock')
   expect(labels).not.toContain('Unlock')
+})
+
+it('locks every selected relation in one press, not only the first', async () => {
+  // The verb that had to change before shift could add an edge at all
+  // (user decision, 2026-09-19). It dispatched to `selectedEdgeId` — the
+  // leading id — which was correct while an edge selection could only ever
+  // hold one, and would have silently left every other selected relation
+  // unlocked the moment shift opened. Mutation-checked: cutting the loop
+  // back to the first id fails here and nothing else in the suite.
+  const twoEdges: SpatialCanvas = {
+    nodes: initial.nodes,
+    edges: [
+      { id: 'e1', from: { node: 'a' }, to: { node: 'b' } },
+      { id: 'e2', from: { node: 'b' }, to: { node: 'a' } },
+    ],
+  }
+  const latest: { toggles: Array<[string, boolean]> } = { toggles: [] }
+  function Host() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(twoEdges)
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          theme="light"
+          lockedEdgeIds={new Set<string>()}
+          onToggleEdgeLock={(edgeId, locked) => latest.toggles.push([edgeId, locked])}
+        />
+      </div>
+    )
+  }
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  const lines = () =>
+    [...container.querySelectorAll('[data-testid="spatial-editor"] svg polyline')] as SVGElement[]
+  await vi.waitFor(() => expect(lines().length).toBeGreaterThanOrEqual(2))
+  const midpointOf = (line: SVGElement) => {
+    const lr = line.getBoundingClientRect()
+    const rr = root.getBoundingClientRect()
+    return [lr.x + lr.width / 2 - rr.x, lr.y + lr.height / 2 - rr.y] as const
+  }
+
+  const [x1, y1] = midpointOf(lines()[0] as SVGElement)
+  pressAt(root, x1, y1)
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
+  )
+  const [x2, y2] = midpointOf(lines()[1] as SVGElement)
+  const rr = root.getBoundingClientRect()
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 2,
+    shiftKey: true,
+    clientX: rr.left + x2,
+    clientY: rr.top + y2,
+  })
+  fireEvent.pointerUp(root, { pointerId: 2, clientX: rr.left + x2, clientY: rr.top + y2 })
+
+  root.focus()
+  fireEvent.keyDown(root, { key: 'l', metaKey: true, shiftKey: true })
+
+  await vi.waitFor(() => expect(latest.toggles.length).toBe(2))
+  expect(latest.toggles.map(([id]) => id).sort()).toEqual(['e1', 'e2'])
+  // One direction for the whole selection, taken from the leading path —
+  // never a flip of each member.
+  expect(latest.toggles.every(([, locked]) => locked)).toBe(true)
 })
