@@ -18,6 +18,32 @@ the code that serves them shares nothing:
 - `layout/` itself — `spatial-canvas.ts`, the composer that draws on both,
   plus the kind-agnostic scene transforms it uses.
 
+**The composer's own file is not the composer's only file.** Two
+independently-featured OVERLAYS and the options vocabulary have their own
+modules, and the direction between them is the point:
+
+- `layout/layout-options.ts` — `SpatialLayoutOptions` (what a caller asks
+  for), `ResolvedLayoutOptions` (the same thing after the entry point has
+  settled geometry, contributions, theme and recursion path once), and
+  `RegionChrome`. Nothing imports the composer to name them.
+- `layout/comments.ts` — the annotation layer (ADR-0024/0025/0026): the
+  pin, the region outline, the bubble.
+- `layout/proposals.ts` — the proposal layer (ADR-0029 decision 1), which
+  reuses the comment layer's constants deliberately.
+- `layout/scene-extent.ts` — `contentExtent`, the one answer to "how far
+  right and down does this laid-out block reach", which both overlays were
+  computing with the same `Math.max(0, ...)` pair.
+
+Both overlays take the body typesetter as a SEAM (`BodyLayoutSeam`) rather
+than importing it. The markdown options a bubble is laid out with are built
+by the composer, which recurses back into `layoutSpatialCanvas` for an
+embedded canvas — importing it would close a cycle, and passing it keeps
+the dependency pointing one way.
+
+`spatial-canvas.ts` re-exports what it used to declare, so no importer had
+to change. That is deliberate: a move that also rewrote every call site
+would be two changes in one diff.
+
 The split was made because the two clusters were measured to have ZERO
 production imports between each other while sitting in one flat directory,
 so the directory gave a reader no signal which of two unrelated engines a

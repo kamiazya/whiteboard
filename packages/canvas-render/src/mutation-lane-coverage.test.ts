@@ -185,9 +185,18 @@ describe('the mutation lane covers what it says it covers', () => {
     // colour is declared, idempotent and colour-only — and each of its
     // decisions (the contested case, the identity return, the edge branch)
     // is mutation-shaped.
+    // 81 since `spatial-canvas.ts` gave its overlay layers and its options
+    // vocabulary their own modules (task #84). Four files, no new behaviour
+    // and none in the lane: `comments.ts` and `proposals.ts` are the moved
+    // bodies, already covered by `comments.test.ts` and `proposals.test.ts`
+    // through the same entry point as before; `layout-options.ts` is type
+    // declarations plus one zod union, so there is nothing in it to mutate;
+    // `scene-extent.ts` is the two-line extent the two overlays were each
+    // computing with the same `Math.max(0, ...)` pair, pinned by every
+    // bubble-placement example that reads a bubble's size.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 15,
-      production: 77,
+      production: 81,
     })
   })
 
