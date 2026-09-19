@@ -107,6 +107,11 @@ import {
 } from '../../lib/spatial/geometry.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
+import {
+  continuesStroke,
+  type PreviousStroke,
+  strokeBounds,
+} from '../../lib/spatial/stroke-group.js'
 import { collectCanvasTags, retag } from '../../lib/spatial/tags.js'
 import {
   canvasToScreen,
@@ -144,7 +149,7 @@ import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { InkDraftLayer } from './InkDraftLayer.js'
-import { inkUnder, inkWithin } from './ink-hit.js'
+import { inkUnder, inkWithin, withGroupMates } from './ink-hit.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
@@ -612,6 +617,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * units: the budget is a screen distance, so zooming out widens it in
      * document space and the stroke stays as easy to hit with a finger.
      */
+    /**
+     * What the last committed stroke left behind, for the next press to be
+     * judged against. A ref rather than state: nothing renders from it, and
+     * the press that reads it runs before React could have committed a
+     * setState from the release that wrote it.
+     */
+    const lastStrokeRef = useRef<PreviousStroke | null>(null)
     const inkTolerance = EDGE_HIT_TOLERANCE_PX / viewport.zoom
     const edgePathOf = useCallback(
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
@@ -1113,11 +1125,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // edge and the release is never seen.
       if (tool === 'draw') {
         capturePointer(root, e.pointerId)
+        // Which MARK this stroke belongs to, decided here because this is
+        // where the clock is: a stroke that goes down soon after the last
+        // one came up, near where it was drawn, is the next stroke of the
+        // same character rather than a new one (`stroke-group.ts`).
+        const previous = lastStrokeRef.current ?? undefined
+        // The reducer's own default, so a group id is minted exactly the way
+        // an element id is — and a test injecting `createId` gets
+        // deterministic groups too.
+        const group = continuesStroke(previous, e.timeStamp, point, viewport.zoom)
+          ? previous?.group
+          : (createId ?? defaultCreateId)()
         applyResult(
           reduceGesture(gestureState, canvas, {
             type: 'pointerdown-draw',
             point,
             zoom: viewport.zoom,
+            ...(group === undefined ? {} : { group }),
           }),
         )
         return
@@ -1170,7 +1194,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         setMarquee({ start: point, current: point })
         applySelection({ type: 'collapse-extras' })
         if (hitEdge !== undefined) {
-          setSelectedEdgeId(hitEdge.id)
+          // The whole MARK, not the one stroke pressed: a handwritten
+          // character is several strokes and a person pressing one means it.
+          setSelectedInkIds(withGroupMates([hitEdge.id], canvas.lines))
           applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
           return
         }
@@ -1582,21 +1608,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // arrives several strokes at a time. The press-time single selection
         // is REPLACED rather than kept: a drag that began on a stroke was a
         // marquee, and the band's own answer is the whole answer.
-        setSelectedInkIds(inkWithin(edgePaths, rect, isEdgeLocked))
+        setSelectedInkIds(withGroupMates(inkWithin(edgePaths, rect, isEdgeLocked), canvas.lines))
         return
       }
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
       // Unsnapped like its samples: the ink ends where the hand stopped.
       if (gestureStateRef.current.kind === 'drawing') {
+        const released = screenToCanvas(screenPoint, viewport)
+        const drawn = gestureStateRef.current
+        const bounds = strokeBounds([...drawn.points, released])
         applyResult(
           reduceGesture(
             gestureStateRef.current,
             canvasRef.current,
-            { type: 'pointerup', point: screenToCanvas(screenPoint, viewport) },
+            { type: 'pointerup', point: released },
             { createId },
           ),
         )
+        // What the next press is judged against. Recorded even when the
+        // stroke was too short to mint anything: a tap between two strokes
+        // of one character is part of writing it, and forgetting the mark
+        // there would split it in two.
+        lastStrokeRef.current =
+          drawn.group === undefined || bounds === undefined
+            ? null
+            : { group: drawn.group, endedAt: e.timeStamp, bounds }
         return
       }
       // Snapped with the same helper the preview used, so the box commits

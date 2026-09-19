@@ -121,6 +121,13 @@ interface BendSnapshot {
  */
 interface DrawSnapshot {
   readonly kind: 'drawing'
+  /**
+   * The mark this stroke joins, decided at the PRESS and carried to the
+   * release. Decided there because that is where the timing and the starting
+   * point are, and by the caller because the decision reads a clock — see
+   * `stroke-group.ts`.
+   */
+  readonly group?: string
   readonly points: readonly Point[]
   readonly zoom: number
 }
@@ -184,7 +191,12 @@ export type GestureEvent =
    * screen-sized thresholds in `freehandLine`, since nothing downstream of
    * here knows the magnification the stroke was drawn at.
    */
-  | { readonly type: 'pointerdown-draw'; readonly point: Point; readonly zoom: number }
+  | {
+      readonly type: 'pointerdown-draw'
+      readonly point: Point
+      readonly zoom: number
+      readonly group?: string
+    }
   | { readonly type: 'dblclick-empty'; readonly point: Point }
   | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
@@ -599,7 +611,12 @@ export function reduceGesture(
     case 'pointerdown-draw':
       return withPendingTextCommit(
         state,
-        stateOnly({ kind: 'drawing', points: [event.point], zoom: event.zoom }),
+        stateOnly({
+          kind: 'drawing',
+          points: [event.point],
+          zoom: event.zoom,
+          ...(event.group === undefined ? {} : { group: event.group }),
+        }),
       )
     case 'pointerdown':
       return withPendingTextCommit(state, reducePointerDown(event, canvas))
@@ -714,7 +731,12 @@ export function reduceGesture(
         case 'bending':
           return reducePointerUpBending(state, event)
         case 'drawing': {
-          const line = freehandLine(createId(), [...state.points, event.point], state.zoom)
+          const line = freehandLine(
+            createId(),
+            [...state.points, event.point],
+            state.zoom,
+            state.group,
+          )
           if (line === undefined) return idle
           return { state: { kind: 'idle' }, commands: [{ kind: 'create-line', line }] }
         }

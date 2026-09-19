@@ -52,6 +52,7 @@ import {
   resolveCanvasEdgeDefaults,
   resolveCanvasEdgeStyle,
   VISUAL_EDGES_KEY,
+  VISUAL_INK_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { remintClipboardFragment } from '../clipboard-fragment.js'
 import { withTagList } from './tags.js'
@@ -198,6 +199,11 @@ export type EditorLeafCommand =
   | {
       // Canvas-envelope sibling of set-edge-routing: whether crossing
       // edges hop over each other. Same later-per-edge-override caveat.
+      readonly kind: 'ungroup-ink'
+      /** Every stroke of the mark being broken apart. */
+      readonly ids: readonly string[]
+    }
+  | {
       readonly kind: 'set-line-jumps'
       readonly lineJumps: LineJumps
     }
@@ -704,6 +710,30 @@ function setEdgeBends(
   }
 }
 
+/**
+ * Breaks a mark apart: every named stroke loses its `visual.ink/v0` group
+ * and stands alone again.
+ *
+ * REMOVES the facet rather than writing a fresh group per stroke, because
+ * carrying no group is already what "a mark of one" means — a new id each
+ * would say the same thing while leaving something to go stale. An empty
+ * `facets` bucket is dropped for the same reason.
+ */
+function ungroupInk(canvas: SpatialCanvas, ids: readonly string[]): SpatialCanvas {
+  const wanted = new Set(ids)
+  const lines = canvas.lines ?? []
+  if (!lines.some((line) => wanted.has(line.id))) return canvas
+  return {
+    ...canvas,
+    lines: lines.map((line) => {
+      if (!wanted.has(line.id) || line.facets === undefined) return line
+      const { [VISUAL_INK_KEY]: _group, ...rest } = line.facets
+      const { facets: _previous, ...withoutFacets } = line
+      return Object.keys(rest).length === 0 ? withoutFacets : { ...withoutFacets, facets: rest }
+    }),
+  }
+}
+
 function setNodeColor(
   canvas: SpatialCanvas,
   id: string,
@@ -934,6 +964,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeBends(canvas, command.id, command.bends)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
+    case 'ungroup-ink':
+      return ungroupInk(canvas, command.ids)
     case 'set-line-jumps':
       return setLineJumps(canvas, command.lineJumps)
     case 'set-edge-color':

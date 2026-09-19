@@ -371,6 +371,8 @@ const COMMAND_COVERAGE = {
     'not modelled: a one-field patch of the projected comment’s text for the opening message, identity otherwise; its write path is document-sync-session.test.ts and its gestures are the rail’s and the card’s Edit (CommentsPanel.browser.test.tsx, comment-edit.browser.test.tsx)',
   'decide-proposal':
     'not modelled: one press on the proposal card decides a whole proposal — a fold of applyCanvasChange over changes the card carried, with no gesture or selection coupling to model here. Its canvas meaning is commands.test.ts, its two-plane write is document-sync-session.test.ts, and its gesture is proposal-adopt.browser.test.tsx',
+  'ungroup-ink':
+    'not modelled: removes one facet key from every named stroke, breaking a handwritten mark apart. Nothing in this model draws with the pen or reads a group, so there is no gesture or selection coupling here to observe; its canvas meaning is commands.test.ts and its gesture is the ink menu’s Ungroup (freehand-ink.browser.test.tsx)',
   'reply-to-thread':
     'not modelled: applyCommand is the IDENTITY for it — a reply writes the threads plane beside the canvas, so this model, whose subject is what a command does to a canvas, has nothing to observe. Its write path is document-sync-session.test.ts and its gestures are comment-reply.browser.test.tsx',
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>

@@ -12,13 +12,16 @@
  * left no way to remove a stroke at all.
  */
 import type { CanvasLine } from '@kamiazya/whiteboard-model'
-import { Lock as LockIcon, LockOpen, Trash2 } from 'lucide-react'
+import { resolveInkGroup } from '@kamiazya/whiteboard-plugin-visual'
+import { Lock as LockIcon, LockOpen, Trash2, Ungroup } from 'lucide-react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 
 export interface InkMenuItemsInput {
   readonly line: CanvasLine
+  /** Every stroke on the board, for finding the rest of this one's mark. */
+  readonly lines: readonly CanvasLine[]
   readonly isEdgeLocked: (id: string) => boolean
   readonly edgeLockEnabled: boolean
   readonly onToggleEdgeLock: CanvasCommands['onToggleEdgeLock']
@@ -31,6 +34,7 @@ export interface InkMenuItemsInput {
 
 export function inkMenuItems({
   line,
+  lines,
   isEdgeLocked,
   edgeLockEnabled,
   onToggleEdgeLock,
@@ -48,7 +52,29 @@ export function inkMenuItems({
       },
     ]
   }
+  // Strokes written one after another are joined into a mark automatically,
+  // so there has to be a way to say the guess was wrong. Offered only when
+  // there IS a mark to break: a lone stroke has nothing to ungroup, and a
+  // verb that does nothing is worse than an absent one.
+  const group = resolveInkGroup(line)
+  const mates = group === undefined ? [] : lines.filter((entry) => resolveInkGroup(entry) === group)
   return [
+    ...(mates.length > 1
+      ? [
+          {
+            label: 'Ungroup' as const,
+            icon: <Ungroup />,
+            onSelect: () => {
+              applyResult({
+                state: { kind: 'idle' },
+                commands: [{ kind: 'ungroup-ink', ids: mates.map((entry) => entry.id) } as const],
+              })
+              setSelectedEdgeId(line.id)
+            },
+          },
+          { kind: 'separator' as const },
+        ]
+      : []),
     ...(edgeLockEnabled
       ? [
           {

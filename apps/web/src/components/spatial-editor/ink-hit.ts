@@ -13,6 +13,8 @@
  * win over a node it happens to pass over would lay a dead band across a node
  * somebody is trying to press, in exchange for a case the router avoids.
  */
+import type { CanvasLine } from '@kamiazya/whiteboard-model'
+import { resolveInkGroup } from '@kamiazya/whiteboard-plugin-visual'
 import { distanceToPolyline } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 
@@ -112,4 +114,37 @@ export function inkWithin(
       }),
     )
     .map((entry) => entry.id)
+}
+
+/**
+ * The ids plus every stroke that shares a mark with one of them.
+ *
+ * A handwritten character is several strokes carrying one group id
+ * (`visual.ink/v0`), and a person who presses one of them means the
+ * character. Applied at every place a selection is decided — the press and
+ * the band — so "what is selected" has one definition rather than one per
+ * gesture.
+ *
+ * An id naming an EDGE, or a line in no group, comes back alone: a group of
+ * one is what carrying no group already means.
+ */
+export function withGroupMates(
+  ids: readonly string[],
+  lines: readonly CanvasLine[] | undefined,
+): readonly string[] {
+  if (ids.length === 0 || lines === undefined || lines.length === 0) return ids
+  const groupOf = new Map<string, string>()
+  for (const line of lines) {
+    const group = resolveInkGroup(line)
+    if (group !== undefined) groupOf.set(line.id, group)
+  }
+  const wanted = new Set<string>()
+  for (const id of ids) {
+    const group = groupOf.get(id)
+    if (group !== undefined) wanted.add(group)
+  }
+  if (wanted.size === 0) return ids
+  const selected = new Set(ids)
+  for (const [id, group] of groupOf) if (wanted.has(group)) selected.add(id)
+  return [...selected]
 }

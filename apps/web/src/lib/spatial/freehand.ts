@@ -22,7 +22,7 @@
  */
 
 import type { CanvasLine } from '@kamiazya/whiteboard-model'
-import { VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import type { Point } from './viewport.js'
 
 /**
@@ -152,6 +152,11 @@ export function freehandLine(
   id: string,
   points: readonly Point[],
   zoom: number,
+  /**
+   * The mark this stroke belongs to, when it continues one. Decided at the
+   * PRESS, by the caller that holds the clock — see `stroke-group.ts`.
+   */
+  group?: string,
 ): CanvasLine | undefined {
   const scale = zoom > 0 && Number.isFinite(zoom) ? zoom : 1
   if (travel(points) < MIN_STROKE_TRAVEL_PX / scale) return undefined
@@ -192,6 +197,12 @@ export function freehandLine(
     // `curved` is a property of THIS stroke: a line authored some other way
     // — dragged between two points with a ruler's intent — keeps its
     // corners.
-    facets: { [VISUAL_EDGES_KEY]: { routing: 'curved' } },
+    facets: {
+      [VISUAL_EDGES_KEY]: { routing: 'curved' },
+      // Absent for a stroke that stands alone, which is most ink: a group of
+      // one is what having no group already means, and writing it would put
+      // an id on every scribble for nothing.
+      ...(group === undefined ? {} : { [VISUAL_INK_KEY]: { group } }),
+    },
   }
 }

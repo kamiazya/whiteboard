@@ -263,6 +263,7 @@ export function CanvasContextMenu({
           : node === undefined && line !== undefined
             ? inkMenuItems({
                 line,
+                lines: canvas.lines ?? [],
                 isEdgeLocked,
                 edgeLockEnabled,
                 onToggleEdgeLock,

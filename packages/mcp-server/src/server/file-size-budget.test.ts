@@ -158,7 +158,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 1099 + 66 when the two branches met: ADR-0040's three tag arms and
   // ADR-0038's two ink arms are independent additions to the same union,
   // and neither shrank on the merge.
-  'apps/web/src/lib/spatial/commands.ts': 1165,
+  // Raised 1165 -> 1197 for `ungroup-ink`: breaking a handwritten mark
+  // apart, which is the escape the automatic grouping owes its user.
+  'apps/web/src/lib/spatial/commands.ts': 1197,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -578,7 +580,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // line one ran), and the marquee looked at boxes only. Both decisions live
   // OUT of this file, in `ink-hit.ts`; what is left here is the call sites
   // and their reasons.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2951,
+  // Raised 2951 -> 2988: the press decides which MARK a stroke joins (the
+  // rule itself is `stroke-group.ts`) and the release remembers what the
+  // next one is judged against.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2988,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -687,11 +692,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 968,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2706,
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2708,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
-  'apps/web/src/lib/spatial/commands.test.ts': 1504,
+  'apps/web/src/lib/spatial/commands.test.ts': 1550,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
@@ -716,7 +721,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 834,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 839,
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,

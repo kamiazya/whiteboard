@@ -17,6 +17,7 @@ import {
   withNodeText,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import {
   applyCommand,
@@ -1500,5 +1501,50 @@ describe('set-node-tags / set-edge-tags / set-canvas-tags', () => {
     expect(tagged.edges).toBe(before.edges)
     const cleared = applyCommand(tagged, { kind: 'set-canvas-tags', tags: [] })
     expect(cleared).not.toHaveProperty('tags')
+  })
+})
+
+describe('ungroup-ink', () => {
+  const grouped = (id: string, group?: string) => ({
+    id,
+    from: { kind: 'point' as const, point: { x: 0, y: 0 }, end: 'none' as const },
+    to: { kind: 'point' as const, point: { x: 10, y: 10 }, end: 'none' as const },
+    facets: {
+      [VISUAL_EDGES_KEY]: { routing: 'curved' as const },
+      ...(group === undefined ? {} : { [VISUAL_INK_KEY]: { group } }),
+    },
+  })
+
+  it('takes the group off every named stroke and leaves the rest of the facets', () => {
+    const canvas = {
+      nodes: [],
+      edges: [],
+      lines: [grouped('a', 'g'), grouped('b', 'g'), grouped('c', 'other')],
+    }
+    const next = applyCommand(canvas, { kind: 'ungroup-ink', ids: ['a', 'b'] })
+    expect(next.lines?.[0]?.facets).toEqual({ [VISUAL_EDGES_KEY]: { routing: 'curved' } })
+    expect(next.lines?.[1]?.facets).toEqual({ [VISUAL_EDGES_KEY]: { routing: 'curved' } })
+    // Untouched, and that is the point of naming ids rather than a group:
+    // the command says which strokes, so nothing else moves.
+    expect(next.lines?.[2]?.facets?.[VISUAL_INK_KEY]).toEqual({ group: 'other' })
+  })
+
+  it('drops the bucket entirely when the group was all it held', () => {
+    const bare = { ...grouped('a', 'g'), facets: { [VISUAL_INK_KEY]: { group: 'g' } } }
+    const next = applyCommand(
+      { nodes: [], edges: [], lines: [bare] },
+      {
+        kind: 'ungroup-ink',
+        ids: ['a'],
+      },
+    )
+    expect(next.lines?.[0]).not.toHaveProperty('facets')
+  })
+
+  it('is the same canvas when no named stroke is there', () => {
+    // The union-wide "nothing changed → same reference" contract callers
+    // memoise on.
+    const canvas = { nodes: [], edges: [], lines: [grouped('a', 'g')] }
+    expect(applyCommand(canvas, { kind: 'ungroup-ink', ids: ['gone'] })).toBe(canvas)
   })
 })

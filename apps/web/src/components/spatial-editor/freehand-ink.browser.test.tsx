@@ -10,10 +10,12 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { resolveInkGroup } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { STROKE_GROUP_PAUSE_MS } from '../../lib/spatial/stroke-group.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -321,4 +323,109 @@ it('offers Delete on the ink itself, for a device with no Delete key', async () 
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
   await userEvent.click(await page.getByRole('menuitem', { name: 'Delete' }).element())
   await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
+})
+
+it('joins strokes written one after another into one mark', async () => {
+  // A handwritten character is several strokes and a person means one thing
+  // by them. Consecutive strokes near each other carry the same group, so
+  // everything downstream — selection, Delete — treats them as one.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [200, 200],
+    [260, 260],
+  ])
+  drawStroke(root, [
+    [260, 200],
+    [200, 260],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(2)
+
+  const groups = (latest.canvas.lines ?? []).map((line) => resolveInkGroup(line))
+  expect(groups[0]).toBeDefined()
+  expect(groups[1]).toBe(groups[0])
+})
+
+it('selects and deletes the whole mark from a press on one of its strokes', async () => {
+  // The point of grouping. A cross is two strokes; pressing either selects
+  // both, and Delete takes the mark rather than half of it.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [200, 200],
+    [260, 260],
+  ])
+  drawStroke(root, [
+    [260, 200],
+    [200, 260],
+  ])
+  // A third stroke, far away and after the pause, is its own mark — and the
+  // control that says the selection is a GROUP rather than everything.
+  await new Promise((resolve) => setTimeout(resolve, STROKE_GROUP_PAUSE_MS + 50))
+  drawStroke(root, [
+    [600, 450],
+    [660, 500],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(3)
+
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+  const first = latest.canvas.lines?.[0]
+  const start = first?.from.kind === 'point' ? first.from.point : { x: 0, y: 0 }
+  const bend = first?.bends?.[0] ?? { x: 0, y: 0 }
+  await userEvent.click(root, {
+    position: { x: (start.x + bend.x) / 2, y: (start.y + bend.y) / 2 },
+  })
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+
+  await userEvent.keyboard('{Delete}')
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
+})
+
+it('breaks a mark apart from the menu, when the guess was wrong', async () => {
+  // Strokes are joined automatically, so there has to be a way to say the
+  // guess was wrong. After Ungroup each stroke stands alone: a press selects
+  // one, and Delete takes one.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [200, 200],
+    [260, 260],
+  ])
+  drawStroke(root, [
+    [260, 200],
+    [200, 260],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(2)
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+
+  const first = latest.canvas.lines?.[0]
+  const start = first?.from.kind === 'point' ? first.from.point : { x: 0, y: 0 }
+  const bend = first?.bends?.[0] ?? { x: 0, y: 0 }
+  const on = { x: (start.x + bend.x) / 2, y: (start.y + bend.y) / 2 }
+  const rect = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      clientX: rect.left + on.x,
+      clientY: rect.top + on.y,
+    }),
+  )
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await userEvent.click(await page.getByRole('menuitem', { name: 'Ungroup' }).element())
+
+  await expect
+    .poll(() => (latest.canvas.lines ?? []).filter((l) => resolveInkGroup(l) !== undefined).length)
+    .toBe(0)
+
+  // And the mark really is apart: pressing one stroke now deletes only it.
+  await userEvent.click(root, { position: on })
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+  await userEvent.keyboard('{Delete}')
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
 })
