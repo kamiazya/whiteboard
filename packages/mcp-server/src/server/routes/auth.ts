@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { isAuthorized, parseBearerAuthorizationHeader } from '../security/bearer-token.js'
+import { verifyMacaroon } from '../security/macaroon.js'
 import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 
@@ -90,6 +91,9 @@ export function createDaemonAuthMiddleware(
   // bearer is only honored WITH the browser-enforced Origin header it was
   // minted for — presenting it originless or cross-origin fails.
   pairingTokens?: { validate(token: string, origin: string): boolean },
+  // ADR-0043 decision 9: absent until a composition root supplies one, so a
+  // daemon that mints no macaroons carries no macaroon branch at all.
+  macaroonRootKey?: Uint8Array,
 ): MiddlewareHandler {
   return async (c, next) => {
     // The route-scope registry is the single source of truth for which routes
@@ -121,9 +125,25 @@ export function createDaemonAuthMiddleware(
     ) {
       return next()
     }
+    // Last of the credential branches, so the two that authorize every route
+    // keep their existing cost and a macaroon pays the verification. It is
+    // also the only branch here that consults the route's declared scopes and
+    // can refuse on them.
+    if (
+      macaroonRootKey !== undefined &&
+      (await isAuthorizedMacaroon(
+        c.req.header('authorization'),
+        macaroonRootKey,
+        c.req.method,
+        c.req.path,
+      ))
+    ) {
+      return next()
+    }
     // One rejection for every way a request can fail: no credential, a wrong
-    // daemon token, a forged/expired/revoked access token, and a valid access
-    // token whose grant does not cover this route. Distinguishing them —
+    // daemon token, a forged/expired/revoked access token, a valid access
+    // token whose grant does not cover this route, and a macaroon that is
+    // forged, expired, or caveated below what this route declares. Distinguishing them —
     // even by status code — would tell an attacker which of the two
     // credentials they are close to holding, and would tell a hostile page
     // whether a given bearer is a live grant at all. (The bodies match; a
@@ -132,4 +152,50 @@ export function createDaemonAuthMiddleware(
     // loopback — at which point the grant check needs a constant-time floor.)
     return c.json({ error: 'unauthorized' }, 401)
   }
+}
+
+/**
+ * A macaroon bearer, checked against the route's DECLARED scopes
+ * ([ADR-0043](../../../../../docs/contributing/adr/0043-authority-as-keys.md)
+ * decision 9's first application).
+ *
+ * This is the first credential in local-daemon mode whose authority is
+ * narrower than the daemon's. The daemon token above authorizes every route
+ * without consulting the registry at all; an OAuth grant is already
+ * scope-checked; a macaroon joins the second group.
+ *
+ * `daemon-token-only` fails closed here for the reason it fails closed for an
+ * OAuth grant, and the reason is ADR-0043 decision 8's promoted rule: a route
+ * whose purpose is handing out daemon-level authority must not be reachable
+ * by a credential narrower than what it hands out, or that credential can
+ * mint a path back to the full one.
+ *
+ * `workspaceId` is deliberately left undefined for now. Nothing mints a
+ * workspace-caveated macaroon yet, and a token that carries one therefore
+ * fails closed on every route until the path's workspace is threaded through
+ * — which is the safe direction to be wrong in, and is the next slice rather
+ * than a gap.
+ */
+export async function isAuthorizedMacaroon(
+  authorization: string | undefined,
+  rootKey: Uint8Array,
+  method: string,
+  path: string,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const bearer = parseBearerAuthorizationHeader(authorization)
+  if (bearer === null) return false
+  const required = resolveApiRouteScope(method, path)
+  // A public route never reaches here — the middleware short-circuits it
+  // before any credential branch — so this does not re-decide publicness. An
+  // undeclared route resolves to null and fails closed, which is the
+  // registry's own posture.
+  if (required?.kind !== 'scoped') return false
+
+  const verdict = await verifyMacaroon({
+    token: bearer,
+    rootKey,
+    context: { requiredScopes: required.scopes, now },
+  })
+  return verdict.ok
 }
