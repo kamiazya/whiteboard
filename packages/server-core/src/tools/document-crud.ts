@@ -125,7 +125,11 @@ export async function wbDocumentCreate(
   if (input.kind === 'markdown' && input.markdown !== undefined) {
     const preflight = parseOkf(input.markdown)
     if (!preflight.ok) {
-      throw new OkfParseError(preflight.error.stage, preflight.error.message)
+      throw new OkfParseError(
+        preflight.error.stage,
+        preflight.error.message,
+        preflight.error.issues,
+      )
     }
     // A tag the workspace's library forbids is refused here for exactly the
     // reason the parse above is: the delegated write below would otherwise
