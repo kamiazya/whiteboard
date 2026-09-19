@@ -404,7 +404,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // in tags/declared-colours.ts, so the layout only passes the canvas through.
   // +2: the edge-only entry point applies the library too, so a live drag
   // draws an edge in its declared colour — the same step the theme takes.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2479,
+  // 2479 -> 1560 when the comment and proposal overlays and the options
+  // vocabulary moved to their own modules (task #84). A pure move: no test
+  // was rewritten and the suite went 1622 -> 1626 on the four cases the
+  // extraction's own guards added.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 1560,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor

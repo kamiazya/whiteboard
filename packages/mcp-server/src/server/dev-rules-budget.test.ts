@@ -367,7 +367,15 @@ const ALWAYS_ON_TOTAL_BUDGET = 24
 // CANVAS before layout, not in the appearance resolver — one paragraph a
 // session here pays for because the obvious place to put a library's colour
 // is the resolver, and there the score behind the legend would never see it.
-const CANVAS_RENDER_BUDGET = 140
+//
+// 140 -> 142 (task #84): the composer's own file is no longer the only file
+// the composer lives in. Two overlay layers and the options vocabulary got
+// their own modules, and what a reader has to be told is not the file list
+// but the DIRECTION — the overlays name the options without importing the
+// thing that builds them, and take the body typesetter as a seam because
+// importing it would close a cycle. A file list would go stale; the rule
+// that decides where the next overlay goes does not.
+const CANVAS_RENDER_BUDGET = 142
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

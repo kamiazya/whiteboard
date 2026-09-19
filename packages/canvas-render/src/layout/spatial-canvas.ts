@@ -25,27 +25,12 @@
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
 
-import {
-  type AliasResolver,
-  parseMarkdownBody,
-  resolveReferences,
-} from '@kamiazya/whiteboard-codec'
-import { namespacedIdSchema, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type {
-  AnchorRect,
-  CanvasComment,
-  CommentThread,
-  EdgeEnd,
-  EdgeRoutingStyle,
-  LineEnd,
-  Proposal,
-  SpatialCanvas,
-  SpatialNode,
-  SpatialProposedChange,
-} from '@kamiazya/whiteboard-model'
-import { canvasChangeConflicts, endNode, spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
+import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endNode } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import type { TagLibrary, VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
+import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type {
@@ -62,15 +47,9 @@ import type {
   ShapeSceneNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
-import { z } from 'zod'
 import { highlightCode } from '../highlight/lowlight.js'
 import { canvasLegend } from '../legend/canvas-legend.js'
-import type { MeasureText } from '../measure.js'
-import {
-  type ReferenceSeams,
-  referenceFor as resolveOneReference,
-  withReferenceSeams,
-} from '../references/seams.js'
+import { referenceFor as resolveOneReference, withReferenceSeams } from '../references/seams.js'
 import { sceneBounds } from '../scene-bounds.js'
 import { withDeclaredColours } from '../tags/declared-colours.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
@@ -82,26 +61,18 @@ import {
 } from '../theme/spatial-palette.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
 import { createThemedAppearance, markdownTheme, paletteFromTokens } from '../theme/theme-asset.js'
-import {
-  COMMENT_TEXT_MAX_WIDTH_PX,
-  layoutCommentBody,
-  PROPOSAL_TEXT_MAX_WIDTH_PX,
-} from './comment-body.js'
-import {
-  commentLeaderEnd,
-  nearestPointOnPolyline,
-  placeCommentBubble,
-} from './comment-placement.js'
+import { composeComments, composeRegionOutlines, regionsOf } from './comments.js'
 import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
-import {
-  assignEdgeAnchors,
-  type EdgeAnchorOverride,
-  type EdgeAnchorPair,
-  routeEdge,
-} from './edges/spatial-edges.js'
+import { assignEdgeAnchors, type EdgeAnchorPair, routeEdge } from './edges/spatial-edges.js'
+import type {
+  ResolvedLayoutOptions,
+  ResolvedReference,
+  SpatialLayoutOptions,
+  SpatialRenderStyle,
+} from './layout-options.js'
 import {
   type EmbeddedCanvasBox,
   type EmbeddedCanvasMiniature,
@@ -125,431 +96,17 @@ import {
   type NodePassage,
   nodePassagesOf,
 } from './passage-highlight.js'
+import { composeProposals } from './proposals.js'
 import { scaleScene } from './scale-scene.js'
 import { seedFromId } from './seed.js'
 import { translateScene } from './translate-scene.js'
 
-/**
- * A degradation `layoutSpatialCanvas` hit while composing one node, reported
- * only when the caller supplies `onDegrade`. canvas-render itself has no
- * logger (it is a shared layer package with no ambient platform API), so
- * this callback is the observability seam: mcp-server wires it to
- * `getLogger`, canvas-viewer omits it and degrades silently by choice.
- */
-export type SpatialLayoutDegradation =
-  | { readonly kind: 'body-parse-failed'; readonly nodeId: string; readonly err: unknown }
-  /** The canvas (or the `style` override) names a theme no contribution registered; drawn clean. */
-  | { readonly kind: 'unknown-theme'; readonly theme: string }
-  /** The theme names a font family this surface cannot measure; declared as the bundled one. */
-  | { readonly kind: 'font-missing'; readonly family: string }
-  | { readonly kind: 'unknown-node-kind'; readonly nodeId: string; readonly type: string }
-  // 'repeat' tiling needs the image's intrinsic size, which this pure layer
-  // never has (no image decoding behind the resolved `image`) — it
-  // renders as 'cover' and the caller is told.
-  | {
-      readonly kind: 'unsupported-background-style'
-      readonly nodeId: string
-      readonly style: 'repeat'
-    }
-
-/**
- * Presentation-shaped card content for a file node, mapped by the caller
- * from its own facet data (model's `coreFacetsSchema` and friends).
- * Deliberately NOT domain-shaped: this package renders "one bare heading
- * line, then labelled rows" and learns nothing about what a facet MEANS —
- * the semantic mapping (`title = facets.title ?? facets.type`, one row per
- * core facet) is the caller's job. Plain TS, not Zod, per
- * zod-schema-discipline: it is constructed and consumed entirely
- * in-process and never crosses a process boundary.
- */
-export interface FacetCardData {
-  readonly title?: string
-  readonly rows: readonly { readonly label: string; readonly value: string }[]
-}
-
-/**
- * `'clean' | 'document' | <theme id>` — see `SpatialLayoutOptions.style`. A
- * Zod schema because it crosses process boundaries (an MCP tool input, the
- * export routes' bodies); every consumer parses this and infers the type.
- */
-export const spatialRenderStyleSchema = z.union([z.enum(['clean', 'document']), namespacedIdSchema])
-export type SpatialRenderStyle = z.infer<typeof spatialRenderStyleSchema>
-
-export interface SpatialLayoutOptions {
-  readonly measure: MeasureText
-  /**
-   * How a `text` node's body becomes mdast. Defaults to codec's
-   * `parseMarkdownBody`, which is what EVERY production caller passed —
-   * seven identical lines whose only reason to exist was this package once
-   * being forbidden to depend on codec. It stays injectable because layout
-   * tests deliberately parse with a stub, the same way they measure with
-   * one: a layout assertion should not fail because a markdown parser
-   * changed.
-   */
-  readonly parseBody?: (text: string) => MdastRoot
-  readonly appearance: SpatialAppearanceResolver
-  /**
-   * Geometry constants (padding/label font size/min content width).
-   * Defaults to `SPATIAL_THEME_GEOMETRY` — the shared constant every
-   * surface must agree on (package-canvas-render.md decision #8). Omit
-   * this in every ordinary call site; a caller that must diverge has to
-   * pass an explicit override here, never inside `appearance`, so a
-   * divergence is a reviewable one-line diff instead of a silent per-file
-   * constant.
-   */
-  readonly geometry?: SpatialGeometry
-  /**
-   * Frozen edge-side choices, threaded to `assignEdgeAnchors`: the caller
-   * trades crossing optimization for route stability (the live drag
-   * overlay pins the committed sides so routes do not flip mid-gesture and
-   * pointer frames skip the improvement loop). Absent means sides settle
-   * through the full pipeline.
-   */
-  readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
-  /**
-   * Non-rect silhouettes per node id, threaded onto each node's chrome
-   * shape and consulted when finishing edge routes (a terminal on the
-   * bbox border is pulled onto the outline rim via `outlineEntryPoint`).
-   * Plain DATA — a record, never a resolver function — for the same
-   * reason as `ResolvedReference`: it must cross `postMessage` so worker
-   * layout keeps working when outlines are wired.
-   */
-  readonly nodeOutlines?: Readonly<Record<string, string>>
-  /**
-   * Documents already on the embed recursion path when this canvas is
-   * itself embedded content — a markdown body's `![[canvas]]`. Seeds the
-   * depth cap and the path-local cycle check so they span the
-   * markdown/canvas boundary; absent for a top-level canvas.
-   */
-  readonly embedPath?: readonly string[]
-  /**
-   * Nodes whose BODY the scene must not draw this pass, because a DOM
-   * editor overlay owns their text right now. The chrome — silhouette,
-   * stroke, fill, decorations — still draws, which is what lets that
-   * overlay be transparent instead of an opaque rectangle covering a
-   * non-rectangular node. Plain data (ids, not a predicate) so it crosses
-   * a worker boundary the way `nodeOutlines` does. Absent or empty means
-   * nothing is suppressed.
-   */
-  readonly suppressedBodyNodeIds?: readonly string[]
-  /**
-   * Silhouettes by namespaced id, merged OVER the built-in table — the same
-   * shape as `SvgDocumentOptions.icons`. The backend must be handed the same
-   * table, or a contributed shape lays out correctly and paints as a rect.
-   */
-  /**
-   * What plugins contribute to rendering: silhouettes, how they read the
-   * facets that select them, where they want a node's text, and what they
-   * draw on top. Defaults to the bundled `visual` plugin's.
-   *
-   * A DEFAULT rather than an opt-in, for the lowlight reason: measured, this
-   * function has nine call sites and `renderSceneToSvg` nine more, and a
-   * resolution step that many have to remember is one a call site forgets —
-   * silently drawing a plain node rather than failing.
-   *
-   * One object rather than an option each: `shapes`, `shapeFacets` and
-   * `decorations` accumulated one per increment, none ever had a caller
-   * outside this package, and a reader plus text placement would have made
-   * five.
-   */
-  readonly renderContributions?: readonly RenderContribution[]
-  /**
-   * Which look this render draws (ADR-0030 decision 6). `'clean'` — the
-   * DEFAULT — ignores any theme the document carries: an agent reading
-   * `wb_scene_render`'s SVG must never pay for jittered geometry or glow it
-   * did not ask for (decision #10), so every headless surface gets this by
-   * omission and a human surface opts in. `'document'` draws the theme the
-   * canvas names (and, in an embed, the host's when the child names none). A
-   * theme id draws that theme without saving it — the in-memory session
-   * override, and how a person previews a theme before choosing it.
-   */
-  readonly style?: SpatialRenderStyle
-  /**
-   * Whether a face for a family exists on THIS surface, so the family a
-   * theme names is declared only where it can be measured (font-family.ts:
-   * the declared family must be the measured one). Defaults to the bundled
-   * family alone; a theme's family that answers false is declared as the
-   * bundled one and reported as `font-missing`.
-   */
-  readonly fontAvailable?: (family: string) => boolean
-  readonly onDegrade?: (event: SpatialLayoutDegradation) => void
-  /**
-   * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
-   * call this module makes — a spatial `text` node's body, and a file node's
-   * referenced markdown body.
-   *
-   * Declared here as a passthrough rather than re-specified, because a body
-   * is a body: the same document laid out in the markdown editor and inside
-   * a canvas node must resolve its math, diagram fences and `![[embed]]`s
-   * the same way. Leaving them unforwarded is what made one engine give two
-   * answers depending on which surface called it.
-   *
-   * Absent seams keep `layoutMdastBlocks`'s own documented fallbacks (the
-   * escaped-source math placeholder, a plain code block, an
-   * `embedPlaceholder`), so an export or viewer that wires none renders
-   * exactly as before.
-   */
-  readonly renderMath?: MdastLayoutOptions['renderMath']
-  readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
-  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
-  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
-  /**
-   * Every reference seam at once — `resolveReference` for file nodes and
-   * the markdown seams for every body — built by `referenceSeams` from what
-   * a keeper loaded. The form a composition root passes; an individual seam
-   * set beside it wins, for a caller probing one in isolation.
-   */
-  readonly references?: ReferenceSeams
-  /**
-   * The workspace's tag library (ADR-0040 decision 5): a box or an edge
-   * carrying a value it colours, and no colour of its own, is drawn in that
-   * colour — applied to the CANVAS (`withDeclaredColours`) so the score, the
-   * appearance and the legend agree. Absent (a digest), drawn as stored.
-   */
-  readonly tagLibrary?: TagLibrary
-  /**
-   * What a text node's `[[target]]` resolves to, applied to its parsed body
-   * the way a note's caller applies it before layout. Filled from
-   * `references` when absent; an id names itself, and a target nobody
-   * resolves stays the literal text the author wrote.
-   */
-  readonly resolveAlias?: AliasResolver
-  /**
-   * Tokeniser for fenced code. Defaults to this package's own lowlight-backed
-   * implementation, for the same reason `parseBody` defaults to codec's
-   * parser: every surface that lays a markdown body out wants it, and the one
-   * that forgets it does not fall back to the same picture — it renders code
-   * plain while the others colour it.
-   *
-   * That is not hypothetical. It shipped wired at ONE of the four call sites
-   * and left export — the surface the change was for — drawing every fence
-   * plain. Supplying it was made an opt-in step, and an opt-in step in four
-   * places is a step that gets missed.
-   *
-   * Still an option, so a caller can substitute a different tokeniser or pass
-   * a no-op to render plain. What changed is which way round the default
-   * points.
-   */
-  readonly highlightCode?: MdastLayoutOptions['highlightCode']
-  /**
-   * Resolves one reference — a file node's `file`, or a group's
-   * `background` — to everything the caller knows about it. Absent, or
-   * `undefined` for a reference, keeps the plain chrome+label rendering;
-   * a throw is caught (total-layout rule) and read as `undefined`.
-   *
-   * ONE seam rather than one per content kind, because a caller has ONE
-   * document per reference: the six callbacks this replaced were six
-   * closures over the same lookup, called four times per node for the same
-   * key, and every consumer that wired any of them wired most. Collapsing
-   * them also makes a resolution plain DATA, which a function seam could
-   * never be — the layout worker refuses any canvas whose file seams are
-   * wired precisely because a function cannot cross `postMessage`.
-   *
-   * `expandFileNode` stays separate: it is the caller's POLICY over a node
-   * (the editor decides by on-screen size, export by intrinsic size), not
-   * something known about the reference. `MdastLayoutOptions.resolveEmbed`
-   * likewise stays its own seam — it is keyed by a documentId appearing in
-   * prose, not by a spatial node's reference.
-   */
-  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
-  /**
-   * The caller's expansion policy (the LOD gate): called per file node
-   * when a resolution carries a `canvas`; `false` (or an absent callback)
-   * keeps the card. canvas-render itself has no expansion policy — the
-   * editor decides by on-screen size, export by intrinsic size.
-   */
-  readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
-  /**
-   * Optional memo for a text node's laid-out body. Content is laid out in
-   * ORIGIN-RELATIVE coordinates and placed by `placeInNode`, so a cached
-   * value is position-independent by construction: keyed by the node's
-   * text and box size only. Everything else that shapes content —
-   * `measure`, the appearance resolver, `geometry`, `parseBody`, the
-   * reference and mdast seams — is deliberately NOT in the key: the CALLER owns the cache's
-   * lifetime and must discard it when any of those change (in practice:
-   * one cache per document+theme, dropped on theme/font switches). Cached
-   * values are shared between scenes and must be treated as immutable,
-   * which scene nodes already are.
-   *
-   * Only the success path is cached. The parse-failure fallback recomputes
-   * every run so `onDegrade` keeps firing — a cache must change timings,
-   * never what the caller is told.
-   *
-   * Measured before building (the instrument-first rule): content layout
-   * is 15-18ms of a 66-125ms full layout on the scene-diff corpus with the
-   * arithmetic test measurer — edge routing dominates — so this memo buys
-   * roughly the content share, more under a real (Canvas/opentype)
-   * measurer whose per-call cost is far above the fake's.
-   */
-  readonly contentCache?: SpatialContentCache
-  /**
-   * Draw resolved comments too, muted per the theme's `resolvedOverlay`
-   * (ADR-0025 decisions 2 and 5). Absent/false is the historic behavior —
-   * resolved comments stay in the document, never composed — so every
-   * existing caller's output is byte-identical; the editor's "Show
-   * resolved" toggle is per-user LOCAL view state and must never be written
-   * to the shared document, only passed here at render time.
-   */
-  readonly showResolved?: boolean
-  /**
-   * Extra boxes a comment bubble must not cover, beyond this canvas's own
-   * nodes and earlier bubbles. For a caller laying out ONE comment apart
-   * from its canvas (the editor's drag preview renders the dragged comment
-   * alone) and needing it placed exactly as the committed scene placed it.
-   */
-  readonly commentObstacles?: readonly BoundingBox[]
-  /**
-   * This document's annotation layer, handed over beside the canvas rather
-   * than read out of its envelope.
-   *
-   * ADR-0026 decision 1b makes the layer keeper-side: it is stored one level
-   * above content, so it no longer rides inside `x-whiteboard`. A markdown
-   * document has no envelope at all, which is the argument that decides it —
-   * there is nowhere in a canvas key to put a markdown document's comments.
-   *
-   * When present it REPLACES the envelope's copy rather than adding to it,
-   * and an empty array is an answer ("no conversations") rather than a
-   * missing one. Both matter while call sites migrate one at a time: the
-   * union would draw two pins on one comment, and a fallback would hand a
-   * caller that read the layer and found it empty the stale copy back.
-   *
-   * Absent, the envelope is read as before. That is what keeps every
-   * unmigrated caller byte-identical, and it goes once none is left.
-   */
-  readonly comments?: readonly CanvasComment[]
-  /**
-   * The document's conversations, for what the flat `comments` cannot
-   * carry: a thread about a PASSAGE of a text node's text (the text arm
-   * naming a node, ADR-0026 §3) is drawn as a highlight behind the words it
-   * quotes, re-found in the node's laid-out runs by its quote. Pins and
-   * bubbles still come from `comments` / the envelope — the projection a
-   * caller's optimistic state already holds — so a caller passes both.
-   * Absent, no passage is highlighted; the pin at the node's corner still
-   * says the conversation exists.
-   */
-  readonly threads?: readonly CommentThread[]
-  /**
-   * This document's open proposals (ADR-0029), handed over beside the canvas
-   * the way the annotation layer is and for the same reason: they are stored
-   * one level above content, so there is nowhere in a canvas key to put them.
-   *
-   * Absent or empty, nothing is drawn — which keeps every existing caller's
-   * output byte-identical.
-   */
-  readonly proposals?: readonly Proposal[]
-}
-
-/**
- * The store behind `SpatialLayoutOptions.contentCache`. Deliberately a
- * plain get/set pair rather than a Map subtype, so a caller can wrap an
- * LRU, a WeakRef map, or a plain object without this package caring.
- */
-export interface SpatialContentCache {
-  get(key: string): FittedBlocks | undefined
-  set(key: string, value: FittedBlocks): void
-}
-
-/**
- * What a caller knows about one reference. Every field is optional and
- * independent — a caller supplies what it has, and the ranking below
- * decides what gets painted.
- *
- * The content fields are ranked, highest first: `image` (a scaled-down
- * picture is still a meaningful thumbnail, so it is not LOD-gated),
- * `canvas` (inline-embedded, depth-capped at 3 with path-local cycle
- * detection, and gated by `expandFileNode`), `markdown` (the document's own
- * prose, which says more about it than the facets describing it), then
- * `facets`. Anything that produces no usable content — an empty body, a
- * card with no title or rows, a box too small for one block — falls through
- * to the next rank and finally to the plain chrome+label rendering.
- */
-export interface ResolvedReference {
-  /**
-   * Human-readable name, for a caller whose references are opaque ids (the
-   * browser-local store). Absent falls back to the raw reference string,
-   * which is why an export that resolves nothing keeps labels a pure
-   * function of the canvas.
-   *
-   * A document's name lives in the workspace, not in its content
-   * (vocabulary.md) — which is why the markdown body below carries no title
-   * of its own, unlike `MdastLayoutOptions.resolveEmbed`, whose embed mixed
-   * into prose has no other name source.
-   */
-  readonly label?: string
-  /**
-   * The reference points at a target that no longer exists (deleted
-   * document, an imported ref into a store that never had it). Renders a
-   * quiet "Missing reference" label instead of the raw reference, which for
-   * an opaque id tells a reader nothing. This package only paints the
-   * state; deciding it is a lookup against the live document list, and so
-   * the caller's.
-   */
-  readonly missing?: boolean
-  /** A renderable image: `href` is emitted verbatim into the SVG — a data: URI in exports, a blob:/app URL in the editor. */
-  readonly image?: { readonly href: string; readonly alt?: string }
-  /** The referenced spatial canvas, for inline embedding. */
-  readonly canvas?: SpatialCanvas
-  /** A referenced markdown document's already-parsed body. */
-  readonly markdown?: MdastRoot
-  /** Card content built from the referenced document's facet data. */
-  readonly facets?: FacetCardData
-}
-
-/** Internal: options with geometry resolved exactly once per layout call. */
-interface ResolvedLayoutOptions extends SpatialLayoutOptions {
-  /** `threads`'s node passages, grouped by the node they are about. */
-  readonly passagesByNode: ReadonlyMap<string, readonly NodePassage[]>
-  /**
-   * `threads`'s node sets and regions, by thread id: the box each stands
-   * for on THIS canvas (live node bounds, else the stored rect), which is
-   * where its outline is drawn and where its pin stands.
-   */
-  readonly regionsByThread: ReadonlyMap<string, RegionChrome>
-  /**
-   * How many messages each conversation holds, by thread id — the fact the
-   * pin draws. From `threads`, because the flat `comments` projection
-   * carries one text and cannot know; absent for a caller that passes none,
-   * which then gets the pin it always got.
-   */
-  readonly messagesByThread: ReadonlyMap<string, number>
-  /** The contribution set actually in force, defaulted once at the entry
-   *  point so no inner function repeats the `?? [visual]`. */
-  readonly contributions: readonly RenderContribution[]
-  /** Their shapes, composed to namespaced ids. */
-  readonly shapeTable: ShapeTable
-  /** Their edge routers, composed to namespaced ids. */
-  readonly routerTable: Readonly<Record<string, EdgeRouter>>
-  /** Their theme assets, by namespaced id. */
-  readonly themeTable: Readonly<Record<string, ThemeTokens>>
-  /** The caller's resolver — what a canvas without a theme is painted with. */
-  readonly baseAppearance: SpatialAppearanceResolver
-  /**
-   * The theme in force for the canvas being laid out, resolved by
-   * `withCanvasTheme` at every nesting level: an embedded canvas reads its
-   * own facet first and inherits this only when it names none.
-   */
-  readonly activeTheme?: { readonly id: string; readonly tokens: ThemeTokens }
-  /**
-   * The caller's per-node silhouette overrides, root-keyed by contract, so
-   * they apply to the top-level canvas only. `nodeOutlines` is recomputed
-   * per canvas from these plus that canvas's facets and the theme default.
-   */
-  readonly explicitNodeOutlines: Readonly<Record<string, string>> | undefined
-  /** Document references on the CURRENT recursion path, plus its depth. */
-  readonly activeEmbedPath: ReadonlySet<string>
-  readonly embedDepth: number
-  readonly geometry: SpatialGeometry
-  readonly parseBody: (text: string) => MdastRoot
-  /**
-   * Whether content is trimmed to the node's box. INTERNAL — deliberately
-   * not on `SpatialLayoutOptions`, so a normal render can never turn the
-   * fit off by accident. `naturalNodeContentSize` is the one caller that
-   * clears it, and it is a named function precisely so the intent is
-   * legible at the call site instead of being inferred from a degenerate
-   * height.
-   */
-  readonly fitToBox: boolean
-}
+export {
+  COMMENT_TEXT_MAX_WIDTH_PX,
+  type CommentBodyLayoutOptions,
+  layoutCommentBody,
+} from './comment-body.js'
+export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
 
 /**
  * Resolves the effective geometry for one `layoutSpatialCanvas` call.
@@ -1807,8 +1364,18 @@ function layoutSpatialCanvasInternal(
   }
   // Region outlines go under the pins, over everything they enclose.
   const regionContent = composeRegionOutlines(resolved)
-  const commentContent = composeComments(canvas, resolved, (id) => edgePaths.get(id))
-  const proposalContent = composeProposals(canvas, resolved, (id) => edgePaths.get(id))
+  const commentContent = composeComments(
+    canvas,
+    resolved,
+    (id) => edgePaths.get(id),
+    mdastOptionsFor,
+  )
+  const proposalContent = composeProposals(
+    canvas,
+    resolved,
+    (id) => edgePaths.get(id),
+    mdastOptionsFor,
+  )
   // The legend is the layout's answer, attached here and not in a
   // miniature: the reader of an embedded canvas has the host's corner.
   const legend = canvasLegend(canvas, resolved.appearance)
@@ -1819,515 +1386,6 @@ function layoutSpatialCanvasInternal(
     },
     anchors,
   }
-}
-
-/** Pin diameter (px). Fixed like badge geometry — a mark, not content. */
-export const COMMENT_PIN_SIZE_PX = 20
-
-/**
- * The digits on a pin. Sized to sit inside the 20px pin with its 2px ring
- * and still read — the same relation the source pane's 12px gutter dot has
- * to its 9px count.
- */
-export const COMMENT_PIN_COUNT_FONT_PX = 10
-export {
-  COMMENT_TEXT_MAX_WIDTH_PX,
-  type CommentBodyLayoutOptions,
-  layoutCommentBody,
-} from './comment-body.js'
-export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
-
-// Exported with the offset so the editor's compose bubble can wear the same
-// box the renderer draws (padding, corner) — the draft and the settled
-// comment are one object, not two that happen to look alike.
-export const COMMENT_BUBBLE_PADDING_PX = 8
-export const COMMENT_BUBBLE_RADIUS_PX = 8
-
-/** The routed path of an edge, by id, as the layout drew it — absent when the edge is gone. */
-export type EdgePathLookup = (edgeId: string) => readonly { x: number; y: number }[] | undefined
-
-/**
- * Where a comment points: the target node's top-right corner while the node
- * exists (the pin FOLLOWS the node); the point of the target edge's routed
- * path nearest the stored anchor while the edge exists (the pin RIDES the
- * edge through a reroute); the stored anchor otherwise. The fallback is what
- * makes a dangling target harmless, per the model's contract that a comment
- * may outlive its subject.
- *
- * Exported because the editor places its compose bubble and its edit bubble
- * at the same anchor this layer draws from — one producer for the geometry,
- * so the draft cannot open one place and settle another. The editor passes
- * the paths it already flattened for hit-testing as `edgePathOf`; without
- * one, an edge comment stands at its stored point.
- */
-export function commentAnchor(
-  comment: CanvasComment,
-  canvas: SpatialCanvas,
-  edgePathOf?: EdgePathLookup,
-): { readonly x: number; readonly y: number } {
-  if (comment.targetNodeId !== undefined) {
-    const target = canvas.nodes.find((node) => node.id === comment.targetNodeId)
-    if (target !== undefined) return { x: target.x + target.width, y: target.y }
-  }
-  if (comment.targetEdgeId !== undefined) {
-    const path = edgePathOf?.(comment.targetEdgeId)
-    if (path !== undefined && path.length > 0) {
-      return nearestPointOnPolyline({ x: comment.x, y: comment.y }, path)
-    }
-  }
-  return { x: comment.x, y: comment.y }
-}
-
-/** A node set or region thread, with the box it stands for on this canvas. */
-interface RegionChrome {
-  readonly rect: AnchorRect
-  readonly resolved: boolean
-}
-
-function regionsOf(
-  threads: readonly CommentThread[],
-  canvas: SpatialCanvas,
-): ReadonlyMap<string, RegionChrome> {
-  const nodeById = (id: string) => canvas.nodes.find((node) => node.id === id)
-  const out = new Map<string, RegionChrome>()
-  for (const thread of threads) {
-    if (thread.anchor.kind !== 'spatial') continue
-    const rect = spatialAnchorRect(thread.anchor, nodeById)
-    if (rect !== undefined) out.set(thread.id, { rect, resolved: thread.status === 'resolved' })
-  }
-  return out
-}
-
-/** Outline radius (px): the pin's, so the chrome reads as one family. */
-const REGION_OUTLINE_RADIUS_PX = 6
-
-/**
- * One dashed outline per node set or region: the box the conversation is
- * about, drawn so its pin has something to point at. Ids `${threadId}/region`
- * and `commentChrome: true`, like the pin. Resolved ones follow the pin's
- * rule — drawn muted under `showResolved`, otherwise not at all.
- */
-function composeRegionOutlines(options: ResolvedLayoutOptions): readonly SceneNode[] {
-  const chrome = options.appearance.resolveComment?.()
-  const out: SceneNode[] = []
-  for (const [threadId, { rect, resolved }] of options.regionsByThread) {
-    if (resolved && options.showResolved !== true) continue
-    const appearance = resolved ? chrome?.resolvedOverlay.region : chrome?.region
-    out.push({
-      kind: 'shape',
-      id: `${threadId}/region`,
-      commentChrome: true,
-      bbox: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-      radius: REGION_OUTLINE_RADIUS_PX,
-      ...(appearance !== undefined ? { appearance } : {}),
-    })
-  }
-  return out
-}
-
-/**
- * The comment annotation layer (ADR-0024 decision 4): one pin (a circle on
- * the anchor) plus one bubble (rounded rect holding the text, floating
- * offset from the anchor) per unresolved comment, composed from existing
- * scene kinds so no consumer of the closed union changes. Resolved comments
- * stay in the document and are drawn only when `options.showResolved` is set
- * (ADR-0025 decision 2), muted via the resolver's `resolvedOverlay`.
- * Appearance comes from the resolver's optional `resolveComment` — assigned,
- * never invented — so a resolver that predates the layer still lays
- * comments out, bare.
- *
- * The pin and bubble carry ids (`${comment.id}/pin`, `${comment.id}/bubble`,
- * mirroring the leader's `${comment.id}/leader`) so the editor can hit-test
- * them, and `commentChrome: true` so `sceneDigest` can tell them apart from
- * an addressable document node despite carrying an id of their own (see
- * `ShapeSceneNode.commentChrome`).
- *
- * Bubbles are placed by `placeCommentBubble`: down-right of the anchor
- * unless that would cover a node or an earlier comment's bubble, then the
- * least-covered quadrant. Group frames are not obstacles — a comment inside
- * a group is about its members, and pushing the bubble out of the frame
- * would carry it away from them. Document order decides who yields:
- * a later comment fans out around an earlier one.
- */
-function composeComments(
-  canvas: SpatialCanvas,
-  options: ResolvedLayoutOptions,
-  edgePathOf: EdgePathLookup,
-): readonly SceneNode[] {
-  const comments = options.comments ?? canvas.comments
-  if (comments === undefined || comments.length === 0) return []
-
-  const chrome = options.appearance.resolveComment?.()
-  const visible = comments.filter(
-    (comment) => comment.resolved !== true || options.showResolved === true,
-  )
-  const anchorOf = (comment: (typeof visible)[number]): { x: number; y: number } => {
-    // A node set's pin stands at the corner of the box its LIVE nodes
-    // occupy, read from the thread: the flat projection's point is where
-    // that box was when it was last projected, and the nodes move.
-    const region = options.regionsByThread.get(comment.id)
-    return region !== undefined
-      ? { x: region.rect.x + region.rect.width, y: region.rect.y }
-      : commentAnchor(comment, canvas, edgePathOf)
-  }
-  const obstacles: BoundingBox[] = [
-    ...canvas.nodes
-      .filter((node) => node.type !== 'group')
-      .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
-    ...(options.commentObstacles ?? []),
-    // EVERY pin, up front — not each one as its comment is drawn. A pin is
-    // what its comment is about, so a bubble covering one hides exactly what
-    // a reader followed the leader to find. Seeding them all is what makes
-    // that true for a comment drawn BEFORE the pin it would have covered;
-    // pushing each pin as it is emitted only protects the ones after it.
-    //
-    // This did not matter while the placer had four candidates a fixed 14px
-    // from the anchor, which clear their own pin and reach no other. It
-    // matters now: measured on the crowded forty-comment board, the ring
-    // put 3948 square pixels of bubble over other comments' pins.
-    ...visible.map((comment) => {
-      const anchor = anchorOf(comment)
-      return {
-        x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
-        y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
-        w: COMMENT_PIN_SIZE_PX,
-        h: COMMENT_PIN_SIZE_PX,
-      }
-    }),
-  ]
-  const out: SceneNode[] = []
-  for (const comment of visible) {
-    // Assigned, never invented: a resolved comment's muting comes only from
-    // the theme's `resolvedOverlay`, never from an opacity literal here. A
-    // bare resolver (no `resolveComment`) still composes full geometry with
-    // no appearance at all, resolved or not.
-    const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
-    const anchor = anchorOf(comment)
-
-    // Through `layoutCommentBody`, which is the ONE producer of a comment's
-    // prose — so the card and rail that draw this same body in the web app
-    // cannot pick different metrics for it.
-    const laid = layoutCommentBody(comment.text, {
-      ...mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
-      parseBody: options.parseBody,
-      onParseFailure: (err) =>
-        options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err }),
-    })
-    const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
-    const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
-    const bubble = placeCommentBubble(
-      anchor,
-      {
-        w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
-        h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
-      },
-      obstacles,
-    )
-    obstacles.push(bubble)
-
-    // The leader FIRST, so pin and bubble paint over its ends: a dashed line
-    // from the anchor to the bubble's near corner keeps the pair reading as
-    // one comment when a dense canvas separates them. Geometry is composed
-    // for every resolver; only its paint is assigned.
-    out.push({
-      kind: 'edge',
-      id: `${comment.id}/leader`,
-      commentChrome: true,
-      path: [
-        { x: anchor.x, y: anchor.y },
-        commentLeaderEnd(anchor, bubble, COMMENT_BUBBLE_RADIUS_PX),
-      ],
-      fromSide: 'right',
-      toSide: 'left',
-      fromEnd: 'none',
-      toEnd: 'none',
-      ...(appearance !== undefined ? { appearance: appearance.leader } : {}),
-    })
-
-    out.push({
-      kind: 'shape',
-      id: `${comment.id}/pin`,
-      commentChrome: true,
-      bbox: {
-        x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
-        y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
-        w: COMMENT_PIN_SIZE_PX,
-        h: COMMENT_PIN_SIZE_PX,
-      },
-      radius: COMMENT_PIN_SIZE_PX / 2,
-      ...(appearance !== undefined ? { appearance: appearance.pin } : {}),
-    })
-
-    const count = options.messagesByThread.get(comment.id) ?? 1
-    if (count > 1) {
-      // Past one only, the same rule the rail's row, the source pane's
-      // gutter and the preview marker follow: a digit beside every lone
-      // remark is noise, and the number only says something once there is
-      // more than one.
-      const countAppearance =
-        comment.resolved === true ? chrome?.resolvedOverlay?.pinCount : chrome?.pinCount
-      const text = String(count)
-      // Family from the resolver and size from geometry, the same split the
-      // edge label makes: this package assigns paint, never invents it, and
-      // a size is geometry rather than paint.
-      const metrics = options.measure(text, {
-        family: countAppearance?.fontFamily ?? 'sans-serif',
-        fallbackChain: [],
-        weight: 400,
-        style: 'normal',
-        sizePx: COMMENT_PIN_COUNT_FONT_PX,
-      })
-      const w = metrics.advanceWidth
-      const h = metrics.ascent + metrics.descent
-      out.push({
-        kind: 'textRun',
-        bbox: { x: anchor.x - w / 2, y: anchor.y - h / 2, w, h },
-        baseline: metrics.ascent,
-        text,
-        ...(countAppearance === undefined
-          ? {}
-          : { appearance: { ...countAppearance, fontSize: COMMENT_PIN_COUNT_FONT_PX } }),
-      })
-    }
-
-    out.push({
-      kind: 'shape',
-      id: `${comment.id}/bubble`,
-      commentChrome: true,
-      bbox: bubble,
-      radius: COMMENT_BUBBLE_RADIUS_PX,
-      ...(appearance !== undefined ? { appearance: appearance.bubble } : {}),
-    })
-    out.push(
-      ...translateScene(
-        laid,
-        bubble.x + COMMENT_BUBBLE_PADDING_PX,
-        bubble.y + COMMENT_BUBBLE_PADDING_PX,
-      ).nodes,
-    )
-  }
-  return out
-}
-
-/**
- * The proposal layer (ADR-0029 decision 1): every OPEN change outlined where
- * it would land, and one bubble per proposal saying what it would do.
- *
- * Drawn on the live document rather than in a preview of a second one — that
- * is the decision, and the reason the whole variation surface was retired.
- * The bubble reuses the comment layer's constants and grammar deliberately:
- * a reader who has used a comment has already learned how to read this, and
- * two sets of numbers for one visual language would drift.
- *
- * A DECIDED change draws nothing. It stays in the record because what closed
- * it is part of what happened to the document, but it is no longer asking
- * for anything, and a proposal whose changes are all decided has no bubble.
- *
- * The verbs live in the editor's context menu on this chrome, the way a
- * comment is resolved — the bubble says how many and whether any needs a
- * look, and the menu is where the deciding happens.
- */
-function composeProposals(
-  canvas: SpatialCanvas,
-  options: ResolvedLayoutOptions,
-  edgePathOf: EdgePathLookup,
-): readonly SceneNode[] {
-  const proposals = options.proposals
-  if (proposals === undefined || proposals.length === 0) return []
-  const chrome = options.appearance.resolveProposal?.()
-  const paint = chrome === undefined ? {} : { appearance: chrome.outline }
-  const obstacles: BoundingBox[] = canvas.nodes
-    .filter((node) => node.type !== 'group')
-    .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
-  const out: SceneNode[] = []
-
-  for (const proposal of proposals) {
-    const open = proposal.changes.filter((change) => change.status === 'open')
-    if (open.length === 0) continue
-    let anchor: { x: number; y: number } | undefined
-    let conflicts = 0
-
-    for (const change of open) {
-      if (change.op === 'body.replace') continue
-      if (canvasChangeConflicts(change, canvas)) conflicts += 1
-      const box = proposedBox(change, canvas)
-      if (box !== undefined) {
-        out.push({
-          kind: 'shape',
-          id: `${change.id}/outline`,
-          proposalChrome: { proposalId: proposal.id },
-          bbox: box,
-          radius: COMMENT_BUBBLE_RADIUS_PX,
-          ...paint,
-        })
-        obstacles.push(box)
-        anchor ??= { x: box.x + box.w, y: box.y }
-        continue
-      }
-      const path = proposedEdgePath(change, canvas, edgePathOf)
-      if (path === undefined) continue
-      out.push({
-        kind: 'edge',
-        id: `${change.id}/outline`,
-        path,
-        fromSide: 'right',
-        toSide: 'left',
-        fromEnd: 'none',
-        toEnd: 'none',
-        ...paint,
-      })
-      anchor ??= path[Math.floor(path.length / 2)]
-    }
-    if (anchor === undefined) continue
-
-    const changed = `${open.length} proposed change${open.length === 1 ? '' : 's'}`
-    const label = conflicts === 0 ? changed : `${changed}, ${conflicts} needs a look`
-    // Through the comment body's own producer, so the label WRAPS instead of
-    // being truncated at the bubble's width — "2 proposed changes - 1 needs
-    // a look" does not fit on one line, and a truncated count is worse than
-    // no count. This bubble borrows the comment layer's grammar throughout;
-    // borrowing its producer is what keeps that true.
-    const laid = layoutCommentBody(label, {
-      ...mdastOptionsFor(PROPOSAL_TEXT_MAX_WIDTH_PX, options),
-      density: 'compact',
-      parseBody: options.parseBody,
-      onParseFailure: (err) =>
-        options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err }),
-    })
-    const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
-    const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
-    const bubble = placeCommentBubble(
-      anchor,
-      {
-        w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
-        h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
-      },
-      obstacles,
-    )
-    obstacles.push(bubble)
-
-    out.push({
-      kind: 'edge',
-      id: `${proposal.id}/leader`,
-      path: [
-        { x: anchor.x, y: anchor.y },
-        commentLeaderEnd(anchor, bubble, COMMENT_BUBBLE_RADIUS_PX),
-      ],
-      fromSide: 'right',
-      toSide: 'left',
-      fromEnd: 'none',
-      toEnd: 'none',
-      ...(chrome === undefined ? {} : { appearance: chrome.leader }),
-    })
-    out.push({
-      kind: 'shape',
-      id: `${proposal.id}/bubble`,
-      proposalChrome: { proposalId: proposal.id },
-      bbox: bubble,
-      radius: COMMENT_BUBBLE_RADIUS_PX,
-      ...(chrome === undefined ? {} : { appearance: chrome.bubble }),
-    })
-    out.push(
-      ...translateScene(
-        laid,
-        bubble.x + COMMENT_BUBBLE_PADDING_PX,
-        bubble.y + COMMENT_BUBBLE_PADDING_PX,
-      ).nodes,
-    )
-  }
-  return out
-}
-
-/**
- * The box a change concerns: where an addition would appear, where a patch
- * would leave the element, and where a removal would take it from. A patch
- * is drawn at its DESTINATION and the element stays where it is — the
- * outline is what says "there", and moving the node would be applying the
- * proposal rather than showing it.
- *
- * `undefined` for an edge arm, which has a route rather than a box.
- */
-function proposedBox(
-  change: SpatialProposedChange,
-  canvas: SpatialCanvas,
-): BoundingBox | undefined {
-  const boxOf = (node: SpatialNode): BoundingBox => ({
-    x: node.x,
-    y: node.y,
-    w: node.width,
-    h: node.height,
-  })
-  switch (change.op) {
-    case 'node.add':
-      return boxOf(change.node)
-    case 'node.patch': {
-      const node = canvas.nodes.find((candidate) => candidate.id === change.nodeId)
-      return node === undefined ? undefined : boxOf({ ...node, ...change.patch })
-    }
-    case 'node.remove': {
-      const node = canvas.nodes.find((candidate) => candidate.id === change.nodeId)
-      return node === undefined ? undefined : boxOf(node)
-    }
-    default:
-      return undefined
-  }
-}
-
-/**
- * The route a proposed edge change traces. An edge already on the board is
- * traced along the route it was ROUTED to, so the chrome sits on the line a
- * reader can see; one that does not exist yet has no route, so it is drawn
- * straight between the centres of the nodes it would join — honest as a
- * preview, and visibly not the finished routing.
- */
-function proposedEdgePath(
-  change: SpatialProposedChange,
-  canvas: SpatialCanvas,
-  edgePathOf: EdgePathLookup,
-): readonly { x: number; y: number }[] | undefined {
-  if (change.op === 'edge.patch' || change.op === 'edge.remove') {
-    return edgePathOf(change.edgeId)
-  }
-  // Ink already on the board is traced the same way, and for the same
-  // reason: `composeEdgesAndLabels` routes lines through the edge pipeline,
-  // so a line's id is in the same path table (ADR-0038 decision 2).
-  if (change.op === 'line.patch' || change.op === 'line.remove') {
-    return edgePathOf(change.lineId)
-  }
-  if (change.op === 'line.add') {
-    const at = (end: LineEnd) => {
-      if (end.kind === 'point') return end.point
-      const node = canvas.nodes.find((candidate) => candidate.id === end.node)
-      return node === undefined
-        ? undefined
-        : { x: node.x + node.width / 2, y: node.y + node.height / 2 }
-    }
-    const from = at(change.line.from)
-    const to = at(change.line.to)
-    return from === undefined || to === undefined ? undefined : [from, to]
-  }
-  if (change.op !== 'edge.add') return undefined
-  // A FREE end has no box to take a centre from, so a proposed edge carrying
-  // one draws no preview line — the same answer a dangling reference gets.
-  const centre = (end: EdgeEnd) => {
-    const id = endNode(end)
-    const node = id === undefined ? undefined : canvas.nodes.find((c) => c.id === id)
-    return node === undefined
-      ? undefined
-      : { x: node.x + node.width / 2, y: node.y + node.height / 2 }
-  }
-  const from = centre(change.edge.from)
-  const to = centre(change.edge.to)
-  return from === undefined || to === undefined ? undefined : [from, to]
-}
-
-/** Right/bottom extents of a laid-out block at origin, for sizing a bubble. */
-function sceneRight(node: SceneNode): number {
-  return node.kind === 'edge' ? 0 : node.bbox.x + node.bbox.w
-}
-
-function sceneBottom(node: SceneNode): number {
-  return node.kind === 'edge' ? 0 : node.bbox.y + node.bbox.h
 }
 
 function composeEdgesAndLabels(
@@ -2477,3 +1535,26 @@ function resolveNodeOutlines(
   if (fromFacets === undefined) return explicit
   return explicit === undefined ? fromFacets : { ...fromFacets, ...explicit }
 }
+
+// The overlay layers and the options vocabulary live in their own modules
+// now (comments.ts, proposals.ts, layout-options.ts). They are re-exported
+// here because this file has been the package's layout barrel since before
+// they were split out, and a move that also rewrote every importer would be
+// two changes in one diff.
+export {
+  COMMENT_BUBBLE_PADDING_PX,
+  COMMENT_BUBBLE_RADIUS_PX,
+  COMMENT_PIN_COUNT_FONT_PX,
+  COMMENT_PIN_SIZE_PX,
+  commentAnchor,
+  type EdgePathLookup,
+} from './comments.js'
+export type {
+  FacetCardData,
+  ResolvedReference,
+  SpatialContentCache,
+  SpatialLayoutDegradation,
+  SpatialLayoutOptions,
+  SpatialRenderStyle,
+} from './layout-options.js'
+export { spatialRenderStyleSchema } from './layout-options.js'
