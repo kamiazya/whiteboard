@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
+import { pointableBoxes } from './element-pick.js'
 import { createIdleState, type GestureState } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 
@@ -48,9 +49,14 @@ export function useLockPolicy({
    */
   const lockEnabled = onToggleNodeLock !== undefined
   const isLocked = (nodeId: string): boolean => lockEnabled && (lockedNodeIds?.has(nodeId) ?? false)
-  /** Boxes a pointer or marquee may target: locked nodes are invisible to both. */
+  /**
+   * Boxes a pointer or marquee may target: locked nodes are invisible to
+   * both. The RULE is `element-pick.ts`'s, since the press and the band
+   * apply it themselves; this memo is for the four readers that are not a
+   * pick — the connect gesture, its overlay and the drag preview.
+   */
   const selectableBoxes = useMemo(
-    () => (lockEnabled ? boxes.filter((entry) => !isLocked(entry.id)) : boxes),
+    () => pointableBoxes(boxes, isLocked),
     // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
     [boxes, lockEnabled, lockedNodeIds],
   )

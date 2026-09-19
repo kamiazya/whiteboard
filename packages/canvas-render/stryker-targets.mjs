@@ -110,6 +110,20 @@ export const MUTATED = [
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // Both live on `mostlyInside`'s last line, and both are equivalent for the
+  // same reason, stated in full beside the code: `area` is positive there, so
+  // `w * h * 2 > area` already implies `w * h > 0`. The span checks exist to
+  // rule out two NEGATIVE spans — a box diagonally across the canvas, whose
+  // product is positive — and nothing else. So `w > 0` and `w >= 0` differ
+  // only at `w === 0`, where the product is 0 and fails the majority test
+  // either way; and `&&` -> `||` differs only where exactly one span is
+  // positive, where the product is non-positive and fails it too. Verified by
+  // applying each edit and running the file's property, which kills the five
+  // non-equivalent mutants on the same two functions.
+  'src/tidy-units.ts': {
+    'EqualityOperator: w > 0 -> w >= 0': 1,
+    'LogicalOperator: w > 0 && h > 0 -> w > 0 || h > 0': 1,
+  },
   // `tags ?? []` only matters when the element carries no `tags` at all, and
   // then the substitute is iterated as a tag: a string with no colon is not
   // a scoped tag, `parseScopedTag` answers `undefined`, and the loop

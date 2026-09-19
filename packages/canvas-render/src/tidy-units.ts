@@ -133,6 +133,14 @@ export function mostlyInside(outer: Rect, inner: Rect): boolean {
   if (area <= 0) return fullyContains(outer, inner)
   const w = Math.min(outer.x + outer.w, inner.x + inner.w) - Math.max(outer.x, inner.x)
   const h = Math.min(outer.y + outer.h, inner.y + inner.h) - Math.max(outer.y, inner.y)
+  // Past the line above `area` is positive, so `w * h * 2 > area` already
+  // implies `w * h > 0`. The two span checks therefore rule out exactly ONE
+  // case the product cannot: both spans NEGATIVE — two boxes separated on
+  // both axes, whose product is positive and can exceed half the area, which
+  // would have a frame claim a box diagonally across the canvas. They are
+  // not boundary guards, and no input distinguishes `w > 0` from `w >= 0`
+  // here, nor `&&` from `||` between them (recorded in KNOWN_EQUIVALENT with
+  // this reasoning, so the lane's survivors on this line are not re-chased).
   return w > 0 && h > 0 && w * h * 2 > area
 }
 

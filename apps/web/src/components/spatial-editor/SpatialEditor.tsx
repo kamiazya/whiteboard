@@ -715,8 +715,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const pickInputs = {
       paths: edgePaths,
-      boxes: selectableBoxes,
+      edges: canvas.edges,
+      boxes,
       tolerance: inkTolerance,
+      isNodeLocked: isLocked,
       isEdgeLocked,
     }
     /**
@@ -724,7 +726,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * included. A locked object has to stay right-clickable or Unlock would
      * be unreachable — only the selection side effect is skipped for it.
      */
-    const menuPickInputs = { ...pickInputs, boxes, isEdgeLocked: () => false }
+    const menuPickInputs = { ...pickInputs, isNodeLocked: () => false, isEdgeLocked: () => false }
 
     // The drag/resize/connect render layers (ghost, backdrop, live edges,
     // live resize, preview geometry, and the committed surface's mount-once
@@ -1011,32 +1013,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * has not been applied yet when this runs.
      */
     const toggleSelectionMember = (primaryId: string | null, hitId: string) => {
-      // INK is deliberately kept. It was cleared here, because Delete
-      // processed the selected edge FIRST and would have removed that
-      // instead of the node multi-selection — a real hazard while the two
-      // could not go together. Delete now takes every selected stroke AND
-      // the nodes in the same press, so the reason is gone, and with it the
-      // reason to shrink a selection the person is growing: this is the
-      // shared path of shift-click and the touch gather, and shift means ADD
-      // everywhere else in this editor.
+      // NOTHING is dropped here. It used to clear the whole path selection,
+      // because Delete processed the selected edge FIRST and would have
+      // removed that instead of the node multi-selection — a real hazard
+      // while the two could not go together. Delete takes every selected
+      // stroke AND the nodes in one press now, so the reason is gone, and
+      // with it the reason to shrink a selection the person is growing:
+      // this is the shared path of shift-click and the touch gather, and
+      // shift means ADD everywhere else in this editor.
       //
-      // A relation EDGE is still dropped, and the two kinds share one state
-      // so the difference has to be made here rather than inherited. What
-      // separates them is the verbs BEHIND the selection, not the gesture: a
-      // stroke's are Delete and Ungroup, which already act on a set, while
-      // an edge's dispatch to a single target — `toggle-lock` locks the edge
-      // when one is selected, so a surviving edge would silently lock the
-      // relation instead of the nodes being gathered. Recorded as
-      // `edges/shift-press` in element-surface-coverage.test.ts, where
-      // opening it is a product decision rather than a side effect of this
-      // one.
+      // A relation EDGE went on being dropped after ink stopped being,
+      // because the verbs behind an edge dispatched to a single target —
+      // `toggle-lock` would have locked the one surviving relation instead
+      // of the nodes being gathered. Those verbs take the set now (user
+      // decision, 2026-09-19), so the distinction has nothing left to rest
+      // on and an edge is kept like a stroke.
       //
       // A plain press still replaces — that clearing lives on the press
       // paths, not here. The caller supplies the anchor primary (the
       // in-flight gesture's, not yet applied); extras come from the latest
       // state via the functional update.
-      const lineIds = new Set((canvas.lines ?? []).map((line) => line.id))
-      retainInk((id) => lineIds.has(id))
       setSelectionState((prev) =>
         reduceSelection(
           { primaryId, extraIds: prev.extraIds },
@@ -1218,7 +1214,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           toggleSelectionMember(selectedId, shift.id)
           return
         }
-        if (shift.kind === 'lines') {
+        if (shift.kind === 'paths') {
           setSelectedInkIds(shift.ids)
           return
         }
@@ -1634,8 +1630,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         applySelection({ type: 'set-members', ids: [...gathered.nodes] })
         // The press-time single selection is REPLACED rather than kept: a
         // drag that began on a stroke was a marquee, and the band's own
-        // answer is the whole answer.
-        setSelectedInkIds(withGroupMates(gathered.lines, canvas.lines))
+        // answer is the whole answer. Ink and edges land in the one path
+        // selection they share.
+        setSelectedInkIds(withGroupMates([...gathered.lines, ...gathered.edges], canvas.lines))
         return
       }
       if (root === null) return
@@ -1958,7 +1955,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       selection,
       selectedNode,
       extraIds,
-      selectedEdgeId,
       setSelectedEdgeId,
       selectedInkIds,
       setSelectedInkIds,

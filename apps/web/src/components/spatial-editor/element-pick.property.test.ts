@@ -88,7 +88,7 @@ const ELEMENT_SURFACES = {
     'context menu':
       'not modelled: the menu is a component — which verbs it offers is JSX, not a decision this layer can produce. context-menu.browser.test.tsx drives the real one',
     delete: 'covered',
-    lock: "not modelled: a node lock is applied by the CALLER, which hands `pressProbes` a box list that already excludes locked nodes — so a property here would be asserting its own filtering rather than the editor's. node-lock.browser.test.tsx drives the real filter, and this asymmetry with the path lock (which the probe applies itself) is worth knowing before a third kind picks one of the two",
+    lock: 'covered',
     'selection highlight':
       'not modelled: the highlight is rendered geometry, so what it proves is pixels on a page. multi-select.browser.test.tsx reads the real overlay',
   },
@@ -204,7 +204,14 @@ const bandAround = (points: readonly Point[]) => {
   return { x, y, w: Math.max(...xs) - x + 10, h: Math.max(...ys) - y + 10 }
 }
 
-const emptyInputs = { paths: [], boxes: [], tolerance: TOLERANCE, isEdgeLocked: () => false }
+const emptyInputs = {
+  paths: [],
+  edges: [],
+  boxes: [],
+  tolerance: TOLERANCE,
+  isNodeLocked: () => false,
+  isEdgeLocked: () => false,
+}
 
 const lineOf = (id: string, path: readonly Point[]): CanvasLine => ({
   id,
@@ -218,10 +225,10 @@ const lineOf = (id: string, path: readonly Point[]): CanvasLine => ({
 
 // An edge's end names a node and nothing else — ADR-0038 decision 2 took the
 // discriminator off it, which is the whole difference from a line's end.
-const edgeOf = (id: string): CanvasEdge => ({
+const edgeOf = (id: string, from = 'n-from', to = 'n-to'): CanvasEdge => ({
   id,
-  from: { node: 'n-from' },
-  to: { node: 'n-to' },
+  from: { node: from },
+  to: { node: to },
 })
 
 const placedNode = boxArb.map(
@@ -230,10 +237,12 @@ const placedNode = boxArb.map(
     id: 'the-node',
     inputs: (locked) => ({
       ...emptyInputs,
-      // A locked node never reaches the probes: the caller drops it from the
-      // box list (`selectableBoxes`). That is the asymmetry the ledger's
-      // nodes/lock cell records.
-      boxes: locked ? [] : ([{ id: 'the-node', box }] satisfies readonly NodeBox[]),
+      // The board as it really is, locked boxes included — the probe applies
+      // the lock, exactly as it does for a path. It used to be the caller's
+      // job here, so this property was handed an empty list and asserted its
+      // own filtering.
+      boxes: [{ id: 'the-node', box }] satisfies readonly NodeBox[],
+      isNodeLocked: (probed: string) => locked && probed === 'the-node',
     }),
     on: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
     band: { x: box.x - 5, y: box.y - 5, w: box.width + 10, h: box.height + 10 },
@@ -263,7 +272,8 @@ const placedPath = (kind: 'lines' | 'edges') =>
       inputs: (locked) => ({
         ...emptyInputs,
         paths: [drawn],
-        isEdgeLocked: (probed) => locked && probed === id,
+        ...(kind === 'edges' ? { edges: [edgeOf(id)] } : {}),
+        isEdgeLocked: (probed: string) => locked && probed === id,
       }),
       on: path[0] as Point,
       band: bandAround(path),
@@ -329,7 +339,10 @@ describe('every element kind, through every surface that has to know about it', 
       const gathered = pickContentWithin(probes, placed.band)
       const probe = probes[placed.kind]
       if (typeof probe === 'function') {
-        expect(gathered[placed.kind]).toContain(placed.id)
+        // An EDGE is the one kind a band does not take by its own geometry,
+        // so a lone edge with its ends outside the band is correctly left
+        // behind; the case that gathers one is its own property below.
+        if (placed.kind !== 'edges') expect(gathered[placed.kind]).toContain(placed.id)
       } else {
         // A kind the band skips answers nothing AND owes a sentence — a
         // reason under a clause is the omission with a word in front of it.
@@ -352,11 +365,13 @@ describe('every element kind, through every surface that has to know about it', 
         case 'nodes':
           expect(shift.id).toBe(placed.id)
           break
-        case 'lines':
+        case 'paths':
           // Shift GROWS or SHRINKS, never replaces: every id it answers was
           // either held already or is the mark just pressed. This is the
           // statement the two shipped defects would have failed — one
-          // replaced the held ink, the other dropped it entirely.
+          // replaced the held ink, the other dropped it entirely. An EDGE
+          // takes this same arm since 2026-09-19, which is the whole of
+          // what opening shift for edges cost here.
           for (const id of shift.ids) expect([...held, placed.id]).toContain(id)
           break
         default:
@@ -370,9 +385,85 @@ describe('every element kind, through every surface that has to know about it', 
     'a locked element is never picked, whatever its kind',
     (placed) => {
       expect(pickContentAt(pressProbes(placed.inputs(true)), placed.on)).toBeUndefined()
-      // Only the kinds whose probe applies the lock ITSELF are claimed; the
-      // node lock is the caller's and the ledger says so.
-      if (placed.kind !== 'nodes') produced(placed.kind, 'lock')
+      produced(placed.kind, 'lock')
+    },
+  )
+
+  const bandEdges = { taken: 0, leftBehind: 0 }
+
+  fcTest.prop([boxArb, boxArb, fc.boolean(), fc.boolean()], withDefaults())(
+    'a band takes a relation when it took both of its ends, and never half of one',
+    (a, b, bandHoldsA, bandHoldsB) => {
+      // The rule stated by CONSTRUCTION: the generator decides which ends
+      // the band covers, and the property asks whether the relation came
+      // along. It never computes an intersection with the edge's LINE,
+      // which is the whole point — a router steers that line around the
+      // boxes between its ends, so where it runs says nothing about what it
+      // connects (user decision, 2026-09-19).
+      const boxes = [
+        { id: 'a', box: { x: a.x, y: a.y, width: a.width, height: a.height } },
+        { id: 'b', box: { x: b.x + 2000, y: b.y + 2000, width: b.width, height: b.height } },
+      ] satisfies readonly NodeBox[]
+      // The band covers whichever ends were drawn in, and sits in a far
+      // corner when it holds neither.
+      const covered = [...(bandHoldsA ? [boxes[0]] : []), ...(bandHoldsB ? [boxes[1]] : [])]
+      const rect =
+        covered.length === 0
+          ? { x: 9e4, y: 9e4, w: 10, h: 10 }
+          : {
+              x: Math.min(...covered.map((e) => e.box.x)) - 5,
+              y: Math.min(...covered.map((e) => e.box.y)) - 5,
+              w:
+                Math.max(...covered.map((e) => e.box.x + e.box.width)) -
+                Math.min(...covered.map((e) => e.box.x)) +
+                10,
+              h:
+                Math.max(...covered.map((e) => e.box.y + e.box.height)) -
+                Math.min(...covered.map((e) => e.box.y)) +
+                10,
+            }
+      const gathered = pickContentWithin(
+        bandProbes({ ...emptyInputs, boxes, edges: [edgeOf('rel', 'a', 'b')] }),
+        rect,
+      )
+      const bothEnds = bandHoldsA && bandHoldsB
+      expect(gathered.edges).toEqual(bothEnds ? ['rel'] : [])
+      // A relation is never gathered with one end, which is the state a
+      // selection of relations must not be able to reach.
+      if (bothEnds) bandEdges.taken += 1
+      else bandEdges.leftBehind += 1
+    },
+  )
+
+  it('drew a band over both ends and over fewer, so neither answer is untested', () => {
+    expect(bandEdges.taken).toBeGreaterThan(0)
+    expect(bandEdges.leftBehind).toBeGreaterThan(0)
+  })
+
+  fcTest.prop([boxArb, fc.integer({ min: 4, max: 40 })], withDefaults())(
+    'a locked box lying over an unlocked one does not swallow the press',
+    (box, inset) => {
+      // Why the rule filters the LIST rather than rejecting the answer.
+      // `hitTest` answers the TOPMOST box, so checking the lock afterwards
+      // would make a locked node a hole in the board: the press would find
+      // nothing where an unlocked box is plainly visible under it.
+      const under = { id: 'under', box }
+      const over = {
+        id: 'over',
+        box: {
+          x: box.x - inset,
+          y: box.y - inset,
+          width: box.width + inset * 2,
+          height: box.height + inset * 2,
+        },
+      } satisfies NodeBox
+      const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      const probes = pressProbes({
+        ...emptyInputs,
+        boxes: [under, over],
+        isNodeLocked: (id: string) => id === 'over',
+      })
+      expect(pickContentAt(probes, at)).toEqual({ kind: 'nodes', id: 'under' })
     },
   )
 
