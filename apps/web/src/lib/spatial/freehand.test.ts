@@ -1,3 +1,4 @@
+import { VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import {
   FREEHAND_MAX_POINTS,
@@ -66,6 +67,16 @@ describe('freehandLine', () => {
     const travelled = [at(0, 0), at(MIN_STROKE_TRAVEL_PX + 1, 0)]
     expect(freehandLine('ink-1', travelled, 1)).toBeDefined()
     expect(freehandLine('ink-1', travelled, 0.25)).toBeUndefined()
+  })
+
+  it('asks to be DRAWN as a curve, so the samples are not read as corners', () => {
+    // The stroke's own geometry is the bends; this is the other half — a
+    // path of straight runs between kept samples reads as a jagged line
+    // however dense it is. `curved` is what makes the renderer round each
+    // corner into the quadratic its neighbours' midpoints define, which is
+    // the same smoothing a drawing app applies to a captured stroke.
+    const line = freehandLine('ink-1', [at(0, 0), at(40, 60), at(90, 10), at(140, 80)], 1)
+    expect(line?.facets?.[VISUAL_EDGES_KEY]).toEqual({ routing: 'curved' })
   })
 
   it('bounds what one stroke writes, however long the pointer was down', () => {

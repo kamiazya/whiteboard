@@ -22,6 +22,7 @@
  */
 
 import type { CanvasLine } from '@kamiazya/whiteboard-model'
+import { VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import type { Point } from './viewport.js'
 
 /**
@@ -31,8 +32,14 @@ import type { Point } from './viewport.js'
  * Small enough that a deliberate curve survives (a circle drawn at ordinary
  * size keeps tens of points), large enough that pointer jitter along a
  * straight run does not become geometry.
+ *
+ * Halved from 1.5 once the stroke started being DRAWN as a curve: the two
+ * work together, and denser samples are what the rounding has to work with.
+ * The floor is set by the jitter it still has to swallow — a hand wobbling
+ * half a pixel along a straight run must not leave geometry behind — so this
+ * is as low as it goes without the wobble becoming part of the drawing.
  */
-export const STROKE_TOLERANCE_PX = 1.5
+export const STROKE_TOLERANCE_PX = 0.75
 
 /**
  * How far the pointer must travel from where it went down, in SCREEN pixels,
@@ -174,5 +181,17 @@ export function freehandLine(
     from: { kind: 'point', point: first, end: 'none' },
     to: { kind: 'point', point: last, end: 'none' },
     bends: middle,
+    // Drawn as a curve, not as the chain of straight runs the bends
+    // literally are. Every kept sample is a corner otherwise, and a stroke
+    // made of corners reads as jagged however many of them there are — the
+    // renderer rounds each one into the quadratic its neighbours' midpoints
+    // define (`edge-rounding.ts`), which is the smoothing a drawing app
+    // applies to a captured stroke.
+    //
+    // Stored on the line rather than decided by the renderer, because
+    // `curved` is a property of THIS stroke: a line authored some other way
+    // — dragged between two points with a ruler's intent — keeps its
+    // corners.
+    facets: { [VISUAL_EDGES_KEY]: { routing: 'curved' } },
   }
 }

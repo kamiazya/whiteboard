@@ -408,6 +408,46 @@ describe('layoutSpatialCanvas', () => {
     expect(routed('plain')?.path.length).toBe(2)
   })
 
+  it('draws a curved LINE through its own bends, rounded', () => {
+    // The seam the freehand pen rides: the stroke stores its samples as
+    // bends and asks for `curved`, and every corner between two kept samples
+    // is rounded into a quadratic. Without it a stroke is a chain of
+    // straight runs — one visible corner per sample — which reads as jagged
+    // however dense the sampling is.
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 40, height: 40, text: 'a' })
+    const scene = layoutSpatialCanvas(
+      {
+        ...canvas([a], []),
+        lines: [
+          {
+            id: 'ink',
+            from: { kind: 'point' as const, point: { x: 200, y: 200 }, end: 'none' as const },
+            to: { kind: 'point' as const, point: { x: 400, y: 260 }, end: 'none' as const },
+            bends: [
+              { x: 260, y: 160 },
+              { x: 320, y: 300 },
+            ],
+            facets: { 'visual.edges/v0': { routing: 'curved' } },
+          },
+        ],
+      },
+      baseOptions(),
+    )
+    const ink = scene.nodes.find(
+      (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode =>
+        n.kind === 'edge' && n.id === 'ink',
+    )
+    expect(ink?.rounded).toBe(true)
+    // And it still travels the samples themselves — rounding is how the
+    // corners are drawn, never a different route.
+    expect(ink?.path).toEqual([
+      { x: 200, y: 200 },
+      { x: 260, y: 160 },
+      { x: 320, y: 300 },
+      { x: 400, y: 260 },
+    ])
+  })
+
   it("an edge's own facet chooses whether it hops the lines it crosses", () => {
     // Line jumps are drawn on the LATER edge of a crossing pair, so a
     // per-edge answer means "does THIS edge hop", asked of the edge that
