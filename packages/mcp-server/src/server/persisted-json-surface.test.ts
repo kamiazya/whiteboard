@@ -90,6 +90,14 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'is an example instead — daemon-identity.test.ts asserts the SAME identity reloads, and that ' +
       'a corrupt or wrong-shape file rotates without echoing the private key',
   ),
+  'server/security/macaroon-root-key.ts': notModelled(
+    'the written record is 32 random bytes, so a property drawing one would draw exactly what the ' +
+      'writer produces and assert that a key is a key — the same argument daemon-identity.ts is ' +
+      'exempt on, one file above. The examples carry it instead: macaroon-root-key.test.ts asserts ' +
+      'the SAME key reloads across restarts, that a corrupt, wrong-shape or wrong-LENGTH file ' +
+      'rotates while saying why, and that the key reaches neither the rotation warning nor a log ' +
+      'record that carries it as a field',
+  ),
   'shared/mkdir-lock.ts': notModelled(
     'the owner file holds a pid and a timestamp this process just wrote, and what matters about it ' +
       'is the reclaim protocol rather than the shape. mkdir-lock.test.ts drives that protocol, ' +
@@ -116,6 +124,13 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
     'parsed from WHITEBOARD_OAUTH_CLIENT_REGISTRY, which an operator writes and nothing here ' +
       'emits, so there is no writer to round-trip against. Its refusals are ' +
       'oauth-authz-registry.test.ts',
+  ),
+  'server/security/macaroon.ts': notModelled(
+    'a bearer token rather than a stored shape — it reaches the schema through JSON.parse because ' +
+      'a macaroon serializes to base64url JSON, and the daemon is both its writer and its reader. ' +
+      'macaroon.test.ts round-trips serialize(parse(token)) back to the same token, refuses every ' +
+      'malformed and unknown-caveat shape without throwing, and pins the SIGNATURE against ' +
+      "libmacaroons' published values — which is what a round trip over this shape could not say",
   ),
   'server/routes/ws-validation.ts': notModelled(
     'a frame a CLIENT sends, so this package is the reader alone. The frames the daemon emits are ' +

@@ -22,11 +22,12 @@ import {
   generateKeyPairSync,
   type KeyObject,
 } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { ed25519PublicKeyToDidKey } from '@kamiazya/whiteboard-daemon-client/api-contracts/did-key'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import { assertSecretFileIsOwnerOnly, writeSecretFileAtomicSync } from './secret-file-mode.js'
 
 const log = getLogger('daemon-identity')
 
@@ -105,18 +106,18 @@ function generateAndPersist(filepath: string): LoadedKeys {
   }
   // Write-then-rename with owner-only perms, same posture as the pairing
   // grants file: a half-written identity must never be observed, and the
-  // private key is never group/world readable.
-  // The data dir may not exist yet on a first start (identity generation can
-  // precede any store write); owner-only like the rest of the data dir.
-  mkdirSync(dirname(filepath), { recursive: true, mode: 0o700 })
-  const tmpPath = `${filepath}.tmp`
-  writeFileSync(tmpPath, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
-  renameSync(tmpPath, filepath)
+  // private key is never group/world readable. The data dir may not exist yet
+  // on a first start (identity generation can precede any store write).
+  writeSecretFileAtomicSync(filepath, `${JSON.stringify(record, null, 2)}\n`)
   return { publicKey, privateKey }
 }
 
 export function createDaemonIdentity({ dataDir }: { dataDir: string }): DaemonIdentity {
   const filepath = join(dataDir, DAEMON_IDENTITY_FILENAME)
+  // Before the read, not inside `tryLoad`: an unreadable identity is
+  // regenerated, and a LEAKED one must not be, so this has to propagate
+  // rather than fold into the null that means "make a new one".
+  assertSecretFileIsOwnerOnly(filepath)
   const keys = tryLoad(filepath) ?? generateAndPersist(filepath)
 
   const publicJwk = keys.publicKey.export({ format: 'jwk' }) as { x?: string }

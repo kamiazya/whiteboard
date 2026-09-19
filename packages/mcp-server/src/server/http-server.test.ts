@@ -30,9 +30,9 @@ async function acquirePort(): Promise<number> {
 }
 
 describe('authorizeWsUpgrade', () => {
-  it('rejects websocket upgrade without the daemon subprotocol token when token auth is enabled', () => {
+  it('rejects websocket upgrade without the daemon subprotocol token when token auth is enabled', async () => {
     expect(
-      authorizeWsUpgrade(
+      await authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
         },
@@ -41,9 +41,9 @@ describe('authorizeWsUpgrade', () => {
     ).toEqual({ accept: false, statusCode: 401 })
   })
 
-  it('rejects websocket upgrade when the daemon subprotocol token is wrong', () => {
+  it('rejects websocket upgrade when the daemon subprotocol token is wrong', async () => {
     expect(
-      authorizeWsUpgrade(
+      await authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
           'sec-websocket-protocol': 'whiteboard-v1, daemon-token.nope',
@@ -53,9 +53,9 @@ describe('authorizeWsUpgrade', () => {
     ).toEqual({ accept: false, statusCode: 401 })
   })
 
-  it('accepts websocket upgrade with the daemon subprotocol token and selects whiteboard-v1', () => {
+  it('accepts websocket upgrade with the daemon subprotocol token and selects whiteboard-v1', async () => {
     expect(
-      authorizeWsUpgrade(
+      await authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
           origin: 'http://127.0.0.1:5173',
@@ -66,20 +66,20 @@ describe('authorizeWsUpgrade', () => {
     ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
   })
 
-  it('keeps websocket auth disabled when daemon token is unset', () => {
+  it('keeps websocket auth disabled when daemon token is unset', async () => {
     expect(
-      authorizeWsUpgrade({
+      await authorizeWsUpgrade({
         host: '127.0.0.1:3099',
       }),
     ).toEqual({ accept: true, protocol: undefined, scopes: ALL_AUTH_SCOPES })
   })
 
-  it('admits cross-name loopback origins but rejects non-loopback ones', () => {
+  it('admits cross-name loopback origins but rejects non-loopback ones', async () => {
     // Loopback-to-loopback name mismatch (localhost page, 127.0.0.1 daemon)
     // is admitted — same policy as the HTTP CORS middleware; the token is
     // still required and offered here.
     expect(
-      authorizeWsUpgrade(
+      await authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
           origin: 'http://localhost:5173',
@@ -90,7 +90,7 @@ describe('authorizeWsUpgrade', () => {
     ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
 
     expect(
-      authorizeWsUpgrade(
+      await authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
           origin: 'https://example.com',
