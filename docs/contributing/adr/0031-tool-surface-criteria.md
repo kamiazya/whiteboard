@@ -1199,6 +1199,39 @@ closest word in the table to "show it", and the table did not say the
 symbol is invisible here. Filed as a finding; the answer is either a drawn
 badge channel or a description that says where a symbol is drawn.
 
+> **Answered (2026-09-19, user decision): the DESCRIPTION, not the channel.**
+> Drawing the badge on a canvas would reverse a decision this project
+> already made with its own argument — the badge was removed because a node
+> at full size repeats what its own label already says, and a symbol is for
+> a surface too small to read. That is still true, so the remedy is to say
+> so where the model reads.
+>
+> `visual.symbol/v0`'s payload schema now carries one sentence naming where
+> a badge IS drawn (the minimap, a row in the document browser, the tab
+> favicon), that a canvas does not draw it, and the channel that records
+> state on a board — a scoped tag, which colours the box and appears in the
+> legend (ADR-0040).
+>
+> **What it cost, and the column it did not move.** Rung 1 is unchanged to
+> the byte: a facet's payload schema is in no tool's INPUT table, so this
+> costs zero model-visible bytes on every turn. Rung 2 moved on the one
+> errand that asks what a write may name — `wear a stencil this workspace
+> defines`, response 12,162 -> 13,072. The description is 453 bytes and the
+> row moved 910, because an MCP reply carries its answer twice, as `content`
+> text and as `structuredContent`; every byte a tool ANSWERS is priced at 2x
+> on that scoreboard. Calls unchanged. This is the same trade
+> `wb_facet_list`'s `otherTargets` took, and the reason the sentence is on
+> the facet rather than in a tool description.
+>
+> The facet score still counts TWO channels, not three: nothing about what a
+> canvas draws changed, so counting the badge would credit a distinction no
+> reader of the board can see (the 2026-09-11 correction in ADR-0033 §1).
+>
+> Whether it WORKS is unmeasured here. ADR-0031's own rule for a description
+> change is rung 3 on the tasks that touch the tool, and the one study that
+> measured it found description fixes regress a sixth of cases — so this is
+> a hypothesis with its price paid and its reading owed, not a fix.
+
 What this adds to the twenty-second: the write path for a word that is
 NOT a plugin's — a tag needs no registry to be a partition — reads the same
 as the registered facet did. Six remedies, one reading, and the open

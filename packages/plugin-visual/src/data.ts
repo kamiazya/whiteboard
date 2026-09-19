@@ -121,16 +121,33 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
  */
 const isSingleGrapheme = (value: string): boolean => [...graphemes.segment(value)].length === 1
 
-export const visualSymbolFacetSchema = z.union([
-  z.object({ kind: z.literal('icon'), name: z.string().min(1) }),
-  z.object({
-    kind: z.literal('emoji'),
-    char: z
-      .string()
-      .min(1)
-      .refine(isSingleGrapheme, 'must be a single character or emoji, not a string'),
-  }),
-])
+export const visualSymbolFacetSchema = z
+  .union([
+    z.object({ kind: z.literal('icon'), name: z.string().min(1) }),
+    z.object({
+      kind: z.literal('emoji'),
+      char: z
+        .string()
+        .min(1)
+        .refine(isSingleGrapheme, 'must be a single character or emoji, not a string'),
+    }),
+  ])
+  /**
+   * WHERE the badge is drawn, said in the answer `wb_facet_list` gives,
+   * because the name alone is the closest word in the table to "show it"
+   * and a caller acted on exactly that: asked to record health, it wrote a
+   * check and a cross on all five boxes and spent no colour, so a person
+   * looking at the board saw no health at all.
+   *
+   * The badge is for a surface too small to read its own content — a
+   * minimap, a row in the document browser, the tab's favicon — and a node
+   * at full size is not that, which is why the canvas stopped drawing it.
+   * So the sentence names both halves, and the channel that would have
+   * worked: a scoped tag, which colours the box and appears in the legend.
+   */
+  .describe(
+    'What SYMBOLISES this object, for surfaces too small to read it: the minimap, a row in the document browser, the tab favicon. NOT drawn on a canvas \u2014 a node at full size already shows its own content \u2014 so a badge written to say what a box IS or how it is DOING is invisible to anyone reading the board. To record state or kind on a board, write a scoped tag instead (`health:failing`): it colours the box and appears in the board legend.',
+  )
 
 export type VisualSymbolFacet = z.infer<typeof visualSymbolFacetSchema>
 
