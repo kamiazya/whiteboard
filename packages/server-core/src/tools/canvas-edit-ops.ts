@@ -264,9 +264,16 @@ const exactlyOneTarget = {
  * the table.
  */
 const STENCIL_FIELD = namespacedIdSchema
+  // `null` is admitted for the same reason `within` admits it one field
+  // over: a model that has just learned "null means none" on this op
+  // generalises, and a parse refusal costs the WHOLE batch rather than the
+  // one field. Measured before buying: `stencil` is the most frequent
+  // unrecognized-key refusal in the stored lane readings (6 across 3 of 9),
+  // and a nullable costs 28 bytes a field — 56 against this tool's 14020.
+  .nullable()
   .optional()
   .describe(
-    'What this box IS, as a registered stencil id — sets its colour and silhouette together; an explicit color wins. wb_facet_list reports the ids this deployment has.',
+    'What this box IS, as a registered stencil id — sets its colour and silhouette together; an explicit color wins. Null or absent: this op names none. wb_facet_list reports the ids this deployment has.',
   )
 
 /**

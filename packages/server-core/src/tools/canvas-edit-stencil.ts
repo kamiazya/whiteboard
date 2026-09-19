@@ -24,7 +24,13 @@ export function dressWithStencil(
   index: number,
   opName: string,
   node: SpatialNode,
-  stencil: string | undefined,
+  /**
+   * Absent and `null` mean the same thing — leave the box undressed. Null
+   * is admitted at the schema because a caller that has just written
+   * `within: null` for "no group" writes it here for "no stencil", and a
+   * parse refusal on one field loses the whole batch.
+   */
+  stencil: string | null | undefined,
   /**
    * The colour the caller named in THIS op, if any — `node.color` on a
    * `node.add` draft, `patch.color` on a `node.patch`.
@@ -45,7 +51,7 @@ export function dressWithStencil(
    */
   registry: FacetRegistry,
 ): SpatialNode {
-  if (stencil === undefined) return node
+  if (stencil === undefined || stencil === null) return node
   const applied = applyStencil(node, stencil, registry)
   if (applied === undefined) {
     throw new CanvasEditError(

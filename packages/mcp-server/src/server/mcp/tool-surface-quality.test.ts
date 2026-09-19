@@ -363,13 +363,33 @@ describe('what the tool table costs to read', () => {
         // node ops (ADR-0031's twenty-second reading). C1 up for nothing on
         // C13 or C14 is what §1 refuses, so the row is back where it was,
         // and the rule that decided it was written before the reading.
-        visibleBytes: 15043,
+        // +128 visible for `stencil` accepting `null` on node.add and
+        // node.patch (task #93). Two parts, each priced on its own before
+        // being bought: the `.nullable()` is +56 (28 a field, 2 arms) and
+        // the sentence that says what null MEANS is +72.
+        //
+        // What it buys is a whole BATCH, not a field. A parse refusal on
+        // one op loses every op beside it, and `stencil` is the most
+        // frequent unrecognized-key refusal in the stored lane readings —
+        // 6 across 3 of 9, where the runner-up appeared in one. Two of
+        // three round-18 trials wrote `stencil: null` after writing
+        // `within: null` one field over, which is the generalisation the
+        // asymmetry invited.
+        //
+        // The sentence is not decoration and is why this row moved 128
+        // rather than 56: the schema type alone says null is ACCEPTED, and
+        // a reader of a PATCH could take that as "take the stencil off".
+        // It does not — the box keeps what it has — and a caller who
+        // guessed otherwise would silently lose a box's kind.
+        visibleBytes: 15171,
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
         // omit it until decision 7's reading prices the inline form. Letting
         // it through read +6 parameters / +6 undescribed / +300 visible.
-        wireBytes: 38513,
+        // +128, the same bytes: this change is in the input schema, which
+        // the model reads and the wire carries alike.
+        wireBytes: 38641,
         descriptionWords: 169,
         parameters: 221,
         undescribed: 154,
@@ -800,7 +820,9 @@ describe('what the tool table costs to read', () => {
       // sentence on wb_facet_set, each priced at its row. No input gained a
       // parameter — the library is a DOCUMENT, written with the facet write
       // the surface already has.
-      visibleBytes: 39348,
+      // Then +128 visible / 0 parameters for `stencil: null` on
+      // `wb_canvas_edit` (task #93), priced at its own row above.
+      visibleBytes: 39476,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -809,7 +831,8 @@ describe('what the tool table costs to read', () => {
       // wb_facet_list's in-use tags), each priced at its row.
       // Then +891 wire for increment 5: wb_facet_list's `tagLibrary` output
       // (+696) and wb_facet_set's sentence (+195).
-      wireBytes: 120035,
+      // Then +128 wire for `stencil: null`, the same bytes as visible.
+      wireBytes: 120163,
       parameters: 348,
       undescribed: 221,
     })
