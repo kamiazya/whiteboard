@@ -26,6 +26,8 @@ const {
   disposeAutoCompact,
   _inFlightAutoCompactCountForTests,
   _isDisposingAutoCompactForTests,
+  _awaitAutoCompactFiredForTests,
+  _awaitAutoCompactIdleForTests,
 } = await import('./auto-compact.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
@@ -368,16 +370,12 @@ describe('auto-compact', () => {
     // Nothing has fired yet.
     expect(await readLastCompactedAt()).toBeNull()
 
-    // Wait past the debounce + the async compactDocument write. Poll instead of
-    // a fixed sleep so this does not flake on a slow CI runner.
-    const stamp = await vi.waitFor(
-      async () => {
-        const value = await readLastCompactedAt()
-        expect(value).not.toBeNull()
-        return value
-      },
-      { timeout: 2000 },
-    )
+    // Wait for the debounce to fire and its compactDocument write to settle.
+    // The seam waits for that event rather than for a budget to elapse — the
+    // budget is what used to fail here under a shared runner's contention.
+    await _awaitAutoCompactIdleForTests()
+    const stamp = await readLastCompactedAt()
+    expect(stamp).not.toBeNull()
     const settled = stamp!
 
     // Further idle time without a new trigger must NOT re-compact. This half
@@ -420,17 +418,15 @@ describe('auto-compact', () => {
     expect(peekDoc('session1', 'cached')).toBeDefined()
 
     scheduleAutoCompact('session1', 'cached', store, { debounceMs: 50 })
-    await vi.waitFor(
-      async () => {
-        const { openWorkspaceDocIfStored } = await import('./document-store.js')
-        const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-        const workspaceDoc = await openWorkspaceDocIfStored('session1')
-        expect(
-          workspaceDoc && (readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null),
-        ).not.toBeNull()
-      },
-      { timeout: 2000 },
-    )
+    await _awaitAutoCompactIdleForTests()
+    {
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      expect(
+        workspaceDoc && (readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null),
+      ).not.toBeNull()
+    }
 
     // Edit and save AFTER the compaction, then reload from stored bytes
     // only: everything survives.
@@ -512,6 +508,41 @@ describe('auto-compact disposal', () => {
     })
   }
 
+  // The two seams these tests pin are what the rest of this file waits on.
+  // They replaced `vi.waitFor(..., { timeout: 2000 })` — a second, tighter
+  // wall-clock ceiling nested inside the per-test one, around work a shared
+  // CI runner schedules. Under momentary contention that ceiling was the only
+  // thing that could fail, and it did, on a commit that re-ran green.
+  it('_awaitAutoCompactIdleForTests resolves only once the debounced compaction has settled', async () => {
+    const store = await buildCompactableCanvas('idle-seam')
+
+    async function readLastCompactedAt(): Promise<number | null> {
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      if (workspaceDoc === null) return null
+      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
+    }
+
+    // The held-open cut lookup is what makes "only once" observable: a seam
+    // that returned early would read the stamp while it is still null.
+    scheduleAutoCompact('session1', 'idle-seam', withDelayedEarliestFrontiers(store, 100), {
+      debounceMs: 1,
+    })
+    expect(await readLastCompactedAt()).toBeNull()
+
+    await _awaitAutoCompactIdleForTests()
+
+    expect(_inFlightAutoCompactCountForTests()).toBe(0)
+    expect(await readLastCompactedAt()).not.toBeNull()
+  })
+
+  it('_awaitAutoCompactFiredForTests says so rather than hanging when nothing is pending or in flight', async () => {
+    await expect(_awaitAutoCompactFiredForTests()).rejects.toThrow(
+      /nothing was scheduled, or it already settled/,
+    )
+  })
+
   it('cancels the pending debounce when the DB is disposed before it fires, instead of touching the destroyed driver', async () => {
     const store = await buildCompactableCanvas('big')
     const logs = captureLogsForTests('warning')
@@ -547,12 +578,8 @@ describe('auto-compact disposal', () => {
     scheduleAutoCompact('session1', 'cached', withDelayedEarliestFrontiers(store, 100), {
       debounceMs: 1,
     })
-    await vi.waitFor(
-      () => {
-        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
-      },
-      { timeout: 2000 },
-    )
+    await _awaitAutoCompactFiredForTests()
+    expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
     await disposeAutoCompact()
 
@@ -601,24 +628,16 @@ describe('auto-compact disposal', () => {
     })
 
     scheduleAutoCompact('session1', 'reentrant', reentrantStore, { debounceMs: 1 })
-    await vi.waitFor(
-      () => {
-        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
-      },
-      { timeout: 2000 },
-    )
+    await _awaitAutoCompactFiredForTests()
+    expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
     const disposePromise = disposeAutoCompact()
     // Confirm disposal has actually begun (and is blocked awaiting the
     // in-flight compaction above) before letting the reschedule proceed —
     // this is the exact interleaving the original bug report depended on
-    // luck to hit.
-    await vi.waitFor(
-      () => {
-        expect(_isDisposingAutoCompactForTests()).toBe(true)
-      },
-      { timeout: 2000 },
-    )
+    // luck to hit. disposeAutoCompact raises the guard before its first
+    // await, so the call above has already raised it: nothing to wait for.
+    expect(_isDisposingAutoCompactForTests()).toBe(true)
     releaseReschedule()
     await disposePromise
 
@@ -650,12 +669,8 @@ describe('auto-compact disposal', () => {
     })
 
     scheduleAutoCompact('session1', 'lifecycle', reentrantStore, { debounceMs: 1 })
-    await vi.waitFor(
-      () => {
-        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
-      },
-      { timeout: 2000 },
-    )
+    await _awaitAutoCompactFiredForTests()
+    expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
     const disposingDb = handle.db
     // Exercise the actual DB lifecycle API (createIsolatedDb().dispose(),
@@ -683,12 +698,8 @@ describe('auto-compact disposal', () => {
     await disposeAutoCompact()
 
     scheduleAutoCompact('session1', 'again', store, { debounceMs: 20 })
-    await vi.waitFor(
-      async () => {
-        expect(await readLastCompactedAt()).not.toBeNull()
-      },
-      { timeout: 2000 },
-    )
+    await _awaitAutoCompactIdleForTests()
+    expect(await readLastCompactedAt()).not.toBeNull()
   })
 
   it('composes with uninstallAutoCompact() in either order without dropping in-flight work', async () => {
@@ -705,12 +716,8 @@ describe('auto-compact disposal', () => {
     scheduleAutoCompact('session1', 'composed', withDelayedEarliestFrontiers(store, 100), {
       debounceMs: 1,
     })
-    await vi.waitFor(
-      () => {
-        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
-      },
-      { timeout: 2000 },
-    )
+    await _awaitAutoCompactFiredForTests()
+    expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
     // uninstallAutoCompact() stays synchronous and timer-only: it must
     // not swallow the in-flight compaction that is already running.

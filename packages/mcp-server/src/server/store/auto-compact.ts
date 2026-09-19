@@ -30,6 +30,7 @@ import type { VersionStore } from './version-store.js'
 function clearAllAutoCompactTimers(): void {
   for (const t of autoCompactTimers.values()) clearTimeout(t)
   autoCompactTimers.clear()
+  announceAutoCompactStateChange()
 }
 
 /**
@@ -121,6 +122,7 @@ export function scheduleAutoCompact(
         inFlightAutoCompacts.delete(compaction)
       })
     inFlightAutoCompacts.add(compaction)
+    announceAutoCompactStateChange()
   }, options.debounceMs ?? AUTO_COMPACT_DEBOUNCE_MS)
   // Do not keep the event loop alive just for this debounce. Node will
   // still flush the compaction if anything else (HTTP, WS) holds the
@@ -181,6 +183,94 @@ export function _inFlightAutoCompactCountForTests(): number {
 // delay against dispose's await window.
 export function _isDisposingAutoCompactForTests(): boolean {
   return disposingAutoCompactCount > 0
+}
+
+// ── test-only waiting, without a budget of its own ────────────────────
+// A debounce firing and a compaction settling are the two state changes a
+// test waits on, and both used to be waited on with `vi.waitFor(...,
+// { timeout: 2000 })` — a second, tighter wall-clock ceiling nested inside
+// the per-test one. The work under it is a shared CI runner's to schedule,
+// so the ceiling was the only thing in the arrangement that could fail, and
+// under momentary shard contention it did: two tests went red together on a
+// commit whose re-run was green, while the shard that failed had in fact run
+// nine seconds QUICKER than the one that passed.
+//
+// These seams replace the ceiling with the event itself. They have no
+// timeout: a compaction that never settles overruns the test's own per-test
+// timeout, which is the one budget, and reports the test that was waiting.
+const autoCompactStateWaiters = new Set<() => void>()
+
+function announceAutoCompactStateChange(): void {
+  if (autoCompactStateWaiters.size === 0) return
+  const waiters = Array.from(autoCompactStateWaiters)
+  autoCompactStateWaiters.clear()
+  for (const resolve of waiters) resolve()
+}
+
+function nextAutoCompactStateChange(): Promise<void> {
+  return new Promise((resolve) => {
+    autoCompactStateWaiters.add(resolve)
+  })
+}
+
+/**
+ * Hold the event loop open for the duration of a wait.
+ *
+ * `scheduleAutoCompact` unrefs its debounce timer on purpose, so a waiter
+ * whose only remaining handle is that timer would let the loop drain instead
+ * of being woken by it. A test runner normally holds its own handles, but
+ * that is the runner's business and not something a seam should rest on.
+ */
+async function whileHoldingTheLoopOpen(wait: () => Promise<void>): Promise<void> {
+  const keepAlive = setInterval(() => undefined, 1_000)
+  try {
+    await wait()
+  } finally {
+    clearInterval(keepAlive)
+  }
+}
+
+/**
+ * Test-only: resolve once a pending debounce has fired and its compaction is
+ * in flight — the state `_inFlightAutoCompactCountForTests` reports.
+ *
+ * Throws rather than hanging when there is nothing to wait for, because a
+ * compaction that already settled and one that was never scheduled are the
+ * two ways a caller's premise can be wrong, and a hang names neither.
+ */
+export function _awaitAutoCompactFiredForTests(): Promise<void> {
+  return whileHoldingTheLoopOpen(async () => {
+    while (inFlightAutoCompacts.size === 0) {
+      if (autoCompactTimers.size === 0) {
+        throw new Error(
+          'no auto-compact is pending or in flight: nothing was scheduled, or it already settled',
+        )
+      }
+      await nextAutoCompactStateChange()
+    }
+  })
+}
+
+/**
+ * Test-only: resolve once nothing is pending — every debounce has fired or
+ * been cleared, and every compaction it started has settled.
+ *
+ * Unlike `disposeAutoCompact`, which cancels what has not fired yet, this
+ * waits for it: the difference is what lets a test assert on the RESULT of a
+ * debounced compaction rather than on its cancellation.
+ */
+export function _awaitAutoCompactIdleForTests(): Promise<void> {
+  return whileHoldingTheLoopOpen(async () => {
+    for (;;) {
+      const inFlight = Array.from(inFlightAutoCompacts)
+      if (inFlight.length > 0) {
+        await Promise.allSettled(inFlight)
+        continue
+      }
+      if (autoCompactTimers.size === 0) return
+      await nextAutoCompactStateChange()
+    }
+  })
 }
 
 registerDbDisposeHook(disposeAutoCompact)
