@@ -59,7 +59,7 @@ const CORPUS: TidyNode[][] = fc
   .map((rects) =>
     rects.map((r, i) => ({
       id: `n${i}`,
-      type: 'text' as const,
+      frame: false as const,
       x: r.x,
       y: r.y,
       width: r.w,
@@ -82,7 +82,7 @@ const GROUPED_CORPUS: { nodes: TidyNode[]; lockedId: string }[] = CORPUS.map((no
   const bottom = Math.max(...wrapped.map((n) => n.y + n.height))
   const group: TidyNode = {
     id: 'grp',
-    type: 'group',
+    frame: true,
     x,
     y,
     width: right - x,
@@ -229,7 +229,7 @@ describe('tidy quality scoreboard', () => {
       }
       // The group's own box is not a thing a reader sees a collision with —
       // it is drawn around its members — so overlap is scored on the members.
-      const bodies = after.filter((n) => n.type !== 'group')
+      const bodies = after.filter((n) => n.frame !== true)
       for (let i = 0; i < bodies.length; i++) {
         for (let j = i + 1; j < bodies.length; j++) {
           if (overlapsWithMargin(rectOf(bodies[i] as TidyNode), rectOf(bodies[j] as TidyNode))) {

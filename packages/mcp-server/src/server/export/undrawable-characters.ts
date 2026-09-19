@@ -1,6 +1,6 @@
 import { expandEmojiShortcodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { nodeFile, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
+import { frameLabel, isFrame, nodeFile, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import { loadExportFonts } from './measure-text.js'
 
 /**
@@ -56,7 +56,7 @@ export async function undrawableCharacters(canvas: SpatialCanvas): Promise<reado
     const file = nodeFile(node)
     const url = nodeUrl(node)
     if (text !== undefined) scan(text)
-    else if (node.type === 'group') scan(node.label)
+    else if (isFrame(node)) scan(frameLabel(node))
     else if (file !== undefined) scan(file)
     else if (url !== undefined) scan(url)
   }

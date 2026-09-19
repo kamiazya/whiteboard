@@ -4,7 +4,7 @@
 // fragment can land any number of times in any canvas without colliding.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { clipboardFragmentSchema, endIn, endNode } from '@kamiazya/whiteboard-model'
+import { clipboardFragmentSchema, endIn, endNode, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
@@ -104,7 +104,8 @@ describe('remintClipboardFragment', () => {
     expect(endNode(edges[0].to)).toBe('minted-2')
     expect(edges[0].id).not.toBe('ab')
     // Non-id fields survive untouched.
-    expect(nodes[0]).toMatchObject({ type: 'text', text: 'a', x: 0, y: 0 })
+    expect(nodes[0]).toMatchObject({ x: 0, y: 0 })
+    expect(nodes[0] !== undefined && nodeText(nodes[0])).toBe('a')
   })
 
   it('skips createId values already present in the blocklist or the minted set', () => {

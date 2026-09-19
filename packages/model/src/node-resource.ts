@@ -19,6 +19,8 @@
  */
 import { z } from 'zod'
 
+const URI_LIST = 'text/uri-list'
+
 export const nodeResourceSchema = z
   .object({
     /** The media type of what this node shows. */
@@ -31,10 +33,29 @@ export const nodeResourceSchema = z
     subpath: z.string().startsWith('#').optional(),
   })
   .strict()
+  // `location` is a plain string because a file's is a path inside a
+  // workspace, which is not a URL. A uri-list's IS one, and the node-kind
+  // union checked it (`url: z.string().url()`) — so the check moves here
+  // rather than being dropped with the arm that carried it.
+  .refine((r) => r.mimeType !== URI_LIST || r.location === undefined || URL.canParse(r.location), {
+    error: 'a text/uri-list resource must locate a valid URL',
+    path: ['location'],
+  })
+  // A resource either CARRIES its bytes or POINTS at them; carrying both says
+  // two different things about the same node. `RESOURCE_KINDS` resolves such
+  // a resource to `text` by lookup order, so nothing failed — the projections
+  // did. Found by `codecs.property.test.ts`'s confluence property: JSON
+  // Canvas keeps whichever field its node kind has a slot for, so the same
+  // document came back a text node one way round and a file node the other.
+  // Neither is legitimate, so an unrepresentable state is the fix rather than
+  // a tie-break. Carrying NEITHER stays valid — that is a resource this build
+  // has no reader for, which OCIF conformance requires keeping.
+  .refine((r) => r.content === undefined || r.location === undefined, {
+    error: 'a resource carries its content or names a location, never both',
+    path: ['location'],
+  })
 
 export type NodeResource = z.infer<typeof nodeResourceSchema>
-
-const URI_LIST = 'text/uri-list'
 
 export interface ResourceKindSpec {
   /** What a resource of this kind is emitted with. */

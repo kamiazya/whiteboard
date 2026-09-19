@@ -190,7 +190,8 @@ export function useNodeCreation({
     const id = newId()
     applyResult({
       state: { kind: 'idle' },
-      commands: [{ kind: 'create-group', node: { id, type: 'group', ...frame } }],
+      // No resource: a frame shows nothing.
+      commands: [{ kind: 'create-group', node: { id, ...frame } }],
       selectedId: id,
     })
     collapseExtras()

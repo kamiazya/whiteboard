@@ -1,4 +1,5 @@
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fromJsonCanvas, JSON_CANVAS_PROJECTION, toJsonCanvas } from './projection.js'
 
@@ -8,12 +9,12 @@ import { fromJsonCanvas, JSON_CANVAS_PROJECTION, toJsonCanvas } from './projecti
  * thrown away what a pen measured
  * ([ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md)).
  *
- * So this is the first field position whose projection is `degraded` rather
- * than `native` or `extension` — the ledger's third kind, which until now
- * nothing exercised.
+ * So this was the first field position whose projection is `degraded` rather
+ * than `native` or `extension` — the ledger's third kind, which until then
+ * nothing exercised. `nodes[].resource.mimeType` is the second.
  */
 const withGeometry = (x: number, y: number, width: number, height: number) => ({
-  nodes: [{ id: 'n1', type: 'text' as const, text: 'a', x, y, width, height }],
+  nodes: [textNode({ id: 'n1', text: 'a', x, y, width, height })],
   edges: [],
 })
 

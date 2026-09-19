@@ -5,7 +5,9 @@
 // it can so the edited node (plus its exit-hint band) stays above the
 // keyboard. Chromium cannot raise a real keyboard, so these tests install a
 // fake visualViewport and shrink it the way a keyboard does.
+
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -37,7 +39,7 @@ function installFakeVisualViewport(): FakeVisualViewport {
 
 function canvasWithNodeAt(y: number): SpatialCanvas {
   return {
-    nodes: [{ id: 'n1', type: 'text', x: 100, y, width: 200, height: 100, text: 'kbbody' }],
+    nodes: [textNode({ id: 'n1', x: 100, y, width: 200, height: 100, text: 'kbbody' })],
     edges: [],
   }
 }

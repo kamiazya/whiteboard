@@ -4,11 +4,14 @@
  * daemon page passed no seams at all, so canvas embeds (J5a) and image nodes
  * (J5b) silently did nothing there while working in browser mode.
  */
+
 import {
   writeCoreFacets,
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
@@ -21,7 +24,7 @@ const path = 'my-canvas'
 function snapshotOf(text: string): Uint8Array {
   const doc = new Loro()
   writeSpatialCanvas(doc, {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text })],
     edges: [],
   })
   return doc.export({ mode: 'snapshot' })
@@ -147,7 +150,9 @@ describe('createDaemonFileAdapter', () => {
     const loaded = await adapter.loadDocument('sibling')
 
     expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/sibling/snapshot`)
-    expect(loaded?.canvas?.nodes[0]).toMatchObject({ id: 'n1', text: 'hello' })
+    const only = loaded?.canvas?.nodes[0]
+    expect(only?.id).toBe('n1')
+    expect(only !== undefined && nodeText(only)).toBe('hello')
   })
 
   it('carries a referenced markdown document body, read from the same snapshot', async () => {

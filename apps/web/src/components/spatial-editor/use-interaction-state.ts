@@ -108,6 +108,13 @@ export function useInteractionState({ canvas }: InteractionStateInputs) {
   // fires ~500ms after the closure that armed it, by which time the press
   // itself has usually advanced the gesture ('pressing'/'moving'); reducing
   // a cancel against the ARM-time state would mis-apply it.
+  //
+  // And for the handler that runs BEFORE its render: `pointermove` arrives
+  // faster than React commits, and a stroke ACCUMULATES its samples rather
+  // than recomputing from a start snapshot, so a move reduced against the
+  // last rendered gesture drops every sample but one. `applyResult` advances
+  // this ref at the moment it sets the state, which is what makes reading it
+  // in a pointer handler correct rather than merely fresher.
   const gestureStateRef = useRef(gestureState)
   gestureStateRef.current = gestureState
 

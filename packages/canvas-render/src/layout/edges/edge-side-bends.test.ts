@@ -3,19 +3,21 @@
 // while the dominant-axis opposing pair needs a Z with two — and may share
 // a side other edges already occupy. The derivation now ranks side pairs
 // by estimated bends, breaking L-ties toward the less crowded side.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
+const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
 
 function bends(path: readonly { x: number; y: number }[]): number {
   let count = 0

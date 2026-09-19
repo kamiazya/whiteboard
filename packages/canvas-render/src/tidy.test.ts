@@ -13,8 +13,8 @@ const box = (
   y: number,
   width = 100,
   height = 60,
-  type: TidyNode['type'] = 'text',
-): TidyNode => ({ id, type, x, y, width, height })
+  frame: TidyNode['frame'] = false,
+): TidyNode => ({ id, frame, x, y, width, height })
 
 const clearOfEachOther = (a: TidyNode, b: TidyNode) =>
   a.x + a.width + 32 <= b.x ||
@@ -213,9 +213,9 @@ describe('row order by edges', () => {
 
   it('a group is neither hub nor partner: a row of frames keeps its order', () => {
     const nodes = [
-      { id: 'g1', type: 'group' as const, x: 40, y: 0, width: 160, height: 60 },
-      { id: 'g2', type: 'group' as const, x: 264, y: 0, width: 160, height: 60 },
-      { id: 'g3', type: 'group' as const, x: 488, y: 0, width: 160, height: 60 },
+      { id: 'g1', frame: true as const, x: 40, y: 0, width: 160, height: 60 },
+      { id: 'g2', frame: true as const, x: 264, y: 0, width: 160, height: 60 },
+      { id: 'g3', frame: true as const, x: 488, y: 0, width: 160, height: 60 },
     ]
     expect(
       tidyNodes(nodes, {
@@ -314,7 +314,7 @@ describe('row order by edges', () => {
 
 describe('inside a frame', () => {
   const frame = (x: number, y: number, width: number, height: number) =>
-    box('grp', x, y, width, height, 'group')
+    box('grp', x, y, width, height, true)
 
   it('two overlapping members separate inside their frame, and the frame grows to keep its padding', () => {
     const nodes = [frame(0, 0, 200, 160), box('a', 40, 40), box('b', 88, 48)]
@@ -341,7 +341,7 @@ describe('inside a frame', () => {
     const nodes = [
       frame(0, 0, 400, 200),
       box('a', 8, 60, 200, 80),
-      box('grp-b', 0, 240, 400, 200, 'group'),
+      box('grp-b', 0, 240, 400, 200, true),
       box('b', 40, 300, 200, 80),
     ]
     const after = applyMoves(nodes, [...tidyNodes(nodes)])
@@ -362,7 +362,7 @@ describe('inside a frame', () => {
     // frame's edge as much as inside it.
     const nodes = [
       box('outside', 0, 0, 200, 80),
-      box('grp', -40, 260, 880, 160, 'group'),
+      box('grp', -40, 260, 880, 160, true),
       box('ingest', 0, 296, 200, 80),
       box('transform', 304, 296, 200, 80),
       box('publish', 600, 296, 200, 80),
@@ -495,8 +495,8 @@ describe('units', () => {
     // Tidy inside already (on the grid, the margin kept), so the delta read
     // below is the unit's alone.
     const nodes = [
-      box('outer', 0, 112, 320, 200, 'group'),
-      box('inner', 40, 144, 120, 80, 'group'),
+      box('outer', 0, 112, 320, 200, true),
+      box('inner', 40, 144, 120, 80, true),
       box('m', 200, 144, 64, 40),
       box('peer', 500, 96, 100, 60),
     ]
@@ -513,9 +513,9 @@ describe('units', () => {
     // would claim m first and outer would move alone; the outermost frame
     // must still scoop both.
     const nodes = [
-      box('inner', 40, 144, 120, 80, 'group'),
+      box('inner', 40, 144, 120, 80, true),
       box('m', 200, 144, 64, 40),
-      box('outer', 0, 112, 320, 200, 'group'),
+      box('outer', 0, 112, 320, 200, true),
       box('peer', 500, 96, 100, 60),
     ]
     const moves = tidyNodes(nodes)
@@ -533,7 +533,7 @@ describe('units', () => {
     // one unit and the member's delta equals the group's.
     const nodes = [
       box('big', 0, 0, 400, 300),
-      box('g', 0, 0, 200, 120, 'group'),
+      box('g', 0, 0, 200, 120, true),
       box('m', 40, 40, 60, 40),
     ]
     const moves = tidyNodes(nodes)
@@ -552,8 +552,8 @@ describe('units', () => {
     // Mutual containment ties; the document order breaks it. Both must
     // move by one delta, never be separated as two overlapping units.
     const nodes = [
-      box('first', 0, 0, 200, 120, 'group'),
-      box('second', 0, 0, 200, 120, 'group'),
+      box('first', 0, 0, 200, 120, true),
+      box('second', 0, 0, 200, 120, true),
       box('m', 40, 40, 60, 40),
       box('peer', 150, 0, 100, 60),
     ]
@@ -772,7 +772,7 @@ describe('convergence', () => {
     // 3px off it and the next tidy put them back. The commonest shape by
     // far: 2446 of 3000 generated boards needed exactly two tidies.
     const nodes = [
-      box('g', -21, -11, 261, 247, 'group'),
+      box('g', -21, -11, 261, 247, true),
       box('n0', 49, 146, 107, 30),
       box('n1', 114, 20, 91, 60),
     ]
@@ -786,7 +786,7 @@ describe('convergence', () => {
     // passes moved the unit, so the relation it established was broken by
     // the move and re-established from the new position next time.
     const nodes = [
-      box('g', -12, 36, 304, 293, 'group'),
+      box('g', -12, 36, 304, 293, true),
       box('n0', 122, 155, 48, 63),
       box('n1', -16, 4, 113, 58),
       box('n2', 5, 115, 121, 51),
@@ -804,8 +804,8 @@ describe('convergence', () => {
     // walk down it — and it is the densest shape the generator draws: two
     // overlapping frames, one of them LOCKED, half the board out of scope.
     const nodes = [
-      box('g0', 9, 13, 100, 123, 'group'),
-      box('g1', 0, 0, 100, 224, 'group'),
+      box('g0', 9, 13, 100, 123, true),
+      box('g1', 0, 0, 100, 224, true),
       box('n0', 0, 0, 41, 30),
       box('n1', 0, -9, 140, 30),
       box('n2', 0, 0, 41, 30),
@@ -830,7 +830,7 @@ describe('convergence', () => {
     // level's loop fixes this board too, and was measured and dropped for
     // costing 50% more time to reach the same answer.
     const nodes = [
-      box('g', -21, 11, 294, 234, 'group'),
+      box('g', -21, 11, 294, 234, true),
       box('n0', -25, 92, 95, 67),
       box('n1', -22, 103, 105, 30),
       box('n2', 112, 187, 116, 65),
@@ -848,7 +848,7 @@ describe('convergence', () => {
     // snap carried the whole unit back, 3px wider on every tidy with no
     // member moving at all.
     const nodes = [
-      box('g', -20, 26, 398, 247, 'group'),
+      box('g', -20, 26, 398, 247, true),
       box('n0', 94, 59, 75, 68),
       box('n1', 5, 80, 150, 79),
     ]
@@ -865,7 +865,7 @@ describe('convergence', () => {
     // straddler has to be immobile, or the overlap pass hops it clear before
     // the growth can reach it, which is what three hand-built attempts did.
     const nodes = [
-      box('g', 11, 170, 274, 112, 'group'),
+      box('g', 11, 170, 274, 112, true),
       box('n0', 238, 227, 124, 73),
       box('n1', 221, 230, 53, 72),
     ]
@@ -880,7 +880,7 @@ describe('convergence', () => {
     // bottom edge — after which the ejected one is no longer its member and
     // the next tidy reads a different board.
     const nodes = [
-      box('g', 0, 0, 240, 200, 'group'),
+      box('g', 0, 0, 240, 200, true),
       box('a', 32, 32, 160, 60),
       box('b', 40, 100, 160, 60),
       box('c', 48, 120, 160, 60),
@@ -895,7 +895,7 @@ describe('convergence', () => {
     // grew AND walked, -2 -> -6 -> -10 -> -14, four pixels left per tidy,
     // so a board left alone in an editor drifts off its own page.
     const nodes = [
-      box('g', -14, -29, 204, 152, 'group'),
+      box('g', -14, -29, 204, 152, true),
       box('n0', 103, 76, 82, 56),
       box('n1', 151, -3, 69, 44),
       box('n2', 153, 85, 126, 77),
@@ -987,7 +987,7 @@ describe('tidy properties', () => {
       // vitest: 3139 of 5000 boards were not idempotent before this work and
       // none is now.
       const nodes = [
-        ...frames.map((f, i) => box(`g${i}`, f.x, f.y, f.w, f.h, 'group')),
+        ...frames.map((f, i) => box(`g${i}`, f.x, f.y, f.w, f.h, true)),
         ...rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h)),
       ]
       const lockedId = nodes[lockedIndex % nodes.length]?.id
@@ -1088,7 +1088,7 @@ describe('tidy properties', () => {
         const y = Math.min(...wrapped.map((n) => n.y))
         const right = Math.max(...wrapped.map((n) => n.x + n.width))
         const bottom = Math.max(...wrapped.map((n) => n.y + n.height))
-        nodes.unshift(box('grp', x, y, right - x, bottom - y, 'group'))
+        nodes.unshift(box('grp', x, y, right - x, bottom - y, true))
       }
       const lockedIds = new Set(nodes.slice(0, locked).map((n) => n.id))
       const scope = scoped
@@ -1141,7 +1141,7 @@ describe('tidy properties', () => {
       const moves = tidyScenario(scenario)
       note(
         'group',
-        scenario.nodes.some((n) => n.type === 'group'),
+        scenario.nodes.some((n) => n.frame),
       )
       note('locked', scenario.lockedIds.size > 0)
       note('scope', scenario.scope !== undefined)

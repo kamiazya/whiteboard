@@ -1,4 +1,5 @@
-import type { BodyProposedChange, SpatialProposedChange } from './proposal.js'
+import { applyNodePatch, nodePatchField } from './node-content.js'
+import type { BodyProposedChange, NodePatchFields, SpatialProposedChange } from './proposal.js'
 import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from './spatial.js'
 import { endNode } from './spatial.js'
 
@@ -47,7 +48,10 @@ export function applyCanvasChange(
       return {
         ...canvas,
         nodes: canvas.nodes.map((node) =>
-          node.id === change.nodeId ? patchedInto(node, change.patch as Fields) : node,
+          // A node patch goes through `applyNodePatch`: its content keys are
+          // the published vocabulary and the node stores a resource, so a
+          // plain spread would write a shape `spatialNodeSchema` refuses.
+          node.id === change.nodeId ? applyNodePatch(node, change.patch) : node,
         ),
       }
     }
@@ -146,7 +150,15 @@ export function canvasChangeConflicts(
     case 'node.patch': {
       const node = canvas.nodes.find((candidate) => candidate.id === change.nodeId)
       if (node === undefined) return true
-      return differsFromPrior(node as Fields, change.patch as Fields, change.assumed as Fields)
+      // Read through the seam for the reason the apply does: `assumed.text`
+      // is what the anchor HELD, and the node no longer has a `text` key.
+      return Object.keys(change.patch).some(
+        (field) =>
+          !Object.is(
+            nodePatchField(node, field as keyof NodePatchFields),
+            (change.assumed as Fields)[field],
+          ),
+      )
     }
     case 'edge.patch': {
       const edge = canvas.edges.find((candidate) => candidate.id === change.edgeId)

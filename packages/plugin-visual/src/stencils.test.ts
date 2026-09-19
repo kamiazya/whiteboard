@@ -6,8 +6,11 @@
 // channel ships a vocabulary that reads as one thing. And applying a stencil
 // has to leave a RECORD, because that record is what makes the drawing's
 // distinctions legible to the facet axis rather than merely visible.
+
 import { createFacetRegistry, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import {
   applyStencil,
@@ -23,8 +26,10 @@ import {
 } from './index.js'
 
 type Node = SpatialCanvas['nodes'][number]
-const box = (extra: Partial<Node> = {}): Node =>
-  ({ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'n1', ...extra }) as Node
+const box = (extra: Partial<Node> & { text?: string } = {}): Node => {
+  const { text = 'n1', ...rest } = extra
+  return { ...textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 80, text }), ...rest }
+}
 
 const ids = Object.keys(VISUAL_STENCILS).map((name) => `visual.${name}`)
 
@@ -137,7 +142,7 @@ describe('applying a stencil', () => {
       'visual.datastore',
     )
     expect([applied?.x, applied?.y, applied?.width, applied?.height]).toEqual([40, 90, 300, 120])
-    expect((applied as { text?: string } | undefined)?.text).toBe('orders')
+    expect(applied === undefined ? undefined : nodeText(applied)).toBe('orders')
   })
 
   it('replaces a previous stencil rather than layering two vocabularies on one box', () => {

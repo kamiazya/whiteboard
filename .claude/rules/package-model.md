@@ -134,6 +134,48 @@ paths:
     from `canvasEdgeSchema`, so the field reaches `edge.patch` for free — and reaching the
     proposal diff for free is what exposed its identity comparison (`Object.is` on two deep-equal
     objects from two different parses); that diff now compares structurally.
+- **A node is a BOX that may SHOW a resource**
+  ([ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md) decision 3).
+  The `text | file | link | group` union is gone: `resource` is `{ mimeType,
+  content? | location?, subpath? }`, and the KIND is derived (`nodeKind`),
+  never stored. Absent `resource` means the node shows nothing, which is what
+  a FRAME is — the same thing the `group` arm said and the same thing OCIF's
+  group node says. Read a node's content through the seam in
+  `node-content.ts` (`nodeText`/`nodeFile`/`nodeUrl`/`nodeSubpath`/`isFrame`/
+  `frameLabel`/`frameBackground`/`frameBackgroundStyle`/`nodeKind`), never by
+  hand.
+  - The exhaustiveness the union gave is NOT given up. It moves to
+    `RESOURCE_KINDS` in `node-resource.ts`: `ResourceKind` is `keyof` it, so a
+    table written `satisfies Record<NodeKind, …>` still fails to compile when
+    the set grows. `searchable-texts.ts` and `canvas-snapshot.ts` are the two
+    worked examples of a `switch` that became a table.
+  - **`nodeKind` answers `undefined` for a resource nothing claims**, and that
+    is a first-class answer rather than a fallback. The union could not
+    express such a node AT ALL — an unknown arm failed to parse and
+    `readSpatialCanvas` drops what fails, so the node VANISHED — and OCIF
+    conformance requires keeping it. Every reader answers for it: the layout
+    degrades it to chrome, the index contributes nothing, the snapshot
+    projects it as the wire's `group`.
+  - **Two combinations are refused rather than resolved**, both found by
+    `codec`'s confluence property rather than by argument, and both closed by
+    making the state unrepresentable: a resource carrying BOTH its content
+    and a location, and a node that shows a resource while carrying a FRAME's
+    fields. Each had been accepted, resolved by lookup order or ignored by an
+    accessor, and each made one document come back as two different things
+    depending on which format it crossed first.
+  - The `link` arm's `url: z.string().url()` moved onto the resource rather
+    than being dropped with the arm: a `text/uri-list` location is an address
+    and is still checked as one, while a file's stays a plain path.
+  - `applyNodePatch` / `nodePatchField` are the patch's vocabulary meeting the
+    resource, and they live here rather than at either caller because
+    `wb_canvas_edit`'s `node.patch` and the proposal layer's `node.patch`
+    apply the same patch to the same node.
+  - `spatialNodeSchema` is REFINED now, and zod v4 refuses `.partial()` over a
+    refined object — which is why `sharedNodeFieldsSchema` is exported: a
+    writer deriving an optional-geometry draft derives it from that.
+  - The builders in `test-utils/nodes.ts` are how a FIXTURE names a node, and
+    `nodes.test.ts` pins that their INPUT never admits the stored shape.
+
 - **The node, edge and canvas schemas are `.strict()`, and the WIRE schemas in codec are not.**
   The asymmetry is the whole point. A JSON Canvas document another tool wrote may legitimately
   carry vendor keys, so refusing it would be wrong; this is the INTERNAL model, where a key it

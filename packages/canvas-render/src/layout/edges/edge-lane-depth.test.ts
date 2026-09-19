@@ -4,19 +4,21 @@
 // parallel overlap. Each group member now gets a strictly deeper one-sided
 // stub (base + i * step, in the group's existing sort order), so shared
 // sides produce parallel DISTINCT corridors.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
+const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
 
 /** Collinear vertical overlap between any segment pair of the two paths. */
 function verticalOverlapLength(

@@ -6,6 +6,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -27,15 +28,16 @@ const KEY_SEPARATOR = '\0'
 function spatialDoc(nodeIds: readonly string[]): LoroDoc {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, {
-    nodes: nodeIds.map((id) => ({
-      id,
-      type: 'text' as const,
-      text: id,
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-    })),
+    nodes: nodeIds.map((id) =>
+      textNode({
+        id,
+        text: id,
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+      }),
+    ),
     edges: [],
   })
   return doc

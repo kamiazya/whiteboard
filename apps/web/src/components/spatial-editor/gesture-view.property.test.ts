@@ -12,6 +12,7 @@
 
 import { facetsArbitrary } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
@@ -42,15 +43,16 @@ const envelopeArb = fc.option(
 )
 const canvasArb: fc.Arbitrary<SpatialCanvas> = envelopeArb.map(
   (envelope): SpatialCanvas => ({
-    nodes: ['a', 'b', 'c', 'd'].map((id, i) => ({
-      id,
-      type: 'text' as const,
-      x: i * 100,
-      y: 0,
-      width: 80,
-      height: 40,
-      text: id,
-    })),
+    nodes: ['a', 'b', 'c', 'd'].map((id, i) =>
+      textNode({
+        id,
+        x: i * 100,
+        y: 0,
+        width: 80,
+        height: 40,
+        text: id,
+      }),
+    ),
     edges: [],
     ...(envelope?.facets === undefined ? {} : { facets: envelope.facets }),
     ...(envelope?.comments === undefined ? {} : { comments: envelope.comments }),

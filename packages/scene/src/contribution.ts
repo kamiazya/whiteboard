@@ -191,6 +191,23 @@ export interface RenderContribution {
    * Edge routers by BARE name, namespaced to `${namespace}.${name}` the way
    * `shapes` are, and selected by `readRouting` the way a shape is selected
    * by `readShape`.
+   *
+   * **No bundled plugin claims one, and that is the settled state rather than
+   * a gap.** `visual.path/v0` and its router left with ADR-0037 slice 4: an
+   * edge's bends became `edge.bends`, a field of the model, and the route
+   * through them became `canvas-render`'s own `bend-route.ts`. The seam was
+   * the right shape and what it carried turned out to be core.
+   *
+   * It reads as dead code to anything counting consumers, and has been
+   * rediscovered as such more than once, so the two answers are here at the
+   * declaration rather than in a rule file: the contract is exercised
+   * END TO END by `canvas-render`'s `contributed-router.test.ts`, which drives
+   * a fake plugin's router through `layoutSpatialCanvas` and pins both
+   * fallbacks — so a break in the wiring fails a test, not merely a type.
+   * And the two ways to "close" it are both worse than leaving it: deleting a
+   * published extension point because this repo happens not to use it, or
+   * inventing a bundled router to justify it, which puts an algorithm nobody
+   * asked for in front of every edge.
    */
   readonly routers?: Readonly<Record<string, EdgeRouter>>
   /**

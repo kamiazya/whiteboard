@@ -3,6 +3,7 @@ import {
   type MeasureText,
   naturalNodeContentSize,
   SPATIAL_THEME_GEOMETRY,
+  tidyBoxes,
   tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -14,6 +15,7 @@ import {
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  applyNodePatch,
   type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
@@ -23,12 +25,14 @@ import {
   endIn,
   endNodes,
   isFrame,
+  nodePatchField,
   type nodePatchFieldsSchema,
   nodeText,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
   spatialNodeSchema,
+  withNodeText,
 } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { z } from 'zod'
@@ -42,7 +46,9 @@ import {
   type CanvasEditOutput,
   canvasEditInputSchema,
   canvasEditOutputSchema,
+  draftContent,
   type geometryEntrySchema,
+  type NodeDraft,
   type Target,
 } from './canvas-edit-ops.js'
 import {
@@ -60,6 +66,7 @@ import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
+import { publishedKind } from './published-node-kind.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 
 export { canvasEditInputSchema } from './canvas-edit-ops.js'
@@ -521,7 +528,31 @@ export function createCanvasEditTool(deps: ServerDeps) {
       ): void => {
         const node = nodeAt(id)
         if (node === undefined) fail(index, opName, `node "${id}" is not on the canvas`)
-        const parsed = spatialNodeSchema.safeParse({ ...node, ...patch })
+        // A content key the TARGET has no room for. `applyNodePatch` IGNORES
+        // one — it answers what the patch means, and a proposal has nobody to
+        // deliver a refusal to — so the tool asks what the patch actually
+        // took. Read back through the same seam rather than against a second
+        // table of which key goes with which kind: a key that did not land is
+        // exactly a key the node has no room for.
+        //
+        // Before ADR-0038 decision 3 the node schemas' strictness detected
+        // this, and the message below was already written by hand because
+        // "Unrecognized key" names the key and NOT the kind. Dissolving the
+        // union takes the detector away, so it moves here; the message it
+        // feeds is unchanged, and so is what a caller sees.
+        const applied = applyNodePatch(node, patch)
+        const unheld = (Object.keys(patch) as (keyof typeof patch)[]).filter(
+          (key) => patch[key] !== undefined && !Object.is(nodePatchField(applied, key), patch[key]),
+        )
+        if (unheld.length > 0) {
+          fail(
+            index,
+            opName,
+            `a ${publishedKind(node)} node has no ${unheld.join(', ')} — the patch would have been ` +
+              'accepted and silently dropped, so it is refused instead',
+          )
+        }
+        const parsed = spatialNodeSchema.safeParse(applied)
         if (!parsed.success) {
           // A patch key the TARGET's type does not have. `label` on a text
           // node is the case that exists today: it is on the patch allowlist
@@ -542,7 +573,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             fail(
               index,
               opName,
-              `a ${node.type} node has no ${unknown.join(', ')} — the patch would have been ` +
+              `a ${publishedKind(node)} node has no ${unknown.join(', ')} — the patch would have been ` +
                 'accepted and silently dropped, so it is refused instead',
             )
           }
@@ -578,7 +609,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               draft.height ??
               (draft.type === 'text' && measure !== undefined
                 ? fittedHeight(
-                    { ...draft, id, x: 0, y: 0, width, height: size.height },
+                    { ...draftContent(draft), id, x: 0, y: 0, width, height: size.height },
                     measure,
                     size.height,
                   )
@@ -596,12 +627,26 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 : placeInside(index, op.op, group, [{ width, height }])[0]
             if (at === undefined) fail(index, op.op, 'no placement')
 
-            // The draft's extension arrives under the published input key and
-            // spreads out as the model's own fields — see WRITE_EXTENSION.
-            const { 'x-whiteboard': extension, ...rest } = draft
+            // `embed` and `facets` are the model's own fields on the input
+            // now, so they ride through `rest` rather than being unpacked
+            // from a published extension key — see WRITE_EXTENSION.
+            const {
+              type: _type,
+              text: _text,
+              file: _file,
+              subpath: _subpath,
+              url: _url,
+              label: _label,
+              background: _background,
+              backgroundStyle: _backgroundStyle,
+              ...rest
+            } = draft as NodeDraft & Record<string, unknown>
             const parsed = spatialNodeSchema.safeParse({
               ...rest,
-              ...extension,
+              // The draft's published `type` and content field become the
+              // model's resource here, at the tool's boundary — see
+              // `draftContent` for why that boundary exists at all.
+              ...draftContent(draft),
               id,
               ...at,
               width,
@@ -671,7 +716,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               fail(
                 index,
                 op.op,
-                `a ${node.type} node holds no text to splice; only a text node does`,
+                `a ${publishedKind(node)} node holds no text to splice; only a text node does`,
               )
             }
             const lines = nodeOwnText.split('\n')
@@ -690,7 +735,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               ...op.replacement.split('\n'),
               ...lines.slice(op.endLine + 1),
             ].join('\n')
-            const parsed = spatialNodeSchema.safeParse({ ...node, text: spliced })
+            const parsed = spatialNodeSchema.safeParse(withNodeText(node, spliced))
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
             nodes = nodes.map((existing) => (existing.id === op.id ? parsed.data : existing))
             touchedNodes.add(op.id)
@@ -1035,7 +1080,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // is a fixed obstacle it routes around, never one it moves.
             const scope =
               op.within !== undefined ? nodeTargets(index, op.op, { within: op.within }) : op.scope
-            const moved = tidyNodes(nodes, {
+            const moved = tidyNodes(tidyBoxes(nodes), {
               scope: scope === undefined ? undefined : new Set(scope),
               locked: (id) => nodeLocks.has(id),
               edges,

@@ -10,6 +10,9 @@ import {
 
 const baseGeometry = { id: 'n1', x: 0, y: 0, width: 100, height: 100 }
 
+/** A node showing markdown, for the cases that are about something else. */
+const text = (content: string) => ({ resource: { mimeType: 'text/markdown', content } })
+
 describe('canvasColorSchema', () => {
   it('accepts preset colors 1-6', () => {
     for (const preset of ['1', '2', '3', '4', '5', '6']) {
@@ -28,44 +31,135 @@ describe('canvasColorSchema', () => {
   })
 })
 
-describe('spatialNodeSchema (text)', () => {
-  it('accepts a minimal text node', () => {
+/**
+ * ADR-0038 decision 3: a node is a box that may SHOW a resource, and the
+ * KIND is derived from that resource rather than stored beside it. The
+ * `text | file | link | group` union these describes used to be one per arm
+ * of is gone, so the claims that survive are about the RESOURCE, and two
+ * that did not survive are named where they were.
+ */
+describe('spatialNodeSchema: what a node shows', () => {
+  it('accepts a node showing markdown it carries itself', () => {
+    expect(spatialNodeSchema.safeParse({ ...baseGeometry, ...text('hello') }).success).toBe(true)
+  })
+
+  it('accepts a node pointing at a document, with a #-prefixed fragment', () => {
     expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, type: 'text', text: 'hello' }).success,
+      spatialNodeSchema.safeParse({
+        ...baseGeometry,
+        resource: { mimeType: 'application/octet-stream', location: 'a.md', subpath: '#heading' },
+      }).success,
     ).toBe(true)
   })
 
-  it('rejects a text node missing text', () => {
-    expect(spatialNodeSchema.safeParse({ ...baseGeometry, type: 'text' }).success).toBe(false)
+  it('rejects a fragment not starting with #', () => {
+    expect(
+      spatialNodeSchema.safeParse({
+        ...baseGeometry,
+        resource: { mimeType: 'application/octet-stream', location: 'a.md', subpath: 'heading' },
+      }).success,
+    ).toBe(false)
   })
 
+  it('accepts a node pointing at an address', () => {
+    expect(
+      spatialNodeSchema.safeParse({
+        ...baseGeometry,
+        resource: { mimeType: 'text/uri-list', location: 'https://example.com' },
+      }).success,
+    ).toBe(true)
+  })
+
+  /**
+   * The `link` arm carried `url: z.string().url()`. Dissolving the union
+   * would have dropped that check with the arm, so it moved onto the
+   * resource: a `text/uri-list` location is an address and is still checked
+   * as one, while a file's location stays a plain path.
+   */
+  it('rejects an address that is not a URL', () => {
+    expect(
+      spatialNodeSchema.safeParse({
+        ...baseGeometry,
+        resource: { mimeType: 'text/uri-list', location: 'not a url' },
+      }).success,
+    ).toBe(false)
+  })
+
+  /**
+   * The node-kind union could not express this at all: an unknown arm failed
+   * to parse and `readSpatialCanvas` drops what fails, so such a node VANISHED.
+   * OCIF conformance requires keeping it, so it is schema-valid and every
+   * reader answers for it — `nodeKind` says `undefined`, the layout degrades
+   * it to chrome, the index contributes nothing for it.
+   */
+  it('accepts a resource whose media type nothing in this build claims', () => {
+    expect(
+      spatialNodeSchema.safeParse({
+        ...baseGeometry,
+        resource: { mimeType: 'application/x-nothing-claims-this' },
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejects a resource with no media type', () => {
+    expect(
+      spatialNodeSchema.safeParse({ ...baseGeometry, resource: { content: 'hi' } }).success,
+    ).toBe(false)
+  })
+
+  /**
+   * Two claims retired with the union rather than moved: "a text node missing
+   * text" and "a file node missing file" are both A NODE THAT SHOWS NOTHING,
+   * which is precisely the frame. There is nothing left to reject.
+   */
+  it('accepts a node that shows nothing, which is the frame', () => {
+    expect(spatialNodeSchema.safeParse({ ...baseGeometry }).success).toBe(true)
+  })
+
+  it("accepts a frame's own fields", () => {
+    expect(
+      spatialNodeSchema.safeParse({
+        ...baseGeometry,
+        label: 'Section',
+        background: 'bg.png',
+        backgroundStyle: 'cover',
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejects an invalid backgroundStyle', () => {
+    expect(
+      spatialNodeSchema.safeParse({ ...baseGeometry, backgroundStyle: 'stretch' }).success,
+    ).toBe(false)
+  })
+
+  it('rejects the stored discriminant the union used to carry', () => {
+    expect(spatialNodeSchema.safeParse({ ...baseGeometry, type: 'text', text: 'hi' }).success).toBe(
+      false,
+    )
+  })
+})
+
+describe('spatialNodeSchema: geometry', () => {
   // ADR-0037 slice 4: geometry is a real number here, because ink is
   // sub-pixel. JSON Canvas 1.0's integer pixels are the PROJECTION's rounding.
   it('accepts a sub-pixel coordinate and keeps it', () => {
-    const parsed = spatialNodeSchema.safeParse({
-      ...baseGeometry,
-      x: 1.5,
-      type: 'text',
-      text: 'hi',
-    })
+    const parsed = spatialNodeSchema.safeParse({ ...baseGeometry, x: 1.5, ...text('hi') })
     expect(parsed.success && parsed.data.x).toBe(1.5)
   })
 
   it('rejects geometry JSON cannot carry', () => {
     for (const x of [Number.POSITIVE_INFINITY, Number.NaN]) {
-      expect(
-        spatialNodeSchema.safeParse({ ...baseGeometry, x, type: 'text', text: 'hi' }).success,
-      ).toBe(false)
+      expect(spatialNodeSchema.safeParse({ ...baseGeometry, x, ...text('hi') }).success).toBe(false)
     }
   })
 
   it('rejects negative width and height', () => {
+    expect(spatialNodeSchema.safeParse({ ...baseGeometry, width: -1, ...text('hi') }).success).toBe(
+      false,
+    )
     expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, width: -1, type: 'text', text: 'hi' }).success,
-    ).toBe(false)
-    expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, height: -1, type: 'text', text: 'hi' })
-        .success,
+      spatialNodeSchema.safeParse({ ...baseGeometry, height: -1, ...text('hi') }).success,
     ).toBe(false)
   })
 
@@ -77,83 +171,9 @@ describe('spatialNodeSchema (text)', () => {
         y: -50,
         width: 0,
         height: 0,
-        type: 'text',
-        text: 'hi',
+        ...text('hi'),
       }).success,
     ).toBe(true)
-  })
-})
-
-describe('spatialNodeSchema (file)', () => {
-  it('accepts a file node with a #-prefixed subpath', () => {
-    expect(
-      spatialNodeSchema.safeParse({
-        ...baseGeometry,
-        type: 'file',
-        file: 'a.md',
-        subpath: '#heading',
-      }).success,
-    ).toBe(true)
-  })
-
-  it('accepts a file node without subpath', () => {
-    expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, type: 'file', file: 'a.md' }).success,
-    ).toBe(true)
-  })
-
-  it('rejects a subpath not starting with #', () => {
-    expect(
-      spatialNodeSchema.safeParse({
-        ...baseGeometry,
-        type: 'file',
-        file: 'a.md',
-        subpath: 'heading',
-      }).success,
-    ).toBe(false)
-  })
-
-  it('rejects a file node missing file', () => {
-    expect(spatialNodeSchema.safeParse({ ...baseGeometry, type: 'file' }).success).toBe(false)
-  })
-})
-
-describe('spatialNodeSchema (link)', () => {
-  it('accepts a link node with a url', () => {
-    expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, type: 'link', url: 'https://example.com' })
-        .success,
-    ).toBe(true)
-  })
-
-  it('rejects an invalid url', () => {
-    expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, type: 'link', url: 'not a url' }).success,
-    ).toBe(false)
-  })
-})
-
-describe('spatialNodeSchema (group)', () => {
-  it('accepts a minimal group node', () => {
-    expect(spatialNodeSchema.safeParse({ ...baseGeometry, type: 'group' }).success).toBe(true)
-  })
-
-  it('accepts a full group node', () => {
-    const result = spatialNodeSchema.safeParse({
-      ...baseGeometry,
-      type: 'group',
-      label: 'Section',
-      background: 'bg.png',
-      backgroundStyle: 'cover',
-    })
-    expect(result.success).toBe(true)
-  })
-
-  it('rejects an invalid backgroundStyle', () => {
-    expect(
-      spatialNodeSchema.safeParse({ ...baseGeometry, type: 'group', backgroundStyle: 'stretch' })
-        .success,
-    ).toBe(false)
   })
 })
 
@@ -203,8 +223,8 @@ describe('canvasEdgeSchema', () => {
 })
 
 describe('spatialCanvasSchema', () => {
-  const node1 = { ...baseGeometry, id: 'n1', type: 'text', text: 'a' }
-  const node2 = { ...baseGeometry, id: 'n2', type: 'text', text: 'b' }
+  const node1 = { ...baseGeometry, id: 'n1', ...text('a') }
+  const node2 = { ...baseGeometry, id: 'n2', ...text('b') }
 
   it('accepts distinct node and edge ids', () => {
     const result = spatialCanvasSchema.safeParse({
@@ -351,7 +371,16 @@ describe('canvasCommentSchema', () => {
 })
 
 describe('tags on the spatial model (ADR-0040 decision 2)', () => {
-  const box = { id: 'a', type: 'text', x: 0, y: 0, width: 1, height: 1, text: 't' } as const
+  // The stored shape, not the tool's: ADR-0038 decision 3 made what a node
+  // SHOWS one resource field, so a box is its geometry plus that.
+  const box = {
+    id: 'a',
+    x: 0,
+    y: 0,
+    width: 1,
+    height: 1,
+    resource: { mimeType: 'text/markdown', content: 't' },
+  } as const
 
   it('a node, an edge and the board each carry tags, read verbatim', () => {
     const parsed = spatialCanvasSchema.parse({

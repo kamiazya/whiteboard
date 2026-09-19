@@ -1,5 +1,11 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import {
+  textNode as buildTextNode,
+  fileNode,
+  groupNode,
+  linkNode,
+} from '@kamiazya/whiteboard-model/test-utils'
 import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import type {
   HeadingBlockNode,
@@ -63,29 +69,40 @@ function fakeParseBody(text: string): MdastRoot {
         {
           type: 'heading',
           depth: 1,
-          children: [{ type: 'text', value: text.slice(2) }],
+          children: [{ type: 'text' as const, value: text.slice(2) }],
         },
       ],
     }
   }
   return {
     type: 'root',
-    children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+    children: [{ type: 'paragraph', children: [{ type: 'text' as const, value: text }] }],
   }
 }
 
-function textNode(
-  overrides: Partial<Extract<SpatialNode, { type: 'text' }>> = {},
-): Extract<SpatialNode, { type: 'text' }> {
-  return {
+function textNode(overrides: Partial<TextNodeFields> = {}): SpatialNode {
+  return buildTextNode({
     id: 'n1',
-    type: 'text',
     x: 100,
     y: 50,
     width: 200,
     height: 100,
     text: '# Title',
     ...overrides,
+  })
+}
+
+type TextNodeFields = Parameters<typeof buildTextNode>[0]
+
+/**
+ * A node showing a resource nothing in `RESOURCE_KINDS` claims. Schema-valid
+ * — which is the change ADR-0038 decision 3 makes: the node-kind union could
+ * not express this at all, so such a node used to fail to parse and vanish.
+ */
+function unreadableNode(id: string): SpatialNode {
+  return {
+    ...textNode({ id }),
+    resource: { mimeType: 'application/x-nothing-claims-this' },
   }
 }
 
@@ -391,6 +408,46 @@ describe('layoutSpatialCanvas', () => {
     expect(routed('plain')?.path.length).toBe(2)
   })
 
+  it('draws a curved LINE through its own bends, rounded', () => {
+    // The seam the freehand pen rides: the stroke stores its samples as
+    // bends and asks for `curved`, and every corner between two kept samples
+    // is rounded into a quadratic. Without it a stroke is a chain of
+    // straight runs — one visible corner per sample — which reads as jagged
+    // however dense the sampling is.
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 40, height: 40, text: 'a' })
+    const scene = layoutSpatialCanvas(
+      {
+        ...canvas([a], []),
+        lines: [
+          {
+            id: 'ink',
+            from: { kind: 'point' as const, point: { x: 200, y: 200 }, end: 'none' as const },
+            to: { kind: 'point' as const, point: { x: 400, y: 260 }, end: 'none' as const },
+            bends: [
+              { x: 260, y: 160 },
+              { x: 320, y: 300 },
+            ],
+            facets: { 'visual.edges/v0': { routing: 'curved' } },
+          },
+        ],
+      },
+      baseOptions(),
+    )
+    const ink = scene.nodes.find(
+      (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode =>
+        n.kind === 'edge' && n.id === 'ink',
+    )
+    expect(ink?.rounded).toBe(true)
+    // And it still travels the samples themselves — rounding is how the
+    // corners are drawn, never a different route.
+    expect(ink?.path).toEqual([
+      { x: 200, y: 200 },
+      { x: 260, y: 160 },
+      { x: 320, y: 300 },
+      { x: 400, y: 260 },
+    ])
+  })
+
   it("an edge's own facet chooses whether it hops the lines it crosses", () => {
     // Line jumps are drawn on the LATER edge of a crossing pair, so a
     // per-edge answer means "does THIS edge hop", asked of the edge that
@@ -545,19 +602,17 @@ describe('layoutSpatialCanvas', () => {
 
   it('degrades an unrecognized node kind to chrome only, without throwing or dropping siblings', () => {
     const good = textNode({ id: 'good' })
-    const bogus = { ...textNode({ id: 'bogus' }), type: 'bogus' } as unknown as SpatialNode
-    const scene = layoutSpatialCanvas(canvas([good, bogus]), baseOptions())
+    const scene = layoutSpatialCanvas(canvas([good, unreadableNode('bogus')]), baseOptions())
     expect(shapesOf(scene)).toHaveLength(2)
   })
 
   it('reports an unrecognized node kind via onDegrade when supplied', () => {
-    const bogus = { ...textNode({ id: 'bogus' }), type: 'bogus' } as unknown as SpatialNode
     const onDegrade = vi.fn<(event: SpatialLayoutDegradation) => void>()
-    layoutSpatialCanvas(canvas([bogus]), baseOptions({ onDegrade }))
+    layoutSpatialCanvas(canvas([unreadableNode('bogus')]), baseOptions({ onDegrade }))
     expect(onDegrade).toHaveBeenCalledWith({
       kind: 'unknown-node-kind',
       nodeId: 'bogus',
-      type: 'bogus',
+      type: 'application/x-nothing-claims-this',
     })
   })
 
@@ -599,16 +654,15 @@ describe('layoutSpatialCanvas', () => {
   })
 
   it('renders a file node as chrome plus a label containing the path and subpath', () => {
-    const node: Extract<SpatialNode, { type: 'file' }> = {
+    const node: SpatialNode = fileNode({
       id: 'f1',
-      type: 'file',
       x: 0,
       y: 0,
       width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       file: 'notes/a.md',
       subpath: '#heading',
-    }
+    })
     const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
     const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun')
     expect(label?.text).toBe('notes/a.md#heading')
@@ -616,15 +670,14 @@ describe('layoutSpatialCanvas', () => {
   })
 
   it('a resolved label replaces a file node label; failures fall back to the raw reference', () => {
-    const node: Extract<SpatialNode, { type: 'file' }> = {
+    const node: SpatialNode = fileNode({
       id: 'f1',
-      type: 'file',
       x: 0,
       y: 0,
       width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       file: 'opaque-id-123',
-    }
+    })
     const resolved = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
       resolveReference: (ref) => (ref === 'opaque-id-123' ? { label: 'Release plan' } : undefined),
@@ -653,16 +706,15 @@ describe('layoutSpatialCanvas', () => {
   })
 
   it('a reference resolved as missing renders a quiet label instead of the raw reference', () => {
-    const node: Extract<SpatialNode, { type: 'file' }> = {
+    const node: SpatialNode = fileNode({
       id: 'f1',
-      type: 'file',
       x: 0,
       y: 0,
       width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       file: 'dangling-id-123',
       subpath: '#heading',
-    }
+    })
     const missing = layoutSpatialCanvas(canvas([node]), {
       ...baseOptions(),
       resolveReference: (ref) => ({ missing: ref === 'dangling-id-123' }),
@@ -695,30 +747,28 @@ describe('layoutSpatialCanvas', () => {
   })
 
   it('renders a link node as chrome plus a label containing the url', () => {
-    const node: Extract<SpatialNode, { type: 'link' }> = {
+    const node: SpatialNode = linkNode({
       id: 'l1',
-      type: 'link',
       x: 0,
       y: 0,
       width: 320, // wide enough that the label is not truncated — this asserts its CONTENT
       height: 40,
       url: 'https://example.com/page',
-    }
+    })
     const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
     const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun')
     expect(label?.text).toBe('https://example.com/page')
   })
 
   it('renders a group node as chrome plus its label, and chrome-only when unlabeled', () => {
-    const labeled: Extract<SpatialNode, { type: 'group' }> = {
+    const labeled: SpatialNode = groupNode({
       id: 'g1',
-      type: 'group',
       x: 0,
       y: 0,
       width: 300,
       height: 200,
       label: 'Section A',
-    }
+    })
     const scene = layoutSpatialCanvas(canvas([labeled]), baseOptions())
     const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun')
     expect(label?.text).toBe('Section A')
@@ -728,7 +778,7 @@ describe('layoutSpatialCanvas', () => {
     expect(label !== undefined && label.bbox.y + label.bbox.h <= labeled.y).toBe(true)
     expect(label?.bbox.x).toBe(labeled.x)
 
-    const unlabeled: Extract<SpatialNode, { type: 'group' }> = {
+    const unlabeled: SpatialNode = {
       ...labeled,
       id: 'g2',
       label: undefined,
@@ -743,15 +793,14 @@ describe('layoutSpatialCanvas', () => {
     // coloured layer swallowed four of the eleven boxes in a diagram the
     // lane drew, and the grader (which reads the store) passed it.
     const member = textNode({ id: 'a-member', x: 40, y: 40, width: 120, height: 60, text: 'in' })
-    const group: Extract<SpatialNode, { type: 'group' }> = {
+    const group: SpatialNode = groupNode({
       id: 'z-group',
-      type: 'group',
       x: 0,
       y: 0,
       width: 300,
       height: 200,
       color: '5',
-    }
+    })
     const scene = layoutSpatialCanvas(canvas([member, group]), baseOptions())
     const at = (id: string) => scene.nodes.findIndex((n) => 'id' in n && n.id === id)
     expect(at('z-group')).toBeGreaterThanOrEqual(0)
@@ -771,15 +820,14 @@ describe('layoutSpatialCanvas', () => {
 
   it('renders the composed scene through renderSceneToSvg with a viewBox containing all content', () => {
     const a = textNode({ id: 'a', x: 10, y: 20, width: 120, height: 60, text: 'hello' })
-    const b: Extract<SpatialNode, { type: 'file' }> = {
+    const b: SpatialNode = fileNode({
       id: 'b',
-      type: 'file',
       x: 400,
       y: 300,
       width: 100,
       height: 50,
       file: 'x.md',
-    }
+    })
     const scene = layoutSpatialCanvas(canvas([a, b]), baseOptions())
     const svg = renderSceneToSvg(scene, { padding: 16 })
 
@@ -898,16 +946,15 @@ describe('edge routing style from the canvas', () => {
 describe('group background images (JSON Canvas group.background/backgroundStyle)', () => {
   const groupWithBackground = (backgroundStyle?: 'cover' | 'ratio' | 'repeat'): SpatialCanvas => ({
     nodes: [
-      {
+      groupNode({
         id: 'g1',
-        type: 'group',
         x: 40,
         y: 60,
         width: 400,
         height: 300,
         background: 'bg.png',
         ...(backgroundStyle !== undefined ? { backgroundStyle } : {}),
-      },
+      }),
     ],
     edges: [],
   })
@@ -971,10 +1018,10 @@ describe('layoutSpatialEdges', () => {
   it('equals the edge+label suffix of the full layout, jumps and labels included', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
-        { id: 'b', type: 'text', x: 300, y: 0, width: 100, height: 40, text: 'b' },
-        { id: 'c', type: 'text', x: 150, y: -200, width: 100, height: 40, text: 'c' },
-        { id: 'd', type: 'text', x: 150, y: 200, width: 100, height: 40, text: 'd' },
+        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 300, y: 0, width: 100, height: 40, text: 'b' }),
+        textNode({ id: 'c', x: 150, y: -200, width: 100, height: 40, text: 'c' }),
+        textNode({ id: 'd', x: 150, y: 200, width: 100, height: 40, text: 'd' }),
       ],
       edges: [
         {
@@ -1005,8 +1052,8 @@ describe('layoutSpatialEdges', () => {
     // committed render pencilled and curved them.
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
-        { id: 'b', type: 'text', x: 300, y: 120, width: 100, height: 40, text: 'b' },
+        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 300, y: 120, width: 100, height: 40, text: 'b' }),
       ],
       edges: [
         {
@@ -1042,7 +1089,7 @@ describe('a text node keeps its body inside its own box', () => {
       type: 'root',
       children: text.split(/\n\s*\n/).map((para) => ({
         type: 'paragraph',
-        children: [{ type: 'text', value: para }],
+        children: [{ type: 'text' as const, value: para }],
       })),
     }
   }
@@ -1072,15 +1119,14 @@ describe('a text node keeps its body inside its own box', () => {
     // paragraph painted OUTSIDE the frame entirely.
     const canvas: SpatialCanvas = {
       nodes: [
-        {
+        textNode({
           id: 'n1',
-          type: 'text',
           x: 40,
           y: 260,
           width: 67,
           height: 51,
           text: 'かあらた\n\nかたそ',
-        },
+        }),
       ],
       edges: [],
     }
@@ -1106,7 +1152,7 @@ describe('a text node keeps its body inside its own box', () => {
     // ordinary label-sized node — caught by the widget smoke, whose own
     // fixture is exactly this.
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 25, text: '日本語ラベル' }],
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 25, text: '日本語ラベル' })],
       edges: [],
     }
 
@@ -1128,7 +1174,7 @@ describe('a text node keeps its body inside its own box', () => {
     const opts = baseOptions({ measure: fullWidth, parseBody: parseParagraphs })
     const sizeAt = (height: number) =>
       naturalNodeContentSize(
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height, text: 'かあらた\n\nかたそ' },
+        textNode({ id: 'n1', x: 0, y: 0, width: 67, height, text: 'かあらた\n\nかたそ' }),
         opts,
       )
 
@@ -1139,7 +1185,7 @@ describe('a text node keeps its body inside its own box', () => {
   it('still paints the blocks that do fit', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 67, height: 51, text: 'かあらた\n\nかたそ' },
+        textNode({ id: 'n1', x: 0, y: 0, width: 67, height: 51, text: 'かあらた\n\nかたそ' }),
       ],
       edges: [],
     }

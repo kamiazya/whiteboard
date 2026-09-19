@@ -37,7 +37,7 @@ async function seedDocuments(workspaceId: string, paths: string[]): Promise<void
 /** A one-text-node canvas — the smallest content a digest can tell apart. */
 function textCanvas(id: string, text: string): SpatialCanvas {
   return {
-    nodes: [{ id, type: 'text', text, x: 0, y: 0, width: 100, height: 40 }],
+    nodes: [textNode({ id, text, x: 0, y: 0, width: 100, height: 40 })],
     edges: [],
   }
 }

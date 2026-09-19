@@ -11,10 +11,12 @@ import {
   resolveCanvasTheme,
   resolveDocumentSymbol,
   resolveEffectiveCanvasEdgeStyle,
+  resolveInkGroup,
   resolveNodeShape,
   resolveNodeSymbol,
   resolveNodeTextAlign,
   VISUAL_EDGES_KEY,
+  VISUAL_INK_KEY,
   VISUAL_SHAPE_KEY,
   VISUAL_SYMBOL_KEY,
   VISUAL_TEXT_KEY,
@@ -223,9 +225,8 @@ describe('resolveNodeShape', () => {
 
 describe('visual.symbol/v0', () => {
   const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
-    ({
+    textNode({
       id: 'n1',
-      type: 'text',
       x: 0,
       y: 0,
       width: 10,
@@ -323,9 +324,8 @@ describe('visual.symbol/v0', () => {
 
 describe('visual.text/v0', () => {
   const nodeWith = (facets: SpatialCanvas['nodes'][number]['facets']) =>
-    ({
+    textNode({
       id: 'n1',
-      type: 'text',
       x: 0,
       y: 0,
       width: 10,
@@ -426,5 +426,42 @@ describe('visual.theme/v0', () => {
         glyph: { kind: 'theme', id: 'visual.neon', icon: 'visual.signature' },
       },
     ])
+  })
+})
+
+describe('visual.ink/v0 — which strokes are one thing', () => {
+  it('answers the group a stroke belongs to', () => {
+    const line = {
+      id: 'a',
+      from: { kind: 'point' as const, point: { x: 0, y: 0 }, end: 'none' as const },
+      to: { kind: 'point' as const, point: { x: 10, y: 10 }, end: 'none' as const },
+      facets: { [VISUAL_INK_KEY]: { group: 'g1' } },
+    }
+    expect(resolveInkGroup(line as never)).toBe('g1')
+  })
+
+  it('answers undefined for a stroke that belongs to none', () => {
+    // The overwhelmingly common case for ink that arrived any other way —
+    // an import, an agent's write, a line dragged off a handle.
+    const bare = {
+      id: 'a',
+      from: { kind: 'point' as const, point: { x: 0, y: 0 }, end: 'none' as const },
+      to: { kind: 'point' as const, point: { x: 10, y: 10 }, end: 'none' as const },
+    }
+    expect(resolveInkGroup(bare as never)).toBeUndefined()
+    expect(resolveInkGroup({ ...bare, facets: {} } as never)).toBeUndefined()
+  })
+
+  it('answers undefined rather than throwing on a payload that does not fit', () => {
+    // Facets round-trip unvalidated through the generic bucket, so anything
+    // may be under this key. A grouping nobody can read is no grouping; it
+    // must not take the stroke down with it.
+    const wrong = {
+      id: 'a',
+      from: { kind: 'point' as const, point: { x: 0, y: 0 }, end: 'none' as const },
+      to: { kind: 'point' as const, point: { x: 10, y: 10 }, end: 'none' as const },
+      facets: { [VISUAL_INK_KEY]: { group: 42 } },
+    }
+    expect(resolveInkGroup(wrong as never)).toBeUndefined()
   })
 })

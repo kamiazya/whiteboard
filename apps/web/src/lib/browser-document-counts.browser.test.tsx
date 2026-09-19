@@ -3,7 +3,9 @@
  * real Loro wasm — which is the whole subject: this module exists precisely
  * because the count cannot be had without them.
  */
+
 import { adoptWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -35,7 +37,7 @@ afterEach(resetBrowserWorkspaceIdForTests)
 
 function spatialDoc(text: string): Loro {
   const doc = new Loro()
-  doc.getMap('nodes').set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text })
+  doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text }))
   doc.commit()
   return doc
 }

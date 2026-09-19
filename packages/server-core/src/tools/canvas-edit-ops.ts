@@ -10,41 +10,40 @@ import {
   canvasEdgeSchema,
   canvasLineSchema,
   documentIdSchema,
-  type ExtensionFacets,
   edgePatchFieldsSchema,
   extensionFacetsSchema,
   linePatchFieldsSchema,
-  type NodeEmbed,
+  type NodeResource,
+  nodeEmbedSchema,
   nodeIdSchema,
   nodePatchFieldsSchema,
   nodePositionSchema,
   nodeSizeSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
-  spatialNodeSchema,
+  RESOURCE_KINDS,
+  sharedNodeFieldsSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
 
-// Derived from the stored node schemas rather than restated beside them, so
-// a field added to a node type reaches this tool's input for free. Only the
-// id and the four geometry fields become optional; `type` stays required
-// because it is the discriminator, and the per-type content fields stay
-// required because there is no sensible default for a link with no url.
+// Geometry and identity are DERIVED from the stored node's own fields rather
+// than restated beside them, so a change to what an `x` may hold reaches this
+// tool's input for free. Only the id and the four geometry fields become
+// optional.
 const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
 const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
-const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
 /**
- * The model's two extension fields are omitted from the derived options and
+ * The model's two extension fields are omitted from the derived shape and
  * reached through `WRITE_EXTENSION` below instead.
  *
- * Deriving from the stored schemas means a field added to a node type arrives
- * here for free — which is the point, and wrong for exactly these two: the
- * tool already publishes a way to write them, and a second one is two
- * spellings of one thing on a table a model reads every turn. Measured when
- * ADR-0037 moved them onto the node: 14 new parameters across the four node
- * types, every one of them undescribed.
+ * Deriving from the stored schema means a field added to a node arrives here
+ * for free — which is the point, and wrong for exactly these two: the tool
+ * already publishes a way to write them, and a second one is two spellings of
+ * one thing on a table a model reads every turn. Measured when ADR-0037 moved
+ * them onto the node: 14 new parameters across the four node types, every one
+ * of them undescribed.
  *
  * `tags` is held back for a different reason: whether an inline tag field on
  * a canvas op is worth its bytes is a question
@@ -54,69 +53,79 @@ const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
  * parameters and 300 model-visible bytes.
  */
 const STORED_EXTENSION_FIELDS = { embed: true, facets: true, tags: true } as const
-const textOption = textNode.omit(STORED_EXTENSION_FIELDS)
-const fileOption = fileNode.omit(STORED_EXTENSION_FIELDS)
-const linkOption = linkNode.omit(STORED_EXTENSION_FIELDS)
-const groupOption = groupNode.omit(STORED_EXTENSION_FIELDS)
+/**
+ * The model's own two fields, reached directly.
+ *
+ * The tool used to publish them as `x-whiteboard: { kind: "embed",
+ * documentId, versionRef, facets }` — JSON Canvas 1.0's extension key, flat
+ * rather than the stored union, with a `.refine` spelling out that an embed
+ * names the document it embeds. That key made sense while the model WAS the
+ * format. ADR-0037 ended that: a node carries `embed` and `facets`
+ * independently now, and a published input naming a foreign format's
+ * extension key, when the model has none anywhere, tells a model reading
+ * `tools/list` something untrue about the thing it is writing.
+ *
+ * The hand-written refusal becomes STRUCTURAL in the move: `nodeEmbedSchema`
+ * requires `documentId`, so "an embed with no document" is refused by the
+ * type rather than by a `.refine` that had to say it. That is the whole of
+ * what the old schema's first reason bought, now bought by the model.
+ *
+ * `facets` is still named here rather than derived, and that is the second
+ * reason, which does NOT dissolve: the stored field is
+ * `extensionFacetsSchema.optional().catch(undefined)`, and the `.catch` is
+ * read-side tolerance — an unrecognised bucket must not stop a canvas being
+ * readable. On the WRITE side the same `.catch` would silently drop a
+ * malformed facets bucket a caller just sent, where this refuses it by name.
+ * So the stored pair stays omitted from the derived shape and is re-added
+ * here with the tolerance stripped.
+ */
+const WRITE_EXTENSION = {
+  embed: nodeEmbedSchema.optional(),
+  facets: extensionFacetsSchema.optional(),
+} as const
+
+const draftBase = sharedNodeFieldsSchema
+  .omit(STORED_EXTENSION_FIELDS)
+  .partial(DRAFT_OPTIONAL)
+  .extend(WRITE_EXTENSION)
 
 /**
- * The node extension as a WRITER declares it: one flat object instead of
- * the stored two-variant union, narrowed to the stored shape on parse.
+ * What a node SHOWS is a RESOURCE in the model now
+ * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
+ * decision 3), and this tool's four arms are NOT derived from it. They are
+ * written out here, and the boundary converts.
  *
- * Two reasons, one of them measured. The stored schema `.catch`es an
- * unrecognised extension so a canvas stays readable, which on the write
- * side would silently DROP a broken embed a caller just sent; here a
- * `kind: "embed"` with no document is refused by name. And the stored
- * union is emitted inline into the tool's input once per node type per op
- * — eight times, 487 bytes each — where this shape is 290, on a table a
- * model reads on every turn.
- */
-const nodeExtensionWriteSchema = z
-  .object({
-    kind: z.literal('embed').optional(),
-    documentId: documentIdSchema.optional(),
-    versionRef: z.string().min(1).optional(),
-    facets: extensionFacetsSchema.optional(),
-  })
-  .strict()
-  .refine((value) => (value.kind === 'embed') === (value.documentId !== undefined), {
-    message: 'an embed names the document it embeds: kind "embed" and documentId go together',
-  })
-  /**
-   * Out comes the MODEL's two fields, not the format's union arm.
-   *
-   * The tool's INPUT key stays `x-whiteboard` — it is published in
-   * `tools/list`, a model reads it every turn, and moving it is a tool-surface
-   * change with its own gate (ADR-0031). What ADR-0037 changed is the far
-   * side: a node carries `embed` and `facets` independently now, and the
-   * transform is where the union arm becomes them.
-   */
-  .transform((value): { embed?: NodeEmbed; facets?: ExtensionFacets } => ({
-    ...(value.kind === 'embed' &&
-      value.documentId !== undefined && {
-        embed: {
-          documentId: value.documentId,
-          ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
-        },
-      }),
-    ...(value.facets === undefined ? {} : { facets: value.facets }),
-  }))
-/**
- * NAMED in zod's registry, so it is emitted into `$defs` once and referenced
- * at each of its four sites instead of inlined there. Measured: -776
- * model-visible bytes, with `parameters` and `undescribed` unmoved.
+ * A deliberate decision rather than an oversight. `type` plus the kind's own
+ * content field is what `tools/list` has published since the tool existed,
+ * and a model reads that table on every turn — so converging the input on
+ * the model's shape is a tool-surface change with its own criteria, its own
+ * two scoreboards and its own LLM-driven before/after (ADR-0031, the
+ * `mcp-tool-surface` skill). Keeping the surface still is what makes the
+ * storage flip a model change that no caller can see.
  *
- * Only a COMPOSITE may be registered, and that rule was measured rather than
- * assumed. A description INSIDE a registered object survives into `$defs`
- * (`EdgeEnd` keeps all three of its). A description ON the registered schema
- * itself is DROPPED — registering the described `width`/`height` leaves read
- * as -837 bytes, and the bytes were the descriptions being deleted: 4 arms x
- * (60 + 150) is the whole of it, and the model would have been left guessing
- * at a size field that used to say what omitting it buys.
+ * `type` stays required because it is the discriminator the arms are chosen
+ * by, and each content field stays required because there is no sensible
+ * default for a link with no url.
  */
-z.globalRegistry.add(nodeExtensionWriteSchema, { id: 'NodeExtension' })
-
-const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
+const textOption = draftBase.extend({
+  type: z.literal('text'),
+  text: z.string(),
+})
+const fileOption = draftBase.extend({
+  type: z.literal('file'),
+  file: z.string(),
+  subpath: z.string().startsWith('#').optional(),
+})
+const linkOption = draftBase.extend({
+  type: z.literal('link'),
+  url: z.url(),
+})
+const groupOption = draftBase.extend({
+  type: z.literal('group'),
+  label: z.string().optional(),
+  background: z.string().optional(),
+  backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
+})
 
 /**
  * A key inside the node that the node has no room for is REFUSED, and
@@ -147,13 +156,57 @@ const draftOption = <S extends z.ZodRawShape>(option: { shape: S }) =>
   z.object(option.shape, draftStrayKeys).strict()
 
 const nodeDraftSchema = z.discriminatedUnion('type', [
-  draftOption(textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
-  draftOption(fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
-  draftOption(linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
-  draftOption(groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(textOption),
+  draftOption(fileOption),
+  draftOption(linkOption),
+  draftOption(groupOption),
 ])
 
-// `tags` omitted for the reason the node options omit it (ADR-0040 decision 7).
+export type NodeDraft = z.infer<typeof nodeDraftSchema>
+
+/**
+ * The published draft's `type` plus its content field, as the fields the
+ * model stores.
+ *
+ * This function IS the boundary the comment on the four arms above describes:
+ * the tool's vocabulary on one side, ADR-0038 decision 3's resource on the
+ * other, converted once. Every other reader of a node goes through the
+ * content seam (`nodeText`/`nodeFile`/…), so this is the only place the two
+ * vocabularies meet.
+ */
+export function draftContent(draft: NodeDraft): {
+  resource?: NodeResource
+  label?: string
+  background?: string
+  backgroundStyle?: 'cover' | 'ratio' | 'repeat'
+} {
+  switch (draft.type) {
+    case 'text':
+      return { resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: draft.text } }
+    case 'file':
+      return {
+        resource: {
+          // A reference alone does not say what it points AT, and the registry
+          // claims any located resource that is not a uri-list.
+          mimeType: RESOURCE_KINDS.file.mimeType,
+          location: draft.file,
+          ...(draft.subpath !== undefined && { subpath: draft.subpath }),
+        },
+      }
+    case 'link':
+      return { resource: { mimeType: RESOURCE_KINDS.link.mimeType, location: draft.url } }
+    case 'group':
+      // No resource: a frame shows nothing, which is what the `group` arm
+      // always meant.
+      return {
+        ...(draft.label !== undefined && { label: draft.label }),
+        ...(draft.background !== undefined && { background: draft.background }),
+        ...(draft.backgroundStyle !== undefined && { backgroundStyle: draft.backgroundStyle }),
+      }
+  }
+}
+
+// `tags` omitted for the reason the node draft omits it (ADR-0040 decision 7).
 const edgeDraftSchema = canvasEdgeSchema.omit({ tags: true }).partial({ id: true })
 
 /**

@@ -3,7 +3,9 @@
 // routed configuration and adopts a strictly better one — so a crossing
 // that exists only because two edges guessed conflicting sides gets
 // routed away entirely, not merely jumped.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 // Static, not `await import()` inside the test body: an in-body import of
@@ -13,15 +15,15 @@ import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { layoutSpatialEdges } from '../spatial-canvas.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
+const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
 
 type P = { x: number; y: number }
 function segmentsCross(a1: P, a2: P, b1: P, b2: P): boolean {

@@ -2,7 +2,14 @@
 // miniature inside the node's content area, gated by the caller's
 // expansion policy, with the depth cap and path-local cycle handling this
 // package's embed contract already promises.
+
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeFile } from '@kamiazya/whiteboard-model'
+import {
+  fileNode as buildFileNode,
+  textNode as buildTextNode,
+  textNode,
+} from '@kamiazya/whiteboard-model/test-utils'
 import type {
   EmbedResolvedNode,
   HeadingBlockNode,
@@ -33,20 +40,11 @@ function baseOptions(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions
   }
 }
 
-const fileNode = (over?: Partial<Extract<SpatialNode, { type: 'file' }>>) =>
-  ({
-    id: 'f1',
-    type: 'file',
-    x: 100,
-    y: 100,
-    width: 220,
-    height: 180,
-    file: 'child',
-    ...over,
-  }) satisfies SpatialNode
+const fileNode = (over?: Partial<Parameters<typeof buildFileNode>[0]>): SpatialNode =>
+  buildFileNode({ id: 'f1', x: 100, y: 100, width: 220, height: 180, file: 'child', ...over })
 
 const childCanvas: SpatialCanvas = {
-  nodes: [{ id: 'c1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: '' }],
+  nodes: [textNode({ id: 'c1', x: 0, y: 0, width: 400, height: 200, text: '' })],
   edges: [],
 }
 
@@ -87,7 +85,7 @@ describe('file-node inline embeds', () => {
 
   it('never upscales a small child (fit caps at 1)', () => {
     const tiny: SpatialCanvas = {
-      nodes: [{ id: 'c1', type: 'text', x: 0, y: 0, width: 40, height: 20, text: '' }],
+      nodes: [textNode({ id: 'c1', x: 0, y: 0, width: 40, height: 20, text: '' })],
       edges: [],
     }
     const scene = layoutSpatialCanvas(
@@ -142,10 +140,10 @@ describe('file-node inline embeds', () => {
     // so a scale/translate that misses `jumps` draws the arc outside it.
     const crossing: SpatialCanvas = {
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: '' },
-        { id: 'b', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' },
-        { id: 'c', type: 'text', x: 200, y: -300, width: 100, height: 50, text: '' },
-        { id: 'd', type: 'text', x: 200, y: 300, width: 100, height: 50, text: '' },
+        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: '' }),
+        textNode({ id: 'b', x: 400, y: 0, width: 100, height: 50, text: '' }),
+        textNode({ id: 'c', x: 200, y: -300, width: 100, height: 50, text: '' }),
+        textNode({ id: 'd', x: 200, y: 300, width: 100, height: 50, text: '' }),
       ],
       edges: [
         {
@@ -405,15 +403,14 @@ describe('file-node facet cards', () => {
   })
 
   it('emits the card within its own node slot, in document order ahead of a later node', () => {
-    const textNode: SpatialNode = {
+    const textNode = buildTextNode({
       id: 't1',
-      type: 'text',
       x: 400,
       y: 100,
       width: 100,
       height: 100,
       text: '',
-    }
+    })
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode(), textNode], edges: [] },
       baseOptions({ resolveReference: () => ({ facets: card }) }),
@@ -430,16 +427,15 @@ describe('file-node facet cards', () => {
 describe('shape facets inside an embedded canvas', () => {
   const shapedChild: SpatialCanvas = {
     nodes: [
-      {
+      textNode({
         id: 'c1',
-        type: 'text',
         x: 0,
         y: 0,
         width: 400,
         height: 200,
         text: '',
         facets: { 'visual.shape/v0': { kind: 'hexagon' } },
-      },
+      }),
     ],
     edges: [],
   }
@@ -463,16 +459,15 @@ describe('shape facets inside an embedded canvas', () => {
     const root: SpatialCanvas = {
       nodes: [
         fileNode(),
-        {
+        textNode({
           id: 'c1',
-          type: 'text',
           x: 500,
           y: 100,
           width: 100,
           height: 100,
           text: '',
           facets: { 'visual.shape/v0': { kind: 'diamond' } },
-        },
+        }),
       ],
       edges: [],
     }
@@ -480,7 +475,7 @@ describe('shape facets inside an embedded canvas', () => {
       root,
       baseOptions({
         resolveReference: () => ({ canvas: childCanvas }),
-        expandFileNode: (n) => n.type === 'file',
+        expandFileNode: (n) => nodeFile(n) !== undefined,
       }),
     )
     const childShape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')

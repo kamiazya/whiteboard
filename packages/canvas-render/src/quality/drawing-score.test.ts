@@ -5,7 +5,7 @@
 // calibrated is how `worstStallMs` reported 0.3ms for a 200ms stall.
 
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
@@ -23,15 +23,15 @@ const layout = (canvas: SpatialCanvas): Scene =>
   layoutSpatialCanvas(canvas, { measure, appearance })
 const score = (canvas: SpatialCanvas): DrawingScore => scoreDrawing(canvas, layout(canvas))
 
-const box = (id: string, x: number, y: number, width = 200, height = 80): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
+const box = (id: string, x: number, y: number, width = 200, height = 80): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
 const group = (
   id: string,
   x: number,
@@ -39,7 +39,7 @@ const group = (
   width: number,
   height: number,
   label = id,
-): SpatialNode => ({ id, type: 'group', x, y, width, height, label })
+): SpatialNode => groupNode({ id, x, y, width, height, label })
 const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge => ({
   id,
   from: { node: fromNode },

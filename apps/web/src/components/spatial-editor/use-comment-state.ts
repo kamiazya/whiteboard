@@ -7,7 +7,7 @@
 // its whole hit-testing input.
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { type CanvasComment, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useEffect, useRef, useState } from 'react'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { CommentComposeState } from './CanvasContextMenu.js'
@@ -32,7 +32,7 @@ export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateI
    */
   const commentPlacementObstacles = (beforeCommentId?: string): BoundingBox[] => {
     const out: BoundingBox[] = canvasRef.current.nodes
-      .filter((node) => node.type !== 'group')
+      .filter((node) => !isFrame(node))
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
     for (const entry of commentChromeBoxes) {
       if (entry.part !== 'bubble') continue

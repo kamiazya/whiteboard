@@ -3,7 +3,10 @@
 // sandboxed iframe (no allow-same-origin, no referrer); at most three live
 // at once (LRU); collapse returns to the facade. Exports are untouched —
 // this layer is editor-only HTML.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { withNodeUrl } from '@kamiazya/whiteboard-model'
+import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -12,15 +15,14 @@ import { SpatialEditor } from './SpatialEditor.js'
 afterEach(cleanup)
 
 const bigLink = (id: string, x: number) =>
-  ({
+  linkNode({
     id,
-    type: 'link',
     x,
     y: 60,
     width: 320,
     height: 240,
     url: `https://example.com/${id}`,
-  }) as const
+  })
 
 function makeHost(initial: SpatialCanvas) {
   function Host() {
@@ -43,15 +45,14 @@ it('offers the facade only above the LOD threshold, and activation swaps in a sa
   const canvas: SpatialCanvas = {
     nodes: [
       bigLink('l1', 60),
-      {
+      linkNode({
         id: 'small',
-        type: 'link',
         x: 500,
         y: 60,
         width: 200,
         height: 60,
         url: 'https://example.com/s',
-      },
+      }),
     ],
     edges: [],
   }
@@ -101,7 +102,10 @@ it('caps live iframes at three — activating a fourth collapses the oldest', as
 
 it('never offers a facade for a non-followable URL scheme', async () => {
   const canvas: SpatialCanvas = {
-    nodes: [{ ...bigLink('js', 60), url: 'javascript:alert(1)' } as never],
+    // The url goes through the BUILDER, not a spread beside it: a node's
+    // address lives inside its resource now, so `{ ...node, url }` leaves a
+    // stray key and the node keeps the address it was built with.
+    nodes: [withNodeUrl(bigLink('js', 60), 'javascript:alert(1)')],
     edges: [],
   }
   const Host = makeHost(canvas)

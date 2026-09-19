@@ -3,7 +3,7 @@
 // The round trip itself is `codecs.property.test.ts`'s, stated as idempotence
 // and asked of every registered format. What is here is what only OCIF has:
 // the edge/arrow branch, a text body as a resource, and explicit group members.
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { parseOcif, toOcif } from './ocif-projection-io.js'
 
@@ -43,7 +43,7 @@ describe('a document becomes OCIF and comes back', () => {
     // What the degrade costs, asserted rather than described: a foreign reader
     // gets a line between two points and no relation at all.
     const projected = toOcif({
-      nodes: [{ id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 40 }],
+      nodes: [textNode({ id: 'a', text: 'a', x: 0, y: 0, width: 10, height: 40 })],
       edges: [],
       lines: [
         {
@@ -62,7 +62,7 @@ describe('a document becomes OCIF and comes back', () => {
 
   it('makes a text body a markdown RESOURCE rather than a field on the node', () => {
     const projected = toOcif({
-      nodes: [{ id: 'n', type: 'text', text: '# hi', x: 0, y: 0, width: 10, height: 10 }],
+      nodes: [textNode({ id: 'n', text: '# hi', x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
     expect(projected.resources?.[0]?.representations[0]).toEqual({
@@ -75,9 +75,9 @@ describe('a document becomes OCIF and comes back', () => {
   it('resolves a group to explicit members, which OCIF states and containment does not', () => {
     const projected = toOcif({
       nodes: [
-        { id: 'g', type: 'group', x: 0, y: 0, width: 100, height: 100 },
-        { id: 'inside', type: 'text', text: 'x', x: 10, y: 10, width: 10, height: 10 },
-        { id: 'outside', type: 'text', text: 'y', x: 500, y: 0, width: 10, height: 10 },
+        groupNode({ id: 'g', x: 0, y: 0, width: 100, height: 100 }),
+        textNode({ id: 'inside', text: 'x', x: 10, y: 10, width: 10, height: 10 }),
+        textNode({ id: 'outside', text: 'y', x: 500, y: 0, width: 10, height: 10 }),
       ],
       edges: [],
     })

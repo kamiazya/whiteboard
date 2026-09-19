@@ -1,5 +1,5 @@
 import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
-import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { routeEdge } from './spatial-edges.js'
@@ -11,15 +11,15 @@ import { routeEdge } from './spatial-edges.js'
  * belongs to, which it must touch.
  */
 
-const node = (id: string, x: number, y: number, w = 100, h = 60): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+const node = (id: string, x: number, y: number, w = 100, h = 60): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: w,
+    height: h,
+    text: id,
+  })
 
 const edge = (
   from: string,

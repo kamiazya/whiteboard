@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -20,7 +21,8 @@ describe('useNodeInEditor', () => {
 
     act(() => result.current.commit('after'))
     const [next, command] = onChange.mock.calls[0] ?? []
-    expect((next as SpatialCanvas).nodes[0]).toMatchObject({ id: 'n1', text: 'after' })
+    expect((next as SpatialCanvas).nodes[0]).toMatchObject({ id: 'n1' })
+    expect(nodeText((next as SpatialCanvas).nodes[0] as SpatialNode)).toBe('after')
     expect(command).toEqual({ kind: 'set-text', id: 'n1', text: 'after' })
 
     act(() => result.current.close())

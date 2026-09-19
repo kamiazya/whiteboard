@@ -13,6 +13,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
+import { dataUriToBytes } from './font-loading.js'
 import {
   type CanvasViewerHandle,
   type MountCanvasViewerOptions,
@@ -57,7 +58,12 @@ function registerFonts(): void {
   const registeredFaces: FontFace[] = []
   for (const font of WIDGET_FONTS) {
     const descriptors = buildFontFaceDescriptors(font)
-    const face = new FontFace(font.family, `url(${font.dataUri})`, descriptors)
+    // From BYTES, not `url(${font.dataUri})`. A `url()` source is a fetch as
+    // far as CSP is concerned and so is subject to `font-src`, which an MCP
+    // Apps host builds from `_meta.ui.csp.resourceDomains` — a list of
+    // origins that cannot name `data:`. See `dataUriToBytes` for what that
+    // measured. A buffer source is not a fetch and no directive governs it.
+    const face = new FontFace(font.family, dataUriToBytes(font.dataUri), descriptors)
     document.fonts.add(face)
     registeredFaces.push(face)
     // FontFace.add() alone doesn't trigger a load; force it so

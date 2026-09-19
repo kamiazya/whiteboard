@@ -4,7 +4,12 @@ import {
   labelObstacles,
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { CanvasEdge, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  type CanvasEdge,
+  frameLabel,
+  isFrame,
+  type SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
@@ -112,12 +117,12 @@ export function GroupLabelEditorOverlay({
   readonly onClose: () => void
 }) {
   const group = canvas.nodes.find((entry) => entry.id === editId)
-  if (group === undefined || group.type !== 'group') return null
+  if (group === undefined || !isFrame(group)) return null
   return (
     <TextNodeEditor
       exitHintScale={1 / zoom}
       box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
-      initialText={group.label ?? ''}
+      initialText={frameLabel(group) ?? ''}
       testId="group-label-editor"
       style={labelEditorStyle(palette, fontFamily)}
       onCommit={(label) => {

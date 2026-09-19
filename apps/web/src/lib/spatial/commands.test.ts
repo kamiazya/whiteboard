@@ -6,10 +6,25 @@ import type {
   ProposedChange,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { endNode, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import {
+  endNode,
+  isFrame,
+  nodeFile,
+  nodeText,
+  nodeUrl,
+  type SpatialNode,
+  spatialCanvasSchema,
+  withNodeText,
+} from '@kamiazya/whiteboard-model'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
-import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
+import {
+  applyCommand,
+  buildFragmentInsertCommand,
+  deleteInkCommand,
+  type EditorCommand,
+} from './commands.js'
 
 function baseCanvas(): SpatialCanvas {
   return {
@@ -51,7 +66,7 @@ describe('applyCommand', () => {
   it('set-text changes only the text field of a text node', () => {
     const canvas = baseCanvas()
     const next = applyCommand(canvas, { kind: 'set-text', id: 'a', text: 'updated' })
-    expect(next.nodes[0]).toEqual({ ...canvas.nodes[0], text: 'updated' })
+    expect(next.nodes[0]).toEqual(withNodeText(canvas.nodes[0] as SpatialNode, 'updated'))
   })
 
   it('set-text on a non-text node is a no-op returning the input canvas', () => {
@@ -301,15 +316,14 @@ describe('applyCommand', () => {
   it('set-node-url updates a link node and ignores non-link targets', () => {
     const withLink = applyCommand(baseCanvas(), {
       kind: 'create-node',
-      node: {
+      node: linkNode({
         id: 'l1',
-        type: 'link',
         x: 0,
         y: 200,
         width: 200,
         height: 60,
         url: 'https://example.com/',
-      },
+      }),
     })
 
     const updated = applyCommand(withLink, {
@@ -317,9 +331,8 @@ describe('applyCommand', () => {
       id: 'l1',
       url: 'https://jsoncanvas.org/',
     })
-    expect(updated.nodes.find((n) => n.id === 'l1')).toMatchObject({
-      url: 'https://jsoncanvas.org/',
-    })
+    const relinked = updated.nodes.find((n) => n.id === 'l1')
+    expect(relinked !== undefined && nodeUrl(relinked)).toBe('https://jsoncanvas.org/')
     expect(spatialCanvasSchema.safeParse(updated).success).toBe(true)
 
     // A text node has no url — the command is a no-op, not a corruption.
@@ -343,7 +356,8 @@ describe('applyCommand', () => {
     const grouped = applyCommand(baseCanvas(), { kind: 'create-group', node: group })
     // Array order IS z-order: the frame sits at the bottom, so hit-testing
     // (last containing box wins) still reaches the members inside it.
-    expect(grouped.nodes[0]).toMatchObject({ id: 'g1', type: 'group' })
+    expect(grouped.nodes[0]).toMatchObject({ id: 'g1' })
+    expect(grouped.nodes[0] !== undefined && isFrame(grouped.nodes[0])).toBe(true)
     expect(grouped.nodes).toHaveLength(3)
     expect(spatialCanvasSchema.safeParse(grouped).success).toBe(true)
 
@@ -414,7 +428,8 @@ describe('applyCommand', () => {
       id: 'f1',
       file: 'notes/roadmap',
     })
-    expect(retargeted.nodes.find((n) => n.id === 'f1')).toMatchObject({ file: 'notes/roadmap' })
+    const moved = retargeted.nodes.find((n) => n.id === 'f1')
+    expect(moved !== undefined && nodeFile(moved)).toBe('notes/roadmap')
     // Retargeting clears a stale subpath: a heading anchor from the old
     // document has no meaning in the new one.
     expect(retargeted.nodes.find((n) => n.id === 'f1')).not.toHaveProperty('subpath')
@@ -444,15 +459,16 @@ describe('applyCommand', () => {
     /** Four nodes stacked on the same spot — everything overlaps. */
     function stackedCanvas(): SpatialCanvas {
       return {
-        nodes: (['a', 'b', 'c', 'd'] as const).map((id) => ({
-          id,
-          type: 'text',
-          x: 0,
-          y: 0,
-          width: 80,
-          height: 40,
-          text: id,
-        })),
+        nodes: (['a', 'b', 'c', 'd'] as const).map((id) =>
+          textNode({
+            id,
+            x: 0,
+            y: 0,
+            width: 80,
+            height: 40,
+            text: id,
+          }),
+        ),
         edges: [],
       }
     }
@@ -588,7 +604,8 @@ describe('batch', () => {
         { kind: 'connect-nodes', edgeId: 'e9', fromNode: 'a', toNode: 'b' },
       ],
     })
-    expect(next.nodes[0]).toMatchObject({ x: 10, y: 20, text: 'batched' })
+    expect(next.nodes[0]).toMatchObject({ x: 10, y: 20 })
+    expect(nodeText(next.nodes[0] as SpatialNode)).toBe('batched')
     expect(next.edges).toEqual([
       {
         id: 'e9',
@@ -906,8 +923,7 @@ describe('buildFragmentInsertCommand', () => {
     if (command?.kind !== 'batch') throw new Error('expected a batch command')
     const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
     const nodeCommands = command.commands.filter((c) => c.kind === 'create-node')
-    const remintedB = nodeCommands.find((c) => c.node.type === 'text' && c.node.text === 'b')?.node
-      .id
+    const remintedB = nodeCommands.find((c) => nodeText(c.node) === 'b')?.node.id
     expect(remintedB).toBeDefined()
     const boundary = edgeCommands.find((c) => c.edge.label === 'kept')?.edge
     expect(boundary).toMatchObject({
@@ -1321,6 +1337,102 @@ describe('set-edge-facet', () => {
   })
 })
 
+describe('lines in the editor', () => {
+  // A LINE is ink (ADR-0038 decision 2): it may end nowhere, and it asserts
+  // nothing about what is related to what. The editor could already DRAW one
+  // and accept one through a proposal, but had no command that mints or
+  // removes one — so a line reached a board only from MCP or a proposal, and
+  // could not be taken back off it.
+  const lineCanvas = (): SpatialCanvas => ({
+    ...baseCanvas(),
+    lines: [
+      {
+        id: 'l1',
+        from: { kind: 'node', node: 'a' },
+        to: { kind: 'point', point: { x: 400, y: 400 } },
+      },
+    ],
+  })
+
+  it('mints a line from a node to a free point', () => {
+    const next = applyCommand(baseCanvas(), {
+      kind: 'create-line',
+      line: {
+        id: 'l9',
+        from: { kind: 'node', node: 'a' },
+        to: { kind: 'point', point: { x: 300, y: 250 } },
+      },
+    })
+    expect(next.lines).toEqual([
+      {
+        id: 'l9',
+        from: { kind: 'node', node: 'a' },
+        to: { kind: 'point', point: { x: 300, y: 250 } },
+      },
+    ])
+    // The canvas it came from stays a valid one, which is what stops a
+    // command sequence producing something the schema would refuse.
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('refuses a colliding line id as a no-op, the way every other create does', () => {
+    const canvas = lineCanvas()
+    const next = applyCommand(canvas, {
+      kind: 'create-line',
+      line: {
+        id: 'l1',
+        from: { kind: 'point', point: { x: 0, y: 0 } },
+        to: { kind: 'point', point: { x: 1, y: 1 } },
+      },
+    })
+    expect(next).toBe(canvas)
+  })
+
+  it('removes a line by id', () => {
+    const next = applyCommand(lineCanvas(), { kind: 'delete-line', id: 'l1' })
+    expect(next.lines).toEqual([])
+  })
+
+  it('is a no-op for a line id the canvas does not hold', () => {
+    const canvas = lineCanvas()
+    expect(applyCommand(canvas, { kind: 'delete-line', id: 'nope' })).toBe(canvas)
+  })
+
+  it('takes a line with it when the node one of its ends names is deleted', () => {
+    // The same referential-integrity rule `delete-node` already enforces for
+    // edges. A line ending on a node that is gone would be a dangling
+    // reference the schema's own id check refuses.
+    const next = applyCommand(lineCanvas(), { kind: 'delete-node', id: 'a' })
+    expect(next.lines ?? []).toEqual([])
+  })
+
+  it('picks the delete that matches the collection the selected ink is in', () => {
+    // The editor holds ONE selected-ink id, because the SCENE is where an
+    // edge and a line become the same thing: canvas-render routes
+    // `[...edges, ...lines]` and both come out as `kind: 'edge'` scene nodes
+    // carrying their own id, so hit-testing and the selection highlight
+    // already work on a line without knowing it is one. Deleting is the
+    // step that has to know, and this is the one place that decides.
+    const canvas: SpatialCanvas = {
+      ...lineCanvas(),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    expect(deleteInkCommand(canvas, 'e1')).toEqual({ kind: 'delete-edge', id: 'e1' })
+    expect(deleteInkCommand(canvas, 'l1')).toEqual({ kind: 'delete-line', id: 'l1' })
+    // An id in neither collection gets no command at all, rather than a
+    // delete aimed at a guess — a stale selection must not remove something
+    // that happens to share its id in the other collection.
+    expect(deleteInkCommand(canvas, 'gone')).toBeUndefined()
+  })
+
+  it('keeps a line whose ends name no deleted node', () => {
+    // The other side of the guard: a free-ended line is nobody's dependent,
+    // so deleting an unrelated node must not sweep it away.
+    const next = applyCommand(lineCanvas(), { kind: 'delete-node', id: 'b' })
+    expect(next.lines).toHaveLength(1)
+  })
+})
+
 // ADR-0040's tag writes: a WHOLE list per object, so the command carries the
 // value the way `set-edge-bends` does rather than an add/remove pair — the
 // chips editor already holds the list, and an empty one is spelled as the
@@ -1389,5 +1501,50 @@ describe('set-node-tags / set-edge-tags / set-canvas-tags', () => {
     expect(tagged.edges).toBe(before.edges)
     const cleared = applyCommand(tagged, { kind: 'set-canvas-tags', tags: [] })
     expect(cleared).not.toHaveProperty('tags')
+  })
+})
+
+describe('ungroup-ink', () => {
+  const grouped = (id: string, group?: string) => ({
+    id,
+    from: { kind: 'point' as const, point: { x: 0, y: 0 }, end: 'none' as const },
+    to: { kind: 'point' as const, point: { x: 10, y: 10 }, end: 'none' as const },
+    facets: {
+      [VISUAL_EDGES_KEY]: { routing: 'curved' as const },
+      ...(group === undefined ? {} : { [VISUAL_INK_KEY]: { group } }),
+    },
+  })
+
+  it('takes the group off every named stroke and leaves the rest of the facets', () => {
+    const canvas = {
+      nodes: [],
+      edges: [],
+      lines: [grouped('a', 'g'), grouped('b', 'g'), grouped('c', 'other')],
+    }
+    const next = applyCommand(canvas, { kind: 'ungroup-ink', ids: ['a', 'b'] })
+    expect(next.lines?.[0]?.facets).toEqual({ [VISUAL_EDGES_KEY]: { routing: 'curved' } })
+    expect(next.lines?.[1]?.facets).toEqual({ [VISUAL_EDGES_KEY]: { routing: 'curved' } })
+    // Untouched, and that is the point of naming ids rather than a group:
+    // the command says which strokes, so nothing else moves.
+    expect(next.lines?.[2]?.facets?.[VISUAL_INK_KEY]).toEqual({ group: 'other' })
+  })
+
+  it('drops the bucket entirely when the group was all it held', () => {
+    const bare = { ...grouped('a', 'g'), facets: { [VISUAL_INK_KEY]: { group: 'g' } } }
+    const next = applyCommand(
+      { nodes: [], edges: [], lines: [bare] },
+      {
+        kind: 'ungroup-ink',
+        ids: ['a'],
+      },
+    )
+    expect(next.lines?.[0]).not.toHaveProperty('facets')
+  })
+
+  it('is the same canvas when no named stroke is there', () => {
+    // The union-wide "nothing changed → same reference" contract callers
+    // memoise on.
+    const canvas = { nodes: [], edges: [], lines: [grouped('a', 'g')] }
+    expect(applyCommand(canvas, { kind: 'ungroup-ink', ids: ['gone'] })).toBe(canvas)
   })
 })

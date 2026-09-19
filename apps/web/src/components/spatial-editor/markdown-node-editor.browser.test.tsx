@@ -4,7 +4,10 @@
 // exit semantics: ⌘Enter COMMITS (the overlay's most important verb — it
 // deliberately outranks the document editor's task-toggle binding), and
 // losing focus commits too, so nothing typed is ever lost.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -15,7 +18,7 @@ afterEach(cleanup)
 
 function makeHost(text: string) {
   const start: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 260, height: 120, text }],
+    nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 260, height: 120, text })],
     edges: [],
   }
   const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
@@ -83,7 +86,7 @@ it('⌘Enter COMMITS — it does not toggle a task checkbox inside a node', asyn
     expect(container.querySelector('[data-testid="text-node-editor"]')).toBeNull(),
   )
   const node = latest.canvas.nodes[0]
-  expect(node?.type === 'text' ? node.text : undefined).toBe('- [ ] todo item')
+  expect(node === undefined ? undefined : nodeText(node)).toBe('- [ ] todo item')
 })
 
 it('losing focus commits what was typed — nothing is ever lost to a stray click', async () => {
@@ -102,7 +105,7 @@ it('losing focus commits what was typed — nothing is ever lost to a stray clic
 
   await vi.waitFor(() => {
     const node = latest.canvas.nodes[0]
-    expect(node?.type === 'text' ? node.text : undefined).toBe('start typed')
+    expect(node === undefined ? undefined : nodeText(node)).toBe('start typed')
   })
 })
 
@@ -119,7 +122,7 @@ it('Enter continues a list item, and Enter on an empty item exits the list', asy
 
   await vi.waitFor(() => {
     const node = latest.canvas.nodes[0]
-    expect(node?.type === 'text' ? node.text : undefined).toBe('- alpha\n- beta\ndone')
+    expect(node === undefined ? undefined : nodeText(node)).toBe('- alpha\n- beta\ndone')
   })
 })
 
@@ -146,7 +149,7 @@ it('click-away commits EXACTLY once — unmount must not fire a second stale com
 
   await vi.waitFor(() => expect(container.querySelector('.cm-content')).toBeNull())
   const node = latest.canvas.nodes[0]
-  expect(node?.type === 'text' ? node.text : undefined).toBe('start typed')
+  expect(node === undefined ? undefined : nodeText(node)).toBe('start typed')
   expect(latest.commands.filter((k) => k === 'set-text')).toHaveLength(1)
 })
 
@@ -164,6 +167,6 @@ it('a blur after Escape does not resurrect the cancelled edit as a commit', asyn
 
   await vi.waitFor(() => expect(container.querySelector('.cm-content')).toBeNull())
   const node = latest.canvas.nodes[0]
-  expect(node?.type === 'text' ? node.text : undefined).toBe('keep me')
+  expect(node === undefined ? undefined : nodeText(node)).toBe('keep me')
   expect(latest.commands.filter((k) => k === 'set-text')).toHaveLength(0)
 })

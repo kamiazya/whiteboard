@@ -16,7 +16,7 @@ import type {
   SpatialNode,
   SpatialProposedChange,
 } from '@kamiazya/whiteboard-model'
-import { canvasChangeConflicts, endNode } from '@kamiazya/whiteboard-model'
+import { canvasChangeConflicts, endNode, isFrame } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import { layoutCommentBody, PROPOSAL_TEXT_MAX_WIDTH_PX } from './comment-body.js'
 import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
@@ -59,7 +59,7 @@ export function composeProposals(
   const chrome = options.appearance.resolveProposal?.()
   const paint = chrome === undefined ? {} : { appearance: chrome.outline }
   const obstacles: BoundingBox[] = canvas.nodes
-    .filter((node) => node.type !== 'group')
+    .filter((node) => !isFrame(node))
     .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
   const out: SceneNode[] = []
 

@@ -1,4 +1,5 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import {
@@ -54,7 +55,7 @@ async function writeText(deps: ServerDeps, documentId: string, text: string): Pr
 
 async function textOf(deps: ServerDeps, documentId: string): Promise<string | undefined> {
   const node = readSpatialCanvas(await load(deps, documentId)).nodes[0]
-  return node?.type === 'text' ? node.text : undefined
+  return node === undefined ? undefined : (nodeText(node) ?? undefined)
 }
 
 // The daemon keeps ONE version history — the file-backed store the History

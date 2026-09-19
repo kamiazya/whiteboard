@@ -36,6 +36,19 @@ import {
   resolveWorkspaceDocument,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
+// `readSpatialCanvas` answers the MODEL, and a model node has shown its text
+// through a RESOURCE since ADR-0038 decision 3 — there is no `.text` field to
+// read. Reading one answers `undefined`, which compared against the expected
+// string fails as "missing/mismatched node A" and reads like the drift bug
+// this smoke exists to catch. It was exactly that: the storage flip left
+// these two reads behind, and this smoke has been red since — on THIS branch,
+// which is where the flip lives; `origin/main` does not carry it yet.
+//
+// The sibling `mcp-e2e-smoke.mjs` still reads `node.type` / `node.text` and is
+// CORRECT to: it reads `wb_canvas_snapshot`'s answer, which is the published
+// WIRE shape and deliberately unmoved by that ADR. Model and wire are the
+// distinction; the seam is how a reader stays on the right side of it.
+import { nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { WebSocket } from 'ws'
 import { waitForEventWithTimeout } from './lib/wait-for-event.mjs'
@@ -352,7 +365,7 @@ async function main() {
   httpDoc.import(httpSnapshotBytes)
   const httpCanvas = readSpatialCanvas(httpDoc)
   const nodeAViaHttp = httpCanvas.nodes.find((n) => n.id === 'node-a')
-  if (nodeAViaHttp?.text !== NODE_A.text) {
+  if (nodeAViaHttp === undefined || nodeText(nodeAViaHttp) !== NODE_A.text) {
     throw new Error(`HTTP path-snapshot missing/mismatched node A: ${JSON.stringify(nodeAViaHttp)}`)
   }
   log('[e2e] HTTP path-snapshot → node A present with exact content')
@@ -385,7 +398,7 @@ async function main() {
   const nodeAViaWs = readSpatialCanvas(documentContainers(wsDoc, wsEntry.documentId)).nodes.find(
     (n) => n.id === 'node-a',
   )
-  if (nodeAViaWs?.text !== NODE_A.text) {
+  if (nodeAViaWs === undefined || nodeText(nodeAViaWs) !== NODE_A.text) {
     throw new Error(`WS initial snapshot missing/mismatched node A: ${JSON.stringify(nodeAViaWs)}`)
   }
   log('[e2e] WS connect → workspace snapshot contains node A inside this document')
@@ -434,7 +447,21 @@ async function main() {
     height: 100,
     text: 'node B — added over WS (web-edit shape)',
   }
-  writeSpatialNode(documentContainers(clientDoc, clientEntry.documentId), NODE_B)
+  // NODE_B above is the FORMAT shape — it is what the JSON Canvas assertion
+  // below compares against, where `type` + `text` are correct and unmoved.
+  // `writeSpatialNode` takes the MODEL, where the same text is shown through
+  // a RESOURCE. Handed the format shape it stored no resource at all and the
+  // node came back a frame; the text was not mismatched, it was never written.
+  // One source of truth for the string, and the boundary spelled out, because
+  // this script sits on both sides of it.
+  writeSpatialNode(documentContainers(clientDoc, clientEntry.documentId), {
+    id: NODE_B.id,
+    x: NODE_B.x,
+    y: NODE_B.y,
+    width: NODE_B.width,
+    height: NODE_B.height,
+    resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: NODE_B.text },
+  })
   clientDoc.commit()
   const update = clientDoc.export({ mode: 'update', from: preEditVersion })
   ws.send(Buffer.from(update))

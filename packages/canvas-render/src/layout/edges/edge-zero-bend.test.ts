@@ -3,19 +3,21 @@
 // other's coordinate and the route is a single straight segment — anchors
 // are renderer-chosen defaults, so trading their position for a bend-free
 // line is the better-looking edge. Blocked lanes fall back to the elbows.
+
 import type { CanvasEdge, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
+const node = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
 
 const edge = (
   fromNode: string,

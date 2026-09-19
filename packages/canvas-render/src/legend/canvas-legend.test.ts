@@ -3,7 +3,7 @@
 // edges) under that value are drawn in. Judged by the facet score, so a
 // legend can never promise a distinction the drawing does not keep.
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
 import { canvasLegend } from './canvas-legend.js'
@@ -91,7 +91,7 @@ describe('canvasLegend', () => {
   it('a frame or a stencil carrying the colour is not a legend key — only a scoped-tag key is', () => {
     const canvas: SpatialCanvas = {
       nodes: [
-        { id: 'g', type: 'group', x: -10, y: -10, width: 300, height: 100 },
+        groupNode({ id: 'g', x: -10, y: -10, width: 300, height: 100 }),
         box('a', { color: '1' }),
         box('b', { x: 500, color: '2' }),
       ],

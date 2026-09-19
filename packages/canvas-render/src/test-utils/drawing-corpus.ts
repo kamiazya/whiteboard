@@ -1,5 +1,6 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { tidyNodes } from '../tidy.js'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { tidyBoxes, tidyNodes } from '../tidy.js'
 
 /**
  * Boards for the drawing scoreboard: the two diagrams the tool-surface
@@ -32,15 +33,15 @@ const box = (
   y: number,
   width = BOX_W,
   height = BOX_H,
-): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text,
-})
+): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text,
+  })
 const group = (
   id: string,
   label: string,
@@ -48,15 +49,15 @@ const group = (
   y: number,
   width: number,
   height: number,
-): SpatialNode => ({
-  id,
-  type: 'group',
-  label,
-  x,
-  y,
-  width,
-  height,
-})
+): SpatialNode =>
+  groupNode({
+    id,
+    label,
+    x,
+    y,
+    width,
+    height,
+  })
 const edge = (id: string, fromNode: string, toNode: string, label?: string): CanvasEdge => ({
   id,
   from: { node: fromNode },
@@ -230,7 +231,7 @@ const laneArchitecture: SpatialCanvas = {
 /** The draft after `tidyNodes`, every move applied. */
 function tidied(canvas: SpatialCanvas): SpatialCanvas {
   const moves = new Map(
-    tidyNodes(canvas.nodes, { edges: canvas.edges }).map((m) => [m.id, m] as const),
+    tidyNodes(tidyBoxes(canvas.nodes), { edges: canvas.edges }).map((m) => [m.id, m] as const),
   )
   return {
     ...canvas,

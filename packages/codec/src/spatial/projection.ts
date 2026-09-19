@@ -1,4 +1,11 @@
 import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  nodeFile,
+  nodeSubpath,
+  nodeText,
+  nodeUrl,
+  RESOURCE_KINDS,
+} from '@kamiazya/whiteboard-model'
 import type { JsonCanvasDocument, JsonCanvasEdge, JsonCanvasNode } from './json-canvas.js'
 
 /** What a field position costs when a document is projected onto JSON Canvas. */
@@ -20,6 +27,16 @@ const EXTENSION = { kind: 'extension' } as const
  * the right place; what it loses is the precision a pen reports.
  */
 const ROUNDED = { kind: 'degraded', to: 'the nearest integer pixel' } as const
+/**
+ * The format has a node KIND (`text | file | link | group`) and no media type
+ * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
+ * decision 3). So a resource crosses as the kind the registry reads it as,
+ * and what comes back carries that kind's OWN media type — `image/png` on a
+ * file node exports and re-imports as `application/octet-stream`. A resource
+ * nothing claims has no kind at all and crosses as a group, which is the
+ * format's node that shows nothing.
+ */
+const AS_NODE_KIND = { kind: 'degraded', to: "the format's node kind" } as const
 
 /**
  * Every field position the model can hold, and what projecting it onto JSON
@@ -41,16 +58,17 @@ const ROUNDED = { kind: 'degraded', to: 'the nearest integer pixel' } as const
 export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   // JSON Canvas 1.0's own vocabulary.
   'nodes[].id': NATIVE,
-  'nodes[].type': NATIVE,
   'nodes[].x': ROUNDED,
   'nodes[].y': ROUNDED,
   'nodes[].width': ROUNDED,
   'nodes[].height': ROUNDED,
   'nodes[].color': NATIVE,
-  'nodes[].text': NATIVE,
-  'nodes[].file': NATIVE,
-  'nodes[].subpath': NATIVE,
-  'nodes[].url': NATIVE,
+  'nodes[].resource.mimeType': AS_NODE_KIND,
+  // The kind's own content field: `text` for markdown carried inline,
+  // `file`/`url` for a location, and `subpath` beside a file.
+  'nodes[].resource.content': NATIVE,
+  'nodes[].resource.location': NATIVE,
+  'nodes[].resource.subpath': NATIVE,
   'nodes[].label': NATIVE,
   'nodes[].background': NATIVE,
   'nodes[].backgroundStyle': NATIVE,
@@ -272,22 +290,35 @@ function liftNode(node: JsonCanvasNode): SpatialNode {
     ...(extension?.facets !== undefined && { facets: extension.facets }),
     ...(extension?.tags !== undefined && { tags: extension.tags }),
   }
+  // The FORMAT keeps its four-armed discriminant — JSON Canvas 1.0 is not
+  // changing — and the model no longer has one (ADR-0038 decision 3), so this
+  // is where the two spellings meet. A group lifts to a node with no
+  // resource: both say "a box that shows nothing".
   switch (node.type) {
     case 'text':
-      return { ...shared, type: 'text', text: node.text }
+      return {
+        ...shared,
+        resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: node.text },
+      }
     case 'file':
       return {
         ...shared,
-        type: 'file',
-        file: node.file,
-        ...(node.subpath !== undefined && { subpath: node.subpath }),
+        resource: {
+          // A reference alone does not say what it points AT, and the
+          // registry claims any located resource that is not a uri-list.
+          mimeType: RESOURCE_KINDS.file.mimeType,
+          location: node.file,
+          ...(node.subpath !== undefined && { subpath: node.subpath }),
+        },
       }
     case 'link':
-      return { ...shared, type: 'link', url: node.url }
+      return {
+        ...shared,
+        resource: { mimeType: RESOURCE_KINDS.link.mimeType, location: node.url },
+      }
     case 'group':
       return {
         ...shared,
-        type: 'group',
         ...(node.label !== undefined && { label: node.label }),
         ...(node.background !== undefined && { background: node.background }),
         ...(node.backgroundStyle !== undefined && { backgroundStyle: node.backgroundStyle }),
@@ -321,26 +352,25 @@ function projectNode(node: SpatialNode): JsonCanvasNode {
     ...(node.color !== undefined && { color: node.color }),
     ...(nodeExtension(node) !== undefined && { 'x-whiteboard': nodeExtension(node) }),
   }
-  switch (node.type) {
-    case 'text':
-      return { ...shared, type: 'text', text: node.text }
-    case 'file':
-      return {
-        ...shared,
-        type: 'file',
-        file: node.file,
-        ...(node.subpath !== undefined && { subpath: node.subpath }),
-      }
-    case 'link':
-      return { ...shared, type: 'link', url: node.url }
-    case 'group':
-      return {
-        ...shared,
-        type: 'group',
-        ...(node.label !== undefined && { label: node.label }),
-        ...(node.background !== undefined && { background: node.background }),
-        ...(node.backgroundStyle !== undefined && { backgroundStyle: node.backgroundStyle }),
-      }
+  // The mirror of `liftNode`: the model's kind is DERIVED, and the format
+  // states it. A node whose resource this build has no reader for has no arm
+  // in JSON Canvas either, so it crosses as the format's nearest thing to
+  // "a box" — a group — which is also what the loss table says.
+  const text = nodeText(node)
+  if (text !== undefined) return { ...shared, type: 'text', text }
+  const file = nodeFile(node)
+  if (file !== undefined) {
+    const subpath = nodeSubpath(node)
+    return { ...shared, type: 'file', file, ...(subpath !== undefined && { subpath }) }
+  }
+  const url = nodeUrl(node)
+  if (url !== undefined) return { ...shared, type: 'link', url }
+  return {
+    ...shared,
+    type: 'group',
+    ...(node.label !== undefined && { label: node.label }),
+    ...(node.background !== undefined && { background: node.background }),
+    ...(node.backgroundStyle !== undefined && { backgroundStyle: node.backgroundStyle }),
   }
 }
 

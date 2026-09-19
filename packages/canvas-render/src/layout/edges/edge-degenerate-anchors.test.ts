@@ -7,19 +7,21 @@
 // Found by the routing scoreboard's property, not by a report: it is exactly
 // the arrangement the `tidy` op produces when it snaps nodes into a
 // column, so it is reachable without anyone placing boxes by hand.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+const node = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: w,
+    height: h,
+    text: id,
+  })
 
 /** Length of `path` running strictly inside a node's box. */
 function interiorInk(path: readonly { x: number; y: number }[], n: SpatialNode): number {

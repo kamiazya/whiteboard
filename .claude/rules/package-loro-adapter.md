@@ -218,6 +218,26 @@ implementations live in the composition roots.
   says it persists at all — it reported the field dropped before `edgeToFields` carried it, which
   no other test in the suite could have seen.
 
+- **A record written before [ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md)
+  decision 3 stored what a node SHOWS as a kind plus that kind's own field**
+  — `{ type: 'text', text }`, `{ type: 'file', file, subpath? }`,
+  `{ type: 'link', url }`, `{ type: 'group', label? }`. `nodeToFields` writes
+  one `resource` now, and `liftLegacyNodeKind` converts a stored node on the
+  way out; `liftStoredNode` composes it with the ADR-0037 lift below, in the
+  order the record acquired the two shapes.
+
+  Load-bearing for the same reason and by the same mechanism: the model is
+  `.strict()` and names neither `type` nor any kind's content field, so such
+  a node FAILS its schema and the read drops what fails —
+  `legacy-node-kind.test.ts` measures it, and no other test in the package
+  can, because every one of them asserts on a document this version wrote.
+
+  It costs bytes, and the scoreboard says how many: 156960 -> 184960 over
+  1000 edits (+18%, ~28B), because a text edit used to write one flat key and
+  now writes a nested `{ mimeType, content }`. Recorded rather than absorbed
+  — it is what a discriminant on the resource would have to beat if that
+  question is ever reopened.
+
 - **A record written before [ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)
   stored all of this under the FORMAT's extension key**, because the model
   was the format. `liftLegacyExtension` converts a stored node or edge on
@@ -248,9 +268,9 @@ implementations live in the composition roots.
 - Vitest project: `loro-adapter-node` (registered in root
   `vitest.config.ts`).
 - Unit tests for CRDT merge behavior across the bridge.
-- `readSpatialCanvas`/`writeSpatialCanvas` tests: round-trip all node types
-  (text/file/link/group), edges, a node's embed and every facets bucket, overwrite/delete
-  semantics, and CRDT merge of independent node additions.
+- `readSpatialCanvas`/`writeSpatialCanvas` tests: round-trip a node of each
+  resource kind and the frame, edges, a node's embed and every facets bucket,
+  overwrite/delete semantics, and CRDT merge of independent node additions.
 - `loro-bridge.property.test.ts` draws canvases from the model schemas and
   round-trips nodes, edges AND the canvas's own facets — the last because
   this bridge is the path the app saves through and a JSON round-trip is no

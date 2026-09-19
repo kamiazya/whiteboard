@@ -6,7 +6,7 @@ import {
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
+import { frameLabel, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { searchableTexts, snippetAround } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
@@ -69,7 +69,7 @@ export interface TagBearer {
 
 /** The name a reader knows a node by: its text, a group's label, or its id. */
 function nodeName(node: SpatialNode): string {
-  const own = nodeText(node) ?? (node.type === 'group' ? node.label : undefined)
+  const own = nodeText(node) ?? frameLabel(node)
   return own === undefined || own.length === 0 ? node.id : own
 }
 

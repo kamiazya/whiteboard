@@ -2,19 +2,21 @@
 // outline reads as though the edge merges into the box. Overlapping nodes
 // are the arrangement that provokes it, because a side's anchor can sit
 // inside the other node and the route has to come back around.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: w,
+    height: h,
+    text: id,
+  })
 
 /** Collinear-and-overlapping length between a path segment and a rect
  * border, quantized the same way the production rule must be: a point

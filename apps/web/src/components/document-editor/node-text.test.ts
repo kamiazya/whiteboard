@@ -1,14 +1,15 @@
 // @vitest-environment node
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { withNodeText } from './node-text.js'
 
 const canvas: SpatialCanvas = {
   nodes: [
     textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'before' }),
-    { id: 'n2', type: 'link', x: 0, y: 0, width: 10, height: 10, url: 'https://example.com' },
+    linkNode({ id: 'n2', x: 0, y: 0, width: 10, height: 10, url: 'https://example.com' }),
   ],
   edges: [],
 }
@@ -17,7 +18,7 @@ describe('withNodeText', () => {
   it('replaces the body of the named text node and leaves the rest alone', () => {
     const next = withNodeText(canvas, 'n1', 'after')
     const node = next.nodes.find((entry) => entry.id === 'n1')
-    expect(node?.type === 'text' ? node.text : null).toBe('after')
+    expect(node === undefined ? null : nodeText(node)).toBe('after')
     expect(next.nodes[1]).toBe(canvas.nodes[1])
     expect(next).not.toBe(canvas)
   })

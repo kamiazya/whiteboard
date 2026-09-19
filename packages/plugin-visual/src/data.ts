@@ -85,6 +85,29 @@ export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
  * disabled, and losing the whole declaration to that would cost more than
  * the stray key does. A key no box carries simply contributes no partition.
  */
+/**
+ * `visual.ink/v0` — which strokes are ONE thing.
+ *
+ * A handwritten character is several strokes and a person means one mark by
+ * them: they select together, move together and are deleted together. The
+ * model has no container for that — a Group is a NODE holding nodes, and a
+ * stroke is a line — so the membership is written on each line instead, as
+ * the id of the group it belongs to.
+ *
+ * An id rather than a nesting, because strokes arrive one at a time: the
+ * writer of the second stroke knows which group it is joining and nothing
+ * has to be rewritten. Lines sharing an id are one object; a line carrying
+ * none is one object by itself, which is what ink from an import or an
+ * agent's write is.
+ */
+export const visualInkFacetSchema = z.object({
+  group: z.string().min(1),
+})
+
+export type VisualInkFacet = z.infer<typeof visualInkFacetSchema>
+
+export const VISUAL_INK_KEY = 'visual.ink/v0'
+
 export const visualAxesFacetSchema = z.object({
   axes: z.array(
     z
@@ -318,6 +341,22 @@ export const visualPlugin = definePlugin({
           },
         },
       },
+    }),
+    defineFacet({
+      name: 'ink',
+      displayName: 'Ink',
+      version: 'v0',
+      // EDGE target, which is where a LINE's facets live — the same bucket
+      // `visual.edges/v0` reads. Only ink is grouped today; the target says
+      // where a payload may attach, not what may use it.
+      targets: ['edge'],
+      schema: visualInkFacetSchema,
+      // No editor spec, deliberately, and for a sharper reason than
+      // `visual.axes` has: a group id is an identity, not a preference. A
+      // text box over it would let somebody type a group that does not
+      // exist, or break one apart by a typo. Grouping is made and unmade by
+      // the gesture that draws — and by the menu's Ungroup, which removes
+      // the facet rather than editing it.
     }),
     defineFacet({
       name: 'shape',
@@ -621,6 +660,29 @@ export function resolveEdgeOwnStyle(
   const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
   if (resolution.kind !== 'resolved') return {}
   return visualEdgesFacetSchema.parse(resolution.value)
+}
+
+/**
+ * The group a stroke belongs to, or `undefined` when it stands alone.
+ *
+ * Answers `undefined` for an unreadable payload rather than throwing: facets
+ * round-trip unvalidated through the generic bucket, so anything may be
+ * under this key, and a grouping nobody can read is no grouping — it must
+ * not take the stroke down with it.
+ */
+export function resolveInkGroup(
+  // Either element, like `resolveEdgeOwnStyle`: a LINE carries the same
+  // facet bucket an edge does (ADR-0038 decision 2). Only a line is ever
+  // grouped today, and nothing here has to know that.
+  element: RoutableElement,
+  registry: FacetRegistry = bundledFacetRegistry,
+): string | undefined {
+  const stored = element.facets?.[VISUAL_INK_KEY]
+  if (stored === undefined) return undefined
+  const resolution = registry.resolveFacetPayload(VISUAL_INK_KEY, stored)
+  if (resolution.kind !== 'resolved') return undefined
+  const parsed = visualInkFacetSchema.safeParse(resolution.value)
+  return parsed.success ? parsed.data.group : undefined
 }
 
 /**

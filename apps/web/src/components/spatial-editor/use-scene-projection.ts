@@ -59,6 +59,17 @@ export function useSceneProjection({
   // hit/highlight path is the DRAWN line — rounded corners flattened and
   // line-jump hops arced over — via the same decomposition the SVG
   // backend serializes, so a tap and the highlight land on the ink.
+  //
+  // Each entry says whether it is INK, because the press path treats the two
+  // differently: ink is drawn on what it crosses and wins over the node under
+  // it, an edge does not (see `ink-hit.ts`). The scene cannot answer this —
+  // it routes `[...edges, ...lines]` through one pass and hands both back as
+  // `kind: 'edge'` nodes, which is exactly why hit-testing worked on a line
+  // before anything here knew lines existed — so the canvas is asked.
+  const lineIds = useMemo(
+    () => new Set((canvas.lines ?? []).map((line) => line.id)),
+    [canvas.lines],
+  )
   const edgePaths = useMemo(
     () =>
       scene.nodes.flatMap((node) =>
@@ -67,11 +78,12 @@ export function useSceneProjection({
               {
                 id: node.id,
                 path: flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true),
+                ink: lineIds.has(node.id),
               },
             ]
           : [],
       ),
-    [scene],
+    [scene, lineIds],
   )
   // Comment chrome (pins and bubbles) from the committed scene, for
   // hit-testing: the shapes carry `${commentId}/pin` / `/bubble` ids and

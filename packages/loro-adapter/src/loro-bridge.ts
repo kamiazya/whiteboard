@@ -10,6 +10,9 @@ import {
   type ExtensionFacets,
   endNode,
   extensionFacetsSchema,
+  nodeKind,
+  nodeText,
+  RESOURCE_KINDS,
   type SpatialCanvas,
   type SpatialNode,
   type StoredCoreFacets,
@@ -87,6 +90,54 @@ function liftLegacyExtension(raw: unknown): unknown {
   return lifted
 }
 
+/**
+ * Convert a stored node written under the pre-[ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
+ * node-kind union into the model's shape. A no-op for anything already in it.
+ *
+ * Load-bearing for the reason `liftLegacyExtension` is, and by the same
+ * mechanism: `spatialNodeSchema` is `.strict()` and names neither `type` nor
+ * any kind's own content field, so a stored node still carrying them FAILS
+ * its schema and `readSpatialCanvas` drops what fails — the node would
+ * vanish, not merely lose its content. `legacy-node-kind.test.ts` measures
+ * that; nothing else can, since every other test asserts on a document this
+ * version wrote.
+ *
+ * The literals are the shape as it stood, the way a migration's own text
+ * always is. Read-only: every write from here on is `nodeToFields`' resource
+ * shape, so a record converges the first time anything saves it.
+ */
+function liftLegacyNodeKind(raw: unknown): unknown {
+  if (raw === null || typeof raw !== 'object') return raw
+  const { type, text, file, subpath, url, ...rest } = raw as Record<string, unknown>
+  if (type === undefined) return raw
+  if (typeof text === 'string') {
+    return { ...rest, resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: text } }
+  }
+  if (typeof file === 'string') {
+    return {
+      ...rest,
+      resource: {
+        // A reference alone does not say what it points AT, and the registry
+        // claims any located resource that is not a uri-list.
+        mimeType: RESOURCE_KINDS.file.mimeType,
+        location: file,
+        ...(typeof subpath === 'string' && { subpath }),
+      },
+    }
+  }
+  if (typeof url === 'string') {
+    return { ...rest, resource: { mimeType: RESOURCE_KINDS.link.mimeType, location: url } }
+  }
+  // A `group` showed nothing, which is exactly what a frame is, and its own
+  // fields were already spelled the way the model spells them.
+  return rest
+}
+
+/** Both lifts, in the order the record acquired the two shapes. */
+function liftStoredNode(raw: unknown): unknown {
+  return liftLegacyNodeKind(liftLegacyExtension(raw))
+}
+
 /** The canvas's facets, from this version's key or the one before it. */
 function readCanvasFacets(doc: DocumentContainers): ExtensionFacets | undefined {
   const canvasMap = doc.getMap(CANVAS_KEY)
@@ -160,7 +211,6 @@ function nodeToFields(node: SpatialNode): Fields {
   }
   const fields: Fields = {
     id: node.id,
-    type: node.type,
     x: node.x,
     y: node.y,
     width: node.width,
@@ -172,23 +222,12 @@ function nodeToFields(node: SpatialNode): Fields {
   // One value, like `bends`: concurrent retagging converges on one set.
   if (node.tags !== undefined) fields.tags = node.tags
 
-  switch (node.type) {
-    case 'text':
-      fields.text = node.text
-      break
-    case 'file':
-      fields.file = node.file
-      if (node.subpath !== undefined) fields.subpath = node.subpath
-      break
-    case 'link':
-      fields.url = node.url
-      break
-    case 'group':
-      if (node.label !== undefined) fields.label = node.label
-      if (node.background !== undefined) fields.background = node.background
-      if (node.backgroundStyle !== undefined) fields.backgroundStyle = node.backgroundStyle
-      break
-  }
+  // What a node SHOWS is one field now, so there is no kind to switch on:
+  // absence is the frame, and the frame's own fields ride beside it.
+  if (node.resource !== undefined) fields.resource = node.resource
+  if (node.label !== undefined) fields.label = node.label
+  if (node.background !== undefined) fields.background = node.background
+  if (node.backgroundStyle !== undefined) fields.backgroundStyle = node.backgroundStyle
   return fields
 }
 
@@ -692,7 +731,7 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
 
   const nodes: SpatialNode[] = []
   for (const nodeId of nodesMap.keys()) {
-    const raw = liftLegacyExtension(nodesMap.get(nodeId))
+    const raw = liftStoredNode(nodesMap.get(nodeId))
     const parsed = spatialNodeSchema.safeParse(raw)
     if (parsed.success) nodes.push(parsed.data)
   }
@@ -958,17 +997,22 @@ export function readMarkdownBody(doc: DocumentContainers): string {
   return markdownBodyFromCanvas(readSpatialCanvas(doc))
 }
 
-type SpatialTextNode = Extract<SpatialNode, { type: 'text' }>
-
 /**
  * The node a markdown document's body lives in, given an already-read
  * canvas: the stable id first, then the first text node (pre-stable-id
  * documents), matching `readMarkdownBody`'s node-side selection exactly.
+ *
+ * Asks the content seam what a node HOLDS rather than narrowing on the
+ * stored discriminant, so it says the same thing before and after ADR-0038
+ * decision 3 dissolves that union. It used to answer a
+ * `SpatialNode`, which is a type derived from the
+ * union itself — and the only thing the caller wanted from that narrowing
+ * was `.text`, which `nodeText` gives without it.
  */
-function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialTextNode | undefined {
+function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialNode | undefined {
   const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)
-  if (byId?.type === 'text') return byId
-  return nodes.find((node): node is SpatialTextNode => node.type === 'text')
+  if (byId !== undefined && nodeKind(byId) === 'text') return byId
+  return nodes.find((node) => nodeKind(node) === 'text')
 }
 
 /**
@@ -977,7 +1021,8 @@ function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialTextNode | 
  * is what let a caller treat the node as a live representation to write.
  */
 function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
-  return findMarkdownBodyNode(canvas.nodes)?.text ?? ''
+  const node = findMarkdownBodyNode(canvas.nodes)
+  return (node === undefined ? undefined : nodeText(node)) ?? ''
 }
 
 /**

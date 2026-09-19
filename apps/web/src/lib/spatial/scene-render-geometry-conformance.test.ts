@@ -7,7 +7,7 @@
 
 import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { renderCanvasToSvg } from './scene-render.js'
 
@@ -23,7 +23,7 @@ function fakeMeasure(): MeasureText {
 function fixture(): SpatialCanvas {
   return {
     nodes: [
-      { id: 'link-1', type: 'link', x: 0, y: 0, width: 120, height: 40, url: 'https://ex.com' },
+      linkNode({ id: 'link-1', x: 0, y: 0, width: 120, height: 40, url: 'https://ex.com' }),
       textNode({ id: 'text-1', x: 200, y: 0, width: 10, height: 40, text: 'hi' }),
     ],
     edges: [],

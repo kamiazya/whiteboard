@@ -3,7 +3,9 @@
 // the node even though no other tier (overlap, border-tracing,
 // endpoint-body-ink) prices it — the two retrograde segments are a few px
 // apart, never collinear, so nothing catches it before path-reversal.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import {
   assertQuantumSeparated,
@@ -12,15 +14,15 @@ import {
 import { COST_QUANTUM } from './edge-rules.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: w,
+    height: h,
+    text: id,
+  })
 
 const userCanvasNodes = [
   box('A', 100, 570, 200, 100),

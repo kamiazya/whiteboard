@@ -16,7 +16,7 @@
  */
 
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import { isFrame, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 import {
@@ -180,7 +180,7 @@ export function composeComments(
   }
   const obstacles: BoundingBox[] = [
     ...canvas.nodes
-      .filter((node) => node.type !== 'group')
+      .filter((node) => !isFrame(node))
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
     ...(options.commentObstacles ?? []),
     // EVERY pin, up front — not each one as its comment is drawn. A pin is

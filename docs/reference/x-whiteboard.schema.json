@@ -82,11 +82,7 @@
                 "$ref": "#/$defs/Bends"
               },
               "facets": {
-                "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {}
+                "$ref": "#/$defs/ExtensionFacets"
               }
             },
             "required": [
@@ -98,12 +94,11 @@
           }
         },
         "facets": {
-          "type": "object",
+          "$ref": "#/$defs/ExtensionFacets",
           "propertyNames": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*\\/v[0-9]+$"
-          },
-          "additionalProperties": {}
+          }
         },
         "tags": {
           "type": "array",
@@ -223,6 +218,13 @@
           "items": {
             "$ref": "#/$defs/CanvasPoint"
           }
+        },
+        "ExtensionFacets": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       }
     },
@@ -244,11 +246,7 @@
               "minLength": 1
             },
             "facets": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
+              "$ref": "#/$defs/ExtensionFacets"
             },
             "tags": {
               "type": "array",
@@ -267,11 +265,7 @@
           "type": "object",
           "properties": {
             "facets": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
+              "$ref": "#/$defs/ExtensionFacets"
             },
             "tags": {
               "type": "array",
@@ -282,17 +276,22 @@
           },
           "additionalProperties": false
         }
-      ]
-    },
-    "edgeExtension": {
-      "type": "object",
-      "properties": {
-        "facets": {
+      ],
+      "$defs": {
+        "ExtensionFacets": {
           "type": "object",
           "propertyNames": {
             "type": "string"
           },
           "additionalProperties": {}
+        }
+      }
+    },
+    "edgeExtension": {
+      "type": "object",
+      "properties": {
+        "facets": {
+          "$ref": "#/$defs/ExtensionFacets"
         },
         "tags": {
           "type": "array",
@@ -325,7 +324,16 @@
           }
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "$defs": {
+        "ExtensionFacets": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      }
     }
   }
 }

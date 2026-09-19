@@ -30,7 +30,7 @@
 // smaller than ~10% is noise here, not a result.
 
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import { test } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -52,9 +52,8 @@ const ALIGNS = ['top', 'middle'] as const
 
 function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
   const nodes: SpatialNode[] = Array.from({ length: nodeCount }, (_, i) => {
-    const node: SpatialNode = {
+    const node: SpatialNode = textNode({
       id: `n${i}`,
-      type: 'text',
       x: (i % 12) * 260,
       y: Math.floor(i / 12) * 180,
       // Comfortably larger than the badge plus its margin, so the badge is
@@ -63,7 +62,7 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
       width: 200,
       height: 120,
       text: `n${i}`,
-    }
+    })
     if (!styled) return node
     return {
       ...node,

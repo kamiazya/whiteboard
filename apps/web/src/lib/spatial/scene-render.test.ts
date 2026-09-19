@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import { renderCanvasForExport, renderCanvasToSvg } from './scene-render.js'
@@ -20,15 +20,14 @@ function canvas(): SpatialCanvas {
       // rect (a padded frame, an outside label) would silently misplace
       // there — the parity pin below is the tripwire.
       groupNode({ id: 'c', x: 0, y: 120, width: 220, height: 90, label: 'g' }),
-      {
+      linkNode({
         id: 'd',
-        type: 'link',
         x: 300,
         y: 120,
         width: 140,
         height: 60,
         url: 'https://example.com/',
-      },
+      }),
     ],
     edges: [],
   }

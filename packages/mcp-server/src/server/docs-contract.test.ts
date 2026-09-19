@@ -112,6 +112,7 @@ describe('docs/ contract', () => {
       'canvas-render-browser',
       'canvas-viewer-browser',
       'web-browser',
+      'web-browser-window-state',
     ])
 
     const testingDocPath = join(DOCS_ROOT, 'contributing/testing.md')
@@ -280,6 +281,7 @@ describe('docs/ contract', () => {
       'twenty-three',
       'twenty-four',
       'twenty-five',
+      'twenty-six',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]

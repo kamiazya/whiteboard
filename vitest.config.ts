@@ -28,6 +28,7 @@ export default defineConfig({
       'apps/web/vitest.config.ts',
       'apps/web/vitest.node.config.ts',
       'apps/web/vitest.browser.config.ts',
+      'apps/web/vitest.browser-window-state.config.ts',
     ],
   },
 })

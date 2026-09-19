@@ -1,4 +1,4 @@
-import { endSide } from '@kamiazya/whiteboard-model'
+import { endSide, isFrame } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 // The OOUI object-action surface: right-click a node for its actions,
 // right-click empty space to create "here". Real pointer input throughout —
@@ -131,8 +131,8 @@ it('empty space offers the full creation set, anchored at the click point', asyn
   }
 
   await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
-  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(true))
-  const frame = latest.canvas.nodes.find((n) => n.type === 'group')
+  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(true))
+  const frame = latest.canvas.nodes.find((n) => isFrame(n))
   if (frame === undefined) throw new Error('frame missing')
   // Centered on the click point (600,450 screen = canvas at identity view).
   expect(frame.x + frame.width / 2).toBeCloseTo(600, 0)

@@ -3,8 +3,10 @@
 // the web editor adopts, and a later MCP verb will adopt the same way, and a
 // second implementation of "what does this change mean" would be free to
 // disagree with the first.
+
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { withNodeText } from './node-content.js'
 import type { SpatialProposedChange } from './proposal.js'
 import { applyCanvasChange, canvasChangeConflicts } from './proposal-apply.js'
 import type { SpatialCanvas } from './spatial.js'
@@ -160,7 +162,7 @@ describe('canvasChangeConflicts', () => {
     }
     expect(canvasChangeConflicts(remove, BOARD)).toBe(false)
     expect(
-      canvasChangeConflicts(remove, { ...BOARD, nodes: [{ ...NODE_A, text: 'edited' }, NODE_B] }),
+      canvasChangeConflicts(remove, { ...BOARD, nodes: [withNodeText(NODE_A, 'edited'), NODE_B] }),
     ).toBe(true)
   })
 })

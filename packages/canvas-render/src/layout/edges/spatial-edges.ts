@@ -2061,6 +2061,13 @@ export function routeEdge(
       kind: 'edge',
       id: edge.id,
       path: [...bent],
+      // The stored path answers WHERE this goes; the style still says how it
+      // is DRAWN, and the two are independent — same as the computed branch
+      // below, where 'curved' is 'orthogonal' asking for rounded corners.
+      // Freehand ink is what made the omission visible: a stroke is all
+      // bends, so it came back as a chain of straight runs with a corner at
+      // every sample the simplification kept.
+      ...(style === 'curved' ? { rounded: true as const } : {}),
       fromSide: namedFromSide ?? 'right',
       toSide: namedToSide ?? 'left',
       fromEnd,

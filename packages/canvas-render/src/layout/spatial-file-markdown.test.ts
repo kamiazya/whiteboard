@@ -47,14 +47,14 @@ const NODE = fileNode({
   file: 'notes',
 }) satisfies SpatialNode
 
-const canvasOf = (over?: Partial<Extract<SpatialNode, { type: 'file' }>>): SpatialCanvas => ({
+const canvasOf = (over?: Partial<SpatialNode>): SpatialCanvas => ({
   nodes: [{ ...NODE, ...over }],
   edges: [],
 })
 
 const paragraph = (value: string): MdastRoot['children'][number] => ({
   type: 'paragraph',
-  children: [{ type: 'text', value }],
+  children: [{ type: 'text' as const, value }],
 })
 
 const BODY: MdastRoot = {
@@ -263,7 +263,7 @@ describe('malformed bodies never abort the canvas', () => {
     ['a code node with no value', { type: 'code' }],
   ]
 
-  const withSibling = (over?: Partial<Extract<SpatialNode, { type: 'file' }>>): SpatialCanvas => ({
+  const withSibling = (over?: Partial<SpatialNode>): SpatialCanvas => ({
     nodes: [
       { ...NODE, ...over },
       textNode({ id: 'sibling', x: 500, y: 0, width: 200, height: 100, text: 'SIBLING' }),

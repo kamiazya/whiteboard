@@ -4,6 +4,14 @@ import { parseViewerScene, serializeViewerScene, type ViewerScene } from './scen
 
 const emptyCanvas: ViewerScene = { nodes: [], edges: [] }
 
+/**
+ * `parseViewerScene` takes the JSON Canvas WIRE shape — it IS the codec
+ * parser — so every fixture in this describe spells `type` plus the kind's
+ * own field. The `serializeViewerScene` describe below takes a `ViewerScene`,
+ * which is the MODEL, and uses the node builders. One file, both contracts,
+ * and telling them apart is the whole point of ADR-0038 decision 3 leaving
+ * the wire where it was.
+ */
 describe('parseViewerScene', () => {
   it('accepts a bare object canvas ({}) as an empty canvas', () => {
     const result = parseViewerScene({})
@@ -12,7 +20,7 @@ describe('parseViewerScene', () => {
 
   it('accepts a nodes-only canvas object', () => {
     const canvas = {
-      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hi' })],
+      nodes: [{ id: 'n1', type: 'text', text: 'hi', x: 0, y: 0, width: 100, height: 50 }],
     }
     const result = parseViewerScene(canvas)
     expect(result.ok).toBe(true)
@@ -24,8 +32,8 @@ describe('parseViewerScene', () => {
   it('accepts a nodes+edges JSON string via the codec parser', () => {
     const text = JSON.stringify({
       nodes: [
-        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' },
-        { id: 'b', type: 'text', x: 20, y: 20, width: 10, height: 10, text: '' },
+        { id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'b', type: 'text', text: '', x: 20, y: 20, width: 10, height: 10 },
       ],
       edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
     })
@@ -36,15 +44,16 @@ describe('parseViewerScene', () => {
   it('accepts a node carrying the x-whiteboard embed extension', () => {
     const canvas = {
       nodes: [
-        textNode({
+        {
           id: 'n1',
+          type: 'text',
+          text: '',
           x: 0,
           y: 0,
           width: 10,
           height: 10,
-          text: '',
-          embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
-        }),
+          'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+        },
       ],
     }
     const result = parseViewerScene(canvas)

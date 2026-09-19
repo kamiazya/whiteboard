@@ -183,6 +183,28 @@ rather than in a string, so joining its runs yields `tightenthis`.
   - Measured, so a later reader is not guessing: 5000 runs of each property (25x the budget)
     found no counterexample, and the worst per-test duration under the full `codec-node` suite
     is 543ms against the 5000ms default.
+- **What a node SHOWS is a RESOURCE in the model now**
+  ([ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md) decision 3),
+  and the two ledgers moved in OPPOSITE directions on the same rows — the
+  clearest thing either has said about what the decision bought. Five model
+  positions (`nodes[].type|text|file|url|subpath`) became four
+  (`nodes[].resource.{mimeType,content,location,subpath}`). JSON Canvas went
+  19 -> 17 `native` and 4 -> 5 `degraded`, because the format has a node KIND
+  and no media type at all, so `image/png` on a file node exports and
+  re-imports as the generic stream. OCIF kept its 23 `native` and went 5 -> 4
+  `degraded`: the row that was degraded is simply GONE, since the
+  discriminator OCIF had no field for is no longer a field of ours, and
+  `representationFor` is nearly the identity.
+- **The confluence property found two states the MODEL should never have
+  admitted, and each was closed in the model rather than tie-broken here.** A
+  resource carrying both its content and a location (`RESOURCE_KINDS` resolved
+  it to `text` by lookup order, and JSON Canvas keeps whichever field its node
+  kind has a slot for — so one document came back a text node one way round
+  and a file node the other); and a node that shows a resource while carrying
+  a FRAME's fields (the format projects a node it cannot read as a `group`, so
+  a background rode back one way and was dropped the other). Both are the
+  property working as designed: it is blind to deletion and sharp on exactly
+  this — a transform that does not commute.
 - **OCIF v0.7.0 is a THIRD projection** ([ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md)):
   `spatial/ocif.ts` (the wire shape), `spatial/ocif-projection-io.ts`
   (`toOcif`/`fromOcif`/`parseOcif`) and `spatial/ocif-projection.ts` (the `OCIF_PROJECTION`

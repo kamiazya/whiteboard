@@ -31,10 +31,12 @@
  */
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
   type Box,
+  boxContains,
   type ResizeHandleKind,
   resizeBoxByDelta,
   scaleBoxWithin,
@@ -108,6 +110,28 @@ interface BendSnapshot {
   readonly waypoints: readonly Point[]
 }
 
+/**
+ * A freehand stroke in progress: every sample the pointer has emitted since
+ * it went down, in canvas coordinates.
+ *
+ * The one gesture that keeps intermediate points, and it has to — see the
+ * `pointermove` arm. `zoom` rides along because what counts as jitter, and
+ * what counts as a tap, are screen distances, and the release has no viewport
+ * to ask.
+ */
+interface DrawSnapshot {
+  readonly kind: 'drawing'
+  /**
+   * The mark this stroke joins, decided at the PRESS and carried to the
+   * release. Decided there because that is where the timing and the starting
+   * point are, and by the caller because the decision reads a clock — see
+   * `stroke-group.ts`.
+   */
+  readonly group?: string
+  readonly points: readonly Point[]
+  readonly zoom: number
+}
+
 interface IdleSnapshot {
   readonly kind: 'idle'
 }
@@ -119,6 +143,7 @@ export type GestureState =
   | ConnectSnapshot
   | EditTextSnapshot
   | BendSnapshot
+  | DrawSnapshot
 
 export function createIdleState(): GestureState {
   return { kind: 'idle' }
@@ -161,6 +186,17 @@ export type GestureEvent =
       readonly dy: number
     }
   | { readonly type: 'pointerdown-empty' }
+  /**
+   * The pen went down on the board. Carries the viewport's zoom for the
+   * screen-sized thresholds in `freehandLine`, since nothing downstream of
+   * here knows the magnification the stroke was drawn at.
+   */
+  | {
+      readonly type: 'pointerdown-draw'
+      readonly point: Point
+      readonly zoom: number
+      readonly group?: string
+    }
   | { readonly type: 'dblclick-empty'; readonly point: Point }
   | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
@@ -212,13 +248,26 @@ function storedWaypoints(canvas: SpatialCanvas, edgeId: string): readonly Point[
   return edge?.bends ?? []
 }
 
+/**
+ * What a gesture records about the node it started on, so it can abandon
+ * itself if that node becomes something else mid-drag. `''` for a node
+ * showing a resource this build cannot read: one class, and every such node
+ * compares equal to every other, which is the same thing the old
+ * `node.type` did for the four arms it knew.
+ */
+function startKindOf(node: SpatialNode): string {
+  return nodeKind(node) ?? ''
+}
+
 function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean {
   switch (state.kind) {
     case 'idle':
       return true
     case 'moving':
-    case 'resizing':
-      return findNode(canvas, state.nodeId)?.type === state.startType
+    case 'resizing': {
+      const target = findNode(canvas, state.nodeId)
+      return target !== undefined && startKindOf(target) === state.startType
+    }
     case 'connecting':
       return findNode(canvas, state.fromNodeId) !== undefined
     case 'editing-text': {
@@ -227,6 +276,10 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
     }
     case 'bending':
       return canvas.edges.some((edge) => edge.id === state.edgeId)
+    case 'drawing':
+      // A stroke is drawn ON the board, not on anything in it, so no
+      // element arriving or leaving can invalidate it.
+      return true
   }
 }
 
@@ -277,7 +330,7 @@ function reducePointerDown(
     state: {
       kind: 'moving',
       nodeId: event.nodeId,
-      startType: node.type,
+      startType: startKindOf(node),
       startPoint: event.point,
       startX: node.x,
       startY: node.y,
@@ -296,7 +349,7 @@ function reducePointerDownHandle(
   return stateOnly({
     kind: 'resizing',
     nodeId: event.nodeId,
-    startType: node.type,
+    startType: startKindOf(node),
     handle: event.handle,
     startPoint: event.point,
     startBox: event.box,
@@ -406,13 +459,45 @@ function reducePointerUpConnecting(
   state: ConnectSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
   createId: () => string,
+  canvas: SpatialCanvas,
 ): GestureResult {
-  // Releasing over empty space cancels. Releasing over the SOURCE node
-  // keeps the connect armed: that is the first click of the object-first
-  // click-A-click-B flow (the press and its own release both land on A),
-  // and in the drag flow it just means "still choosing a target".
-  if (event.targetNodeId === undefined) return idle
+  // Releasing over the SOURCE node keeps the connect armed: that is the
+  // first click of the object-first click-A-click-B flow (the press and its
+  // own release both land on A), and in the drag flow it just means "still
+  // choosing a target".
+  //
+  // Releasing over EMPTY canvas draws a line. It used to cancel, and could
+  // not have done anything else: an edge is a RELATION and cannot end in
+  // empty space, so there was nothing to make. ADR-0038 decision 2 split ink
+  // from relation, and a line's end is exactly the `{kind:'point'}` this
+  // release has been carrying all along.
+  //
+  // The click flow is unaffected, which is worth stating because it looks
+  // like it should be: cancelling an armed connect means pressing empty
+  // canvas, and `pointerdown-empty` resets to idle BEFORE its pointerup
+  // arrives, so this arm never sees it. The only gesture that changed is a
+  // real drag off the connect handle.
   if (event.targetNodeId === state.fromNodeId) return stateOnly(state)
+  if (event.targetNodeId === undefined) {
+    const source = findNode(canvas, state.fromNodeId)
+    // A release still inside the source box is not a drag anywhere: the
+    // handle is drawn on the node and can overhang it, and a line from a box
+    // to itself is zero-length ink that cannot then be clicked to remove.
+    if (source !== undefined && boxContains(source, event.point)) return idle
+    return {
+      state: { kind: 'idle' },
+      commands: [
+        {
+          kind: 'create-line',
+          line: {
+            id: createId(),
+            from: { kind: 'node', node: state.fromNodeId },
+            to: { kind: 'point', point: { x: event.point.x, y: event.point.y } },
+          },
+        },
+      ],
+    }
+  }
   return {
     state: { kind: 'idle' },
     commands: [
@@ -439,12 +524,11 @@ export const NEW_NODE_HEIGHT = 100
 function newTextNodeAt(point: Point, id: string): SpatialNode {
   return {
     id,
-    type: 'text',
     x: Math.round(point.x - NEW_NODE_WIDTH / 2),
     y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
     width: NEW_NODE_WIDTH,
     height: NEW_NODE_HEIGHT,
-    text: '',
+    resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: '' },
   }
 }
 
@@ -524,6 +608,16 @@ export function reduceGesture(
         commands: [{ kind: 'delete-node', id: event.nodeId }],
         selectedId: null,
       }
+    case 'pointerdown-draw':
+      return withPendingTextCommit(
+        state,
+        stateOnly({
+          kind: 'drawing',
+          points: [event.point],
+          zoom: event.zoom,
+          ...(event.group === undefined ? {} : { group: event.group }),
+        }),
+      )
     case 'pointerdown':
       return withPendingTextCommit(state, reducePointerDown(event, canvas))
     case 'pointerdown-handle':
@@ -615,6 +709,16 @@ export function reduceGesture(
       // its own component-local pointer state (see `computeDragPreview` in
       // drag-preview.ts) — this reducer has no opinion on it one way or the
       // other, and no visual state ever needs to round-trip through here.
+      //
+      // A STROKE is the exception, and it is not a relaxation of that rule
+      // so much as the case the rule cannot cover: the samples ARE the
+      // gesture, and there is nothing to recompute them from at the release.
+      // So the drawing arm accumulates, and the preview reads the same list
+      // the commit will — one path, rather than a component-local copy that
+      // can disagree with what is written.
+      if (state.kind === 'drawing') {
+        return stateOnly({ ...state, points: [...state.points, event.point] })
+      }
       return stateOnly(state)
     case 'pointerup':
       switch (state.kind) {
@@ -623,9 +727,19 @@ export function reduceGesture(
         case 'resizing':
           return reducePointerUpResizing(state, event)
         case 'connecting':
-          return reducePointerUpConnecting(state, event, createId)
+          return reducePointerUpConnecting(state, event, createId, canvas)
         case 'bending':
           return reducePointerUpBending(state, event)
+        case 'drawing': {
+          const line = freehandLine(
+            createId(),
+            [...state.points, event.point],
+            state.zoom,
+            state.group,
+          )
+          if (line === undefined) return idle
+          return { state: { kind: 'idle' }, commands: [{ kind: 'create-line', line }] }
+        }
         case 'editing-text':
           // A double-press opens the editor on the SECOND pointerdown; that
           // press's own pointerup arrives afterwards and must not tear the

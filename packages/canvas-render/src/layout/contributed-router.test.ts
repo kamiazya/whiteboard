@@ -2,6 +2,14 @@
 // registers routers by bare name and answers `readRouting` for the edges it
 // claims — the same shape `shapes` + `readShape` already have, so a plugin
 // stores the choice in its OWN facet and cannot reach another's router.
+//
+// This file is the ONLY consumer of that seam, deliberately: no bundled plugin
+// claims a router since ADR-0037 slice 4 moved bends into the model and the
+// route into `bend-route.ts`. So these cases are not a unit test beside a real
+// caller — they ARE what keeps a published extension point working, which is
+// why they drive a fake plugin through `layoutSpatialCanvas` rather than
+// calling `resolveRouter` directly. A test that stopped at the resolver would
+// pass over wiring that no longer reaches the layout at all.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'

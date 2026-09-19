@@ -39,13 +39,18 @@ const withKind = (kind: FieldProjection['kind']) =>
   positions.filter((path) => kindOf(path) === kind)
 
 describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () => {
-  it("states 19 of the model's field positions exactly", () => {
+  it("states 17 of the model's field positions exactly", () => {
     // 19 -> 21 with ADR-0037 slice 3 (an END became one object, and its `kind`
     // was a position of its own per side), and 21 -> 19 with ADR-0038
     // decision 2, which took those two `kind` positions off an edge again: an
     // edge's end names a node and nothing else, so there is no discriminator
     // left to state.
-    expect(withKind('native')).toHaveLength(19)
+    //
+    // 19 -> 17 with ADR-0038 decision 3, and the two it lost went different
+    // ways. Five model positions became four, so one is simple arithmetic;
+    // the other is `nodes[].resource.mimeType`, which moved to `degraded`
+    // below because the format has a node KIND and no media type at all.
+    expect(withKind('native')).toHaveLength(17)
   })
 
   it('cannot state NOTHING at all any more, which is what the split bought', () => {
@@ -62,13 +67,21 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     expect([...withKind('dropped')].sort()).toEqual([])
   })
 
-  it('states 4 more only to the nearest whole pixel — a node box', () => {
+  it('states 5 more but not exactly — a node box, and what a node shows', () => {
     // The format HAS these fields, so they are not outside it; what it cannot
     // say is a fraction. Since ADR-0037 slice 4 the model's geometry is real,
-    // so the box is the ledger's first `degraded` entry, and this pin is what
-    // makes a second one a decision rather than a merge.
+    // so the box was the ledger's first `degraded` entry, and this pin is what
+    // made the second one a decision rather than a merge.
+    //
+    // The second one arrived: ADR-0038 decision 3's `resource.mimeType`. The
+    // format's node kind carries WHICH of four things a node is and no media
+    // type, so `image/png` on a file node exports and re-imports as the
+    // generic stream. A different sort of inexactness from the box's — the
+    // box loses precision, this loses a distinction — and the ledger has one
+    // word for both, which is worth knowing before a third arrives.
     expect([...withKind('degraded')].sort()).toEqual([
       'nodes[].height',
+      'nodes[].resource.mimeType',
       'nodes[].width',
       'nodes[].x',
       'nodes[].y',
@@ -114,10 +127,15 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // 17 -> 15 when ADR-0040 retired it: what a box IS is a scoped tag now,
     // which is CORE — three positions in the ledger rather than two in a
     // bucket — so the facet column gives back what the tag rows took.
-    expect(census.facet).toHaveLength(15)
+    //
+    // 15 -> 16 for `visual.ink/v0`'s `group`: which strokes are ONE mark.
+    // One field on one target (edge, which is where a line's facets live),
+    // so one position. The format has no word for a handwritten character
+    // being several strokes, which is the column doing its job again.
+    expect(census.facet).toHaveLength(16)
   })
 
-  it('so 52 of the 75 positions a document can hold are outside the format', () => {
+  it('so 52 of the 74 positions a document can hold are outside the format', () => {
     // Both numbers move for DIFFERENT reasons, which is the reading.
     //
     // The denominator grew by 14 because a LINE is a new element with its own
@@ -149,10 +167,22 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     //
     // 54/77 -> 52/75: the classification facet's two positions leave with
     // it (ADR-0040 decision 4). Net of the tag rows the model says one
-    // position MORE than before the ADR — a relation is classified too —
-    // and the share outside settles at 69.3%.
+    // position MORE than before the ADR — a relation is classified too.
+    //
+    // 52/75 -> 52/74 with ADR-0038 decision 3: five node positions
+    // (`type`/`text`/`file`/`url`/`subpath`) became four
+    // (`resource.mimeType`/`content`/`location`/`subpath`), and none of the
+    // four is outside the format, so the DENOMINATOR alone falls. The share
+    // outside therefore RISES, to 70.3%, on a change that took nothing away
+    // from a JSON Canvas reader — the clearest warning this ratio carries
+    // about being read as a quality.
+    //
+    // 52/74 -> 53/75 for `visual.ink/v0`'s one position: both halves again,
+    // so the share outside barely moves (70.3% -> 70.7%). The same shape as
+    // the axes and classification facets — a position that only ever lives
+    // in the extension raises numerator and denominator together.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(52)
+    expect(outside).toBe(53)
     expect(outside + withKind('native').length + withKind('degraded').length).toBe(75)
   })
 })

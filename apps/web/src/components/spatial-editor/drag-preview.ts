@@ -1,4 +1,4 @@
-import type { CanvasEdge } from '@kamiazya/whiteboard-model'
+import { type CanvasEdge, isFrame, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 /**
  * Pure derivation of the in-flight gesture preview from the gesture's own
  * start snapshot plus the live pointer position — never from `canvas`, so it
@@ -139,12 +139,11 @@ export function computeDragPreview(
               ...canvas.nodes,
               {
                 id: '__connect-pointer__',
-                type: 'text' as const,
                 x: livePoint.x,
                 y: livePoint.y,
                 width: 0,
                 height: 0,
-                text: '',
+                resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: '' },
               },
             ]
           : canvas.nodes
@@ -194,7 +193,7 @@ export function carriedWithDrag(
 ): ReadonlySet<string> {
   const carried = new Set<string>([gesture.nodeId, ...extraIds])
   const movingNode = canvas.nodes.find((n) => n.id === gesture.nodeId)
-  if (movingNode?.type === 'group') {
+  if (movingNode !== undefined && isFrame(movingNode)) {
     for (const n of canvas.nodes) {
       if (
         !isLocked(n.id) &&

@@ -59,7 +59,7 @@ export interface RenderCanvasCoreOptions {
   /** The reference bundle, for what text-node bodies embed and link. */
   readonly references?: ReferenceSeams
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
-  readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  readonly expandFileNode?: (node: SpatialNode) => boolean
   /**
    * canvas-render's text-node body memo (see SpatialContentCache's caller
    * contract: one cache per measure+theme, dropped when either changes).

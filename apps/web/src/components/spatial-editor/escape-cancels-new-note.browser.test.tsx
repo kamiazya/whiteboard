@@ -1,4 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -61,7 +62,9 @@ describe('Escape while typing a brand-new note (real browser)', () => {
     // about a layout is not cancelling the box — only the typing.
     await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull())
     expect(latest.nodes).toHaveLength(1)
-    expect(latest.nodes[0]?.type === 'text' ? latest.nodes[0].text : 'unset').toBe('')
+    expect(latest.nodes[0] === undefined ? 'unset' : (nodeText(latest.nodes[0]) ?? 'unset')).toBe(
+      '',
+    )
   })
 
   it('keeps an existing note and its stored text when the edit is cancelled', async () => {
@@ -76,7 +79,7 @@ describe('Escape while typing a brand-new note (real browser)', () => {
     await userEvent.keyboard('{Control>}{Enter}{/Control}')
     await waitFor(() => {
       const node = latest.nodes[0]
-      expect(node?.type === 'text' ? node.text : undefined).toBe('kept')
+      expect(node === undefined ? undefined : nodeText(node)).toBe('kept')
     })
 
     const box = await screen.findByText('kept')
@@ -85,6 +88,6 @@ describe('Escape while typing a brand-new note (real browser)', () => {
 
     await waitFor(() => expect(latest.nodes).toHaveLength(1))
     const kept = latest.nodes[0]
-    expect(kept?.type === 'text' ? kept.text : undefined).toBe('kept')
+    expect(kept === undefined ? undefined : nodeText(kept)).toBe('kept')
   })
 })

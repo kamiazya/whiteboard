@@ -212,16 +212,15 @@ it('sits above the canvas scene', () => {
 // a few pixels, so the box says WHERE and the mark says WHICH.
 const marked = (width: number): SpatialCanvas => ({
   nodes: [
-    {
+    textNode({
       id: 'a',
-      type: 'text',
       x: 0,
       y: 0,
       width,
       height: width,
       text: 'A',
       facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
-    },
+    }),
     textNode({ id: 'b', x: 4000, y: 4000, width: 100, height: 60, text: 'B' }),
   ],
   edges: [],

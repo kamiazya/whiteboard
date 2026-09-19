@@ -1,19 +1,14 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode as buildTextNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
 import { MARKDOWN_THEME_NODE } from './markdown-theme.js'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './spatial-palette.js'
 import { createSpatialTheme } from './spatial-theme.js'
 
-function textNode(overrides: Partial<Extract<SpatialNode, { type: 'text' }>> = {}): SpatialNode {
+function textNode(overrides: Partial<SpatialNode> = {}): SpatialNode {
   return {
-    id: 'n1',
-    type: 'text',
-    x: 0,
-    y: 0,
-    width: 200,
-    height: 100,
-    text: 'hello',
+    ...buildTextNode({ id: 'n1', x: 0, y: 0, width: 200, height: 100, text: 'hello' }),
     ...overrides,
   }
 }

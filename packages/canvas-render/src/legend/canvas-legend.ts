@@ -10,7 +10,7 @@
  * one line rather than inventing a key.
  */
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { parseScopedTag } from '@kamiazya/whiteboard-model'
+import { isFrame, parseScopedTag } from '@kamiazya/whiteboard-model'
 import type { LegendEntry, LegendKey, LegendSwatch, SceneLegend } from '@kamiazya/whiteboard-scene'
 import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
 import { scoreFacets } from '../quality/facet-score.js'
@@ -73,7 +73,7 @@ export function canvasLegend(
   appearance: SpatialAppearanceResolver,
 ): SceneLegend | undefined {
   const score = scoreFacets(canvas)
-  const boxes = canvas.nodes.filter((node) => node.type !== 'group')
+  const boxes = canvas.nodes.filter((node) => !isFrame(node))
   const keys: LegendKey[] = [
     ...score.channels.colour.carriedBy
       .filter((key) => isTagKey(boxes, key))

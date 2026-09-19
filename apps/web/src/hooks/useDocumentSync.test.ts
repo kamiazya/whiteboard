@@ -17,6 +17,7 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { withNodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
@@ -285,7 +286,7 @@ describe('useDocumentSync', () => {
     expect(result.current.canvas).toEqual(emptyCanvas())
 
     const otherCanvas: SpatialCanvas = {
-      nodes: [{ ...TEXT_NODE, id: 'n-b', text: 'world' }],
+      nodes: [{ ...withNodeText(TEXT_NODE, 'world'), id: 'n-b' }],
       edges: [],
     }
     await hydrate(backendB, otherCanvas)

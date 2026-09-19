@@ -5,9 +5,11 @@
  * and the budget — at the layer they live, where each case is a zoom
  * number instead of a mounted editor.
  */
+
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { fileNode as buildFileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useFileSeamScene } from './use-file-seam-scene.js'
@@ -15,12 +17,8 @@ import { useFileSeamScene } from './use-file-seam-scene.js'
 const measure: MeasureText = () => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
 const references = referenceSeams(new Map())
 
-function fileNode(
-  id: string,
-  width: number,
-  height: number,
-): Extract<SpatialNode, { type: 'file' }> {
-  return { id, type: 'file', file: `doc-${id}`, x: 0, y: 0, width, height }
+function fileNode(id: string, width: number, height: number): SpatialNode {
+  return buildFileNode({ id, file: `doc-${id}`, x: 0, y: 0, width, height })
 }
 
 function canvasOf(nodes: readonly SpatialNode[]): SpatialCanvas {
@@ -43,10 +41,8 @@ function renderSeam(canvas: SpatialCanvas, zoom: number) {
   )
 }
 
-const expands = (
-  result: { current: ReturnType<typeof useFileSeamScene> },
-  node: Extract<SpatialNode, { type: 'file' }>,
-) => result.current.fileSeamOptions.expandFileNode?.(node) ?? false
+const expands = (result: { current: ReturnType<typeof useFileSeamScene> }, node: SpatialNode) =>
+  result.current.fileSeamOptions.expandFileNode?.(node) ?? false
 
 describe('useFileSeamScene LOD gate', () => {
   it('expands a file node only once its on-screen box reaches 200x140', async () => {

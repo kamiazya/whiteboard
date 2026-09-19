@@ -5,10 +5,20 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  * multi-selection targeting, the facet doorway, order/align/distribute/
  * tidy/lock, and the properties/facets/verbs/delete band order.
  */
-import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endIn, nodeFile, nodeSubpath, nodeText } from '@kamiazya/whiteboard-model'
+import {
+  endIn,
+  frameBackground,
+  frameBackgroundStyle,
+  isFrame,
+  nodeFile,
+  nodeSubpath,
+  nodeText,
+  nodeUrl,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -128,7 +138,7 @@ export function nodeMenuItems({
   const properties: ContextMenuItem[] = []
   const verbs: ContextMenuItem[] = []
   const commentOnThis = commentOnNodeItem(node, setCommentCompose)
-  if (node.type === 'group') {
+  if (isFrame(node)) {
     verbs.push({
       label: 'Edit label',
       icon: <Tag />,
@@ -144,8 +154,10 @@ export function nodeMenuItems({
         },
       })
     }
-    if (node.background !== undefined) {
-      const background = node.background
+    const ownBackground = frameBackground(node)
+    if (ownBackground !== undefined) {
+      const background = ownBackground
+      const backgroundStyle = frameBackgroundStyle(node)
       const applyStyle = (backgroundStyle: 'cover' | 'ratio') =>
         applyResult({
           state: { kind: 'idle' },
@@ -158,13 +170,13 @@ export function nodeMenuItems({
           {
             label: 'Cover',
             ariaLabel: 'Cover',
-            selected: node.backgroundStyle !== 'ratio',
+            selected: backgroundStyle !== 'ratio',
             onSelect: () => applyStyle('cover'),
           },
           {
             label: 'Fit',
             ariaLabel: 'Fit',
-            selected: node.backgroundStyle === 'ratio',
+            selected: backgroundStyle === 'ratio',
             onSelect: () => applyStyle('ratio'),
           },
         ],
@@ -238,7 +250,7 @@ export function nodeMenuItems({
       })
     }
   }
-  if (node.type === 'link') {
+  if (nodeUrl(node) !== undefined) {
     verbs.push({
       label: 'Open link',
       icon: <ExternalLink />,
@@ -431,7 +443,7 @@ export function nodeMenuItems({
       icon: <Sparkles />,
       onSelect: () =>
         applyBoxMoves(
-          tidyNodes(canvasRef.current.nodes, {
+          tidyNodes(tidyBoxes(canvasRef.current.nodes), {
             scope: new Set([node.id, ...extraIds]),
             locked: isLocked,
             edges: canvasRef.current.edges,

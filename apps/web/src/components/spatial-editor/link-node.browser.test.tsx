@@ -5,6 +5,7 @@
 // survived unnoticed.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeUrl, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -19,15 +20,14 @@ const empty: SpatialCanvas = { nodes: [], edges: [] }
 
 const withLink: SpatialCanvas = {
   nodes: [
-    {
+    linkNode({
       id: 'l1',
-      type: 'link',
       x: 100,
       y: 100,
       width: 200,
       height: 60,
       url: 'https://example.com/docs',
-    },
+    }),
   ],
   edges: [],
 }
@@ -92,10 +92,7 @@ it('Add link opens the URL dialog and a valid submit creates a link node', async
   clickOk(container)
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
-  expect(latest.canvas.nodes[0]).toMatchObject({
-    type: 'link',
-    url: 'https://jsoncanvas.org/spec/1.0/',
-  })
+  expect(nodeUrl(latest.canvas.nodes[0] as SpatialNode)).toBe('https://jsoncanvas.org/spec/1.0/')
   expect(latest.commands).toContain('create-node')
   // The dialog closes and the node renders its URL as the label — cut to the
   // prefix that fits the default node width, since a label never wraps.
@@ -172,7 +169,7 @@ it('the link context menu offers Open link and Edit URL rewrites the target', as
   clickOk(container)
 
   await vi.waitFor(() =>
-    expect(latest.canvas.nodes[0]).toMatchObject({ url: 'https://example.com/changed' }),
+    expect(nodeUrl(latest.canvas.nodes[0] as SpatialNode)).toBe('https://example.com/changed'),
   )
   expect(latest.commands).toContain('set-node-url')
 })

@@ -30,7 +30,7 @@ pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change 
 
 # 2. After targeted test passes, run the broader gate for the touched area
 pnpm test
-pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser)
+pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
 ```
@@ -172,7 +172,7 @@ There are three real-browser Vitest projects:
 | `web-browser` | `apps/web` | `apps/web` app browser regressions: popovers, dialogs, focus, keyboard, restore flows, and tests requiring real browser APIs unavailable in jsdom (IndexedDB, OPFS, `window.showOpenFilePicker`) |
 
 ```bash
-pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser
+pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state
 pnpm run test:browser:replay  # same, plus a step-by-step DOM replay of EVERY test in .vitest/index.html
 pnpm run test:browser:trace   # same, plus a Playwright trace for EVERY test and its DOM snapshots
 ```
@@ -374,7 +374,7 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#p
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
 pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, history node, scene node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
-pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser (the real-browser projects)
+pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 ```
 

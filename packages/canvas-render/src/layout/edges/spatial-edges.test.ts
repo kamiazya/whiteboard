@@ -1,9 +1,10 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 
 function node(id: string, x: number, y: number, width: number, height: number): SpatialNode {
-  return { type: 'text', id, x, y, width, height, text: '' }
+  return textNode({ id, x, y, width, height, text: '' })
 }
 
 function edge(overrides: Partial<CanvasEdge> & Pick<CanvasEdge, 'id' | 'from' | 'to'>): CanvasEdge {

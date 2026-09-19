@@ -22,7 +22,11 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { DOCUMENT_PATH_SEGMENT_PATTERN, generateDocumentId } from '@kamiazya/whiteboard-model'
+import {
+  DOCUMENT_PATH_SEGMENT_PATTERN,
+  generateDocumentId,
+  nodeText,
+} from '@kamiazya/whiteboard-model'
 import {
   arbitraryForSchema,
   textNode,
@@ -316,7 +320,7 @@ describe('BrowserVersionStore', () => {
       const past = await versions.loadPast(workspaceId, PATH, saved.id)
       expect(past).not.toBeNull()
       const node = readSpatialCanvas(past as LoroDoc).nodes[0]
-      expect(node?.type === 'text' ? node.text : undefined).toBe('saved')
+      expect(node === undefined ? undefined : nodeText(node)).toBe('saved')
     },
   )
 })

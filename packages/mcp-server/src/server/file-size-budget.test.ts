@@ -141,11 +141,26 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `set-edge-side` grew a real branch — only a node end has a side to pin,
   // so the write is a no-op on a free one. The width is the branch, not
   // ceremony: the flat version could not have had it.
+  // +64 for INK: `create-line` and `delete-line`, `deleteInkCommand`, and the
+  // `delete-node` cascade learning that a line whose end names the deleted
+  // node goes with it. A line is a different collection from an edge, not a
+  // variant of one (ADR-0038 decision 2), so the arms cannot share an edge's
+  // — and `deleteInkCommand` exists precisely so the two collections are
+  // reconciled HERE rather than at each of the call sites that hold one
+  // selected-ink id. Roughly half the width is the comment saying why the
+  // editor needs no second selection state: the scene already hands an edge
+  // and a line out identically, which is the non-obvious fact that kept the
+  // rest of this change small.
   // +35 for ADR-0040's tag writes: three union arms (`set-node-tags`,
   // `set-edge-tags`, `set-canvas-tags`) and their cases, each a whole-list
   // write through `lib/spatial/tags.ts`'s `withTagList`, where the set and
   // canonical-emptiness rules live rather than here.
-  'apps/web/src/lib/spatial/commands.ts': 1099,
+  // 1099 + 66 when the two branches met: ADR-0040's three tag arms and
+  // ADR-0038's two ink arms are independent additions to the same union,
+  // and neither shrank on the merge.
+  // Raised 1165 -> 1197 for `ungroup-ink`: breaking a handwritten mark
+  // apart, which is the escape the automatic grouping owes its user.
+  'apps/web/src/lib/spatial/commands.ts': 1197,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -208,7 +223,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // one value: it is one thing with one meaning, so last-writer-wins per key
   // is the whole merge story, and two peers re-attaching the same end
   // converge on an end one of them chose rather than on a half of each.
-  'packages/loro-adapter/src/loro-bridge.ts': 1083,
+  // +21: ADR-0038 decision 3's read-side lift (`liftLegacyNodeKind` plus the
+  // `liftStoredNode` that composes it with the ADR-0037 one). Load-bearing,
+  // and the comment is most of the lines: the model is `.strict()`, so a node
+  // stored under the node-kind union fails its schema and the read drops what
+  // fails — the node VANISHES rather than losing its content. Net of the
+  // switch `nodeToFields` no longer needs.
+  // +22 on the merge: a node's stored fields are written once as a
+  // resource (ADR-0038 decision 3) beside the tag write ADR-0040 added,
+  // and the kind switch the resource replaced was the shorter of the two.
+  'packages/loro-adapter/src/loro-bridge.ts': 1126,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -235,7 +259,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // binding the text this file reads twice. Raised rather than shrunk because
   // the alternative is reading `nodeText(node)` a second time to save a line,
   // which is the opposite of what the accessor is for.
-  'packages/server-core/src/tools/canvas-edit.ts': 1183,
+  // 1183 -> 1184 for `tidyBoxes`: the tool hands tidy a canvas's real nodes,
+  // and tidy no longer mirrors the model's node union to ask whether one is a
+  // frame. One import line.
+  // +45: the by-name refusal rebuilt. `.strict()` on the node schemas was the
+  // DETECTOR for a content key the target has no room for, and ADR-0038
+  // decision 3 dissolves the union it detected over — so the tool reads the
+  // patch back through the content seam instead, and the eight destructured
+  // draft keys plus `draftContent`'s call sites carry the rest. What a caller
+  // sees is unchanged; without it the op reported success and wrote nothing.
+  'packages/server-core/src/tools/canvas-edit.ts': 1229,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -428,6 +461,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 2444 -> 2463: the proposal layer draws a proposed LINE. Without it the
   // op stored a change nothing rendered — built but unwired, and every test
   // green over a board that said nothing had happened.
+  // 2463 -> 2484 across ADR-0038 decision 3's reader conversion, in two
+  // steps. +5: `isFrame` took the model import past the formatter's width
+  // and wrapped it. +16: the other eight accessors joined that same list,
+  // which is eight lines of the sixteen, and the rest is rationale that had
+  // nowhere to live before — why the file arm's `?? ''` is unreachable
+  // rather than a default, and why the dispatch asks what a node HOLDS.
+  //
+  // The seam does not shrink this file; the FLIP does, and only once the
+  // arms it dispatches over stop existing. Said plainly because the earlier
+  // entry promised the reduction at this step and the number went the other
+  // way.
+  // +3, and the entry above was right: the flip did NOT shrink this file. The
+  // arms stopped existing and `composeNode` still dispatches over four cases,
+  // because `nodeKind` has the same four answers the union's discriminant had
+  // — plus `undefined`, which is a fifth case the union could not express and
+  // the defensive branch now has a real caller for.
   // +4: the legend attached to the top-level scene (ADR-0040 decision 6) —
   // derived in legend/canvas-legend.ts, so the layout only asks and attaches.
   // +10: the tag library option (ADR-0040 decision 5) — declared here, applied
@@ -438,7 +487,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // vocabulary moved to their own modules (task #84). A pure move: no test
   // was rewritten and the suite went 1622 -> 1626 on the four cases the
   // extraction's own guards added.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 1560,
+  // +22 on the merge: the content seam's accessors and the reasons the
+  // dispatch asks what a node HOLDS, landing in the file the overlay and
+  // options extraction had just cut to 1560.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 1582,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -457,7 +509,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +16 for `rectAtEnd`: a free end is a DEGENERATE box at its point, which
   // is the whole of what lets this file draw one without a second routing
   // path beside the one it has.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2170,
+  // Raised 2170 -> 2177: the bent branch carries `rounded` now, with the
+  // reason it did not before.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2177,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
@@ -490,6 +544,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `lib/spatial/viewport.ts` — an overlay taking its own press needs the
   // same client-to-root mapping, and two of them is how the pointer and the
   // geometry come to disagree about where a press landed.
+  // 2785 -> 2791 for ADR-0038 decision 3's seam. Six lines: the accessor
+  // import, and the double-press dispatch becoming a block that resolves the
+  // node once instead of four `node?.type` tests that each narrowed their own
+  // arm. The block is what costs, and it is not optional — an early return
+  // would skip the `applyResult(result)` this handler ends with.
+  // 2791 -> 2855 for the pen. Three branches, one per pointer phase, each a
+  // few lines of dispatch plus the reason it is where it is: the press has
+  // to sit after the annotation layer's chrome and take capture eagerly,
+  // neither the samples nor the release may be snapped, and the samples are
+  // reduced from the gesture MIRROR rather than the render's closure —
+  // `pointermove` outruns React's commit, and a stroke accumulates where
+  // every other gesture recomputes, so reading the closure drops all but the
+  // first sample. The stroke's own arithmetic is `lib/spatial/freehand.ts`,
+  // its state machine is the gesture reducer's `drawing` arm, and what the
+  // hand watches is a new `InkDraftLayer.tsx` — so what stayed here is the
+  // wiring only, which is what this file is for.
   // +31 for the Facets panel's tag row (ADR-0040 decision 6): the write
   // that fans a tag edit out over the selection as a CHANGE to each box's
   // own list (`retag`), beside the facet write that already fans out.
@@ -502,7 +572,29 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and its in-use vocabulary — each threaded to the layout, the drag
   // overlay and the Facets panel's tag row; the reading of both lives in
   // the pages' hook, not here.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2843,
+  // 2843 + 83 on the merge: the pen's three pointer branches and the
+  // gesture-mirror read (ADR-0038) beside ADR-0040's tag fan-out, legend
+  // and library props. Two features, no overlap, nothing to reconcile.
+  // Raised 2926 -> 2951 across the two ink-selection fixes: ink drawn over a
+  // node was unselectable (the node hit-test settled the press before the
+  // line one ran), and the marquee looked at boxes only. Both decisions live
+  // OUT of this file, in `ink-hit.ts`; what is left here is the call sites
+  // and their reasons.
+  // Raised 2951 -> 2988: the press decides which MARK a stroke joins (the
+  // rule itself is `stroke-group.ts`) and the release remembers what the
+  // next one is judged against.
+  // Raised 2988 -> 3011: shift on INK, which the multi-select branch above
+  // it cannot see — ink wins a press by leaving `hitId` undefined, so
+  // without its own arm holding shift destroyed the selection it was meant
+  // to grow.
+  // 3011 -> 3025 -> 3015, which is the ratchet working in both directions
+  // in one change. The +14 was the REASON rather than the rule: one line
+  // drops a held edge on a shift-press while ink survives, and what
+  // separates the two kinds had nowhere to be written but beside it. The
+  // -10 is what moving the per-kind decisions to `element-pick.ts` gave
+  // back — three hit-tests two hundred lines apart became one call, and the
+  // context menu's two duplicate edge probes went with them.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3015,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -596,17 +688,26 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
  * A shrink-only ratchet never demands shrinkage, so it does not fight a
  * test that honestly needs its setup — it only stops one growing unwatched.
  */
+// Ten entries moved when ADR-0038's branch met ADR-0040's: two features
+// touching the same files, and a test file grows with what it covers. The
+// large ones are the two pinned SCOREBOARDS (`tool-surface-quality`, +89, and
+// `editor-state.property`, +72) and the two command ledgers
+// (`commands.test`, +111, `canvas-edit.test`, +33) — each one a table where a
+// moved row is a reason somebody has to write down, so the growth IS the
+// record. `gestures.test` and this file itself are new entries rather than
+// raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/App.test.tsx': 1611,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 968,
-  'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2136,
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2634,
+  'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2708,
+  'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
-  'apps/web/src/lib/document-sync-session.test.ts': 2766,
-  'apps/web/src/lib/spatial/commands.test.ts': 1393,
+  'apps/web/src/lib/document-sync-session.test.ts': 2768,
+  'apps/web/src/lib/spatial/commands.test.ts': 1550,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
@@ -618,21 +719,32 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,
   'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
-  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1194,
+  // Raised 1200 -> 1240 for the curved-line layout case: the seam the
+  // freehand pen rides, from facet through style to a rounded scene node.
+  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1240,
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   'packages/canvas-render/src/tidy.test.ts': 1176,
   'packages/canvas-viewer/src/widget-entry.test.tsx': 1266,
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1307,
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1308,
   'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
   'packages/mcp-server/src/server/app.test.ts': 1339,
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 874,
+  // Its own entry, and it counts ITSELF: the number is what the file is
+  // after the entry is in it, which is why this one is 10 past the reading
+  // that first flagged it.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 855,
+  // 963 -> 976 at the merge with main. Both sides moved the same totals and
+  // both REASONS were kept, because each explains a different change the
+  // merged table now holds; only the numbers were re-measured. A scoreboard
+  // whose rows are pinned exactly is one whose history is prose, so a merge
+  // of two histories costs lines rather than losing one of them.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 976,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
   'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
-  'packages/server-core/src/tools/canvas-edit.test.ts': 3110,
+  'packages/server-core/src/tools/canvas-edit.test.ts': 3143,
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 

@@ -3,22 +3,24 @@
 // (node, side) the renderer is free to spread them. Stacked ends at the
 // side midpoint made two edges with different colors/arrowheads read as
 // one line — the anchors now distribute deterministically along the side.
+
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: 100,
-  height: 100,
-  text: id,
-})
+const node = (id: string, x: number, y: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: 100,
+    height: 100,
+    text: id,
+  })
 
 const appearance: SpatialAppearanceResolver = {
   resolveNode: () => ({}),

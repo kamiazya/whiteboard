@@ -1,10 +1,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { selectCanvasFragment } from './canvas-fragment.js'
 
 const text = (id: string, x: number, y: number) =>
-  ({ id, type: 'text', x, y, width: 100, height: 50, text: id }) as const
+  textNode({ id, x, y, width: 100, height: 50, text: id })
 
 const canvas: SpatialCanvas = {
   nodes: [

@@ -5,7 +5,10 @@
  * fold path covered; this file is where the tree-backed composition itself
  * is pinned — real IndexedDB, because that is what it composes over.
  */
+
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -38,7 +41,7 @@ async function stripKindInPlace(documentId: string): Promise<void> {
 
 function canvasWith(text: string) {
   return {
-    nodes: [{ id: 'n1', type: 'text' as const, x: 0, y: 0, width: 80, height: 40, text }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
     edges: [],
   }
 }
@@ -71,7 +74,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     const content = await loadDocumentContent(entry.documentId)
     expect(content).not.toBeNull()
     const node = content === null ? null : readSpatialCanvas(content).nodes[0]
-    expect(node?.type === 'text' ? node.text : null).toBe('legacy content')
+    expect(node === null || node === undefined ? null : nodeText(node)).toBe('legacy content')
   })
 
   it('a fold-skipped unreadable record stays listed, resolvable and deletable', async () => {
@@ -175,7 +178,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     expect(back?.path).toBe('doomed')
     const content = await loadDocumentContent(entry.documentId)
     const node = content === null ? null : readSpatialCanvas(content).nodes[0]
-    expect(node?.type === 'text' ? node.text : null).toBe('to bring back')
+    expect(node === null || node === undefined ? null : nodeText(node)).toBe('to bring back')
     expect(await index.listTrash({ workspaceId: getBrowserWorkspaceId() })).toEqual([])
   })
 
@@ -196,7 +199,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     ).toBe(true)
     const content = await loadDocumentContent(entry.documentId)
     const node = content === null ? null : readSpatialCanvas(content).nodes[0]
-    expect(node?.type === 'text' ? node.text : null).toBe('seeded')
+    expect(node === null || node === undefined ? null : nodeText(node)).toBe('seeded')
     // Nothing legacy was written: the tree node IS the content record.
     expect((await new LoroStore().load(entry.documentId)).kind).toBe('not-found')
 

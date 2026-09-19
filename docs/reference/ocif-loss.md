@@ -8,7 +8,7 @@ document ([ADR-0038](../contributing/adr/0038-ocif-projection.md)), beside JSON 
 OKF Markdown. The claim first-party support makes is the same one ADR-0037 made for JSON
 Canvas: a round-trip property over the expressible subset, and this table for everything else.
 
-The model can hold **60** field positions. **28** of them are something OCIF can
+The model can hold **59** field positions. **27** of them are something OCIF can
 state in its own vocabulary; the remaining **32** ride an extension of ours.
 
 **Nothing is dropped**, and that is the difference worth knowing before choosing a format.
@@ -40,16 +40,16 @@ A conforming reader gets these and UNDERSTANDS them. A facet bucket is in here b
 | `lines[].to.point.y` | stated by the format |
 | `nodes[].embed.documentId` | stated by the format |
 | `nodes[].facets/*` | stated by the format |
-| `nodes[].file` | stated by the format |
 | `nodes[].height` | stated by the format |
 | `nodes[].id` | stated by the format |
-| `nodes[].text` | stated by the format |
-| `nodes[].url` | stated by the format |
+| `nodes[].resource.content` | stated by the format |
+| `nodes[].resource.location` | stated by the format |
+| `nodes[].resource.mimeType` | stated by the format |
 | `nodes[].width` | stated by the format |
 | `nodes[].x` | stated by the format |
 | `nodes[].y` | stated by the format |
 
-## Stated, but not in the same shape — 5
+## Stated, but not in the same shape — 4
 
 The format has somewhere to put the value and not the same shape for it. What a reader gets instead is named per row, and this projection reads it back the same way, so the row is what a round trip through a foreign tool really costs.
 
@@ -59,7 +59,6 @@ The format has somewhere to put the value and not the same shape for it. What a 
 | `edges[].to.end` | crosses as @ocif/edge's single `directed` boolean — the format has no per-end marker on a relation |
 | `lines[].from.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
 | `lines[].to.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
-| `nodes[].type` | crosses as the node's resource and extensions — OCIF has no node type field, so what a node IS comes from what it shows and what it carries |
 
 ## Carried on a `@whiteboard/*` extension — 32
 
@@ -96,7 +95,7 @@ A conforming reader must PRESERVE an extension it does not understand, so a roun
 | `nodes[].color` | preserved, not understood |
 | `nodes[].embed.versionRef` | preserved, not understood |
 | `nodes[].label` | preserved, not understood |
-| `nodes[].subpath` | preserved, not understood |
+| `nodes[].resource.subpath` | preserved, not understood |
 | `nodes[].tags[]` | preserved, not understood |
 | `tags[]` | preserved, not understood |
 

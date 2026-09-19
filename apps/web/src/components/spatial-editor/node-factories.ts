@@ -16,6 +16,7 @@
  * tests.
  */
 import type { DocumentKind, SpatialNode } from '@kamiazya/whiteboard-model'
+import { RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { findFreeSpot } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -59,27 +60,17 @@ function centeredBox(id: string, point: Point, size: Size) {
   }
 }
 
-export function textNodeDefaults(
-  id: string,
-  point: Point,
-  text: string,
-): Extract<SpatialNode, { type: 'text' }> {
+export function textNodeDefaults(id: string, point: Point, text: string): SpatialNode {
   return {
     ...centeredBox(id, point, { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }),
-    type: 'text',
-    text,
+    resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: text },
   }
 }
 
-export function linkNodeDefaults(
-  id: string,
-  point: Point,
-  url: string,
-): Extract<SpatialNode, { type: 'link' }> {
+export function linkNodeDefaults(id: string, point: Point, url: string): SpatialNode {
   return {
     ...centeredBox(id, point, { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }),
-    type: 'link',
-    url,
+    resource: { mimeType: RESOURCE_KINDS.link.mimeType, location: url },
   }
 }
 
@@ -89,39 +80,30 @@ export function fileNodeDefaults(
   file: string,
   /** What the reference points at; a markdown document gets a prose-sized box. */
   kind?: DocumentKind,
-): Extract<SpatialNode, { type: 'file' }> {
+): SpatialNode {
   const box =
     kind === 'markdown'
       ? { width: DOCUMENT_NODE_WIDTH, height: DOCUMENT_NODE_HEIGHT }
       : { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT }
   return {
     ...centeredBox(id, point, box),
-    type: 'file',
-    file,
+    resource: { mimeType: RESOURCE_KINDS.file.mimeType, location: file },
   }
 }
 
 /** Images ARE file nodes (JSON Canvas has no dedicated image type) — only
  * the default box shape differs from a plain file reference card. */
-export function imageNodeDefaults(
-  id: string,
-  point: Point,
-  file: string,
-): Extract<SpatialNode, { type: 'file' }> {
+export function imageNodeDefaults(id: string, point: Point, file: string): SpatialNode {
   return {
     ...centeredBox(id, point, { width: IMAGE_NODE_WIDTH, height: IMAGE_NODE_HEIGHT }),
-    type: 'file',
-    file,
+    resource: { mimeType: RESOURCE_KINDS.file.mimeType, location: file },
   }
 }
 
-export function groupNodeDefaults(
-  id: string,
-  point: Point,
-): Extract<SpatialNode, { type: 'group' }> {
+export function groupNodeDefaults(id: string, point: Point): SpatialNode {
   return {
+    // No resource: a frame shows nothing.
     ...centeredBox(id, point, { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }),
-    type: 'group',
   }
 }
 

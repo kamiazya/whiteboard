@@ -5,6 +5,7 @@
 // the drag/double-press paths.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -75,7 +76,7 @@ it('the palette Add group button creates an empty frame at the bottom of the z-o
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
   await userEvent.click(page.getByRole('menuitem', { name: 'Group' }))
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
-  expect(latest.canvas.nodes[0]).toMatchObject({ type: 'group' })
+  expect(isFrame(latest.canvas.nodes[0] as SpatialNode)).toBe(true)
   expect(latest.commands).toContain('create-group')
 })
 
@@ -175,7 +176,7 @@ it('Group selection from a multi-selected node frames the selection with padding
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(3))
   const frame = latest.canvas.nodes[0]
   // Enclosing box (120,120)-(420,280) plus the 24px padding on every side.
-  expect(frame).toMatchObject({ type: 'group', x: 96, y: 96, width: 348, height: 208 })
+  expect(frame).toMatchObject({ x: 96, y: 96, width: 348, height: 208 })
 })
 
 // A member that paints BELOW its frame (member first, frame later in
@@ -213,7 +214,7 @@ it('deleting the frame keeps its members', async () => {
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
   await userEvent.click(page.getByRole('menuitem', { name: 'Delete' }))
 
-  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(false))
+  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(false))
   expect(latest.canvas.nodes.map((n) => n.id).sort()).toEqual(['a', 'b', 'c'])
 })
 
@@ -237,7 +238,7 @@ it('a palette-created frame that lands off-screen pans the viewport to show it',
       (b) => b.getAttribute('aria-label') === 'Group',
     ) as HTMLElement,
   )
-  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => n.type === 'group')).toBe(true))
+  await vi.waitFor(() => expect(latest.canvas.nodes.some((n) => isFrame(n))).toBe(true))
 
   const root = rootOf(container).getBoundingClientRect()
   await vi.waitFor(() => {
@@ -287,7 +288,6 @@ it('Group selection can frame a selection that includes a group frame', async ()
   // (min corner 80,80 / max corner 520,220, plus 24px padding).
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(4))
   expect(latest.canvas.nodes[0]).toMatchObject({
-    type: 'group',
     x: 56,
     y: 56,
     width: 488,

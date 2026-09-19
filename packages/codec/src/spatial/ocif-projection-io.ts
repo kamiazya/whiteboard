@@ -6,7 +6,16 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { EXTENSION_FACET_KEY_PATTERN } from '@kamiazya/whiteboard-model'
+import {
+  EXTENSION_FACET_KEY_PATTERN,
+  isFrame,
+  nodeFile,
+  nodeKind,
+  nodeSubpath,
+  nodeText,
+  nodeUrl,
+  RESOURCE_KINDS,
+} from '@kamiazya/whiteboard-model'
 import { type CodecParseResult, codecFailure, codecSuccess } from '../errors.js'
 import {
   OCIF_TYPE,
@@ -105,17 +114,15 @@ function representationFor(node: SpatialNode): OcifResource['representations'][n
       mimeType: 'application/ocif+json',
     }
   }
-  switch (node.type) {
-    // The body is markdown, which is what the model stores and what OKF reads.
-    case 'text':
-      return { mimeType: 'text/markdown', content: node.text }
-    case 'file':
-      return { location: node.file }
-    case 'link':
-      return { location: node.url, mimeType: 'text/uri-list' }
-    case 'group':
-      return undefined
-  }
+  // Since ADR-0038 decision 3 this is very nearly the identity: the model's
+  // resource IS an OCIF representation, which is what decision 3 was for.
+  // What still differs is the FILE case — OCIF carries the fragment on the
+  // location, and this model keeps `subpath` beside it, so that one goes on
+  // the extension below rather than into the representation.
+  const resource = node.resource
+  if (resource === undefined) return undefined
+  const { subpath: _fragment, ...representation } = resource
+  return representation
 }
 
 /** Which nodes a group holds, by this model's rule: geometric containment. */
@@ -138,7 +145,7 @@ function membersOf(group: SpatialNode, nodes: readonly SpatialNode[]): string[] 
  * with it the only native evidence of what the node IS — had to move onto an
  * extension of ours.
  */
-const contentIsShadowed = (node: SpatialNode) => node.embed !== undefined && node.type !== 'group'
+const contentIsShadowed = (node: SpatialNode) => node.embed !== undefined && !isFrame(node)
 
 function projectNode(
   node: SpatialNode,
@@ -147,7 +154,7 @@ function projectNode(
   const representation = representationFor(node)
   const data: OcifExtension[] = [...facetEntries(node.facets)]
 
-  if (node.type === 'group') {
+  if (isFrame(node)) {
     data.push({ type: OCIF_TYPE.group, members: membersOf(node, nodes) })
     const chrome = ours(OCIF_TYPE.groupChrome, {
       ...(node.label === undefined ? {} : { label: node.label }),
@@ -157,14 +164,21 @@ function projectNode(
     if (chrome !== undefined) data.push(chrome)
   }
   const shadowed = contentIsShadowed(node)
+  const subpath = nodeSubpath(node)
+  const text = nodeText(node)
+  const file = nodeFile(node)
+  const url = nodeUrl(node)
   const extras = ours(OCIF_TYPE.nodeExtras, {
     ...(node.color === undefined ? {} : { color: node.color }),
-    ...(node.type === 'file' && node.subpath !== undefined ? { subpath: node.subpath } : {}),
+    ...(subpath !== undefined ? { subpath } : {}),
     ...(node.embed?.versionRef === undefined ? {} : { versionRef: node.embed.versionRef }),
-    ...(shadowed && node.type === 'text' ? { text: node.text } : {}),
-    ...(shadowed && node.type === 'file' ? { file: node.file } : {}),
-    ...(shadowed && node.type === 'link' ? { url: node.url } : {}),
-    ...(shadowed ? { kind: node.type } : {}),
+    ...(shadowed && text !== undefined ? { text } : {}),
+    ...(shadowed && file !== undefined ? { file } : {}),
+    ...(shadowed && url !== undefined ? { url } : {}),
+    // The published `kind` keeps the FORMAT's four words, which is what a
+    // reader of an earlier export already has. The model's own kind is
+    // derived now, so this is a projection like every other field here.
+    ...(shadowed ? { kind: nodeKind(node) === 'frame' ? 'group' : nodeKind(node) } : {}),
   })
   if (extras !== undefined) data.push(extras)
   const tags = tagsEntry(node.tags)
@@ -403,7 +417,7 @@ function kindOf(
   entry: OcifNode,
   representation: OcifResource['representations'][number] | undefined,
   extras: OcifExtension | undefined,
-): SpatialNode['type'] {
+): 'text' | 'file' | 'link' | 'group' {
   if (extensionOf(entry.data, OCIF_TYPE.group) !== undefined) return 'group'
   const shadowed = extras?.kind
   if (shadowed === 'text' || shadowed === 'file' || shadowed === 'link') return shadowed
@@ -487,11 +501,14 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
           }
         : {}),
     }
+    // `kindOf` still answers the FORMAT's four words, because that is what
+    // the evidence it reads is made of — an `@ocif/group` extension, our own
+    // published `kind`, a media type. What changed is the shape it builds:
+    // a resource, or none at all for the frame.
     const kind = kindOf(entry, representation, extras)
     if (kind === 'group') {
       nodes.push({
         ...shared,
-        type: 'group',
         ...(typeof chrome?.label === 'string' ? { label: chrome.label } : {}),
         ...(typeof chrome?.background === 'string' ? { background: chrome.background } : {}),
         ...(typeof chrome?.backgroundStyle === 'string'
@@ -501,21 +518,27 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
     } else if (kind === 'file') {
       nodes.push({
         ...shared,
-        type: 'file',
-        file: (embedded ? extras?.file : representation?.location) as string,
-        ...(typeof extras?.subpath === 'string' ? { subpath: extras.subpath } : {}),
+        resource: {
+          mimeType: RESOURCE_KINDS.file.mimeType,
+          location: (embedded ? extras?.file : representation?.location) as string,
+          ...(typeof extras?.subpath === 'string' ? { subpath: extras.subpath } : {}),
+        },
       } as SpatialNode)
     } else if (kind === 'link') {
       nodes.push({
         ...shared,
-        type: 'link',
-        url: (embedded ? extras?.url : representation?.location) as string,
+        resource: {
+          mimeType: RESOURCE_KINDS.link.mimeType,
+          location: (embedded ? extras?.url : representation?.location) as string,
+        },
       } as SpatialNode)
     } else {
       nodes.push({
         ...shared,
-        type: 'text',
-        text: (embedded ? extras?.text : representation?.content) as string,
+        resource: {
+          mimeType: RESOURCE_KINDS.text.mimeType,
+          content: (embedded ? extras?.text : representation?.content) as string,
+        },
       } as SpatialNode)
     }
   }

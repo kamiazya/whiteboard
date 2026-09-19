@@ -8,7 +8,7 @@
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../measure.js'
@@ -73,15 +73,14 @@ const exportShaped: SpatialAppearanceResolver = {
 function fixture(): SpatialCanvas {
   const nodes: SpatialNode[] = [
     // (a) a labeled `link` node — drives labelFontSizePx via labelRun.
-    {
+    linkNode({
       id: 'link-1',
-      type: 'link',
       x: 0,
       y: 0,
       width: 120,
       height: 40,
       url: 'https://example.com',
-    },
+    }),
     // (b) a node narrower than ~17px — drives minContentWidthPx, otherwise
     // invisible since a wider node never hits the floor.
     textNode({

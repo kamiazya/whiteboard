@@ -268,7 +268,7 @@ export interface SpatialLayoutOptions {
    * keeps the card. canvas-render itself has no expansion policy — the
    * editor decides by on-screen size, export by intrinsic size.
    */
-  readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  readonly expandFileNode?: (node: SpatialNode) => boolean
   /**
    * Optional memo for a text node's laid-out body. Content is laid out in
    * ORIGIN-RELATIVE coordinates and placed by `placeInNode`, so a cached

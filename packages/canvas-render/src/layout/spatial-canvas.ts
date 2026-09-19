@@ -28,7 +28,18 @@
 import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endNode } from '@kamiazya/whiteboard-model'
+import {
+  endNode,
+  frameBackground,
+  frameBackgroundStyle,
+  frameLabel,
+  isFrame,
+  nodeFile,
+  nodeKind,
+  nodeSubpath,
+  nodeText,
+  nodeUrl,
+} from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
@@ -218,7 +229,7 @@ function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSc
   const shape = options.nodeOutlines?.[node.id]
   // A coloured node is hatched over its tint under a pencil; a group is a
   // frame around its members, never a filled box, so its colour stays on the line.
-  const ink = sketchInkFor(node.id, options, node.color !== undefined && node.type !== 'group')
+  const ink = sketchInkFor(node.id, options, node.color !== undefined && !isFrame(node))
   return {
     kind: 'shape',
     id: node.id,
@@ -393,13 +404,13 @@ function fitTextBody(
   return fitSceneInNode(scene, node, options) ?? firstLineOfBlocks(scene.nodes)
 }
 
-function composeTextNode(
-  node: Extract<SpatialNode, { type: 'text' }>,
-  options: ResolvedLayoutOptions,
-): readonly SceneNode[] {
+function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
   // The editor overlay owns this node's text: draw the chrome alone, with
   // no truncation mark — there is no drawn text for the mark to be about.
   if (options.suppressedBodyNodeIds?.includes(node.id)) return [chromeShape(node, options)]
+  // Bound once: this function reads it three times, and the accessor exists
+  // so no reader spells where the text is stored.
+  const text = nodeText(node) ?? ''
   const maxWidth = contentWidth(node, options)
   // Position deliberately absent from the key: the cached value is
   // origin-relative (see `contentCache`'s contract), so a moved node hits.
@@ -411,7 +422,7 @@ function composeTextNode(
       : JSON.stringify([
           node.width,
           node.height,
-          node.text,
+          text,
           options.nodeOutlines?.[node.id] ?? null,
           // A theme's family fits differently; two themes on one cache must
           // not hand each other the other's wrapped lines.
@@ -428,14 +439,14 @@ function composeTextNode(
   } else {
     try {
       const laid = layoutMdastBlocks(
-        resolveReferences(options.parseBody(node.text), options.resolveAlias),
+        resolveReferences(options.parseBody(text), options.resolveAlias),
         mdastOptionsFor(maxWidth, options),
       )
       body = fitTextBody(laid, node, options)
       if (cacheKey !== undefined) options.contentCache?.set(cacheKey, body)
     } catch (err) {
       options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
-      body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
+      body = fitTextBody({ nodes: [labelRun(text, options, maxWidth)] }, node, options)
     }
   }
   // Behind the runs, in the same origin-relative space, so `placeInNode`
@@ -479,23 +490,20 @@ function referenceFor(ref: string, options: ResolvedLayoutOptions): ResolvedRefe
 }
 
 /** The readable label of a non-text node, or `undefined` when it has none. */
-function labelOf(
-  node: Extract<SpatialNode, { type: 'file' | 'link' | 'group' }>,
-  resolved: ResolvedReference | undefined,
-): string | undefined {
-  switch (node.type) {
-    case 'file': {
-      // The raw reference is an opaque id — useless to a reader — and the
-      // subpath is moot without a target, so neither appears.
-      if (resolved?.missing === true) return 'Missing reference'
-      const base = resolved?.label ?? node.file
-      return node.subpath ? `${base}${node.subpath}` : base
-    }
-    case 'link':
-      return node.url
-    case 'group':
-      return node.label && node.label.length > 0 ? node.label : undefined
+function labelOf(node: SpatialNode, resolved: ResolvedReference | undefined): string | undefined {
+  const file = nodeFile(node)
+  if (file !== undefined) {
+    // The raw reference is an opaque id — useless to a reader — and the
+    // subpath is moot without a target, so neither appears.
+    if (resolved?.missing === true) return 'Missing reference'
+    const base = resolved?.label ?? file
+    const subpath = nodeSubpath(node)
+    return subpath ? `${base}${subpath}` : base
   }
+  const url = nodeUrl(node)
+  if (url !== undefined) return url
+  const label = frameLabel(node)
+  return label !== undefined && label.length > 0 ? label : undefined
 }
 
 /** Depth cap matching embed-recursion.ts's contract: root is 0, the 4th level degrades. */
@@ -510,14 +518,19 @@ const FILE_EMBED_DEPTH_CAP = 3
  * degenerate fit.
  */
 function composeFileEmbed(
-  node: Extract<SpatialNode, { type: 'file' }>,
+  node: SpatialNode,
   resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): SceneNode | undefined {
   const child = resolved?.canvas
   if (child === undefined) return undefined
   if (options.expandFileNode?.(node) !== true) return undefined
-  if (options.embedDepth >= FILE_EMBED_DEPTH_CAP || options.activeEmbedPath.has(node.file)) {
+  const file = nodeFile(node)
+  if (
+    file === undefined ||
+    options.embedDepth >= FILE_EMBED_DEPTH_CAP ||
+    options.activeEmbedPath.has(file)
+  ) {
     return undefined
   }
 
@@ -529,7 +542,7 @@ function composeFileEmbed(
     // canvas. Explicit per-node overrides are root-keyed by contract, so
     // they do not descend.
     explicitNodeOutlines: undefined,
-    activeEmbedPath: new Set([...options.activeEmbedPath, node.file]),
+    activeEmbedPath: new Set([...options.activeEmbedPath, file]),
     embedDepth: options.embedDepth + 1,
   })
   const padding = options.geometry.paddingPx
@@ -545,7 +558,7 @@ function composeFileEmbed(
   return {
     kind: 'embedResolved',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
-    documentId: node.file,
+    documentId: file,
     children: fitted.nodes,
   }
 }
@@ -572,7 +585,7 @@ export function fitSceneIntoBox(
 
 /** The image rendering of a file node: fills the padded box, aspect kept. */
 function composeFileImage(
-  node: Extract<SpatialNode, { type: 'file' }>,
+  node: SpatialNode,
   resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): SceneNode | undefined {
@@ -673,7 +686,7 @@ function fitBodyInNode(
  * an error, so it is never reported via `onDegrade`.
  */
 function composeFileMarkdown(
-  node: Extract<SpatialNode, { type: 'file' }>,
+  node: SpatialNode,
   resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] | undefined {
@@ -729,7 +742,7 @@ function composeFileMarkdown(
  * so canvas-render never reports it via `onDegrade`.
  */
 function composeFileFacets(
-  node: Extract<SpatialNode, { type: 'file' }>,
+  node: SpatialNode,
   resolved: ResolvedReference | undefined,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] | undefined {
@@ -768,14 +781,16 @@ function composeFileFacets(
  * file-image seam's never-throw rule.
  */
 function composeGroupBackground(
-  node: Extract<SpatialNode, { type: 'group' }>,
+  node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): SceneNode | undefined {
-  if (node.background === undefined) return undefined
-  const image = referenceFor(node.background, options)?.image
+  const background = frameBackground(node)
+  if (background === undefined) return undefined
+  const image = referenceFor(background, options)?.image
   if (image === undefined) return undefined
   if (!(node.width > 0) || !(node.height > 0)) return undefined
-  if (node.backgroundStyle === 'repeat') {
+  const backgroundStyle = frameBackgroundStyle(node)
+  if (backgroundStyle === 'repeat') {
     options.onDegrade?.({ kind: 'unsupported-background-style', nodeId: node.id, style: 'repeat' })
   }
   return {
@@ -783,17 +798,27 @@ function composeGroupBackground(
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
     href: image.href,
     ...(image.alt !== undefined ? { alt: image.alt } : {}),
-    fit: node.backgroundStyle === 'ratio' ? 'contain' : 'cover',
+    fit: backgroundStyle === 'ratio' ? 'contain' : 'cover',
   }
 }
 
 function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
-  switch (node.type) {
+  // Dispatches on what a node HOLDS rather than on the stored discriminant,
+  // so this switch says the same thing before and after ADR-0038 decision 3
+  // dissolves that union. `NodeKind` is closed, so it still narrows to
+  // `never` — the exhaustiveness the defensive arm below is measured against
+  // survives the move.
+  switch (nodeKind(node)) {
     case 'file': {
       // Resolved ONCE per node and threaded through every rank below. The
       // seams this replaced re-asked for the same key at each rank, which
       // meant a caller's lookup ran four times per file node.
-      const resolved = referenceFor(node.file, options)
+      //
+      // The `?? ''` is unreachable rather than a default: `nodeKind` answered
+      // `file`, and that kind IS "has a location", so the accessor cannot be
+      // empty here. It resolves to nothing if it ever were, which is the same
+      // never-throw degradation the arms below already take.
+      const resolved = referenceFor(nodeFile(node) ?? '', options)
       const image = composeFileImage(node, resolved, options)
       if (image !== undefined) {
         // Full-bleed image, no label run — the filename would overlap the
@@ -829,13 +854,9 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
             ),
           ]
     }
-    default:
-      break
-  }
-  switch (node.type) {
     case 'text':
       return composeTextNode(node, options)
-    case 'group': {
+    case 'frame': {
       const chrome = chromeShape(node, options)
       const background = composeGroupBackground(node, options)
       const base = background === undefined ? [chrome] : [chrome, background]
@@ -859,17 +880,18 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
           ]
     }
     default: {
-      // Defensive branch: `SpatialNode` is a closed discriminated union, so
-      // this is unreachable for schema-valid input. Kept so an unrecognized
-      // `type` (e.g. a value cast past the type system) still degrades to
-      // chrome-only rather than throwing.
-      const unknownNode = node as SpatialNode
+      // Defensive branch: `NodeKind` is closed, so this is unreachable for
+      // schema-valid input. Kept so an unrecognized kind (a value cast past
+      // the type system) still degrades to chrome-only rather than throwing.
       options.onDegrade?.({
         kind: 'unknown-node-kind',
-        nodeId: unknownNode.id,
-        type: unknownNode.type,
+        nodeId: node.id,
+        // The media type is what a reader needs here: `nodeKind` answers
+        // `undefined` precisely when nothing claims the resource, so naming
+        // the kind would say nothing at all.
+        type: node.resource?.mimeType ?? 'none',
       })
-      return [chromeShape(unknownNode, options)]
+      return [chromeShape(node, options)]
     }
   }
 }
@@ -1337,9 +1359,9 @@ function composeDecorations(
  */
 export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNode[] {
   const groups = nodes
-    .filter((node) => node.type === 'group')
+    .filter((node) => isFrame(node))
     .sort((a, b) => b.width * b.height - a.width * a.height)
-  return [...groups, ...nodes.filter((node) => node.type !== 'group')]
+  return [...groups, ...nodes.filter((node) => !isFrame(node))]
 }
 
 function layoutSpatialCanvasInternal(
@@ -1525,7 +1547,7 @@ function resolveNodeOutlines(
     // The theme's default is an already-namespaced id, and it fills in only
     // where the node's own facet is silent (ADR-0030 decision 4). A group is
     // a frame around other nodes, never a shaped thing itself.
-    if (chosen === undefined && defaultShape !== undefined && node.type !== 'group') {
+    if (chosen === undefined && defaultShape !== undefined && !isFrame(node)) {
       chosen = defaultShape
     }
     if (chosen === undefined) continue

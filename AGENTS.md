@@ -63,12 +63,14 @@ Do not stop at manual verification without preserving the scenario in automation
 
 ## Browser Mode And Trace
 
-`canvas-viewer-browser` is the default place for real browser regression tests in `packages/canvas-viewer`. Use `web-browser` for `apps/web` browser tests (IndexedDB, OPFS, etc.). `pnpm test:browser` runs all three browser projects: `canvas-viewer-browser`, `web-browser`, and `canvas-render-browser`.
+`canvas-viewer-browser` is the default place for real browser regression tests in `packages/canvas-viewer`. Use `web-browser` for `apps/web` browser tests (IndexedDB, OPFS, etc.). `pnpm test:browser` runs all FOUR browser projects: `canvas-viewer-browser`, `web-browser`, `canvas-render-browser`, and `web-browser-window-state`.
+
+**A test that leaves the browser WINDOW in a state the next file cannot tolerate** (today: entering real fullscreen, which makes Chromium refuse `page.viewport` for the next file that resizes) is named `*.window-state.browser.test.tsx` and runs alone in `web-browser-window-state`. Why a project rather than a fix in the test is measured in `apps/web/vitest.browser-window-state.config.ts`.
 
 Use:
 
 ```bash
-pnpm run test:browser        # canvas-viewer-browser + web-browser + canvas-render-browser
+pnpm run test:browser        # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state
 pnpm run test:browser:trace  # same, plus a trace for EVERY test and its DOM snapshots
 ```
 

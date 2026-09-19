@@ -51,11 +51,13 @@ import {
   type CanvasEdge,
   endIn,
   endNode,
+  nodeKind,
+  nodeText,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect, it } from 'vitest'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
@@ -65,6 +67,7 @@ import {
   recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
+import type { EditorTool } from '../../lib/editor-tool.js'
 import {
   applyCommand,
   buildFragmentInsertCommand,
@@ -91,6 +94,15 @@ import {
   selectionMembers,
 } from './selection.js'
 import type { ShortcutId } from './shortcuts.js'
+
+/**
+ * The same thing `gestures.ts`'s `startKindOf` records, read back. Written
+ * out rather than exported from the module under test: the property exists
+ * to check the gesture against the canvas, and borrowing the subject's own
+ * function would make it agree with itself.
+ */
+const startKindOfNode = (node: SpatialNode | undefined): string | undefined =>
+  node === undefined ? undefined : (nodeKind(node) ?? '')
 
 /**
  * The initial document is GENERATED, not fixed, and the geometry is drawn
@@ -167,13 +179,13 @@ function nodeArb(id: string): fc.Arbitrary<SpatialNode> {
       const base = { id, ...box }
       switch (kind) {
         case 'file':
-          return { ...base, type: 'file', file: `notes/${id}.md` }
+          return fileNode({ ...base, file: `notes/${id}.md` })
         case 'link':
-          return { ...base, type: 'link', url: `https://example.com/${id}` }
+          return linkNode({ ...base, url: `https://example.com/${id}` })
         case 'group':
-          return { ...base, type: 'group', label: text }
+          return groupNode({ ...base, label: text })
         default:
-          return { ...base, type: 'text', text }
+          return textNode({ ...base, text })
       }
     })
 }
@@ -247,15 +259,14 @@ function initialCanvas(): SpatialCanvas {
       textNode({ id: 'n0', x: 0, y: 0, width: 100, height: 60, text: 'zero' }),
       textNode({ id: 'n1', x: 160, y: 0, width: 100, height: 60, text: 'one' }),
       textNode({ id: 'n2', x: 0, y: 120, width: 100, height: 60, text: '' }),
-      {
+      linkNode({
         id: 'n3',
-        type: 'link',
         x: 160,
         y: 120,
         width: 100,
         height: 60,
         url: 'https://example.com/',
-      },
+      }),
     ],
     edges: [
       {
@@ -303,6 +314,19 @@ const COMMAND_COVERAGE = {
   'delete-node': 'covered',
   'create-edge': 'covered',
   'delete-edge': 'covered',
+  // `covered` because the ledger SAID SO, not because it was claimed. Both
+  // went in as `not modelled` and direction 4 failed this one — "the run
+  // produced it 2 times" — which is the connect gesture's empty release
+  // arriving through the model's own pointerup arm now that it mints ink
+  // instead of cancelling.
+  'create-line': 'covered',
+  // Still genuinely unreached: the model drives gestures, and no gesture
+  // deletes ink — that is a keypress against a selection. `applyCommand` is
+  // covered by commands.test.ts, the collection-picking by its
+  // `deleteInkCommand` case, and the select-then-delete flow by
+  // line-ink.browser.test.tsx.
+  'delete-line':
+    'not modelled: no gesture deletes ink; the Delete keypress against a selected line is line-ink.browser.test.tsx',
   'reorder-nodes': 'covered',
   'set-body':
     'not modelled: the markdown editor writes the document body, which is not in the canvas at all — applyCommand returns the same reference',
@@ -347,6 +371,8 @@ const COMMAND_COVERAGE = {
     'not modelled: a one-field patch of the projected comment’s text for the opening message, identity otherwise; its write path is document-sync-session.test.ts and its gestures are the rail’s and the card’s Edit (CommentsPanel.browser.test.tsx, comment-edit.browser.test.tsx)',
   'decide-proposal':
     'not modelled: one press on the proposal card decides a whole proposal — a fold of applyCanvasChange over changes the card carried, with no gesture or selection coupling to model here. Its canvas meaning is commands.test.ts, its two-plane write is document-sync-session.test.ts, and its gesture is proposal-adopt.browser.test.tsx',
+  'ungroup-ink':
+    'not modelled: removes one facet key from every named stroke, breaking a handwritten mark apart. Nothing in this model draws with the pen or reads a group, so there is no gesture or selection coupling here to observe; its canvas meaning is commands.test.ts and its gesture is the ink menu’s Ungroup (freehand-ink.browser.test.tsx)',
   'reply-to-thread':
     'not modelled: applyCommand is the IDENTITY for it — a reply writes the threads plane beside the canvas, so this model, whose subject is what a command does to a canvas, has nothing to observe. Its write path is document-sync-session.test.ts and its gestures are comment-reply.browser.test.tsx',
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>
@@ -360,6 +386,7 @@ const GESTURE_EVENT_COVERAGE = {
   'pointerdown-handle': 'covered',
   'pointerdown-connect': 'covered',
   'pointerdown-empty': 'covered',
+  'pointerdown-draw': 'covered',
   'dblclick-empty': 'covered',
   'delete-selection': 'covered',
   pointermove: 'covered',
@@ -449,6 +476,8 @@ interface Stats {
   handPressesIgnored: number
   handEntries: number
   connectArms: number
+  /** Strokes that really became ink — not presses in the draw tool. */
+  inkStrokes: number
   toolSwitches: number
   /** Move commits that carried at least one node besides the grabbed one. */
   carriedMoves: number
@@ -501,7 +530,7 @@ interface Real {
    * all, and `connect` re-routes a node press to `pointerdown-connect`
    * instead of starting a move.
    */
-  tool: 'select' | 'hand' | 'connect'
+  tool: EditorTool
   /**
    * The rubber-band rectangle, armed by a press that hit no node. While
    * it is armed the pointer NEVER reaches the gesture reducer again —
@@ -583,7 +612,7 @@ function checkInvariants(real: Real): void {
       break
     case 'moving':
     case 'resizing':
-      expect(nodeById(canvas, gesture.nodeId)?.type, `G1 ${gesture.kind} ${at}`).toBe(
+      expect(startKindOfNode(nodeById(canvas, gesture.nodeId)), `G1 ${gesture.kind} ${at}`).toBe(
         gesture.startType,
       )
       break
@@ -591,7 +620,9 @@ function checkInvariants(real: Real): void {
       expect(nodeById(canvas, gesture.fromNodeId), `G1 connecting ${at}`).toBeDefined()
       break
     case 'editing-text':
-      expect(nodeById(canvas, gesture.nodeId)?.type, `G1 editing-text ${at}`).toBe('text')
+      expect(startKindOfNode(nodeById(canvas, gesture.nodeId)), `G1 editing-text ${at}`).toBe(
+        'text',
+      )
       break
   }
 
@@ -884,7 +915,7 @@ function pickConnected(real: Real, index: number): SpatialNode | undefined {
 
 function pickText(real: Real, index: number): SpatialNode | undefined {
   const texts = real.canvas.nodes.filter(
-    (node) => node.type === 'text' && !real.lockedNodeIds.has(node.id),
+    (node) => nodeText(node) !== undefined && !real.lockedNodeIds.has(node.id),
   )
   if (texts.length === 0) return undefined
   return texts[index % texts.length]
@@ -1173,8 +1204,8 @@ class StartTextEdit extends GestureCommand {
   }
   event(real: Real): GestureEvent | undefined {
     const node = pickText(real, this.index)
-    if (node === undefined || node.type !== 'text') return undefined
-    return { type: 'start-text-edit', nodeId: node.id, text: node.text }
+    if (node === undefined || nodeText(node) === undefined) return undefined
+    return { type: 'start-text-edit', nodeId: node.id, text: nodeText(node) ?? '' }
   }
   toString(): string {
     return `startTextEdit(text#${this.index})`
@@ -2038,7 +2069,7 @@ class ClipboardFlow implements fc.Command<Model, Real> {
  * is that no press can change the canvas.
  */
 class SwitchTool implements fc.Command<Model, Real> {
-  constructor(private readonly next: 'select' | 'hand' | 'connect') {}
+  constructor(private readonly next: EditorTool) {}
   check(): boolean {
     return true
   }
@@ -2096,6 +2127,46 @@ class WithTool implements fc.Command<Model, Real> {
 }
 
 /**
+ * A freehand stroke, tool switch included — ink is only reachable in the
+ * draw tool, and a uniform draw would have to land the switch immediately
+ * before the press to reach this arm at all (the same reason `WithTool`
+ * exists).
+ *
+ * It mirrors `handlePointerDown`'s draw branch: no hit-test, no selection
+ * transition, and the samples unsnapped. The middle sample is deliberately
+ * off the chord, so the stroke has a turn to keep and the run exercises the
+ * simplification rather than only its two-point case.
+ */
+class DrawStroke implements fc.Command<Model, Real> {
+  constructor(
+    private readonly from: Point,
+    private readonly delta: Point,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    new SwitchTool('draw').run(model, real)
+    const to = { x: this.from.x + this.delta.x, y: this.from.y + this.delta.y }
+    const before = real.canvas.lines?.length ?? 0
+    dispatch(real, { type: 'pointerdown-draw', point: this.from, zoom: 1 }, this.toString())
+    dispatch(
+      real,
+      {
+        type: 'pointermove',
+        point: { x: (this.from.x + to.x) / 2 + 30, y: (this.from.y + to.y) / 2 - 30 },
+      },
+      `${this.toString()}:move`,
+    )
+    dispatch(real, { type: 'pointerup', point: to }, `${this.toString()}:up`)
+    if ((real.canvas.lines?.length ?? 0) > before) real.stats.inkStrokes += 1
+  }
+  toString(): string {
+    return `draw(${this.from.x},${this.from.y}+${this.delta.x},${this.delta.y})`
+  }
+}
+
+/**
  * Frame the current selection: a group node at the enclosing box plus
  * padding, which becomes the selection. The frame therefore CONTAINS what
  * it was made from, so a later drag of it carries them — the one
@@ -2117,7 +2188,7 @@ class GroupSelection implements fc.Command<Model, Real> {
     const id = `group-${real.nextId++}`
     dispatchCommands(
       real,
-      [{ kind: 'create-group', node: { id, type: 'group', ...frame } }],
+      [{ kind: 'create-group', node: groupNode({ id, ...frame }) }],
       this.toString(),
     )
     real.selection = reduceSelection(real.selection, { type: 'set-primary', id })
@@ -2293,6 +2364,7 @@ const allCommands = [
   fc
     .tuple(fc.constantFrom<'hand' | 'connect'>('hand', 'connect'), indexArb, indexArb)
     .map(([t, from, to]) => new WithTool(t, from, to)),
+  fc.tuple(pointArb, nonZeroDeltaArb).map(([from, delta]) => new DrawStroke(from, delta)),
   fc.constant(new GroupSelection()),
   fc
     .tuple(fc.constantFrom<'multi' | 'group'>('multi', 'group'), nonZeroDeltaArb)
@@ -2326,6 +2398,7 @@ describe('editor composite state (command-based)', () => {
     handPressesIgnored: 0,
     handEntries: 0,
     connectArms: 0,
+    inkStrokes: 0,
     toolSwitches: 0,
     carriedMoves: 0,
     groupOrMultiDrags: 0,
@@ -2388,7 +2461,7 @@ describe('editor composite state (command-based)', () => {
     // handoffs 33-44, mid-gesture external replacements 39-54,
     // multi-selections 430-515, nudges 70-98, duplicates 18-30, effective
     // reorders 43-54 (of which forward/backward 16-24), locks applied
-    // 15-28, select-alls 119-139, edge selections 83-95, edge deletes
+    // 15-28, ink strokes 74-85, select-alls 119-139, edge selections 83-95, edge deletes
     // 19-34, copies 33-46, cuts 53-72, cut-moves 13-20, paste-inserts
     // 38-59, reconnections 5-19 (see below), marquee selections 23-30,
     // hand-swallowed presses 53-70, hand entries 43-56, connect arms
@@ -2468,6 +2541,7 @@ describe('editor composite state (command-based)', () => {
     atLeast(stats.handPressesIgnored, 17, 'hand mode never swallowed a press')
     atLeast(stats.handEntries, 14, 'hand mode was never entered')
     atLeast(stats.connectArms, 14, 'the connect tool never armed')
+    atLeast(stats.inkStrokes, 24, 'the draw tool never made ink')
     atLeast(stats.toolSwitches, 60, 'the tool never changed')
     atLeast(stats.carriedMoves, 18, 'no drag ever carried a second node')
     atLeast(stats.groupOrMultiDrags, 18, 'no group or multi-selection was ever dragged')
@@ -2598,10 +2672,10 @@ describe('pinned counterexamples', () => {
 
     expect(moved.commands).toEqual([{ kind: 'set-text', id: 'n0', text: 'zero, edited' }])
     expect(moved.state).toEqual({ kind: 'editing-text', nodeId: 'n1', pendingText: 'one' })
-    expect(applyCommand(canvas, moved.commands[0]).nodes[0]).toMatchObject({
-      id: 'n0',
-      text: 'zero, edited',
-    })
+    expect(applyCommand(canvas, moved.commands[0]).nodes[0]).toMatchObject({ id: 'n0' })
+    expect(nodeText(applyCommand(canvas, moved.commands[0]).nodes[0] as SpatialNode)).toBe(
+      'zero, edited',
+    )
   })
 
   // Re-opening the editor on the node ALREADY being edited is a no-op, and

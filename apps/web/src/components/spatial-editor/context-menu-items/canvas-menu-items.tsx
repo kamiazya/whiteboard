@@ -2,7 +2,7 @@
  * The empty-canvas branch: paste-with-fragment, creation entries, the
  * conditional document/image entries, and Tidy at >=2 nodes.
  */
-import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   ClipboardPaste,
@@ -119,7 +119,10 @@ export function canvasMenuItems({
       icon: <Sparkles />,
       onSelect: () =>
         applyBoxMoves(
-          tidyNodes(canvasRef.current.nodes, { locked: isLocked, edges: canvasRef.current.edges }),
+          tidyNodes(tidyBoxes(canvasRef.current.nodes), {
+            locked: isLocked,
+            edges: canvasRef.current.edges,
+          }),
         ),
     })
   }

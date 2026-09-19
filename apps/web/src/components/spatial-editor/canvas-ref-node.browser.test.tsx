@@ -4,6 +4,7 @@
 // editor — the host page owns its meaning.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile, type SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -79,7 +80,7 @@ it('Add canvas opens the picker and picking creates a file node with that refere
   fireEvent.click(option)
 
   await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(1))
-  expect(latest.canvas.nodes[0]).toMatchObject({ type: 'file', file: 'canvas-b' })
+  expect(nodeFile(latest.canvas.nodes[0] as SpatialNode)).toBe('canvas-b')
   expect(latest.commands).toContain('create-node')
   expect(container.querySelector('[data-testid="document-picker-dialog"]')).toBeNull()
   // The card shows the RESOLVED label, not the opaque reference — the
@@ -120,9 +121,7 @@ it('the file context menu offers Open canvas and Change target retargets via the
   ].find((b) => b.textContent === 'Meeting notes') as HTMLButtonElement
   fireEvent.click(target)
 
-  await vi.waitFor(() =>
-    expect(latest.canvas.nodes[0]).toMatchObject({ type: 'file', file: 'canvas-b' }),
-  )
+  await vi.waitFor(() => expect(nodeFile(latest.canvas.nodes[0] as SpatialNode)).toBe('canvas-b'))
   expect(latest.commands).toContain('set-node-file')
 })
 

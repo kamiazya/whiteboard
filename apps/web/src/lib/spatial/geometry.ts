@@ -6,7 +6,7 @@
  * `scene-render.test.ts`'s drift guard.
  */
 import { paintOrderOf } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Point } from './viewport.js'
 
 export interface Box {
@@ -29,7 +29,7 @@ export function indexNodeBoxes(canvas: SpatialCanvas): readonly NodeBox[] {
   // below reads the same picture the renderer draws.
   return paintOrderOf(canvas.nodes).map((node) => ({
     id: node.id,
-    ...(node.type === 'group' ? { container: true } : {}),
+    ...(isFrame(node) ? { container: true } : {}),
     box: { x: node.x, y: node.y, width: node.width, height: node.height },
   }))
 }

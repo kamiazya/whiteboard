@@ -6,7 +6,9 @@
 // Decorations COMPOSE: several plugins marking one node is a stack, not a
 // conflict, so the only question is order and it answers by contribution
 // order. That is what makes this seam cheaper than the silhouette one.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
@@ -36,16 +38,15 @@ function baseOptions(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions
 
 const canvasOf = (facets?: Record<string, unknown>): SpatialCanvas => ({
   nodes: [
-    {
+    textNode({
       id: 'n1',
-      type: 'text',
       x: 0,
       y: 0,
       width: 200,
       height: 120,
       text: 'n1',
       ...(facets === undefined ? {} : { facets }),
-    },
+    }),
   ],
   edges: [],
 })

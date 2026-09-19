@@ -24,6 +24,7 @@ import {
   type CanvasColor,
   type CanvasComment,
   type CanvasEdge,
+  type CanvasLine,
   type ClipboardFragment,
   type CommentMessage,
   type CommentThread,
@@ -32,6 +33,7 @@ import {
   type EdgeRoutingStyle,
   endIn,
   endNode,
+  isFrame,
   isSelfLoop,
   type LineJumps,
   nodeFile,
@@ -50,6 +52,7 @@ import {
   resolveCanvasEdgeDefaults,
   resolveCanvasEdgeStyle,
   VISUAL_EDGES_KEY,
+  VISUAL_INK_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { remintClipboardFragment } from '../clipboard-fragment.js'
 import { withTagList } from './tags.js'
@@ -96,6 +99,14 @@ export type EditorLeafCommand =
       readonly placement: 'forward' | 'backward' | 'front' | 'back'
     }
   | { readonly kind: 'delete-edge'; readonly id: string }
+  /**
+   * Ink, not a relation (ADR-0038 decision 2): a line may end nowhere, and
+   * says nothing about what is connected to what. Carries the whole
+   * `CanvasLine` for the reason `create-node` carries the whole node — a
+   * field added to the model arrives here without a command-shape change.
+   */
+  | { readonly kind: 'create-line'; readonly line: CanvasLine }
+  | { readonly kind: 'delete-line'; readonly id: string }
   | { readonly kind: 'set-edge-label'; readonly id: string; readonly label: string }
   | {
       readonly kind: 'set-edge-ends'
@@ -188,6 +199,11 @@ export type EditorLeafCommand =
   | {
       // Canvas-envelope sibling of set-edge-routing: whether crossing
       // edges hop over each other. Same later-per-edge-override caveat.
+      readonly kind: 'ungroup-ink'
+      /** Every stroke of the mark being broken apart. */
+      readonly ids: readonly string[]
+    }
+  | {
       readonly kind: 'set-line-jumps'
       readonly lineJumps: LineJumps
     }
@@ -201,7 +217,7 @@ export type EditorLeafCommand =
       // so hit-testing (last containing box wins) still reaches members
       // drawn above it. A colliding id is a no-op, like create-node.
       readonly kind: 'create-group'
-      readonly node: Extract<SpatialNode, { type: 'group' }>
+      readonly node: SpatialNode
     }
   | {
       // Sets a group frame's label; an empty string removes the field
@@ -453,6 +469,51 @@ function createNode(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
 }
 
 /**
+ * The delete a selected piece of ink wants, or `undefined` when the canvas
+ * holds no such ink.
+ *
+ * The editor carries ONE selected-ink id rather than one per collection,
+ * because the SCENE is where an edge and a line become the same thing:
+ * canvas-render routes `[...edges, ...lines]` through one pass and both come
+ * out as `kind: 'edge'` scene nodes carrying their own id. So hit-testing,
+ * `edgePaths` and the selection highlight already worked on a line before
+ * anything here knew lines existed.
+ *
+ * Deleting is the step that has to know which collection, and this is the one
+ * place that decides — rather than each call site remembering to look in two
+ * lists. An id in neither answers `undefined` instead of a delete aimed at a
+ * guess: a stale selection must not remove whatever happens to share its id.
+ */
+export function deleteInkCommand(canvas: SpatialCanvas, id: string): EditorCommand | undefined {
+  if (canvas.edges.some((edge) => edge.id === id)) return { kind: 'delete-edge', id }
+  if ((canvas.lines ?? []).some((line) => line.id === id)) return { kind: 'delete-line', id }
+  return undefined
+}
+
+/**
+ * Appends `line`, rejecting a colliding id as a no-op — the same guard
+ * `createNode` and `connectNodes` carry, for the same reason: the schema's id
+ * check refuses a canvas holding two of anything with one id.
+ */
+function createLine(canvas: SpatialCanvas, line: CanvasLine): SpatialCanvas {
+  if ((canvas.lines ?? []).some((existing) => existing.id === line.id)) return canvas
+  return { ...canvas, lines: [...(canvas.lines ?? []), line] }
+}
+
+/**
+ * Removes the line with `id`. A no-op when the canvas holds no such line, and
+ * deliberately does NOT introduce an empty `lines` array on a canvas that had
+ * none — the model says an absent `lines` and an empty one mean the same, so
+ * writing one would make a no-op look like an edit to every value comparison
+ * downstream.
+ */
+function deleteLine(canvas: SpatialCanvas, id: string): SpatialCanvas {
+  const lines = canvas.lines
+  if (lines === undefined || !lines.some((line) => line.id === id)) return canvas
+  return { ...canvas, lines: lines.filter((line) => line.id !== id) }
+}
+
+/**
  * Removes the node with `id` plus every edge that references it as
  * `fromNode`/`toNode` — the command-layer half of the edge-referential-
  * integrity invariant `deleteSpatialNode` (workspace) also enforces
@@ -465,6 +526,16 @@ function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
     ...canvas,
     nodes: canvas.nodes.filter((node) => node.id !== id),
     edges: canvas.edges.filter((edge) => endNode(edge.from) !== id && endNode(edge.to) !== id),
+    // Lines cascade too, and for the same reason edges do: `endNode` answers
+    // `undefined` for a FREE end, so a line floating in empty space names no
+    // node and is never swept up by this.
+    ...(canvas.lines === undefined
+      ? {}
+      : {
+          lines: canvas.lines.filter(
+            (line) => endNode(line.from) !== id && endNode(line.to) !== id,
+          ),
+        }),
   }
 }
 
@@ -639,6 +710,30 @@ function setEdgeBends(
   }
 }
 
+/**
+ * Breaks a mark apart: every named stroke loses its `visual.ink/v0` group
+ * and stands alone again.
+ *
+ * REMOVES the facet rather than writing a fresh group per stroke, because
+ * carrying no group is already what "a mark of one" means — a new id each
+ * would say the same thing while leaving something to go stale. An empty
+ * `facets` bucket is dropped for the same reason.
+ */
+function ungroupInk(canvas: SpatialCanvas, ids: readonly string[]): SpatialCanvas {
+  const wanted = new Set(ids)
+  const lines = canvas.lines ?? []
+  if (!lines.some((line) => wanted.has(line.id))) return canvas
+  return {
+    ...canvas,
+    lines: lines.map((line) => {
+      if (!wanted.has(line.id) || line.facets === undefined) return line
+      const { [VISUAL_INK_KEY]: _group, ...rest } = line.facets
+      const { facets: _previous, ...withoutFacets } = line
+      return Object.keys(rest).length === 0 ? withoutFacets : { ...withoutFacets, facets: rest }
+    }),
+  }
+}
+
 function setNodeColor(
   canvas: SpatialCanvas,
   id: string,
@@ -663,20 +758,17 @@ function setNodeFile(canvas: SpatialCanvas, id: string, file: string): SpatialCa
   }
 }
 
-function createGroup(
-  canvas: SpatialCanvas,
-  node: Extract<SpatialNode, { type: 'group' }>,
-): SpatialCanvas {
+function createGroup(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
   if (canvas.nodes.some((existing) => existing.id === node.id)) return canvas
   return { ...canvas, nodes: [node, ...canvas.nodes] }
 }
 
 function setGroupLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && node.type === 'group')) return canvas
+  if (!canvas.nodes.some((node) => node.id === id && isFrame(node))) return canvas
   return {
     ...canvas,
     nodes: canvas.nodes.map((node) => {
-      if (node.id !== id || node.type !== 'group') return node
+      if (node.id !== id || !isFrame(node)) return node
       const { label: _removed, ...rest } = node
       return label === '' ? rest : { ...rest, label }
     }),
@@ -689,11 +781,11 @@ function setGroupBackground(
   background: string | undefined,
   backgroundStyle: 'cover' | 'ratio' | 'repeat' | undefined,
 ): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && node.type === 'group')) return canvas
+  if (!canvas.nodes.some((node) => node.id === id && isFrame(node))) return canvas
   return {
     ...canvas,
     nodes: canvas.nodes.map((node) => {
-      if (node.id !== id || node.type !== 'group') return node
+      if (node.id !== id || !isFrame(node)) return node
       const { background: _bg, backgroundStyle: _style, ...rest } = node
       if (background === undefined) return rest
       return {
@@ -830,6 +922,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return createNode(canvas, command.node)
     case 'delete-edge':
       return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== command.id) }
+    case 'create-line':
+      return createLine(canvas, command.line)
+    case 'delete-line':
+      return deleteLine(canvas, command.id)
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
     case 'set-edge-ends':
@@ -868,6 +964,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeBends(canvas, command.id, command.bends)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
+    case 'ungroup-ink':
+      return ungroupInk(canvas, command.ids)
     case 'set-line-jumps':
       return setLineJumps(canvas, command.lineJumps)
     case 'set-edge-color':

@@ -3,19 +3,21 @@
 // ranking never proposed, and the edge reaches its target the long way
 // round: the reported canvas arrived at n2's BOTTOM from below, four
 // corners, when n2's right side was one corner away.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const node = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+const node = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: w,
+    height: h,
+    text: id,
+  })
 
 it('re-pairs the arrival onto the axis the moved departure did not take', () => {
   // n1 buries n0's left anchor, so the departure moves left -> top. The

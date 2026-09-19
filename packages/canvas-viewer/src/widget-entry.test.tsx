@@ -1,4 +1,3 @@
-import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseViewerScene } from './scene.js'
 
@@ -157,7 +156,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // canvas_view's outputSchema wraps the scene as {documentId, scene}; only
     // the `scene` field is a valid mountCanvasViewer payload.
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -236,7 +235,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // The host's connect() attempt was never cancelled by the timeout, so a
     // tool-result notification can still arrive afterward.
     const scene = {
-      nodes: [textNode({ id: 'b', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'b', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -260,7 +259,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -294,7 +293,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // Host delivers the tool-result while connect() is still pending, i.e.
     // before the HOST_CONNECT_TIMEOUT_MS branch decides "not connected".
     const scene = {
-      nodes: [textNode({ id: 'c', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'c', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -344,7 +343,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -370,7 +369,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // connect() has resolved — committedCanvasId is already set when
     // connect() (and thus the `if (connected)` branch) resolves next.
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -399,7 +398,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 320, height: 220, file: 'notes' })],
+      nodes: [{ id: 'f', type: 'file', file: 'notes', x: 0, y: 0, width: 320, height: 220 }],
     }
     const body = 'a paragraph'
     fakeAppInstances[0].ontoolresult?.({
@@ -426,7 +425,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene, style: 'document' },
@@ -454,7 +453,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
       // The host sends a JSON Canvas document — `canvas_view` projects one —
       // so the theme rides the extension key and the widget resolves its
       // paper from the LIFTED model (ADR-0037).
@@ -486,7 +485,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const YOMOGI_URL =
       'https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf'
     const sketchScene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
       facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
 
@@ -589,7 +588,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' })],
+      nodes: [{ id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 40 }],
     }
     const thread = {
       id: 't',
@@ -626,7 +625,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 320, height: 220, file: 'notes' })],
+      nodes: [{ id: 'f', type: 'file', file: 'notes', x: 0, y: 0, width: 320, height: 220 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: {
@@ -659,7 +658,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     }
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -683,7 +682,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
     await Promise.resolve()
@@ -702,7 +701,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -733,7 +732,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 90, y: 50, width: 40, height: 30, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 90, y: 50, width: 40, height: 30 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -798,7 +797,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -846,7 +845,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -886,7 +885,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -937,7 +936,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     }
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -961,7 +960,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
 
     await importFreshWidgetEntry()
     const scene = {
-      nodes: [textNode({ id: 'c', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'c', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -1006,7 +1005,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     }
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/right', scene },
@@ -1023,7 +1022,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene1 = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene1 },
@@ -1034,7 +1033,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     vi.mocked(mountCanvasViewer).mockClear()
 
     const scene2 = {
-      nodes: [textNode({ id: 'b', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'b', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     callServerToolMock.mockResolvedValueOnce({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
@@ -1067,7 +1066,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -1087,7 +1086,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(button.disabled).toBe(false)
 
     const scene2 = {
-      nodes: [textNode({ id: 'b', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'b', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     callServerToolMock.mockResolvedValueOnce({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
@@ -1110,7 +1109,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -1136,7 +1135,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(button.disabled).toBe(false)
 
     const scene2 = {
-      nodes: [textNode({ id: 'b', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'b', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     callServerToolMock.mockResolvedValueOnce({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
@@ -1159,7 +1158,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -1200,7 +1199,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     const scene = {
-      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
@@ -1210,7 +1209,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     vi.mocked(mountCanvasViewer).mockClear()
 
     const scene2 = {
-      nodes: [textNode({ id: 'b', x: 0, y: 0, width: 10, height: 10, text: '' })],
+      nodes: [{ id: 'b', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
     }
     callServerToolMock.mockResolvedValueOnce({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },

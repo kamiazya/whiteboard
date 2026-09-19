@@ -19,9 +19,11 @@
  * resolution — the semantics this file exists for — are written out
  * independently below.
  */
+
 import { movesForPathChange, scanReferences } from '@kamiazya/whiteboard-codec'
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
+import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
@@ -466,10 +468,7 @@ describe('reference semantics under command sequences', () => {
                       id: nodeId,
                       type: 'file',
                       file: 'embed-placeholder',
-                      // `execute` takes the schema's OUTPUT type, and the input's
-                      // flat write shape has already been narrowed to the model's
-                      // field by then.
-                      'x-whiteboard': { embed: { documentId: targetId } },
+                      embed: { documentId: targetId },
                     },
                   },
                 ],
@@ -575,18 +574,15 @@ describe('reference semantics under command sequences', () => {
             ).toEqual(doc.bodyTokens)
           } else {
             const canvas = readSpatialCanvas(real)
-            const textTokens = canvas.nodes
-              .filter((node) => node.type === 'text')
-              .flatMap((node) => scanReferences(node.text).map((m) => m.target))
+            const textTokens = canvas.nodes.flatMap((node) =>
+              scanReferences(nodeText(node) ?? '').map((m) => m.target),
+            )
             expect([...textTokens].sort(), `text tokens of ${doc.path}`).toEqual(
               [...doc.bodyTokens].sort(),
             )
             const plainFiles = canvas.nodes
-              .filter((node) => {
-                if (node.type !== 'file') return false
-                return node.embed === undefined
-              })
-              .map((node) => (node.type === 'file' ? node.file : ''))
+              .filter((node) => nodeFile(node) !== undefined && node.embed === undefined)
+              .map((node) => nodeFile(node) ?? '')
             expect(plainFiles.sort(), `file refs of ${doc.path}`).toEqual([...doc.fileRefs].sort())
           }
         }

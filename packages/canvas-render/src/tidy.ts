@@ -83,6 +83,7 @@ import {
 } from './tidy-units.js'
 
 export type { TidyNode, TidyOptions } from './tidy-units.js'
+export { tidyBoxes } from './tidy-units.js'
 
 export interface TidyMove {
   readonly id: string
@@ -295,7 +296,7 @@ function bandsBy(units: Unit[], anchor: (u: Unit) => number): Unit[][] {
 function orderRowsByEdges(units: Unit[], edges: readonly Pick<CanvasEdge, 'from' | 'to'>[]): void {
   const unitOf = new Map<string, Unit>()
   for (const unit of units) {
-    if (unit.members.length === 1 && unit.members[0]?.type !== 'group') {
+    if (unit.members.length === 1 && unit.members[0]?.frame !== true) {
       unitOf.set(unit.rootId, unit)
     }
   }

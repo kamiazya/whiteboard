@@ -15,6 +15,7 @@ import {
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
@@ -64,7 +65,7 @@ function canvasDoc(text: string): LoroDoc {
 
 function readText(doc: LoroDoc): string | null {
   const node = readSpatialCanvas(doc).nodes[0]
-  return node?.type === 'text' ? node.text : null
+  return node === undefined ? null : (nodeText(node) ?? null)
 }
 
 async function stores() {

@@ -236,12 +236,18 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
     // dock is nowhere near — where a control floating a strip's height up,
     // with empty space beneath it, reads as unanchored rather than as placed.
     //
-    // 407 is arithmetic, not taste. The dock is centred at 295px, so its left
-    // edge is (vw - 295) / 2; this control spans 12..44; 8px of clearance
-    // wants vw >= 295 + 112. `declares a corner breakpoint that still clears
+    // 445 is arithmetic, not taste. The dock is centred at 333px, so its left
+    // edge is (vw - 333) / 2; this control spans 12..44; 8px of clearance
+    // wants vw >= 333 + 112. `declares a corner breakpoint that still clears
     // the dock` reads the number back out of this class and re-measures it
     // against the real dock, so widening the dock fails there rather than on
-    // someone's phone.
+    // someone's phone — which is exactly how the pen's tool button moved it
+    // from 407.
+    //
+    // Narrower than 357 the dock stops growing (it is capped to the editor's
+    // width less a gutter, and its tools scroll), so its left edge parks at
+    // 12 and this control's horizontal clearance is gone for good — which is
+    // the band the 70px lift below covers.
     //
     // 70px is that strip: the dock's own 0.75rem offset, its 46px, and the gap
     // again. It clears the markdown formatting bar (44px) too, so no page has
@@ -255,7 +261,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         onClick={fullscreen.toggle}
         className={cn(
           HEADER_BUTTON_CLASS,
-          'fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-[407px]:bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
+          'fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-[445px]:bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
         )}
       >
         <Minimize2 aria-hidden="true" className="size-4" />

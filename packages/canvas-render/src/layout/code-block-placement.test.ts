@@ -10,7 +10,9 @@
  * looking. Reported against an embedded document and a plain text node
  * alike, which is the tell: both go through the same translation.
  */
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { CodeBlockNode, SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -21,7 +23,7 @@ const BODY = ['# Title', '', '```', 'const a = 1', '```'].join('\n')
 
 function canvasAt(x: number, y: number): SpatialCanvas {
   return {
-    nodes: [{ id: 'n1', type: 'text', text: BODY, x, y, width: 400, height: 320 }],
+    nodes: [textNode({ id: 'n1', text: BODY, x, y, width: 400, height: 320 })],
     edges: [],
   } as unknown as SpatialCanvas
 }

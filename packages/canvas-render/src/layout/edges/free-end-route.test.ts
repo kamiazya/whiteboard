@@ -13,18 +13,19 @@
 // reader cares about is that the line reaches the point and stops there.
 
 import type { CanvasLine, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { routeEdge } from './spatial-edges.js'
 
-const box = (id: string, x: number, y: number): SpatialNode => ({
-  id,
-  type: 'text',
-  text: id,
-  x,
-  y,
-  width: 100,
-  height: 60,
-})
+const box = (id: string, x: number, y: number): SpatialNode =>
+  textNode({
+    id,
+    text: id,
+    x,
+    y,
+    width: 100,
+    height: 60,
+  })
 
 const last = <T>(items: readonly T[]): T => items[items.length - 1] as T
 

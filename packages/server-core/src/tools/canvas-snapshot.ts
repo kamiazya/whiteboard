@@ -26,6 +26,7 @@ import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
+import { type PublishedNodeKind, publishedKind } from './published-node-kind.js'
 
 /**
  * Per-node text budget, in characters. A text node can hold a whole markdown
@@ -171,7 +172,7 @@ type CanvasSnapshotInput = z.infer<typeof canvasSnapshotInputSchema>
 /** Everything a snapshot node carries whatever it shows. */
 type SnapshotNodeBase = {
   readonly id: string
-  readonly type: SpatialNode['type']
+  readonly type: PublishedNodeKind
   readonly x: number
   readonly y: number
   readonly width: number
@@ -184,9 +185,10 @@ function projectNode(
   node: SpatialNode,
   locked: boolean,
 ): { node: z.infer<typeof canvasSnapshotNodeSchema>; truncated: boolean } {
+  const kind = nodeKind(node)
   const base: SnapshotNodeBase = {
     id: node.id,
-    type: node.type,
+    type: publishedKind(node),
     x: node.x,
     y: node.y,
     width: node.width,
@@ -195,7 +197,9 @@ function projectNode(
     ...(locked ? { locked: true as const } : {}),
   }
 
-  return PROJECT_NODE[nodeKind(node)](node, base)
+  // An unreadable resource has no row of its own; it projects as the frame
+  // its `type` above already says it is.
+  return PROJECT_NODE[kind ?? 'frame'](node, base)
 }
 
 /**

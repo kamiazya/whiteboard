@@ -1,4 +1,5 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 
 /**
  * The documents that reached a human before they reached the suite. Each one
@@ -16,15 +17,15 @@ export type RoutingCase = {
   readonly edges: readonly CanvasEdge[]
 }
 
-const node = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+const node = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: w,
+    height: h,
+    text: id,
+  })
 
 const overlappingPair = (name: string, bx: number, by: number): RoutingCase => ({
   name,

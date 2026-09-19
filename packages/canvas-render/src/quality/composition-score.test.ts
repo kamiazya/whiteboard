@@ -8,7 +8,9 @@
 //
 // ADR-0032 fixes what these columns may be read to mean: the composition a
 // drawing hands its reader, never that it was understood.
+
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
@@ -22,24 +24,24 @@ const layout = (canvas: SpatialCanvas): Scene =>
   layoutSpatialCanvas(canvas, { measure, appearance })
 const score = (canvas: SpatialCanvas): CompositionScore => scoreComposition(canvas, layout(canvas))
 
-const box = (id: string, x: number, y: number, width = 200, height = 80): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width,
-  height,
-  text: id,
-})
-const group = (id: string, x: number, y: number, width: number, height: number): SpatialNode => ({
-  id,
-  type: 'group',
-  x,
-  y,
-  width,
-  height,
-  label: id,
-})
+const box = (id: string, x: number, y: number, width = 200, height = 80): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    text: id,
+  })
+const group = (id: string, x: number, y: number, width: number, height: number): SpatialNode =>
+  groupNode({
+    id,
+    x,
+    y,
+    width,
+    height,
+    label: id,
+  })
 const edge = (id: string, fromNode: string, toNode: string): CanvasEdge => ({
   id,
   from: { node: fromNode },

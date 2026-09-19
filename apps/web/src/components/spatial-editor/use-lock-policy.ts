@@ -19,7 +19,7 @@ export interface LockPolicyInputs {
   selectedId: string | null
   extraIds: ReadonlySet<string>
   selectedEdgeId: string | null
-  setSelectedEdgeId: (id: string | null) => void
+  retainInk: (keep: (id: string) => boolean) => void
   setEdgeLabelEditId: (update: (current: string | null) => string | null) => void
   gestureState: GestureState
   setGestureState: (state: GestureState) => void
@@ -35,7 +35,7 @@ export function useLockPolicy({
   selectedId,
   extraIds,
   selectedEdgeId,
-  setSelectedEdgeId,
+  retainInk,
   setEdgeLabelEditId,
   gestureState,
   setGestureState,
@@ -70,9 +70,11 @@ export function useLockPolicy({
    * silent deselect-all.
    */
   useEffect(() => {
-    if (edgeLockEnabled && selectedEdgeId !== null && isEdgeLocked(selectedEdgeId)) {
-      setSelectedEdgeId(null)
-      setEdgeLabelEditId((current) => (current === selectedEdgeId ? null : current))
+    if (edgeLockEnabled) {
+      // Every selected id, not just the primary: a band can hold several
+      // strokes and a lock arriving from a peer may name any of them.
+      retainInk((id) => !isEdgeLocked(id))
+      setEdgeLabelEditId((current) => (current !== null && isEdgeLocked(current) ? null : current))
     }
     // isEdgeLocked closes over lockedEdgeIds/edgeLockEnabled, both listed.
   }, [edgeLockEnabled, lockedEdgeIds, selectedEdgeId])

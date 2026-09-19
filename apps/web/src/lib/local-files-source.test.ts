@@ -9,6 +9,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -338,26 +339,8 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     writeSpatialCanvas(boardDoc, {
       tags: ['team:core', 'q3'],
       nodes: [
-        {
-          id: 'a',
-          type: 'text',
-          x: 0,
-          y: 0,
-          width: 100,
-          height: 50,
-          text: 'a',
-          tags: ['health:ok'],
-        },
-        {
-          id: 'b',
-          type: 'text',
-          x: 200,
-          y: 0,
-          width: 100,
-          height: 50,
-          text: 'b',
-          tags: ['health:ok'],
-        },
+        textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a', tags: ['health:ok'] }),
+        textNode({ id: 'b', x: 200, y: 0, width: 100, height: 50, text: 'b', tags: ['health:ok'] }),
       ],
       edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['link:slow'] }],
     })

@@ -1,5 +1,7 @@
 // @vitest-environment node
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe } from 'vitest'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
@@ -116,7 +118,7 @@ describe('drag-preview / translation equivariance (fast-check)', () => {
       const state: GestureState = { kind: 'connecting', fromNodeId: 'n1' }
       const boxes: readonly NodeBox[] = [{ id: 'n1', box: fromBox }]
       const canvas: SpatialCanvas = {
-        nodes: [{ id: 'n1', type: 'text', ...fromBox, text: '' }],
+        nodes: [textNode({ id: 'n1', ...fromBox, text: '' })],
         edges: [],
       }
       const preview = computeDragPreview(state, boxes, livePoint, {

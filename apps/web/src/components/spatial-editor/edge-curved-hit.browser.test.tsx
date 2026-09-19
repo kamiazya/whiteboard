@@ -7,6 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { selectionHighlightPoints } from '../../test-utils/selection-highlight.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -49,13 +50,9 @@ it('selects a curved edge by clicking the drawn curve, and highlights along it',
 
   // The highlight follows the curve: it passes near the apex and never
   // through the sharp waypoint corner.
-  const highlight = container.querySelector(
-    '[data-testid="edge-selection-highlight"]',
-  ) as SVGPolylineElement
-  const points = (highlight.getAttribute('points') ?? '').split(' ').map((pair) => {
-    const [x, y] = pair.split(',').map(Number)
-    return { x: x as number, y: y as number }
-  })
+  const points = selectionHighlightPoints(
+    container.querySelector('[data-testid="edge-selection-highlight"]'),
+  )
   expect(points.some((p) => Math.hypot(p.x - 450, p.y - 153.75) < 2)).toBe(true)
   expect(points.some((p) => p.x === 480 && p.y === 130)).toBe(false)
 })

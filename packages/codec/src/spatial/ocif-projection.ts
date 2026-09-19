@@ -35,22 +35,6 @@ const NATIVE = { kind: 'native' } as const
 const EXTENSION = { kind: 'extension' } as const
 
 /**
- * OCIF has no node `type`. What a node IS comes from the resource it shows
- * and the extensions it carries — the spec is explicit that "there is no
- * special text node in OCIF. Text is a kind of resource."
- *
- * So the discriminator does not cross as a field. The INFORMATION survives
- * (a reader can still tell a group from a note) but it survives as a
- * different shape, which is what `degraded` is for — and `fromOcif` earns
- * the word by deriving the kind from the mime type and `@ocif/group` rather
- * than from anything of ours.
- */
-const AS_SHAPE = {
-  kind: 'degraded',
-  to: "the node's resource and extensions — OCIF has no node type field, so what a node IS comes from what it shows and what it carries",
-} as const
-
-/**
  * Colour was written `degraded` here from the spec — OCIF's shape extensions
  * take a concrete `fillColor`, so a preset index would have to be resolved on
  * the way out and would arrive having lost the theme role it named.
@@ -99,20 +83,24 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'nodes[].y': NATIVE,
   'nodes[].width': NATIVE,
   'nodes[].height': NATIVE,
-  'nodes[].type': AS_SHAPE,
   'nodes[].color': EXTENSION,
-  // Text is a resource (`text/markdown`), a file is a resource with a
-  // `location`, a URL is a resource whose location is that URL.
-  'nodes[].text': NATIVE,
-  'nodes[].file': NATIVE,
-  'nodes[].url': NATIVE,
+  // A resource is now what the model STORES, not something the projection
+  // builds — decision 3 took OCIF's shape into the model, and the row that
+  // used to sit here (`nodes[].type`, `degraded` to "the shape of the
+  // document") is gone with the discriminator it described. Text is a
+  // resource (`text/markdown`), a file is a resource with a `location`, a
+  // URL is a resource whose location is that URL, and `representationFor`
+  // is nearly the identity.
+  'nodes[].resource.mimeType': NATIVE,
+  'nodes[].resource.content': NATIVE,
+  'nodes[].resource.location': NATIVE,
   // Written `dropped` from the spec — an OCIF resource reference names a whole
   // resource and has no vocabulary for a fragment inside one. The projection
   // corrected it: what the FORMAT cannot state and what this PROJECTION cannot
   // carry are two different questions, and an extension of ours answers the
   // second. A foreign reader still loses it, which is what `extension` has
   // always meant here.
-  'nodes[].subpath': EXTENSION,
+  'nodes[].resource.subpath': EXTENSION,
   // A group's chrome. `@ocif/group` carries membership and nothing about how
   // the frame is painted, so these ride an extension of ours.
   'nodes[].label': EXTENSION,

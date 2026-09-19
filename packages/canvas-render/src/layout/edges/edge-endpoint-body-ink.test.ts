@@ -3,19 +3,21 @@
 // border-tracing (edge-border-trace.test.ts) pins the complementary
 // outline-riding invariant on this same canvas; this file pins interior
 // ink, which border-tracing's collinear-ON-the-border check cannot see.
+
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
-const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode => ({
-  id,
-  type: 'text',
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
+  textNode({
+    id,
+    x,
+    y,
+    width: w,
+    height: h,
+    text: id,
+  })
 
 /** Independent oracle (never calls production code): total length of every
  * path segment that runs STRICTLY inside a rect's interior — a border-riding

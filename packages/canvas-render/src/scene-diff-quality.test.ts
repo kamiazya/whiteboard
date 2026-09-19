@@ -1,4 +1,5 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, ShapeId } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
@@ -134,7 +135,7 @@ describe('scene-diff scoreboard (single edit → fraction of the scene that chan
   it('editing visible text touches that node content and nothing else', () => {
     const edited = layout(
       editNode(canvas, 'n18', (n) =>
-        n.type === 'text' ? { ...n, text: (n.text ?? '').replace('# Step 18', '# Step 18b') } : n,
+        withNodeText(n, (nodeText(n) ?? '').replace('# Step 18', '# Step 18b')),
       ),
     )
     expect(diffCount(base, edited)).toEqual({ changed: 1, total: 178 })
@@ -146,9 +147,7 @@ describe('scene-diff scoreboard (single edit → fraction of the scene that chan
     // an incremental renderer gets these edits for free, and a layout
     // change that makes truncation leak into visible entries shows up here.
     const edited = layout(
-      editNode(canvas, 'n18', (n) =>
-        n.type === 'text' ? { ...n, text: `${n.text} Appended past the cut.` } : n,
-      ),
+      editNode(canvas, 'n18', (n) => withNodeText(n, `${nodeText(n)} Appended past the cut.`)),
     )
     expect(diffCount(base, edited)).toEqual({ changed: 0, total: 178 })
   })

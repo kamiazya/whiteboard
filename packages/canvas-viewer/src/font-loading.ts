@@ -95,6 +95,46 @@ const loadedByBytes = new Set<string>()
  * rejects: a realm without `FontFace`, or bytes that are not a font, answer
  * `'degraded'` and the layout keeps declaring the bundled family.
  */
+/**
+ * The bytes inside a `data:` URI, so a face can be constructed from a buffer
+ * rather than from a `url()` source.
+ *
+ * This is a Content-Security-Policy decision, not a performance one. A
+ * `FontFace` built from `url(data:...)` is a FETCH as far as CSP is
+ * concerned, so it is subject to `font-src` — and an MCP Apps host builds
+ * `font-src` from what the server declares in `_meta.ui.csp.resourceDomains`,
+ * which is a list of ORIGINS and cannot name `data:`. Measured under a host
+ * policy built that way: both embedded faces reported `status: 'error'` with
+ * a `font-src <- data` violation, while the widget kept drawing in a system
+ * fallback and said nothing, because the load rejection is deliberately
+ * swallowed.
+ *
+ * A face constructed from a buffer is not a fetch and no directive governs
+ * it. That asymmetry was already visible and unread: the THEMED face
+ * survived the same policy, because `registerFontBytes` had always built it
+ * from an `ArrayBuffer`.
+ *
+ * Throws on a source that is not a base64 `data:` URI, rather than returning
+ * an empty buffer — the caller registers a face per asset at startup, and a
+ * silently empty one is the same invisible fallback this exists to end.
+ */
+export function dataUriToBytes(dataUri: string): Uint8Array<ArrayBuffer> {
+  const comma = dataUri.indexOf(',')
+  if (!dataUri.startsWith('data:') || comma === -1) {
+    throw new Error(`not a data: URI: ${dataUri.slice(0, 32)}`)
+  }
+  if (!dataUri.slice(0, comma).endsWith(';base64')) {
+    throw new Error(`expected a base64 data: URI: ${dataUri.slice(0, 32)}`)
+  }
+  const binary = atob(dataUri.slice(comma + 1))
+  // Over an explicit ArrayBuffer: a bare `new Uint8Array(n)` is typed
+  // `Uint8Array<ArrayBufferLike>`, which `BufferSource` refuses because it
+  // could be shared.
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length))
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
 export function registerFontBytes(family: string, bytes: ArrayBuffer): Promise<ViewerFontStatus> {
   const existing = registeredByBytes.get(family)
   if (existing !== undefined) return existing
@@ -136,7 +176,16 @@ async function loadViewerFont(generation: number): Promise<ViewerFontStatus> {
 
   let face: FontFace
   try {
-    face = new FontFace(VIEWER_FONT_FAMILY, `url(${robotoFontUrl})`)
+    // The single-file widget build INLINES this asset, so `robotoFontUrl`
+    // is a `data:` URI there and an ordinary path in apps/web. The two want
+    // different constructors, and the difference is Content-Security-Policy:
+    // a `url(data:...)` source is a fetch subject to `font-src`, which an
+    // MCP Apps host builds from declared ORIGINS and so can never permit.
+    // A path is same-origin and `font-src 'self'` covers it, while turning
+    // it into bytes would add a fetch apps/web does not currently make.
+    face = robotoFontUrl.startsWith('data:')
+      ? new FontFace(VIEWER_FONT_FAMILY, dataUriToBytes(robotoFontUrl))
+      : new FontFace(VIEWER_FONT_FAMILY, `url(${robotoFontUrl})`)
     faceSet.add(face)
   } catch {
     return 'degraded'

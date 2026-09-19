@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
 import { integerSchema } from './integer.js'
+import { nodeResourceSchema } from './node-resource.js'
 import { storedTagsSchema } from './tags.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
@@ -66,7 +67,17 @@ export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
 export const nodePositionSchema = z.number().finite()
 export const nodeSizeSchema = z.number().finite().nonnegative()
 
-const sharedNodeFieldsSchema = z.object({
+/**
+ * What every node has, whatever it shows.
+ *
+ * Exported because `spatialNodeSchema` below is REFINED, and zod v4 refuses
+ * `.partial()` over a refined object — so a writer deriving an optional-
+ * geometry draft from the stored node (`wb_canvas_edit`'s `node.add`) has to
+ * derive it from something. This is that something, and it is the same
+ * object the stored schema extends, so the two cannot disagree about a
+ * field's type the way a hand-written copy would.
+ */
+export const sharedNodeFieldsSchema = z.object({
   id: nodeIdSchema,
   x: nodePositionSchema,
   y: nodePositionSchema,
@@ -96,43 +107,53 @@ const sharedNodeFieldsSchema = z.object({
   tags: storedTagsSchema,
 })
 
-const textNodeSchema = sharedNodeFieldsSchema
+/**
+ * A node is a BOX that may SHOW something.
+ *
+ * [ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md) decision 3:
+ * the `text | file | link | group` union is inherited from JSON Canvas and
+ * dissolves under OCIF's decomposition. What a node shows is a RESOURCE — a
+ * media type plus inline content or a location — and the kind is DERIVED from
+ * it (`nodeKind`), never stored beside it.
+ *
+ * Absent `resource` means the node shows nothing, which is what a FRAME is:
+ * a box that collects whatever its rectangle contains. That is faithful to
+ * both sides — OCIF's group node carries no resource either, and the old
+ * `group` arm was the one arm with no content field.
+ *
+ * The frame's own fields stay where they were. Turning membership from
+ * GEOMETRIC into declared (`parent` plus `@ocif/group`) changes behaviour
+ * rather than shape — `tidy-units.ts` says plainly that membership is
+ * containment — so it is a separate decision from this one, whose
+ * justification in the ADR is entirely about text.
+ */
+export const spatialNodeSchema = sharedNodeFieldsSchema
   .extend({
-    type: z.literal('text'),
-    text: z.string(),
-  })
-  .strict()
-
-const fileNodeSchema = sharedNodeFieldsSchema
-  .extend({
-    type: z.literal('file'),
-    file: z.string(),
-    subpath: z.string().startsWith('#').optional(),
-  })
-  .strict()
-
-const linkNodeSchema = sharedNodeFieldsSchema
-  .extend({
-    type: z.literal('link'),
-    url: z.url(),
-  })
-  .strict()
-
-const groupNodeSchema = sharedNodeFieldsSchema
-  .extend({
-    type: z.literal('group'),
+    /** What this node shows. Absent: it shows nothing, and is a frame. */
+    resource: nodeResourceSchema.optional(),
+    /** A frame's caption. */
     label: z.string().optional(),
     background: z.string().optional(),
     backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
   })
   .strict()
-
-export const spatialNodeSchema = z.discriminatedUnion('type', [
-  textNodeSchema,
-  fileNodeSchema,
-  linkNodeSchema,
-  groupNodeSchema,
-])
+  // The frame's fields belong to the frame, so a node that SHOWS something
+  // may not carry them. `frameLabel`/`frameBackground`/`frameBackgroundStyle`
+  // already answer `undefined` for such a node, which made the combination
+  // dead weight rather than a second meaning — and `codecs.property.test.ts`'s
+  // confluence property found what dead weight costs: JSON Canvas projects a
+  // node it cannot read as a `group`, so a background rode back onto a node
+  // one way round the formats and was dropped the other. An unrepresentable
+  // state rather than a tie-break, the same answer `nodeResourceSchema` gives
+  // to a resource carrying its bytes AND a location.
+  .refine(
+    (node) =>
+      node.resource === undefined ||
+      (node.label === undefined &&
+        node.background === undefined &&
+        node.backgroundStyle === undefined),
+    { error: "a node that shows a resource is not a frame and has no frame's fields" },
+  )
 
 export type SpatialNode = z.infer<typeof spatialNodeSchema>
 

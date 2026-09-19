@@ -18,7 +18,7 @@
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
+import { spatialCanvasArbitrary, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { contentDigestOfDocument } from './content-digest.js'
@@ -62,7 +62,7 @@ function treeDigest(ws: LoroDoc): string {
 describe('one identity across hosts', () => {
   it('a spatial document digests the same as a tree node, a projection and a fresh document', () => {
     const canvas: SpatialCanvas = {
-      nodes: [{ id: 'n0', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+      nodes: [textNode({ id: 'n0', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
       edges: [],
     }
     const fresh = freshSpatial(canvas)
@@ -108,7 +108,7 @@ describe('one identity across hosts', () => {
     const doc = freshSpatial({ nodes: [], edges: [] })
     const before = contentDigestOfDocument(doc)
 
-    doc.getMap('nodes').set('n1', { id: 'n1', type: 'text', x: 1, y: 1, width: 1, height: 1 })
+    doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 1, y: 1, width: 1, height: 1, text: '' }))
     const pending = contentDigestOfDocument(doc)
     expect(pending).not.toBe(before)
 

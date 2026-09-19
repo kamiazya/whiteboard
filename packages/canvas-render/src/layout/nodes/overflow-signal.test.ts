@@ -7,6 +7,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../../scene-digest.js'
@@ -28,7 +29,7 @@ const paragraph = (value: string) => ({
 
 function layoutSized(width: number, height: number, root: MdastRoot): Scene {
   const canvas: SpatialCanvas = {
-    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width, height, text: 'x' }],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width, height, text: 'x' })],
     edges: [],
   }
   return layoutSpatialCanvas(canvas, {

@@ -14,6 +14,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
@@ -66,11 +67,11 @@ describe('wb_canvas_edit tool', () => {
       ops: [
         {
           op: 'node.add',
-          node: textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' }),
+          node: { type: 'text', id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' },
         },
         {
           op: 'node.add',
-          node: textNode({ id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' }),
+          node: { type: 'text', id: 'b', x: 200, y: 0, width: 100, height: 40, text: 'B' },
         },
         {
           op: 'edge.add',
@@ -109,7 +110,7 @@ describe('wb_canvas_edit tool', () => {
         ops: [
           {
             op: 'node.add',
-            node: textNode({ id: 'b', x: 50, y: 0, width: 100, height: 48, text: 'B' }),
+            node: { type: 'text', id: 'b', x: 50, y: 0, width: 100, height: 48, text: 'B' },
           },
           // 'ghost' is not on the canvas — this op cannot apply.
           { op: 'node.patch', id: 'ghost', patch: { x: 5 } },
@@ -383,12 +384,12 @@ describe('wb_canvas_edit tool', () => {
       ops: [
         {
           op: 'node.add',
-          node: textNode({ id: 'a', x: 0, y: 0, width: 100, height: 100, text: 'A' }),
+          node: { type: 'text', id: 'a', x: 0, y: 0, width: 100, height: 100, text: 'A' },
         },
         {
           op: 'node.add',
           // Deliberately overlapping 'a' so tidy has something to separate.
-          node: textNode({ id: 'b', x: 10, y: 10, width: 100, height: 100, text: 'B' }),
+          node: { type: 'text', id: 'b', x: 10, y: 10, width: 100, height: 100, text: 'B' },
         },
         { op: 'tidy' },
       ],
@@ -1517,15 +1518,15 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [
         {
           op: 'node.add',
-          node: textNode({ id: 'a', x: 0, y: 300, width: 200, height: 80, text: 'A' }),
+          node: { type: 'text', id: 'a', x: 0, y: 300, width: 200, height: 80, text: 'A' },
         },
         {
           op: 'node.add',
-          node: textNode({ id: 'b', x: 300, y: 300, width: 200, height: 80, text: 'B' }),
+          node: { type: 'text', id: 'b', x: 300, y: 300, width: 200, height: 80, text: 'B' },
         },
         {
           op: 'node.add',
-          node: textNode({ id: 'c', x: 600, y: 300, width: 200, height: 80, text: 'C' }),
+          node: { type: 'text', id: 'c', x: 600, y: 300, width: 200, height: 80, text: 'C' },
         },
         { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pipeline' } },
         { op: 'region.set', within: 'g', nodes: ['a', 'b', 'c'] },
@@ -1568,7 +1569,7 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [
         {
           op: 'node.add',
-          node: textNode({ id: 'a', x: 100, y: 100, width: 200, height: 80, text: 'A' }),
+          node: { type: 'text', id: 'a', x: 100, y: 100, width: 200, height: 80, text: 'A' },
         },
         { op: 'node.add', node: { id: 'g', type: 'group', label: 'Wide', width: 1000 } },
         { op: 'region.set', within: 'g', nodes: ['a'] },
@@ -1629,17 +1630,25 @@ describe('wb_canvas_edit — region.set', () => {
         {
           op: 'node.add',
           within: 'g',
-          node: textNode({ id: 'web', x: 240, y: 140, width: 160, height: 60, text: 'Web' }),
+          node: { type: 'text', id: 'web', x: 240, y: 140, width: 160, height: 60, text: 'Web' },
         },
         {
           op: 'node.add',
           within: 'g',
-          node: textNode({ id: 'cli', x: 40, y: 60, width: 160, height: 60, text: 'CLI' }),
+          node: { type: 'text', id: 'cli', x: 40, y: 60, width: 160, height: 60, text: 'CLI' },
         },
         {
           op: 'node.add',
           within: 'g',
-          node: textNode({ id: 'mobile', x: 440, y: 140, width: 160, height: 60, text: 'Mobile' }),
+          node: {
+            type: 'text',
+            id: 'mobile',
+            x: 440,
+            y: 140,
+            width: 160,
+            height: 60,
+            text: 'Mobile',
+          },
         },
       ],
     })
@@ -1678,17 +1687,25 @@ describe('wb_canvas_edit — region.set', () => {
         {
           op: 'node.add',
           within: 'clients',
-          node: textNode({ id: 'cli', x: 100, y: 100, width: 160, height: 60, text: 'CLI' }),
+          node: { type: 'text', id: 'cli', x: 100, y: 100, width: 160, height: 60, text: 'CLI' },
         },
         {
           op: 'node.add',
           within: 'clients',
-          node: textNode({ id: 'mobile', x: 540, y: 100, width: 160, height: 60, text: 'Mobile' }),
+          node: {
+            type: 'text',
+            id: 'mobile',
+            x: 540,
+            y: 100,
+            width: 160,
+            height: 60,
+            text: 'Mobile',
+          },
         },
         {
           op: 'node.add',
           within: 'services',
-          node: textNode({ id: 'auth', x: 100, y: 320, width: 160, height: 60, text: 'Auth' }),
+          node: { type: 'text', id: 'auth', x: 100, y: 320, width: 160, height: 60, text: 'Auth' },
         },
       ],
     })
@@ -1722,12 +1739,12 @@ describe('wb_canvas_edit — region.set', () => {
           {
             op: 'node.add',
             within: 'g',
-            node: textNode({ id: 'a', x: 40, y: 140, width: 160, height: 60, text: 'A' }),
+            node: { type: 'text', id: 'a', x: 40, y: 140, width: 160, height: 60, text: 'A' },
           },
           {
             op: 'node.add',
             within: 'g',
-            node: textNode({ id: 'c', x: 440, y: 140, width: 160, height: 60, text: 'C' }),
+            node: { type: 'text', id: 'c', x: 440, y: 140, width: 160, height: 60, text: 'C' },
           },
         ],
       }),
@@ -1749,7 +1766,7 @@ describe('wb_canvas_edit — region.set', () => {
         ops: [
           {
             op: 'node.add',
-            node: textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' }),
+            node: { type: 'text', id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' },
           },
           { op: 'node.add', within: null, node: { id: 'g', type: 'group', label: 'Later' } },
         ],
@@ -2010,7 +2027,15 @@ describe('wb_canvas_edit — node.add within a group', () => {
       ops: [
         {
           op: 'node.add',
-          node: textNode({ id: 'mobile', x: 560, y: 700, width: 200, height: 80, text: 'Mobile' }),
+          node: {
+            type: 'text',
+            id: 'mobile',
+            x: 560,
+            y: 700,
+            width: 200,
+            height: 80,
+            text: 'Mobile',
+          },
           within: 'g',
         },
       ],
@@ -2042,7 +2067,15 @@ describe('wb_canvas_edit — node.add within a group', () => {
         ops: [
           {
             op: 'node.add',
-            node: textNode({ id: 'early', x: -30, y: 20, width: 200, height: 40, text: 'early' }),
+            node: {
+              type: 'text',
+              id: 'early',
+              x: -30,
+              y: 20,
+              width: 200,
+              height: 40,
+              text: 'early',
+            },
             within: 'g',
           },
         ],
@@ -2088,7 +2121,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
         ops: [
           {
             op: 'node.add',
-            node: textNode({ id: 'wide', x: 150, y: 20, width: 100, height: 40, text: 'wide' }),
+            node: { type: 'text', id: 'wide', x: 150, y: 20, width: 100, height: 40, text: 'wide' },
             within: 'g',
           },
         ],
@@ -2473,7 +2506,8 @@ describe('wb_canvas_edit — a node created without a height', () => {
     // A patch that leaves the text fitting still applies.
     await patch({ text: 'still short' })
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes[0]).toMatchObject({ text: 'still short', height: 120 })
+    expect(canvas.nodes[0]).toMatchObject({ height: 120 })
+    expect(nodeText(canvas.nodes[0] as SpatialNode)).toBe('still short')
   })
 
   test('does not shrink a short node below the default', async () => {
@@ -2486,9 +2520,8 @@ describe('wb_canvas_edit — a node created without a height', () => {
 })
 
 describe('node.patch and a node type that does not have the key', () => {
-  const TEXT_NODE = {
+  const TEXT_NODE = textNode({
     id: 'n1',
-    type: 'text' as const,
     x: 0,
     y: 0,
     width: 100,
@@ -2496,7 +2529,7 @@ describe('node.patch and a node type that does not have the key', () => {
     // refused when the box cannot hold the new text.
     height: 80,
     text: 'hello',
-  }
+  })
 
   test("refuses a key the target node's type does not have, rather than dropping it", async () => {
     // `label` is on the patch allowlist because a GROUP has one. A text node
@@ -2597,7 +2630,7 @@ describe('node.patch and a node type that does not have the key', () => {
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes[0]).toMatchObject({ type: 'text', text: '# Rewritten' })
+    expect(nodeText(canvas.nodes[0] as SpatialNode)).toBe('# Rewritten')
   })
 
   test('several nodes change their text in ONE call', async () => {
@@ -2608,8 +2641,8 @@ describe('node.patch and a node type that does not have the key', () => {
     await seedCanvas(store, {
       nodes: [
         TEXT_NODE,
-        { ...TEXT_NODE, id: 'n2', text: 'second' },
-        { ...TEXT_NODE, id: 'n3', text: 'third' },
+        { ...withNodeText(TEXT_NODE, 'second'), id: 'n2' },
+        { ...withNodeText(TEXT_NODE, 'third'), id: 'n3' },
       ],
       edges: [],
     })
@@ -2626,11 +2659,7 @@ describe('node.patch and a node type that does not have the key', () => {
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes.map((node) => (node.type === 'text' ? node.text : undefined))).toEqual([
-      'one',
-      'two',
-      'three',
-    ])
+    expect(canvas.nodes.map((node) => nodeText(node))).toEqual(['one', 'two', 'three'])
   })
 
   test('splices a line range of a text node, one op per node', async () => {
@@ -2641,8 +2670,8 @@ describe('node.patch and a node type that does not have the key', () => {
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedCanvas(store, {
       nodes: [
-        { ...TEXT_NODE, text: 'one\ntwo\nthree' },
-        { ...TEXT_NODE, id: 'n2', text: 'alpha\nbeta' },
+        withNodeText(TEXT_NODE, 'one\ntwo\nthree'),
+        { ...withNodeText(TEXT_NODE, 'alpha\nbeta'), id: 'n2' },
       ],
       edges: [],
     })
@@ -2658,10 +2687,7 @@ describe('node.patch and a node type that does not have the key', () => {
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes.map((node) => (node.type === 'text' ? node.text : undefined))).toEqual([
-      'one\nTWO\nthree',
-      'A\nB\nbeta',
-    ])
+    expect(canvas.nodes.map((node) => nodeText(node))).toEqual(['one\nTWO\nthree', 'A\nB\nbeta'])
   })
 
   test('refuses a line range past the end rather than clamping it', async () => {
@@ -2669,7 +2695,7 @@ describe('node.patch and a node type that does not have the key', () => {
     // the failure the codec's own parsers refuse to degrade into.
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    await seedCanvas(store, { nodes: [{ ...TEXT_NODE, text: 'one\ntwo' }], edges: [] })
+    await seedCanvas(store, { nodes: [withNodeText(TEXT_NODE, 'one\ntwo')], edges: [] })
 
     await expect(
       createCanvasEditTool(makeDeps(store)).execute({
@@ -2724,21 +2750,6 @@ describe('node.patch and a node type that does not have the key', () => {
 describe('the node extension on the write side', () => {
   // The stored schema `.catch`es a broken extension so a canvas stays
   // readable; a WRITER sending one is told, not silently stripped.
-  test('refuses an embed that names no document, by name', () => {
-    const result = canvasEditInputSchema.safeParse({
-      workspaceId: 'ws',
-      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
-      ops: [
-        {
-          op: 'node.add',
-          node: { id: 'n', type: 'text', text: 'x', 'x-whiteboard': { kind: 'embed' } },
-        },
-      ],
-    })
-    expect(result.success).toBe(false)
-    expect(JSON.stringify(result.error?.issues)).toContain('an embed names the document')
-  })
-
   test('reports a sub-pixel size rather than refusing its own answer', async () => {
     // Both payloads here echo what is STORED, and the model's geometry is a
     // real number since ADR-0037 slice 4 — so an output schema still saying
@@ -2769,24 +2780,46 @@ describe('the node extension on the write side', () => {
     expect(parsed.snapshot.nodes[0]).toMatchObject({ width: 120.5, height: 40.25 })
   })
 
-  test("narrows a flat extension to the model's fields: an embed, or facets alone", () => {
-    const parse = (extension: Record<string, unknown>) =>
+  test("takes the model's own embed and facets, and refuses the retired extension key", () => {
+    const parse = (fields: Record<string, unknown>) =>
       canvasEditInputSchema.parse({
         workspaceId: 'ws',
         documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
-        ops: [{ op: 'node.add', node: { type: 'text', text: 'x', 'x-whiteboard': extension } }],
+        ops: [{ op: 'node.add', node: { type: 'text', text: 'x', ...fields } }],
       }).ops[0]
-    // In comes the FORMAT's union arm, under the published input key; out come
-    // the MODEL's two independent fields (ADR-0037). The key stays because it
-    // is what a model reads in `tools/list`; moving it is a tool-surface change.
-    const embed = parse({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' })
-    expect(embed.op === 'node.add' && embed.node['x-whiteboard']).toEqual({
-      embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' },
+
+    // The published input names the MODEL's fields. It used to name JSON
+    // Canvas 1.0's `x-whiteboard` extension key, flattened, which made sense
+    // while the model WAS the format; since ADR-0037 the model has no such
+    // key anywhere, so publishing one told a reader of `tools/list`
+    // something untrue about the thing it was writing.
+    const embed = parse({ embed: { documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' } })
+    expect(embed.op === 'node.add' && embed.node.embed).toEqual({
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
     })
     const facets = parse({ facets: { 'example.kanban/v1': { status: 'todo' } } })
-    expect(facets.op === 'node.add' && facets.node['x-whiteboard']).toEqual({
-      facets: { 'example.kanban/v1': { status: 'todo' } },
+    expect(facets.op === 'node.add' && facets.node.facets).toEqual({
+      'example.kanban/v1': { status: 'todo' },
     })
+
+    // STRUCTURAL now, where a hand-written `.refine` used to spell it out:
+    // `nodeEmbedSchema` requires `documentId`, so an embed naming no
+    // document cannot be expressed rather than being caught after the fact.
+    expect(() => parse({ embed: { versionRef: 'v1' } })).toThrow()
+
+    // The second half of the old write schema does NOT dissolve, and this is
+    // what would silently regress if someone derived `facets` straight from
+    // the stored field: that one is `.catch(undefined)`, read-side tolerance
+    // so an unrecognised bucket cannot stop a canvas being readable. On the
+    // write side the same tolerance drops a malformed bucket a caller just
+    // sent. Here it is refused.
+    expect(() => parse({ facets: { nope: {} } })).toThrow()
+
+    // And the retired key is a stray now, refused by name (C10) rather than
+    // quietly accepted — which is what makes this a real retirement.
+    expect(() =>
+      parse({ 'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' } }),
+    ).toThrow()
   })
 })
 
@@ -2804,15 +2837,15 @@ describe('wb_canvas_edit — a node created without a width', () => {
   //
   // 260 was nobody's preference: the drawing corpus is 200 on nine boards of
   // eleven, and the one board a model drew itself is a uniform 220.
-  const box = (id: string, x: number, width: number): SpatialNode => ({
-    id,
-    type: 'text',
-    x,
-    y: 0,
-    width,
-    height: 80,
-    text: id,
-  })
+  const box = (id: string, x: number, width: number): SpatialNode =>
+    textNode({
+      id,
+      x,
+      y: 0,
+      width,
+      height: 80,
+      text: id,
+    })
 
   // Derived from the tool's own schema rather than loosened to a record: a
   // record typechecks against nothing, and the helper builds its ops

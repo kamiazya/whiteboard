@@ -6,6 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { selectionHighlightPoints } from '../../test-utils/selection-highlight.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -84,15 +85,14 @@ it('the selection highlight arcs over jump hops instead of cutting through them'
   const highlight = await vi.waitFor(() => {
     const el = container.querySelector('[data-testid="edge-selection-highlight"]')
     expect(el).not.toBeNull()
-    return el as SVGPolylineElement
+    return el as SVGPathElement
   })
 
   // The highlight must deviate at the hop ON THE DRAWN SIDE: a vertex sits
   // at the arc apex itself, not merely at hop-radius distance (which a
   // wrong-side sample would also satisfy).
-  const pts = (highlight.getAttribute('points') ?? '')
-    .split(' ')
-    .map((pair) => pair.split(',').map(Number))
+  const pts = selectionHighlightPoints(highlight)
+    .map((point) => [point.x, point.y])
     .map(([x, y]) => ({ x: x!, y: y! }))
   const nearApex = pts.some((p) => Math.hypot(p.x - apex.x, p.y - apex.y) <= 0.75)
   expect(nearApex).toBe(true)
