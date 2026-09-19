@@ -732,11 +732,16 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 850,
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 855,
+  // 963 -> 976 at the merge with main. Both sides moved the same totals and
+  // both REASONS were kept, because each explains a different change the
+  // merged table now holds; only the numbers were re-measured. A scoreboard
+  // whose rows are pinned exactly is one whose history is prose, so a merge
+  // of two histories costs lines rather than losing one of them.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 976,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
-  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 885,
+  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
   'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
   'packages/server-core/src/tools/canvas-edit.test.ts': 3143,

@@ -98,6 +98,37 @@ describe('wb_facet_list', () => {
   })
 
   /**
+   * ADR-0031's twenty-third reading, as a description rather than a channel
+   * (the ADR named both branches, and the drawn one was refused: a node at
+   * full size repeats what its own label already says, which is why the
+   * badge was removed from the canvas in the first place).
+   *
+   * What was measured: asked to record health, a trial wrote
+   * `visual.symbol/v0` with checks and crosses on all five boxes and spent
+   * no colour, so a person looking at the board saw no health at all. The
+   * model reached for the one facet whose name says "symbol" — the closest
+   * word in the table to "show it" — and nothing it could read said the
+   * symbol is invisible on a canvas.
+   *
+   * This is the sentence that says so, and names the channel that would
+   * have worked. It costs ZERO model-visible bytes: a facet's payload
+   * schema is not in any tool's input table, it is in this tool's ANSWER,
+   * which is read only by a caller who asked what a write may name.
+   */
+  test('the symbol facet says where a badge is drawn, and what to reach for instead', async () => {
+    const result = await tool().execute({})
+    const symbol = result.facets.find((facet) => facet.key === 'visual.symbol/v0')
+    const description = (symbol?.schema as { description?: string } | undefined)?.description
+    expect(description).toBeDefined()
+    // The three facts a model needs, each asserted on its own: that a
+    // canvas does not draw this, where it IS drawn, and the channel that
+    // records state on a board (ADR-0040's scoped tags).
+    expect(description).toMatch(/not drawn on (?:a|the) canvas/i)
+    expect(description).toMatch(/minimap/i)
+    expect(description).toMatch(/tag/i)
+  })
+
+  /**
    * The measured gap this closes (ADR-0031's round 15, 0 of 3 trials): asked
    * to tell two things apart at once, every trial called this tool with
    * `target: 'node'` — the right question while dressing boxes — and so

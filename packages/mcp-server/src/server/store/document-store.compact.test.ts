@@ -17,9 +17,13 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so it runs after the mock is resolved.
-const { saveDocument, loadDocument, compactDocument, setDocumentSavedListener } = await import(
-  './document-store.js'
-)
+const {
+  saveDocument,
+  loadDocument,
+  compactDocument,
+  setDocumentSavedListener,
+  openWorkspaceDocIfStored,
+} = await import('./document-store.js')
 const {
   scheduleAutoCompact,
   uninstallAutoCompact,
@@ -35,7 +39,87 @@ const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
+const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
+
+/**
+ * What the scheduler DECLINED for, phrased to sit in an assertion message.
+ *
+ * `expected null not to be null` on a stamp names neither of the things that
+ * produce it. Reading the reasons back says which: nothing to gain, a lost
+ * generation fence, or no decline reported at all.
+ */
+function declinedFor(records: { scope: string; msg: string; data?: unknown }[]): string {
+  const reasons = records
+    .filter((record) => record.scope === 'auto-compact' && record.msg === 'declined')
+    .map((record) => String((record.data as { reason?: unknown } | undefined)?.reason))
+  return reasons.length === 0 ? 'and logged no decline at all' : `declining: ${reasons.join(', ')}`
+}
+
+/**
+ * The workspace's compaction stamp, or null when nothing has compacted yet.
+ *
+ * Takes no path on purpose: compaction folds the WORKSPACE record (S4b/S7),
+ * so there is one stamp per workspace and not one per document.
+ */
+async function readLastCompactedAt(): Promise<number | null> {
+  const workspaceDoc = await openWorkspaceDocIfStored('session1')
+  if (workspaceDoc === null) return null
+  return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
+}
+
+/**
+ * A document with a version cut and history on both sides of it — the one
+ * fixture every test that expects a real compaction builds on.
+ *
+ * The churn is the load-bearing part. Compaction answers `no-gain` unless the
+ * shallow snapshot comes out SMALLER than the record, and 30 fresh elements
+ * leave a margin of single-digit bytes on ~1,366 — under Loro's own
+ * run-to-run encoding variance, so the comparison flips at random. Measured
+ * over five local runs of the old fixture: margins of 24, 19, 2, 4 and 23
+ * bytes, and a sixth on CI went negative and failed as `expected null not to
+ * be null`. Rewriting the same keys grows the OPLOG without growing the
+ * state, which is exactly what the cut folds away: 1,804 -> 1,381, a
+ * 423-byte margin, identical across runs.
+ *
+ * Longer element ids alone lift it to 266, so the churn is not the only
+ * thing standing between this and the flake. It is here because it makes
+ * the margin come from what the test is ABOUT — history the version cut
+ * drops — rather than from how many characters an id happens to have.
+ *
+ * `does not fold away ops another instance appended` sized its own fixture
+ * for this and said so; the four that did not are what this replaces.
+ */
+async function buildCompactableCanvas(path: string): Promise<{
+  store: InstanceType<typeof FileVersionStore>
+  doc: LoroDoc
+  version: Awaited<ReturnType<InstanceType<typeof FileVersionStore>['save']>>
+}> {
+  const { LoroMap } = await import('loro-crdt')
+  const doc = new LoroDoc()
+  const list = doc.getMovableList('elements')
+  const maps = []
+  for (let i = 0; i < 30; i++) {
+    const m = list.insertContainer(list.length, new LoroMap())
+    m.set('id', `elem-${i}`)
+    maps.push(m)
+  }
+  for (let round = 0; round < 40; round++) {
+    for (const m of maps) m.set('churn', `r-${round}`)
+    doc.commit()
+  }
+  await saveDocument('session1', path, doc)
+  const store = new FileVersionStore()
+  const version = await store.save('session1', path, doc, { auto: true })
+  for (let i = 0; i < 30; i++) {
+    const m = list.insertContainer(list.length, new LoroMap())
+    m.set('id', `extra-${i}`)
+  }
+  doc.commit()
+  await saveDocument('session1', path, doc, { overwrite: true })
+  return { store, doc, version }
+}
 
 async function setupIsolatedDb(): Promise<void> {
   handle = await createIsolatedDb({ dataDir: tempDir })
@@ -112,28 +196,7 @@ describe('compactDocument', () => {
   })
 
   it('compacts at a version cut point while keeping restore working', async () => {
-    const { LoroMap } = await import('loro-crdt')
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    // Build a larger op log by repeatedly adding and updating elements.
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `elem-${i}`)
-      m.set('x', i)
-    }
-    doc.commit()
-    await saveDocument('session1', 'test', doc)
-
-    const store = new FileVersionStore()
-    const v = await store.save('session1', 'test', doc, { auto: true })
-
-    // Add more operations after the saved version.
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `extra-${i}`)
-    }
-    doc.commit()
-    await saveDocument('session1', 'test', doc, { overwrite: true })
+    const { store, version: v } = await buildCompactableCanvas('test')
 
     const result = await compactDocument('session1', 'test', store)
     expect(result.compacted).toBe(true)
@@ -164,18 +227,6 @@ describe('compactDocument', () => {
   })
 
   it('writes lastCompactedAt only on successful compaction', async () => {
-    const { LoroMap } = await import('loro-crdt')
-
-    async function readLastCompactedAt(_path: string): Promise<number | null> {
-      // Workspace-level meta (S4b/S7): compaction folds the workspace
-      // record, so there is one stamp per workspace, not per document.
-      const { openWorkspaceDocIfStored } = await import('./document-store.js')
-      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored('session1')
-      if (workspaceDoc === null) return null
-      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
-    }
-
     // Case 1: no version → reason='no-versions' → lastCompactedAt stays null.
     const empty = new LoroDoc()
     empty.getMovableList('elements').insert(0, 'x')
@@ -184,31 +235,16 @@ describe('compactDocument', () => {
     const noopStore = new FileVersionStore()
     const noop = await compactDocument('session1', 'untouched', noopStore)
     expect(noop.reason).toBe('no-versions')
-    expect(await readLastCompactedAt('untouched')).toBeNull()
+    expect(await readLastCompactedAt()).toBeNull()
 
     // Case 2: version cut available → reason='ok' → lastCompactedAt is set.
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `elem-${i}`)
-    }
-    doc.commit()
-    await saveDocument('session1', 'big', doc)
-    const store = new FileVersionStore()
-    await store.save('session1', 'big', doc, { auto: true })
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `extra-${i}`)
-    }
-    doc.commit()
-    await saveDocument('session1', 'big', doc, { overwrite: true })
+    const { store } = await buildCompactableCanvas('big')
 
     const before = Date.now()
     const result = await compactDocument('session1', 'big', store)
     expect(result.compacted).toBe(true)
     const after = Date.now()
-    const stamp = await readLastCompactedAt('big')
+    const stamp = await readLastCompactedAt()
     expect(stamp).not.toBeNull()
     expect(stamp!).toBeGreaterThanOrEqual(before)
     expect(stamp!).toBeLessThanOrEqual(after)
@@ -331,42 +367,16 @@ describe('auto-compact', () => {
   })
 
   it('scheduleAutoCompact debounces rapid triggers into a single compaction', async () => {
-    const { LoroMap } = await import('loro-crdt')
-
-    async function readLastCompactedAt(): Promise<number | null> {
-      const { openWorkspaceDocIfStored } = await import('./document-store.js')
-      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored('session1')
-      if (workspaceDoc === null) return null
-      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
-    }
-
-    // Build a canvas with a version cut + extra ops so compactDocument
-    // actually has work to do (otherwise the debounced firing would
-    // just return reason: 'no-versions' and lastCompactedAt stays null).
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `e-${i}`)
-    }
-    doc.commit()
-    await saveDocument('session1', 'big', doc)
-    const store = new FileVersionStore()
-    await store.save('session1', 'big', doc, { auto: true })
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `x-${i}`)
-    }
-    doc.commit()
-    await saveDocument('session1', 'big', doc, { overwrite: true })
+    // A version cut with history on both sides, so the debounced firing has
+    // something to gain rather than answering 'no-versions' or 'no-gain'.
+    const { store } = await buildCompactableCanvas('big')
 
     expect(await readLastCompactedAt()).toBeNull()
 
     // A compaction that THROWS is caught inside the scheduler and logged, so
     // without this capture a failed compaction reaches the reader as a null
     // stamp — a message that names the assertion rather than the cause.
-    const logs = captureLogsForTests('warning')
+    const logs = captureLogsForTests('info')
 
     // Three rapid triggers within the debounce window must collapse into
     // a single compactDocument run. Use a tiny debounce so the test stays fast.
@@ -394,7 +404,24 @@ describe('auto-compact', () => {
       logs.records.filter((record) => record.scope === 'auto-compact' && record.msg === 'failed'),
       'the debounced compaction threw and was swallowed, so no stamp was ever written',
     ).toEqual([])
-    expect(stamp).not.toBeNull()
+    const why = `the compaction settled but wrote no stamp, ${declinedFor(logs.records)}`
+    expect(stamp, why).not.toBeNull()
+
+    // The PREMISE, asserted on the same path that flaked. Not on a direct
+    // `compactDocument` call: measured, the two paths do not share a margin
+    // — the direct one reads 302 on a fixture this one reads 24 on, so a
+    // floor placed there cannot see a thinned fixture at all.
+    //
+    // 200 separates a dangerous fixture from a safe one, both measured
+    // rather than chosen: the shape that flaked on CI gives 24 (three runs
+    // of three, and 1366 - 1342 = 24 is the CI number itself), the shape
+    // here gives 423, and Loro's encoding varies by ~20 bytes between runs
+    // on an unchanged fixture. A margin inside that noise is what flips the
+    // `no-gain` comparison at random.
+    const gains = logs.records
+      .filter((record) => record.scope === 'auto-compact' && record.msg === 'compacted')
+      .map((record) => Number(record.data?.beforeBytes) - Number(record.data?.afterBytes))
+    expect(Math.min(...gains), `compaction gains were ${gains.join(', ')}`).toBeGreaterThan(200)
     const settled = stamp!
 
     // Further idle time without a new trigger must NOT re-compact. This half
@@ -482,29 +509,6 @@ describe('auto-compact disposal', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  async function buildCompactableCanvas(
-    path: string,
-  ): Promise<InstanceType<typeof FileVersionStore>> {
-    const { LoroMap } = await import('loro-crdt')
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `e-${i}`)
-    }
-    doc.commit()
-    await saveDocument('session1', path, doc)
-    const store = new FileVersionStore()
-    await store.save('session1', path, doc, { auto: true })
-    for (let i = 0; i < 30; i++) {
-      const m = list.insertContainer(list.length, new LoroMap())
-      m.set('id', `x-${i}`)
-    }
-    doc.commit()
-    await saveDocument('session1', path, doc, { overwrite: true })
-    return store
-  }
-
   // compactDocument normally settles fast enough (in-memory DB, tiny fixture)
   // that polling for "in flight" would race the compaction to zero. Delay
   // just the cut lookup — an await compactDocument makes early on — so tests
@@ -533,15 +537,7 @@ describe('auto-compact disposal', () => {
   // CI runner schedules. Under momentary contention that ceiling was the only
   // thing that could fail, and it did, on a commit that re-ran green.
   it('_awaitAutoCompactIdleForTests resolves only once the debounced compaction has settled', async () => {
-    const store = await buildCompactableCanvas('idle-seam')
-
-    async function readLastCompactedAt(): Promise<number | null> {
-      const { openWorkspaceDocIfStored } = await import('./document-store.js')
-      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored('session1')
-      if (workspaceDoc === null) return null
-      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
-    }
+    const { store } = await buildCompactableCanvas('idle-seam')
 
     // Held open by a GATE the test releases, not by a sleep. The first draft
     // used `withDelayedEarliestFrontiers(store, 100)` and read the stamp
@@ -567,6 +563,7 @@ describe('auto-compact disposal', () => {
       },
     })
 
+    const logs = captureLogsForTests('info')
     scheduleAutoCompact('session1', 'idle-seam', gatedStore, { debounceMs: 1 })
     // Throws naming the premise if the schedule was a no-op, instead of
     // leaving that to be inferred from a null stamp three lines later.
@@ -591,16 +588,17 @@ describe('auto-compact disposal', () => {
       releaseCompaction()
     }
     await idle
+    logs.restore()
 
     expect(_inFlightAutoCompactCountForTests()).toBe(0)
     expect(
       await readLastCompactedAt(),
-      'the compaction settled but wrote no lastCompactedAt',
+      `the compaction settled but wrote no lastCompactedAt, ${declinedFor(logs.records)}`,
     ).not.toBeNull()
   })
 
   it("releases an abandoned wait's keep-alive when the timers are cleared, instead of leaving it running", async () => {
-    const store = await buildCompactableCanvas('abandoned-wait')
+    const { store } = await buildCompactableCanvas('abandoned-wait')
     let releaseCompaction: () => void = () => undefined
     const gate = new Promise<void>((resolve) => {
       releaseCompaction = resolve
@@ -652,8 +650,30 @@ describe('auto-compact disposal', () => {
     )
   })
 
+  it('logs which reason a scheduled compaction declined for, instead of dropping it and leaving a null stamp to explain itself', async () => {
+    // `compactDocument` names four reasons it writes no stamp — `no-file`,
+    // `no-versions`, `no-gain`, `raced`. The scheduler read only
+    // `result.compacted`, so all four reached a reader as the same silence:
+    // a null stamp and no record of why.
+    const empty = new LoroDoc()
+    empty.getMovableList('elements').insert(0, 'x')
+    empty.commit()
+    await saveDocument('session1', 'undeclared', empty)
+
+    const logs = captureLogsForTests('info')
+    scheduleAutoCompact('session1', 'undeclared', new FileVersionStore(), { debounceMs: 1 })
+    await _awaitAutoCompactIdleForTests()
+    logs.restore()
+
+    expect(
+      logs.records
+        .filter((record) => record.scope === 'auto-compact' && record.msg === 'declined')
+        .map((record) => record.data?.reason),
+    ).toEqual(['no-versions'])
+  })
+
   it('cancels the pending debounce when the DB is disposed before it fires, instead of touching the destroyed driver', async () => {
-    const store = await buildCompactableCanvas('big')
+    const { store } = await buildCompactableCanvas('big')
     const logs = captureLogsForTests('warning')
 
     // Do NOT call uninstallAutoCompact() here — the point of this test
@@ -674,15 +694,7 @@ describe('auto-compact disposal', () => {
   })
 
   it('disposeAutoCompact awaits an already-fired in-flight compaction before resolving', async () => {
-    const store = await buildCompactableCanvas('cached')
-
-    async function readLastCompactedAt(): Promise<number | null> {
-      const { openWorkspaceDocIfStored } = await import('./document-store.js')
-      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored('session1')
-      if (workspaceDoc === null) return null
-      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
-    }
+    const { store } = await buildCompactableCanvas('cached')
 
     scheduleAutoCompact('session1', 'cached', withDelayedEarliestFrontiers(store, 100), {
       debounceMs: 1,
@@ -697,7 +709,7 @@ describe('auto-compact disposal', () => {
   })
 
   it('disposeAutoCompact refuses a reschedule attempted while disposal is in progress, instead of racing a timer against the next clear pass', async () => {
-    const store = await buildCompactableCanvas('reentrant')
+    const { store } = await buildCompactableCanvas('reentrant')
 
     // Simulates loadDocument()'s legacy-migration path resuming mid-compaction
     // and calling saveDocument(), which re-invokes the auto-compact trigger and
@@ -758,7 +770,7 @@ describe('auto-compact disposal', () => {
   })
 
   it('disposes through the real DB lifecycle (createIsolatedDb().dispose()) without spinning up a replacement connection for a re-entrant getDb() call', async () => {
-    const store = await buildCompactableCanvas('lifecycle')
+    const { store } = await buildCompactableCanvas('lifecycle')
     const { getDb } = await import('./db/index.js')
     let reentrantDb: Awaited<ReturnType<typeof getDb>> | null = null
 
@@ -793,15 +805,7 @@ describe('auto-compact disposal', () => {
   })
 
   it('is idempotent, and scheduleAutoCompact still works after a dispose', async () => {
-    const store = await buildCompactableCanvas('again')
-
-    async function readLastCompactedAt(): Promise<number | null> {
-      const { openWorkspaceDocIfStored } = await import('./document-store.js')
-      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored('session1')
-      if (workspaceDoc === null) return null
-      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
-    }
+    const { store } = await buildCompactableCanvas('again')
 
     await disposeAutoCompact()
     await disposeAutoCompact()
@@ -812,15 +816,7 @@ describe('auto-compact disposal', () => {
   })
 
   it('composes with uninstallAutoCompact() in either order without dropping in-flight work', async () => {
-    const store = await buildCompactableCanvas('composed')
-
-    async function readLastCompactedAt(): Promise<number | null> {
-      const { openWorkspaceDocIfStored } = await import('./document-store.js')
-      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored('session1')
-      if (workspaceDoc === null) return null
-      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
-    }
+    const { store } = await buildCompactableCanvas('composed')
 
     scheduleAutoCompact('session1', 'composed', withDelayedEarliestFrontiers(store, 100), {
       debounceMs: 1,

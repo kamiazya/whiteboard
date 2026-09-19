@@ -163,6 +163,15 @@ export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
 export type { IconTable } from './svg/icon.js'
 export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
 export { renderSceneToKeyedSvg } from './svg/keyed.js'
+/**
+ * Exported because a caller that SCORES a canvas must score the one the
+ * layout would draw, not the one the store holds: `layoutSpatialCanvas`
+ * resolves a declared tag colour onto the node before it lays anything out,
+ * so a scorer that skips this step reads `colour unused` on a board drawn in
+ * two colours. The eval lane's two-axis verifier did exactly that and failed
+ * boards a reader would call correct (ADR-0031's twenty-fourth reading).
+ */
+export { withDeclaredColours } from './tags/declared-colours.js'
 export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 export type { MarkdownTheme } from './theme/markdown-theme.js'
 export {

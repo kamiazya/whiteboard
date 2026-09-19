@@ -1,4 +1,4 @@
-import { parseOkf } from '@kamiazya/whiteboard-codec'
+import { hasOkfFrontmatter, parseOkf } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import {
@@ -97,6 +97,23 @@ async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> 
   return workspaceId
 }
 
+/**
+ * The `type` a bare body is recorded under.
+ *
+ * Something has to be chosen: `coreFacetsSchema.type` is required and this
+ * tool has no parameter for one. Adding a parameter would cost model-visible
+ * bytes on every turn for a choice most callers do not make, so the default
+ * is NAMED in the parameter's description instead — predictable rather than
+ * a surprise, and a caller who wants another type sends full OKF.
+ *
+ * `note` because that is what a markdown document someone wrote a body into
+ * is; the repo's own ticketing already uses `note` and `issue` this way.
+ */
+const BARE_BODY_TYPE = 'note'
+
+/** A body with the minimal frontmatter that makes it a document. */
+const asOkfBody = (body: string): string => `---\ntype: ${BARE_BODY_TYPE}\n---\n\n${body}`
+
 export async function wbDocumentCreate(
   deps: ServerDeps,
   rawInput: z.infer<typeof wbDocumentCreateInputSchema>,
@@ -122,10 +139,30 @@ export async function wbDocumentCreate(
   // old order bought was the error a caller gets when their request is
   // wrong in BOTH ways at once, which no test pins and which is the less
   // useful of the two — a malformed body has to be fixed either way.
-  if (input.kind === 'markdown' && input.markdown !== undefined) {
-    const preflight = parseOkf(input.markdown)
+  //
+  // A bare body is an input, not a mistake: a caller sending prose means a
+  // note, and refusing it for a block they never wrote costs a round trip
+  // to learn a format the answer did not teach them.
+  //
+  // The discriminator is a POSITIVE test taken BEFORE parsing. Both a bare
+  // body and a malformed frontmatter come back from `parseOkf` as stage
+  // `frontmatter-schema`, so the failure cannot tell them apart, and
+  // sniffing its text would route a caller's own YAML mistake into a
+  // document body where nobody would ever see it.
+  // Narrowed once, because the spatial arm of the union has no `markdown`
+  // at all and a ternary that reaches for it in the else branch does not
+  // typecheck.
+  const sent = input.kind === 'markdown' ? input.markdown : undefined
+  const markdown = sent !== undefined && !hasOkfFrontmatter(sent) ? asOkfBody(sent) : sent
+
+  if (markdown !== undefined) {
+    const preflight = parseOkf(markdown)
     if (!preflight.ok) {
-      throw new OkfParseError(preflight.error.stage, preflight.error.message)
+      throw new OkfParseError(
+        preflight.error.stage,
+        preflight.error.message,
+        preflight.error.issues,
+      )
     }
     // A tag the workspace's library forbids is refused here for exactly the
     // reason the parse above is: the delegated write below would otherwise
@@ -193,11 +230,14 @@ export async function wbDocumentCreate(
   // into the model — and a second copy of that reasoning here would be a
   // second answer to the same question, drifting from the first the moment
   // either changes.
-  if (input.kind === 'markdown' && input.markdown !== undefined) {
+  // `input.kind` is re-tested for the NARROWING, not for the condition:
+  // `markdown` is only ever defined on the markdown arm, but `input.actor`
+  // below is reachable only once TypeScript knows which arm this is.
+  if (input.kind === 'markdown' && markdown !== undefined) {
     await createDocumentSetTool(deps).execute({
       workspaceId,
       documentId: entry.documentId,
-      markdown: input.markdown,
+      markdown,
       ...(input.actor === undefined ? {} : { actor: input.actor }),
     })
   }

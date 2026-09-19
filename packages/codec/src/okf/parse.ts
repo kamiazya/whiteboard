@@ -5,6 +5,26 @@ import { type OkfMarkdownDocument, okfMarkdownFrontmatterSchema } from './schema
 
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/
 
+/**
+ * Whether a string OPENS with an OKF frontmatter block — the question a
+ * caller has to answer before deciding whether a string is a whole document
+ * or only a body.
+ *
+ * Shares `FRONTMATTER_PATTERN` with `parseOkf` deliberately, and that is the
+ * whole point of it living here: a caller that reimplemented the test would
+ * eventually disagree with the parser about what a block is, and both ways
+ * of disagreeing are bad — treat a document as a body and it gets a second
+ * frontmatter wrapped around its first; treat a body as a document and it is
+ * refused for a block it never claimed to have.
+ *
+ * TRUE says only that a block OPENS the string, never that its contents
+ * parse: a malformed frontmatter is still a mistake for `parseOkf` to
+ * report, and a caller must not use this to route one into a body.
+ */
+export function hasOkfFrontmatter(text: string): boolean {
+  return FRONTMATTER_PATTERN.test(text)
+}
+
 const RESERVED = new Set<string>(RESERVED_ROOT_KEYS)
 
 /**
@@ -45,7 +65,15 @@ export function parseOkf(text: string): CodecParseResult<OkfMarkdownDocument> {
   if (match === null) {
     return codecFailure(
       'frontmatter-schema',
-      'document does not start with a --- frontmatter block',
+      // Names the SHAPE, because "does not start with a --- block" tells a
+      // caller what is wrong and not what to send. Measured: three trials
+      // across the eval lane's rounds 20a-20d passed a bare markdown body
+      // here and each paid a retry.
+      //
+      // `type` is the one key the schema requires (`coreFacetsSchema`, every
+      // other field optional), and this exact string is verified to parse by
+      // a test rather than read off the schema by eye.
+      'document does not start with a --- frontmatter block. A minimal OKF document is `---`, a `type:` line, `---`, then the body',
     )
   }
   const [, yamlText, body] = match

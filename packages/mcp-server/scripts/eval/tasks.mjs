@@ -87,8 +87,50 @@ const workspacePackages = () => {
   ]).then(([codec, render]) => ({
     parseSpatial: codec.parseSpatial,
     scoreFacets: render.scoreFacets,
+    withDeclaredColours: render.withDeclaredColours,
   }))
   return workspacePackagesPromise
+}
+
+/**
+ * The workspace's tag library, as the resolver takes it.
+ *
+ * Read through `wb_facet_list`, the tool a MODEL would use, rather than
+ * through the server's own `workspaceTagLibrary` — the lane has tool calls
+ * and nothing else, and a verifier that reached past the tools would be
+ * grading something no caller can see.
+ *
+ * The shapes differ on purpose and the conversion is here rather than in
+ * either of them: the TOOL answers arrays, so two calls agree and a diff of
+ * the output is stable, while the STORED facet is a record keyed by name.
+ * `withDeclaredColours` takes the stored shape.
+ *
+ * A workspace that declares nothing answers `{}`, and the resolver then
+ * returns the canvas unchanged.
+ *
+ * EXPORTED because the lane has two places that read a board and they must
+ * read the same one: this file's verifiers, and the runner's `drawing`
+ * column. Round 21 caught them disagreeing about a single board in a single
+ * run — `colour carried(health)` in the verdict, `colour unused` in the
+ * column beside it — because only the verifier had been fixed. One
+ * definition, so the next caller cannot drift from it.
+ */
+export const tagLibrary = async (wb) => {
+  const answered = await wb.call('wb_facet_list', { workspaceId: WORKSPACE_ID })
+  return Object.fromEntries(
+    (answered.tagLibrary ?? []).map(({ key, description, exclusive, values }) => [
+      key,
+      {
+        ...(description === undefined ? {} : { description }),
+        ...(exclusive === undefined ? {} : { exclusive }),
+        ...(values === undefined
+          ? {}
+          : {
+              values: Object.fromEntries(values.map(({ value, ...declared }) => [value, declared])),
+            }),
+      },
+    ]),
+  )
 }
 
 export const text = (n) => (n.text ?? '').trim()
@@ -880,10 +922,29 @@ export const TASKS = [
     // which is a different question and not this one. Which channel carries
     // which is left entirely open: colour-for-health and shape-for-kind is
     // the obvious reading, and the verifier accepts the opposite.
+    //
+    // IT ALSO ASKS FOR THE MEANING TO SURVIVE THE CONVERSATION, and that was
+    // an open question for six rounds before it was decided (user,
+    // 2026-09-19). The verifier has always required a DECLARED distinction,
+    // because that is what makes a board legible to a reader who did not draw
+    // it; the prompt did not ask for one, so every `contested` reading was
+    // arguably grading an intent nobody stated. The lane measures whether the
+    // SURFACE supports a stated intent, not whether a model guesses an
+    // unstated one, so the intent is now stated.
+    //
+    // Said in a user's words and naming no mechanism — no tag, no library,
+    // no legend, no tool — for the reason the header gives: a prompt that
+    // quotes the surface measures the quote. Measured, that is not
+    // hypothetical: naming `health:failing` in a DESCRIPTION bought a pass
+    // that a neutral example did not (ADR-0031's twenty-fourth reading), and
+    // a prompt is the same hazard with more leverage.
+    //
+    // Readings taken before this change are not comparable with readings
+    // after it. Rounds 15-20d were all taken under the old prompt.
     name: 'tell two things apart at once: what it is, and whether it is healthy',
     boards: ['boards/fleet'],
     prompt:
-      'Create a board at boards/fleet and draw our service fleet: an Orders service, a Billing service, a Postgres database, a Redis cache, and a payment gateway that is outside our system. Billing and Redis are currently failing; the rest are healthy. Someone glancing at the board should be able to answer two different questions without reading every label: what each thing IS, and whether it is healthy. Apply it directly; I am looking at the board.',
+      'Create a board at boards/fleet and draw our service fleet: an Orders service, a Billing service, a Postgres database, a Redis cache, and a payment gateway that is outside our system. Billing and Redis are currently failing; the rest are healthy. Someone glancing at the board should be able to answer two different questions without reading every label: what each thing IS, and whether it is healthy. The board should stand on its own, too: somebody opening it next week, who was not in this conversation, should be able to tell from the board itself what the differences between the boxes mean. Apply it directly; I am looking at the board.',
     verify: async (wb, _ids) => {
       const listed = await wb.call('wb_document_list', { workspaceId: WORKSPACE_ID })
       const entry = listed.documents.find((d) => d.path === 'boards/fleet')
@@ -894,7 +955,7 @@ export const TASKS = [
       })
       const content = read.documents[0]?.content
       if (content === undefined) return { ok: false, detail: 'the board has no content' }
-      const { parseSpatial, scoreFacets } = await workspacePackages()
+      const { parseSpatial, scoreFacets, withDeclaredColours } = await workspacePackages()
       const parsed = parseSpatial(content)
       if (!parsed.ok) {
         return { ok: false, detail: `the board does not parse: ${parsed.error.message}` }
@@ -917,7 +978,16 @@ export const TASKS = [
       // what "two questions answerable at a glance" means, and a model that
       // gets there by putting health in the silhouette has drawn a board
       // that reads, which is the whole ask.
-      const { channels } = scoreFacets(parsed.value)
+      //
+      // SCORED AS THE LAYOUT WOULD DRAW IT, which is what the stored
+      // document alone is not. A scoped tag's colour comes from the
+      // workspace's tag library, and `layoutSpatialCanvas` resolves it onto
+      // the node before laying anything out; a verifier reading the stored
+      // canvas scores a board nobody draws. Measured: every trial of lane
+      // round 20c tagged each box and declared a library with a colour per
+      // value, the SVGs came out green and red, and this read
+      // `colour unused`.
+      const { channels } = scoreFacets(withDeclaredColours(parsed.value, await tagLibrary(wb)))
       const spent = Object.entries(channels).filter(([, r]) => r.use !== 'unused')
       const say = () =>
         Object.entries(channels)

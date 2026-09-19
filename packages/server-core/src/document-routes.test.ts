@@ -81,20 +81,51 @@ describe('canvas CRUD routes', () => {
     expect(res.status).toBe(409)
   })
 
-  it('POST a markdown document whose body is not OKF returns 400 with a reason', async () => {
+  // This route shares `wbDocumentCreate`'s semantics, so it accepts a bare
+  // body for the same reason the tool does — a caller who sends prose gets a
+  // note rather than a parse error about a block they never wrote.
+  it('POST a markdown document whose body has no frontmatter stores it as a note', async () => {
     const app = makeApp()
-    for (const markdown of ['', 'no frontmatter here']) {
-      const res = await app.request('/api/v1/workspaces/ws-1/documents', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ path: 'note', kind: 'markdown', markdown, createWorkspace: true }),
-      })
-      expect(res.status, markdown).toBe(400)
-      // The stage is the reason; a message that dropped it would still say OKF.
-      expect(await res.json()).toMatchObject({
-        error: expect.stringContaining('OKF parse failed at frontmatter-schema:'),
-      })
-    }
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'note',
+        kind: 'markdown',
+        markdown: 'no frontmatter here',
+        createWorkspace: true,
+      }),
+    })
+    expect(res.status).toBe(201)
+    const { documentId } = wbDocumentCreateOutputSchema.parse(await res.json())
+
+    const okf = await app.request(`/api/v1/workspaces/ws-1/documents/${documentId}/okf`)
+    expect(okf.status).toBe(200)
+    const stored = await okf.text()
+    expect(stored).toContain('type: note')
+    expect(stored).toContain('no frontmatter here')
+  })
+
+  // A `---` block that IS there and does not parse keeps its 400: the caller
+  // wrote frontmatter and got it wrong, which is the one case the wrapper
+  // above must not paper over.
+  it('POST a markdown document whose frontmatter is malformed returns 400 with a reason', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'note',
+        kind: 'markdown',
+        markdown: '---\ntype: 7\n---\n\nbody\n',
+        createWorkspace: true,
+      }),
+    })
+    expect(res.status).toBe(400)
+    // The stage is the reason; a message that dropped it would still say OKF.
+    expect(await res.json()).toMatchObject({
+      error: expect.stringContaining('OKF parse failed at frontmatter-schema:'),
+    })
   })
 
   it('POST a markdown document whose tag the workspace library forbids returns 400, not 500', async () => {

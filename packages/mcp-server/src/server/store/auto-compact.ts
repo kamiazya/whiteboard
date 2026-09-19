@@ -121,7 +121,23 @@ export function scheduleAutoCompact(
             },
             'compacted',
           )
+          return
         }
+        // The other arm, and NOT a warning: declining is the common case —
+        // every save schedules a compaction and most have nothing to gain —
+        // so `no-gain` and `no-versions` are the scheduler working. What is
+        // worth the symmetry with 'compacted' above is that the reason
+        // survives at all. `compactDocument` distinguishes four of them and
+        // this was the one place that could record which; reading only
+        // `compacted` collapsed them into an absence, so a caller looking at
+        // an unwritten `lastCompactedAt` could not tell a fence race
+        // ('raced') from a snapshot that was already as short as it gets
+        // ('no-gain'). An absence explains nothing, and three reports of a
+        // null stamp in this scheduler's tests are what it cost.
+        getLogger('auto-compact').info(
+          { workspaceId, path, reason: result.reason, beforeBytes: result.beforeBytes },
+          'declined',
+        )
       })
       .catch((err) => {
         getLogger('auto-compact').warning({ workspaceId, path, err }, 'failed')

@@ -471,3 +471,51 @@ describe('wb_document_set and a workspace tag library (ADR-0040 decision 5)', ()
     expect(listings).toBe(0)
   })
 })
+
+/**
+ * A refusal a model can act on (ADR-0031's C11). Both messages here were
+ * measured in three trials across the lane's rounds 20a–20d, each costing a
+ * retry, while a model was building the workspace's tag library document.
+ *
+ * The field-level detail already existed and was thrown away:
+ * `CodecParseError.issues` is documented as "populated for schema-stage
+ * failures so a caller can render field-level detail", and both call sites
+ * passed only `stage` and `message` into `OkfParseError`. So a caller was
+ * told "frontmatter failed OKF schema validation" while the key that failed
+ * sat one field away, unused.
+ */
+describe('an OKF refusal names the fix', () => {
+  async function refusalFor(markdown: string): Promise<string> {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    const tool = createDocumentSetTool(makeDeps(store))
+    try {
+      await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown })
+    } catch (error) {
+      return (error as Error).message
+    }
+    throw new Error('the write was accepted; it should have been refused')
+  }
+
+  test('a body with no frontmatter is told what a minimal one looks like', async () => {
+    const message = await refusalFor('# Tag library\n\nShared vocabulary.\n')
+    // `type` is the ONE key the schema requires (`coreFacetsSchema.type`,
+    // every other field optional), and the shape below is verified to parse
+    // rather than asserted from reading the schema.
+    expect(message).toContain('type:')
+    expect(message).toContain('---')
+  })
+
+  test('a frontmatter the schema refuses names the key that failed', async () => {
+    // `type` must be a non-empty string. A caller who sent a number learns
+    // WHICH key and WHAT was wrong with it, not that "validation failed".
+    const message = await refusalFor('---\ntype: 7\n---\n\nbody\n')
+    expect(message).toContain('type')
+    expect(message).toMatch(/string/i)
+  })
+
+  test('the stage is still named, so the existing readers keep working', async () => {
+    const message = await refusalFor('no frontmatter here')
+    expect(message).toContain('OKF parse failed at frontmatter-schema:')
+  })
+})
