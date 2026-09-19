@@ -218,7 +218,7 @@ describe('the two-axis verifier', () => {
   // an instrument can also do is refuse EVERY board, and that reads the same.
   const FLEET = TASKS.find((t) => t.name.startsWith('tell two things apart'))
 
-  type Box = { id: string; label: string; stencil: string; status: string; color: string }
+  type Box = { id: string; label: string; stencil: string; status: string; color?: string }
   const FLEET_BOXES: readonly Box[] = [
     {
       id: 'orders',
@@ -293,7 +293,7 @@ describe('the two-axis verifier', () => {
         y: 0,
         width: 200,
         height: 80,
-        color: b.color,
+        ...(b.color === undefined ? {} : { color: b.color }),
         'x-whiteboard': {
           facets: dressed(b.stencil, b.status),
           ...(tagsOf === undefined ? {} : { tags: tagsOf(b.status) }),
@@ -303,18 +303,39 @@ describe('the two-axis verifier', () => {
       'x-whiteboard': { facets: { 'visual.axes/v0': { axes: [...axes] } } },
     })
 
-  const wbOver = (content: string) => ({
+  /**
+   * The workspace's tag LIBRARY as `wb_facet_list` answers it: an array of
+   * keys, each with its values and the colour a thing carrying one is drawn
+   * in (ADR-0040 decision 5). Absent by default, because most boards declare
+   * none and the verifier must work without one.
+   */
+  type Library = { key: string; values: { value: string; color: string }[] }[]
+  const HEALTH_LIBRARY: Library = [
+    {
+      key: 'health',
+      values: [
+        { value: 'healthy', color: '4' },
+        { value: 'failing', color: '1' },
+      ],
+    },
+  ]
+
+  const wbOver = (content: string, tagLibrary?: Library) => ({
     call: async (name: string) => {
       if (name === 'wb_document_list') {
         return { documents: [{ path: 'boards/fleet', documentId: 'doc-1' }] }
       }
       if (name === 'wb_document_get') return { documents: [{ content }] }
       if (name === 'wb_canvas_snapshot') return JSON.parse(content)
+      if (name === 'wb_facet_list') {
+        return { facets: [], assets: [], ...(tagLibrary === undefined ? {} : { tagLibrary }) }
+      }
       throw new Error(`the verifier called an unexpected tool: ${name}`)
     },
   })
 
-  const verify = (content: string) => FLEET?.verify?.(wbOver(content) as never, {} as never)
+  const verify = (content: string, tagLibrary?: Library) =>
+    FLEET?.verify?.(wbOver(content, tagLibrary) as never, {} as never)
 
   it('passes a board whose colour carries a DECLARED axis and whose shape carries the stencil', async () => {
     await expect(verify(fleetContent(FLEET_BOXES, ['ops.status/v0']))).resolves.toMatchObject({
@@ -332,6 +353,41 @@ describe('the two-axis verifier', () => {
     await expect(verify(fleetContent(FLEET_BOXES, [], healthTag))).resolves.toMatchObject({
       ok: true,
     })
+  })
+
+  /**
+   * The case the LANE actually produced, and the one this verifier was
+   * scoring wrong. Round 20c: every trial tagged each box `health:<status>`
+   * and declared a `visual.tags/v0` library giving each value a colour, and
+   * wrote no colour on any box — which is the whole point of declaring a
+   * library. The boards rendered green and red; the verifier read
+   * `colour unused` and failed two of three.
+   *
+   * The cause was not the instrument. `layoutSpatialCanvas` resolves a
+   * declared colour onto the node (`withDeclaredColours`) BEFORE it lays
+   * anything out, so `scoreFacets` and the legend both see it; the verifier
+   * scored the raw stored document instead, which is a canvas nobody draws.
+   *
+   * The negative control is the case below it: the same board with no
+   * library is `colour unused` for real, because nothing anywhere says what
+   * an undeclared tag should be drawn in.
+   */
+  it('passes a board whose colour comes from the workspace tag LIBRARY, not from the boxes', async () => {
+    const boxes = FLEET_BOXES.map(({ color: _dropped, ...rest }) => rest)
+    await expect(verify(fleetContent(boxes, [], healthTag), HEALTH_LIBRARY)).resolves.toMatchObject(
+      {
+        ok: true,
+      },
+    )
+  })
+
+  it('refuses that same board when the workspace declares no library', async () => {
+    // Nothing is drawn in anything: the tags are recorded and the boxes are
+    // all one colour, so a reader sees one axis, not two. The pair above and
+    // here is what discriminates "the verifier cannot see a declared colour"
+    // from "there is no declared colour".
+    const boxes = FLEET_BOXES.map(({ color: _dropped, ...rest }) => rest)
+    await expect(verify(fleetContent(boxes, [], healthTag))).resolves.toMatchObject({ ok: false })
   })
 
   it('refuses the same board with the axis undeclared, which is the whole point', async () => {

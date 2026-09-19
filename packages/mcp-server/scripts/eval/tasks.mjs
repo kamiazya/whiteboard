@@ -87,8 +87,43 @@ const workspacePackages = () => {
   ]).then(([codec, render]) => ({
     parseSpatial: codec.parseSpatial,
     scoreFacets: render.scoreFacets,
+    withDeclaredColours: render.withDeclaredColours,
   }))
   return workspacePackagesPromise
+}
+
+/**
+ * The workspace's tag library, as the resolver takes it.
+ *
+ * Read through `wb_facet_list`, the tool a MODEL would use, rather than
+ * through the server's own `workspaceTagLibrary` — the lane has tool calls
+ * and nothing else, and a verifier that reached past the tools would be
+ * grading something no caller can see.
+ *
+ * The shapes differ on purpose and the conversion is here rather than in
+ * either of them: the TOOL answers arrays, so two calls agree and a diff of
+ * the output is stable, while the STORED facet is a record keyed by name.
+ * `withDeclaredColours` takes the stored shape.
+ *
+ * A workspace that declares nothing answers `{}`, and the resolver then
+ * returns the canvas unchanged.
+ */
+const tagLibrary = async (wb) => {
+  const answered = await wb.call('wb_facet_list', { workspaceId: WORKSPACE_ID })
+  return Object.fromEntries(
+    (answered.tagLibrary ?? []).map(({ key, description, exclusive, values }) => [
+      key,
+      {
+        ...(description === undefined ? {} : { description }),
+        ...(exclusive === undefined ? {} : { exclusive }),
+        ...(values === undefined
+          ? {}
+          : {
+              values: Object.fromEntries(values.map(({ value, ...declared }) => [value, declared])),
+            }),
+      },
+    ]),
+  )
 }
 
 export const text = (n) => (n.text ?? '').trim()
@@ -913,7 +948,7 @@ export const TASKS = [
       })
       const content = read.documents[0]?.content
       if (content === undefined) return { ok: false, detail: 'the board has no content' }
-      const { parseSpatial, scoreFacets } = await workspacePackages()
+      const { parseSpatial, scoreFacets, withDeclaredColours } = await workspacePackages()
       const parsed = parseSpatial(content)
       if (!parsed.ok) {
         return { ok: false, detail: `the board does not parse: ${parsed.error.message}` }
@@ -936,7 +971,16 @@ export const TASKS = [
       // what "two questions answerable at a glance" means, and a model that
       // gets there by putting health in the silhouette has drawn a board
       // that reads, which is the whole ask.
-      const { channels } = scoreFacets(parsed.value)
+      //
+      // SCORED AS THE LAYOUT WOULD DRAW IT, which is what the stored
+      // document alone is not. A scoped tag's colour comes from the
+      // workspace's tag library, and `layoutSpatialCanvas` resolves it onto
+      // the node before laying anything out; a verifier reading the stored
+      // canvas scores a board nobody draws. Measured: every trial of lane
+      // round 20c tagged each box and declared a library with a colour per
+      // value, the SVGs came out green and red, and this read
+      // `colour unused`.
+      const { channels } = scoreFacets(withDeclaredColours(parsed.value, await tagLibrary(wb)))
       const spent = Object.entries(channels).filter(([, r]) => r.use !== 'unused')
       const say = () =>
         Object.entries(channels)
