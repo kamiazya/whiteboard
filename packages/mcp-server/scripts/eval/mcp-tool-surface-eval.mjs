@@ -129,7 +129,23 @@ async function captureBoards(wb, task, trial) {
   const figures = `${OUT.replace(/\.json$/, '')}-boards`
   // Read ONCE per capture: a workspace declares one library, and every board
   // in this task is drawn against it.
-  const library = await tagLibrary(wb)
+  //
+  // And never at the cost of the capture. This runs AFTER the model has
+  // spent its quota, so a library read that fails must still leave every
+  // SVG on disk — the same rule the per-board catch below states, which the
+  // first version of this line sat outside of and silently broke.
+  //
+  // The failure is carried and recorded per board rather than degraded to
+  // "no library": an empty library scores every board as if it declared
+  // nothing, which is a NUMBER, and a wrong number reads like a reading.
+  // An absent score does not.
+  let library = {}
+  let libraryError
+  try {
+    library = await tagLibrary(wb)
+  } catch (error) {
+    libraryError = error instanceof Error ? error.message : String(error)
+  }
   const drawing = []
   for (const path of task.boards) {
     const entry = listed.documents.find((d) => d.path === path)
@@ -145,6 +161,11 @@ async function captureBoards(wb, task, trial) {
     // is recorded as such, not a reason to abandon a run that has already
     // spent its quota. The SVG above is already on disk either way.
     try {
+      if (libraryError !== undefined) {
+        throw new Error(
+          `the workspace tag library could not be read, so this board cannot be scored as drawn: ${libraryError}`,
+        )
+      }
       const read = await wb.call('wb_document_get', {
         workspaceId: WORKSPACE_ID,
         documentIds: [entry.documentId],
