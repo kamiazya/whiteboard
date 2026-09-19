@@ -70,6 +70,11 @@ Where a replica exists, what is written to IndexedDB is ciphertext under a
 per-workspace content key. The client receives that key on authorising and
 holds it **in memory only** — never in a store, for the reason above.
 
+[ADR-0043](0043-authority-as-keys.md) decision 3 makes this key the root of an
+`HKDF(workspaceKey, documentId)` derivation tree, so a holder can be given one
+document rather than the workspace. The in-memory rule above applies unchanged
+at every level of that tree.
+
 ### 3. Revocation withholds the key; that is the whole mechanism
 
 A revoked client reconnects, is refused the key, and its replica is ciphertext
