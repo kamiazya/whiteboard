@@ -61,9 +61,30 @@ function walk(absoluteDir: string): string[] {
 function isScannedSourceFile(absolutePath: string): boolean {
   if (!/\.tsx?$/.test(absolutePath)) return false
   if (absolutePath.endsWith('.d.ts')) return false
-  if (/\.test\.tsx?$/.test(absolutePath)) return false
+  // Test files are held by TEST_FILE_SIZE_GRANDFATHER below, at the SAME
+  // budget, so they are moved to a sibling ledger rather than exempted. This
+  // line was a silent exclusion for a long time, unlike the two directory
+  // exclusions above that each say why.
+  if (isTestFile(absolutePath)) return false
   const normalized = absolutePath.replaceAll('\\', '/')
   return !EXCLUDED_DIR_SEGMENTS.some((segment) => normalized.includes(segment))
+}
+
+function isTestFile(absolutePath: string): boolean {
+  return /\.test\.tsx?$/.test(absolutePath)
+}
+
+function isScannedTestFile(absolutePath: string): boolean {
+  if (!isTestFile(absolutePath)) return false
+  const normalized = absolutePath.replaceAll('\\', '/')
+  return !EXCLUDED_DIR_SEGMENTS.some((segment) => normalized.includes(segment))
+}
+
+function scanTestFiles(): string[] {
+  return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
+    .filter(isScannedTestFile)
+    .map((absolutePath) => relativeToRepo(absolutePath))
+    .sort()
 }
 
 function scanFiles(): string[] {
@@ -73,8 +94,17 @@ function scanFiles(): string[] {
     .sort()
 }
 
+/**
+ * The repo-relative path in the form BOTH ledgers are keyed with.
+ *
+ * Normalised because the ledgers hold forward slashes and `join` produces
+ * backslashes on Windows, where an unnormalised key matches nothing — so
+ * every listed file would be reported as unlisted, which reads as the guard
+ * finding real debt. The two filters above already normalise for the same
+ * reason; this helper did not, and served both ledgers.
+ */
 function relativeToRepo(absolutePath: string): string {
-  return absolutePath.slice(REPO_ROOT.length + 1)
+  return absolutePath.slice(REPO_ROOT.length + 1).replaceAll('\\', '/')
 }
 
 /**
@@ -475,6 +505,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2843,
 }
 
+describe('the path form both ledgers are keyed with', () => {
+  // Feeds the helper a backslash tail on the real root: it exercises the
+  // normalisation, not a Windows run, which nothing here can do. Without it
+  // the assertion reads back the backslashes, which is exactly what would
+  // reach a ledger lookup there.
+  it('answers forward slashes, whatever separator the walk produced', () => {
+    expect(relativeToRepo(`${join(REPO_ROOT, 'packages')}\\mcp-server\\src\\x.ts`)).toBe(
+      'packages/mcp-server/src/x.ts',
+    )
+  })
+})
+
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
   const files = scanFiles()
 
@@ -523,6 +565,136 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
       (path) => !existsSync(join(REPO_ROOT, path)),
     )
     expect(missing).toEqual([])
+  })
+})
+
+/**
+ * Test files over the SAME 800-line budget, on the same shrink-only contract
+ * as FILE_SIZE_GRANDFATHER above: an entry is a ceiling, both sides are
+ * guarded, and growing a listed file means raising its ceiling here in the
+ * same diff.
+ *
+ * Why the same budget rather than a higher one, which is the question that
+ * kept this exclusion silent. The case for a higher ceiling is that a test
+ * file legitimately repeats setup, so it should be allowed to run larger.
+ * Measured across this repo on 2026-09-19, that is not what the sizes say —
+ * test files are barely larger than source files at every percentile:
+ *
+ * |            | median | p90 | p95 | p99  | max  |
+ * |------------|--------|-----|-----|------|------|
+ * | source (1058) |   99 | 341 | 517 | 1081 | 2843 |
+ * | test (1443)   |  116 | 382 | 574 | 1266 | 3110 |
+ *
+ * A ratio of 1.09-1.17 does not pay for an exemption, and an exemption
+ * nobody can date is the thing this ledger exists to remove. So the budget
+ * is the one the checklist already states, and what differs is only which
+ * files each ledger holds.
+ *
+ * Note what this does NOT claim: that a long test file carries the same
+ * maintainability signal as a long source file. It claims only that the
+ * justification offered for a higher ceiling is not supported by the sizes.
+ * A shrink-only ratchet never demands shrinkage, so it does not fight a
+ * test that honestly needs its setup — it only stops one growing unwatched.
+ */
+const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
+  'apps/web/src/App.test.tsx': 1611,
+  'apps/web/src/components/VersionTimeline.test.tsx': 1061,
+  'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
+  'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 968,
+  'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2136,
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2634,
+  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
+  'apps/web/src/lib/document-sync-session.test.ts': 2766,
+  'apps/web/src/lib/spatial/commands.test.ts': 1393,
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
+  'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
+  'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
+  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2109,
+  'apps/web/src/pages/SettingsPage.test.tsx': 905,
+  'apps/web/src/pages/use-browser-document-controller.test.ts': 1500,
+  'packages/canvas-render/src/layout/comments.test.ts': 823,
+  'packages/canvas-render/src/layout/edges/edge-rules.properties.test.ts': 843,
+  'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,
+  'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
+  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1194,
+  'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
+  'packages/canvas-render/src/svg/backend.test.ts': 1184,
+  'packages/canvas-render/src/tidy.test.ts': 1176,
+  'packages/canvas-viewer/src/widget-entry.test.tsx': 1266,
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1307,
+  'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
+  'packages/mcp-server/src/server/app.test.ts': 1339,
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 874,
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
+  'packages/mcp-server/src/server/routes/ws.test.ts': 980,
+  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 885,
+  'packages/mcp-server/src/server/store/document-store.test.ts': 861,
+  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
+  'packages/server-core/src/tools/canvas-edit.test.ts': 3110,
+  'packages/server-core/src/tools/facet-set.test.ts': 1320,
+}
+
+describe('file-size budget: test files, same 800-line budget, same shrink-only contract', () => {
+  const testFiles = scanTestFiles()
+
+  // Same guard-that-never-reaches-its-subject discipline as above: a filter
+  // that stopped matching would pass every assertion below over an empty set,
+  // which reads exactly like a clean tree.
+  it('reaches a test tree of the size this repo actually has', () => {
+    expect(testFiles.length).toBeGreaterThan(900)
+  })
+
+  it('flags no over-budget test file outside TEST_FILE_SIZE_GRANDFATHER', () => {
+    const unlisted = testFiles
+      .map((path) => ({ path, lines: lineCount(join(REPO_ROOT, path)) }))
+      .filter(({ path, lines }) => lines > LINE_BUDGET && !(path in TEST_FILE_SIZE_GRANDFATHER))
+      .map(({ path, lines }) => `${path}: ${lines} lines`)
+
+    expect(unlisted).toEqual([])
+  })
+
+  it('holds every grandfathered test file at or under its recorded ceiling', () => {
+    const grown = Object.entries(TEST_FILE_SIZE_GRANDFATHER)
+      .filter(([path]) => existsSync(join(REPO_ROOT, path)))
+      .map(([path, ceiling]) => ({ path, ceiling, lines: lineCount(join(REPO_ROOT, path)) }))
+      .filter(({ lines, ceiling }) => lines > ceiling)
+      .map(
+        ({ path, lines, ceiling }) =>
+          `${path}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      )
+
+    expect(grown).toEqual([])
+  })
+
+  it('holds no test-file entry that has shrunk to budget — delete it instead', () => {
+    const shrunk = Object.keys(TEST_FILE_SIZE_GRANDFATHER)
+      .filter((path) => existsSync(join(REPO_ROOT, path)))
+      .map((path) => ({ path, lines: lineCount(join(REPO_ROOT, path)) }))
+      .filter(({ lines }) => lines <= LINE_BUDGET)
+      .map(
+        ({ path, lines }) => `${path}: ${lines} lines, at or under the ${LINE_BUDGET}-line budget`,
+      )
+
+    expect(shrunk).toEqual([])
+  })
+
+  it('holds no test-file entry for a file that moved or was deleted', () => {
+    const missing = Object.keys(TEST_FILE_SIZE_GRANDFATHER).filter(
+      (path) => !existsSync(join(REPO_ROOT, path)),
+    )
+    expect(missing).toEqual([])
+  })
+
+  // The two ledgers must not both claim a file: the source scan excludes test
+  // files and this one requires them, so an overlap means one of the two
+  // filters drifted.
+  it('shares no path with the source ledger', () => {
+    const shared = Object.keys(TEST_FILE_SIZE_GRANDFATHER).filter(
+      (path) => path in FILE_SIZE_GRANDFATHER,
+    )
+    expect(shared).toEqual([])
   })
 })
 
