@@ -1271,16 +1271,40 @@ example for a word no task uses dropped the pass back to 0 of 3 with the
 tag writes unchanged. The rule against a description quoting its task is
 not hygiene; it was worth a whole pass here.
 
-**What 20c then exposed is a PRODUCT finding, and it is the reason this
-task has read 0 of 3 since round 15.** Every trial wrote the right tags and
-declared a `visual.tags/v0` library giving each value a colour — and
-`scoreFacets` still read `colour unused`, because it takes the canvas
-alone and the library lives in another document. The renderer joins them;
-the instrument cannot. Confirmed by looking at the boards rather than the
-verdicts: all three of 20c's SVGs are drawn in the health colours, two of
-them on trials the verifier failed. **The axis built to judge ADR-0040's
-"declare it once, the board draws it" is blind to exactly that.** Filed;
-it is its own increment, not this one's.
+**What 20c then exposed is a real finding, and it is the reason this task
+has read 0 of 3 since round 15.** Every trial wrote the right tags and
+declared a `visual.tags/v0` library giving each value a colour — and the
+verifier still read `colour unused`. Confirmed by looking at the boards
+rather than the verdicts: all three of 20c's SVGs are drawn in the health
+colours, two of them on trials the verifier failed. Filed; it is its own
+increment, not this one's.
+
+> **Correction (2026-09-19, same day): the cause first written here was
+> wrong, and naming it wrongly is worth more than deleting it.** This said
+> `scoreFacets` "takes the canvas alone and the library lives in another
+> document — the renderer joins them; the instrument cannot". It can.
+> `layoutSpatialCanvas` calls `withDeclaredColours(stored, tagLibrary)`
+> BEFORE it lays anything out, so by the time the score and the legend read
+> the canvas the declared colour is on the node.
+>
+> The evidence that refutes it was already in hand when it was written: the
+> boards rendered a real `health` legend with swatches, and `canvasLegend`
+> derives its keys from `score.channels.colour.carriedBy` — so the score
+> HAD to be reading `carried` in the render path while the lane reported
+> `unused`. A diagnosis that contradicts an observation you already have is
+> the cheapest kind to catch, and it was published anyway.
+>
+> The actual cause was one layer out: the two-axis VERIFIER scored the raw
+> stored document straight out of `wb_document_get`, never loading the
+> library and never resolving it — a canvas nobody draws. Fixed by having
+> it read the library through `wb_facet_list` (the tool a model would use,
+> since the lane has tool calls and nothing else) and score
+> `withDeclaredColours(parsed.value, library)`. The positive control in
+> `tasks.test.ts` is the board the lane actually produced: declared tags, a
+> library with a colour per value, and no stored colour on any box.
+>
+> The general rule it leaves behind: **a caller that SCORES a canvas must
+> score the one the layout would draw.** The export carries that sentence.
 
 **The last clause was bought by a reading, not reasoned.** 20c's wording
 said a tag "colours the box" flat, which is true only of a declared value;
