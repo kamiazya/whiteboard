@@ -988,13 +988,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * has not been applied yet when this runs.
      */
     const toggleSelectionMember = (primaryId: string | null, hitId: string) => {
-      // Node and edge selection are mutually exclusive: Delete processes a
-      // selected edge FIRST, so an edge left selected here would be what a
-      // Delete on the node multi-selection actually removes.
-      setSelectedEdgeId(null)
-      // The caller supplies the anchor primary (the in-flight gesture's, not
-      // yet applied); extras come from the latest state via the functional
-      // update.
+      // INK is deliberately kept. It was cleared here, because Delete
+      // processed the selected edge FIRST and would have removed that
+      // instead of the node multi-selection — a real hazard while the two
+      // could not go together. Delete now takes every selected stroke AND
+      // the nodes in the same press, so the reason is gone, and with it the
+      // reason to shrink a selection the person is growing: this is the
+      // shared path of shift-click and the touch gather, and shift means ADD
+      // everywhere else in this editor.
+      //
+      // A relation EDGE is still dropped, and the two kinds share one state
+      // so the difference has to be made here rather than inherited. What
+      // separates them is the verbs BEHIND the selection, not the gesture: a
+      // stroke's are Delete and Ungroup, which already act on a set, while
+      // an edge's dispatch to a single target — `toggle-lock` locks the edge
+      // when one is selected, so a surviving edge would silently lock the
+      // relation instead of the nodes being gathered. Recorded as
+      // `edges/shift-press` in element-surface-coverage.test.ts, where
+      // opening it is a product decision rather than a side effect of this
+      // one.
+      //
+      // A plain press still replaces — that clearing lives on the press
+      // paths, not here. The caller supplies the anchor primary (the
+      // in-flight gesture's, not yet applied); extras come from the latest
+      // state via the functional update.
+      const lineIds = new Set((canvas.lines ?? []).map((line) => line.id))
+      retainInk((id) => lineIds.has(id))
       setSelectionState((prev) =>
         reduceSelection(
           { primaryId, extraIds: prev.extraIds },
@@ -1164,6 +1183,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // Shift-click builds a multi-selection instead of starting a gesture.
       if (e.shiftKey && hitId !== undefined) {
         toggleSelectionMember(selectedId, hitId)
+        return
+      }
+      // Shift on INK, which the branch above cannot see: ink wins the press
+      // by leaving `hitId` undefined, so without this the press fell through
+      // to the empty-canvas branch — collapsing the node extras and
+      // REPLACING the ink selection. Holding shift destroyed the selection
+      // it was meant to grow.
+      if (e.shiftKey && hitInk !== undefined) {
+        const mark = withGroupMates([hitInk.id], canvas.lines)
+        // A mark already held is REMOVED, which is what shift means
+        // everywhere else in this editor: a press on a member toggles it.
+        const held = new Set(selectedInkIds)
+        const whole = mark.every((id) => held.has(id))
+        setSelectedInkIds(
+          whole
+            ? selectedInkIds.filter((id) => !mark.includes(id))
+            : [...new Set([...selectedInkIds, ...mark])],
+        )
         return
       }
       // Edge hit-test runs at the press so the double-press pairing can

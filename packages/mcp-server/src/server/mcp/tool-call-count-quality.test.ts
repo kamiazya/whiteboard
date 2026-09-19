@@ -258,7 +258,14 @@ describe('what an errand costs in tool calls', () => {
         // facet) — its schema is a record of keys each holding a record of
         // values, so it is the widest facet schema the listing carries, and
         // the errand pays to see it exactly as it paid for the axes facet.
-        responseBytes: 12162,
+        // Then 12,162 -> 12,832: +670 for `visual.ink/v0`, which strokes are
+        // ONE handwritten mark. One field on one target, so this is close to
+        // the floor a facet costs a listing at all — the key, the display
+        // name, the target and a one-field schema. Worth paying and worth
+        // seeing: every facet a plugin registers is read by a model that
+        // asks what it may attach, whether or not it is the one the model
+        // came for.
+        responseBytes: 12832,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the

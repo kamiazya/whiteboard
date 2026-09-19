@@ -120,7 +120,7 @@ describe('wb_facet_list', () => {
     // reported is a failure and not a silently shorter list.
     expect(nodeOnly.otherTargets).toEqual({
       canvas: ['visual.axes/v0', 'visual.edges/v0', 'visual.theme/v0'],
-      edge: ['visual.edges/v0'],
+      edge: ['visual.edges/v0', 'visual.ink/v0'],
       document: ['visual.stencils/v0', 'visual.tags/v0'],
     })
     // `visual.symbol/v0` attaches to canvas, node AND document, so the

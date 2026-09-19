@@ -429,3 +429,83 @@ it('breaks a mark apart from the menu, when the guess was wrong', async () => {
   await userEvent.keyboard('{Delete}')
   await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
 })
+
+it('shift-clicking ink adds it to a selection instead of replacing it', async () => {
+  // Multi-select and ink did not compose. Shift-click tests `hitId`, which
+  // ink deliberately leaves undefined so the stroke wins the press — so the
+  // shift branch never ran for ink, and the press fell through to the one
+  // that COLLAPSES the node extras and REPLACES the ink selection. Holding
+  // shift therefore destroyed the selection it was meant to grow.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [150, 150],
+    [220, 220],
+  ])
+  await new Promise((resolve) => setTimeout(resolve, STROKE_GROUP_PAUSE_MS + 50))
+  drawStroke(root, [
+    [600, 420],
+    [670, 490],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(2)
+  await expect.poll(() => root.querySelectorAll('path[d*="Q"]').length).toBeGreaterThanOrEqual(2)
+
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+  const midOf = (index: number) => {
+    const line = latest.canvas.lines?.[index]
+    const start = line?.from.kind === 'point' ? line.from.point : { x: 0, y: 0 }
+    const bend = line?.bends?.[0] ?? { x: 0, y: 0 }
+    return { x: (start.x + bend.x) / 2, y: (start.y + bend.y) / 2 }
+  }
+  await userEvent.click(root, { position: midOf(0) })
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+  await userEvent.click(root, { position: midOf(1), modifiers: ['Shift'] })
+
+  // Both marks are held, so one Delete takes both.
+  await userEvent.keyboard('{Delete}')
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
+})
+
+it('holds a note and a stroke together, and one Delete takes both', async () => {
+  // The mixed selection a band already produced, reached the other way —
+  // by shift-click. Worth its own case because the two halves live in
+  // different state (`selectionState` for nodes, `selectedInkIds` for ink)
+  // and only Delete puts them back together.
+  const { Host, latest } = makeHost({
+    nodes: [textNode({ id: 'a', x: 500, y: 120, width: 160, height: 90, text: 'note' })],
+    edges: [],
+  })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [120, 380],
+    [220, 470],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(1)
+  await expect.poll(() => root.querySelectorAll('path[d*="Q"]').length).toBeGreaterThanOrEqual(1)
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+
+  const line = latest.canvas.lines?.[0]
+  const start = line?.from.kind === 'point' ? line.from.point : { x: 0, y: 0 }
+  const bend = line?.bends?.[0] ?? { x: 0, y: 0 }
+  await userEvent.click(root, {
+    position: { x: (start.x + bend.x) / 2, y: (start.y + bend.y) / 2 },
+  })
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+  // Shift onto the note: the ink must survive the press that adds it.
+  await userEvent.click(root, { position: { x: 580, y: 165 }, modifiers: ['Shift'] })
+
+  // The ink must still be held after the press that added the note — this
+  // is the assertion that says the two halves compose, rather than the
+  // Delete below passing because one of them was silently dropped.
+  expect(
+    container.querySelectorAll('[data-testid="edge-selection-highlight"]').length,
+  ).toBeGreaterThan(0)
+
+  await userEvent.keyboard('{Delete}')
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
+  await expect.poll(() => latest.canvas.nodes.length).toBe(0)
+})

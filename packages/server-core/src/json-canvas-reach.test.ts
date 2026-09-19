@@ -127,7 +127,12 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // 17 -> 15 when ADR-0040 retired it: what a box IS is a scoped tag now,
     // which is CORE — three positions in the ledger rather than two in a
     // bucket — so the facet column gives back what the tag rows took.
-    expect(census.facet).toHaveLength(15)
+    //
+    // 15 -> 16 for `visual.ink/v0`'s `group`: which strokes are ONE mark.
+    // One field on one target (edge, which is where a line's facets live),
+    // so one position. The format has no word for a handwritten character
+    // being several strokes, which is the column doing its job again.
+    expect(census.facet).toHaveLength(16)
   })
 
   it('so 52 of the 74 positions a document can hold are outside the format', () => {
@@ -171,8 +176,13 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // outside therefore RISES, to 70.3%, on a change that took nothing away
     // from a JSON Canvas reader — the clearest warning this ratio carries
     // about being read as a quality.
+    //
+    // 52/74 -> 53/75 for `visual.ink/v0`'s one position: both halves again,
+    // so the share outside barely moves (70.3% -> 70.7%). The same shape as
+    // the axes and classification facets — a position that only ever lives
+    // in the extension raises numerator and denominator together.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(52)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(74)
+    expect(outside).toBe(53)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(75)
   })
 })

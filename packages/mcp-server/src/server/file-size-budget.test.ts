@@ -583,7 +583,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2951 -> 2988: the press decides which MARK a stroke joins (the
   // rule itself is `stroke-group.ts`) and the release remembers what the
   // next one is judged against.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2988,
+  // Raised 2988 -> 3011: shift on INK, which the multi-select branch above
+  // it cannot see — ink wins a press by leaving `hitId` undefined, so
+  // without its own arm holding shift destroyed the selection it was meant
+  // to grow.
+  // Raised 3011 -> 3025, and all 14 are the REASON rather than the rule: one
+  // line drops a held edge on a shift-press while ink survives, and the two
+  // kinds share one state, so what separates them (an edge's verbs dispatch
+  // to a single target, a stroke's already take a set) has nowhere to be
+  // written but beside the line that acts on it.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3025,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -721,7 +730,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 839,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 848,
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 963,
   'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
