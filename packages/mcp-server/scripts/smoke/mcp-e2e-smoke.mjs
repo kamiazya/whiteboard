@@ -637,6 +637,16 @@ async function main() {
         node: { id: 'dressed', type: 'text', x: 400, y: 0, width: 200, height: 100, text: 'store' },
         stencil: 'visual.datastore',
       },
+      // `stencil: null` says "this op names none" (task #93). Through a
+      // real client because the value has to survive the SDK's own
+      // validation of the input schema, which is where a nullable is
+      // either declared or not — a unit test calling `execute` never
+      // crosses it.
+      {
+        op: 'node.add',
+        node: { id: 'plain', type: 'text', x: 400, y: 200, width: 200, height: 100, text: 'plain' },
+        stencil: null,
+      },
       {
         op: 'edge.add',
         edge: {
@@ -647,7 +657,7 @@ async function main() {
       },
     ],
   })
-  if (seedBatch.applied !== 4 || seedBatch.snapshot.edges[0]?.id !== 'link') {
+  if (seedBatch.applied !== 5 || seedBatch.snapshot.edges[0]?.id !== 'link') {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
 

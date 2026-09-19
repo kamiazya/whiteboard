@@ -410,3 +410,73 @@ describe('a workspace\u2019s own stencil library', () => {
     expect(resolveNodeShape(canvas.nodes.find((n) => n.id === 'b') as never)).toBe('cylinder')
   })
 })
+
+describe('`stencil: null` says "no stencil", the way `within: null` says "no group"', () => {
+  // Round 18 put `stencil: null` on a title and a frame in two trials of
+  // three and lost the whole batch to a parse refusal. The asymmetry is
+  // what a model generalises across: `within` on the same op already
+  // accepts null for "no group", so null reads as the way to say "none".
+  test('node.add accepts null and keeps the box undressed', async () => {
+    const { canvas } = await run([
+      {
+        op: 'node.add',
+        node: textNode({ id: 'plain', x: 0, y: 0, width: 200, height: 80, text: 'Title' }),
+        stencil: null,
+      },
+    ])
+
+    const node = canvas.nodes.find((n) => n.id === 'plain')
+    expect(node).toBeDefined()
+    // Undressed, not merely accepted: null must not resolve to some default
+    // stencil, which would be a quieter version of the same defect.
+    expect(resolveNodeStencil(node as never, createFacetRegistry([visualPlugin]))).toBeUndefined()
+  })
+
+  test('node.patch accepts null and leaves the box as it stands', async () => {
+    const { canvas } = await run([
+      {
+        op: 'node.add',
+        node: textNode({ id: 'box', x: 0, y: 0, width: 200, height: 80, text: 'Box' }),
+      },
+      { op: 'node.patch', id: 'box', patch: { text: 'Renamed' }, stencil: null },
+    ])
+
+    const node = canvas.nodes.find((n) => n.id === 'box')
+    expect(node).toMatchObject({ text: 'Renamed' })
+    expect(resolveNodeStencil(node as never, createFacetRegistry([visualPlugin]))).toBeUndefined()
+  })
+
+  test('null on a DRESSED box names no stencil rather than stripping the one it has', async () => {
+    // The discriminator between the two readings of `stencil: null` on a
+    // patch: "this op names none" (what this does) and "take the stencil
+    // off" (what it does NOT do). Only the first is safe — undressing has
+    // to decide what happens to the colour and the silhouette the stencil
+    // wrote, which is a capability nobody asked for, and a caller who meant
+    // "no stencil in this op" would silently lose the box's kind.
+    const registry = createFacetRegistry([visualPlugin])
+    const { canvas } = await run([
+      {
+        op: 'node.add',
+        node: textNode({ id: 'db', x: 0, y: 0, width: 200, height: 80, text: 'Store' }),
+        stencil: 'visual.datastore',
+      },
+      { op: 'node.patch', id: 'db', patch: { text: 'Primary store' }, stencil: null },
+    ])
+
+    const node = canvas.nodes.find((n) => n.id === 'db')
+    expect(node).toMatchObject({ text: 'Primary store' })
+    expect(resolveNodeStencil(node as never, registry)).toBe('visual.datastore')
+  })
+
+  test('an unknown stencil is still refused — null is the only new value admitted', async () => {
+    await expect(
+      run([
+        {
+          op: 'node.add',
+          node: textNode({ id: 'x', x: 0, y: 0, width: 200, height: 80, text: 'X' }),
+          stencil: 'nope.missing',
+        },
+      ]),
+    ).rejects.toThrow(/no stencil "nope\.missing" is registered/)
+  })
+})
