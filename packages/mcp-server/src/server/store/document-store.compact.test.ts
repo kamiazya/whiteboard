@@ -29,6 +29,7 @@ const {
   _awaitAutoCompactFiredForTests,
   _awaitAutoCompactIdleForTests,
   _loopHoldersCountForTests,
+  _autoCompactTimerCountForTests,
 } = await import('./auto-compact.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
@@ -362,20 +363,37 @@ describe('auto-compact', () => {
 
     expect(await readLastCompactedAt()).toBeNull()
 
+    // A compaction that THROWS is caught inside the scheduler and logged, so
+    // without this capture a failed compaction reaches the reader as a null
+    // stamp — a message that names the assertion rather than the cause.
+    const logs = captureLogsForTests('warning')
+
     // Three rapid triggers within the debounce window must collapse into
     // a single compactDocument run. Use a tiny debounce so the test stays fast.
     scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
     scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
     scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
 
-    // Nothing has fired yet.
-    expect(await readLastCompactedAt()).toBeNull()
+    // The collapse itself, asserted where it is a FACT rather than a race:
+    // three schedules leave one timer, and the count is readable synchronously
+    // on the line after the third call. Everything below is about what that
+    // one timer then does.
+    expect(
+      _autoCompactTimerCountForTests(),
+      'three rapid triggers did not collapse into exactly one pending debounce',
+    ).toBe(1)
 
     // Wait for the debounce to fire and its compactDocument write to settle.
     // The seam waits for that event rather than for a budget to elapse — the
     // budget is what used to fail here under a shared runner's contention.
     await _awaitAutoCompactIdleForTests()
     const stamp = await readLastCompactedAt()
+    logs.restore()
+
+    expect(
+      logs.records.filter((record) => record.scope === 'auto-compact' && record.msg === 'failed'),
+      'the debounced compaction threw and was swallowed, so no stamp was ever written',
+    ).toEqual([])
     expect(stamp).not.toBeNull()
     const settled = stamp!
 
