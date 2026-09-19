@@ -214,9 +214,21 @@ function GeneralSection({
 
 // Duplicate mount cost (this renders once per visible layout — mobile detail
 // and desktop pane both exist in the DOM at once, see the module doc comment
-// below) is an accepted tradeoff: PairedOriginsCard/StorageReportCard already
-// own their fetch/error/loading state, and splitting that state out to share
-// across two layouts would add real complexity for a cheap, idempotent GET.
+// below) is an accepted tradeoff: PairedOriginsCard, PasskeysCard and
+// StorageReportCard each own their own fetch/error/loading state, and
+// splitting that out to share across two layouts would add real complexity
+// for a cheap, idempotent GET.
+//
+// The consequence is not only a duplicated read. Two of these cards MUTATE —
+// PairedOriginsCard revokes a grant, PasskeysCard registers and revokes a
+// passkey — and each drops the row from its own list, so the hidden layout's
+// copy keeps showing it. CSS hiding does not unmount, so that copy is stale
+// until the section is left and re-entered, which remounts both. It is
+// reachable only by crossing the `sm` breakpoint in between, and repeating
+// the stale action is safe: a second DELETE of a credential already gone
+// answers 404, which the card renders as "could not remove" rather than
+// removing anything else. Lift the state if a card here ever gains a
+// mutation that is NOT safe to repeat.
 function ConnectionsSection({
   daemon,
   onDisconnected,

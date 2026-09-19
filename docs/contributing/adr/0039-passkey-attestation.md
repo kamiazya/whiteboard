@@ -348,9 +348,10 @@ attestation beside it. The challenge is
 `SHA-256(promotionChallengeInput({ workspaceId, snapshotDigest }))`, shared
 through daemon-client so both ends hash the same bytes.
 
-**#1612 — the browser.** `apps/web/src/lib/passkey-attestation.ts` keeps only
-the credential id a daemon pinned, keyed by that daemon's base URL (decision
-1); registers with `attestation: 'none'`, ES256 and `userVerification:
+**#1612 — the browser.** `apps/web/src/lib/passkey-attestation.ts` keeps the
+credential id a daemon pinned and the daemon's own `createdAt` for it, keyed
+by that daemon's base URL (decision 1) — never key material, which stays with
+the authenticator; registers with `attestation: 'none'`, ES256 and `userVerification:
 'required'` on the page's own origin; asks the registered credential to sign
 the recomputed challenge at promote, and answers `null` where it cannot ask,
 which the move records as unattested (decision 5's "absence means not
