@@ -338,12 +338,42 @@ try {
     throw new Error('restored data dir missing whiteboard.db')
   }
   const restoredEntries = readdirSync(restoredDataDir).sort()
-  if (JSON.stringify(restoredEntries) !== JSON.stringify(srcEntriesAfterBackup)) {
+
+  // A restore reproduces the source MINUS the keys a backup must never
+  // carry. Listed here by name rather than imported from the exclusion list
+  // the daemon uses, deliberately: an oracle built from the code it judges
+  // agrees with that code by construction, so this states the contract
+  // independently and fails if the shipped daemon stops honouring it.
+  //
+  // `daemon.json` is not here because a clean shutdown removes it, so it is
+  // already absent from the source by this point.
+  const MUST_NOT_TRAVEL = ['daemon-identity.json', 'macaroon-root-key.json']
+
+  // The absence has to mean something: if the source never held these, the
+  // check below passes over a situation it was never meant to see.
+  const missingFromSource = MUST_NOT_TRAVEL.filter((n) => !srcEntriesAfterBackup.includes(n))
+  if (missingFromSource.length > 0) {
     throw new Error(
-      `restored entries differ from source after restore.\n  src: ${JSON.stringify(srcEntriesAfterBackup)}\n  restored: ${JSON.stringify(restoredEntries)}`,
+      `source data dir never held ${JSON.stringify(missingFromSource)}, so the exclusion check below proves nothing. The daemon should have written both on first start.`,
     )
   }
-  console.log('[packaged-daemon-backup-restore-smoke] backup → restore ok (entries match)')
+
+  const leaked = MUST_NOT_TRAVEL.filter((n) => restoredEntries.includes(n))
+  if (leaked.length > 0) {
+    throw new Error(
+      `a key that must never travel survived backup → restore: ${JSON.stringify(leaked)}. A backup directory is copied to another disk, shipped to support, kept for months; a signing key or a token root in one is a forgery capability that outlives the machine.`,
+    )
+  }
+
+  const expectedEntries = srcEntriesAfterBackup.filter((n) => !MUST_NOT_TRAVEL.includes(n))
+  if (JSON.stringify(restoredEntries) !== JSON.stringify(expectedEntries)) {
+    throw new Error(
+      `restored entries differ from source after restore.\n  expected: ${JSON.stringify(expectedEntries)}\n  restored: ${JSON.stringify(restoredEntries)}`,
+    )
+  }
+  console.log(
+    `[packaged-daemon-backup-restore-smoke] backup → restore ok (entries match; ${MUST_NOT_TRAVEL.join(', ')} correctly absent)`,
+  )
 
   // ───────── Phase 3: boot daemon B against restored dir ─────────
   const daemonB = startDaemon({
