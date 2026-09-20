@@ -554,3 +554,68 @@ it('holds a note and a stroke together, and one Delete takes both', async () => 
   await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
   await expect.poll(() => latest.canvas.nodes.length).toBe(0)
 })
+
+it('joins two marks the drawer meant as one, from the menu', async () => {
+  // Ungroup existed and Group did not, so a guess broken apart — or two
+  // sittings a pause fell between — could never be rejoined. The automatic
+  // grouping is a guess in both directions, and only one of them had an
+  // escape.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [100, 120],
+    [180, 60],
+    [260, 140],
+  ])
+  // Past the pause, so the two are separate marks by construction — the
+  // state this verb exists to repair.
+  await new Promise((resolve) => setTimeout(resolve, STROKE_GROUP_PAUSE_MS + 50))
+  drawStroke(root, [
+    [100, 220],
+    [180, 160],
+    [260, 240],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(2)
+  await expect.poll(() => root.querySelectorAll('path[d*="Q"]').length).toBeGreaterThanOrEqual(2)
+  const before = (latest.canvas.lines ?? []).map((line) => resolveInkGroup(line))
+  expect(before[0]).not.toBe(before[1])
+
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+  // A band over BOTH, which is how a person gathers a scribble — and the
+  // gesture this verb is reached from.
+  const at = pointerAt(root)
+  const bandWidth = () =>
+    Number(
+      page.getByTestId('marquee-rect').element().querySelector('rect')?.getAttribute('width') ?? 0,
+    )
+  root.dispatchEvent(down(at, 60, 30, 73))
+  await expect.element(page.getByTestId('marquee-rect')).toBeInTheDocument()
+  root.dispatchEvent(move(at, 320, 300, 73))
+  await expect.poll(bandWidth).toBeGreaterThan(100)
+  root.dispatchEvent(up(at, 320, 300, 73))
+  await expect.element(page.getByTestId('edge-selection-highlight')).toBeInTheDocument()
+
+  const line = latest.canvas.lines?.[1]
+  const start = line?.from.kind === 'point' ? line.from.point : { x: 0, y: 0 }
+  const bend = line?.bends?.[0] ?? { x: 0, y: 0 }
+  const on = { x: (start.x + bend.x) / 2, y: (start.y + bend.y) / 2 }
+  const rect = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      clientX: rect.left + on.x,
+      clientY: rect.top + on.y,
+    }),
+  )
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await userEvent.click(await page.getByRole('menuitem', { name: 'Group' }).element())
+
+  await expect
+    .poll(() => {
+      const groups = (latest.canvas.lines ?? []).map((line) => resolveInkGroup(line))
+      return groups[0] !== undefined && groups[0] === groups[1]
+    })
+    .toBe(true)
+})

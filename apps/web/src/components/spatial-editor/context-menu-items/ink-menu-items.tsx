@@ -13,8 +13,8 @@
  */
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor, CanvasLine } from '@kamiazya/whiteboard-model'
-import { resolveInkGroup } from '@kamiazya/whiteboard-plugin-visual'
-import { Lock as LockIcon, LockOpen, Tag, Trash2, Ungroup } from 'lucide-react'
+import { resolveInkGroup, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import { Group, Lock as LockIcon, LockOpen, Tag, Trash2, Ungroup } from 'lucide-react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
@@ -36,6 +36,13 @@ export interface InkMenuItemsInput {
   readonly setSelectedEdgeId: (id: string | null) => void
   /** Opens the in-place label editor on this stroke. */
   readonly setEdgeLabelEditId: (id: string | null) => void
+  /**
+   * Every selected stroke or relation, which is what Group acts on — the
+   * pressed line alone can never be a mark.
+   */
+  readonly selectedInkIds: readonly string[]
+  /** Mints the group id, so the menu invents no identity of its own. */
+  readonly createId: () => string
 }
 
 export function inkMenuItems({
@@ -48,6 +55,8 @@ export function inkMenuItems({
   applyResult,
   setSelectedEdgeId,
   setEdgeLabelEditId,
+  selectedInkIds,
+  createId,
 }: InkMenuItemsInput): ContextMenuItem[] {
   // Locked ink offers exactly one action, the same contract the edge branch
   // keeps: everything else here is a mutation the lock exists to refuse.
@@ -66,6 +75,15 @@ export function inkMenuItems({
   // verb that does nothing is worse than an absent one.
   const group = resolveInkGroup(line)
   const mates = group === undefined ? [] : lines.filter((entry) => resolveInkGroup(entry) === group)
+  // The strokes a Group would join: what is selected, narrowed to ink this
+  // canvas actually holds. Offered only when there are two or more — a mark
+  // of one is what carrying no group already means, and a verb that does
+  // nothing is worse than an absent one (the rule Ungroup already follows).
+  const byId = new Map(lines.map((entry) => [entry.id, entry]))
+  const joinable = selectedInkIds.flatMap((id) => {
+    const entry = byId.get(id)
+    return entry === undefined ? [] : [entry]
+  })
   const recolour = (color: CanvasColor | undefined) =>
     applyResult({
       state: { kind: 'idle' },
@@ -80,6 +98,36 @@ export function inkMenuItems({
   return [
     colorRow(palette, line.color, recolour),
     { kind: 'separator' as const },
+    ...(joinable.length > 1
+      ? [
+          {
+            label: 'Group' as const,
+            icon: <Group />,
+            onSelect: () => {
+              // ONE fresh id for the whole set, minted by the editor's
+              // factory rather than here: a mark is an identity, and two
+              // strokes given two ids are two marks that look like one.
+              // Strokes already in other marks are absorbed, which is what
+              // makes this the real inverse of Ungroup rather than a verb
+              // that only works on loose ink.
+              const id = createId()
+              applyResult({
+                state: { kind: 'idle' },
+                commands: joinable.map(
+                  (entry) =>
+                    ({
+                      kind: 'set-line-facet',
+                      id: entry.id,
+                      key: VISUAL_INK_KEY,
+                      payload: { group: id },
+                    }) as const,
+                ),
+              })
+            },
+          },
+          { kind: 'separator' as const },
+        ]
+      : []),
     ...(mates.length > 1
       ? [
           {
@@ -124,9 +172,16 @@ export function inkMenuItems({
       icon: <Trash2 />,
       danger: true,
       onSelect: () => {
+        // The whole SELECTION, which is what the Delete key already takes.
+        // The two agreed only by accident before: a right-click collapsed
+        // the ink selection to the pressed stroke, so "the selection" and
+        // "this stroke" were the same thing. Now that a press on a member
+        // keeps the set, a menu Delete that took one would be the odd one
+        // out — and would read as the menu losing the rest.
+        const targets = joinable.length > 1 ? joinable : [line]
         applyResult({
           state: { kind: 'idle' },
-          commands: [{ kind: 'delete-line', id: line.id } as const],
+          commands: targets.map((entry) => ({ kind: 'delete-line', id: entry.id }) as const),
         })
         setSelectedEdgeId(null)
       },

@@ -118,6 +118,7 @@ const COMMAND_FACTS = {
   'move-line': { verb: 'move', target: 'lines' },
   'set-line-bends': { verb: 'set-bends', target: 'lines' },
   'set-line-label': { verb: 'set-label', target: 'lines' },
+  'set-line-facet': { verb: 'set-facet', target: 'lines' },
   'set-line-color': { verb: 'set-color', target: 'lines' },
   'ungroup-ink': { verb: 'ungroup', target: 'lines' },
 
@@ -252,8 +253,7 @@ const VERB_PARITY = {
   'set-facet': {
     nodes: 'command',
     edges: 'command',
-    lines:
-      'gap: a line has the same `facets` bucket a node and an edge have, and `visual.ink/v0` — which says WHICH strokes are one handwritten mark — is written only when the stroke is created. Nothing edits it, so a mark cannot be re-grouped, only ungrouped',
+    lines: 'command',
     comments:
       'n/a: the annotation layer is not a facet target (ADR-0013 names canvas, node, edge and document)',
   },
@@ -340,7 +340,7 @@ describe('every command kind says which verb it is and what it acts on', () => {
     // `.claude/rules/coverage-ledger.md` asks for one: the type check proves
     // the table matches the union, and nothing else here would notice the
     // union having quietly become five entries.
-    expect(commandFacts).toHaveLength(42)
+    expect(commandFacts).toHaveLength(43)
     expect(elementCommands.length).toBeGreaterThan(30)
   })
 
@@ -440,7 +440,7 @@ describe('what each kind of element can have done to it', () => {
     // whole stroke sits — and the editor writes NONE of them. Ink can be
     // drawn, picked, banded, shift-added, ungrouped, locked and deleted, and
     // after that it is fixed. Nothing was red about that before this line.
-    expect(Object.fromEntries(byCollection)).toEqual({ lines: 3 })
+    expect(Object.fromEntries(byCollection)).toEqual({ lines: 2 })
   })
 })
 

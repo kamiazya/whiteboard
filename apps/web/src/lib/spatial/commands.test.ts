@@ -1542,6 +1542,29 @@ describe('lines in the editor', () => {
     expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
   })
 
+  it('writes one facet on a stroke, and removes it by naming no payload', () => {
+    // Facet-GENERIC, exactly as its node and edge twins are: the key comes
+    // from the caller, so this module never names a domain.
+    const set = applyCommand(lineCanvas(), {
+      kind: 'set-line-facet',
+      id: 'l1',
+      key: VISUAL_INK_KEY,
+      payload: { group: 'mark-1' },
+    })
+    expect(set.lines?.[0]?.facets).toEqual({ [VISUAL_INK_KEY]: { group: 'mark-1' } })
+    const cleared = applyCommand(set, {
+      kind: 'set-line-facet',
+      id: 'l1',
+      key: VISUAL_INK_KEY,
+      payload: undefined,
+    })
+    // The empty bucket goes too: an element carrying `facets: {}` says the
+    // same thing as one carrying none, and only one of them round-trips
+    // identically.
+    expect(cleared.lines?.[0]).not.toHaveProperty('facets')
+    expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
+  })
+
   it('picks the label write by the collection the id came from', () => {
     const canvas: SpatialCanvas = {
       ...lineCanvas(),

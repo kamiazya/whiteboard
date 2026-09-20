@@ -1369,7 +1369,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         setSelectedEdgeId(null)
       }
       if (hitPathId !== undefined) {
-        setSelectedEdgeId(hitPathId)
+        // A press on a MEMBER keeps the whole set and leads with the pressed
+        // one; a press on anything else replaces it. That is the rule the
+        // node branch above already follows (`promote` against
+        // `set-members`), and ink had the other one: `setSelectedEdgeId`
+        // collapses the selection to a single id, so right-clicking one
+        // stroke of a gathered scribble threw the rest away — and every verb
+        // that acts on the SET (Group, and whatever joins it) could never be
+        // offered from the menu that is supposed to offer them.
+        setSelectedInkIds((current) =>
+          current.includes(hitPathId)
+            ? [hitPathId, ...current.filter((id) => id !== hitPathId)]
+            : [hitPathId],
+        )
         applySelection({ type: 'clear' })
       }
       setContextMenu({
@@ -2498,6 +2510,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               isLocked={isLocked}
               extraIds={extraIds}
               selectedId={selectedId}
+              selectedInkIds={selectedInkIds}
+              createId={createId ?? defaultCreateId}
               isImageFileRef={isImageFileRef}
               missingFileRef={missingFileRef}
             />

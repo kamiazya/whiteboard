@@ -123,6 +123,21 @@ export type EditorLeafCommand =
   | { readonly kind: 'set-line-label'; readonly id: string; readonly label: string }
   | {
       /**
+       * One STROKE's own facets bucket, generic in the key for the reason
+       * its node, edge and canvas twins are: the key comes from the caller,
+       * so this module never names a domain. `visual.ink/v0` — which strokes
+       * are one handwritten mark — is the first payload to use it, and
+       * `ungroup-ink` stays its own command because REMOVING that key from
+       * a whole mark at once is a verb rather than a field write.
+       */
+      readonly kind: 'set-line-facet'
+      readonly id: string
+      readonly key: string
+      /** undefined removes the facet, leaving no empty bucket behind. */
+      readonly payload: unknown
+    }
+  | {
+      /**
        * The points a stroke is drawn THROUGH, as a whole list — the bend
        * drag's write, exactly as `set-edge-bends` is for a relation. An
        * empty list clears the field, because absence already says "take a
@@ -665,6 +680,20 @@ function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
   }
 }
 
+function setLineFacet(
+  canvas: SpatialCanvas,
+  id: string,
+  key: string,
+  payload: unknown,
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    const { facets, ...rest } = line
+    const { [key]: _previous, ...others } = facets ?? {}
+    const next = payload === undefined ? others : { ...others, [key]: payload }
+    return Object.keys(next).length === 0 ? rest : { ...rest, facets: next }
+  })
+}
+
 function setLineLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
   return updateLine(canvas, id, (line) => {
     // Empty clears the field, the same canonicalisation `setEdgeLabel` makes.
@@ -1125,6 +1154,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setLineBends(canvas, command.id, command.bends)
     case 'set-line-label':
       return setLineLabel(canvas, command.id, command.label)
+    case 'set-line-facet':
+      return setLineFacet(canvas, command.id, command.key, command.payload)
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
     case 'set-edge-ends':

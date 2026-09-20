@@ -144,6 +144,10 @@ export interface CanvasContextMenuProps {
   readonly isLocked: (nodeId: string) => boolean
   readonly extraIds: ReadonlySet<string>
   readonly selectedId: string | null
+  /** Every selected stroke or relation — what the ink menu's Group acts on. */
+  readonly selectedInkIds: readonly string[]
+  /** The editor's id factory, so a menu verb mints no identity of its own. */
+  readonly createId: () => string
   readonly isImageFileRef?: (file: string) => boolean
   /** Contribution source; a test seam — production uses the bundled registry. */
   readonly facetRegistry?: FacetRegistry
@@ -166,6 +170,8 @@ export function CanvasContextMenu({
   isLocked,
   extraIds,
   selectedId,
+  selectedInkIds,
+  createId,
   isImageFileRef,
   missingFileRef,
   facetRegistry = bundledFacetRegistry,
@@ -271,6 +277,8 @@ export function CanvasContextMenu({
                 applyResult,
                 setSelectedEdgeId,
                 setEdgeLabelEditId,
+                selectedInkIds,
+                createId,
               })
             : node === undefined && edge !== undefined
               ? edgeMenuItems({
