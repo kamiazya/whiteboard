@@ -1,3 +1,5 @@
+import { completionStatus, currentCompletions } from '@codemirror/autocomplete'
+import { EditorView } from '@codemirror/view'
 import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -197,6 +199,66 @@ describe('wiki link completion (real browser)', () => {
     tap('Release plan', 2, 56)
     await new Promise((resolve) => setTimeout(resolve, 200))
     expect(value).toBe('see [[retro-notes]] and [[Rel')
+  })
+
+  it('a tap while a sibling source refreshes the list is committed once the list is back', async () => {
+    // The `:` shortcode source shares this one `autocompletion()` and
+    // re-activates on EVERY keystroke even though its own trigger never
+    // matches inside `[[` — CodeMirror marks the whole dialog `disabled`
+    // (`cm-tooltip-autocomplete-disabled`, `currentCompletions` empty) for
+    // as long as any source is pending, this sibling included. A tap that
+    // lands in that window used to be silently dropped: `acceptCompletion`
+    // refuses while disabled, same as it refuses while genuinely closed.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
+    const view = editable === null ? null : EditorView.findFromDOM(editable as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    await userEvent.keyboard('see [[[[Re')
+    await vi.waitFor(() => {
+      expect(currentCompletions(view.state).length).toBeGreaterThan(0)
+    })
+
+    // One synchronous task: no timer can run between this keystroke and the
+    // tap that follows it, so the disabled window is a CONDITION rather than
+    // a race the test has to get lucky on.
+    const head = view.state.doc.length
+    view.dispatch({
+      changes: { from: head, insert: 't' },
+      selection: { anchor: head + 1 },
+      userEvent: 'input.type',
+    })
+
+    // Premise: the keystroke put the dialog in the exact disabled state a
+    // real fast typist produces after every character — never asserted by
+    // waiting, so a premise that stops holding fails loudly instead of the
+    // test quietly racing past it.
+    expect(
+      document
+        .querySelector('.cm-tooltip-autocomplete')
+        ?.classList.contains('cm-tooltip-autocomplete-disabled'),
+    ).toBe(true)
+    expect(currentCompletions(view.state)).toHaveLength(0)
+    expect(completionStatus(view.state)).toBe('pending')
+    expect(optionLabelled('Retro notes')).toBeDefined()
+
+    tap('Retro notes', 3)
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[retro-notes]]')
+    })
   })
 
   it('plain prose never opens the popup', async () => {

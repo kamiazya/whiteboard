@@ -3,6 +3,8 @@ import {
   type Completion,
   type CompletionContext,
   type CompletionResult,
+  completionStatus,
+  currentCompletions,
   setSelectedCompletion,
 } from '@codemirror/autocomplete'
 import { EditorView, ViewPlugin } from '@codemirror/view'
@@ -32,6 +34,18 @@ const TAP_SLOP_PX = 12
 
 export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
   let startY: number | null = null
+  /**
+   * A label whose tap `acceptCompletion` refused. The dialog shares one
+   * `autocompletion()` with the `:` shortcode source, which re-activates on
+   * EVERY keystroke — even inside `[[`, where its own trigger never matches
+   * — and CodeMirror disables the whole dialog for as long as any source is
+   * pending, this sibling included (`cm-tooltip-autocomplete-disabled`,
+   * `currentCompletions` empty). A tap landing in that window is a real,
+   * visible option; `update()` below commits it once the dialog re-enables,
+   * matched by LABEL because the refreshed list is a fresh render with new
+   * indices.
+   */
+  let deferred: string | null = null
   const optionAt = (target: EventTarget | null): HTMLElement | null => {
     const li = target instanceof Element ? target.closest('.cm-tooltip-autocomplete li') : null
     return li instanceof HTMLElement && view.dom.contains(li) ? li : null
@@ -50,11 +64,33 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
     // a second time, and the blur that would close the popup never fires.
     event.preventDefault()
     view.dispatch({ effects: setSelectedCompletion(Number(match[1])) })
-    acceptCompletion(view)
+    if (!acceptCompletion(view)) {
+      deferred = li.querySelector('.cm-completionLabel')?.textContent ?? null
+    }
   }
   view.dom.addEventListener('touchstart', onTouchStart, { passive: true })
   view.dom.addEventListener('touchend', onTouchEnd, { passive: false })
   return {
+    update() {
+      if (deferred === null) return
+      const label = deferred
+      const options = currentCompletions(view.state)
+      if (options.length === 0) {
+        // Still refreshing (or the dialog closed under the tap) — only give
+        // up once the source has genuinely gone quiet.
+        if (completionStatus(view.state) === null) deferred = null
+        return
+      }
+      const index = options.findIndex((option) => option.label === label)
+      deferred = null
+      if (index === -1) return
+      // A ViewPlugin's own update() cannot dispatch synchronously; queue for
+      // right after CodeMirror finishes applying this one.
+      queueMicrotask(() => {
+        view.dispatch({ effects: setSelectedCompletion(index) })
+        acceptCompletion(view)
+      })
+    },
     destroy() {
       view.dom.removeEventListener('touchstart', onTouchStart)
       view.dom.removeEventListener('touchend', onTouchEnd)
