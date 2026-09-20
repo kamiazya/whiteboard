@@ -67,6 +67,18 @@ export function loadedThemeFaces(): readonly ThemeFace[] {
 }
 
 /**
+ * Code-unit order, spelled out.
+ *
+ * Identical to a bare `.sort()` for strings — and written explicitly
+ * because a bare one reads as an oversight, and a static analyser
+ * (Sonar S2871) asks for `localeCompare` instead. Taking that advice here
+ * would be a defect rather than a fix: `localeCompare` reads the runtime's
+ * default locale and ICU data, so this render-key axis would differ between two machines
+ * holding identical input.
+ */
+const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
+/**
  * The faces this realm holds, as ONE value a render key can carry — sorted,
  * so the same set is always the same string, and empty while none has
  * landed.
@@ -80,7 +92,7 @@ export function loadedThemeFaces(): readonly ThemeFace[] {
  * as long as the file lives.
  */
 export function themeFacesKey(): string {
-  return [...faces.keys()].sort().join(',')
+  return [...faces.keys()].sort(byCodeUnit).join(',')
 }
 
 /** Bumps once per face that landed; a scene keyed on it lays out again. */

@@ -2,6 +2,17 @@ import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 
 /**
+ * Code-unit order, spelled out.
+ *
+ * Identical to a bare `.sort()` for strings — and written explicitly
+ * because a bare one reads as an oversight, and a static analyser
+ * (Sonar S2871) asks for `localeCompare` instead. Taking that advice here
+ * would be a defect rather than a fix: `localeCompare` reads the runtime's
+ * default locale and ICU data, so this canonical pair, and the digest built from it, would differ between two machines
+ * holding identical input.
+ */
+const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+/**
  * `sceneDigest`'s output is the ONLY Zod-schematized surface in this
  * package: it is the AI-facing spatial digest that crosses a process
  * boundary (the `/document/{id}/layout` route payload and the `canvas_layout`
@@ -129,7 +140,7 @@ function computeOverlaps(entries: readonly DigestEntry[]): [string, string][] {
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       if (overlapArea(entries[i].bbox, entries[j].bbox) > 0) {
-        const [a, b] = [entries[i].id, entries[j].id].sort()
+        const [a, b] = [entries[i].id, entries[j].id].sort(byCodeUnit)
         pairs.push([a, b])
       }
     }
