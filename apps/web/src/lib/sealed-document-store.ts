@@ -86,6 +86,14 @@ export const ENVELOPE_OVERHEAD = ENVELOPE_HEADER_BYTES + GCM_TAG_BYTES
  * manifest arithmetic below (`+ ENVELOPE_OVERHEAD` per chunk) exact.
  */
 export function encodeEnvelope(envelope: SealedEnvelope): Uint8Array<ArrayBuffer> {
+  // `epochSchema` only requires a nonnegative integer; `DataView.setUint32`
+  // does not throw on a value outside u32 range, it silently wraps via
+  // ToUint32. An unchecked overflow here would encode a different epoch than
+  // the one `sealBytes` used for the AAD, and the mismatch would surface at
+  // decode as an opaque AEAD failure rather than as the overflow it was.
+  if (envelope.epoch > 0xffffffff) {
+    throw new RangeError(`sealed envelope epoch ${envelope.epoch} exceeds the u32 field width`)
+  }
   const out = new Uint8Array(ENVELOPE_HEADER_BYTES + envelope.ct.byteLength)
   out[0] = ENVELOPE_VERSION
   new DataView(out.buffer).setUint32(1, envelope.epoch, false)

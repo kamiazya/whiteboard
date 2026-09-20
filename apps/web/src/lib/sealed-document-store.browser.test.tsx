@@ -371,6 +371,66 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     )
   })
 
+  it('refuses a chunk and a delta that do not decode as a sealed envelope at all', async () => {
+    const key = await generateKey()
+    const inner = new IdbDocumentStore(DB_NAME)
+    const store = new SealedDocumentStore(inner, fixedKeyProvider(key, 0))
+    const { manifest, chunks } = chunkSnapshot(randomBytes(64), 32)
+    await store.saveSnapshot({ docRef, manifest, chunks, frontier: randomBytes(4) })
+    await store.appendDeltas({
+      docRef,
+      deltaBatch: { updates: [randomBytes(20)], newFrontier: randomBytes(4) },
+    })
+
+    // An unknown version byte, same length as the real record: decodeEnvelope
+    // itself throws before openBytes is ever reached, exercising #open's
+    // FIRST catch (decode failure) rather than its second (AEAD failure) —
+    // and the length stays byte-identical to the manifest the inner store
+    // cross-checks it against, so THAT check does not fire first instead.
+    const key0 = [docRefKey(docRef), 0]
+    const dbForChunk = await openRaw()
+    const chunkRecord = (await get(dbForChunk, SYNC_SNAPSHOT_CHUNKS_STORE, key0)) as {
+      bytes: Uint8Array
+    }
+    const badVersionChunkBytes = new Uint8Array(chunkRecord.bytes)
+    badVersionChunkBytes[0] = 0x02
+    await put(
+      dbForChunk,
+      SYNC_SNAPSHOT_CHUNKS_STORE,
+      { ...chunkRecord, bytes: badVersionChunkBytes },
+      key0,
+    )
+    dbForChunk.close()
+
+    await expect(store.loadSnapshot({ docRef })).rejects.toThrow(/does not decode/i)
+    await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+
+    const dbForDelta = await openRaw()
+    const syncRecord = (await get(dbForDelta, SYNC_DOCUMENTS_STORE, docRefKey(docRef))) as {
+      deltas: Uint8Array[]
+    }
+    const badVersionDeltas = syncRecord.deltas.map((delta, index) => {
+      if (index !== 0) return delta
+      const copy = new Uint8Array(delta)
+      copy[0] = 0x02
+      return copy
+    })
+    await put(
+      dbForDelta,
+      SYNC_DOCUMENTS_STORE,
+      { ...syncRecord, deltas: badVersionDeltas },
+      docRefKey(docRef),
+    )
+    dbForDelta.close()
+
+    await expect(store.loadDeltas({ docRef, afterSeq: null })).rejects.toThrow(/does not decode/i)
+    await expect(store.loadDeltas({ docRef, afterSeq: null })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+  })
+
   it('refuses to open ciphertext sealed under a different epoch', async () => {
     const key0 = await generateKey()
     const key1 = await generateKey()
@@ -464,6 +524,38 @@ describe('openManifest refuses a manifest smaller than its own envelope overhead
     const opened = await store.readSnapshotManifest({ docRef })
     expect(opened?.manifest).toEqual({ chunkCount: 1, totalBytes: 1, maxChunkBytes: 1 })
   })
+
+  it('refuses totalBytes strictly below chunkCount * ENVELOPE_OVERHEAD', async () => {
+    const key = await generateKey()
+    const corrupted: SnapshotManifest = {
+      chunkCount: 2,
+      totalBytes: ENVELOPE_OVERHEAD, // < 2 * ENVELOPE_OVERHEAD
+      maxChunkBytes: ENVELOPE_OVERHEAD + 1,
+    }
+    const store = new SealedDocumentStore(manifestOnlyInner(corrupted), fixedKeyProvider(key, 0))
+    await expect(store.readSnapshotManifest({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+    await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+  })
+
+  it('refuses a maxChunkBytes at or below ENVELOPE_OVERHEAD', async () => {
+    const key = await generateKey()
+    const corrupted: SnapshotManifest = {
+      chunkCount: 1,
+      totalBytes: ENVELOPE_OVERHEAD + 1,
+      maxChunkBytes: ENVELOPE_OVERHEAD,
+    }
+    const store = new SealedDocumentStore(manifestOnlyInner(corrupted), fixedKeyProvider(key, 0))
+    await expect(store.readSnapshotManifest({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+    await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+  })
 })
 
 describe('envelope encoding', () => {
@@ -475,6 +567,11 @@ describe('envelope encoding', () => {
     const wrongVersion = new Uint8Array(33)
     wrongVersion[0] = 0x02
     expect(() => decodeEnvelope(wrongVersion)).toThrow()
+  })
+
+  it('rejects an epoch outside the u32 field width instead of silently wrapping it', () => {
+    const envelope = { v: 1 as const, iv: randomBytes(12), ct: randomBytes(16), epoch: 2 ** 32 }
+    expect(() => encodeEnvelope(envelope)).toThrow(RangeError)
   })
 
   fcTest.prop(
