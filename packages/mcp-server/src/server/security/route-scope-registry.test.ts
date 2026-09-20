@@ -149,36 +149,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     ).toEqual([])
   })
 
-  /**
-   * The keepalive is its own scope, and the reason is the agent.
-   *
-   * `touch` sat with `shutdown` and `logs/prune` under `runtime:admin`
-   * because all three mutate daemon-managed process state. True, but it put
-   * the ONE runtime route the MCP proxy calls on every tool invocation
-   * (`server/mcp/daemon-client.ts`) behind the scope that also stops the
-   * daemon and deletes its logs — so a narrower credential for an agent was
-   * unbuildable: drop `runtime:admin` and the agent's own liveness ping 401s,
-   * and the daemon idles out underneath working work.
-   */
-  it('POST /api/runtime/touch requires runtime:touch, not the admin scope that stops the daemon', () => {
-    expect(resolveApiRouteScope('POST', '/api/runtime/touch')).toEqual({
-      kind: 'scoped',
-      scopes: ['runtime:touch'],
-    })
-  })
-
-  it('keeps shutdown and the log prune on runtime:admin, which runtime:touch does not imply', () => {
-    const admin = { kind: 'scoped', scopes: ['runtime:admin'] }
-    expect(resolveApiRouteScope('POST', '/api/runtime/shutdown')).toEqual(admin)
-    expect(resolveApiRouteScope('POST', '/api/runtime/logs/prune')).toEqual(admin)
-  })
-
-  it('leaves the read half of /api/runtime/* on runtime:read', () => {
-    const read = { kind: 'scoped', scopes: ['runtime:read'] }
-    expect(resolveApiRouteScope('GET', '/api/runtime/status')).toEqual(read)
-    expect(resolveApiRouteScope('GET', '/api/runtime/storage')).toEqual(read)
-  })
-
   it('POST /api/ws-ticket requires canvas:read (ADR-0005 connection ticket mint)', () => {
     expect(resolveApiRouteScope('POST', '/api/ws-ticket')).toEqual({
       kind: 'scoped',

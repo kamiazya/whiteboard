@@ -471,46 +471,6 @@ describe('runtime routes — a macaroon reaches the read half, like every other 
     expect(res.status).toBe(401)
   })
 
-  /**
-   * The keepalive, which is what makes a narrow agent credential usable at
-   * all: `server/mcp/daemon-client.ts` calls this on every tool invocation,
-   * so a credential that cannot reach it watches the daemon idle out from
-   * under working work.
-   */
-  it('allows POST /api/runtime/touch with a macaroon caveated to runtime:touch alone', async () => {
-    const { app, touch } = createApp({ macaroonRootKey: ROOT_KEY })
-    const token = await mintMacaroon({
-      rootKey: ROOT_KEY,
-      tokenId: 'agent-1',
-      caveats: [{ kind: 'scope', scopes: ['runtime:touch'] }],
-    })
-
-    const res = await app.request('/api/runtime/touch', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    expect(res.status).toBe(200)
-    expect(touch).toHaveBeenCalled()
-  })
-
-  it('refuses the keepalive to a macaroon that holds every OTHER runtime scope', async () => {
-    const { app, touch } = createApp({ macaroonRootKey: ROOT_KEY })
-    const token = await mintMacaroon({
-      rootKey: ROOT_KEY,
-      tokenId: 'agent-1',
-      caveats: [{ kind: 'scope', scopes: ['runtime:read', 'runtime:admin'] }],
-    })
-
-    const res = await app.request('/api/runtime/touch', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    expect(res.status).toBe(401)
-    expect(touch).not.toHaveBeenCalled()
-  })
-
   // The per-surface policy this router keeps, and the reason its check is not
   // just `hasRequiredScopes`: the admin half is daemon-token-only whatever
   // scopes a narrow credential holds — including `runtime:admin` itself.

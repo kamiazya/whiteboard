@@ -53,7 +53,6 @@ const SCOPE_COPY: Record<AuthScope, string> = {
   'files:read': 'Read attached files',
   'files:write': 'Write files',
   'runtime:read': 'Read daemon runtime status',
-  'runtime:touch': 'Keep the daemon from idling out',
   'runtime:admin': 'Administer the daemon runtime',
   'mcp:call': 'Call MCP tools',
 }
@@ -138,11 +137,6 @@ const WRITE_SCOPES: ReadonlySet<AuthScope> = new Set<AuthScope>([
   'workspace:write',
   'versions:write',
   'files:write',
-  // Listed by the rule this set states — it changes something (the idle
-  // timer) rather than only reading. It is the mildest member by far, and a
-  // later reader narrowing the band to data-affecting scopes would be
-  // reasonable; erring toward disclosure on a consent screen is not.
-  'runtime:touch',
   'runtime:admin',
   'mcp:call',
 ])
