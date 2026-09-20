@@ -45,7 +45,7 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/components/document-editor/canvas-verb-bar.browser.test.tsx': 1,
   'apps/web/src/components/markdown-editor/touch-formatting-bar.browser.test.tsx': 1,
   'apps/web/src/components/markdown-editor/verb-bar-measure.browser.test.tsx': 1,
-  'apps/web/src/components/markdown-editor/wiki-link-completion.browser.test.tsx': 4,
+  'apps/web/src/components/markdown-editor/wiki-link-completion.browser.test.tsx': 3,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2,
   'apps/web/src/components/spatial-editor/comment-move.browser.test.tsx': 3,
   'apps/web/src/components/spatial-editor/image-node.browser.test.tsx': 1,

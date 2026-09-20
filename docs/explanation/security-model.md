@@ -140,6 +140,12 @@ that write path ships (see
   keeps no lease table server-side; honouring the lapse (discarding the key
   once it passes) is the browser's own responsibility.
 
+A member sees which tier applies to a workspace they are viewing as a plain
+sentence in **Settings → Connections → This workspace** — no jargon, no
+mention of "tier", "replica", or "key". See
+[Connect to a local daemon → See what this device keeps of a daemon-kept
+workspace](../how-to/connect-to-local-daemon.md#see-what-this-device-keeps-of-a-daemon-kept-workspace).
+
 ## Daemon impersonation (loopback port squatting, the other direction)
 
 The section above concerns a process inheriting a browser ORIGIN. The

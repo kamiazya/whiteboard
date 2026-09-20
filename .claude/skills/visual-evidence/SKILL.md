@@ -194,6 +194,15 @@ left unmatched. It is repeatable for more than one image, accepts
 SVG plus MP4/MOV/WebM (10 MB cap on images/GIFs). Confirm `gh --version` is
 2.99.0+ before relying on it — an older gh silently has no such flag.
 
+On an older gh (this machine's is 2.97.0), push the PNGs to the figures-only
+branch `pr-figures` with plumbing — `git hash-object -w`, `git mktree`,
+`git commit-tree -p <its tip>`, `git push origin <commit>:refs/heads/pr-figures`
+— and reference them as
+`https://raw.githubusercontent.com/kamiazya/whiteboard/pr-figures/<pr>/<name>.png`.
+Nothing checks that branch out and no workflow runs on it (every `push`
+trigger in `.github/workflows` is `branches: [main]`, checked 2026-09-21);
+it is never merged. Say in the body that the figure is hosted there.
+
 One sentence naming what to look at, and say what the figure CANNOT show (a
 case only reachable behind a flag, a panel state supplied through a seam
 rather than by the real producer). Cite the two digests the script printed:

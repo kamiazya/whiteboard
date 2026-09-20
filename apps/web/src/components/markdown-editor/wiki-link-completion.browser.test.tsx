@@ -83,11 +83,11 @@ describe('wiki link completion (real browser)', () => {
       expect(selected?.textContent).toContain('Release plan')
     })
 
-    // acceptCompletion deliberately ignores an Enter within interactionDelay
-    // (75ms) of the result opening — an accident guard a human never races.
-    // The wait keeps this test on the human side of that guard; under load
-    // it only grows, so the guard can never re-flake this.
-    await new Promise((resolve) => setTimeout(resolve, 120))
+    // No wait between the selection and the Enter. This editor sets
+    // `interactionDelay: 0` deliberately (MarkdownEditor.tsx says why), so
+    // upstream's accept-too-soon guard never fires here — and the wait above
+    // has already established the only precondition Enter needs, since an
+    // option is marked selected exactly when a result is ACTIVE.
     await userEvent.keyboard('{Enter}')
     await vi.waitFor(() => {
       expect(value).toBe('see [[release-plan]]')
