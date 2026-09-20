@@ -166,3 +166,32 @@ describe('parseServerRunArgs — usage errors', () => {
     expect(result.message).toContain('[REDACTED_ARGUMENT]')
   })
 })
+
+describe('parseServerRunArgs — a flag name is not an object key', () => {
+  // The flag table is an object literal, so `'toString' in TABLE` is true and
+  // `Object.prototype` supplies ~11 more names. Asking membership with `in`
+  // made every one of them answer "requires the inline form" AND echo the raw
+  // argument, which this parser exists not to do. Found by differential-testing
+  // a rewrite against the implementation it replaced.
+  it.each([
+    'toString',
+    'constructor',
+    'valueOf',
+    '__proto__',
+    'hasOwnProperty',
+  ])('treats %s as an unknown argument, not as a value flag', (name) => {
+    const result = parseServerRunArgs(['--json', name])
+    expect(result.kind).toBe('usage-error')
+    if (result.kind !== 'usage-error') return
+    expect(result.message).toContain('Unknown argument')
+    expect(result.message).not.toContain(name)
+  })
+
+  it('does not accept an inherited name in the inline form either', () => {
+    const result = parseServerRunArgs(['--json', 'toString=whatever'])
+    expect(result.kind).toBe('usage-error')
+    if (result.kind !== 'usage-error') return
+    expect(result.message).toContain('Unknown argument')
+    expect(result.message).not.toContain('whatever')
+  })
+})
