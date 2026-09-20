@@ -45,6 +45,11 @@ const ELEMENT_VERBS = [
   'create',
   'delete',
   'move',
+  // What an end is ON, as against what it looks like: `set-ends` writes the
+  // arrowheads and `set-side` which way it leaves, and this one writes which
+  // object the end is fixed to — the only part of an end that says anything
+  // about the document.
+  'attach',
   'resize',
   'reorder',
   'ungroup',
@@ -108,6 +113,7 @@ const COMMAND_FACTS = {
   'set-edge-label': { verb: 'set-label', target: 'edges' },
   'set-edge-ends': { verb: 'set-ends', target: 'edges' },
   'set-edge-side': { verb: 'set-side', target: 'edges' },
+  'set-edge-end': { verb: 'attach', target: 'edges' },
   'set-edge-bends': { verb: 'set-bends', target: 'edges' },
   'set-edge-color': { verb: 'set-color', target: 'edges' },
   'set-edge-facet': { verb: 'set-facet', target: 'edges' },
@@ -121,6 +127,7 @@ const COMMAND_FACTS = {
   'set-line-facet': { verb: 'set-facet', target: 'lines' },
   'set-line-ends': { verb: 'set-ends', target: 'lines' },
   'set-line-side': { verb: 'set-side', target: 'lines' },
+  'set-line-end': { verb: 'attach', target: 'lines' },
   'set-line-color': { verb: 'set-color', target: 'lines' },
   'ungroup-ink': { verb: 'ungroup', target: 'lines' },
 
@@ -222,6 +229,14 @@ const VERB_PARITY = {
     edges: 'command',
     lines: 'command',
     comments: 'n/a: a thread is titled by its first message rather than by a label',
+  },
+  attach: {
+    nodes:
+      'n/a: a node is ON nothing — where it sits is its own geometry, which is move. Frame membership is geometric (ADR-0038), so there is no binding to re-point either',
+    edges: 'command',
+    lines: 'command',
+    comments:
+      "gap: a thread's anchor MAY name a node (annotationAnchorSchema's spatial arm carries nodeId) and move-comment writes only x/y, so a pin can be dragged anywhere on the board and never from one box onto another. Its own increment, because what a re-anchor should do to the offset within the box is the annotation layer's question rather than the canvas's",
   },
   'set-ends': {
     nodes: 'n/a: an end is a property of the thing drawn BETWEEN nodes, not of a node',
@@ -339,7 +354,9 @@ describe('every command kind says which verb it is and what it acts on', () => {
     // `.claude/rules/coverage-ledger.md` asks for one: the type check proves
     // the table matches the union, and nothing else here would notice the
     // union having quietly become five entries.
-    expect(commandFacts).toHaveLength(45)
+    // 45 -> 47 with `set-edge-end` and `set-line-end`, the two writes behind
+    // the `attach` verb.
+    expect(commandFacts).toHaveLength(47)
     expect(elementCommands.length).toBeGreaterThan(30)
   })
 
@@ -433,13 +450,21 @@ describe('what each kind of element can have done to it', () => {
     // scoreboards are: an improvement is as loud as a regression, and closing
     // one of these is a diff that has to come past this line.
     //
-    // The first reading is the finding. A `CanvasLine` stores seven things a
+    // The first reading was the finding. A `CanvasLine` stores seven things a
     // person could want changed — where each end is, which side it leaves a
     // box from, its bends, its colour, its label, its facets, and where the
-    // whole stroke sits — and the editor writes NONE of them. Ink can be
+    // whole stroke sits — and the editor wrote NONE of them. Ink could be
     // drawn, picked, banded, shift-added, ungrouped, locked and deleted, and
-    // after that it is fixed. Nothing was red about that before this line.
-    expect(Object.fromEntries(byCollection)).toEqual({})
+    // after that it was fixed. Nothing was red about that before this line.
+    // All seven closed, and the count reached zero.
+    //
+    // It is back at one, and that is the matrix widening rather than the
+    // editor narrowing: `attach` is a new ROW, added with the verb that moves
+    // an end onto a different object. Two of its cells arrived as `command`
+    // and the comments cell arrived as a gap nobody had a name for before
+    // there was a row to put it in — which is what a derived axis buys that a
+    // hand-kept one cannot.
+    expect(Object.fromEntries(byCollection)).toEqual({ comments: 1 })
   })
 })
 

@@ -224,6 +224,11 @@ export function isInFlightGesture(state: GestureState): boolean {
     // Ink travelling: the highlight is drawn at an offset while it does, and
     // the offset is read from the live pointer — which `applyResult` clears
     // for any state this predicate calls settled.
-    state.kind === 'moving-ink'
+    state.kind === 'moving-ink' ||
+    // An end being re-attached, for the same reason: the box the pointer is
+    // over is marked while the drag runs, and which box that is comes from
+    // the live pointer. Without this the pointer is cleared on every move
+    // and the drag gives no feedback at all.
+    state.kind === 'reattaching'
   )
 }

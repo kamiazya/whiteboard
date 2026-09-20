@@ -350,6 +350,10 @@ const COMMAND_COVERAGE = {
     'not modelled: edge label editor, a single-field write with no gesture or selection coupling',
   'set-edge-ends': 'not modelled: edge inspector, single-field write',
   'set-edge-side': 'not modelled: edge inspector, single-field write',
+  'set-edge-end':
+    'not modelled: the end-drag arm. This model generates NODE interactions and never produces the `pointerdown-end` that arms one, so the gesture is unreachable from here rather than absent. Its canvas meaning is commands.test.ts, its reducer arms gesture-ends.test.ts, and the whole way from a pointer to the moved end is edge-reattach.browser.test.tsx',
+  'set-line-end':
+    'not modelled: the same drag reaching the other collection — a stroke end that may also land in empty space. Unreachable here for `set-edge-end`\u2019s reason, and covered by the same three files',
   'set-edge-color': 'not modelled: edge inspector, single-field write',
   'set-edge-routing': 'not modelled: a canvas-wide preference, not per-element state',
   'set-line-jumps': 'not modelled: a canvas-wide preference, not per-element state',
@@ -411,6 +415,8 @@ const GESTURE_EVENT_COVERAGE = {
   'update-text-edit': 'covered',
   'commit-text-edit': 'covered',
   'cancel-text-edit': 'covered',
+  'pointerdown-end':
+    'not modelled: the press on an END handle. This model generates NODE interactions and never renders the overlay a handle sits on, so nothing here produces one; its reducer arms are gesture-ends.test.ts and the whole way from a pointer to the moved end is edge-reattach.browser.test.tsx',
   'pointerdown-bend':
     'not modelled: its only command is set-edge-facet, which this model already declares unmodelled — a plugin-owned payload it cannot observe. The gesture arithmetic is edge-bend-gesture.test.ts and the flow is edge-bend.browser.test.tsx',
   'remove-bend':

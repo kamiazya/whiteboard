@@ -60,6 +60,17 @@ import { remintClipboardFragment } from '../clipboard-fragment.js'
 import { withTagList } from './tags.js'
 import type { Point } from './viewport.js'
 
+/**
+ * Where a dragged end lands: a box, or a bare point on the canvas.
+ *
+ * `LineEnd` minus the two fields a re-attachment does not decide — the
+ * arrowhead, which travels with the end, and the side, which does not. Said
+ * as its own type so a caller cannot smuggle either in through the target.
+ */
+export type EndTarget =
+  | { readonly kind: 'node'; readonly node: string }
+  | { readonly kind: 'point'; readonly point: { readonly x: number; readonly y: number } }
+
 export type EditorLeafCommand =
   | { readonly kind: 'move-node'; readonly id: string; readonly x: number; readonly y: number }
   | {
@@ -320,6 +331,36 @@ export type EditorLeafCommand =
       readonly endpoint: 'from' | 'to'
       // undefined returns the endpoint to derived (auto) routing.
       readonly side: 'top' | 'right' | 'bottom' | 'left' | undefined
+    }
+  | {
+      /**
+       * Moves one END of a relation onto a different box.
+       *
+       * Its siblings write what an end LOOKS like — `set-edge-ends` the
+       * arrowheads, `set-edge-side` which way it leaves — and this one
+       * writes what it is ON, which is the only part of an end that says
+       * anything about the document.
+       *
+       * The `side` pin does not travel: it was a statement about the old
+       * box's geometry, and carrying it to a box somewhere else is a choice
+       * nobody made. The arrowhead does, because it is the person's.
+       */
+      readonly kind: 'set-edge-end'
+      readonly id: string
+      readonly endpoint: 'from' | 'to'
+      readonly node: string
+    }
+  | {
+      /**
+       * `set-edge-end`'s twin for ink, and the one place the two verbs
+       * differ in KIND rather than in collection: a stroke may end nowhere
+       * (ADR-0038 decision 2), so its target is a box or a bare point, and
+       * the same drag a relation has to refuse is ordinary here.
+       */
+      readonly kind: 'set-line-end'
+      readonly id: string
+      readonly endpoint: 'from' | 'to'
+      readonly target: EndTarget
     }
   | {
       // Appends one comment verbatim (ADR-0024's annotation layer). A
@@ -596,6 +637,31 @@ export function labelInkCommand(
   return undefined
 }
 
+/**
+ * The end write, picked by collection — the fifth of the ink-id siblings,
+ * and the only one that can answer "there is no such write".
+ *
+ * A relation cannot end in empty space (ADR-0038 decision 2), so a drop
+ * there has no command behind it; the gesture reads the `undefined` and
+ * leaves the end where it was. That is a product decision rather than a
+ * schema one — an edge could have been turned into a line instead — and it
+ * is written here because this is the one place that knows both.
+ */
+export function endInkCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  endpoint: 'from' | 'to',
+  target: EndTarget,
+): EditorLeafCommand | undefined {
+  if (canvas.edges.some((edge) => edge.id === id))
+    return target.kind === 'node'
+      ? { kind: 'set-edge-end', id, endpoint, node: target.node }
+      : undefined
+  if ((canvas.lines ?? []).some((line) => line.id === id))
+    return { kind: 'set-line-end', id, endpoint, target }
+  return undefined
+}
+
 export function bendInkCommand(
   canvas: SpatialCanvas,
   id: string,
@@ -725,6 +791,67 @@ function setLineSide(
     if (end.kind !== 'node') return line
     const { side: _previous, ...rest } = end
     const next = side === undefined ? rest : { ...rest, side }
+    return endpoint === 'from' ? { ...line, from: next } : { ...line, to: next }
+  })
+}
+
+/**
+ * The other end of the same element, so a re-attachment can refuse to make
+ * a self-loop. `connectNodes` already refuses one when MINTING a relation;
+ * an end dragged onto the box the other end names would be the same edge by
+ * another route, and for ink it is zero-length — a stroke that cannot then
+ * be clicked to remove, which is why the connect gesture refuses it too.
+ */
+function otherEndNode(
+  element: CanvasEdge | CanvasLine,
+  endpoint: 'from' | 'to',
+): string | undefined {
+  return endNode(endpoint === 'from' ? element.to : element.from)
+}
+
+function setEdgeEnd(
+  canvas: SpatialCanvas,
+  id: string,
+  endpoint: 'from' | 'to',
+  node: string,
+): SpatialCanvas {
+  const edge = canvas.edges.find((candidate) => candidate.id === id)
+  if (edge === undefined) return canvas
+  if (!canvas.nodes.some((candidate) => candidate.id === node)) return canvas
+  if (otherEndNode(edge, endpoint) === node) return canvas
+  return {
+    ...canvas,
+    edges: canvas.edges.map((candidate) => {
+      if (candidate.id !== id) return candidate
+      // `side` goes and `end` stays — see the command's own declaration for
+      // which of the two belongs to the box and which to the person.
+      const { side: _left, node: _was, ...rest } = candidate[endpoint]
+      return { ...candidate, [endpoint]: { ...rest, node } }
+    }),
+  }
+}
+
+function setLineEnd(
+  canvas: SpatialCanvas,
+  id: string,
+  endpoint: 'from' | 'to',
+  target: EndTarget,
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    if (target.kind === 'node') {
+      if (!canvas.nodes.some((candidate) => candidate.id === target.node)) return line
+      if (otherEndNode(line, endpoint) === target.node) return line
+    }
+    const arrowhead = (endpoint === 'from' ? line.from : line.to).end
+    const carried = arrowhead === undefined ? {} : { end: arrowhead }
+    // Built arm-first rather than by spreading the old end: the two arms
+    // carry different fields, so a spread would hand `point` a `node` (or
+    // the reverse) and the schema's discriminated union would refuse the
+    // whole canvas.
+    const next: CanvasLine['from'] =
+      target.kind === 'node'
+        ? { kind: 'node', node: target.node, ...carried }
+        : { kind: 'point', point: target.point, ...carried }
     return endpoint === 'from' ? { ...line, from: next } : { ...line, to: next }
   })
 }
@@ -1215,6 +1342,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeEnds(canvas, command.id, command.fromEnd, command.toEnd)
     case 'set-edge-side':
       return setEdgeSide(canvas, command.id, command.endpoint, command.side)
+    case 'set-edge-end':
+      return setEdgeEnd(canvas, command.id, command.endpoint, command.node)
+    case 'set-line-end':
+      return setLineEnd(canvas, command.id, command.endpoint, command.target)
     case 'set-node-color':
       return setNodeColor(canvas, command.id, command.color)
     case 'set-node-facet':
