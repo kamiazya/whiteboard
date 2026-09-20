@@ -16,14 +16,9 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import {
-  type TagInUse,
-  type WorkspaceFilesSource,
-  WorkspaceMissingError,
-} from '../../lib/files-source.js'
+import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/files-source.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
-import { countTagsInUse } from '../../lib/tags-in-use.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -47,6 +42,7 @@ import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { useDocumentPointers } from './use-document-pointers.js'
 import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
+import { useTagsInUse } from './use-tags-in-use.js'
 import { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
@@ -206,21 +202,11 @@ export function WorkspaceFilesPanel({
     resetResults: resetSearchResults,
   } = useDebouncedDocumentSearch(source, revision)
   const rootRef = useRef<HTMLDivElement | null>(null)
-  // The vocabulary in use, as the keeper counts it (ADR-0040 decision 5),
-  // reloaded with the list so deleting the last carrier of a tag removes
-  // its chip. A keeper that does not answer, or has not yet, gets the strip
-  // derived from the entries' own tags — documents only, no counts of what
-  // a board's boxes carry.
-  const [tagsInUse, setTagsInUse] = useState<readonly TagInUse[] | null>(null)
-  const workspaceTags = useMemo<readonly TagInUse[]>(() => {
-    if (tagsInUse !== null) return tagsInUse
-    return countTagsInUse(
-      (documents ?? []).map((entry) => ({
-        what: entry.kind === 'spatial' ? 'board' : 'document',
-        tags: entry.tags ?? [],
-      })),
-    )
-  }, [documents, tagsInUse])
+  const {
+    tags: workspaceTags,
+    reload: loadTagsInUse,
+    reset: resetTagsInUse,
+  } = useTagsInUse(source, documents)
   const activeTag = query.trim().startsWith('#') ? query.trim().slice(1) : null
 
   // One broker for the whole panel. Deliberately NOT keyed on the theme the
@@ -265,26 +251,6 @@ export function WorkspaceFilesPanel({
     },
     [readList],
   )
-
-  const readTagsInUse = useCallback(
-    () =>
-      source.listTagsInUse === undefined
-        ? Promise.resolve(null)
-        : source.listTagsInUse().catch(() => null),
-    [source],
-  )
-  // Rows land only from the LATEST ask. The workspace-load effect and the
-  // revision effect each ask, and the earlier ask can answer after the
-  // later one — which would show the vocabulary from before the write that
-  // bumped the revision until the next one. A counter rather than a
-  // per-effect flag, since the two effects do not know about each other.
-  const tagsRequest = useRef(0)
-  const loadTagsInUse = useCallback(() => {
-    const token = ++tagsRequest.current
-    return readTagsInUse().then((rows) => {
-      if (token === tagsRequest.current) setTagsInUse(rows)
-    })
-  }, [readTagsInUse])
 
   // Through a ref so it never joins an effect's dependencies: a host that
   // passes an inline arrow would otherwise re-run the workspace-load effect
@@ -392,7 +358,7 @@ export function WorkspaceFilesPanel({
     // that happened somewhere else.
     outcome.beginWrite()
     // The vocabulary is the departed keeper's until the new one answers.
-    setTagsInUse(null)
+    resetTagsInUse()
     // Guarded by the source's IDENTITY, not by a first-run flag: an
     // `initialFolder` is a deliberate address and must survive mounting,
     // while StrictMode replays this effect with the SAME readList — which a
