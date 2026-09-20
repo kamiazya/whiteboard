@@ -1,8 +1,6 @@
-import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
+import { autocompletion } from '@codemirror/autocomplete'
 import { redo, undo } from '@codemirror/commands'
 import type { Extension, StateEffect } from '@codemirror/state'
-import { Prec } from '@codemirror/state'
-import { keymap } from '@codemirror/view'
 import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
@@ -40,7 +38,11 @@ import {
 } from './annotation-decorations.js'
 import { useAnnotationEntry } from './annotation-scope.js'
 import { completionOnDelete } from './completion-on-delete.js'
-import { completionPopupTheme, completionTouchAccept } from './completion-popup.js'
+import {
+  completionEnterKeymap,
+  completionPopupTheme,
+  completionTouchAccept,
+} from './completion-popup.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
@@ -392,22 +394,7 @@ export function MarkdownEditor({
       }),
       // Deletion re-asks the sources; the plugin itself only activates on typing.
       completionOnDelete(),
-      // While the popup is OPEN ('active'), Enter is accept-or-nothing —
-      // never a newline under a visible option list. 'pending' (the source
-      // still running, typically for plain prose that will produce no
-      // popup) must fall through, or Enter after typing "- item" would eat
-      // the list continuation.
-      Prec.highest(
-        keymap.of([
-          {
-            key: 'Enter',
-            run: (view) => {
-              if (completionStatus(view.state) !== 'active') return false
-              return acceptCompletion(view) || true
-            },
-          },
-        ]),
-      ),
+      completionEnterKeymap,
       completionPopupTheme,
       completionTouchAccept,
     ],

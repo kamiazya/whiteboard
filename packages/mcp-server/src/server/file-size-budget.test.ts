@@ -225,7 +225,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `autocompletion()` call — `completionConfig` is not exported, so it
   // cannot ride the shared theme, and a second `autocompletion()` beside
   // this one would replace its `override`.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1146,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1130,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first
@@ -620,7 +620,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 32 closed-over values into parameters and grown the file further.
   // Raised 3194 -> 3195, +1, for one IMPORT: `defaultCreateId` moved to
   // `lib/spatial/element-id.ts`, so one import line became two.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3195,
+  // -886 when the pointer surface left for the entry below, the second of
+  // this component's two event surfaces to go.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2309,
+  // The six pointer handlers, moved verbatim; over budget on arrival, and
+  // splitting `handlePointerUp` there is what shrinks it.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1052,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -817,8 +822,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 917 -> 919 for the App.tsx raise above (ADR-0041 S0-5's Members card).
   // 919 -> 926 for the App.test.tsx raise above, the same increment's two
   // new assertions.
-  // 926 -> 941 for the four S4b raises above and this sentence.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 941,
+  // +5 for the two entries the pointer-surface move needs: this list
+  // GREW by an over-budget file, which is the one thing that can only be
+  // recorded by raising this number. Then the four S4b raises and their
+  // sentences.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 949,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
