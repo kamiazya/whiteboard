@@ -10,10 +10,10 @@ import { fromBase64 } from './sse-stream-hub.js'
  * ADR-0043 decision 3). The browser never persists a workspace content key
  * — this module holds raw key bytes only in a module-singleton Map, exposes
  * no serialisation of them, and forgets them on lapse or on `forget()`.
- * `tools/arch-lint`'s persisted-key scan is what enforces that no future
- * caller wires the bytes to a storage sink; this module's job is to never
- * hand them anywhere but `replicaKeyProviderFor`'s derived, non-extractable
- * `CryptoKey`.
+ * A future `tools/arch-lint` persisted-key scan should enforce that no
+ * caller wires the bytes to a storage sink; until then, this module's job
+ * is to never hand them anywhere but `replicaKeyProviderFor`'s derived,
+ * non-extractable `CryptoKey`.
  *
  * Deliberately free of any node:* import and any DOM global — `fetch` and
  * passkey binding are injected via `ReplicaSource` so this module runs
@@ -146,11 +146,32 @@ export async function sessionKey(
     return existing
   }
 
-  const promise = requestSessionKey(daemonBaseUrl, workspaceId, source).then((result) => {
-    inFlight.delete(key)
-    cache.set(key, result)
-    return result
-  })
+  // `promise` is read inside its own settlement handlers below. That is
+  // safe — a `.then` handler only runs as a microtask, strictly after this
+  // `const` has been assigned — and it is what lets each handler tell
+  // whether it is still the CURRENT request for `key`: forget()/forgetAll()
+  // may remove (or replace) this entry while the request is outstanding, and
+  // a request that settles after that must not resurrect what was just
+  // forgotten, nor leave a rejected request stuck in `inFlight` forever.
+  const promise: Promise<SessionKeyResult> = requestSessionKey(
+    daemonBaseUrl,
+    workspaceId,
+    source,
+  ).then(
+    (result) => {
+      if (inFlight.get(key) === promise) {
+        inFlight.delete(key)
+        cache.set(key, result)
+      }
+      return result
+    },
+    (error: unknown) => {
+      if (inFlight.get(key) === promise) {
+        inFlight.delete(key)
+      }
+      throw error
+    },
+  )
   inFlight.set(key, promise)
   return promise
 }
@@ -159,6 +180,7 @@ export async function sessionKey(
 export function forget(daemonBaseUrl: string, workspaceId: string): void {
   const key = cacheKey(daemonBaseUrl, workspaceId)
   cache.delete(key)
+  inFlight.delete(key)
   derivedKeyMemo.delete(key)
 }
 

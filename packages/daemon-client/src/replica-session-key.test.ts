@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { openBytes, sealBytes } from './read-plane.js'
 import {
   forget,
   forgetAll,
@@ -6,6 +7,7 @@ import {
   replicaKeyProviderFor,
   sessionKey,
 } from './replica-session-key.js'
+import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const DAEMON = 'https://daemon.example'
 const WORKSPACE = 'ws-1'
@@ -172,6 +174,45 @@ describe('replica-session-key: sessionKey', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(second).toEqual({ kind: 'withheld', reason: 'not_a_member' })
   })
+
+  it('a 200 body that fails the response schema withholds as unreachable', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ tier: 'offline' }))
+    const result = await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
+    expect(result).toEqual({ kind: 'withheld', reason: 'unreachable' })
+  })
+
+  it('a non-200 body that fails the refusal schema withholds as unreachable', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ oops: 'not a refusal' }, 500))
+    const result = await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
+    expect(result).toEqual({ kind: 'withheld', reason: 'unreachable' })
+  })
+
+  it('a rejecting bindSession does not poison the cache — the next call retries instead of replaying the rejection', async () => {
+    let fetchCalls = 0
+    const fetchImpl = vi.fn(async () => {
+      fetchCalls += 1
+      // Every request starts by being told it needs a person session; only
+      // the fetch that follows a successful bind (the 3rd overall) answers
+      // with a key.
+      return fetchCalls <= 2
+        ? jsonResponse({ error: 'requires_person_session', message: 'not signed in' }, 403)
+        : jsonResponse(keyResponse())
+    })
+    const bindSession = vi.fn<ReplicaSource['bindSession']>()
+    bindSession.mockImplementationOnce(async () => {
+      throw new Error('WebAuthn ceremony threw')
+    })
+    bindSession.mockImplementation(async () => ({ ok: true as const }))
+    const source = sourceWith(fetchImpl, bindSession)
+
+    await expect(sessionKey(DAEMON, WORKSPACE, source)).rejects.toThrow('WebAuthn ceremony threw')
+
+    // Without the fix, the rejected promise stays in `inFlight` forever and
+    // this second call would be handed the SAME rejected promise back.
+    const second = await sessionKey(DAEMON, WORKSPACE, source)
+    expect(second.kind).toBe('key')
+    expect(bindSession).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('replica-session-key: bounded lease lapse', () => {
@@ -229,6 +270,35 @@ describe('replica-session-key: forget / forgetAll', () => {
     await sessionKey(DAEMON, 'ws-2', source)
     expect(fetchImpl).toHaveBeenCalledTimes(4)
   })
+
+  it('forget() while a request is outstanding starts a fresh one, and the stale settlement does not resurrect the forgotten entry', async () => {
+    let resolveStale: (r: Response) => void = () => {}
+    let fetchCalls = 0
+    const fetchImpl = vi.fn(() => {
+      fetchCalls += 1
+      if (fetchCalls === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveStale = resolve
+        })
+      }
+      return Promise.resolve(jsonResponse(keyResponse({ tier: 'no-offline' })))
+    })
+    const source = sourceWith(fetchImpl)
+
+    const stale = sessionKey(DAEMON, WORKSPACE, source)
+    forget(DAEMON, WORKSPACE)
+    const fresh = await sessionKey(DAEMON, WORKSPACE, source)
+    expect(fresh.kind).toBe('key')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+
+    // The forgotten request finally settles; it must not overwrite what the
+    // fresh request just cached.
+    resolveStale(jsonResponse(keyResponse({ tier: 'offline' })))
+    await stale
+    const readBack = await sessionKey(DAEMON, WORKSPACE, source)
+    expect(readBack).toEqual(fresh)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('replicaKeyProviderFor', () => {
@@ -255,4 +325,134 @@ describe('replicaKeyProviderFor', () => {
     const provider = replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl))
     expect(await provider.keyFor('doc-1')).toBe('withheld')
   })
+
+  it('forget() clears the derived-key memo — a later session key derives a functionally different CryptoKey', async () => {
+    const fetchImpl1 = vi.fn(async () => jsonResponse(keyResponse()))
+    const first = await replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl1)).keyFor(
+      'doc-1',
+    )
+    expect(first).not.toBe('withheld')
+
+    forget(DAEMON, WORKSPACE)
+
+    const otherWorkspaceKey = Uint8Array.from({ length: 32 }, (_, i) => 255 - i)
+    const fetchImpl2 = vi.fn(async () =>
+      jsonResponse(keyResponse({ workspaceKey: base64Url(otherWorkspaceKey) })),
+    )
+    const second = await replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl2)).keyFor(
+      'doc-1',
+    )
+    expect(second).not.toBe('withheld')
+    if (first === 'withheld' || second === 'withheld') return
+
+    const context = { documentId: 'doc-1', epoch: 0 }
+    const envelope = await sealBytes(first.key, new TextEncoder().encode('probe'), context)
+    // If forget() failed to clear the memo, `second.key` would be the SAME
+    // memoized CryptoKey as `first.key` and this would open cleanly.
+    await expect(openBytes(second.key, envelope, context)).rejects.toMatchObject({
+      name: 'OperationError',
+    })
+  })
+
+  it('forgetAll() clears the derived-key memo too', async () => {
+    const fetchImpl1 = vi.fn(async () => jsonResponse(keyResponse()))
+    const first = await replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl1)).keyFor(
+      'doc-1',
+    )
+    expect(first).not.toBe('withheld')
+
+    forgetAll()
+
+    const otherWorkspaceKey = Uint8Array.from({ length: 32 }, (_, i) => 255 - i)
+    const fetchImpl2 = vi.fn(async () =>
+      jsonResponse(keyResponse({ workspaceKey: base64Url(otherWorkspaceKey) })),
+    )
+    const second = await replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl2)).keyFor(
+      'doc-1',
+    )
+    expect(second).not.toBe('withheld')
+    if (first === 'withheld' || second === 'withheld') return
+
+    const context = { documentId: 'doc-1', epoch: 0 }
+    const envelope = await sealBytes(first.key, new TextEncoder().encode('probe'), context)
+    await expect(openBytes(second.key, envelope, context)).rejects.toMatchObject({
+      name: 'OperationError',
+    })
+  })
+})
+
+describe('replica-session-key: property — TTL boundary and concurrent dedup', () => {
+  afterEach(() => {
+    forgetAll()
+    vi.useRealTimers()
+  })
+
+  fcTest.prop(
+    [fc.integer({ min: 1, max: 1_000_000 }), fc.integer({ min: -2000, max: 2000 })],
+    withDefaults({ numRuns: 30 }),
+  )(
+    'a bounded lease answers the minted key strictly before leaseExpiresAt and withheld:lapsed at or after it, for any lease length and probe offset',
+    async (leaseMs, offsetMs) => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        const start = Date.UTC(2026, 0, 1)
+        vi.setSystemTime(new Date(start))
+        const leaseExpiresAtMs = start + leaseMs
+        const fetchImpl = vi.fn(async () =>
+          jsonResponse(
+            keyResponse({
+              tier: 'bounded',
+              leaseExpiresAt: new Date(leaseExpiresAtMs).toISOString(),
+            }),
+          ),
+        )
+        const source = sourceWith(fetchImpl)
+        // A fresh (daemon, workspace) pair per run — the module-singleton
+        // cache otherwise leaks between fast-check iterations of one test.
+        const daemon = `${DAEMON}/ttl-${leaseMs}-${offsetMs}`
+
+        const minted = await sessionKey(daemon, WORKSPACE, source)
+        expect(minted.kind).toBe('key')
+
+        vi.setSystemTime(new Date(leaseExpiresAtMs + offsetMs))
+        const probed = await sessionKey(daemon, WORKSPACE, source)
+        if (offsetMs < 0) {
+          expect(probed).toEqual(minted)
+        } else {
+          expect(probed).toEqual({ kind: 'withheld', reason: 'lapsed' })
+        }
+        expect(fetchImpl).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    },
+  )
+
+  let dedupRun = 0
+  fcTest.prop([fc.integer({ min: 2, max: 6 })], withDefaults({ numRuns: 20 }))(
+    'N concurrent calls for one (daemon, workspace) pair share exactly one in-flight fetch and all resolve to the identical result',
+    async (n) => {
+      dedupRun += 1
+      let resolveFetch: (r: Response) => void = () => {}
+      const fetchImpl = vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFetch = resolve
+          }),
+      )
+      const source = sourceWith(fetchImpl)
+      // A fresh (daemon, workspace) pair per run, same reason as the TTL
+      // property above.
+      const daemon = `${DAEMON}/dedup-${dedupRun}`
+
+      const calls = Array.from({ length: n }, () => sessionKey(daemon, WORKSPACE, source))
+      resolveFetch(jsonResponse(keyResponse()))
+      const results = await Promise.all(calls)
+
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+      for (const result of results) {
+        expect(result).toEqual(results[0])
+      }
+    },
+  )
 })
