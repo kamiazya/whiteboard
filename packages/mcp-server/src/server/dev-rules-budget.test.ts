@@ -164,7 +164,16 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // now prevents the known instance; this entry is for the next window state
   // that is not fullscreen, which no scan can anticipate and which will
   // present identically.
-  '.claude/rules/integrator-flow.md': 16,
+  // 17 for the post-merge prune rule. A refspec-scoped `--prune` silently
+  // narrows to that refspec, so the habitual `git fetch origin main --prune`
+  // leaves the just-merged branch's tracking ref standing and a squash merge
+  // turns it into a phantom unpushed commit — a false report acted on twice
+  // in one session. The cost is charged to every session, and it is paid
+  // because the trap is in a command every fold already runs and the
+  // symptom names git rather than the fetch. The narrative of how it was
+  // found was cut to the commit message, which is where chronology belongs;
+  // what stayed is the mechanism, the rule and the one-command tell.
+  '.claude/rules/integrator-flow.md': 17,
   // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a

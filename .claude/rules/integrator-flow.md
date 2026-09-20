@@ -17,26 +17,17 @@ Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "
 
 ## After a merge, prune without a refspec
 
-GitHub deletes the head branch on merge. The local remote-tracking ref does
-NOT go with it, and a squash merge makes the leftover ref look like unpushed
-work: `HEAD` is at the squash commit, the stale ref is at the pre-merge tip,
-and the squash commit is not a descendant of it. The Stop hook's git check
-then reports "1 unpushed commit" on a branch that is byte-identical to
-`origin/main`, and `--force-with-lease` refuses with `stale info` against a
+GitHub deletes the merged head branch; its local tracking ref survives and,
+being no ancestor of the squash commit, reads as unpushed work — the Stop
+hook reports one, and `--force-with-lease` answers `stale info` against a
 branch that no longer exists.
 
-**`git fetch origin <branch> --prune` does not fix this.** With an explicit
-refspec, `--prune` only prunes inside that refspec — so the routine
-post-merge `git fetch origin main --prune` leaves every OTHER branch's stale
-ref in place, including the one just merged. Measured twice in one session:
-the first time the post-merge fetch had no refspec and nothing went wrong,
-the second time it named `main` and the false positive appeared.
-
-So the post-merge sequence is `git fetch origin --prune` — no refspec —
-before `git checkout -B <branch> origin/main`. `git ls-remote --heads origin
-<branch>` answering nothing while
-`git rev-parse refs/remotes/origin/<branch>` still answers is the tell, and
-it distinguishes a stale ref from real unpushed work in one command.
+**`--prune` under an explicit refspec prunes only inside it**, so the
+habitual post-merge `git fetch origin main --prune` leaves every other
+branch's stale ref standing. Use `git fetch origin --prune`, no refspec,
+before `git checkout -B <branch> origin/main`. The tell, in one command:
+`git ls-remote --heads origin <branch>` answers nothing while
+`git rev-parse refs/remotes/origin/<branch>` still resolves.
 
 ## Long-running watches
 
