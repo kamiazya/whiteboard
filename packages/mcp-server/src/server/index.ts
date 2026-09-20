@@ -6,10 +6,7 @@ import { getDataDir } from './config.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
 import { startHttpServer } from './http-server.js'
 import { getLogger } from './log.js'
-import {
-  createLocalTokenMcpHttpAuthStrategy,
-  resolveMcpProtectedResourceMetadataFromEnv,
-} from './security/mcp-auth.js'
+import { resolveMcpProtectedResourceMetadataFromEnv } from './security/mcp-auth.js'
 import { parseOAuthClientRegistryEnv } from './security/oauth-authz-registry.js'
 import {
   DEFAULT_ALLOWED_WEB_ORIGINS,
@@ -191,10 +188,9 @@ export async function main() {
 
   const daemonMode = hasFlag('daemon')
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
-  const mcpAuth = createLocalTokenMcpHttpAuthStrategy({
-    token,
-    protectedResourceMetadata: resolveMcpProtectedResourceMetadataFromEnv(process.env),
-  })
+  // Only the discovery metadata travels from here. The strategy that checks
+  // the credential is built inside `createApp`, over the one resolver.
+  const mcpProtectedResourceMetadata = resolveMcpProtectedResourceMetadataFromEnv(process.env)
 
   // Initialise OpenTelemetry before any HTTP / store wiring so the very
   // first request on a freshly started daemon already carries a span. The
@@ -253,7 +249,7 @@ export async function main() {
     port,
     host,
     token,
-    mcpAuth,
+    mcpProtectedResourceMetadata,
     idleTimeoutMs,
     allowedWebOrigins,
     oauthClientRegistry: oauthRegistry.registry,

@@ -26,10 +26,13 @@ import {
 import { installStdioLifecycle } from './stdio-lifecycle.js'
 
 export interface CreateMcpServerOptions {
-  /** Daemon origin + bootstrap token for wb_pairing_link_create. Absent on
-   *  the stdio entrypoint, which has no HTTP listener of its own to embed in
-   *  a pairing link — the tool stays registered there too (so tools/list is
-   *  one authoritative list across transports) but answers isError. */
+  /** What wb_pairing_link_create embeds: this daemon's own origin, and the
+   *  web-origin allowlist it checks the target against. NO credential — the
+   *  link carries none, and access is approved by a person on the daemon's
+   *  /pair page. Absent on the stdio entrypoint, which has no HTTP listener
+   *  of its own to embed in a pairing link — the tool stays registered there
+   *  too (so tools/list is one authoritative list across transports) but
+   *  answers isError. */
   pairing?: PairingLinkContext
   /** Why `pairing` is absent, so the tool's refusal message names the real
    *  cause instead of assuming stdio. Defaults to 'stdio' since that is this

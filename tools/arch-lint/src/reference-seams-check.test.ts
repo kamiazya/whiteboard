@@ -22,9 +22,10 @@
  * because that body is where "what does this reference draw as" gets
  * decided a second time.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
@@ -70,68 +71,9 @@ const DEFINITION_PATTERNS: readonly { readonly pattern: RegExp; readonly shape: 
  */
 const ALLOWLIST: Readonly<Record<string, string>> = {}
 
-function walk(dir: string, out: string[]): void {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules' || entry === 'dist') continue
-      walk(full, out)
-    } else if (/\.(ts|tsx)$/.test(entry)) out.push(full)
-  }
-}
-
-function isTest(path: string): boolean {
-  return /\.(test|spec)\.tsx?$/.test(path) || path.split(sep).includes('test-utils')
-}
-
-/**
- * Comments removed and string contents blanked (except a lone identifier,
- * which may be a quoted key), so prose describing a seam is not read as
- * defining one — and a `//` inside a string does not swallow the definition
- * after it. One pass with a state machine rather than
- * regexes, because a regex cannot tell `"//"` from a comment or `// don't`
- * from a string, and the scan measured both mistakes. Regex literals are not
- * tracked: a `/'/` would open a "string" here, which is the one shape left
- * for a fixture to catch.
- */
-function stripComments(source: string): string {
-  let out = ''
-  let i = 0
-  while (i < source.length) {
-    const ch = source[i] as string
-    const next = source[i + 1]
-    if (ch === '/' && next === '/') {
-      while (i < source.length && source[i] !== '\n') i += 1
-      continue
-    }
-    if (ch === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2)
-      i = end === -1 ? source.length : end + 2
-      continue
-    }
-    if (ch === "'" || ch === '"' || ch === '`') {
-      const start = i + 1
-      i = start
-      while (i < source.length && source[i] !== ch) {
-        if (source[i] === '\\') i += 1
-        i += 1
-      }
-      // A string that is one identifier may be a quoted key, which the
-      // patterns must still see; anything longer is prose and is blanked.
-      const body = source.slice(start, i)
-      out += ch + (/^[A-Za-z_$][\w$]*$/.test(body) ? body : '') + ch
-      i += 1
-      continue
-    }
-    out += ch
-    i += 1
-  }
-  return out
-}
-
 const files: string[] = []
-for (const dir of SCAN_DIRS) walk(join(REPO_ROOT, dir), files)
-const production = files.filter((path) => !isTest(path))
+for (const dir of SCAN_DIRS) walkSourceFiles(join(REPO_ROOT, dir), files)
+const production = files.filter((path) => !isTestPath(path))
 
 /** What the patterns must catch, and what they must let through. */
 const DEFINITION_FIXTURES: readonly { readonly source: string; readonly defines: boolean }[] = [
@@ -167,7 +109,7 @@ const DEFINITION_FIXTURES: readonly { readonly source: string; readonly defines:
 describe('references resolve in one place', () => {
   it('recognises a seam definition in every spelling, and passes a hand-over through', () => {
     for (const { source, defines } of DEFINITION_FIXTURES) {
-      const stripped = stripComments(source)
+      const stripped = stripCommentsAndStrings(source)
       const hit = DEFINITION_PATTERNS.some(({ pattern }) => pattern.test(stripped))
       expect(hit, source).toBe(defines)
     }
@@ -183,7 +125,7 @@ describe('references resolve in one place', () => {
     for (const path of production) {
       const rel = relative(REPO_ROOT, path).split(sep).join('/')
       if (ALLOWLIST[rel] !== undefined) continue
-      const source = stripComments(readFileSync(path, 'utf8'))
+      const source = stripCommentsAndStrings(readFileSync(path, 'utf8'))
       for (const { pattern, shape } of DEFINITION_PATTERNS) {
         const match = pattern.exec(source)
         if (match !== null) hits.push(`${rel}: ${shape} — \`${match[0].trim().slice(0, 80)}\``)
@@ -200,7 +142,7 @@ describe('references resolve in one place', () => {
       const path = join(REPO_ROOT, rel)
       let source: string
       try {
-        source = stripComments(readFileSync(path, 'utf8'))
+        source = stripCommentsAndStrings(readFileSync(path, 'utf8'))
       } catch {
         return true
       }

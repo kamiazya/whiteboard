@@ -159,9 +159,9 @@ const PAIRING_LINK_TOOL_NAME = 'wb_pairing_link_create'
 export type PairingUnavailableReason =
   // The stdio entrypoint: no HTTP listener exists at all to embed a link to.
   | 'stdio'
-  // A real HTTP /mcp connection, but server-mode has no single daemon
-  // origin/bootstrap-token to embed — clients authenticate via their own
-  // configured strategy (API key/OAuth) instead.
+  // A real HTTP /mcp connection, but server-mode has no single daemon origin
+  // to embed — clients authenticate via their own configured strategy
+  // (API key/OAuth) instead.
   | 'server-mode'
   // local-daemon mode, but the composition root gave no daemonBaseUrl (an
   // ad-hoc or test caller with no real HTTP listener behind it).
@@ -171,7 +171,7 @@ const PAIRING_UNAVAILABLE_MESSAGES: Record<PairingUnavailableReason, string> = {
   stdio:
     'wb_pairing_link_create: this MCP server is running standalone over stdio, which has no HTTP daemon to pair with. Start the `whiteboard` daemon (pnpm mcp:http:dev in development, or the installed daemon in production) and connect through its HTTP /mcp endpoint instead.',
   'server-mode':
-    'wb_pairing_link_create: this MCP server is running in server-mode, which has no single daemon origin or bootstrap token to embed in a pairing link — server-mode clients authenticate through their own configured strategy (API key or OAuth) instead of a daemon pairing link.',
+    'wb_pairing_link_create: this MCP server is running in server-mode, which has no single daemon origin to embed in a pairing link — server-mode clients authenticate through their own configured strategy (API key or OAuth) instead of a daemon pairing link.',
   'no-daemon-base-url':
     'wb_pairing_link_create: this MCP server has no daemonBaseUrl configured, so there is no HTTP origin to embed in a pairing link.',
 }

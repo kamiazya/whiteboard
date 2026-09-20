@@ -376,7 +376,16 @@ pnpm typecheck      # TypeScript — must be green before review
 pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, history node, scene node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
 pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
+pnpm coverage       # every non-browser project with v8 coverage -> tmp/coverage/lcov.info
 ```
+
+`pnpm coverage` is what the SonarQube Cloud lane runs; locally it is a way to see which
+modules have no test loading them at all. It is not a gate — no threshold fails it, and
+the browser projects are not measured (their v8 coverage is charged to a page rather than
+to the module graph). Coverage options are configured in the ROOT `vitest.config.ts` only:
+with `projects`, a per-project `coverage` block is ignored, and the `include` globs are
+resolved against each project's OWN root, so they are written `**/src/**`, never
+`packages/*/src/**`.
 
 **Additional gates by change type:**
 

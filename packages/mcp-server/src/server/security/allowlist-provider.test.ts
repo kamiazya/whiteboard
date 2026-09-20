@@ -14,6 +14,7 @@ import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { authorizeWsUpgrade } from '../routes/ws-auth.js'
 import { createApiLoopbackCorsMiddleware } from './cors-loopback.js'
+import { createCredentialResolver } from './credential-resolver.js'
 import { createMcpHttpOriginMiddleware } from './mcp-http.js'
 
 const GRANTED = 'https://granted.example.com'
@@ -72,11 +73,13 @@ describe('allowlist provider is evaluated per request on every surface', () => {
     const { provider, grant } = makeProvider()
     const headers = { host: '127.0.0.1:3099', origin: GRANTED }
 
-    expect(await authorizeWsUpgrade(headers, undefined, provider)).toEqual({
+    expect(await authorizeWsUpgrade(headers, createCredentialResolver({}), provider)).toEqual({
       accept: false,
       statusCode: 403,
     })
     grant(GRANTED)
-    expect((await authorizeWsUpgrade(headers, undefined, provider)).accept).toBe(true)
+    expect((await authorizeWsUpgrade(headers, createCredentialResolver({}), provider)).accept).toBe(
+      true,
+    )
   })
 })
