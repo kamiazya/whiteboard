@@ -427,6 +427,141 @@ function kindOf(
   return 'text'
 }
 
+/**
+ * A node entry that carries `@ocif/edge` or `@ocif/arrow`, lifted into the
+ * collection that extension names.
+ *
+ * WHICH extension it carries decides which collection it joins, and that is
+ * the whole of the read side of ADR-0038 decision 2. An `@ocif/edge` is a
+ * relation; anything else drawn as a line is ink.
+ */
+function liftRelationOrInk(
+  entry: OcifNode,
+  edgeExt: OcifExtension | undefined,
+  arrowExt: OcifExtension | undefined,
+): { edge: CanvasEdge } | { line: CanvasLine } {
+  const rest = extensionOf(entry.data, OCIF_TYPE.edgeLabel)
+  const bends = extensionOf(entry.data, OCIF_TYPE.bends)?.points
+  const facets = facetsFrom(entry.data)
+  const tags = tagsFrom(entry.data)
+  const shared = {
+    id: entry.id,
+    ...(typeof rest?.color === 'string' ? { color: rest.color } : {}),
+    ...(typeof rest?.label === 'string' ? { label: rest.label } : {}),
+    ...(Array.isArray(bends)
+      ? { bends: bends.map((b) => ({ x: pair(b, 0)[0], y: pair(b, 0)[1] })) }
+      : {}),
+    ...(facets === undefined ? {} : { facets }),
+  }
+  if (edgeExt !== undefined) {
+    const ends = extensionOf(entry.data, OCIF_TYPE.edgeEnds)
+    return {
+      edge: {
+        ...shared,
+        from: liftEdgeEnd('from', ends, edgeExt),
+        to: liftEdgeEnd('to', ends, edgeExt),
+        // A relation is classified; ink is not (ADR-0040 decision 2), so
+        // the tag set is lifted onto this arm only.
+        ...(tags === undefined ? {} : { tags }),
+      } as CanvasEdge,
+    }
+  }
+  const ends = extensionOf(entry.data, OCIF_TYPE.lineEnds)
+  return {
+    line: {
+      ...shared,
+      from: liftLineEnd('from', ends, arrowExt),
+      to: liftLineEnd('to', ends, arrowExt),
+    } as CanvasLine,
+  }
+}
+
+/**
+ * What each node KIND adds to the fields every node has.
+ *
+ * Keyed on `kindOf`'s answer rather than written as an if/else ladder, so a
+ * fifth kind cannot be added to that return type without being given a body
+ * here. `embedded` is what decides whether the payload comes from our own
+ * extras or from the resource the entry points at: an OCIF document we
+ * embedded carries the content in the extension, a foreign one in its
+ * representation.
+ */
+const NODE_KIND_FIELDS: {
+  [K in ReturnType<typeof kindOf>]: (context: {
+    chrome: OcifExtension | undefined
+    extras: OcifExtension | undefined
+    representation: OcifResource['representations'][number] | undefined
+    embedded: boolean
+  }) => Record<string, unknown>
+} = {
+  group: ({ chrome }) => ({
+    ...(typeof chrome?.label === 'string' ? { label: chrome.label } : {}),
+    ...(typeof chrome?.background === 'string' ? { background: chrome.background } : {}),
+    ...(typeof chrome?.backgroundStyle === 'string'
+      ? { backgroundStyle: chrome.backgroundStyle as 'cover' }
+      : {}),
+  }),
+  file: ({ extras, representation, embedded }) => ({
+    resource: {
+      mimeType: RESOURCE_KINDS.file.mimeType,
+      location: (embedded ? extras?.file : representation?.location) as string,
+      ...(typeof extras?.subpath === 'string' ? { subpath: extras.subpath } : {}),
+    },
+  }),
+  link: ({ extras, representation, embedded }) => ({
+    resource: {
+      mimeType: RESOURCE_KINDS.link.mimeType,
+      location: (embedded ? extras?.url : representation?.location) as string,
+    },
+  }),
+  text: ({ extras, representation, embedded }) => ({
+    resource: {
+      mimeType: RESOURCE_KINDS.text.mimeType,
+      content: (embedded ? extras?.text : representation?.content) as string,
+    },
+  }),
+}
+
+/** A node entry that is not a relation or ink, lifted into a `SpatialNode`. */
+function liftNode(entry: OcifNode, resources: ReadonlyMap<string, OcifResource>): SpatialNode {
+  const extras = extensionOf(entry.data, OCIF_TYPE.nodeExtras)
+  const chrome = extensionOf(entry.data, OCIF_TYPE.groupChrome)
+  const representation =
+    entry.resource === undefined ? undefined : resources.get(entry.resource)?.representations[0]
+  const [x, y] = pair(entry.position, 0)
+  const [width, height] = pair(entry.size, 0)
+  const embedded = representation?.mimeType === 'application/ocif+json'
+  const facets = facetsFrom(entry.data)
+  const nodeTags = tagsFrom(entry.data)
+  const shared = {
+    id: entry.id,
+    x,
+    y,
+    width,
+    height,
+    ...(typeof extras?.color === 'string' ? { color: extras.color } : {}),
+    ...(facets === undefined ? {} : { facets }),
+    ...(nodeTags === undefined ? {} : { tags: nodeTags }),
+    ...(embedded
+      ? {
+          embed: {
+            documentId: (representation?.location ?? '').replace('wb:document/', ''),
+            ...(typeof extras?.versionRef === 'string' ? { versionRef: extras.versionRef } : {}),
+          },
+        }
+      : {}),
+  }
+  // `kindOf` still answers the FORMAT's four words, because that is what
+  // the evidence it reads is made of — an `@ocif/group` extension, our own
+  // published `kind`, a media type. What changed is the shape it builds:
+  // a resource, or none at all for the frame.
+  const kind = kindOf(entry, representation, extras)
+  return {
+    ...shared,
+    ...NODE_KIND_FIELDS[kind]({ chrome, extras, representation, embedded }),
+  } as SpatialNode
+}
+
 function fromOcif(ocif: OcifDocument): SpatialCanvas {
   const resources = new Map((ocif.resources ?? []).map((r) => [r.id, r]))
   const nodes: SpatialNode[] = []
@@ -437,110 +572,12 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
     const edgeExt = extensionOf(entry.data, OCIF_TYPE.edge)
     const arrowExt = extensionOf(entry.data, OCIF_TYPE.arrow)
     if (edgeExt !== undefined || arrowExt !== undefined) {
-      const rest = extensionOf(entry.data, OCIF_TYPE.edgeLabel)
-      const bends = extensionOf(entry.data, OCIF_TYPE.bends)?.points
-      const facets = facetsFrom(entry.data)
-      const tags = tagsFrom(entry.data)
-      const shared = {
-        id: entry.id,
-        ...(typeof rest?.color === 'string' ? { color: rest.color } : {}),
-        ...(typeof rest?.label === 'string' ? { label: rest.label } : {}),
-        ...(Array.isArray(bends)
-          ? { bends: bends.map((b) => ({ x: pair(b, 0)[0], y: pair(b, 0)[1] })) }
-          : {}),
-        ...(facets === undefined ? {} : { facets }),
-      }
-      // WHICH extension it carries decides which collection it joins, and
-      // that is the whole of the read side of ADR-0038 decision 2. An
-      // `@ocif/edge` is a relation; anything else drawn as a line is ink.
-      if (edgeExt !== undefined) {
-        const ends = extensionOf(entry.data, OCIF_TYPE.edgeEnds)
-        edges.push({
-          ...shared,
-          from: liftEdgeEnd('from', ends, edgeExt),
-          to: liftEdgeEnd('to', ends, edgeExt),
-          // A relation is classified; ink is not (ADR-0040 decision 2), so
-          // the tag set is lifted onto this arm only.
-          ...(tags === undefined ? {} : { tags }),
-        } as CanvasEdge)
-      } else {
-        const ends = extensionOf(entry.data, OCIF_TYPE.lineEnds)
-        lines.push({
-          ...shared,
-          from: liftLineEnd('from', ends, arrowExt),
-          to: liftLineEnd('to', ends, arrowExt),
-        } as CanvasLine)
-      }
+      const lifted = liftRelationOrInk(entry, edgeExt, arrowExt)
+      if ('edge' in lifted) edges.push(lifted.edge)
+      else lines.push(lifted.line)
       continue
     }
-
-    const extras = extensionOf(entry.data, OCIF_TYPE.nodeExtras)
-    const chrome = extensionOf(entry.data, OCIF_TYPE.groupChrome)
-    const representation =
-      entry.resource === undefined ? undefined : resources.get(entry.resource)?.representations[0]
-    const [x, y] = pair(entry.position, 0)
-    const [width, height] = pair(entry.size, 0)
-    const embedded = representation?.mimeType === 'application/ocif+json'
-    const facets = facetsFrom(entry.data)
-    const nodeTags = tagsFrom(entry.data)
-    const shared = {
-      id: entry.id,
-      x,
-      y,
-      width,
-      height,
-      ...(typeof extras?.color === 'string' ? { color: extras.color } : {}),
-      ...(facets === undefined ? {} : { facets }),
-      ...(nodeTags === undefined ? {} : { tags: nodeTags }),
-      ...(embedded
-        ? {
-            embed: {
-              documentId: (representation?.location ?? '').replace('wb:document/', ''),
-              ...(typeof extras?.versionRef === 'string' ? { versionRef: extras.versionRef } : {}),
-            },
-          }
-        : {}),
-    }
-    // `kindOf` still answers the FORMAT's four words, because that is what
-    // the evidence it reads is made of — an `@ocif/group` extension, our own
-    // published `kind`, a media type. What changed is the shape it builds:
-    // a resource, or none at all for the frame.
-    const kind = kindOf(entry, representation, extras)
-    if (kind === 'group') {
-      nodes.push({
-        ...shared,
-        ...(typeof chrome?.label === 'string' ? { label: chrome.label } : {}),
-        ...(typeof chrome?.background === 'string' ? { background: chrome.background } : {}),
-        ...(typeof chrome?.backgroundStyle === 'string'
-          ? { backgroundStyle: chrome.backgroundStyle as 'cover' }
-          : {}),
-      } as SpatialNode)
-    } else if (kind === 'file') {
-      nodes.push({
-        ...shared,
-        resource: {
-          mimeType: RESOURCE_KINDS.file.mimeType,
-          location: (embedded ? extras?.file : representation?.location) as string,
-          ...(typeof extras?.subpath === 'string' ? { subpath: extras.subpath } : {}),
-        },
-      } as SpatialNode)
-    } else if (kind === 'link') {
-      nodes.push({
-        ...shared,
-        resource: {
-          mimeType: RESOURCE_KINDS.link.mimeType,
-          location: (embedded ? extras?.url : representation?.location) as string,
-        },
-      } as SpatialNode)
-    } else {
-      nodes.push({
-        ...shared,
-        resource: {
-          mimeType: RESOURCE_KINDS.text.mimeType,
-          content: (embedded ? extras?.text : representation?.content) as string,
-        },
-      } as SpatialNode)
-    }
+    nodes.push(liftNode(entry, resources))
   }
 
   const canvasFacets = facetsFrom(ocif.data)
