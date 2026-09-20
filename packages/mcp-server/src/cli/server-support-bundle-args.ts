@@ -1,12 +1,6 @@
 // Arg parser for `whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]`.
-//
-// All value flags use inline form only (`--flag=<value>`). Space form is
-// rejected to prevent silent token swallowing. Raw values are never echoed
-// in error messages. --json is required.
 
-import { redactFlagValue, takeInlineValue } from './argv.js'
-
-const SERVER_SUPPORT_BUNDLE_INLINE_FLAGS = new Set(['--output-dir', '--data-dir'])
+import { type FlagTable, scanFlags } from './flag-table.js'
 
 export type ServerSupportBundleArgs =
   | {
@@ -17,59 +11,21 @@ export type ServerSupportBundleArgs =
     }
   | { kind: 'usage-error'; message: string }
 
+const SUPPORT_BUNDLE_FLAGS: FlagTable<'outputDir' | 'dataDir'> = {
+  booleans: ['--json'],
+  values: { '--output-dir': 'outputDir', '--data-dir': 'dataDir' },
+}
+
+const USAGE = 'Re-run with: whiteboard server support-bundle --json --output-dir=<path>'
+
 export function parseServerSupportBundleArgs(args: readonly string[]): ServerSupportBundleArgs {
-  let json = false
-  let outputDir: string | undefined
-  let dataDir: string | undefined
-
-  for (const arg of args) {
-    if (arg === '--json') {
-      if (json) return { kind: 'usage-error', message: '--json specified more than once' }
-      json = true
-      continue
-    }
-
-    if (SERVER_SUPPORT_BUNDLE_INLINE_FLAGS.has(arg)) {
-      return {
-        kind: 'usage-error',
-        message: `${arg} requires the inline form: ${arg}=<value>`,
-      }
-    }
-
-    if (arg.startsWith('--output-dir=')) {
-      const taken = takeInlineValue(arg, '--output-dir=')
-      if ('kind' in taken) return taken
-      if (outputDir !== undefined)
-        return { kind: 'usage-error', message: '--output-dir specified more than once' }
-      outputDir = taken.value
-      continue
-    }
-    if (arg.startsWith('--data-dir=')) {
-      const taken = takeInlineValue(arg, '--data-dir=')
-      if ('kind' in taken) return taken
-      if (dataDir !== undefined)
-        return { kind: 'usage-error', message: '--data-dir specified more than once' }
-      dataDir = taken.value
-      continue
-    }
-
-    return { kind: 'usage-error', message: `Unknown argument: ${redactFlagValue(arg)}` }
+  const scan = scanFlags(args, SUPPORT_BUNDLE_FLAGS)
+  if (scan.kind === 'usage-error') return scan
+  if (!scan.seen.has('--json')) {
+    return { kind: 'usage-error', message: `Only --json is supported for now. ${USAGE}` }
   }
-
-  if (!json) {
-    return {
-      kind: 'usage-error',
-      message:
-        'Only --json is supported for now. Re-run with: whiteboard server support-bundle --json --output-dir=<path>',
-    }
+  if (scan.values.outputDir === undefined) {
+    return { kind: 'usage-error', message: `--output-dir=<path> is required. ${USAGE}` }
   }
-  if (outputDir === undefined) {
-    return {
-      kind: 'usage-error',
-      message:
-        '--output-dir=<path> is required. Re-run with: whiteboard server support-bundle --json --output-dir=<path>',
-    }
-  }
-
-  return { kind: 'ok', json: true, outputDir, dataDir }
+  return { kind: 'ok', json: true, outputDir: scan.values.outputDir, dataDir: scan.values.dataDir }
 }

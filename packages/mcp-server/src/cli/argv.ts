@@ -8,23 +8,6 @@ import { type FlagTable, redactFlagValue, scanFlags } from './flag-table.js'
 
 export { redactFlagValue }
 
-type InlineValueResult = { kind: 'usage-error'; message: string } | { value: string }
-
-/**
- * Kept for the `server *-args` parsers that still read a value by hand.
- * They move onto `scanFlags` next, and this goes with the last of them.
- */
-export function takeInlineValue(arg: string, prefix: string): InlineValueResult {
-  const value = arg.slice(prefix.length)
-  if (!value) {
-    return {
-      kind: 'usage-error',
-      message: `${prefix.slice(0, -1)}=<value> requires a non-empty value`,
-    }
-  }
-  return { value }
-}
-
 export type DaemonSubcommandArgs =
   | { kind: 'ok'; json: true; dataDir: string | undefined }
   | { kind: 'usage-error'; message: string }

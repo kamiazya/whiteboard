@@ -9,7 +9,7 @@
 // and the refusal follows from the kind.
 
 /** A value flag's check, when the flag wants more than "not empty". */
-export type FlagCheck = (value: string) => string | undefined
+type FlagCheck = (value: string) => string | undefined
 
 export interface FlagTable<Field extends string> {
   /** Set-once flags. A repeat is a usage error naming the flag. */

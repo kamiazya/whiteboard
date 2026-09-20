@@ -4,7 +4,6 @@ import {
   parseDaemonSubcommandArgs,
   parseDaemonSupportBundleArgs,
   redactFlagValue,
-  takeInlineValue,
 } from './argv.js'
 
 // ---------------------------------------------------------------------------
@@ -30,28 +29,6 @@ describe('redactFlagValue', () => {
 
   it('does not redact flags without -- prefix', () => {
     expect(redactFlagValue('-v')).toBe('[REDACTED_ARGUMENT]')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// takeInlineValue
-// ---------------------------------------------------------------------------
-
-describe('takeInlineValue', () => {
-  it('extracts the value when present', () => {
-    const result = takeInlineValue('--host=localhost', '--host=')
-    expect(result).toEqual({ value: 'localhost' })
-  })
-
-  it('returns usage-error when value is empty', () => {
-    const result = takeInlineValue('--host=', '--host=')
-    expect(result).toMatchObject({ kind: 'usage-error' })
-    expect((result as { kind: string; message: string }).message).toContain('--host')
-  })
-
-  it('extracts a path value correctly', () => {
-    const result = takeInlineValue('--data-dir=/tmp/data', '--data-dir=')
-    expect(result).toEqual({ value: '/tmp/data' })
   })
 })
 
