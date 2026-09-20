@@ -296,13 +296,57 @@ function unevenGapsAlong(
 const isEdge = (n: Scene['nodes'][number]): n is ResolvedEdgeNode => n.kind === 'edge'
 const isRun = (n: Scene['nodes'][number]): n is TextRunNode => n.kind === 'textRun'
 
-export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore {
+/**
+ * What every measure below reads, derived once. The measures are
+ * independent — each answers one column of the score and consults no
+ * other — so the only thing they share is this, and deriving it per
+ * measure would walk the board a dozen times to reach the same lists.
+ */
+interface DrawingSubject {
+  readonly canvas: SpatialCanvas
+  readonly scene: Scene
+  readonly nodes: readonly SpatialNode[]
+  readonly groups: readonly SpatialNode[]
+  readonly boxes: readonly SpatialNode[]
+  readonly boxRects: readonly Rect[]
+  readonly byId: ReadonlyMap<string, SpatialNode>
+  /**
+   * Edges the CANVAS owns, laid out. Chrome edges (a comment's leader) are
+   * not the drawing's, so a scene edge with no canvas edge behind it is
+   * dropped rather than measured.
+   */
+  readonly edges: readonly { edge: CanvasEdge; path: readonly Point[] }[]
+  readonly paths: readonly (readonly Point[])[]
+  readonly runs: readonly TextRunNode[]
+}
+
+function subjectOf(canvas: SpatialCanvas, scene: Scene): DrawingSubject {
   const nodes = canvas.nodes
-  const groups = nodes.filter((n) => isFrame(n))
   const boxes = nodes.filter((n) => !isFrame(n))
   const byId = new Map(nodes.map((n) => [n.id, n] as const))
   const edgeById = new Map<string, CanvasEdge>(canvas.edges.map((e) => [e.id, e] as const))
+  const edges = scene.nodes
+    .filter(isEdge)
+    .map((e) => ({ edge: edgeById.get(e.id), path: e.path }))
+    .filter((e): e is { edge: CanvasEdge; path: readonly Point[] } => e.edge !== undefined)
+  return {
+    canvas,
+    scene,
+    nodes,
+    groups: nodes.filter((n) => isFrame(n)),
+    boxes,
+    boxRects: boxes.map(rectOf),
+    byId,
+    edges,
+    paths: edges.map((e) => e.path),
+    runs: scene.nodes.filter(isRun),
+  }
+}
 
+function boxesOverlapping({ boxes }: DrawingSubject): {
+  nodeOverlaps: number
+  overlapAreaPx: number
+} {
   let nodeOverlaps = 0
   let overlapAreaPx = 0
   pairs(boxes, (a, b) => {
@@ -312,9 +356,14 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
       overlapAreaPx += shared
     }
   })
+  return { nodeOverlaps, overlapAreaPx }
+}
 
-  // A box partly in and partly out of a frame, and two frames that
-  // overlap without one holding the other. Each unordered pair once.
+/**
+ * A box partly in and partly out of a frame, and two frames that overlap
+ * without one holding the other. Each unordered pair once.
+ */
+function straddlingFrames({ nodes }: DrawingSubject): number {
   let straddles = 0
   pairs(nodes, (a, b) => {
     if (!isFrame(a) && !isFrame(b)) return
@@ -322,18 +371,20 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     const rb = rectOf(b)
     if (overlapArea(ra, rb) > 0 && !contains(ra, rb) && !contains(rb, ra)) straddles++
   })
+  return straddles
+}
 
-  // Edges the canvas owns, by id; chrome edges (a comment's leader) are not
-  // the drawing's. A frame is never "through": an edge between two members
-  // legitimately runs inside it. An edge's OWN endpoint boxes are not
-  // exempt — only a box that strictly contains an anchor is, since no
-  // detour can avoid the point inside it. An edge that leaves its source
-  // and comes back through it is the picture the first live reading
-  // showed, and a reader calls it wrong before anything else on the board.
-  const edges = scene.nodes
-    .filter(isEdge)
-    .map((e) => ({ edge: edgeById.get(e.id), path: e.path }))
-    .filter((e): e is { edge: CanvasEdge; path: readonly Point[] } => e.edge !== undefined)
+/**
+ * An edge's OWN endpoint boxes are not exempt — only a box that strictly
+ * contains an anchor is, since no detour can avoid the point inside it. An
+ * edge that leaves its source and comes back through it is the picture the
+ * first live reading showed, and a reader calls it wrong before anything
+ * else on the board.
+ */
+function edgesThroughBoxes({ edges, boxes }: DrawingSubject): {
+  edgeThroughNode: number
+  throughInkPx: number
+} {
   let edgeThroughNode = 0
   let throughInkPx = 0
   for (const { path } of edges) {
@@ -350,12 +401,16 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
       }
     }
   }
-  const paths = edges.map((e) => e.path)
+  return { edgeThroughNode, throughInkPx }
+}
 
-  // An edge connecting a frame's member crosses its boundary once, which is
-  // what a member's edge does; one connecting nothing in the frame has no
-  // business inside it. Membership is judged by touch, so a straddling
-  // endpoint is charged as a straddle and not again here.
+/**
+ * An edge connecting a frame's member crosses its boundary once, which is
+ * what a member's edge does; one connecting nothing in the frame has no
+ * business inside it. Membership is judged by touch, so a straddling
+ * endpoint is charged as a straddle and not again here.
+ */
+function edgesThroughFrames({ edges, groups, byId }: DrawingSubject): number {
   let edgeThroughFrame = 0
   for (const { edge, path } of edges) {
     const from = nodeAtEnd(edge.from, byId)
@@ -368,7 +423,13 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
       if (interiorInk(path, frame) > 0) edgeThroughFrame++
     }
   }
+  return edgeThroughFrame
+}
 
+function edgesSharingInk({ paths }: DrawingSubject): {
+  edgeOverlaps: number
+  sharedInkPx: number
+} {
   let edgeOverlaps = 0
   let sharedInkPx = 0
   pairs(paths, (p, q) => {
@@ -378,10 +439,19 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
       sharedInkPx += shared
     }
   })
+  return { edgeOverlaps, sharedInkPx }
+}
 
-  const { flow, against: againstFlow } = flowOf(headings(canvas, byId))
-
-  const runs = scene.nodes.filter(isRun)
+/**
+ * A frame's name is drawn above its frame, which for a nested frame is
+ * inside the frame that holds it — painted first, so the name lies over its
+ * fill and under nothing. Only a box the frame is NOT inside can hide it.
+ */
+function labelsCovered({ runs, boxes, nodes, byId }: DrawingSubject): {
+  labelOverNode: number
+  labelOverLabel: number
+  labelCovered: number
+} {
   const edgeLabels = runs.filter((r) => r.annotates?.kind === 'edge')
   let labelOverNode = 0
   for (const label of edgeLabels) {
@@ -391,9 +461,6 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
   pairs(edgeLabels, (a, b) => {
     if (overlapArea(a.bbox, b.bbox) > 0) labelOverLabel++
   })
-  // A frame's name is drawn above its frame, which for a nested frame is
-  // inside the frame that holds it — painted first, so the name lies over
-  // its fill and under nothing. Only a box the frame is NOT inside can hide it.
   let labelCovered = 0
   for (const label of runs) {
     if (label.annotates?.kind !== 'node') continue
@@ -407,16 +474,24 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     )
     if (hidden) labelCovered++
   }
+  return { labelOverNode, labelOverLabel, labelCovered }
+}
 
+function textOverflowing({ scene, byId }: DrawingSubject): number {
   let textOverflow = 0
   for (const n of scene.nodes) {
     if (n.kind !== 'shape' || n.id === undefined || !byId.has(n.id)) continue
     if (n.commentChrome === true || n.proposalChrome !== undefined) continue
     if (n.truncated === true || n.overflows === true) textOverflow++
   }
+  return textOverflow
+}
 
-  // A member is judged against the innermost frame holding it, so a box
-  // deep in a nested layout is not charged the outer frame's padding.
+/**
+ * A member is judged against the innermost frame holding it, so a box deep
+ * in a nested layout is not charged the outer frame's padding.
+ */
+function crampedMembersIn({ nodes, groups }: DrawingSubject): number {
   let crampedMembers = 0
   for (const n of nodes) {
     const r = rectOf(n)
@@ -432,20 +507,26 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     )
     if (clearance < GROUP_PADDING_PX) crampedMembers++
   }
+  return crampedMembers
+}
 
-  // Container and member line up by padding, not by intent, so a pair where
-  // one holds the other is not asked to align — nor is a box asked to line
-  // up with a frame it is not in: boxes align with boxes and frames with
-  // frames. Alignment is any of the three anchors on an axis: the lane drew
-  // a 200-wide decision box centred on a 160 column, 20px off on the left,
-  // and a reader calls that lined up; judged by the left edge alone, a box
-  // in one frame was also charged for sitting 6px off the CENTRE of the
-  // 800-wide frame beside it, which nobody reads as a miss.
-  // Only anchors a drawer SETS count. A width is named, so left, centre and
-  // right are all choices; a height is usually fitted to the text by the
-  // tool, so a bottom edge is where the text ended, not where anyone put
-  // it — a sentence box under one column read a miss against the bottom of
-  // a box in another, 10px apart on an edge nobody placed.
+/**
+ * Container and member line up by padding, not by intent, so a pair where
+ * one holds the other is not asked to align — nor is a box asked to line up
+ * with a frame it is not in: boxes align with boxes and frames with frames.
+ * Alignment is any of the three anchors on an axis: the lane drew a
+ * 200-wide decision box centred on a 160 column, 20px off on the left, and
+ * a reader calls that lined up; judged by the left edge alone, a box in one
+ * frame was also charged for sitting 6px off the CENTRE of the 800-wide
+ * frame beside it, which nobody reads as a miss.
+ *
+ * Only anchors a drawer SETS count. A width is named, so left, centre and
+ * right are all choices; a height is usually fitted to the text by the
+ * tool, so a bottom edge is where the text ended, not where anyone put it —
+ * a sentence box under one column read a miss against the bottom of a box
+ * in another, 10px apart on an edge nobody placed.
+ */
+function nearMissesAmong({ nodes }: DrawingSubject): number {
   const nearest = (a0: number, a1: number, b0: number, b1: number, far: boolean): number =>
     Math.min(
       Math.abs(a0 - b0),
@@ -465,9 +546,14 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     if (dx >= 1 && dx < NEAR_MISS_PX) nearMisses++
     if (dy >= 1 && dy < NEAR_MISS_PX) nearMisses++
   })
+  return nearMisses
+}
 
-  // Boxes only: a member's distance from its frame is `crampedMembers`, and a
-  // box against a frame it is outside of is the frame's name being covered.
+/**
+ * Boxes only: a member's distance from its frame is `crampedMembers`, and a
+ * box against a frame it is outside of is the frame's name being covered.
+ */
+function tightGapsAmong({ boxes }: DrawingSubject): number {
   let tightGaps = 0
   pairs(boxes, (a, b) => {
     const ra = rectOf(a)
@@ -483,8 +569,19 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     )
       tightGaps++
   })
+  return tightGaps
+}
 
-  const boxRects = boxes.map(rectOf)
+export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore {
+  const subject = subjectOf(canvas, scene)
+  const { nodes, boxes, boxRects, paths, byId } = subject
+
+  const { nodeOverlaps, overlapAreaPx } = boxesOverlapping(subject)
+  const { edgeThroughNode, throughInkPx } = edgesThroughBoxes(subject)
+  const { edgeOverlaps, sharedInkPx } = edgesSharingInk(subject)
+  const { labelOverNode, labelOverLabel, labelCovered } = labelsCovered(subject)
+  const { flow, against: againstFlow } = flowOf(headings(canvas, byId))
+
   const unevenGaps =
     unevenGapsAlong(
       boxRects,
@@ -511,17 +608,17 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     edges: canvas.edges.length,
     nodeOverlaps,
     overlapAreaPx: Math.round(overlapAreaPx),
-    straddles,
+    straddles: straddlingFrames(subject),
     edgeThroughNode,
     throughInkPx: Math.round(throughInkPx),
     labelOverNode,
     labelOverLabel,
     labelCovered,
-    textOverflow,
-    crampedMembers,
-    nearMisses,
-    tightGaps,
-    edgeThroughFrame,
+    textOverflow: textOverflowing(subject),
+    crampedMembers: crampedMembersIn(subject),
+    nearMisses: nearMissesAmong(subject),
+    tightGaps: tightGapsAmong(subject),
+    edgeThroughFrame: edgesThroughFrames(subject),
     edgeOverlaps,
     sharedInkPx: Math.round(sharedInkPx),
     crossings,
