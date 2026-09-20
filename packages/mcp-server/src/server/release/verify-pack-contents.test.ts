@@ -1,7 +1,7 @@
 // Unit coverage for tools/checks/src/verify-pack-contents.mjs, the versioned
 // replacement for release.yml's former inline `node -e` "Verify pack
 // contents" step. Cross-package import of the .mjs matches the established
-// pattern in release-gate-matrix-schema.test.ts / ci-workflow-steps.test.ts.
+// pattern in release-gate-matrix-schema.test.ts.
 
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'

@@ -1,4 +1,4 @@
-// Standing workflow-hygiene policy, distinct from ci-workflow-steps.test.ts
+// Standing workflow-hygiene policy, distinct from gate-isomorphism.test.ts
 // (which checks step/gate isomorphism): scans the RAW TEXT of every
 // .github/workflows/*.yml for two structural regressions that a diff review
 // can miss —
@@ -6,9 +6,12 @@
 //      (production logic belongs in a versioned, unit-tested script)
 //   2. an environment variable placed at job scope (ambient to every step)
 //      when it is only needed by one step
-// The raw-text scan is deliberate FOR (1): ci-workflow-steps.mjs explicitly
-// skips multi-line `run: |` blocks, so it cannot see an inline interpreter
-// buried inside one.
+// The raw-text scan is deliberate FOR (1), and the reason changed with the
+// extractor: it used to be that the scanner could not see inside a multi-line
+// `run: |` block at all. `workflow-jobs.ts` parses the YAML and hands back the
+// block's real text, so a structured check IS now possible — but the raw scan
+// still reads what a `run:` cannot: a composite action's own steps, and any
+// interpreter written outside a `run:` key entirely.
 //
 // (2) is asked of the PARSED workflow. It used to be a 165-line hand-rolled
 // indentation scanner in tools/checks, at cognitive complexity 102 — four
