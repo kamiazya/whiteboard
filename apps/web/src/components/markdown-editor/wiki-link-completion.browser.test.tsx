@@ -202,13 +202,10 @@ describe('wiki link completion (real browser)', () => {
   })
 
   it('a tap while a sibling source refreshes the list is committed once the list is back', async () => {
-    // The `:` shortcode source shares this one `autocompletion()` and
-    // re-activates on EVERY keystroke even though its own trigger never
-    // matches inside `[[` — CodeMirror marks the whole dialog `disabled`
-    // (`cm-tooltip-autocomplete-disabled`, `currentCompletions` empty) for
-    // as long as any source is pending, this sibling included. A tap that
-    // lands in that window used to be silently dropped: `acceptCompletion`
-    // refuses while disabled, same as it refuses while genuinely closed.
+    // The disabled window is the `:` sibling source re-activating on every
+    // keystroke — see `deferred` in `wikiLinkTouchAccept`. A tap landing in
+    // it used to be silently dropped: `acceptCompletion` refuses while
+    // disabled, same as it refuses while genuinely closed.
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
@@ -223,8 +220,8 @@ describe('wiki link completion (real browser)', () => {
     await focusEditable(() =>
       getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
     )
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    const view = editable === null ? null : EditorView.findFromDOM(editable as HTMLElement)
+    // focusEditable just proved the editable exists and holds focus.
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
     if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
 
     await userEvent.keyboard('see [[[[Re')

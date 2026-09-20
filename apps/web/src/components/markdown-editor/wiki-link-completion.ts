@@ -73,7 +73,6 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
   return {
     update() {
       if (deferred === null) return
-      const label = deferred
       const options = currentCompletions(view.state)
       if (options.length === 0) {
         // Still refreshing (or the dialog closed under the tap) — only give
@@ -81,7 +80,7 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
         if (completionStatus(view.state) === null) deferred = null
         return
       }
-      const index = options.findIndex((option) => option.label === label)
+      const index = options.findIndex((option) => option.label === deferred)
       deferred = null
       if (index === -1) return
       // A ViewPlugin's own update() cannot dispatch synchronously; queue for
