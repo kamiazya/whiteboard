@@ -209,9 +209,11 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // catch-all's write-by-default answer below — a grant lacking the
   // required passkey binding is refused by the handler itself regardless of
   // scope.
-  if (/^\/api\/workspaces\/[^/]+\/replica-key$/.test(path)) {
-    return { kind: 'scoped', scopes: ['workspace:read'] }
-  }
+  {
+    name: 'workspace replica-key',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/replica-key$/, 'POST'),
+    decide: always('workspace:read'),
+  },
 
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
   //

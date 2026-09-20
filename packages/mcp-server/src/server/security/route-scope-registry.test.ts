@@ -334,6 +334,7 @@ const CLAIMED_BY = {
   'files/purge-dangling': ['POST', '/api/workspaces/ws1/files/purge-dangling'],
   'documents/optimize-all': ['POST', '/api/workspaces/ws1/documents/optimize-all'],
   'workspace members': ['GET', '/api/workspaces/ws1/members'],
+  'workspace replica-key': ['POST', '/api/workspaces/ws1/replica-key'],
   'workspaces (rest)': ['GET', '/api/workspaces/ws1'],
   'runtime state': ['POST', '/api/runtime/touch'],
   'runtime (rest)': ['GET', '/api/runtime/status'],
