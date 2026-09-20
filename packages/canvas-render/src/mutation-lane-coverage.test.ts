@@ -201,9 +201,20 @@ describe('the mutation lane covers what it says it covers', () => {
     // the sift, and both were mutation-checked by hand when written —
     // inverting the sift-up comparison fails three cases, re-rooting with
     // the wrong value fails one.
+    // 83 since `svg/render-edge.ts` left `svg/backend.ts` — the edge's path
+    // data, its arrow markers and their assembly, moved when naming the four
+    // biggest `renderNode` cases carried that file past the 800-line budget
+    // again. Outside the lane for the same reason `svg/paint.ts` and
+    // `svg/shapes.ts` were when they left the same file: what pins this code
+    // is the byte-identical SVG tests, which are examples, so a mutation
+    // report over it would be survivors nobody can act on. Held instead by a
+    // differential over 24 scenes and 14 single-leaf ones, mutation-checked
+    // by hand at the three cases that moved — flattening preserveAspectRatio,
+    // dropping the glyph baseline offset, and dropping the fragment's
+    // presentation role each move the dump.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 16,
-      production: 82,
+      production: 83,
     })
   })
 

@@ -43,30 +43,64 @@ function isWriteMethod(method: string): boolean {
   )
 }
 
-// Returns `null` when no rule below claims the path — the signal to fail
-// closed (`auth.route-undeclared`) rather than silently authorizing with a
-// guessed scope.
-export function resolveApiRouteScope(method: string, path: string): RouteScopeDecision | null {
-  if (!path.startsWith('/api/')) return null
+/**
+ * One rule of the policy: what it CLAIMS, and what it then decides.
+ *
+ * The table below is ordered and FIRST MATCH WINS, which is the whole of the
+ * policy's control flow — so a rule placed under a broader one is dead, and
+ * `route-scope-registry.test.ts` walks the table to say so. `name` exists for
+ * that walk: it is what a shadowed rule is reported by.
+ *
+ * `decide` takes the write/read split rather than the method, because that is
+ * the only thing about a request any decision here turns on beyond the path;
+ * a rule that needs the method itself says so in `claims`.
+ */
+interface RouteScopeRule {
+  readonly name: string
+  readonly claims: (path: string, method: string) => boolean
+  readonly decide: (isWrite: boolean) => RouteScopeDecision
+}
 
+const exactly =
+  (...paths: readonly string[]) =>
+  (path: string): boolean =>
+    paths.includes(path)
+const matching =
+  (pattern: RegExp, method?: string) =>
+  (path: string, m: string): boolean =>
+    pattern.test(path) && (method === undefined || m === method)
+const under =
+  (...prefixes: readonly string[]) =>
+  (path: string): boolean =>
+    prefixes.some((prefix) => path.startsWith(prefix))
+
+const always =
+  (...scopes: readonly AuthScope[]) =>
+  (): RouteScopeDecision => ({ kind: 'scoped', scopes })
+const byAccess =
+  (write: AuthScope, read: AuthScope) =>
+  (isWrite: boolean): RouteScopeDecision => ({ kind: 'scoped', scopes: [isWrite ? write : read] })
+const publicRoute = (): RouteScopeDecision => ({ kind: 'public' })
+
+const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // Deliberate, documented carve-out: an unauthenticated liveness probe used
   // by daemon-discovery and the mixed-content preflight (ADR-0002). Every
   // other /api/runtime/* path requires a scope below.
-  if (path === '/api/runtime/ping') return { kind: 'public' }
+  { name: 'runtime/ping', claims: exactly('/api/runtime/ping'), decide: publicRoute },
 
   // Same carve-out class as ping: the identity challenge (POST-only) must be
   // answerable BEFORE any pairing exists — it is how a browser decides
   // whether a responder is trustworthy at all. Rate-limited in the router.
-  if (path === '/api/runtime/verify') return { kind: 'public' }
-
-  const isWrite = isWriteMethod(method)
+  { name: 'runtime/verify', claims: exactly('/api/runtime/verify'), decide: publicRoute },
 
   // File routes: reading/writing a canvas's attached binary file. The
   // document path is multi-segment, so the discriminator is the mandatory
   // `/file/<fileId>` suffix — the same suffix-anchored parse the router uses.
-  if (/^\/api\/w\/[^/]+\/document\/.+\/file\/[^/]+$/.test(path)) {
-    return { kind: 'scoped', scopes: [isWrite ? 'files:write' : 'files:read'] }
-  }
+  {
+    name: 'document file',
+    claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/file\/[^/]+$/),
+    decide: byAccess('files:write', 'files:read'),
+  },
 
   // The workspace-document sync surface: one snapshot/update pair for the
   // whole workspace document. Same tier as the per-document equivalents —
@@ -74,24 +108,32 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // wider, and the snapshot answers the same content canvas:read grants.
   // Promotion merges the record AND writes explicit checkpoints for it
   // (ADR-0039), so it needs what both of those need.
-  if (/^\/api\/w\/[^/]+\/workspace-document\/promote$/.test(path) && method === 'POST') {
-    return { kind: 'scoped', scopes: ['canvas:write', 'versions:write'] }
-  }
-  if (/^\/api\/w\/[^/]+\/workspace-document\/(snapshot|update)$/.test(path)) {
-    return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
-  }
+  {
+    name: 'workspace-document/promote',
+    claims: matching(/^\/api\/w\/[^/]+\/workspace-document\/promote$/, 'POST'),
+    decide: always('canvas:write', 'versions:write'),
+  },
+  {
+    name: 'workspace-document sync',
+    claims: matching(/^\/api\/w\/[^/]+\/workspace-document\/(snapshot|update)$/),
+    decide: byAccess('canvas:write', 'canvas:read'),
+  },
 
   // Canvas write operations that arrive as POST but mutate state.
-  if (/^\/api\/w\/[^/]+\/document\/.+\/(update|export)$/.test(path) && method === 'POST') {
-    return { kind: 'scoped', scopes: ['canvas:write'] }
-  }
+  {
+    name: 'document update/export',
+    claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/(update|export)$/, 'POST'),
+    decide: always('canvas:write'),
+  },
   // Remaining /api/w/:workspaceId/document/* routes: honor the write/read
   // split so a mutating POST (e.g. /viewport) isn't authorized by
   // canvas:read alone. The specific write routes above still take
   // precedence via ordering.
-  if (/^\/api\/w\/[^/]+\/document\//.test(path)) {
-    return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
-  }
+  {
+    name: 'document (rest)',
+    claims: matching(/^\/api\/w\/[^/]+\/document\//),
+    decide: byAccess('canvas:write', 'canvas:read'),
+  },
 
   // SSE sync transport. These are canvas:read even though two of them are
   // POSTs: they mutate only which documents this stream is told about, and
@@ -103,52 +145,64 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // routes, and a later mutating route under the same prefix would otherwise
   // inherit read-level authorization silently instead of falling through to
   // the fail-closed default.
-  if (
-    path === '/api/sync/stream' ||
-    path === '/api/sync/subscribe' ||
-    path === '/api/sync/message'
-  ) {
-    return { kind: 'scoped', scopes: ['canvas:read'] }
-  }
+  {
+    name: 'sync transport',
+    claims: exactly('/api/sync/stream', '/api/sync/subscribe', '/api/sync/message'),
+    decide: always('canvas:read'),
+  },
 
   // Version history, restore, compact — version-control operations scoped
   // to a single canvas.
-  if (/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|compact)/.test(path)) {
-    return { kind: 'scoped', scopes: [isWrite ? 'versions:write' : 'versions:read'] }
-  }
+  {
+    name: 'document versions/compact',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|compact)/),
+    decide: byAccess('versions:write', 'versions:read'),
+  },
 
   // Branch and checkpoint routes — version-control operations at the
   // workspace level.
-  if (/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/branches/.test(path)) {
-    return { kind: 'scoped', scopes: [isWrite ? 'versions:write' : 'versions:read'] }
-  }
-  if (/^\/api\/workspaces\/[^/]+\/checkpoints$/.test(path)) {
-    return { kind: 'scoped', scopes: ['versions:write'] }
-  }
-  if (/^\/api\/workspaces\/[^/]+\/versions\/prune-sandwiched$/.test(path)) {
-    return { kind: 'scoped', scopes: ['versions:write'] }
-  }
+  {
+    name: 'document branches',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/branches/),
+    decide: byAccess('versions:write', 'versions:read'),
+  },
+  {
+    name: 'workspace checkpoints',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/checkpoints$/),
+    decide: always('versions:write'),
+  },
+  {
+    name: 'versions/prune-sandwiched',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/versions\/prune-sandwiched$/),
+    decide: always('versions:write'),
+  },
 
   // Destructive maintenance routes mounted under /api/workspaces need their
   // own narrower scope — without this rule they'd fall through to the
   // workspace:write fallback below, which is broader than what they
   // actually mutate (attachment blobs / canvas version history) and would
   // let any workspace:write grant trigger them.
-  if (/^\/api\/workspaces\/[^/]+\/files\/purge-dangling$/.test(path) && method === 'POST') {
-    return { kind: 'scoped', scopes: ['files:write'] }
-  }
-  if (/^\/api\/workspaces\/[^/]+\/documents\/optimize-all$/.test(path) && method === 'POST') {
-    return { kind: 'scoped', scopes: ['versions:write'] }
-  }
+  {
+    name: 'files/purge-dangling',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/files\/purge-dangling$/, 'POST'),
+    decide: always('files:write'),
+  },
+  {
+    name: 'documents/optimize-all',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/optimize-all$/, 'POST'),
+    decide: always('versions:write'),
+  },
 
   // Membership (ADR-0041/0042): who has L1 access to a workspace. Same bar
   // as pairing-grant and credential-pin management — a paired browser
   // session that can manage grants and passkey pins can manage members too
   // (accepted v1 posture; narrowing what a pairing session may do is its
   // own future increment, per routes/membership.ts's header).
-  if (/^\/api\/workspaces\/[^/]+\/members(\/[^/]+)?$/.test(path)) {
-    return { kind: 'scoped', scopes: ['runtime:admin'] }
-  }
+  {
+    name: 'workspace members',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/members(\/[^/]+)?$/),
+    decide: always('runtime:admin'),
+  },
 
   // The read plane's workspace content key (ADR-0042 decisions 1/3/5). The
   // key confers READ, so workspace:read is the bar here rather than the
@@ -160,96 +214,114 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   }
 
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
-  if (path.startsWith('/api/workspaces')) {
-    return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
-  }
-
-  // The /api/v1 document surface (server-core's createServer, mounted when
-  // the daemon is given ServerDeps). Same resources as /api/workspaces above
-  // and deliberately the SAME decision, because what differs between the two
-  // is how a document is ADDRESSED — by path there, by the id the index
-  // assigned here — not what a caller may do to it. Splitting them would mean
-  // one grant that reaches a document by id and a different one that reaches
-  // the same document by path.
   //
-  // This rule is why the prefix is spelled out rather than folded into the
-  // one above: `startsWith('/api/workspaces')` does not match
-  // `/api/v1/workspaces`, so before this every v1 path resolved to null. That
-  // is fail-closed (server-mode answers 500 auth.route-undeclared), so nothing
-  // was ever under-protected — but it made the surface unusable in server mode
-  // for a reason no one had decided, and the registry-wide guard could not see
-  // it because the apps it walked were built without ServerDeps.
-  if (path.startsWith('/api/v1/workspaces')) {
-    return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
-  }
+  // The /api/v1 document surface (server-core's createServer, mounted when
+  // the daemon is given ServerDeps) takes the SAME decision deliberately,
+  // because what differs between the two is how a document is ADDRESSED — by
+  // path there, by the id the index assigned here — not what a caller may do
+  // to it. Splitting them would mean one grant that reaches a document by id
+  // and a different one that reaches the same document by path.
+  //
+  // The v1 prefix is spelled out rather than folded into the other:
+  // `startsWith('/api/workspaces')` does not match `/api/v1/workspaces`, so
+  // before it existed every v1 path resolved to null. That is fail-closed
+  // (server-mode answers 500 auth.route-undeclared), so nothing was ever
+  // under-protected — but it made the surface unusable in server mode for a
+  // reason no one had decided, and the registry-wide guard could not see it
+  // because the apps it walked were built without ServerDeps.
+  {
+    name: 'workspaces (rest)',
+    claims: under('/api/workspaces', '/api/v1/workspaces'),
+    decide: byAccess('workspace:write', 'workspace:read'),
+  },
 
   // touch and logs-prune both mutate daemon-managed process state (the
   // liveness timer, the on-disk log files) and require the admin tier even
   // though the HTTP verb for prune is POST like any other write route.
   // Stopping the process is deliberately NOT here: it is a signal, not a
   // route.
-  if (path === '/api/runtime/touch' || path === '/api/runtime/logs/prune') {
-    return { kind: 'scoped', scopes: ['runtime:admin'] }
-  }
-  if (path.startsWith('/api/runtime/')) {
-    return { kind: 'scoped', scopes: ['runtime:read'] }
-  }
+  {
+    name: 'runtime state',
+    claims: exactly('/api/runtime/touch', '/api/runtime/logs/prune'),
+    decide: always('runtime:admin'),
+  },
+  { name: 'runtime (rest)', claims: under('/api/runtime/'), decide: always('runtime:read') },
 
-  if (path.startsWith('/api/debug')) {
-    return { kind: 'scoped', scopes: ['runtime:admin'] }
-  }
+  { name: 'debug', claims: under('/api/debug'), decide: always('runtime:admin') },
 
   // Fonts (ADR-0012). Installing one makes the daemon issue an outbound
   // request and write to its own data directory, changing what every later
   // export renders — daemon-level configuration, so it sits at the same admin
   // tier as the other routes that mutate daemon state, not at canvas:write.
   // Reading the catalogue is harmless and answers a picker.
-  if (path === '/api/fonts' || path.startsWith('/api/fonts/')) {
-    return { kind: 'scoped', scopes: [isWrite ? 'runtime:admin' : 'runtime:read'] }
-  }
+  {
+    name: 'fonts',
+    claims: (path) => path === '/api/fonts' || path.startsWith('/api/fonts/'),
+    decide: byAccess('runtime:admin', 'runtime:read'),
+  },
 
   // POST /api/ws-ticket (ADR-0005): mints a WS connection ticket bound to
   // the caller's own OAuth grant scopes. canvas:read is the floor any live
   // grant is assumed to hold — the minted ticket never carries more than
   // the presented grant's own scopes regardless of this route's own
   // requirement, so this is a "can you ask at all" gate, not an escalation.
-  if (path === '/api/ws-ticket') {
-    return { kind: 'scoped', scopes: ['canvas:read'] }
-  }
+  { name: 'ws-ticket', claims: exactly('/api/ws-ticket'), decide: always('canvas:read') },
 
   // POST /api/pairing/token — the pairing-grant flow's deliberately PUBLIC
-  // endpoint (the second of exactly two public routes, with /api/runtime/
-  // ping): it authenticates by other means — a single-use PKCE-bound code,
-  // or the browser-enforced Origin header matched against a persisted
-  // grant — and it must be reachable by an origin that does not hold a
-  // bearer yet. Guard enumeration lives in routes/pairing.ts.
-  if (path === '/api/pairing/token') {
-    return { kind: 'public' }
-  }
+  // endpoint (the third of exactly three public routes, with
+  // /api/runtime/ping and /api/runtime/verify): it authenticates by other
+  // means — a single-use PKCE-bound code, or the browser-enforced Origin
+  // header matched against a persisted grant — and it must be reachable by
+  // an origin that does not hold a bearer yet. Guard enumeration lives in
+  // routes/pairing.ts.
+  { name: 'pairing/token', claims: exactly('/api/pairing/token'), decide: publicRoute },
+
   // Persisting a grant is a consent decision made on the daemon's own
   // served UI (which carries the daemon token); nothing below admin may
   // widen the origin allowlist. Listing and revoking grants (the
   // management surface, including DELETE /api/pairing/grants/:grantId)
   // sit behind the same bar.
-  if (path === '/api/pairing/grants' || path.startsWith('/api/pairing/grants/')) {
-    return { kind: 'scoped', scopes: ['runtime:admin'] }
-  }
-  // Credential pins (ADR-0039) sit at the same bar as grants: a pin is what
-  // an attestation is verified against, so planting or revoking one is the
+  //
+  // Credential pins (ADR-0039) sit at the same bar: a pin is what an
+  // attestation is verified against, so planting or revoking one is the
   // consent surface's, not a scoped OAuth client's. A paired origin's
   // session token reaches it the way it reaches grant management.
-  if (path === '/api/pairing/credentials' || path.startsWith('/api/pairing/credentials/')) {
-    return { kind: 'scoped', scopes: ['runtime:admin'] }
-  }
+  {
+    name: 'pairing grants and credentials',
+    claims: (path) =>
+      path === '/api/pairing/grants' ||
+      path.startsWith('/api/pairing/grants/') ||
+      path === '/api/pairing/credentials' ||
+      path.startsWith('/api/pairing/credentials/'),
+    decide: always('runtime:admin'),
+  },
+
   // Session assertion (ADR-0041 S0-2): the scope check here only keeps a
   // narrower OAuth grant out. The real gate is the handler's own token-store
   // check (a valid pairing SESSION token for the requesting Origin) — an
   // open daemon's `anonymous` grant carries this scope too but has no
   // session to bind, and the handler refuses it with no bearer at all.
-  if (path === '/api/pairing/session-assert' || path === '/api/pairing/session-assert/challenge') {
-    return { kind: 'scoped', scopes: ['runtime:admin'] }
-  }
+  {
+    name: 'pairing/session-assert',
+    claims: exactly('/api/pairing/session-assert', '/api/pairing/session-assert/challenge'),
+    decide: always('runtime:admin'),
+  },
+]
 
-  // No rule matched: an undeclared /api/* route. Callers must fail closed.
-  return null
+/** The rules, for the walk that proves none of them is shadowed. */
+export const API_ROUTE_RULE_NAMES: readonly string[] = API_ROUTE_RULES.map((rule) => rule.name)
+
+/** Which rule claims this request, or `null` when none does. */
+export function ruleClaiming(method: string, path: string): string | null {
+  if (!path.startsWith('/api/')) return null
+  return API_ROUTE_RULES.find((rule) => rule.claims(path, method))?.name ?? null
+}
+
+// Returns `null` when no rule above claims the path — the signal to fail
+// closed (`auth.route-undeclared`) rather than silently authorizing with a
+// guessed scope.
+export function resolveApiRouteScope(method: string, path: string): RouteScopeDecision | null {
+  if (!path.startsWith('/api/')) return null
+  const rule = API_ROUTE_RULES.find((r) => r.claims(path, method))
+  return rule === undefined ? null : rule.decide(isWriteMethod(method))
 }

@@ -307,18 +307,51 @@ describe('the env parser answers exactly what it answered before the split', () 
 })
 
 /**
- * A tally, not a coverage percentage: it exists because the first version
- * of the generator above agreed with the oracle on 1000 runs while never
- * once producing a valid config.
+ * That the VALUE TABLE can reach every refusal, walked rather than drawn.
+ *
+ * This was `expect(seen.failures.size).toBe(17)` on the random run's tally,
+ * and it flaked on main: `expected 16 to be 17`. An exact count over a
+ * randomised draw is a pinned RNG outcome wearing a coverage assertion —
+ * five stable local runs said nothing about the sixth, and the one that
+ * missed a code reported it as a defect in the parser.
+ *
+ * Sweeping the table instead makes the claim a fact: every value it holds
+ * is applied to the valid deployment, once, and the refusals collected.
+ * The property above keeps its random draws for what they are good at —
+ * COMBINATIONS, which a one-field-at-a-time sweep cannot reach.
  */
-describe('the generator reaches what it claims to', () => {
-  it('produced valid configs AND most of the failure codes', () => {
-    // Measured over five fresh runs: 190-220 valid configs and all 17
-    // failure codes, every run. Pinned at the full set rather than a
-    // floor, because a code the generator stops reaching is a branch the
-    // two parsers stop being compared on — which is the failure this
-    // tally exists to make loud.
+describe('the value table reaches every refusal the parser can answer', () => {
+  it('produces all 17 failure codes when walked field by field', () => {
+    const codes = new Set<string>()
+    let ok = 0
+    for (const [key, values] of Object.entries(VALUES)) {
+      for (const value of values) {
+        const env: NodeJS.ProcessEnv = { ...VALID_ENV }
+        if (value === undefined) delete env[key]
+        else env[key] = value
+        const result = parseServerModeEnvConfig(env)
+        if (result.ok) ok += 1
+        else codes.add(result.code)
+      }
+    }
+
+    expect(codes.size, `reached: ${[...codes].sort().join(', ')}`).toBe(17)
+    expect(ok).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * A tally over the random draws, kept as a FLOOR.
+ *
+ * It exists because the first version of the generator agreed with the
+ * oracle on 1000 runs while never once producing a valid config — a green
+ * property that compared the two parsers on their refusals alone. A floor
+ * catches that; an exact count only added flakiness, and the sweep above
+ * carries the per-code claim.
+ */
+describe('the random draws reach both outcomes', () => {
+  it('produced valid configs and a spread of refusals', () => {
     expect(seen.ok).toBeGreaterThan(100)
-    expect(seen.failures.size).toBe(17)
+    expect(seen.failures.size).toBeGreaterThanOrEqual(12)
   })
 })
