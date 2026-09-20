@@ -114,6 +114,60 @@ export interface OAuthJwtValidatorOptions {
   keyResolver: JwtKeyResolver
 }
 
+/**
+ * Why a token was refused, from whatever `jwtVerify` threw.
+ *
+ * Its own function because it is the one part of validation that is PURE —
+ * a JOSE error code in, a refusal reason out — and until it was, every one
+ * of its branches could only be reached by persuading `jose` to throw that
+ * exact error. It is now callable directly, which is what lets each mapping
+ * be stated as a test rather than as a comment.
+ *
+ * `resolverFailed` wins over everything: a key resolver that threw means
+ * this validator could not do its job, which is not the token's fault and
+ * must not read as one. The two are distinguishable only because the
+ * wrapper above sets the flag — jose reports both as a verify failure.
+ *
+ * The thrown message is never read. It may carry IdP URLs, JWKS endpoint
+ * addresses or stack frames, and a refusal reason reaches a client.
+ */
+export function refusalFor(
+  err: unknown,
+  resolverFailed: boolean,
+): Extract<OAuthResourceTokenValidationResult, { ok: false }> {
+  if (resolverFailed) return { ok: false, reason: 'validator_unavailable' }
+
+  // Read through a shape check rather than a cast: `throw null` is legal
+  // JavaScript, and reading `.code` off it throws a TypeError OUT of the
+  // catch block — turning a refusal into a crash, on the path that decides
+  // whether a request is authorized. The cast this replaces did exactly
+  // that; found by asking this function directly, which is only possible
+  // now that it is one.
+  const fields: { code?: string; claim?: string } =
+    typeof err === 'object' && err !== null ? err : {}
+  const { code, claim } = fields
+
+  if (code === 'ERR_JWT_EXPIRED') return { ok: false, reason: 'expired' }
+
+  if (code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
+    if (claim === 'iss') return { ok: false, reason: 'invalid_issuer' }
+    if (claim === 'aud') return { ok: false, reason: 'invalid_audience' }
+    return { ok: false, reason: 'malformed' }
+  }
+
+  if (
+    code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' ||
+    code === 'ERR_JOSE_ALG_NOT_ALLOWED' ||
+    code === 'ERR_JOSE_NOT_SUPPORTED'
+  ) {
+    return { ok: false, reason: 'invalid_signature' }
+  }
+
+  // ERR_JWS_INVALID (structural parse failure — not enough parts, invalid
+  // base64url, etc.) and all other JOSE errors → malformed.
+  return { ok: false, reason: 'malformed' }
+}
+
 export function createOAuthJwtValidator(
   options: OAuthJwtValidatorOptions,
 ): OAuthResourceTokenValidator {
@@ -175,31 +229,7 @@ export function createOAuthJwtValidator(
           }
         }
       } catch (err) {
-        if (resolverFailed) {
-          return { ok: false, reason: 'validator_unavailable' }
-        }
-
-        const code = (err as { code?: string }).code
-        const claim = (err as { claim?: string }).claim
-
-        if (code === 'ERR_JWT_EXPIRED') {
-          return { ok: false, reason: 'expired' }
-        }
-        if (code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') {
-          if (claim === 'iss') return { ok: false, reason: 'invalid_issuer' }
-          if (claim === 'aud') return { ok: false, reason: 'invalid_audience' }
-          return { ok: false, reason: 'malformed' }
-        }
-        if (
-          code === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' ||
-          code === 'ERR_JOSE_ALG_NOT_ALLOWED' ||
-          code === 'ERR_JOSE_NOT_SUPPORTED'
-        ) {
-          return { ok: false, reason: 'invalid_signature' }
-        }
-        // ERR_JWS_INVALID (structural parse failure — not enough parts,
-        // invalid base64url, etc.) and all other JOSE errors → malformed.
-        return { ok: false, reason: 'malformed' }
+        return refusalFor(err, resolverFailed)
       }
 
       if (typeof payload.sub !== 'string' || payload.sub === '') {
