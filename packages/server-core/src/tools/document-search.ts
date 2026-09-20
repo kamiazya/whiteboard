@@ -142,6 +142,11 @@ export function createDocumentSearchTool(
       })[] = []
       for (const entry of entries) {
         const facts = content.get(entry.documentId)
+        // Narrowing for `Map.get`, not a branch: `factsFor` sets an entry
+        // for EVERY entry it is given — `EMPTY_FACTS` when the document
+        // cannot be read — so this cannot fire for a listing it was handed.
+        // Deleting it leaves every test green, which reads like an untested
+        // branch and is not one.
         if (facts === undefined) continue
         if (parsed.kind !== undefined && entry.kind !== parsed.kind) continue
         // ONE bearer carries every listed tag (ADR-0040 decision 3): a note
