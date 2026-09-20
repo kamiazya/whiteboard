@@ -18,7 +18,9 @@ import {
   currentCompletions,
   setSelectedCompletion,
 } from '@codemirror/autocomplete'
-import { EditorView, ViewPlugin } from '@codemirror/view'
+import { Prec } from '@codemirror/state'
+import type { Command } from '@codemirror/view'
+import { EditorView, keymap, ViewPlugin } from '@codemirror/view'
 
 /**
  * Deterministic tap-commit for the completion popup. Upstream accepts on
@@ -63,35 +65,47 @@ export const completionTouchAccept = ViewPlugin.define((view) => {
   const onTouchStart = (event: TouchEvent) => {
     startY = optionAt(event.target) === null ? null : (event.changedTouches[0]?.clientY ?? null)
   }
+  /**
+   * Commit what this rendered `<li>` stands for, whatever the dialog's own
+   * state says. Answers whether the key or the tap was CONSUMED, so a
+   * caller that must decide between accepting and its own verb can ask.
+   *
+   * Taken from the DOM rather than from `currentCompletions(view.state)`,
+   * which is empty the whole time the dialog is disabled — the list the
+   * user is looking at is the only thing that still knows which option
+   * this is.
+   */
+  const acceptRendered = (li: HTMLElement): boolean => {
+    const match = /-(\d+)$/.exec(li.id)
+    if (match === null) return false
+    const label = li.querySelector('.cm-completionLabel')?.textContent ?? null
+    view.dispatch({ effects: setSelectedCompletion(Number(match[1])) })
+    if (acceptCompletion(view)) return true
+    if (label === null) return false
+    const siblings = li.parentElement === null ? [li] : [...li.parentElement.children]
+    const occurrence = siblings
+      .slice(0, siblings.indexOf(li) + 1)
+      .filter(
+        (sibling) => sibling.querySelector('.cm-completionLabel')?.textContent === label,
+      ).length
+    deferred = { label, occurrence }
+    return true
+  }
   const onTouchEnd = (event: TouchEvent) => {
     const li = optionAt(event.target)
     const endY = event.changedTouches[0]?.clientY
     if (li === null || startY === null || endY === undefined) return
     if (Math.abs(endY - startY) > TAP_SLOP_PX) return
-    const match = /-(\d+)$/.exec(li.id)
-    if (match === null) return
-    const label = li.querySelector('.cm-completionLabel')?.textContent ?? null
-    // No synthesized mouse events after this tap: upstream must not accept
-    // a second time, and the blur that would close the popup never fires.
-    event.preventDefault()
-    view.dispatch({ effects: setSelectedCompletion(Number(match[1])) })
-    if (!acceptCompletion(view) && label !== null) {
-      // From the RENDERED list, not `currentCompletions(view.state)` — a
-      // tap refused during the disabled window has already dropped to an
-      // empty completions array by this point, so the state can't answer
-      // "which occurrence". The DOM the user was looking at still can.
-      const siblings = li.parentElement === null ? [li] : [...li.parentElement.children]
-      const occurrence = siblings
-        .slice(0, siblings.indexOf(li) + 1)
-        .filter(
-          (sibling) => sibling.querySelector('.cm-completionLabel')?.textContent === label,
-        ).length
-      deferred = { label, occurrence }
-    }
+    // No synthesized mouse events after a tap this plugin took: upstream
+    // must not accept a second time, and the blur that would close the
+    // popup never fires. A tap it did NOT take is left to upstream, which
+    // is what happened before this plugin existed.
+    if (acceptRendered(li)) event.preventDefault()
   }
   view.dom.addEventListener('touchstart', onTouchStart, { passive: true })
   view.dom.addEventListener('touchend', onTouchEnd, { passive: false })
   return {
+    acceptRendered,
     update() {
       if (deferred === null) return
       const options = currentCompletions(view.state)
@@ -127,6 +141,57 @@ export const completionTouchAccept = ViewPlugin.define((view) => {
     },
   }
 })
+
+/**
+ * Accept the option the popup is DRAWING, even while the dialog is
+ * disabled. Answers false when nothing is drawn, so a caller falls through
+ * to its own verb.
+ *
+ * It exists because `completionStatus` cannot tell the two `pending` cases
+ * apart. Every keystroke re-activates BOTH sources of the one shared
+ * `autocompletion()`, so for about `activateOnTypingDelay` after each
+ * character the dialog is disabled while its popup stays on screen — and
+ * for plain prose, which will never produce a popup at all, the sources
+ * are pending in exactly the same way. Enter must take the key in the
+ * first case and leave it in the second, and the rendered list is the only
+ * thing that separates them: `currentCompletions` is empty for both.
+ *
+ * `aria-selected` is what the person is looking at, so it is what commits;
+ * a dialog CodeMirror has not marked falls back to the first row, which is
+ * what `selectOnOpen` would have marked.
+ */
+export const acceptRenderedCompletion: Command = (view) => {
+  const list = view.dom.querySelector('.cm-tooltip-autocomplete ul')
+  if (list === null) return false
+  const li = list.querySelector('li[aria-selected="true"]') ?? list.querySelector('li')
+  if (!(li instanceof HTMLElement)) return false
+  return view.plugin(completionTouchAccept)?.acceptRendered(li) ?? false
+}
+
+/**
+ * Enter, for a host whose other claim on the key is the markdown keymap.
+ *
+ * While the popup is OPEN ('active') Enter is accept-or-nothing — never a
+ * newline under a visible option list. 'pending' must fall through, or
+ * Enter after typing "- item" would eat the list continuation; but a list
+ * that is DRAWN is pending too, and that one owns the key. Which of the
+ * two a 'pending' is, only `acceptRenderedCompletion` can say.
+ *
+ * `Prec.highest` because `autocompletion()` installs its own keymap there
+ * as well, and within that precedence whichever is listed first wins.
+ */
+export const completionEnterKeymap = Prec.highest(
+  keymap.of([
+    {
+      key: 'Enter',
+      run: (view) => {
+        const status = completionStatus(view.state)
+        if (status === 'active') return acceptCompletion(view) || true
+        return status !== null && acceptRenderedCompletion(view)
+      },
+    },
+  ]),
+)
 
 /**
  * The popup in the app's popover clothes. An EditorView.theme rather than
