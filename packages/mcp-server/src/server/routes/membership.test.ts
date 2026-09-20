@@ -153,6 +153,18 @@ describe('GET /api/workspaces/:workspaceId/members', () => {
     const body = membershipRefusalSchema.parse(await res.json())
     expect(body.error).toBe('unknown_workspace')
   })
+
+  // workspaceExists (serverDeps.workspaceDocuments.exists in production)
+  // throws a ValidationError for a workspaceId shaped like path traversal —
+  // the route must turn that into a 400, not let it fall through to Hono's
+  // plain-text default handler.
+  it('answers 400 for a workspaceId validateWorkspaceId rejects', async () => {
+    const { app } = await makeApp()
+    const res = await get(app, '/api/workspaces/not*safe/members')
+    expect(res.status).toBe(400)
+    const body = membershipRefusalSchema.parse(await res.json())
+    expect(body.error).toBe('invalid_workspace_id')
+  })
 })
 
 describe('POST /api/workspaces/:workspaceId/members', () => {
@@ -187,6 +199,19 @@ describe('POST /api/workspaces/:workspaceId/members', () => {
       credentialId: 'x',
     })
     expect(res.status).toBe(400)
+  })
+
+  // post() JSON.stringifies its body, so it can never produce bytes that
+  // fail c.req.json() itself — exercise that branch with a raw request.
+  it('rejects a body that does not parse as JSON at all', async () => {
+    const fixture = await makeApp()
+    const res = await fixture.app.request(`/api/workspaces/${WS}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{not json',
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid JSON body' })
   })
 
   // addMemberRequestSchema only checks origin is a non-empty string, not that
@@ -252,6 +277,17 @@ describe('POST /api/workspaces/:workspaceId/members', () => {
 })
 
 describe('DELETE /api/workspaces/:workspaceId/members/:profileId', () => {
+  // Parity with GET/POST: an unregistered workspace answers unknown_workspace,
+  // not unknown_profile — the same profileId lookup would otherwise find
+  // nothing and misreport "no such member" for a workspace never registered.
+  it('refuses an unknown workspace, matching GET/POST', async () => {
+    const { app } = await makeApp([])
+    const res = await del(app, `/api/workspaces/${WS}/members/some-profile`)
+    expect(res.status).toBe(404)
+    const body = membershipRefusalSchema.parse(await res.json())
+    expect(body.error).toBe('unknown_workspace')
+  })
+
   it('refuses an unknown profileId', async () => {
     const fixture = await makeApp()
     const res = await del(fixture.app, `/api/workspaces/${WS}/members/no-such-profile`)

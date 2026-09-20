@@ -20,6 +20,7 @@ import {
   type ListMembersResponse,
   listMembersResponseSchema,
   type MemberProfileSummary,
+  type MembershipRefusal,
   memberProfileSummarySchema,
   type RemoveMemberResponse,
   removeMemberResponseSchema,
@@ -29,6 +30,7 @@ import { getLogger } from '../log.js'
 import type { MemberProfile, MemberProfileStore } from '../security/member-profile-store.js'
 import type { PairingTokenStore } from '../security/pairing-session.js'
 import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { validateWorkspaceId, validationErrorBody } from '../validators.js'
 
 const log = getLogger('membership')
 
@@ -39,6 +41,28 @@ function toSummary(profile: MemberProfile): MemberProfileSummary {
     credentials: profile.credentials,
     createdAt: new Date(profile.createdAt).toISOString(),
   })
+}
+
+/** A malformed workspaceId (path-traversal-shaped, non-ASCII, etc.) is a 400,
+ *  not the uncaught ValidationError `workspaceExists` throws underneath —
+ *  the same guard `files.ts`'s purge-dangling route applies before its own
+ *  `workspaceExists` call. */
+function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
+  try {
+    validateWorkspaceId(workspaceId)
+    return null
+  } catch (err) {
+    const body = validationErrorBody(err)
+    if (body === null) throw err
+    return { error: 'invalid_workspace_id', message: body.message } satisfies MembershipRefusal
+  }
+}
+
+function unknownWorkspaceRefusal(workspaceId: string): MembershipRefusal {
+  return {
+    error: 'unknown_workspace',
+    message: `no such workspace: ${workspaceId}`,
+  } satisfies MembershipRefusal
 }
 
 export interface MembershipRouterOptions {
@@ -62,12 +86,11 @@ export function createMembershipRouter({
 
   app.get('/api/workspaces/:workspaceId/members', async (c) => {
     const workspaceId = c.req.param('workspaceId')
+    const invalidId = badWorkspaceIdBody(workspaceId)
+    if (invalidId) return c.json(invalidId, 400)
     if (!(await workspaceExists(workspaceId))) {
       log.warning({ workspaceId, reason: 'unknown_workspace' }, 'membership refused')
-      return c.json(
-        { error: 'unknown_workspace', message: `no such workspace: ${workspaceId}` },
-        404,
-      )
+      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
     }
     const list = await members.listMembers(workspaceId)
     const response: ListMembersResponse = listMembersResponseSchema.parse({
@@ -78,6 +101,8 @@ export function createMembershipRouter({
 
   app.post('/api/workspaces/:workspaceId/members', async (c) => {
     const workspaceId = c.req.param('workspaceId')
+    const invalidId = badWorkspaceIdBody(workspaceId)
+    if (invalidId) return c.json(invalidId, 400)
 
     let body: unknown
     try {
@@ -93,10 +118,7 @@ export function createMembershipRouter({
 
     if (!(await workspaceExists(workspaceId))) {
       log.warning({ workspaceId, reason: 'unknown_workspace' }, 'membership refused')
-      return c.json(
-        { error: 'unknown_workspace', message: `no such workspace: ${workspaceId}` },
-        404,
-      )
+      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
     }
 
     let origin: string
@@ -116,7 +138,7 @@ export function createMembershipRouter({
         {
           error: 'unknown_credential',
           message: 'that passkey is not pinned for this origin',
-        },
+        } satisfies MembershipRefusal,
         404,
       )
     }
@@ -133,6 +155,12 @@ export function createMembershipRouter({
   app.delete('/api/workspaces/:workspaceId/members/:profileId', async (c) => {
     const workspaceId = c.req.param('workspaceId')
     const profileId = c.req.param('profileId')
+    const invalidId = badWorkspaceIdBody(workspaceId)
+    if (invalidId) return c.json(invalidId, 400)
+    if (!(await workspaceExists(workspaceId))) {
+      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'membership refused')
+      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
+    }
 
     const { removed, credentials: boundCredentials } = await members.revokeL1Membership(
       workspaceId,
@@ -140,7 +168,13 @@ export function createMembershipRouter({
     )
     if (!removed) {
       log.warning({ workspaceId, profileId, reason: 'unknown_profile' }, 'membership refused')
-      return c.json({ error: 'unknown_profile', message: 'no such member in this workspace' }, 404)
+      return c.json(
+        {
+          error: 'unknown_profile',
+          message: 'no such member in this workspace',
+        } satisfies MembershipRefusal,
+        404,
+      )
     }
 
     const sessionsEnded = tokens.revokeBoundTo(boundCredentials)
