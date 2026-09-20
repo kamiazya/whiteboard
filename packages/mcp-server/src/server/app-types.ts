@@ -32,7 +32,6 @@ interface LocalDaemonAppOptions {
   instanceId?: string
   touch: () => void
   getStatus: () => RuntimeStatusResponse
-  shutdown: () => Promise<void>
   /** Exact-match hosted origins admitted alongside the fixed loopback set
    *  (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default — current loopback-only
    *  behavior is unchanged unless an operator opts in. Local-daemon only;
@@ -105,7 +104,6 @@ export interface ServerModeAppOptions {
   instanceId?: string
   touch: () => void
   getStatus: () => RuntimeStatusResponse
-  shutdown: () => Promise<void>
   /** Hands the composition root the checkpoint trigger the document router
    *  creates, so its shutdown can flush what an edit left pending. The
    *  checkpoint lands at a PAUSE in editing, so a shutdown that does not

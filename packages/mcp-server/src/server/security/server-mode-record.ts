@@ -6,14 +6,17 @@
 //     MUST NOT appear in the record. Only fields needed for operational
 //     identification (pid, host, port, publicBaseUrl, authStrategy, startedAt)
 //     are stored.
-//   - Parent data directory is created with mode 0o700 (owner-only); existing
-//     directories are also tightened to 0o700 via chmodSync.
-//   - Written with mode 0o600 (owner-only read/write).
+//   - Written owner-only, through `writeSecretFileAtomicSync` — the one
+//     definition of that dance, so a correction to it reaches every file the
+//     daemon writes owner-only rather than one of them. This record carries
+//     no secret (see the field constraint above); what it shares with the key
+//     files is the MODE, which is what that helper is about.
 //   - Read path is side-effect-free (no mkdirSync, no probe).
 
-import { chmodSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
 import { z } from 'zod'
+import { writeSecretFileAtomicSync } from './secret-file-mode.js'
 
 export const SERVER_MODE_RECORD_SCHEMA_VERSION = 1 as const
 
@@ -67,22 +70,7 @@ export function readServerModeRecord(dataDir: string): ServerModeRecordReadResul
 }
 
 export function writeServerModeRecord(dataDir: string, record: ServerModeRecord): void {
-  const path = getServerModeRecordPath(dataDir)
-  const dir = dirname(path)
-  mkdirSync(dir, { recursive: true, mode: 0o700 })
-  // chmodSync re-establishes 0o700 on pre-existing directories: mkdirSync's
-  // mode option only applies when creating; existing dirs keep their bits.
-  if (process.platform !== 'win32') {
-    try {
-      chmodSync(dir, 0o700)
-    } catch {
-      // Best-effort; ignore failures on systems where chmod is restricted.
-    }
-  }
-  writeFileSync(path, JSON.stringify(record), { mode: 0o600 })
-  // chmodSync re-establishes 0o600 on pre-existing files: writeFileSync's
-  // mode option only applies when creating; existing files keep their bits.
-  chmodSync(path, 0o600)
+  writeSecretFileAtomicSync(getServerModeRecordPath(dataDir), JSON.stringify(record))
 }
 
 export function deleteServerModeRecord(dataDir: string): void {

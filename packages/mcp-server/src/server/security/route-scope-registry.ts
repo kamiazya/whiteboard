@@ -165,15 +165,12 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
   }
 
-  // touch/shutdown/logs-prune all mutate daemon-managed process state
-  // (liveness timer, process lifecycle, on-disk log files) and require the
-  // admin tier even though the HTTP verb for prune is POST like any other
-  // write route.
-  if (
-    path === '/api/runtime/touch' ||
-    path === '/api/runtime/shutdown' ||
-    path === '/api/runtime/logs/prune'
-  ) {
+  // touch and logs-prune both mutate daemon-managed process state (the
+  // liveness timer, the on-disk log files) and require the admin tier even
+  // though the HTTP verb for prune is POST like any other write route.
+  // Stopping the process is deliberately NOT here: it is a signal, not a
+  // route.
+  if (path === '/api/runtime/touch' || path === '/api/runtime/logs/prune') {
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
   if (path.startsWith('/api/runtime/')) {

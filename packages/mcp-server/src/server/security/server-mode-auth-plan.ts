@@ -83,9 +83,9 @@ export type ServerModeAuthPlanDecision =
 // First-wave server-mode route auth plan — one scope per resource group so
 // callers check exactly the scope required, no over- or under-requirement.
 //   runtime-read:  GET /api/runtime/status
-//   runtime-admin: POST /api/runtime/touch + POST /api/runtime/shutdown
-//     (touch is separated from runtime-read because it mutates daemon state;
-//      shutdown is destructive — both require the admin scope, not the read scope)
+//   runtime-admin: POST /api/runtime/touch + POST /api/runtime/logs/prune
+//     (both mutate daemon state rather than reading it, so they require the
+//      admin scope and not the read one)
 const SERVER_MODE_ROUTE_AUTH_PLAN: readonly RouteGroupAuthPlan[] = [
   { group: 'canvas-read', requiredScopes: ['canvas:read'] },
   { group: 'workspace-read', requiredScopes: ['workspace:read'] },

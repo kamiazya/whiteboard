@@ -1,5 +1,6 @@
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -125,6 +126,36 @@ describe('writeSecretFileAtomicSync', () => {
       expect(modeOf(nested)).toBe(0o700)
     },
   )
+
+  /**
+   * The ATOMIC half of the name, which nothing watched until a mutation check
+   * found it: replacing the temp-file-and-rename with a direct write left all
+   * three callers' suites green — daemon-identity, macaroon-root-key and the
+   * server-mode record alike.
+   *
+   * The inode is the discriminator, and it is the property rather than an
+   * implementation detail. A direct write opens the destination `O_TRUNC`, so
+   * the same inode is empty for as long as the write takes and a concurrent
+   * reader sees a truncated file; a rename swaps a fully-written inode in, so
+   * a reader sees the old bytes or the new ones and never a half file.
+   * Measured: a direct rewrite keeps the inode, a rename changes it.
+   */
+  it('swaps a new inode into place rather than truncating the old one', () => {
+    const file = join(dir, 'key.json')
+    writeSecretFileAtomicSync(file, 'old')
+    const before = statSync(file).ino
+
+    writeSecretFileAtomicSync(file, 'new')
+
+    expect(readFileSync(file, 'utf8')).toBe('new')
+    expect(statSync(file).ino).not.toBe(before)
+  })
+
+  it('leaves no temp file behind', () => {
+    const file = join(dir, 'key.json')
+    writeSecretFileAtomicSync(file, 'contents')
+    expect(existsSync(`${file}.tmp`)).toBe(false)
+  })
 
   it.skipIf(!CHMOD_IS_OBSERVABLE)('replaces an existing secret and leaves it owner-only', () => {
     const file = join(dir, 'key.json')
