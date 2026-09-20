@@ -8,7 +8,11 @@
  * format with no canvas — a person can be given feedback there that an
  * agent has no way to answer.
  */
-import { readAnnotations, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readAnnotations,
+  writeDocumentKind,
+  writeThreadMessage,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import {
@@ -17,7 +21,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { loadDocument } from './document-io.js'
+import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { createThreadEditTool } from './thread-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -162,5 +166,82 @@ describe('wb_thread_edit', () => {
         ops: [{ op: 'message.add', threadId: 'nope', body: 'into the void' }],
       }),
     ).rejects.toThrow(/nope/)
+  })
+})
+
+/**
+ * Two things the batch does that nothing asserted — both found by mutating
+ * the handlers when the switch became a table.
+ */
+describe('wb_thread_edit within ONE batch', () => {
+  test('a thread opened by an earlier op can be replied to by a later one', async () => {
+    // `held.add(id)` after a create is what makes this work: without it the
+    // reply is refused as "not on this document", and the whole point of a
+    // batch tool is that the ops compose. Removing that one line left every
+    // test green.
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store)
+    const deps = makeDeps(store)
+
+    const result = await createThreadEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'thread.add',
+          threadId: 'th-batch',
+          anchor: { kind: 'document' },
+          body: 'opened in this batch',
+        },
+        { op: 'message.add', threadId: 'th-batch', body: 'replied in the same batch' },
+      ],
+    })
+
+    expect(result.threads).toEqual([{ id: 'th-batch', status: 'open', messageCount: 2 }])
+    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    expect(readAnnotations(doc)[0]?.messages.map((m) => m.body)).toEqual([
+      'opened in this batch',
+      'replied in the same batch',
+    ])
+  })
+
+  test('a reply is minted ABOVE the messages already there, never into a gap', async () => {
+    // Minted from the COUNT rather than by scanning up from 1, because a
+    // peer's reply that merged in leaves the two disagreeing — and an id
+    // that lands in a gap overwrites someone else's message instead of
+    // replying. The `while` loop alone does not give this: on a gapless
+    // thread both spellings agree, which is why the gap below is seeded by
+    // hand. The tool itself never makes one.
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store)
+    const deps = makeDeps(store)
+
+    await createThreadEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'thread.add', threadId: 'th-1', anchor: { kind: 'document' }, body: 'first' }],
+    })
+
+    // A peer's reply that merged in at m3, leaving m2 unused — exactly the
+    // state the comment in `message.add` describes.
+    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    writeThreadMessage(doc, 'th-1', {
+      id: 'th-1-m3',
+      body: 'from a peer',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    await saveDocumentSnapshot(deps, WORKSPACE_ID, DOCUMENT_ID, doc)
+
+    await createThreadEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'message.add', threadId: 'th-1', body: 'ours' }],
+    })
+
+    const { doc: after } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const ours = readAnnotations(after)[0]?.messages.find((m) => m.body === 'ours')
+    // m2 is free, and taking it would overwrite the slot the peer is most
+    // likely to fill next.
+    expect(ours?.id).toBe('th-1-m4')
   })
 })
