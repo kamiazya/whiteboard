@@ -62,6 +62,10 @@
       "types": "./src/document-backend-contract.ts",
       "import": "./src/document-backend-contract.ts"
     },
+    "./read-plane": {
+      "types": "./src/read-plane.ts",
+      "import": "./src/read-plane.ts"
+    },
     "./select-document-transport": {
       "types": "./src/select-document-transport.ts",
       "import": "./src/select-document-transport.ts"
