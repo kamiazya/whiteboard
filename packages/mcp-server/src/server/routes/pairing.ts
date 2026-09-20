@@ -36,8 +36,8 @@
 //   session to bind. The challenge is keyed to the SESSION TOKEN that asked
 //   (never the origin alone), so another session paired with the same origin
 //   cannot spend it. `bind` on a successful assertion is what promotes the
-//   token; this slice answers `profileId: null` always — mapping the bound
-//   credential to a MemberProfile is a later slice's job.
+//   token; `profileId` in the response is the MemberProfile that credential
+//   maps to (routes/membership.ts), or null when it has none yet.
 import { createHash } from 'node:crypto'
 import {
   type CreateGrantResponse,
@@ -62,6 +62,7 @@ import { Hono } from 'hono'
 import { getLogger } from '../log.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
+import type { MemberProfileStore } from '../security/member-profile-store.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
 import {
   createSessionChallengeStore,
@@ -98,6 +99,10 @@ export interface PairingRouterOptions {
   /** The passkeys paired origins have pinned (ADR-0039). */
   credentials: WebAuthnCredentialStore
   identity: DaemonIdentity
+  /** The daemon's MemberProfile store (ADR-0041). Absent in callers with no
+   *  membership surface at all, in which case session-assert answers
+   *  `profileId: null` unconditionally, same as before this store existed. */
+  members?: MemberProfileStore
 }
 
 function summarize(pin: PinnedCredential): PinnedCredentialSummary {
@@ -115,6 +120,7 @@ export function createPairingRouter({
   tokens,
   credentials,
   identity,
+  members,
 }: PairingRouterOptions) {
   const app = new Hono()
 
@@ -373,9 +379,10 @@ export function createPairingRouter({
       // The token expired between requireSession's check and here.
       return c.json({ error: 'unauthorized' }, 401)
     }
+    const profile = await members?.profileForCredential(session.origin, credentialId)
     const response: SessionAssertResponse = sessionAssertResponseSchema.parse({
       credentialId,
-      profileId: null,
+      profileId: profile?.id ?? null,
       boundUntil: bound.expiresAt,
     })
     return c.json(response, 200)

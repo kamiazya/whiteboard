@@ -220,6 +220,29 @@ describe('startHttpServer oauth client registry', () => {
   })
 })
 
+// Wiring this covers: startHttpServer must build the daemon's own
+// MemberProfileStore from the post-migration db handle and pass it, together
+// with the pairing stores and serverDeps, into createApp — every one of
+// those three is required before the membership router mounts at all. A
+// unit test on createApp alone cannot see a composition-root wiring gap.
+describe('startHttpServer membership route wiring (ADR-0041 S0-4)', () => {
+  let running: RunningServer | undefined
+
+  afterEach(async () => {
+    await running?.close()
+    running = undefined
+  })
+
+  it('GET /api/workspaces/:workspaceId/members answers 200 on the real HTTP server', async () => {
+    const port = await acquirePort()
+    running = await startHttpServer({ port, host: '127.0.0.1' })
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/workspaces/any-workspace/members`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ members: [] })
+  })
+})
+
 // The wiring this covers: http-server.ts composes daemonBaseUrl from the
 // bound host/port and threads it into createApp -> pairingLinkContext ->
 // wb_pairing_link_create. app.test.ts only feeds createApp a hand-built

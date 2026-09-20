@@ -34,6 +34,7 @@ import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import { createFontsRouter } from './routes/fonts.js'
+import { createMembershipRouter } from './routes/membership.js'
 import {
   createOAuthAuthzRouter,
   OAUTH_AUTHZ_CORS_PATHS,
@@ -431,7 +432,27 @@ export function createApp(options: AppOptions) {
   if (options.authMode === 'local-daemon' && options.pairing !== undefined) {
     // Pairing-grant routes are local-daemon only by design (the consent
     // model assumes the daemon's own served UI and loopback reachability).
-    app.route('/', createPairingRouter({ ...options.pairing, identity }))
+    app.route('/', createPairingRouter({ ...options.pairing, identity, members: options.members }))
+  }
+  // Membership routes (ADR-0041 S0-4) need the workspace-existence check
+  // that only ServerDeps' workspaceDocuments answers — so, unlike the
+  // pairing router above, they also require serverDeps.
+  if (
+    options.authMode === 'local-daemon' &&
+    options.pairing !== undefined &&
+    options.members !== undefined &&
+    options.serverDeps !== undefined
+  ) {
+    const { members, pairing, serverDeps } = options
+    app.route(
+      '/',
+      createMembershipRouter({
+        members,
+        tokens: pairing.tokens,
+        credentials: pairing.credentials,
+        workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
+      }),
+    )
   }
 
   // server-core's /api/v1 document surface (workspace tree, documentId +

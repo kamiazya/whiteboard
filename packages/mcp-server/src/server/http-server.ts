@@ -33,6 +33,7 @@ import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
+import { createMemberProfileStore } from './security/member-profile-store.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
@@ -314,13 +315,18 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // a state the document browser can select out of. Memoized per data dir, so
   // the per-request MCP callers below share this one resolve.
   await ensureWorkspaceId(dataDir)
+  const db = await getDb(dataDir)
   const resolvedDeps = resolveServerDeps(
-    createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
+    createContainer(createStoreLocalModule({ db, blobDir: dataDir })),
     {
       ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
       daemonActor: daemonDeviceActor(dataDir),
     },
   )
+  // The daemon's MemberProfile store (ADR-0041), built from the same
+  // post-migration handle the container above gets — migrations already ran
+  // via prepareDataDir before this point.
+  const members = createMemberProfileStore(db)
   // The WS-route bridge is attached HERE, not in resolveServerDeps: the di
   // graph must not import the routes layer (value cycle), and this root is
   // one of the two places a live-socket audience exists.
@@ -351,6 +357,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     oauthClientRegistry: options.oauthClientRegistry,
     wsTicketStore,
     pairing,
+    members,
     macaroonRootKey,
     serverDeps,
     // host is the bare form normalizeBindHost produced for server.listen();

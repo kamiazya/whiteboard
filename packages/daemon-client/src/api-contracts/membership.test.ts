@@ -166,6 +166,7 @@ describe('membershipRefusalSchema', () => {
     'not_a_member',
     'unknown_credential',
     'unknown_profile',
+    'unknown_workspace',
     'requires_person_session',
   ] as const
 
