@@ -173,3 +173,44 @@ describe('main is analysed, not cancelled by the next merge', () => {
     expect(cancel).toContain('refs/heads/main')
   })
 })
+
+/**
+ * The issue triage is a two-part declaration: an id list, and a `ruleKey` +
+ * `resourceKey` pair per id. Sonar silently ignores a pair whose id is not in
+ * the list, and silently ignores a listed id with no pair — so a typo in
+ * either half excludes NOTHING while reading exactly like a triage that
+ * worked. The file's own comment says a triage that quietly fails is worse
+ * than no triage; this is that sentence made executable.
+ */
+describe('every issue-triage entry is reachable from the multicriteria list', () => {
+  const text = readFileSync(join(ROOT, 'sonar-project.properties'), 'utf-8')
+  const listed = (text.match(/^sonar\.issue\.ignore\.multicriteria=(.+)$/m)?.[1] ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id !== '')
+  const declared = new Map<string, Set<string>>()
+  for (const [, id, field] of text.matchAll(
+    /^sonar\.issue\.ignore\.multicriteria\.([^.=]+)\.(ruleKey|resourceKey)=/gm,
+  )) {
+    const fields = declared.get(id) ?? new Set<string>()
+    fields.add(field)
+    declared.set(id, fields)
+  }
+
+  // Both halves of the comparison below are derived by regex, so a pattern
+  // that stopped matching would report "nothing is wrong" rather than fail.
+  it('finds the declaration at all', () => {
+    expect(listed.length).toBeGreaterThan(5)
+    expect(declared.size).toBeGreaterThan(5)
+  })
+
+  it('gives every listed id both a ruleKey and a resourceKey', () => {
+    const incomplete = listed.filter((id) => declared.get(id)?.size !== 2)
+    expect(incomplete, 'listed but not fully declared — these exclude nothing').toEqual([])
+  })
+
+  it('lists every id that declares a pair', () => {
+    const unlisted = [...declared.keys()].filter((id) => !listed.includes(id))
+    expect(unlisted, 'declared but not listed — Sonar never reads these').toEqual([])
+  })
+})
