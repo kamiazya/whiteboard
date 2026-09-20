@@ -82,16 +82,24 @@ export function verifyPackContents(doc) {
   if (doc.length === 0) {
     return { ok: false, reason: 'pack document array must not be empty' }
   }
-  const entry = /** @type {Record<string, unknown>} */ (doc[0])
+  // Read as UNKNOWN and narrowed, not cast. The cast this replaces claimed
+  // `Record<string, unknown>` before anything had checked, which made the
+  // `=== null` below read as dead code — `typeof null` is `'object'`, so
+  // that half of the guard is the only thing standing between a `[null]`
+  // pack document and a TypeError out of the release gate.
+  /** @type {unknown} */
+  const entry = doc[0]
   if (typeof entry !== 'object' || entry === null) {
     return { ok: false, reason: 'pack document entry [0] must be an object' }
   }
-  if (!Array.isArray(entry.files)) {
+  // Honest now: `entry` really is a non-null object by here.
+  const files = /** @type {Record<string, unknown>} */ (entry).files
+  if (!Array.isArray(files)) {
     return { ok: false, reason: 'pack document entry [0].files must be an array' }
   }
   /** @type {string[]} */
   const paths = []
-  for (const fileEntry of /** @type {unknown[]} */ (entry.files)) {
+  for (const fileEntry of /** @type {unknown[]} */ (files)) {
     if (
       typeof fileEntry !== 'object' ||
       fileEntry === null ||

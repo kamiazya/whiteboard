@@ -34,6 +34,7 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { moveInkCommand } from '../../lib/spatial/commands.js'
+import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
   type Box,
@@ -528,11 +529,6 @@ export interface ReduceGestureOptions {
   /** Injection seam for deterministic tests; defaults to crypto.randomUUID. Used for both node and edge ids. */
   readonly createId?: () => string
 }
-
-export const defaultCreateId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : String(Math.random())
 
 export function reduceGesture(
   state: GestureState,

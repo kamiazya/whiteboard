@@ -1,6 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject, RefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
+import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
@@ -97,11 +98,10 @@ export function useNodeCreation({
     )
   }
 
-  const newId = () =>
-    createId?.() ??
-    (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : String(Math.random()))
+  // The one id generator, not a second copy of it: this had drifted into
+  // its own inline `crypto.randomUUID`/`Math.random` chain while five other
+  // call sites used `defaultCreateId`.
+  const newId = () => (createId ?? defaultCreateId)()
 
   const spawnPoint = (at: Point | undefined, size: { width: number; height: number }): Point => {
     const root = rootRef.current

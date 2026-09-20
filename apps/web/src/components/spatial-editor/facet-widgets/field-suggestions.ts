@@ -46,11 +46,17 @@ export function collectFieldSuggestions(
       if (byField.size > 0) seen.set(key, byField)
     }
   }
-  // Sorted, so the list reads the same however the board was written.
+  // Sorted, so the list reads the same however the board was written —
+  // and by LOCALE, because these are values a person typed and is about to
+  // read back. A default sort orders by UTF-16 code unit, which puts every
+  // Japanese value after every Latin one and scrambles kana among
+  // themselves; this list is drawn in the Facets panel, so that is a
+  // reading order nobody wants.
+  const byName = (a: string, b: string) => a.localeCompare(b)
   return Object.fromEntries(
     [...seen].map(([key, byField]) => [
       key,
-      Object.fromEntries([...byField].map(([name, values]) => [name, [...values].sort()])),
+      Object.fromEntries([...byField].map(([name, values]) => [name, [...values].sort(byName)])),
     ]),
   )
 }
