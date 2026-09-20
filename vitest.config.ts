@@ -31,6 +31,10 @@ export default defineConfig({
         '**/*.test.*',
         '**/*.bench.*',
         '**/dist/**',
+        // A type declaration has no executable line, and Sonar cannot resolve
+        // one from an lcov record because sonar.exclusions drops it — measured
+        // as `Could not resolve 2 file paths`, both .d.ts.
+        '**/*.d.ts',
         // Third-party source this repo carries rather than depends on
         // (architecture-map.md explains why BudouX is vendored); its coverage
         // is not for this project to answer for.
