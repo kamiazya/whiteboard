@@ -48,6 +48,7 @@ import { setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
+import { createCredentialResolver } from './security/credential-resolver.js'
 import { createDaemonIdentity } from './security/daemon-identity.js'
 import {
   buildMcpProtectedResourceMetadata,
@@ -172,6 +173,18 @@ export function createApp(options: AppOptions) {
         }
       : undefined
 
+  // Built ONCE and shared by every surface that checks a credential. A
+  // surface takes it as a required argument, so a credential cannot go
+  // missing on one of them while the others keep working — which is the
+  // defect `security/credential-resolver.ts` exists to make impossible.
+  const localDaemon = options.authMode === 'local-daemon' ? options : undefined
+  const credentialResolver = createCredentialResolver({
+    daemonToken: token,
+    grantStore: oauthAuthz?.store,
+    pairingTokens: localDaemon?.pairing?.tokens,
+    macaroonRootKey: localDaemon?.macaroonRootKey,
+  })
+
   if (options.authMode === 'server-mode') {
     app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
     app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
@@ -187,18 +200,11 @@ export function createApp(options: AppOptions) {
     // while every other method (GET included — see auth.js) falls through to
     // the auth chain unchanged.
     app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
-    // Three credentials: the daemon token (full authority, unchanged), an
-    // OAuth access token, and a macaroon — the last two additionally checked
-    // against the route's declared scope. All fail identically.
-    app.use(
-      '/api/*',
-      createDaemonAuthMiddleware(
-        token,
-        oauthAuthz?.store,
-        options.pairing?.tokens,
-        options.macaroonRootKey,
-      ),
-    )
+    // Every credential this daemon accepts is resolved in ONE place, and the
+    // resolver is a required argument — see `security/credential-resolver.ts`
+    // for why that is load-bearing rather than tidy. What stays here is the
+    // route-scope policy and the refusal shape, which are this surface's.
+    app.use('/api/*', createDaemonAuthMiddleware(credentialResolver))
   }
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
@@ -473,15 +479,13 @@ export function createApp(options: AppOptions) {
   app.route(
     '/',
     createRuntimeRouter({
-      token,
       mcpAuth: mcpAuth ?? undefined,
       instanceId,
       identity,
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       shutdown: options.shutdown,
-      grantStore: oauthAuthz?.store,
-      pairingTokens: options.authMode === 'local-daemon' ? options.pairing?.tokens : undefined,
+      credentialResolver,
     }),
   )
   if (options.authMode === 'server-mode') {

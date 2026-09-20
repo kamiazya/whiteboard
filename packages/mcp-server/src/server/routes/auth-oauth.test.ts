@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
+import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createOAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { createDaemonAuthMiddleware } from './auth.js'
 
@@ -7,7 +8,10 @@ const DAEMON_TOKEN = 'daemon-token'
 
 function createApp(grantStore?: ReturnType<typeof createOAuthTransactionStore>) {
   const app = new Hono()
-  app.use('/api/*', createDaemonAuthMiddleware(DAEMON_TOKEN, grantStore))
+  app.use(
+    '/api/*',
+    createDaemonAuthMiddleware(createCredentialResolver({ daemonToken: DAEMON_TOKEN, grantStore })),
+  )
   app.all('/api/*', (c) => c.json({ ok: true }))
   return app
 }

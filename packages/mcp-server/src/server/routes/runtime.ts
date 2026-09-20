@@ -7,13 +7,13 @@ import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import { getDataDir } from '../config.js'
 import type { RuntimeStatus } from '../http-server.js'
-import { isAuthorized } from '../security/bearer-token.js'
+import { hasRequiredScopes } from '../security/auth-strategy.js'
+import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
+import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
-import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
-import { isAuthorizedOAuthGrant, isAuthorizedPairingOrigin } from './auth.js'
 import { computeStorageReport } from './runtime-storage.js'
 
 // /api/runtime/verify is public and does an Ed25519 sign per call, so cap
@@ -23,18 +23,20 @@ const VERIFY_RATE_LIMIT = 60
 const VERIFY_RATE_WINDOW_MS = 60_000
 
 export interface RuntimeRouterOptions {
-  token?: string
   mcpAuth?: McpHttpAuthStrategy
   instanceId: string
   identity: DaemonIdentity
   touch: () => void
   getStatus: () => RuntimeStatus
   shutdown: () => Promise<void>
-  // Scope-limited credentials honored on the READ half of /api/runtime/*
-  // (per the route-scope registry). Admin routes (shutdown, touch, logs
-  // prune) stay daemon-token-only regardless of these.
-  grantStore?: OAuthTransactionStore
-  pairingTokens?: { validate(token: string, origin: string): boolean }
+  /**
+   * Every credential this router honours, resolved in one place. REQUIRED:
+   * the previous shape took the daemon token, the grant store and the pairing
+   * tokens as three optional fields, which is how the macaroon came to be
+   * admitted by the global `/api/*` gate and refused here — a feature the
+   * route-scope registry had already declared, not working, with nothing red.
+   */
+  credentialResolver: CredentialResolver
 }
 
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
@@ -106,29 +108,25 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // daemon but never stop it or delete its logs.
     const scope = resolveApiRouteScope(c.req.method, c.req.path)
     if (scope?.kind === 'public') return next()
-    if (isAuthorized(c.req.header('authorization'), options.token)) return next()
+
+    const grant = await options.credentialResolver.resolve({
+      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
+      carrier: 'bearer',
+      origin: c.req.header('origin'),
+    })
+    if (grant === null) return c.json({ error: 'unauthorized' }, 401)
+    if (grant.kind === 'anonymous' || grant.kind === 'daemon-token') return next()
+
+    // This surface is STRICTER than `/api/*`'s, deliberately, and the
+    // difference is the `runtime:read` test rather than the scope check that
+    // follows it: a narrow credential reaches only the READ half of
+    // `/api/runtime/*`, whatever scopes it holds. Dropping it in favour of
+    // `hasRequiredScopes` alone would let a grant holding `runtime:admin`
+    // reach shutdown and the log prune, which the admin routes have never
+    // allowed. That is a per-surface policy, so it stays here rather than
+    // moving into the resolver.
     if (scope?.kind === 'scoped' && scope.scopes.includes('runtime:read')) {
-      if (
-        options.grantStore !== undefined &&
-        isAuthorizedOAuthGrant(
-          c.req.header('authorization'),
-          options.grantStore,
-          c.req.method,
-          c.req.path,
-        )
-      ) {
-        return next()
-      }
-      if (
-        options.pairingTokens !== undefined &&
-        isAuthorizedPairingOrigin(
-          c.req.header('authorization'),
-          c.req.header('origin'),
-          options.pairingTokens,
-        )
-      ) {
-        return next()
-      }
+      if (hasRequiredScopes(grant.scopes, scope.scopes)) return next()
     }
     return c.json({ error: 'unauthorized' }, 401)
   })
@@ -173,7 +171,15 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   // refactor away from being world-callable. Re-check the bearer in the
   // handler so the file-deletion side effect is never reached without it.
   app.post('/api/runtime/logs/prune', async (c) => {
-    if (!isAuthorized(c.req.header('authorization'), options.token)) {
+    // Daemon-token-only, checked against the grant's KIND rather than its
+    // scopes: no narrow credential deletes files here, however wide its scope
+    // set. Resolved through the same resolver as everything else so there is
+    // no second place that compares a secret.
+    const grant = await options.credentialResolver.resolve({
+      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
+      carrier: 'bearer',
+    })
+    if (grant?.kind !== 'daemon-token' && grant?.kind !== 'anonymous') {
       return c.json({ error: 'unauthorized' }, 401)
     }
     options.touch()

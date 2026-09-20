@@ -37,7 +37,7 @@ import { isAuthorized } from './bearer-token.js'
 import { verifyMacaroon } from './macaroon.js'
 import type { OAuthTransactionStore } from './oauth-authz-transactions.js'
 
-export type GrantKind =
+type GrantKind =
   /** No daemon token is configured, so every caller holds everything. */
   'anonymous' | 'daemon-token' | 'oauth-grant' | 'pairing' | 'ws-ticket' | 'macaroon'
 
@@ -58,9 +58,9 @@ export interface ResolvedGrant {
  * SINGLE-USE, so a resolver that tried the ticket branch on every secret would
  * burn a live ticket on a request that never claimed to be one.
  */
-export type CredentialCarrier = 'bearer' | 'ws-subprotocol' | 'ws-ticket'
+type CredentialCarrier = 'bearer' | 'ws-subprotocol' | 'ws-ticket'
 
-export interface PresentedCredential {
+interface PresentedCredential {
   /** `null` when the request carried no credential at all. */
   readonly secret: string | null
   readonly carrier: CredentialCarrier
@@ -73,7 +73,7 @@ export interface CredentialResolver {
   resolve(presented: PresentedCredential): Promise<ResolvedGrant | null>
 }
 
-export type RedeemTicketFn = (ticket: string) => {
+type RedeemTicketFn = (ticket: string) => {
   scopes: readonly AuthScope[]
   clientId: string
 } | null

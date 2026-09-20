@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
+import { createCredentialResolver } from '../security/credential-resolver.js'
 import { mintMacaroon } from '../security/macaroon.js'
 import { createDaemonAuthMiddleware } from './auth.js'
 
@@ -17,7 +18,9 @@ function app(macaroonRootKey?: Uint8Array) {
   const instance = new Hono()
   instance.use(
     '/api/*',
-    createDaemonAuthMiddleware(DAEMON_TOKEN, undefined, undefined, macaroonRootKey),
+    createDaemonAuthMiddleware(
+      createCredentialResolver({ daemonToken: DAEMON_TOKEN, macaroonRootKey }),
+    ),
   )
   instance.all('/api/*', (c) => c.json({ ok: true }))
   return instance
