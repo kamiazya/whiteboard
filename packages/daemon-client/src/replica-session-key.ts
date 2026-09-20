@@ -221,12 +221,7 @@ export function replicaKeyProviderFor(
       if (result.kind === 'withheld') {
         return 'withheld'
       }
-      let perWorkspace = derivedKeyMemo.get(key)
-      if (perWorkspace === undefined) {
-        perWorkspace = new Map()
-        derivedKeyMemo.set(key, perWorkspace)
-      }
-      const cachedDerived = perWorkspace.get(documentId)
+      const cachedDerived = derivedKeyMemo.get(key)?.get(documentId)
       if (cachedDerived !== undefined) {
         return { key: cachedDerived, epoch: EPOCH }
       }
@@ -236,6 +231,19 @@ export function replicaKeyProviderFor(
         documentId,
         epoch: EPOCH,
       })
+      // forget()/forgetAll() may have run while the request or the derive
+      // was outstanding. The entry this derive came from is then no longer
+      // the held one, and memoising it would resurrect what was just
+      // forgotten — so the answer is the same as if the key had never been
+      // held, and the caller's next ask goes through a fresh request.
+      if (cache.get(key) !== result) {
+        return 'withheld'
+      }
+      let perWorkspace = derivedKeyMemo.get(key)
+      if (perWorkspace === undefined) {
+        perWorkspace = new Map()
+        derivedKeyMemo.set(key, perWorkspace)
+      }
       perWorkspace.set(documentId, derived)
       return { key: derived, epoch: EPOCH }
     },

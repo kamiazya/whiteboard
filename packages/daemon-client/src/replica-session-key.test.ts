@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { openBytes, sealBytes } from './read-plane.js'
+import { deriveDocumentKey, openBytes, sealBytes } from './read-plane.js'
 import {
   forget,
   forgetAll,
@@ -394,6 +394,45 @@ describe('replicaKeyProviderFor', () => {
     await expect(openBytes(second.key, envelope, context)).rejects.toMatchObject({
       name: 'OperationError',
     })
+  })
+
+  it('forget() during an in-flight keyFor answers withheld and leaves no derived-key memo behind', async () => {
+    let resolveStale: (r: Response) => void = () => {}
+    const otherWorkspaceKey = Uint8Array.from({ length: 32 }, (_, i) => 255 - i)
+    let fetchCalls = 0
+    const fetchImpl = vi.fn(() => {
+      fetchCalls += 1
+      if (fetchCalls === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveStale = resolve
+        })
+      }
+      return Promise.resolve(
+        jsonResponse(keyResponse({ workspaceKey: base64Url(otherWorkspaceKey) })),
+      )
+    })
+    const provider = replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl))
+
+    const stale = provider.keyFor('doc-1')
+    forget(DAEMON, WORKSPACE)
+    resolveStale(jsonResponse(keyResponse()))
+    expect(await stale).toBe('withheld')
+
+    // The next ask goes through a fresh request and derives from ITS bytes;
+    // a resurrected memo would answer with a key derived from the forgotten ones.
+    const fresh = await provider.keyFor('doc-1')
+    expect(fresh).not.toBe('withheld')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    if (fresh === 'withheld') return
+    const expected = await deriveDocumentKey({
+      workspaceKey: otherWorkspaceKey,
+      workspaceKeySalt: WORKSPACE_SALT,
+      documentId: 'doc-1',
+      epoch: 0,
+    })
+    const context = { documentId: 'doc-1', epoch: 0 }
+    const envelope = await sealBytes(expected, new TextEncoder().encode('probe'), context)
+    expect(new TextDecoder().decode(await openBytes(fresh.key, envelope, context))).toBe('probe')
   })
 
   it('forgetAll() clears the derived-key memo too', async () => {
