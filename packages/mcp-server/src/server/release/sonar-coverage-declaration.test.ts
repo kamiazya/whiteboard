@@ -45,7 +45,11 @@ function sonarPatternToRegExp(pattern: string): RegExp {
       rx += '[^/]*'
       i += 1
     } else {
-      rx += pattern[i].replace(/[.+^${}()|[\]\\]/, '\\$&')
+      // Same escape set and the same `g` as vitest-projects.mjs. The flag is
+      // redundant on one character and still belongs here: without it this
+      // reads as a sanitiser that stops after the first match, which is what
+      // CodeQL's js/incomplete-sanitization said about the first version.
+      rx += pattern[i].replace(/[.+^${}()|[\]\\]/g, '\\$&')
       i += 1
     }
   }
