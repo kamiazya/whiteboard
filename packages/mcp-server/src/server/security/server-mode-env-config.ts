@@ -121,143 +121,155 @@ function parseNonNegativeInt(raw: string): number | null {
   return n
 }
 
+/**
+ * An optional env var's TRIMMED value, or undefined when it is absent or
+ * blank. The `x !== undefined && x.trim() !== ''` preamble stood at five
+ * fields, each followed by its own trim — and "unset" and "set to spaces"
+ * mean the same thing here, which is the only reason that preamble is the
+ * same every time.
+ */
+function optional(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const trimmed = env[key]?.trim()
+  return trimmed ? trimmed : undefined
+}
+
+/** A required env var's trimmed value, or null when it is absent or blank. */
+function required(env: NodeJS.ProcessEnv, key: string): string | null {
+  return optional(env, key) ?? null
+}
+
+/**
+ * An optional env var constrained to a fixed set, defaulted when absent.
+ * Answers `null` for a value outside the set, so the caller names the
+ * failure code — the codes are per-field and the messages are the contract.
+ */
+function optionalOneOf<T extends string>(
+  env: NodeJS.ProcessEnv,
+  key: string,
+  allowed: readonly T[],
+  fallback: T,
+): T | null {
+  const value = optional(env, key)
+  if (value === undefined) return fallback
+  return (allowed as readonly string[]).includes(value) ? (value as T) : null
+}
+
+/** Two fields are booleans, spelled exactly `true` or `false`. */
+function optionalBoolean(env: NodeJS.ProcessEnv, key: string, fallback: boolean): boolean | null {
+  const value = optionalOneOf(env, key, ['true', 'false'] as const, fallback ? 'true' : 'false')
+  return value === null ? null : value === 'true'
+}
+
+/**
+ * Everything the JWKS URI has to be, in one place: an https URL carrying no
+ * credentials, query or fragment. Credentials risk leaking secrets through
+ * process env or logs; query and fragment components are not part of any
+ * OIDC JWKS endpoint contract and could carry sensitive tokens.
+ */
+function checkJwksUri(uri: string): ServerModeEnvConfigFailureCode | null {
+  let parsed: URL
+  try {
+    parsed = new URL(uri)
+  } catch {
+    return 'server_mode_env.jwks_uri_must_be_https'
+  }
+  if (parsed.protocol !== 'https:') return 'server_mode_env.jwks_uri_must_be_https'
+  if (parsed.username || parsed.password) return 'server_mode_env.jwks_uri_credentials_forbidden'
+  if (parsed.search) return 'server_mode_env.jwks_uri_query_forbidden'
+  if (parsed.hash) return 'server_mode_env.jwks_uri_fragment_forbidden'
+  return null
+}
+
+/**
+ * The allowed-origin list, or the failure code it breaks. A bare `*` is
+ * refused outright; anything else carrying one has to be a leftmost-label
+ * wildcard that `origin-pattern.ts` recognises, since that is the only
+ * wildcard shape matching can honour later.
+ */
+function checkAllowedOrigins(origins: readonly string[]): ServerModeEnvConfigFailureCode | null {
+  if (origins.some((o) => o === '*')) {
+    return 'server_mode_env.allowed_origins_wildcard_forbidden'
+  }
+  for (const o of origins) {
+    if (!o.includes('*')) continue
+    const result = parseOriginPatternEntry(o)
+    if (!result.ok || result.pattern.kind !== 'wildcard-subdomain') {
+      return 'server_mode_env.allowed_origins_invalid_wildcard'
+    }
+  }
+  return null
+}
+
 export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvConfigResult {
-  // --- Required fields ---
+  const externalUrl = required(env, ENV_KEYS.EXTERNAL_URL)
+  if (externalUrl === null) {
+    return fail('server_mode_env.external_url_required', ENV_KEYS.EXTERNAL_URL)
+  }
 
-  const externalUrl = (env[ENV_KEYS.EXTERNAL_URL] ?? '').trim()
-  if (!externalUrl) return fail('server_mode_env.external_url_required', ENV_KEYS.EXTERNAL_URL)
-
-  const authStrategyRaw = (env[ENV_KEYS.AUTH_STRATEGY] ?? '').trim()
-  if (!authStrategyRaw)
+  const authStrategyRaw = required(env, ENV_KEYS.AUTH_STRATEGY)
+  if (authStrategyRaw === null) {
     return fail('server_mode_env.auth_strategy_required', ENV_KEYS.AUTH_STRATEGY)
+  }
   if (authStrategyRaw !== 'oauth-jwt') {
     return fail('server_mode_env.unknown_auth_strategy', ENV_KEYS.AUTH_STRATEGY)
   }
   const authStrategy: ServerModeAuthStrategy = 'oauth-jwt'
 
-  const jwtIssuer = (env[ENV_KEYS.JWT_ISSUER] ?? '').trim()
-  if (!jwtIssuer) return fail('server_mode_env.jwt_issuer_required', ENV_KEYS.JWT_ISSUER)
+  const jwtIssuer = required(env, ENV_KEYS.JWT_ISSUER)
+  if (jwtIssuer === null) {
+    return fail('server_mode_env.jwt_issuer_required', ENV_KEYS.JWT_ISSUER)
+  }
 
-  const jwtAudienceRaw = (env[ENV_KEYS.JWT_AUDIENCE] ?? '').trim()
-  if (!jwtAudienceRaw) return fail('server_mode_env.jwt_audience_required', ENV_KEYS.JWT_AUDIENCE)
-  const jwtAudience = splitComma(jwtAudienceRaw)
-  if (jwtAudience.length === 0)
+  const jwtAudienceRaw = required(env, ENV_KEYS.JWT_AUDIENCE)
+  const jwtAudience = jwtAudienceRaw === null ? [] : splitComma(jwtAudienceRaw)
+  if (jwtAudience.length === 0) {
     return fail('server_mode_env.jwt_audience_required', ENV_KEYS.JWT_AUDIENCE)
-
-  const jwksUri = (env[ENV_KEYS.JWKS_URI] ?? '').trim()
-  if (!jwksUri) return fail('server_mode_env.jwks_uri_required', ENV_KEYS.JWKS_URI)
-  let parsedJwksUri: URL
-  try {
-    parsedJwksUri = new URL(jwksUri)
-  } catch {
-    return fail('server_mode_env.jwks_uri_must_be_https', ENV_KEYS.JWKS_URI)
-  }
-  if (parsedJwksUri.protocol !== 'https:') {
-    return fail('server_mode_env.jwks_uri_must_be_https', ENV_KEYS.JWKS_URI)
-  }
-  // Credentials, query params, and fragments in the JWKS URI are rejected:
-  // credentials risk leaking secrets through process env or logs; query/fragment
-  // components are not part of any OIDC JWKS endpoint contract and could
-  // carry sensitive tokens.
-  if (parsedJwksUri.username || parsedJwksUri.password) {
-    return fail('server_mode_env.jwks_uri_credentials_forbidden', ENV_KEYS.JWKS_URI)
-  }
-  if (parsedJwksUri.search) {
-    return fail('server_mode_env.jwks_uri_query_forbidden', ENV_KEYS.JWKS_URI)
-  }
-  if (parsedJwksUri.hash) {
-    return fail('server_mode_env.jwks_uri_fragment_forbidden', ENV_KEYS.JWKS_URI)
   }
 
-  // --- Optional: allowedOrigins ---
+  const jwksUri = required(env, ENV_KEYS.JWKS_URI)
+  if (jwksUri === null) return fail('server_mode_env.jwks_uri_required', ENV_KEYS.JWKS_URI)
+  const jwksFailure = checkJwksUri(jwksUri)
+  if (jwksFailure !== null) return fail(jwksFailure, ENV_KEYS.JWKS_URI)
 
-  let allowedOrigins: string[]
-  const allowedOriginsRaw = env[ENV_KEYS.ALLOWED_ORIGINS]
-  if (allowedOriginsRaw !== undefined && allowedOriginsRaw.trim() !== '') {
-    allowedOrigins = splitComma(allowedOriginsRaw)
-    if (allowedOrigins.some((o) => o === '*')) {
-      return fail('server_mode_env.allowed_origins_wildcard_forbidden', ENV_KEYS.ALLOWED_ORIGINS)
-    }
-    for (const o of allowedOrigins) {
-      if (!o.includes('*')) continue
-      const result = parseOriginPatternEntry(o)
-      if (!result.ok || result.pattern.kind !== 'wildcard-subdomain') {
-        return fail('server_mode_env.allowed_origins_invalid_wildcard', ENV_KEYS.ALLOWED_ORIGINS)
-      }
-    }
-  } else {
-    allowedOrigins = [externalUrl]
+  const allowedOriginsRaw = optional(env, ENV_KEYS.ALLOWED_ORIGINS)
+  const allowedOrigins =
+    allowedOriginsRaw === undefined ? [externalUrl] : splitComma(allowedOriginsRaw)
+  if (allowedOriginsRaw !== undefined) {
+    const originsFailure = checkAllowedOrigins(allowedOrigins)
+    if (originsFailure !== null) return fail(originsFailure, ENV_KEYS.ALLOWED_ORIGINS)
   }
-
-  // --- Optional: port ---
 
   const portRaw = env[ENV_KEYS.PORT]
-  let port = 3099
-  if (portRaw !== undefined) {
-    const parsed = parsePort(portRaw)
-    if (parsed === null) return fail('server_mode_env.port_out_of_range', ENV_KEYS.PORT)
-    port = parsed
+  const port = portRaw === undefined ? 3099 : parsePort(portRaw)
+  if (port === null) return fail('server_mode_env.port_out_of_range', ENV_KEYS.PORT)
+
+  const trustedProxy = optionalBoolean(env, ENV_KEYS.TRUSTED_PROXY, false)
+  if (trustedProxy === null) {
+    return fail('server_mode_env.trusted_proxy_invalid', ENV_KEYS.TRUSTED_PROXY)
   }
 
-  // --- Optional: trustedProxy ---
-
-  const trustedProxyRaw = env[ENV_KEYS.TRUSTED_PROXY]
-  let trustedProxy = false
-  if (trustedProxyRaw !== undefined && trustedProxyRaw.trim() !== '') {
-    const v = trustedProxyRaw.trim()
-    if (v !== 'true' && v !== 'false') {
-      return fail('server_mode_env.trusted_proxy_invalid', ENV_KEYS.TRUSTED_PROXY)
-    }
-    trustedProxy = v === 'true'
+  const clockSkewRaw = optional(env, ENV_KEYS.JWT_CLOCK_SKEW_SECONDS)
+  const jwtClockSkewSeconds = clockSkewRaw === undefined ? 60 : parseNonNegativeInt(clockSkewRaw)
+  if (jwtClockSkewSeconds === null) {
+    return fail('server_mode_env.jwt_clock_skew_invalid', ENV_KEYS.JWT_CLOCK_SKEW_SECONDS)
   }
 
-  // --- Optional: jwtClockSkewSeconds ---
-
-  const clockSkewRaw = env[ENV_KEYS.JWT_CLOCK_SKEW_SECONDS]
-  let jwtClockSkewSeconds = 60
-  if (clockSkewRaw !== undefined && clockSkewRaw.trim() !== '') {
-    const parsed = parseNonNegativeInt(clockSkewRaw.trim())
-    if (parsed === null) {
-      return fail('server_mode_env.jwt_clock_skew_invalid', ENV_KEYS.JWT_CLOCK_SKEW_SECONDS)
-    }
-    jwtClockSkewSeconds = parsed
+  const jwtScopeClaim = optionalOneOf(env, ENV_KEYS.JWT_SCOPE_CLAIM, ['scope', 'scp'], 'scope')
+  if (jwtScopeClaim === null) {
+    return fail('server_mode_env.jwt_scope_claim_invalid', ENV_KEYS.JWT_SCOPE_CLAIM)
   }
 
-  // --- Optional: jwtScopeClaim ---
-
-  const scopeClaimRaw = env[ENV_KEYS.JWT_SCOPE_CLAIM]
-  let jwtScopeClaim: 'scope' | 'scp' = 'scope'
-  if (scopeClaimRaw !== undefined && scopeClaimRaw.trim() !== '') {
-    const v = scopeClaimRaw.trim()
-    if (v !== 'scope' && v !== 'scp') {
-      return fail('server_mode_env.jwt_scope_claim_invalid', ENV_KEYS.JWT_SCOPE_CLAIM)
-    }
-    jwtScopeClaim = v
+  const jwtAllowUntypedAccessTokens = optionalBoolean(
+    env,
+    ENV_KEYS.JWT_ALLOW_UNTYPED_ACCESS_TOKENS,
+    false,
+  )
+  if (jwtAllowUntypedAccessTokens === null) {
+    return fail(
+      'server_mode_env.jwt_allow_untyped_access_tokens_invalid',
+      ENV_KEYS.JWT_ALLOW_UNTYPED_ACCESS_TOKENS,
+    )
   }
-
-  // --- Optional: jwtAllowUntypedAccessTokens ---
-
-  const allowUntypedRaw = env[ENV_KEYS.JWT_ALLOW_UNTYPED_ACCESS_TOKENS]
-  let jwtAllowUntypedAccessTokens = false
-  if (allowUntypedRaw !== undefined && allowUntypedRaw.trim() !== '') {
-    const v = allowUntypedRaw.trim()
-    if (v !== 'true' && v !== 'false') {
-      return fail(
-        'server_mode_env.jwt_allow_untyped_access_tokens_invalid',
-        ENV_KEYS.JWT_ALLOW_UNTYPED_ACCESS_TOKENS,
-      )
-    }
-    jwtAllowUntypedAccessTokens = v === 'true'
-  }
-
-  // --- Optional: host ---
-
-  const host = (env[ENV_KEYS.HOST] ?? '0.0.0.0').trim() || '0.0.0.0'
-
-  // --- Optional: dataDir ---
-
-  const dataDirRaw = env[ENV_KEYS.DATA_DIR]
-  const dataDir = dataDirRaw?.trim() || undefined
 
   return {
     ok: true,
@@ -271,10 +283,10 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
       jwtClockSkewSeconds,
       jwtScopeClaim,
       jwtAllowUntypedAccessTokens,
-      host,
+      host: optional(env, ENV_KEYS.HOST) ?? '0.0.0.0',
       port,
       trustedProxy,
-      dataDir,
+      dataDir: optional(env, ENV_KEYS.DATA_DIR),
     },
   }
 }
