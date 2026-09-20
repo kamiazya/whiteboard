@@ -55,8 +55,14 @@ const textEncoder = new TextEncoder()
 // A JSON array's own delimiters mark each element's boundary, so
 // (documentId, epoch) pairs that would collide under bare string
 // concatenation ("a1" + "2" === "a" + "12") encode distinctly.
+//
+// epoch is re-validated here (not just at the persisted-envelope boundary in
+// sealedEnvelopeSchema) because NaN/Infinity/-Infinity all JSON.stringify to
+// `null` — every non-finite epoch would otherwise collapse to the same info
+// / additionalData for a given document, defeating the epoch-scoped
+// separation this module exists to provide.
 function contextBytes(tag: string, { documentId, epoch }: DocumentKeyContext) {
-  return textEncoder.encode(JSON.stringify([tag, documentId, epoch]))
+  return textEncoder.encode(JSON.stringify([tag, documentId, epochSchema.parse(epoch)]))
 }
 
 const WORKSPACE_KEY_BYTES = 32

@@ -179,6 +179,49 @@ describe('sealBytes / openBytes: tamper detection', () => {
   })
 })
 
+describe('contextBytes: non-finite epoch is rejected before HKDF info / AEAD aad', () => {
+  // NaN, Infinity and -Infinity all JSON.stringify to `null`, so a context
+  // carrying any of them would silently collide with every other one under
+  // the same (tag, documentId) unless epochSchema refuses them first.
+  it.each([
+    NaN,
+    Infinity,
+    -Infinity,
+    -1,
+    1.5,
+  ])('deriveDocumentKeyBytes rejects epoch=%s', async (epoch) => {
+    await expect(
+      deriveDocumentKeyBytes({ workspaceKey, workspaceKeySalt, documentId: 'docA', epoch }),
+    ).rejects.toThrow()
+  })
+
+  it('sealBytes rejects a non-finite epoch in its context', async () => {
+    const key = await deriveDocumentKey({
+      workspaceKey,
+      workspaceKeySalt,
+      documentId: 'docA',
+      epoch: 0,
+    })
+    await expect(
+      sealBytes(key, new TextEncoder().encode('x'), { documentId: 'docA', epoch: NaN }),
+    ).rejects.toThrow()
+  })
+
+  it('openBytes rejects a non-finite epoch in its context', async () => {
+    const key = await deriveDocumentKey({
+      workspaceKey,
+      workspaceKeySalt,
+      documentId: 'docA',
+      epoch: 0,
+    })
+    const envelope = await sealBytes(key, new TextEncoder().encode('x'), {
+      documentId: 'docA',
+      epoch: 0,
+    })
+    await expect(openBytes(key, envelope, { documentId: 'docA', epoch: NaN })).rejects.toThrow()
+  })
+})
+
 describe('sealedEnvelopeSchema', () => {
   const validEnvelope = { v: 1 as const, iv: new Uint8Array(12), ct: new Uint8Array(16), epoch: 0 }
 
@@ -210,6 +253,12 @@ describe('sealedEnvelopeSchema', () => {
 
   it('rejects ct given as a plain array rather than Uint8Array', () => {
     expect(sealedEnvelopeSchema.safeParse({ ...validEnvelope, ct: [1, 2, 3] }).success).toBe(false)
+  })
+
+  it('rejects an envelope carrying an unknown extra key (strict envelope shape)', () => {
+    expect(sealedEnvelopeSchema.safeParse({ ...validEnvelope, extra: 'unexpected' }).success).toBe(
+      false,
+    )
   })
 
   it('accepts a cross-realm Uint8Array (structured-clone shape), judged by tag not instanceof', () => {
