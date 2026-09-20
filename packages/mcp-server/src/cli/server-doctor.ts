@@ -235,7 +235,7 @@ export const SERVER_DOCTOR_CHECK_IDS = [
   'server.runtime_status',
 ] as const
 
-export type ServerDoctorCheckId = (typeof SERVER_DOCTOR_CHECK_IDS)[number]
+type ServerDoctorCheckId = (typeof SERVER_DOCTOR_CHECK_IDS)[number]
 
 /** A check of THIS doctor: the shared contract's shape, with its own ids. */
 type Check = DaemonDoctorCheck & { readonly id: ServerDoctorCheckId }
