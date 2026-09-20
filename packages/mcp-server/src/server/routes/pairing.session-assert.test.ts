@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  pairingTokenResponseSchema,
   type SessionAssertChallengeResponse,
   type SessionAssertResponse,
   sessionAssertChallengeResponseSchema,
@@ -82,7 +83,7 @@ async function pairedSession(fixture: ReturnType<typeof makeApp>, origin = HOSTE
     { Origin: origin },
   )
   expect(tokenRes.status).toBe(200)
-  const { token } = (await tokenRes.json()) as { token: string }
+  const { token } = pairingTokenResponseSchema.parse(await tokenRes.json())
   return { token, credentialId: registration.credentialId, keypair, origin }
 }
 
@@ -162,6 +163,38 @@ describe('the challenge is scoped to the SESSION TOKEN, not the origin', () => {
 })
 
 describe('POST /api/pairing/session-assert', () => {
+  it('refuses a malformed JSON body with 400', async () => {
+    const fixture = makeApp()
+    const { token } = await pairedSession(fixture)
+    const res = await fixture.app.request('/api/pairing/session-assert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        Origin: HOSTED,
+      },
+      body: 'not json',
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid JSON body' })
+  })
+
+  it('refuses a body that fails schema validation with 400 and the issues', async () => {
+    const fixture = makeApp()
+    const { token } = await pairedSession(fixture)
+    // Missing every required assertion field.
+    const res = await post(
+      fixture.app,
+      '/api/pairing/session-assert',
+      {},
+      { Authorization: `Bearer ${token}`, Origin: HOSTED },
+    )
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: string; issues: unknown[] }
+    expect(body.error).toBe('invalid input')
+    expect(body.issues.length).toBeGreaterThan(0)
+  })
+
   it('completes the full pin -> challenge -> assertion path and binds the session', async () => {
     const fixture = makeApp()
     const { token, credentialId, keypair } = await pairedSession(fixture)
@@ -463,5 +496,42 @@ describe('POST /api/pairing/session-assert', () => {
       { Authorization: `Bearer ${token}`, Origin: HOSTED },
     )
     expect(assertAfter.status).toBe(401)
+  })
+
+  it('DELETE /api/pairing/credentials/:credentialId kills a session already bound to that passkey', async () => {
+    const fixture = makeApp()
+    const { token, credentialId, keypair } = await pairedSession(fixture)
+    const { challenge } = sessionAssertChallengeResponseSchema.parse(
+      await (await mintChallenge(fixture, token, HOSTED)).json(),
+    )
+    const assertion = buildAssertion({
+      privateKey: keypair.privateKey,
+      rpId: HOST,
+      origin: HOSTED,
+      challenge: Buffer.from(challenge, 'base64url'),
+      flags: FLAGS,
+      signCount: 1,
+    })
+    const bindRes = await post(
+      fixture.app,
+      '/api/pairing/session-assert',
+      {
+        credentialId,
+        authenticatorData: assertion.authenticatorData.toString('base64url'),
+        clientDataJSON: assertion.clientDataJSON.toString('base64url'),
+        signature: assertion.signature.toString('base64url'),
+      },
+      { Authorization: `Bearer ${token}`, Origin: HOSTED },
+    )
+    expect(bindRes.status).toBe(200)
+
+    // Un-pin the passkey through the real route rather than the store.
+    const delRes = await fixture.app.request(`/api/pairing/credentials/${credentialId}`, {
+      method: 'DELETE',
+    })
+    expect(delRes.status).toBe(200)
+
+    // The session bound to it is dead, not merely the pin.
+    expect((await mintChallenge(fixture, token, HOSTED)).status).toBe(401)
   })
 })

@@ -216,12 +216,18 @@ export function createPairingRouter({
 
   // Addressed by credential id alone: an id is 16+ authenticator-random
   // bytes, and a settings UI revoking a pin has the id and not necessarily
-  // the origin it was planted from.
+  // the origin it was planted from. Also kills any live session already
+  // bound to the un-pinned passkey (tokens.revokeBoundTo) — otherwise a
+  // session that asserted before the un-pin stays fully authorized for up
+  // to its remaining 24h TTL, silently contradicting the revocation.
   app.delete('/api/pairing/credentials/:credentialId', (c) => {
     const credentialId = c.req.param('credentialId')
     const matching = credentials.list().filter((pin) => pin.credentialId === credentialId)
     if (matching.length === 0) return c.json({ error: 'unknown credential' }, 404)
     for (const pin of matching) credentials.revoke(pin.origin, pin.credentialId)
+    tokens.revokeBoundTo(
+      matching.map((pin) => ({ origin: pin.origin, credentialId: pin.credentialId })),
+    )
     return c.json({ revoked: true }, 200)
   })
 
