@@ -159,6 +159,10 @@ export function PromoteWorkspaceSection({
       setTier(undefined)
       return
     }
+    // Clear the OLD workspace's line immediately: without this, switching
+    // workspaceId while mounted leaves the stale sentence on screen until
+    // the new fetch resolves.
+    setTier(undefined)
     let cancelled = false
     listWorkspaces(daemonFetch(daemon, baseFetch), daemon.baseUrl)
       .then((response) => {
