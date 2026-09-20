@@ -38,6 +38,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
+import { Button } from '../components/ui/button.js'
 import { formatRelative } from '../components/workspace-files/format-relative.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -432,9 +433,16 @@ export function ReplicaReadPage({
             {REPLICA_STATE_COPY[pageState].body}
             {lockedLine && ` ${lockedLine}`}
           </p>
-          <button type="button" aria-disabled={reconnecting} onClick={() => void handleReconnect()}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            aria-disabled={reconnecting}
+            onClick={() => void handleReconnect()}
+          >
             {REPLICA_STATE_COPY[pageState].action}
-          </button>
+          </Button>
           {reconnecting && (
             <p className="mt-2" data-testid="replica-reconnecting-line">
               Reconnecting…
