@@ -16,7 +16,7 @@ import {
   openDocumentStore,
 } from './replica-store.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
-import { createUserSettingsStore } from './user-settings-store.js'
+import { createUserSettingsStore, STORAGE_KEY } from './user-settings-store.js'
 
 const DB_NAME = 'whiteboard-replica-store'
 const DAEMON = 'http://127.0.0.1:3099'
@@ -220,7 +220,8 @@ describe('replica-store', () => {
     disconnectFromDaemon(createUserSettingsStore(), DAEMON)
     await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(ReplicaKeyWithheldError)
     expect(keyCalls).toBe(1)
-    localStorage.clear()
+    // Only what this test wrote: origin-shared storage is never blanket-cleared.
+    localStorage.removeItem(STORAGE_KEY)
   })
 
   it('a reconnect to the same daemon with a different token forgets the previous key rather than continuing to answer under it', async () => {
