@@ -20,7 +20,7 @@ import { describe, expect, it } from 'vitest'
 const overlaySources = import.meta.glob(
   [
     './SelectionOverlay.tsx',
-    './ConnectOverlay.tsx',
+    './BoxTargetOverlay.tsx',
     './MemberOutlinesOverlay.tsx',
     './DragPreviewLayer.tsx',
     './SpatialEditor.tsx',

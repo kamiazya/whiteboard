@@ -64,6 +64,24 @@ export function endTargetExists(canvas: SpatialCanvas, id: string): boolean {
 }
 
 /**
+ * The box this element's OTHER end is on, or `undefined` when that end is a
+ * free point.
+ *
+ * Read by the overlay that offers boxes to land on: the write refuses a
+ * self-loop, so that box is marked rather than offered — offering it would
+ * offer a target that does nothing.
+ */
+export function otherEndNodeOf(
+  canvas: SpatialCanvas,
+  id: string,
+  endpoint: 'from' | 'to',
+): string | undefined {
+  const element = routableElement(canvas, id)
+  if (element === undefined) return undefined
+  return endNode(endpoint === 'from' ? element.to : element.from)
+}
+
+/**
  * Where a release lands, in the terms the write takes. A release with no
  * box under it is a bare point; whether that is a legal end at all is the
  * COLLECTION's question, and `endInkCommand` answers it.
@@ -71,7 +89,7 @@ export function endTargetExists(canvas: SpatialCanvas, id: string): boolean {
  * Rounded to whole units for the reason a dragged bend is: a point somebody
  * dragged to is a point they can find again, and 137.4183 is not.
  */
-export function releaseTarget(point: Point, targetNodeId: string | undefined): EndTarget {
+function releaseTarget(point: Point, targetNodeId: string | undefined): EndTarget {
   return targetNodeId === undefined
     ? { kind: 'point', point: { x: Math.round(point.x), y: Math.round(point.y) } }
     : { kind: 'node', node: targetNodeId }
@@ -87,11 +105,7 @@ export function releaseTarget(point: Point, targetNodeId: string | undefined): E
  * refused command still reaches `onChange`, so without this it would land
  * in history as an edit somebody can undo and see no difference from.
  */
-export function releaseMovesEnd(
-  canvas: SpatialCanvas,
-  snapshot: EndSnapshot,
-  target: EndTarget,
-): boolean {
+function releaseMovesEnd(canvas: SpatialCanvas, snapshot: EndSnapshot, target: EndTarget): boolean {
   const element = routableElement(canvas, snapshot.elementId)
   if (element === undefined) return false
   const current = snapshot.endpoint === 'from' ? element.from : element.to

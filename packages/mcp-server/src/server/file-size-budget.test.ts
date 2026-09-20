@@ -589,7 +589,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and the release branch that keeps what the marquee used to do for a
   // press ON ink — the double-press label and the root focus, both found by
   // the full browser run rather than by reading.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3097,
+  // Raised 3097 -> 3126 for the `attach` verb's wiring: the end handles
+  // beside the bend layer, the box the pointer is over threaded into the
+  // target overlay, and the two release branches that now answer for a
+  // re-attachment as well as a connect — the hit-test for `targetNodeId`,
+  // and the source box the overlay marks instead of offering.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3126,
 }
 
 describe('the path form both ledgers are keyed with', () => {
