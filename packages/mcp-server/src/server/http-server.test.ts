@@ -252,6 +252,40 @@ describe('startHttpServer membership route wiring (ADR-0041 S0-4)', () => {
   })
 })
 
+// Wiring this covers: startHttpServer must build the daemon's own
+// WorkspaceReplicaKeyStore (ADR-0042/0043) from the post-migration db handle
+// and thread it, together with `members` and `serverDeps`, into createApp —
+// createApp only mounts the replica-key router when all four (pairing,
+// members, serverDeps, replicaKeys) are present. A unit test on createApp
+// alone, or on createWorkspaceReplicaKeyStore in isolation, cannot see a
+// composition-root wiring gap in the `db` handle or the mount condition.
+describe('startHttpServer replica-key route wiring (ADR-0042/0043)', () => {
+  let running: RunningServer | undefined
+
+  afterEach(async () => {
+    await running?.close()
+    running = undefined
+  })
+
+  // Same honesty rule (and same proof shape) as the membership wiring test
+  // above: an unregistered workspace 404s rather than answering an empty
+  // key, which requires the router to be mounted AND
+  // `serverDeps.workspaceDocuments` to be wired through.
+  it('POST /api/workspaces/:workspaceId/replica-key answers 404 for an unregistered workspace on the real HTTP server', async () => {
+    const port = await acquirePort()
+    running = await startHttpServer({ port, host: '127.0.0.1' })
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/workspaces/any-workspace/replica-key`, {
+      method: 'POST',
+    })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({
+      error: 'unknown_workspace',
+      message: 'no such workspace: any-workspace',
+    })
+  })
+})
+
 // The wiring this covers: http-server.ts composes daemonBaseUrl from the
 // bound host/port and threads it into createApp -> pairingLinkContext ->
 // wb_pairing_link_create. app.test.ts only feeds createApp a hand-built

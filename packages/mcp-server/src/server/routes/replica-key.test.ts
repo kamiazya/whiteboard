@@ -56,6 +56,10 @@ interface MakeAppOptions {
   known?: readonly string[]
   defaultTier?: 'no-offline' | 'offline' | 'bounded'
   leaseTtlMs?: number
+  /** No daemon token configured (an open daemon) — every caller resolves to
+   *  an `anonymous` grant, ALL_AUTH_SCOPES, the same bypass DAEMON_TOKEN
+   *  gets. Default false, matching every other test in this file. */
+  openDaemon?: boolean
 }
 
 async function makeApp(options: MakeAppOptions = {}) {
@@ -74,7 +78,7 @@ async function makeApp(options: MakeAppOptions = {}) {
   const workspaceExists = async (id: string) => known.includes(id)
 
   const credentialResolver = createCredentialResolver({
-    daemonToken: DAEMON_TOKEN,
+    ...(options.openDaemon ? {} : { daemonToken: DAEMON_TOKEN }),
     macaroonRootKey: MACAROON_ROOT_KEY,
     pairingTokens: tokens,
     grantStore: {
@@ -227,6 +231,20 @@ describe('POST /api/workspaces/:workspaceId/replica-key', () => {
     expect(replicaKeyResponseSchema.parse(await a.json())).toEqual(
       replicaKeyResponseSchema.parse(await b.json()),
     )
+  })
+
+  // The module header's other bypass arm: an anonymous grant (an open
+  // daemon, no WHITEBOARD_DAEMON_TOKEN configured) is treated the same as
+  // the daemon token — an operator running with no token already has full
+  // authority over the data this key decrypts, so membership is never
+  // consulted. The daemon-token half above is covered repeatedly; this one
+  // was not covered at all.
+  it('an anonymous grant (open daemon) bypasses membership entirely, the same as the daemon token', async () => {
+    const fixture = await makeApp({ openDaemon: true })
+    const res = await post(fixture.app, `/api/workspaces/${WS}/replica-key`)
+    expect(res.status).toBe(200)
+    const body = replicaKeyResponseSchema.parse(await res.json())
+    expect(body.tier).toBe('offline')
   })
 
   it('refuses a pairing session with no passkey binding', async () => {

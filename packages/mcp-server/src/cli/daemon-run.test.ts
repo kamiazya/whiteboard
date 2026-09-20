@@ -175,6 +175,55 @@ describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
   })
 })
 
+describe('runDaemonRun WHITEBOARD_REPLICA_TIER wiring', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  // Regression: this CLI path (`whiteboard daemon run`) used to skip
+  // collectStartupEnvIssues entirely, so an invalid WHITEBOARD_REPLICA_TIER
+  // started the daemon silently instead of aborting — unlike server/index.ts's
+  // dev entrypoint, which already gated on it.
+  it('fails fast with a structured outcome on an invalid value and never starts the daemon', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_REPLICA_TIER: 'Offline' },
+    })
+    expect(outcome).toEqual({
+      kind: 'input-error',
+      message: expect.stringContaining('WHITEBOARD_REPLICA_TIER'),
+      code: 'startup_env',
+    })
+    expect(startHttpServerMock).not.toHaveBeenCalled()
+  })
+
+  it('threads a valid override through to startHttpServer', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_REPLICA_TIER: 'no-offline' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replicaTier: 'no-offline' }),
+    )
+  })
+
+  it('defaults to offline when the env var is unset', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: {},
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ replicaTier: 'offline' }),
+    )
+  })
+})
+
 describe('runDaemonRun --data-dir storage redirection', () => {
   afterEach(() => {
     resetDataDirForTests()
