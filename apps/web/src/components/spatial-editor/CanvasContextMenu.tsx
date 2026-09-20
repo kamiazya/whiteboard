@@ -264,6 +264,7 @@ export function CanvasContextMenu({
             ? inkMenuItems({
                 line,
                 lines: canvas.lines ?? [],
+                palette: resolveCanvasPalette(canvas, theme),
                 isEdgeLocked,
                 edgeLockEnabled,
                 onToggleEdgeLock,

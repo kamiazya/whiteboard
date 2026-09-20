@@ -35,6 +35,7 @@ import {
   endNode,
   isFrame,
   isSelfLoop,
+  type LineEnd,
   type LineJumps,
   nodeFile,
   nodeText,
@@ -107,6 +108,23 @@ export type EditorLeafCommand =
    */
   | { readonly kind: 'create-line'; readonly line: CanvasLine }
   | { readonly kind: 'delete-line'; readonly id: string }
+  /**
+   * Translate a stroke by a DELTA, where a node is moved to an absolute
+   * position.
+   *
+   * A node has one origin to name; a line is several points and no one of
+   * them is the line's position, so an absolute form would have to invent a
+   * reference point and every caller would have to agree on which. The
+   * delta is also what makes the round trip exact: it is rounded once, here,
+   * so a stroke keeps the sub-pixel offsets the pen reported instead of
+   * being re-quantised on every move.
+   */
+  | { readonly kind: 'move-line'; readonly id: string; readonly dx: number; readonly dy: number }
+  | {
+      readonly kind: 'set-line-color'
+      readonly id: string
+      readonly color: CanvasColor | undefined
+    }
   | { readonly kind: 'set-edge-label'; readonly id: string; readonly label: string }
   | {
       readonly kind: 'set-edge-ends'
@@ -491,6 +509,29 @@ export function deleteInkCommand(canvas: SpatialCanvas, id: string): EditorComma
 }
 
 /**
+ * `deleteInkCommand`'s sibling for a MOVE, and the same reason for existing:
+ * the selection holds ink ids without knowing which collection each came
+ * from, and exactly one place should look.
+ *
+ * An EDGE answers `undefined` rather than a command that would do nothing. A
+ * relation's path is routed from the boxes it joins, so there is no geometry
+ * of its own to translate — moving one means moving an end or placing a bend.
+ * A caller nudging a mixed selection therefore moves the strokes and leaves
+ * the relations to follow the nodes they connect, which is what a person
+ * watching the board expects either way.
+ */
+export function moveInkCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  dx: number,
+  dy: number,
+): EditorLeafCommand | undefined {
+  return (canvas.lines ?? []).some((line) => line.id === id)
+    ? { kind: 'move-line', id, dx, dy }
+    : undefined
+}
+
+/**
  * Appends `line`, rejecting a colliding id as a no-op — the same guard
  * `createNode` and `connectNodes` carry, for the same reason: the schema's id
  * check refuses a canvas holding two of anything with one id.
@@ -507,6 +548,61 @@ function createLine(canvas: SpatialCanvas, line: CanvasLine): SpatialCanvas {
  * writing one would make a no-op look like an edit to every value comparison
  * downstream.
  */
+/**
+ * Replaces the line with `id` by `update(line)`, or returns the input canvas
+ * when there is no such line — `updateNode`'s sibling, and the same totality
+ * contract.
+ */
+function updateLine(
+  canvas: SpatialCanvas,
+  id: string,
+  update: (line: CanvasLine) => CanvasLine,
+): SpatialCanvas {
+  const lines = canvas.lines
+  if (lines === undefined || !lines.some((line) => line.id === id)) return canvas
+  return { ...canvas, lines: lines.map((line) => (line.id === id ? update(line) : line)) }
+}
+
+function moveLine(canvas: SpatialCanvas, id: string, dx: number, dy: number): SpatialCanvas {
+  // Whole units, the way a node position and a dragged bend are rounded. The
+  // MODEL takes a fraction since ADR-0037 slice 4, so this is a UI decision:
+  // rounding the DELTA rather than the points is what lets a stroke keep the
+  // sub-pixel geometry the pen reported while still landing on the grid a
+  // person is nudging it along.
+  const stepX = toPosition(dx)
+  const stepY = toPosition(dy)
+  if (stepX === 0 && stepY === 0) return canvas
+  const shift = (end: LineEnd): LineEnd =>
+    // An end ON a node stays where it is: the attachment is the whole point
+    // of that end, and the node is what carries it. What moves is the
+    // geometry the line itself owns.
+    end.kind === 'point'
+      ? { ...end, point: { x: end.point.x + stepX, y: end.point.y + stepY } }
+      : end
+  return updateLine(canvas, id, (line) => ({
+    ...line,
+    from: shift(line.from),
+    to: shift(line.to),
+    ...(line.bends === undefined
+      ? {}
+      : { bends: line.bends.map((bend) => ({ x: bend.x + stepX, y: bend.y + stepY })) }),
+  }))
+}
+
+function setLineColor(
+  canvas: SpatialCanvas,
+  id: string,
+  color: CanvasColor | undefined,
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    // Removed rather than set to `undefined`, the same canonicalisation
+    // `setEdgeColor` makes: absence is how a canvas says "no colour", and a
+    // present-but-undefined key would serialise differently for no reason.
+    const { color: _removed, ...rest } = line
+    return color === undefined ? rest : { ...rest, color }
+  })
+}
+
 function deleteLine(canvas: SpatialCanvas, id: string): SpatialCanvas {
   const lines = canvas.lines
   if (lines === undefined || !lines.some((line) => line.id === id)) return canvas
@@ -926,6 +1022,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return createLine(canvas, command.line)
     case 'delete-line':
       return deleteLine(canvas, command.id)
+    case 'move-line':
+      return moveLine(canvas, command.id, command.dx, command.dy)
+    case 'set-line-color':
+      return setLineColor(canvas, command.id, command.color)
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
     case 'set-edge-ends':

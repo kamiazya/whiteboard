@@ -1398,6 +1398,71 @@ describe('lines in the editor', () => {
     expect(applyCommand(canvas, { kind: 'delete-line', id: 'nope' })).toBe(canvas)
   })
 
+  // A stroke could be drawn, picked, banded, shift-added, ungrouped, locked
+  // and deleted, and after that it was fixed — `element-verb-parity.test.ts`
+  // is what made that visible by asking every verb of every collection.
+  // These are the two cheapest of the seven it reported.
+
+  it('moves a stroke by translating the points it owns', () => {
+    const canvas: SpatialCanvas = {
+      ...baseCanvas(),
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'point', point: { x: 10, y: 20 } },
+          to: { kind: 'point', point: { x: 110, y: 220 } },
+          bends: [{ x: 60, y: 120 }],
+        },
+      ],
+    }
+    const next = applyCommand(canvas, { kind: 'move-line', id: 'l1', dx: 5, dy: -7 })
+    expect(next.lines?.[0]).toEqual({
+      id: 'l1',
+      from: { kind: 'point', point: { x: 15, y: 13 } },
+      to: { kind: 'point', point: { x: 115, y: 213 } },
+      bends: [{ x: 65, y: 113 }],
+    })
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('leaves an end that is ON a node where it is, because the node carries it', () => {
+    // The attachment is the point of the end: a stroke hung on a box follows
+    // the box, so translating that end would tear it off the thing it names.
+    // What moves is the geometry the line itself owns.
+    const next = applyCommand(lineCanvas(), { kind: 'move-line', id: 'l1', dx: 40, dy: 40 })
+    expect(next.lines?.[0]).toEqual({
+      id: 'l1',
+      from: { kind: 'node', node: 'a' },
+      to: { kind: 'point', point: { x: 440, y: 440 } },
+    })
+  })
+
+  it('is a no-op for a move that goes nowhere, and for a line that is not there', () => {
+    const canvas = lineCanvas()
+    expect(applyCommand(canvas, { kind: 'move-line', id: 'l1', dx: 0, dy: 0 })).toBe(canvas)
+    expect(applyCommand(canvas, { kind: 'move-line', id: 'nope', dx: 5, dy: 5 })).toBe(canvas)
+  })
+
+  it('colours a stroke, and clears the colour by naming none', () => {
+    const coloured = applyCommand(lineCanvas(), {
+      kind: 'set-line-color',
+      id: 'l1',
+      color: '#ff0000',
+    })
+    expect(coloured.lines?.[0]?.color).toBe('#ff0000')
+    // Absent, not `undefined`: the same canonicalisation every other colour
+    // write here makes, so a cleared line serialises the way a never-coloured
+    // one does.
+    const cleared = applyCommand(coloured, { kind: 'set-line-color', id: 'l1', color: undefined })
+    expect(cleared.lines?.[0]).not.toHaveProperty('color')
+    expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
+  })
+
+  it('is a no-op when the colour write names a line the canvas does not hold', () => {
+    const canvas = lineCanvas()
+    expect(applyCommand(canvas, { kind: 'set-line-color', id: 'nope', color: '1' })).toBe(canvas)
+  })
+
   it('takes a line with it when the node one of its ends names is deleted', () => {
     // The same referential-integrity rule `delete-node` already enforces for
     // edges. A line ending on a node that is gone would be a dangling

@@ -11,17 +11,21 @@
  * is not, so a press on ink opened the empty-canvas menu. On a phone that
  * left no way to remove a stroke at all.
  */
-import type { CanvasLine } from '@kamiazya/whiteboard-model'
+import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
+import type { CanvasColor, CanvasLine } from '@kamiazya/whiteboard-model'
 import { resolveInkGroup } from '@kamiazya/whiteboard-plugin-visual'
 import { Lock as LockIcon, LockOpen, Trash2, Ungroup } from 'lucide-react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
+import { colorRow } from './color-row.js'
 
 export interface InkMenuItemsInput {
   readonly line: CanvasLine
   /** Every stroke on the board, for finding the rest of this one's mark. */
   readonly lines: readonly CanvasLine[]
+  /** The palette the BOARD is drawn in, so a swatch shows the ink a pick produces. */
+  readonly palette: SpatialPalette
   readonly isEdgeLocked: (id: string) => boolean
   readonly edgeLockEnabled: boolean
   readonly onToggleEdgeLock: CanvasCommands['onToggleEdgeLock']
@@ -35,6 +39,7 @@ export interface InkMenuItemsInput {
 export function inkMenuItems({
   line,
   lines,
+  palette,
   isEdgeLocked,
   edgeLockEnabled,
   onToggleEdgeLock,
@@ -58,7 +63,20 @@ export function inkMenuItems({
   // verb that does nothing is worse than an absent one.
   const group = resolveInkGroup(line)
   const mates = group === undefined ? [] : lines.filter((entry) => resolveInkGroup(entry) === group)
+  const recolour = (color: CanvasColor | undefined) =>
+    applyResult({
+      state: { kind: 'idle' },
+      // The whole MARK, not the one stroke pressed — the same unit every
+      // other verb on this menu acts on, and the same unit a press selects.
+      // A handwritten character recoloured one stroke at a time is a
+      // character in two colours.
+      commands: (mates.length > 1 ? mates : [line]).map(
+        (entry) => ({ kind: 'set-line-color', id: entry.id, color }) as const,
+      ),
+    })
   return [
+    colorRow(palette, line.color, recolour),
+    { kind: 'separator' as const },
     ...(mates.length > 1
       ? [
           {

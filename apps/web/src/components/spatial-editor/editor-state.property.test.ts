@@ -327,6 +327,10 @@ const COMMAND_COVERAGE = {
   // line-ink.browser.test.tsx.
   'delete-line':
     'not modelled: no gesture deletes ink; the Delete keypress against a selected line is line-ink.browser.test.tsx',
+  'move-line':
+    'not modelled: the model drives POINTER gestures and no pointer gesture moves ink — nudging a selected stroke is a keypress. Its canvas meaning is commands.test.ts (plus the additivity property beside it) and its keyboard path is ink-nudge.browser.test.tsx',
+  'set-line-color':
+    'not modelled: the ink menu’s swatch row, a single-field write with no gesture or selection coupling — the same class as set-edge-color beside it. Its canvas meaning is commands.test.ts and its menu is freehand-ink.browser.test.tsx',
   'reorder-nodes': 'covered',
   'set-body':
     'not modelled: the markdown editor writes the document body, which is not in the canvas at all — applyCommand returns the same reference',

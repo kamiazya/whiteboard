@@ -282,9 +282,17 @@ Two things it measured:
 
 - **The first reading is the finding.** A `CanvasLine` stores seven things a
   person could want changed — both ends, a side, bends, colour, label,
-  facets, and where the stroke sits — and the editor writes NONE of them.
+  facets, and where the stroke sits — and the editor wrote NONE of them.
   Ink could be drawn, picked, banded, shift-added, ungrouped, locked and
   deleted, and after that it was fixed. Nothing was red about that.
+  Two were closed in the increment after (`move-line` on the arrow keys,
+  `set-line-color` on the ink menu's swatch row), which is the matrix
+  working in the direction it exists for: each fix had to come past the
+  `gap:` entry that named it, and the pinned count moved 7 -> 5 in the same
+  diff. The remaining five are the ends, the side, the bends and the facets,
+  and the DRAG is recorded beside the move as what a command's existence does
+  not buy — the gesture machine is keyed on a node id, so ink joins the
+  keyboard nudge and not yet the pointer.
 - **A family that issues no verb of its own is invisible to a verb matrix.**
   Copy, cut, paste and duplicate build a batch of `create-node`/`create-edge`,
   so every cell reads `command` for them and the family looks answered; what

@@ -115,6 +115,8 @@ const COMMAND_FACTS = {
 
   'create-line': { verb: 'create', target: 'lines' },
   'delete-line': { verb: 'delete', target: 'lines' },
+  'move-line': { verb: 'move', target: 'lines' },
+  'set-line-color': { verb: 'set-color', target: 'lines' },
   'ungroup-ink': { verb: 'ungroup', target: 'lines' },
 
   'create-comment': { verb: 'create', target: 'comments' },
@@ -135,7 +137,16 @@ const COMMAND_FACTS = {
     'n/a: it names a line and writes the CANVAS facet through `withEdgeStyle` — line jumps are how crossings are drawn board-wide, not a property of any one stroke',
 } satisfies Record<EditorLeafCommand['kind'], CommandFacts>
 
-type Cell = 'command' | `gap: ${string}` | `n/a: ${string}`
+/**
+ * `command, gap: …` is the fourth answer and the one a filled gap needs.
+ *
+ * A cell is (verb, collection), so the moment ANY command exists for the
+ * pair it flips to `command` — and whatever the command does not reach goes
+ * quiet again, which is the silence this file exists against. A stroke can
+ * be nudged now and still cannot be dragged, and that is worth a sentence
+ * rather than a cell that reads as finished.
+ */
+type Cell = 'command' | `command, gap: ${string}` | `gap: ${string}` | `n/a: ${string}`
 
 /**
  * The matrix. `command` is verified against `COMMAND_FACTS`; the other two
@@ -156,7 +167,7 @@ const VERB_PARITY = {
     edges:
       'n/a: an edge is a relation whose path is ROUTED from the boxes it joins, so there is nothing to translate — moving one means moving an end (set-ends) or placing a bend (set-bends)',
     lines:
-      'gap: a stroke can be picked, banded, shift-added, deleted and locked, and nothing translates one. The editor drag reads node ids (selection plus extraIds) and no move-line command exists, so a stroke lands where it was drawn for ever',
+      'command, gap: the arrow keys nudge a selected stroke, and the POINTER does not — `gestures.ts` keys its moving state on a node id, so a press on ink still opens a marquee. Giving the machine an ink arm is its own increment',
     comments: 'command',
   },
   resize: {
@@ -234,8 +245,7 @@ const VERB_PARITY = {
   'set-color': {
     nodes: 'command',
     edges: 'command',
-    lines:
-      "gap: `canvasLineSchema` carries `color` and the context menu offers it for a node and an edge only, so every stroke is drawn in the theme's ink whatever the document stored",
+    lines: 'command',
     comments:
       'n/a: the annotation layer is chrome and is painted by the editor, never by the document',
   },
@@ -331,7 +341,7 @@ describe('every command kind says which verb it is and what it acts on', () => {
     // `.claude/rules/coverage-ledger.md` asks for one: the type check proves
     // the table matches the union, and nothing else here would notice the
     // union having quietly become five entries.
-    expect(commandFacts).toHaveLength(38)
+    expect(commandFacts).toHaveLength(40)
     expect(elementCommands.length).toBeGreaterThan(30)
   })
 
@@ -383,7 +393,7 @@ describe('every command kind says which verb it is and what it acts on', () => {
 describe('what each kind of element can have done to it', () => {
   it('a cell claiming a command has one', () => {
     for (const [verb, collection, cell] of cells) {
-      if (cell !== 'command') continue
+      if (!cell.startsWith('command')) continue
       expect(
         hasCommand(verb, collection),
         `${verb}/${collection} says \`command\` and no entry in COMMAND_FACTS declares that verb over that collection. Either the command was removed — in which case the cell is a \`gap:\` now and somebody has to say what that costs — or it was renamed and COMMAND_FACTS has not caught up.`,
@@ -397,10 +407,10 @@ describe('what each kind of element can have done to it', () => {
     // sentence that is no longer true, and a stale entry is worse than none
     // because it reads as a decision somebody took.
     for (const [verb, collection, cell] of cells) {
-      if (cell === 'command') continue
+      if (cell.startsWith('command')) continue
       expect(
         hasCommand(verb, collection),
-        `${verb}/${collection} says "${cell}", and a command for it now exists. Change the cell to \`command\`.`,
+        `${verb}/${collection} says "${cell}", and a command for it now exists. Change the cell to \`command\` — and if the command does not reach every surface the verb should, say so as \`command, gap: …\` rather than letting the cell read as finished.`,
       ).toBe(false)
     }
   })
@@ -431,7 +441,7 @@ describe('what each kind of element can have done to it', () => {
     // whole stroke sits — and the editor writes NONE of them. Ink can be
     // drawn, picked, banded, shift-added, ungrouped, locked and deleted, and
     // after that it is fixed. Nothing was red about that before this line.
-    expect(Object.fromEntries(byCollection)).toEqual({ lines: 7 })
+    expect(Object.fromEntries(byCollection)).toEqual({ lines: 5 })
   })
 })
 

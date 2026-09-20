@@ -325,6 +325,51 @@ it('offers Delete on the ink itself, for a device with no Delete key', async () 
   await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(0)
 })
 
+it('colours the whole mark from the ink menu', async () => {
+  // `canvasLineSchema` has carried `color` since the split, and the menu
+  // offered the swatch row for a node and an edge only — so every stroke was
+  // drawn in the theme's ink whatever the document stored, and a person who
+  // wanted a red circle round something could not have one.
+  //
+  // The whole MARK, not the stroke pressed: a handwritten character is
+  // several strokes, and the other verbs on this menu already act on all of
+  // them. Recolouring one at a time is a character in two colours.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  drawStroke(root, [
+    [120, 400],
+    [240, 180],
+  ])
+  drawStroke(root, [
+    [250, 190],
+    [380, 420],
+  ])
+  await expect.poll(() => latest.canvas.lines?.length ?? 0).toBe(2)
+  await userEvent.click(page.getByTestId('select-tool-button').element() as HTMLElement)
+
+  const line = latest.canvas.lines?.[0]
+  const first = line?.from.kind === 'point' ? line.from.point : { x: 0, y: 0 }
+  const last = line?.to.kind === 'point' ? line.to.point : { x: 0, y: 0 }
+  const on = { x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 }
+  const rect = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      clientX: rect.left + on.x,
+      clientY: rect.top + on.y,
+    }),
+  )
+
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await userEvent.click(await page.getByRole('menuitemradio', { name: 'Red' }).element())
+
+  // The stored value is the semantic slot, never a resolved hex: the theme
+  // decides what '1' paints as.
+  await expect.poll(() => latest.canvas.lines?.map((entry) => entry.color)).toEqual(['1', '1'])
+})
+
 it('joins strokes written one after another into one mark', async () => {
   // A handwritten character is several strokes and a person means one thing
   // by them. Consecutive strokes near each other carry the same group, so
