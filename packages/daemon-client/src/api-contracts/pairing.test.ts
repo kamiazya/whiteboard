@@ -158,22 +158,22 @@ describe('listGrantsResponseSchema', () => {
   })
 })
 
-describe('pairingTokenNonceSchema bounds', () => {
-  function nonceOfBytes(byteLength: number): string {
-    return Buffer.alloc(byteLength, 7).toString('base64url')
-  }
+function base64urlOfBytes(byteLength: number): string {
+  return Buffer.alloc(byteLength, 7).toString('base64url')
+}
 
+describe('pairingTokenNonceSchema bounds', () => {
   it('accepts nonces that decode to 16-32 bytes', () => {
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(16)).success).toBe(true)
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(32)).success).toBe(true)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(16)).success).toBe(true)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(32)).success).toBe(true)
   })
 
   it('rejects a nonce one byte short of the minimum', () => {
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(15)).success).toBe(false)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(15)).success).toBe(false)
   })
 
   it('rejects a nonce one byte over the maximum', () => {
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(33)).success).toBe(false)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(33)).success).toBe(false)
   })
 
   it('rejects a non-base64url string', () => {
@@ -252,10 +252,6 @@ describe('credential pin schemas', () => {
     ).toBe(false)
   })
 })
-
-function base64urlOfBytes(byteLength: number): string {
-  return Buffer.alloc(byteLength, 7).toString('base64url')
-}
 
 describe('sessionAssertChallengeResponseSchema', () => {
   const valid: SessionAssertChallengeResponse = {

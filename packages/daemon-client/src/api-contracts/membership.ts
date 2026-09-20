@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { pinnedCredentialSummarySchema } from './pairing.js'
 
 /**
  * Membership wire contract, shared between the daemon's member routes and
@@ -13,9 +14,7 @@ export const memberProfileSummarySchema = z
   .object({
     profileId: z.string().min(1),
     displayName: z.string().min(1),
-    credentials: z.array(
-      z.object({ credentialId: z.string().min(1), origin: z.string().min(1) }).strict(),
-    ),
+    credentials: z.array(pinnedCredentialSummarySchema.pick({ credentialId: true, origin: true })),
     createdAt: z.string(),
   })
   .strict()
