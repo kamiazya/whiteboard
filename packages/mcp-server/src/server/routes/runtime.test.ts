@@ -153,16 +153,27 @@ describe('runtime routes', () => {
     expect(touch).toHaveBeenCalledTimes(1)
   })
 
-  it('schedules shutdown when authenticated', async () => {
-    const { app, shutdown, touch } = createApp()
+  /**
+   * The daemon is stopped by a SIGNAL, not over HTTP. `whiteboard daemon stop`
+   * reads the pid and signals the process, and the idle timer calls `close()`
+   * directly — so the route this replaces had no caller anywhere, while
+   * presenting the one HTTP surface that could end the process.
+   *
+   * Asserted with the DAEMON TOKEN, the widest credential there is: a refusal
+   * for a narrow one would not distinguish "route deleted" from "route
+   * guarded".
+   */
+  it('serves no HTTP route that stops the daemon, not even to the daemon token', async () => {
+    const { app, shutdown } = createApp()
+
     const res = await app.request('/api/runtime/shutdown', {
       method: 'POST',
       headers: { Authorization: 'Bearer secret' },
     })
-    expect(res.status).toBe(200)
-    expect(touch).toHaveBeenCalledTimes(1)
+
+    expect(res.status).not.toBe(200)
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(shutdown).toHaveBeenCalledTimes(1)
+    expect(shutdown).not.toHaveBeenCalled()
   })
 
   it('returns a storage report for an authenticated GET /api/runtime/storage', async () => {
@@ -237,17 +248,6 @@ describe('runtime routes', () => {
       expect(mockComputeStorageReport).not.toHaveBeenCalled()
     })
 
-    it('rejects a pairing bearer on admin routes (shutdown stays daemon-token-only)', async () => {
-      const { app, shutdown, sessionToken } = createPairedApp()
-      const res = await app.request('/api/runtime/shutdown', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${sessionToken}`, Origin: PAIRED_ORIGIN },
-      })
-      expect(res.status).toBe(401)
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(shutdown).not.toHaveBeenCalled()
-    })
-
     it('rejects a pairing bearer on POST /api/runtime/logs/prune', async () => {
       const { app, sessionToken } = createPairedApp()
       const res = await app.request('/api/runtime/logs/prune', {
@@ -282,17 +282,16 @@ describe('runtime routes', () => {
       expect(mockComputeStorageReport).not.toHaveBeenCalled()
     })
 
-    it('rejects a runtime:read grant on admin routes (shutdown stays daemon-token-only)', async () => {
+    it('rejects a runtime:read grant on the admin route (prune stays daemon-token-only)', async () => {
       const grantStore = createOAuthTransactionStore()
       const { accessToken } = grantStore.mintAccessToken(['runtime:read'], 'hosted-client')
-      const { app, shutdown } = createApp({ grantStore })
-      const res = await app.request('/api/runtime/shutdown', {
+      const { app } = createApp({ grantStore })
+      const res = await app.request('/api/runtime/logs/prune', {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       expect(res.status).toBe(401)
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(shutdown).not.toHaveBeenCalled()
+      expect(mockPurgeOldDaemonLogs).not.toHaveBeenCalled()
     })
   })
 
@@ -474,23 +473,6 @@ describe('runtime routes — a macaroon reaches the read half, like every other 
   // The per-surface policy this router keeps, and the reason its check is not
   // just `hasRequiredScopes`: the admin half is daemon-token-only whatever
   // scopes a narrow credential holds — including `runtime:admin` itself.
-  it('refuses a macaroon on the admin half even when it carries runtime:admin', async () => {
-    const { app, shutdown } = createApp({ macaroonRootKey: ROOT_KEY })
-    const token = await mintMacaroon({
-      rootKey: ROOT_KEY,
-      tokenId: 'agent-1',
-      caveats: [{ kind: 'scope', scopes: ['runtime:admin', 'runtime:read'] }],
-    })
-
-    const res = await app.request('/api/runtime/shutdown', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    expect(res.status).toBe(401)
-    expect(shutdown).not.toHaveBeenCalled()
-  })
-
   it('refuses a macaroon on POST /api/runtime/logs/prune, which is daemon-token-only in the handler', async () => {
     const { app } = createApp({ macaroonRootKey: ROOT_KEY })
     const token = await mintMacaroon({

@@ -347,7 +347,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     instanceId,
     touch,
     getStatus: getRuntimeStatus,
-    shutdown: close,
     allowedWebOrigins,
     oauthClientRegistry: options.oauthClientRegistry,
     wsTicketStore,

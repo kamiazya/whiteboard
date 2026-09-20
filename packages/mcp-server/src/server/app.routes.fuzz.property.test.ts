@@ -354,7 +354,6 @@ const RULES: Record<string, Rule> = {
   },
   'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
   'POST /api/runtime/touch': { answers: 'json' },
-  'POST /api/runtime/shutdown': { answers: 'json' },
   'GET /api/runtime/storage': { answers: 'json' },
   'POST /api/runtime/logs/prune': { answers: 'json' },
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },

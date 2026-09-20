@@ -163,7 +163,6 @@ export async function startServerModeHttp(
       clients: { connected: 0, ready: 0 },
       publicBaseUrl: options.publicBaseUrl,
     }),
-    shutdown: close,
   })
 
   // Server mode is the MULTI-INSTANCE deployment (ADR-0020), so it is the one

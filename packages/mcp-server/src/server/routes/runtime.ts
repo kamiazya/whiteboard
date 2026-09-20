@@ -26,7 +26,6 @@ export interface RuntimeRouterOptions {
   identity: DaemonIdentity
   touch: () => void
   getStatus: () => RuntimeStatus
-  shutdown: () => Promise<void>
   /**
    * Every credential this router honours, resolved in one place. REQUIRED:
    * the previous shape took the daemon token, the grant store and the pairing
@@ -101,9 +100,11 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // (the global daemon-mutation middleware skips /api/runtime/*), so it
     // must accept the same credential set as the global layer for READ
     // routes: daemon token, scope-checked OAuth grant, or an origin-bound
-    // pairing session token. Admin routes (shutdown, touch, logs prune)
-    // accept the daemon token only — a paired web origin can inspect the
-    // daemon but never stop it or delete its logs.
+    // pairing session token. The admin routes (touch, logs prune) accept the
+    // daemon token only — a paired web origin can inspect the daemon but
+    // never delete its logs. Stopping the daemon is not an HTTP route at
+    // all: `whiteboard daemon stop` signals the process and the idle timer
+    // calls close() directly, so no credential ends it.
     const scope = resolveApiRouteScope(c.req.method, c.req.path)
     if (scope?.kind === 'public') return next()
 
@@ -120,8 +121,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     // follows it: a narrow credential reaches only the READ half of
     // `/api/runtime/*`, whatever scopes it holds. Dropping it in favour of
     // `hasRequiredScopes` alone would let a grant holding `runtime:admin`
-    // reach shutdown and the log prune, which the admin routes have never
-    // allowed. That is a per-surface policy, so it stays here rather than
+    // reach the log prune, which the admin routes have never allowed. That is a per-surface policy, so it stays here rather than
     // moving into the resolver.
     if (scope?.kind === 'scoped' && scope.scopes.includes('runtime:read')) {
       if (hasRequiredScopes(grant.scopes, scope.scopes)) return next()
@@ -136,14 +136,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
 
   app.post('/api/runtime/touch', (c) => {
     options.touch()
-    return c.json({ ok: true })
-  })
-
-  app.post('/api/runtime/shutdown', (c) => {
-    options.touch()
-    setTimeout(() => {
-      void options.shutdown()
-    }, 0)
     return c.json({ ok: true })
   })
 

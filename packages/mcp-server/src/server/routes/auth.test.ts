@@ -23,7 +23,7 @@ describe('requiresDaemonAuth', () => {
     expect(requiresDaemonAuth('/api/runtime/ping')).toBe(false)
     expect(requiresDaemonAuth('/api/runtime/status')).toBe(true)
     expect(requiresDaemonAuth('/api/runtime/touch')).toBe(true)
-    expect(requiresDaemonAuth('/api/runtime/shutdown')).toBe(true)
+    expect(requiresDaemonAuth('/api/runtime/logs/prune')).toBe(true)
     expect(requiresDaemonAuth('/api/runtime/brand-new')).toBe(true)
   })
 
