@@ -1880,11 +1880,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       canvasRef,
       primaryId: selection?.id,
       extraIds,
+      selectedInkIds,
       pendingCut,
       setPendingCut,
       onChange,
       createId,
       selectNodes,
+      selectInk: setSelectedInkIds,
       viewport,
       viewportCenterScreen,
     })

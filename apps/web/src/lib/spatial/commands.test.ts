@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyCommand,
   buildFragmentInsertCommand,
+  DUPLICATE_OFFSET_PX,
   deleteInkCommand,
   type EditorCommand,
 } from './commands.js'
@@ -868,6 +869,65 @@ describe('set-line-jumps', () => {
     const off = applyCommand(both, { kind: 'set-line-jumps', lineJumps: 'none' })
 
     expect(edgesFacet(off)).toEqual({ routing: 'curved' })
+  })
+})
+
+describe('buildFragmentInsertCommand carries ink', () => {
+  const strokeFragment = {
+    nodes: [],
+    edges: [],
+    lines: [
+      {
+        id: 'l1',
+        from: { kind: 'point' as const, point: { x: 100, y: 100 } },
+        to: { kind: 'point' as const, point: { x: 200, y: 200 } },
+        bends: [{ x: 150, y: 120 }],
+      },
+    ],
+  }
+
+  it('pastes a stroke on its own, where a fragment of pure ink used to be nothing', () => {
+    // The guard was `fragment.nodes.length === 0`, so a copied stroke and an
+    // empty clipboard answered the same way.
+    const command = buildFragmentInsertCommand(baseCanvas(), strokeFragment, () => 'fresh')
+    expect(command?.kind).toBe('batch')
+    const next = applyCommand(baseCanvas(), command as EditorCommand)
+    expect(next.lines).toHaveLength(1)
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('offsets every point the stroke owns, so the copy lands beside the original', () => {
+    const next = applyCommand(
+      baseCanvas(),
+      buildFragmentInsertCommand(baseCanvas(), strokeFragment, () => 'fresh') as EditorCommand,
+    )
+    const line = next.lines?.[0]
+    // The same +16 cascade a duplicated node takes.
+    expect(line?.from).toEqual({
+      kind: 'point',
+      point: { x: 100 + DUPLICATE_OFFSET_PX, y: 100 + DUPLICATE_OFFSET_PX },
+    })
+    expect(line?.bends).toEqual([{ x: 150 + DUPLICATE_OFFSET_PX, y: 120 + DUPLICATE_OFFSET_PX }])
+  })
+
+  it('centres an ink-only paste on the anchor, reading the stroke for its bounds', () => {
+    // A node-only bounds computation answers Infinity here, so "paste here"
+    // put the stroke nowhere a person could find it.
+    const next = applyCommand(
+      baseCanvas(),
+      buildFragmentInsertCommand(baseCanvas(), strokeFragment, () => 'fresh', {
+        x: 500,
+        y: 500,
+      }) as EditorCommand,
+    )
+    const line = next.lines?.[0]
+    const from = line?.from.kind === 'point' ? line.from.point : undefined
+    const to = line?.to.kind === 'point' ? line.to.point : undefined
+    expect(from).toBeDefined()
+    expect(to).toBeDefined()
+    // The stroke spans 100..200 on both axes, so its middle lands on 500,500.
+    expect(((from?.x ?? 0) + (to?.x ?? 0)) / 2).toBe(500)
+    expect(((from?.y ?? 0) + (to?.y ?? 0)) / 2).toBe(500)
   })
 })
 

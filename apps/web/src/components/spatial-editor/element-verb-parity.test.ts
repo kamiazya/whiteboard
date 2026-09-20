@@ -296,8 +296,7 @@ const VERB_PARITY = {
 const FRAGMENT_CARRIES = {
   nodes: 'carried',
   edges: 'carried',
-  lines:
-    'gap: `clipboardFragmentSchema` has no `lines` field, so a stroke is dropped by copy, cut, paste and duplicate alike — silently, because the fragment is built from the node selection and a stroke was never in it',
+  lines: 'carried',
   comments:
     'n/a: a thread is anchored feedback ABOUT a spot rather than content (ADR-0024), so copying a box must not carry somebody’s conversation to another board',
 } satisfies Record<ElementCollection, 'carried' | `gap: ${string}` | `n/a: ${string}`>

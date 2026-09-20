@@ -572,21 +572,44 @@ function moveLine(canvas: SpatialCanvas, id: string, dx: number, dy: number): Sp
   const stepX = toPosition(dx)
   const stepY = toPosition(dy)
   if (stepX === 0 && stepY === 0) return canvas
+  return updateLine(canvas, id, (line) => shiftLine(line, stepX, stepY))
+}
+
+/**
+ * The points a line OWNS — its free ends and its bends, never an end that
+ * names a node, whose position is the node's.
+ *
+ * One definition with three readers — the paste's bounds, the cut-as-move's
+ * bounds, and whoever asks next. They have to agree about what a stroke
+ * occupies, or a fragment centres on a box it does not have.
+ */
+export function ownedLinePoints(line: CanvasLine): readonly Point[] {
+  return [
+    ...(line.from.kind === 'point' ? [line.from.point] : []),
+    ...(line.to.kind === 'point' ? [line.to.point] : []),
+    ...(line.bends ?? []),
+  ]
+}
+
+/**
+ * Translate a stroke's own geometry — the ONE producer, shared by the move
+ * command and the paste offset, so a stroke that travels cannot disagree
+ * with one that is dragged about what moving it means.
+ *
+ * An end ON a node stays where it is: the attachment is the whole point of
+ * that end, and the node is what carries it.
+ */
+function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
   const shift = (end: LineEnd): LineEnd =>
-    // An end ON a node stays where it is: the attachment is the whole point
-    // of that end, and the node is what carries it. What moves is the
-    // geometry the line itself owns.
-    end.kind === 'point'
-      ? { ...end, point: { x: end.point.x + stepX, y: end.point.y + stepY } }
-      : end
-  return updateLine(canvas, id, (line) => ({
+    end.kind === 'point' ? { ...end, point: { x: end.point.x + dx, y: end.point.y + dy } } : end
+  return {
     ...line,
     from: shift(line.from),
     to: shift(line.to),
     ...(line.bends === undefined
       ? {}
-      : { bends: line.bends.map((bend) => ({ x: bend.x + stepX, y: bend.y + stepY })) }),
-  }))
+      : { bends: line.bends.map((bend) => ({ x: bend.x + dx, y: bend.y + dy })) }),
+  }
 }
 
 function setLineColor(
@@ -1231,25 +1254,40 @@ export const DUPLICATE_OFFSET_PX = 16
  */
 export function buildFragmentInsertCommand(
   canvas: SpatialCanvas,
-  fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
+  fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines' | 'cut'>,
   createId: () => string,
   anchor?: Point,
 ): EditorCommand | undefined {
-  if (fragment.nodes.length === 0) return undefined
+  // Ink alone is a fragment: a copied stroke used to answer here exactly as
+  // an empty clipboard does.
+  if (fragment.nodes.length === 0 && (fragment.lines ?? []).length === 0) return undefined
   const existingIds = new Set([
     ...canvas.nodes.map((node) => node.id),
     ...canvas.edges.map((edge) => edge.id),
+    ...(canvas.lines ?? []).map((line) => line.id),
   ])
   const reminted = remintClipboardFragment(fragment, createId, existingIds)
   let dx = DUPLICATE_OFFSET_PX
   let dy = DUPLICATE_OFFSET_PX
   if (anchor !== undefined) {
-    const minX = Math.min(...reminted.nodes.map((node) => node.x))
-    const minY = Math.min(...reminted.nodes.map((node) => node.y))
-    const maxX = Math.max(...reminted.nodes.map((node) => node.x + node.width))
-    const maxY = Math.max(...reminted.nodes.map((node) => node.y + node.height))
-    dx = Math.round(anchor.x - (minX + maxX) / 2)
-    dy = Math.round(anchor.y - (minY + maxY) / 2)
+    // Read from the boxes AND the strokes, because either may be the whole
+    // fragment: over nodes alone an ink-only paste computed `Infinity` and
+    // landed nowhere a person could find it.
+    const xs = [
+      ...reminted.nodes.flatMap((node) => [node.x, node.x + node.width]),
+      ...reminted.lines.flatMap((line) => ownedLinePoints(line).map((point) => point.x)),
+    ]
+    const ys = [
+      ...reminted.nodes.flatMap((node) => [node.y, node.y + node.height]),
+      ...reminted.lines.flatMap((line) => ownedLinePoints(line).map((point) => point.y)),
+    ]
+    // A fragment of strokes hung entirely on boxes owns no point of its own,
+    // and there is nothing to centre; the cascade offset is the honest
+    // answer rather than a NaN.
+    if (xs.length > 0 && ys.length > 0) {
+      dx = Math.round(anchor.x - (Math.min(...xs) + Math.max(...xs)) / 2)
+      dy = Math.round(anchor.y - (Math.min(...ys) + Math.max(...ys)) / 2)
+    }
   }
   // A cut fragment reconnects its severed boundary edges to peers that
   // still exist on THIS canvas (same-canvas paste is a move); a missing
@@ -1291,6 +1329,9 @@ export function buildFragmentInsertCommand(
       ),
       ...[...reminted.edges, ...boundaryEdges].map(
         (edge) => ({ kind: 'create-edge', edge }) as const,
+      ),
+      ...reminted.lines.map(
+        (line) => ({ kind: 'create-line', line: shiftLine(line, dx, dy) }) as const,
       ),
     ],
   }

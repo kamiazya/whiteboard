@@ -13,6 +13,7 @@ import {
   applyCommand,
   buildFragmentInsertCommand,
   DUPLICATE_OFFSET_PX,
+  ownedLinePoints,
 } from '../../lib/spatial/commands.js'
 import type { Point, Viewport } from '../../lib/spatial/viewport.js'
 import { screenToCanvas } from '../../lib/spatial/viewport.js'
@@ -36,6 +37,13 @@ export interface ClipboardActionsInputs {
   /** The primary selected node's id, when a node selection exists. */
   readonly primaryId: string | undefined
   readonly extraIds: Iterable<string>
+  /**
+   * The selected strokes and relations. Ink carries an id of its own and is
+   * implied by no node, so a fragment that reads the node selection alone
+   * cannot see it — which is how copy, cut, paste and duplicate all dropped
+   * a stroke silently.
+   */
+  readonly selectedInkIds: readonly string[]
   readonly pendingCut: PendingCut | null
   readonly setPendingCut: (next: PendingCut | null) => void
   readonly onChange: (next: SpatialCanvas, command: EditorCommand) => void
@@ -47,6 +55,8 @@ export interface ClipboardActionsInputs {
    * node/edge exclusivity where they are enforced, in the editor.
    */
   readonly selectNodes: (ids: readonly string[]) => void
+  /** The ink half of the same seam: make exactly these strokes the selection. */
+  readonly selectInk: (ids: readonly string[]) => void
   readonly viewport: Viewport
   /** Root-local screen point at the middle of the visible canvas. */
   readonly viewportCenterScreen: () => Point
@@ -62,14 +72,39 @@ export function useClipboardActions({
   canvasRef,
   primaryId,
   extraIds,
+  selectedInkIds,
   pendingCut,
   setPendingCut,
   onChange,
   createId,
   selectNodes,
+  selectInk,
   viewport,
   viewportCenterScreen,
 }: ClipboardActionsInputs) {
+  /**
+   * Everything the clipboard family acts on, whatever collection it is in.
+   *
+   * ONE set rather than a node list beside an ink list: `extractClipboardFragment`
+   * matches by id, so the only thing it needs to know is what is selected.
+   */
+  const selectedIds = (): Set<string> =>
+    new Set([...(primaryId === undefined ? [] : [primaryId]), ...extraIds, ...selectedInkIds])
+
+  /** Whether anything at all is selected — a node, a relation or a stroke. */
+  const hasSelection = (): boolean => primaryId !== undefined || selectedInkIds.length > 0
+
+  /** What a paste or a duplicate created, so the copies become the selection. */
+  const selectCreated = (command: EditorCommand): void => {
+    if (command.kind !== 'batch') return
+    const nodes = command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : []))
+    const lines = command.commands.flatMap((c) => (c.kind === 'create-line' ? [c.line.id] : []))
+    if (nodes.length > 0) selectNodes(nodes)
+    // Ink is selected whether or not boxes were, because the two selections
+    // are independent: a paste of one stroke leaves the node selection alone
+    // and a mixed paste selects both halves of what it made.
+    if (lines.length > 0) selectInk(lines)
+  }
   /**
    * Clones the selection as ONE batch command (one undo step): reminted
    * ids via the clipboard-fragment helpers, +16px offset (the standard
@@ -77,9 +112,9 @@ export function useClipboardActions({
    * selected — with their properties. The copies become the selection.
    */
   const duplicateSelection = (): boolean => {
-    if (primaryId === undefined) return false
+    if (!hasSelection()) return false
     const current = canvasRef.current
-    const fragment = extractClipboardFragment(current, new Set([primaryId, ...extraIds]))
+    const fragment = extractClipboardFragment(current, selectedIds())
     const command = buildFragmentInsertCommand(
       current,
       fragment,
@@ -89,11 +124,7 @@ export function useClipboardActions({
     const running = applyCommand(current, command)
     if (running === current) return false
     onChange(running, command)
-    const remintedIds =
-      command.kind === 'batch'
-        ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
-        : []
-    if (remintedIds.length > 0) selectNodes(remintedIds)
+    selectCreated(command)
     return true
   }
 
@@ -103,9 +134,9 @@ export function useClipboardActions({
    * when there is nothing to copy.
    */
   const copySelection = (): ClipboardFragment | null => {
-    if (primaryId === undefined) return null
-    const fragment = extractClipboardFragment(canvasRef.current, new Set([primaryId, ...extraIds]))
-    if (fragment.nodes.length === 0) return null
+    if (!hasSelection()) return null
+    const fragment = extractClipboardFragment(canvasRef.current, selectedIds())
+    if (fragment.nodes.length === 0 && (fragment.lines ?? []).length === 0) return null
     writeClipboardFragment(fragment)
     // The newest clipboard intent wins: a plain copy lifts a pending cut.
     setPendingCut(null)
@@ -118,21 +149,28 @@ export function useClipboardActions({
    * reconnects them — a cut is the front half of a move, not a delete.
    */
   const cutSelection = (): ClipboardFragment | null => {
-    if (primaryId === undefined) return null
-    const fragment = extractClipboardFragment(
-      canvasRef.current,
-      new Set([primaryId, ...extraIds]),
-      {
-        cutId: crypto.randomUUID(),
-      },
-    )
-    if (fragment.nodes.length === 0 || fragment.cut === undefined) return null
+    if (!hasSelection()) return null
+    const fragment = extractClipboardFragment(canvasRef.current, selectedIds(), {
+      cutId: crypto.randomUUID(),
+    })
+    if (
+      (fragment.nodes.length === 0 && (fragment.lines ?? []).length === 0) ||
+      fragment.cut === undefined
+    ) {
+      return null
+    }
     writeClipboardFragment(fragment)
     // Defer the delete: hold the originals as a ghost until the paste
     // decides what the cut meant (move here, copy elsewhere, or nothing).
+    // Strokes are held the same way and for the same reason — the snapshot
+    // is what makes ANY change to a held element read as "someone touched
+    // it" and cancel the hold.
     setPendingCut({
       cutId: fragment.cut.id,
-      snapshot: new Map(fragment.nodes.map((node) => [node.id, JSON.stringify(node)])),
+      snapshot: new Map([
+        ...fragment.nodes.map((node) => [node.id, JSON.stringify(node)] as const),
+        ...(fragment.lines ?? []).map((line) => [line.id, JSON.stringify(line)] as const),
+      ]),
     })
     return fragment
   }
@@ -162,7 +200,7 @@ export function useClipboardActions({
 
   /** Paste an explicit fragment (in-app slot, or one parsed off the OS clipboard). */
   const pasteFragment = (
-    fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
+    fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines' | 'cut'>,
     at?: Point,
   ): boolean => {
     const current = canvasRef.current
@@ -172,31 +210,47 @@ export function useClipboardActions({
     // of move-node commands = one undo step that only moves them back.
     if (fragment.cut !== undefined && pendingCut?.cutId === fragment.cut.id) {
       const held = current.nodes.filter((node) => pendingCut.snapshot.has(node.id))
-      if (held.length > 0) {
+      // A cut stroke is held the same way and moves with the rest. It needs no
+      // remint and no reconnection: a move keeps every id, which is what makes
+      // this path simpler than the paste below rather than a copy of it.
+      const heldInk = (current.lines ?? []).filter((line) => pendingCut.snapshot.has(line.id))
+      if (held.length > 0 || heldInk.length > 0) {
         let dx = DUPLICATE_OFFSET_PX
         let dy = DUPLICATE_OFFSET_PX
         if (at !== undefined) {
-          const minX = Math.min(...held.map((node) => node.x))
-          const minY = Math.min(...held.map((node) => node.y))
-          const maxX = Math.max(...held.map((node) => node.x + node.width))
-          const maxY = Math.max(...held.map((node) => node.y + node.height))
-          dx = Math.round(at.x - (minX + maxX) / 2)
-          dy = Math.round(at.y - (minY + maxY) / 2)
+          // Boxes AND strokes, for the reason the paste bounds read both: a
+          // cut of pure ink answers `Infinity` over nodes alone.
+          const xs = [
+            ...held.flatMap((node) => [node.x, node.x + node.width]),
+            ...heldInk.flatMap((line) => ownedLinePoints(line).map((point) => point.x)),
+          ]
+          const ys = [
+            ...held.flatMap((node) => [node.y, node.y + node.height]),
+            ...heldInk.flatMap((line) => ownedLinePoints(line).map((point) => point.y)),
+          ]
+          if (xs.length > 0 && ys.length > 0) {
+            dx = Math.round(at.x - (Math.min(...xs) + Math.max(...xs)) / 2)
+            dy = Math.round(at.y - (Math.min(...ys) + Math.max(...ys)) / 2)
+          }
         }
         const moveCommand: EditorCommand = {
           kind: 'batch',
-          commands: held.map((node) => ({
-            kind: 'move-node' as const,
-            id: node.id,
-            x: node.x + dx,
-            y: node.y + dy,
-          })),
+          commands: [
+            ...held.map((node) => ({
+              kind: 'move-node' as const,
+              id: node.id,
+              x: node.x + dx,
+              y: node.y + dy,
+            })),
+            ...heldInk.map((line) => ({ kind: 'move-line' as const, id: line.id, dx, dy })),
+          ],
         }
         setPendingCut(null)
         const running = applyCommand(current, moveCommand)
         if (running === current) return false
         onChange(running, moveCommand)
-        selectNodes(held.map((node) => node.id))
+        if (held.length > 0) selectNodes(held.map((node) => node.id))
+        if (heldInk.length > 0) selectInk(heldInk.map((line) => line.id))
         return true
       }
     }
@@ -214,7 +268,7 @@ export function useClipboardActions({
         : undefined
     const command = buildFragmentInsertCommand(
       current,
-      { nodes: fragment.nodes, edges: fragment.edges, cut },
+      { nodes: fragment.nodes, edges: fragment.edges, lines: fragment.lines, cut },
       () => createId?.() ?? crypto.randomUUID(),
       at,
     )
@@ -238,11 +292,7 @@ export function useClipboardActions({
       )
     }
     onChange(running, command)
-    const remintedIds =
-      command.kind === 'batch'
-        ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
-        : []
-    if (remintedIds.length > 0) selectNodes(remintedIds)
+    selectCreated(command)
     return true
   }
 

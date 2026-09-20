@@ -167,7 +167,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // (the `updateNode` sibling both need), the two writes, and
   // `moveInkCommand` — `deleteInkCommand`'s twin, and the one place that
   // looks at which collection a selected ink id came from.
-  'apps/web/src/lib/spatial/commands.ts': 1297,
+  // Raised 1297 -> 1338 for the clipboard carrying ink: `ownedLinePoints`
+  // (what a stroke occupies, with three readers now), `shiftLine` (the one
+  // producer both the move and the paste offset go through), and the
+  // fragment insert reading both collections for its bounds.
+  'apps/web/src/lib/spatial/commands.ts': 1338,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -722,7 +726,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
-  'apps/web/src/lib/spatial/commands.test.ts': 1615,
+  // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
+  // ink, the offset on every point a stroke owns, and the anchor bounds that
+  // used to read Infinity over nodes alone.
+  'apps/web/src/lib/spatial/commands.test.ts': 1675,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
@@ -747,11 +754,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  // 858 -> 874 for the three raises the two ink writes needed, each with the
+  // 858 -> 881 for the raises the two ink writes needed, each with the
   // reason beside it. That is the entry doing its job rather than growing:
   // a raise costs a sentence, so a change that widens a file pays for it in
   // the diff a reviewer reads.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 874,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 881,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
