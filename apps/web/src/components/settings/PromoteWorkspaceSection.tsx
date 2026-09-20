@@ -17,6 +17,7 @@
  * this section renders on a settings page that must not pay for the CRDT
  * bundle until the user actually reaches for promotion.
  */
+import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Button } from '../../components/ui/button.js'
 import {
@@ -37,6 +38,7 @@ import {
   passkeySupported,
   registerPasskey,
 } from '../../lib/passkey-attestation.js'
+import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
 import type { PromotionResultRecord, UserSettings } from '../../lib/user-settings-store.js'
 import { type WorkspaceIdentity, workspaceLabel } from '../../lib/workspace-handle.js'
 
@@ -60,6 +62,12 @@ export interface PromoteWorkspaceSectionProps {
    * omitted, `null` to stand in for a browser without passkeys.
    */
   passkeyCredentials?: PasskeyCredentials | null
+  /**
+   * The daemon-kept workspace in view. The line about what this device
+   * keeps of it is hidden without one — a cold load with a daemon merely
+   * detected names no workspace yet.
+   */
+  workspaceId?: string
 }
 
 /**
@@ -126,11 +134,42 @@ export function PromoteWorkspaceSection({
   reload,
   baseFetch,
   passkeyCredentials,
+  workspaceId,
 }: PromoteWorkspaceSectionProps) {
   const targetSelectId = useId()
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const [flow, setFlow] = useState<PromoteFlow>({ step: 'idle' })
   const [passkey, setPasskey] = useState<PasskeyState>({ kind: 'none' })
+  const [tier, setTier] = useState<ReplicaTier | undefined>(undefined)
+
+  // What this device keeps of the workspace in view (ADR-0042's read plane).
+  // Reads the summary this section otherwise never fetches for itself — the
+  // Move flow's own listWorkspaces call answers move TARGETS, not the
+  // current workspace's own row.
+  useEffect(() => {
+    if (!daemon || workspaceId === undefined) {
+      setTier(undefined)
+      return
+    }
+    let cancelled = false
+    const fetchImpl = createDaemonFetch(
+      daemon.baseUrl,
+      daemon.token ?? undefined,
+      baseFetch ?? globalThis.fetch.bind(globalThis),
+    )
+    listWorkspaces(fetchImpl, daemon.baseUrl)
+      .then((response) => {
+        if (cancelled) return
+        const row = response.workspaces.find((ws) => ws.workspaceId === workspaceId)
+        setTier(row?.tier)
+      })
+      .catch(() => {
+        if (!cancelled) setTier(undefined)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [daemon?.baseUrl, daemon?.token, baseFetch, workspaceId])
   // Resolved per call rather than once: a test seam is fixed, but the page's
   // own API is read when it is needed.
   const credentialsOf = useCallback((): PasskeyCredentials | undefined => {
@@ -385,6 +424,11 @@ export function PromoteWorkspaceSection({
         <p className="text-xs text-muted-foreground">
           Connect a daemon to move the documents this browser keeps onto it, with their edit history
           and images.
+        </p>
+      )}
+      {tier !== undefined && (
+        <p data-testid="replica-tier-line" className="text-xs text-muted-foreground">
+          {REPLICA_TIER_COPY[tier]}
         </p>
       )}
       <Button
