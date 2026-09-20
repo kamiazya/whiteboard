@@ -33,6 +33,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { bendInkCommand } from '../../lib/spatial/commands.js'
 import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
   type Box,
@@ -243,9 +244,18 @@ function findNode(canvas: SpatialCanvas, id: string) {
 
 /** Whether the gesture's target(s) are still present, with matching type, in `canvas`. */
 /** The bends an edge stores — its own field since ADR-0037 slice 4. */
-function storedWaypoints(canvas: SpatialCanvas, edgeId: string): readonly Point[] {
-  const edge = canvas.edges.find((candidate) => candidate.id === edgeId)
-  return edge?.bends ?? []
+/**
+ * The points the element STORES, whichever collection it is in. The scene
+ * hands an edge and a line out identically, so the id the bend affordance
+ * carries could be either — and reading `canvas.edges` alone answered an
+ * empty list for every stroke, which reads as "this has no bends" rather
+ * than as "I looked in one place".
+ */
+function storedWaypoints(canvas: SpatialCanvas, id: string): readonly Point[] {
+  const element =
+    canvas.edges.find((candidate) => candidate.id === id) ??
+    (canvas.lines ?? []).find((candidate) => candidate.id === id)
+  return element?.bends ?? []
 }
 
 /**
@@ -375,13 +385,22 @@ function reducePointerUpMoving(
  * an edge storing no bends takes a computed route again — and the model
  * refuses an empty array for exactly that reason: absence already says it.
  */
-function bendCommand(edgeId: string, waypoints: readonly Point[]): EditorCommand {
-  return { kind: 'set-edge-bends', id: edgeId, bends: [...waypoints] }
+function bendCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  waypoints: readonly Point[],
+): readonly EditorCommand[] {
+  // `bendInkCommand` is the one place that looks at which collection the id
+  // came from; an id in neither answers nothing rather than a write aimed at
+  // a guess.
+  const command = bendInkCommand(canvas, id, [...waypoints])
+  return command === undefined ? [] : [command]
 }
 
 function reducePointerUpBending(
   state: BendSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
+  canvas: SpatialCanvas,
 ): GestureResult {
   const dx = event.point.x - state.startPoint.x
   const dy = event.point.y - state.startPoint.y
@@ -394,12 +413,13 @@ function reducePointerUpBending(
       ? // Whole units, the way a node position is rounded. The MODEL accepts
         // a fraction since ADR-0037 slice 4, so this is a UI decision rather
         // than a schema one: a point somebody dragged to is a point they can
-        // find again, and 137.4183 is not. Ink, when it arrives, is the case
-        // that wants the fraction — and it will not come through this drag.
+        // find again, and 137.4183 is not. Ink reaches this drag now, and
+        // takes the same rounding: a stroke's own points keep whatever the
+        // pen reported, and a bend somebody placed by hand is placed here.
         { x: Math.round(point.x + dx), y: Math.round(point.y + dy) }
       : point,
   )
-  return { state: { kind: 'idle' }, commands: [bendCommand(state.edgeId, moved)] }
+  return { state: { kind: 'idle' }, commands: bendCommand(canvas, state.edgeId, moved) }
 }
 
 function reducePointerUpResizing(
@@ -628,7 +648,12 @@ export function reduceGesture(
         stateOnly({ kind: 'connecting', fromNodeId: event.nodeId }),
       )
     case 'pointerdown-bend': {
-      if (!canvas.edges.some((edge) => edge.id === event.edgeId)) return idle
+      if (
+        !canvas.edges.some((edge) => edge.id === event.edgeId) &&
+        !(canvas.lines ?? []).some((line) => line.id === event.edgeId)
+      ) {
+        return idle
+      }
       if (event.waypoints[event.index] === undefined) return idle
       return withPendingTextCommit(
         state,
@@ -647,16 +672,15 @@ export function reduceGesture(
       if (point === undefined || (event.dx === 0 && event.dy === 0)) return idle
       return {
         state: { kind: 'idle' },
-        commands: [
-          bendCommand(
-            event.edgeId,
-            stored.map((current, at) =>
-              at === event.index
-                ? { x: Math.round(current.x + event.dx), y: Math.round(current.y + event.dy) }
-                : current,
-            ),
+        commands: bendCommand(
+          canvas,
+          event.edgeId,
+          stored.map((current, at) =>
+            at === event.index
+              ? { x: Math.round(current.x + event.dx), y: Math.round(current.y + event.dy) }
+              : current,
           ),
-        ],
+        ),
       }
     }
     case 'remove-bend': {
@@ -664,12 +688,11 @@ export function reduceGesture(
       if (stored[event.index] === undefined) return idle
       return {
         state: { kind: 'idle' },
-        commands: [
-          bendCommand(
-            event.edgeId,
-            stored.filter((_point, at) => at !== event.index),
-          ),
-        ],
+        commands: bendCommand(
+          canvas,
+          event.edgeId,
+          stored.filter((_point, at) => at !== event.index),
+        ),
       }
     }
     case 'start-text-edit':
@@ -729,7 +752,7 @@ export function reduceGesture(
         case 'connecting':
           return reducePointerUpConnecting(state, event, createId, canvas)
         case 'bending':
-          return reducePointerUpBending(state, event)
+          return reducePointerUpBending(state, event, canvas)
         case 'drawing': {
           const line = freehandLine(
             createId(),

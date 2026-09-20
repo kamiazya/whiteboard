@@ -61,6 +61,8 @@
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type {
+  CanvasEdge,
+  CanvasLine,
   CommentThread,
   Proposal,
   SpatialCanvas,
@@ -631,8 +633,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
       [edgePaths],
     )
-    const selectedEdge =
-      selectedEdgeId === null ? undefined : canvas.edges.find((edge) => edge.id === selectedEdgeId)
+    // Named for the TYPE it holds rather than for the state that keys it:
+    // `selectedEdgeId` may name a relation or a stroke, because the scene
+    // hands both out as the same kind of node. Looking in `canvas.edges`
+    // alone is what left a selected stroke with no bend affordance at all.
+    const selectedRoutable: CanvasEdge | CanvasLine | undefined =
+      selectedEdgeId === null
+        ? undefined
+        : (canvas.edges.find((edge) => edge.id === selectedEdgeId) ??
+          (canvas.lines ?? []).find((line) => line.id === selectedEdgeId))
     const {
       commentPlacementObstacles,
       hitTestComment,
@@ -2811,10 +2820,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             {selectedInkIds.length > 0 && (
               <EdgeSelectionHighlight selectedEdgeIds={selectedInkIds} edgePaths={edgePaths} />
             )}
-            {selectedEdge !== undefined && (
+            {selectedRoutable !== undefined && (
               <EdgeBendLayer
-                edge={selectedEdge}
-                path={edgePathOf(selectedEdge.id) ?? []}
+                edge={selectedRoutable}
+                path={edgePathOf(selectedRoutable.id) ?? []}
                 viewport={viewport}
                 begin={beginOverlayGesture}
                 dispatch={(event) => applyResult(reduceGesture(gestureState, canvas, event))}

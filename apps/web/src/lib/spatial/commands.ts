@@ -121,6 +121,18 @@ export type EditorLeafCommand =
    */
   | { readonly kind: 'move-line'; readonly id: string; readonly dx: number; readonly dy: number }
   | {
+      /**
+       * The points a stroke is drawn THROUGH, as a whole list — the bend
+       * drag's write, exactly as `set-edge-bends` is for a relation. An
+       * empty list clears the field, because absence already says "take a
+       * computed route again" and the model refuses an empty array for that
+       * reason.
+       */
+      readonly kind: 'set-line-bends'
+      readonly id: string
+      readonly bends: readonly { readonly x: number; readonly y: number }[]
+    }
+  | {
       readonly kind: 'set-line-color'
       readonly id: string
       readonly color: CanvasColor | undefined
@@ -520,6 +532,26 @@ export function deleteInkCommand(canvas: SpatialCanvas, id: string): EditorComma
  * the relations to follow the nodes they connect, which is what a person
  * watching the board expects either way.
  */
+/**
+ * The third of the ink-id siblings, and the reason there is a family: the
+ * selection carries ink ids without knowing which collection each came from,
+ * so exactly one place per VERB looks, rather than every call site
+ * remembering to search two lists.
+ *
+ * Unlike the move, both collections answer — a relation's bends are as real
+ * as a stroke's, and the drag affordance is the same one.
+ */
+export function bendInkCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  bends: readonly { readonly x: number; readonly y: number }[],
+): EditorLeafCommand | undefined {
+  if (canvas.edges.some((edge) => edge.id === id)) return { kind: 'set-edge-bends', id, bends }
+  if ((canvas.lines ?? []).some((line) => line.id === id))
+    return { kind: 'set-line-bends', id, bends }
+  return undefined
+}
+
 export function moveInkCommand(
   canvas: SpatialCanvas,
   id: string,
@@ -610,6 +642,17 @@ function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
       ? {}
       : { bends: line.bends.map((bend) => ({ x: bend.x + dx, y: bend.y + dy })) }),
   }
+}
+
+function setLineBends(
+  canvas: SpatialCanvas,
+  id: string,
+  bends: readonly { readonly x: number; readonly y: number }[],
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    const { bends: _previous, ...rest } = line
+    return bends.length === 0 ? rest : { ...rest, bends: [...bends] }
+  })
 }
 
 function setLineColor(
@@ -1049,6 +1092,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return moveLine(canvas, command.id, command.dx, command.dy)
     case 'set-line-color':
       return setLineColor(canvas, command.id, command.color)
+    case 'set-line-bends':
+      return setLineBends(canvas, command.id, command.bends)
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
     case 'set-edge-ends':

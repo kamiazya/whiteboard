@@ -116,6 +116,7 @@ const COMMAND_FACTS = {
   'create-line': { verb: 'create', target: 'lines' },
   'delete-line': { verb: 'delete', target: 'lines' },
   'move-line': { verb: 'move', target: 'lines' },
+  'set-line-bends': { verb: 'set-bends', target: 'lines' },
   'set-line-color': { verb: 'set-color', target: 'lines' },
   'ungroup-ink': { verb: 'ungroup', target: 'lines' },
 
@@ -238,8 +239,7 @@ const VERB_PARITY = {
   'set-bends': {
     nodes: 'n/a: a bend is a point on a drawn path',
     edges: 'command',
-    lines:
-      'gap: `bendsFieldSchema` is declared once and used by BOTH the edge and the line, so a stroke stores bends the editor can neither place nor clear',
+    lines: 'command',
     comments: 'n/a: nothing draws a path for a thread',
   },
   'set-color': {
@@ -340,7 +340,7 @@ describe('every command kind says which verb it is and what it acts on', () => {
     // `.claude/rules/coverage-ledger.md` asks for one: the type check proves
     // the table matches the union, and nothing else here would notice the
     // union having quietly become five entries.
-    expect(commandFacts).toHaveLength(40)
+    expect(commandFacts).toHaveLength(41)
     expect(elementCommands.length).toBeGreaterThan(30)
   })
 
@@ -440,7 +440,7 @@ describe('what each kind of element can have done to it', () => {
     // whole stroke sits — and the editor writes NONE of them. Ink can be
     // drawn, picked, banded, shift-added, ungrouped, locked and deleted, and
     // after that it is fixed. Nothing was red about that before this line.
-    expect(Object.fromEntries(byCollection)).toEqual({ lines: 5 })
+    expect(Object.fromEntries(byCollection)).toEqual({ lines: 4 })
   })
 })
 

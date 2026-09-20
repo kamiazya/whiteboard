@@ -21,6 +21,7 @@ import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-vi
 import { describe, expect, it } from 'vitest'
 import {
   applyCommand,
+  bendInkCommand,
   buildFragmentInsertCommand,
   DUPLICATE_OFFSET_PX,
   deleteInkCommand,
@@ -1516,6 +1517,43 @@ describe('lines in the editor', () => {
     const cleared = applyCommand(coloured, { kind: 'set-line-color', id: 'l1', color: undefined })
     expect(cleared.lines?.[0]).not.toHaveProperty('color')
     expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
+  })
+
+  it('stores the points a stroke is drawn through, and clears them with an empty list', () => {
+    const bent = applyCommand(lineCanvas(), {
+      kind: 'set-line-bends',
+      id: 'l1',
+      bends: [{ x: 250, y: 250 }],
+    })
+    expect(bent.lines?.[0]?.bends).toEqual([{ x: 250, y: 250 }])
+    // Absence already says "take a computed route again", which is why the
+    // model refuses an empty array — the same contract `set-edge-bends` has.
+    const straight = applyCommand(bent, { kind: 'set-line-bends', id: 'l1', bends: [] })
+    expect(straight.lines?.[0]).not.toHaveProperty('bends')
+    expect(() => spatialCanvasSchema.parse(straight)).not.toThrow()
+  })
+
+  it('picks the bend write by the collection the id came from', () => {
+    // The selection carries ink ids without knowing which collection each is
+    // in — the scene hands an edge and a line out identically — so exactly
+    // one place looks, the way `deleteInkCommand` already does for a delete.
+    const canvas: SpatialCanvas = {
+      ...lineCanvas(),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    const bends = [{ x: 1, y: 2 }]
+    expect(bendInkCommand(canvas, 'e1', bends)).toEqual({
+      kind: 'set-edge-bends',
+      id: 'e1',
+      bends,
+    })
+    expect(bendInkCommand(canvas, 'l1', bends)).toEqual({
+      kind: 'set-line-bends',
+      id: 'l1',
+      bends,
+    })
+    // A stale id must not write to whatever happens to share it.
+    expect(bendInkCommand(canvas, 'nope', bends)).toBeUndefined()
   })
 
   it('is a no-op when the colour write names a line the canvas does not hold', () => {

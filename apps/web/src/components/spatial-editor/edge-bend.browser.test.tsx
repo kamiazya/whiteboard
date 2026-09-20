@@ -164,3 +164,41 @@ it('an arrow key on a focused bend moves it, so the affordance is not pointer-on
   // never reach the canvas's own edge deletion.
   expect(latest.canvas.edges).toHaveLength(1)
 })
+
+it('bends a STROKE the same way, from the same handle', async () => {
+  // A line stores its bends in the same field an edge does —
+  // `bendsFieldSchema` is declared once and used by both — and the scene
+  // hands the two out identically, so the affordance was already generic and
+  // said it was not: the layer's prop named `CanvasEdge`, the reducer's
+  // guard and its `storedWaypoints` read `canvas.edges`, and the editor
+  // looked its selection up there too. A selected stroke got no handle at
+  // all, and every one of those reads was correct for the collection it knew
+  // about.
+  const inkBoard: SpatialCanvas = {
+    nodes,
+    edges: [],
+    lines: [
+      {
+        id: 'l1',
+        from: { kind: 'point', point: { x: 160, y: 300 } },
+        to: { kind: 'point', point: { x: 560, y: 300 } },
+      },
+    ],
+  }
+  const { Host, latest } = makeHost(inkBoard)
+  const { container } = render(<Host />)
+  await selectTheEdge(container)
+
+  const ghost = await waitForOne(container, 'edge-bend-ghost')
+  const from = centre(ghost)
+  const to = { clientX: from.clientX, clientY: from.clientY + 90 }
+  await press(ghost, from)
+  const root = rootOf(container)
+  await moveTo(root, to)
+  await release(root, to)
+
+  await vi.waitFor(() => expect(latest.canvas.lines?.[0]?.bends).toHaveLength(1))
+  // The relation collection is untouched: the write went to the one the id
+  // actually came from.
+  expect(latest.canvas.edges).toEqual([])
+})
