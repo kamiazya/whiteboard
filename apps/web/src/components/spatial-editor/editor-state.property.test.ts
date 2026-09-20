@@ -411,6 +411,8 @@ const GESTURE_EVENT_COVERAGE = {
     'not modelled: its only command is set-edge-facet, which this model already declares unmodelled — a plugin-owned payload it cannot observe. The gesture arithmetic is edge-bend-gesture.test.ts and the flow is edge-bend.browser.test.tsx',
   'remove-bend':
     'not modelled: the same set-edge-facet write with one point dropped, and no gesture or selection state to model; edge-bend-gesture.test.ts pins both the last-bend and the keep-the-rest cases',
+  'pointerdown-ink':
+    'not modelled: the press that arms an ink drag. This model reduces gestures over generated NODES and never draws a stroke, so nothing here produces one; its reducer arms are ink-drag.test.ts and the whole way from a pointer to the moved ink is ink-drag.browser.test.tsx',
   'move-bend':
     'not modelled: the keyboard twin of the bend drag — one set-edge-facet write with one point moved, no gesture state; edge-bend-gesture.test.ts pins it and edge-bend.browser.test.tsx drives the arrow keys',
 } satisfies Record<GestureEvent['type'], SurfaceCoverage>

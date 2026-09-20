@@ -1249,9 +1249,29 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         setMarquee({ start: point, current: point })
         applySelection({ type: 'collapse-extras' })
         if (hitPathId !== undefined) {
-          // The whole MARK, not the one stroke pressed: a handwritten
-          // character is several strokes and a person pressing one means it.
-          setSelectedInkIds(withGroupMates([hitPathId], canvas.lines))
+          // A press on a MEMBER keeps the whole set; anything else replaces
+          // it with the pressed stroke's MARK — a handwritten character is
+          // several strokes and a person pressing one means it. Same rule
+          // the node branch and the context menu follow.
+          const travelling = selectedInkIds.includes(hitPathId)
+            ? selectedInkIds
+            : withGroupMates([hitPathId], canvas.lines)
+          setSelectedInkIds(travelling)
+          // Ink travels under the pointer now. `pointerdown-ink` drops every
+          // id that is not a stroke, so a press on a RELATION arms nothing
+          // and falls through to the band exactly as it did — an edge's path
+          // is routed from the boxes it joins and has no geometry of its own
+          // to drag.
+          const armed = reduceGesture(gestureState, canvas, {
+            type: 'pointerdown-ink',
+            ids: travelling,
+            point,
+          })
+          if (armed.state.kind === 'moving-ink') {
+            setMarquee(null)
+            applyResult(armed)
+            return
+          }
           applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
           return
         }
@@ -1597,6 +1617,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       const armed = doublePressRef.current
       doublePressRef.current = null
+      if (gestureState.kind === 'moving-ink' && root !== null) {
+        // The ink drag replaced the marquee this press used to start, and
+        // two things the marquee branch did for a press ON ink had to come
+        // with it. Both were found by the full browser run rather than by
+        // reading: each is about what happens AFTER a release that wrote
+        // nothing, so the drag's own tests passed over them.
+        //
+        // Unsnapped, and the same reason the stroke's own release is: ink is
+        // sub-pixel by nature, and a snapped release would quantise a whole
+        // scribble to a box grid it was never drawn on.
+        const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
+        applyResult(reduceGesture(gestureState, canvas, { type: 'pointerup', point: released }))
+        // A double press on a stroke edits its label, exactly as on a
+        // relation — the press key is `edge:<id>` for both.
+        if (armed?.key.startsWith('edge:')) {
+          setEdgeLabelEditId(armed.key.slice('edge:'.length))
+        }
+        // Ink has no focusable element of its own (node shapes carry
+        // tabIndex; a drawn path does not), so without this the real
+        // keyboard's Delete and Escape land on <body> and never reach this
+        // root's onKeyDown. Taken at the RELEASE because the browser's own
+        // mousedown focus handling would undo one taken at the press.
+        root.focus()
+        return
+      }
       if (marquee !== null) {
         setMarquee(null)
         const zeroMove =
@@ -2832,7 +2877,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               />
             )}
             {selectedInkIds.length > 0 && (
-              <EdgeSelectionHighlight selectedEdgeIds={selectedInkIds} edgePaths={edgePaths} />
+              <EdgeSelectionHighlight
+                selectedEdgeIds={selectedInkIds}
+                edgePaths={edgePaths}
+                // The live half of the ink drag: the committed strokes stay
+                // where they are and their outlines travel, which is the
+                // same bargain the node drag makes with its ghost box. A
+                // full re-layout per frame is what the preview overlay
+                // exists to avoid (see `drag-preview.ts`'s header).
+                offset={
+                  gestureState.kind === 'moving-ink'
+                    ? {
+                        x: (livePoint?.x ?? gestureState.startPoint.x) - gestureState.startPoint.x,
+                        y: (livePoint?.y ?? gestureState.startPoint.y) - gestureState.startPoint.y,
+                      }
+                    : undefined
+                }
+              />
             )}
             {selectedRoutable !== undefined && (
               <EdgeBendLayer

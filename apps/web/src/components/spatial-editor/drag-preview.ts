@@ -217,5 +217,13 @@ export function carriedWithDrag(
  * risking two clearing rules drifting apart.
  */
 export function isInFlightGesture(state: GestureState): boolean {
-  return state.kind === 'moving' || state.kind === 'resizing' || state.kind === 'connecting'
+  return (
+    state.kind === 'moving' ||
+    state.kind === 'resizing' ||
+    state.kind === 'connecting' ||
+    // Ink travelling: the highlight is drawn at an offset while it does, and
+    // the offset is read from the live pointer — which `applyResult` clears
+    // for any state this predicate calls settled.
+    state.kind === 'moving-ink'
+  )
 }

@@ -169,8 +169,7 @@ const VERB_PARITY = {
     nodes: 'command',
     edges:
       'n/a: an edge is a relation whose path is ROUTED from the boxes it joins, so there is nothing to translate — moving one means moving an end (set-ends) or placing a bend (set-bends)',
-    lines:
-      'command, gap: the arrow keys nudge a selected stroke, and the POINTER does not — `gestures.ts` keys its moving state on a node id, so a press on ink still opens a marquee. Giving the machine an ink arm is its own increment',
+    lines: 'command',
     comments: 'command',
   },
   resize: {

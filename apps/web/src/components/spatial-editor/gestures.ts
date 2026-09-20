@@ -33,7 +33,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { bendInkCommand } from '../../lib/spatial/commands.js'
+import { moveInkCommand } from '../../lib/spatial/commands.js'
 import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
   type Box,
@@ -43,6 +43,13 @@ import {
   scaleBoxWithin,
 } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
+import {
+  type BendSnapshot,
+  bendCommands,
+  bendTargetExists,
+  movedWaypoints,
+  storedWaypoints,
+} from './gesture-bends.js'
 
 interface MoveSnapshot {
   readonly kind: 'moving'
@@ -94,24 +101,6 @@ interface EditTextSnapshot {
 }
 
 /**
- * A bend being dragged on one edge.
- *
- * `waypoints` is the list the gesture ENDS with, minus the drag — the
- * overlay hands it over already carrying a point the edge does not have
- * when a ghost handle on a straight run is what was pressed, so adding a
- * bend and moving one are the same gesture and this machine knows only the
- * second. Whether a point is worth inserting is geometry the overlay has
- * and the reducer does not.
- */
-interface BendSnapshot {
-  readonly kind: 'bending'
-  readonly edgeId: string
-  readonly index: number
-  readonly startPoint: Point
-  readonly waypoints: readonly Point[]
-}
-
-/**
  * A freehand stroke in progress: every sample the pointer has emitted since
  * it went down, in canvas coordinates.
  *
@@ -133,6 +122,23 @@ interface DrawSnapshot {
   readonly zoom: number
 }
 
+/**
+ * Strokes travelling under the pointer.
+ *
+ * Its own state rather than an arm of `MoveSnapshot`, and the difference is
+ * the model's: a node is moved to an absolute position computed from ONE
+ * origin, and ink has no origin — `move-line` takes a delta, so what this
+ * has to remember is where the press landed and nothing else. Sharing the
+ * node state would have meant inventing a reference point for a set of
+ * strokes, which is exactly what the command's shape refuses to do.
+ */
+interface MoveInkSnapshot {
+  readonly kind: 'moving-ink'
+  /** Every stroke travelling — the selection, not the one pressed. */
+  readonly ids: readonly string[]
+  readonly startPoint: Point
+}
+
 interface IdleSnapshot {
   readonly kind: 'idle'
 }
@@ -145,6 +151,7 @@ export type GestureState =
   | EditTextSnapshot
   | BendSnapshot
   | DrawSnapshot
+  | MoveInkSnapshot
 
 export function createIdleState(): GestureState {
   return { kind: 'idle' }
@@ -186,6 +193,13 @@ export type GestureEvent =
       readonly dx: number
       readonly dy: number
     }
+  /**
+   * The pointer went down on INK. Carries every stroke that should travel,
+   * decided by the caller: the press rule (a member keeps the set, anything
+   * else replaces it) is the editor's, and the mark a stroke belongs to is
+   * `ink-hit.ts`'s.
+   */
+  | { readonly type: 'pointerdown-ink'; readonly ids: readonly string[]; readonly point: Point }
   | { readonly type: 'pointerdown-empty' }
   /**
    * The pen went down on the board. Carries the viewport's zoom for the
@@ -244,19 +258,6 @@ function findNode(canvas: SpatialCanvas, id: string) {
 
 /** Whether the gesture's target(s) are still present, with matching type, in `canvas`. */
 /** The bends an edge stores — its own field since ADR-0037 slice 4. */
-/**
- * The points the element STORES, whichever collection it is in. The scene
- * hands an edge and a line out identically, so the id the bend affordance
- * carries could be either — and reading `canvas.edges` alone answered an
- * empty list for every stroke, which reads as "this has no bends" rather
- * than as "I looked in one place".
- */
-function storedWaypoints(canvas: SpatialCanvas, id: string): readonly Point[] {
-  const element =
-    canvas.edges.find((candidate) => candidate.id === id) ??
-    (canvas.lines ?? []).find((candidate) => candidate.id === id)
-  return element?.bends ?? []
-}
 
 /**
  * What a gesture records about the node it started on, so it can abandon
@@ -285,7 +286,15 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
       return target !== undefined && nodeText(target) !== undefined
     }
     case 'bending':
-      return canvas.edges.some((edge) => edge.id === state.edgeId)
+      // Both collections: a stroke's bends are dragged from the same
+      // affordance, so a canvas replaced mid-drag would otherwise abandon
+      // the gesture on the ground that the element had vanished.
+      return bendTargetExists(canvas, state.edgeId)
+    case 'moving-ink':
+      // As long as ONE of them survives there is still a move to make; the
+      // release drops whatever went. Requiring all of them would abandon a
+      // whole scribble because a collaborator erased one stroke of it.
+      return state.ids.some((id) => (canvas.lines ?? []).some((line) => line.id === id))
     case 'drawing':
       // A stroke is drawn ON the board, not on anything in it, so no
       // element arriving or leaving can invalidate it.
@@ -380,23 +389,6 @@ function reducePointerUpMoving(
   }
 }
 
-/**
- * The bend list an edge should carry. An empty list clears the field, since
- * an edge storing no bends takes a computed route again — and the model
- * refuses an empty array for exactly that reason: absence already says it.
- */
-function bendCommand(
-  canvas: SpatialCanvas,
-  id: string,
-  waypoints: readonly Point[],
-): readonly EditorCommand[] {
-  // `bendInkCommand` is the one place that looks at which collection the id
-  // came from; an id in neither answers nothing rather than a write aimed at
-  // a guess.
-  const command = bendInkCommand(canvas, id, [...waypoints])
-  return command === undefined ? [] : [command]
-}
-
 function reducePointerUpBending(
   state: BendSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
@@ -408,18 +400,27 @@ function reducePointerUpBending(
   // leave a bend where the line already ran, which is a point a person did
   // not ask for and then has to find and remove.
   if (dx === 0 && dy === 0) return idle
-  const moved = state.waypoints.map((point, at) =>
-    at === state.index
-      ? // Whole units, the way a node position is rounded. The MODEL accepts
-        // a fraction since ADR-0037 slice 4, so this is a UI decision rather
-        // than a schema one: a point somebody dragged to is a point they can
-        // find again, and 137.4183 is not. Ink reaches this drag now, and
-        // takes the same rounding: a stroke's own points keep whatever the
-        // pen reported, and a bend somebody placed by hand is placed here.
-        { x: Math.round(point.x + dx), y: Math.round(point.y + dy) }
-      : point,
-  )
-  return { state: { kind: 'idle' }, commands: bendCommand(canvas, state.edgeId, moved) }
+  const moved = movedWaypoints(state.waypoints, state.index, dx, dy)
+  return { state: { kind: 'idle' }, commands: bendCommands(canvas, state.edgeId, moved) }
+}
+
+function reducePointerUpMovingInk(
+  state: MoveInkSnapshot,
+  event: Extract<GestureEvent, { type: 'pointerup' }>,
+  canvas: SpatialCanvas,
+): GestureResult {
+  const dx = event.point.x - state.startPoint.x
+  const dy = event.point.y - state.startPoint.y
+  // A press that never travelled writes nothing — the same rule the bend
+  // drag keeps, and what makes a plain press on ink stay a plain selection.
+  if (dx === 0 && dy === 0) return idle
+  const commands = state.ids.flatMap((id) => {
+    const command = moveInkCommand(canvas, id, dx, dy)
+    return command === undefined ? [] : [command]
+  })
+  if (commands.length === 0) return idle
+  // ONE batch: moving a scribble is one action and must undo as one step.
+  return { state: { kind: 'idle' }, commands: [{ kind: 'batch', commands }] }
 }
 
 function reducePointerUpResizing(
@@ -613,6 +614,25 @@ export function reduceGesture(
         }
       }
       return idle
+    case 'pointerdown-ink': {
+      // Only strokes travel. An id naming a RELATION is dropped here rather
+      // than at the release: an edge's path is routed from the boxes it
+      // joins, so there is nothing of its own to move, and a gesture armed
+      // over nothing would swallow the press that should have started a
+      // band.
+      const ids = event.ids.filter((id) => (canvas.lines ?? []).some((line) => line.id === id))
+      if (ids.length === 0) return idle
+      return withPendingTextCommit(state, {
+        state: { kind: 'moving-ink', ids, startPoint: event.point },
+        commands: [],
+        // The NODE selection goes, the same way `pointerdown-empty` drops it
+        // — which is the event this arm replaced for a press on ink. Without
+        // it a node selected a moment earlier stayed selected behind the
+        // stroke, and the next Delete took both. Found by the full browser
+        // run: the drag's own tests never selected a node first.
+        selectedId: null,
+      })
+    }
     case 'pointerdown-empty':
       return withPendingTextCommit(state, {
         state: { kind: 'idle' },
@@ -648,12 +668,7 @@ export function reduceGesture(
         stateOnly({ kind: 'connecting', fromNodeId: event.nodeId }),
       )
     case 'pointerdown-bend': {
-      if (
-        !canvas.edges.some((edge) => edge.id === event.edgeId) &&
-        !(canvas.lines ?? []).some((line) => line.id === event.edgeId)
-      ) {
-        return idle
-      }
+      if (!bendTargetExists(canvas, event.edgeId)) return idle
       if (event.waypoints[event.index] === undefined) return idle
       return withPendingTextCommit(
         state,
@@ -672,14 +687,10 @@ export function reduceGesture(
       if (point === undefined || (event.dx === 0 && event.dy === 0)) return idle
       return {
         state: { kind: 'idle' },
-        commands: bendCommand(
+        commands: bendCommands(
           canvas,
           event.edgeId,
-          stored.map((current, at) =>
-            at === event.index
-              ? { x: Math.round(current.x + event.dx), y: Math.round(current.y + event.dy) }
-              : current,
-          ),
+          movedWaypoints(stored, event.index, event.dx, event.dy),
         ),
       }
     }
@@ -688,7 +699,7 @@ export function reduceGesture(
       if (stored[event.index] === undefined) return idle
       return {
         state: { kind: 'idle' },
-        commands: bendCommand(
+        commands: bendCommands(
           canvas,
           event.edgeId,
           stored.filter((_point, at) => at !== event.index),
@@ -753,6 +764,8 @@ export function reduceGesture(
           return reducePointerUpConnecting(state, event, createId, canvas)
         case 'bending':
           return reducePointerUpBending(state, event, canvas)
+        case 'moving-ink':
+          return reducePointerUpMovingInk(state, event, canvas)
         case 'drawing': {
           const line = freehandLine(
             createId(),
