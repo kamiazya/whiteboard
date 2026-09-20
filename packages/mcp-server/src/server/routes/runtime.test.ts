@@ -85,13 +85,11 @@ function verifyIdentitySignature(parts: readonly string[], signatureB64u: string
 // case answered 500.
 function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = {}) {
   const touch = vi.fn()
-  const shutdown = vi.fn(async () => undefined)
   const app = createRuntimeRouter({
     credentialResolver: createCredentialResolver({ daemonToken: 'secret', ...credentials }),
     instanceId: 'test-instance-id',
     identity: testIdentity,
     touch,
-    shutdown,
     getStatus: () => ({
       pid: 10,
       port: 3099,
@@ -103,7 +101,7 @@ function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = 
     }),
   })
 
-  return { app, touch, shutdown }
+  return { app, touch }
 }
 
 beforeEach(() => {
@@ -164,7 +162,7 @@ describe('runtime routes', () => {
    * guarded".
    */
   it('serves no HTTP route that stops the daemon, not even to the daemon token', async () => {
-    const { app, shutdown } = createApp()
+    const { app } = createApp()
 
     const res = await app.request('/api/runtime/shutdown', {
       method: 'POST',
@@ -172,8 +170,6 @@ describe('runtime routes', () => {
     })
 
     expect(res.status).not.toBe(200)
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(shutdown).not.toHaveBeenCalled()
   })
 
   it('returns a storage report for an authenticated GET /api/runtime/storage', async () => {
