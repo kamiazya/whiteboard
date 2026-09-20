@@ -622,7 +622,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2309,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1207,
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1052,
 }
 
 describe('the path form both ledgers are keyed with', () => {
