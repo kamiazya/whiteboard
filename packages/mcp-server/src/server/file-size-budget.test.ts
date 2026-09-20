@@ -737,10 +737,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
-  // Raised 968 -> 990 for S4b: the `/replica-key` route and the
+  // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
   // `connectReplicaKeeper` wiring every existing move/demote test now needs,
   // since the pull those flows drive is sealed.
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 990,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1053,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // Raised 2708 -> 2724, two lines for each of the eight ink entries the
   // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
