@@ -113,6 +113,28 @@ describe('POST /api/pairing/session-assert/challenge', () => {
     expect(res.status).toBe(401)
   })
 
+  it('refuses a request with no Origin header at all', async () => {
+    const fixture = makeApp()
+    const { token } = await pairedSession(fixture)
+    const res = await fixture.app.request('/api/pairing/session-assert/challenge', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'unauthorized' })
+  })
+
+  it('refuses a malformed Origin header', async () => {
+    const fixture = makeApp()
+    const { token } = await pairedSession(fixture)
+    const res = await fixture.app.request('/api/pairing/session-assert/challenge', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, Origin: 'not a url' },
+    })
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'unauthorized' })
+  })
+
   it('mints a schema-valid 43-char challenge for a valid session', async () => {
     const fixture = makeApp()
     const { token } = await pairedSession(fixture)
@@ -396,6 +418,36 @@ describe('POST /api/pairing/session-assert', () => {
     )
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'assertion_rejected', message: 'signature' })
+  })
+
+  it('refuses an assertion whose backup-eligible flag disagrees with the pinned value', async () => {
+    const fixture = makeApp()
+    const { token, credentialId, keypair } = await pairedSession(fixture)
+    const { challenge } = sessionAssertChallengeResponseSchema.parse(
+      await (await mintChallenge(fixture, token, HOSTED)).json(),
+    )
+    // registrationFor always pins BE=true; assert without it so the verdict disagrees.
+    const assertion = buildAssertion({
+      privateKey: keypair.privateKey,
+      rpId: HOST,
+      origin: HOSTED,
+      challenge: Buffer.from(challenge, 'base64url'),
+      flags: WEBAUTHN_FLAG_UP | WEBAUTHN_FLAG_UV,
+      signCount: 1,
+    })
+    const res = await post(
+      fixture.app,
+      '/api/pairing/session-assert',
+      {
+        credentialId,
+        authenticatorData: assertion.authenticatorData.toString('base64url'),
+        clientDataJSON: assertion.clientDataJSON.toString('base64url'),
+        signature: assertion.signature.toString('base64url'),
+      },
+      { Authorization: `Bearer ${token}`, Origin: HOSTED },
+    )
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'assertion_rejected', message: 'backupEligibility' })
   })
 
   it('refuses a sign count that did not advance', async () => {
