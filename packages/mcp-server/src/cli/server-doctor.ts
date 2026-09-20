@@ -214,62 +214,50 @@ function aggregateOverallStatus(checks: DaemonDoctorCheck[]): {
   return { ok: true, status: 'ok' }
 }
 
-export async function runServerDoctor(
-  options: RunServerDoctorOptions,
-): Promise<RunServerDoctorOutcome> {
-  const env = mergeCliFlagsIntoEnv(options.env ?? process.env, options.flags)
-  const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
-  const verifyIdentity = options.verifyIdentity ?? defaultVerifyIdentity
-  const fetchJwks = options.fetchJwks ?? defaultFetchJwks
-  const checkDataDir = options.checkDataDir ?? defaultCheckDataDir
-  const readRecordMode = options.readRecordMode ?? defaultReadRecordMode
-  const fetchPing = options.fetchPing ?? defaultFetchPing
-  const fetchRuntimeStatus = options.fetchRuntimeStatus ?? defaultFetchRuntimeStatus
+/**
+ * Every check this doctor reports, in the order it runs them.
+ *
+ * ONE declaration, because there were two: the sequence below, and a list
+ * of ids the invalid-config gate marked `skipped`. A check added to the
+ * sequence and not to that list was simply ABSENT from the result on an
+ * invalid config — no error, one fewer row, and the overall status
+ * aggregated over whatever did report.
+ */
+export const SERVER_DOCTOR_CHECK_IDS = [
+  'server.config',
+  'server.exposure',
+  'server.jwks',
+  'server.data_dir',
+  'server.record',
+  'server.record_permissions',
+  'server.identity',
+  'server.runtime_ping',
+  'server.runtime_status',
+] as const
 
-  const checks: DaemonDoctorCheck[] = []
+type ServerDoctorCheckId = (typeof SERVER_DOCTOR_CHECK_IDS)[number]
 
-  // ── 1. server.config ─────────────────────────────────────────────
-  const configResult = parseServerModeEnvConfig(env)
-  if (!configResult.ok) {
-    checks.push({
-      id: 'server.config',
-      status: 'error',
-      summary: 'Server config is invalid',
-      detail: `Config error: code=${configResult.code}`,
-      remediation: 'Check your WHITEBOARD_SERVER_* environment variables.',
-    })
-    // Cannot proceed: all downstream checks depend on a valid config.
-    for (const id of [
-      'server.exposure',
-      'server.jwks',
-      'server.data_dir',
-      'server.record',
-      'server.record_permissions',
-      'server.identity',
-      'server.runtime_ping',
-      'server.runtime_status',
-    ]) {
-      checks.push({
-        id,
-        status: 'skipped',
-        summary: 'Skipped because the server config is invalid',
-      })
-    }
-    const rawChecks = checks.map(redactDoctorCheck)
-    const { ok, status } = aggregateOverallStatus(rawChecks)
-    const result: DaemonDoctorResult = daemonDoctorResultSchema.parse({
-      schemaVersion: SERVER_DOCTOR_SCHEMA_VERSION,
-      ok,
-      status,
-      checks: rawChecks,
-    })
-    return { result, exitCode: ok ? 0 : 1 }
-  }
+/** A check of THIS doctor: the shared contract's shape, with its own ids. */
+type Check = DaemonDoctorCheck & { readonly id: ServerDoctorCheckId }
 
-  const config = configResult.config
-  checks.push({ id: 'server.config', status: 'ok', summary: 'Server config is valid' })
+/** Everything but the config check, which is the one that gates them. */
+function skippedBelowConfig(summary: string): Check[] {
+  return SERVER_DOCTOR_CHECK_IDS.filter((id) => id !== 'server.config').map((id) => ({
+    id,
+    status: 'skipped' as const,
+    summary,
+  }))
+}
 
-  // ── 2. server.exposure ───────────────────────────────────────────
+// Each check answers for ITSELF: it takes what it needs and returns its
+// verdict, rather than pushing into a shared array partway down a 290-line
+// sequence. `runServerDoctor` below is then the ORDER and the data flow,
+// which is the part a reader actually has to hold in their head.
+
+/** Derived rather than imported: the parser does not export the shape. */
+type ServerModeConfig = Extract<ReturnType<typeof parseServerModeEnvConfig>, { ok: true }>['config']
+
+function checkExposure(config: ServerModeConfig): Check {
   const plan = planServerModeAuth({
     mode: 'server-mode',
     bindHost: config.host,
@@ -277,234 +265,249 @@ export async function runServerDoctor(
     allowedOrigins: [...config.allowedOrigins],
     trustedProxy: config.trustedProxy,
   })
-  if (!plan.ok) {
-    checks.push({
-      id: 'server.exposure',
-      status: 'error',
-      summary: 'Server exposure plan is invalid',
-      detail: `Exposure error: code=${plan.code}`,
-      remediation:
-        'Check WHITEBOARD_SERVER_EXTERNAL_URL and WHITEBOARD_SERVER_ALLOWED_ORIGINS. Wildcards and non-HTTPS origins are not allowed.',
-    })
-  } else {
-    checks.push({ id: 'server.exposure', status: 'ok', summary: 'Server exposure plan is valid' })
+  if (plan.ok) {
+    return { id: 'server.exposure', status: 'ok', summary: 'Server exposure plan is valid' }
   }
+  return {
+    id: 'server.exposure',
+    status: 'error',
+    summary: 'Server exposure plan is invalid',
+    detail: `Exposure error: code=${plan.code}`,
+    remediation:
+      'Check WHITEBOARD_SERVER_EXTERNAL_URL and WHITEBOARD_SERVER_ALLOWED_ORIGINS. Wildcards and non-HTTPS origins are not allowed.',
+  }
+}
 
-  // ── 3. server.jwks ───────────────────────────────────────────────
-  const jwksResult = await fetchJwks(config.jwksUri)
-  if (!jwksResult.ok) {
-    checks.push({
+function checkJwks(result: { ok: boolean; hasKeys: boolean }): Check {
+  if (!result.ok) {
+    return {
       id: 'server.jwks',
       status: 'error',
       summary: 'JWKS endpoint is not reachable',
       remediation:
         'Ensure the JWKS URI is reachable from this server and returns a JSON document with a non-empty `keys` array.',
-    })
-  } else if (!jwksResult.hasKeys) {
-    checks.push({
+    }
+  }
+  if (!result.hasKeys) {
+    return {
       id: 'server.jwks',
       status: 'error',
       summary: 'JWKS endpoint returned no keys',
       remediation:
         'Check that the JWKS endpoint returns a JSON document with a non-empty `keys` array.',
-    })
-  } else {
-    checks.push({
-      id: 'server.jwks',
-      status: 'ok',
-      summary: 'JWKS endpoint is reachable and has keys',
-    })
+    }
   }
+  return {
+    id: 'server.jwks',
+    status: 'ok',
+    summary: 'JWKS endpoint is reachable and has keys',
+  }
+}
 
-  // ── 4. server.data_dir ───────────────────────────────────────────
-  const dataDir = config.dataDir ?? resolveDefaultDataDir(env)
-  const dataDirState = checkDataDir(dataDir)
-  if (dataDirState === 'not-exists') {
-    checks.push({
+function checkDataDirState(state: 'ok' | 'not-writable' | 'not-exists'): Check {
+  if (state === 'not-exists') {
+    return {
       id: 'server.data_dir',
       status: 'error',
       summary: 'Data directory does not exist',
       remediation:
         'Create the data directory or set WHITEBOARD_DATA_DIR to an existing writable path.',
-    })
-  } else if (dataDirState === 'not-writable') {
-    checks.push({
+    }
+  }
+  if (state === 'not-writable') {
+    return {
       id: 'server.data_dir',
       status: 'error',
       summary: 'Data directory is not writable',
       remediation: 'Grant write access to the data directory for this process.',
-    })
-  } else {
-    checks.push({ id: 'server.data_dir', status: 'ok', summary: 'Data directory is writable' })
+    }
   }
+  return { id: 'server.data_dir', status: 'ok', summary: 'Data directory is writable' }
+}
 
-  // ── 5. server.record ─────────────────────────────────────────────
-  const recordResult = readServerModeRecord(dataDir)
-  let record: ServerModeRecord | null = null
-
-  if (recordResult.kind === 'missing') {
-    checks.push({
+function checkRecord(result: ReturnType<typeof readServerModeRecord>): Check {
+  if (result.kind === 'missing') {
+    return {
       id: 'server.record',
       status: 'skipped',
       summary: 'Server record not found — server may not be running',
-    })
-  } else if (recordResult.kind === 'malformed') {
-    checks.push({
+    }
+  }
+  if (result.kind === 'malformed') {
+    return {
       id: 'server.record',
       status: 'warning',
       summary: 'Server record is malformed',
       remediation: 'Delete the stale server record or restart the server.',
-    })
-  } else {
-    record = recordResult.record
-    checks.push({ id: 'server.record', status: 'ok', summary: 'Server record found and valid' })
+    }
   }
+  return { id: 'server.record', status: 'ok', summary: 'Server record found and valid' }
+}
 
-  // ── 6. server.record_permissions ─────────────────────────────────
-  const platform = process.platform
-  if (recordResult.kind !== 'ok') {
-    checks.push({
+function checkRecordPermissions(
+  recordFound: boolean,
+  platform: NodeJS.Platform,
+  /** Read HERE, so the two guards above it still stand between the
+   * platform and the filesystem: Windows never reads POSIX mode bits. */
+  readMode: () => number | null,
+): Check {
+  if (!recordFound) {
+    return {
       id: 'server.record_permissions',
       status: 'skipped',
       summary: 'Skipped because the server record is missing or malformed',
-    })
-  } else if (platform === 'win32') {
-    checks.push({
+    }
+  }
+  if (platform === 'win32') {
+    return {
       id: 'server.record_permissions',
       status: 'skipped',
       summary: 'Skipped on Windows because POSIX mode bits do not apply',
-    })
-  } else {
-    const mode = readRecordMode(dataDir)
-    if (mode === null) {
-      checks.push({
-        id: 'server.record_permissions',
-        status: 'skipped',
-        summary: 'Skipped because the server record permissions could not be read',
-      })
-    } else if ((mode & 0o077) !== 0) {
-      checks.push({
-        id: 'server.record_permissions',
-        status: 'warning',
-        summary: 'Server record file has broad permissions',
-        detail: 'Group or other has read, write, or execute access to the server record file.',
-        remediation: 'Restrict the server record so only the current user can read and write it.',
-      })
-    } else {
-      checks.push({
-        id: 'server.record_permissions',
-        status: 'ok',
-        summary: 'Server record permissions are restricted',
-      })
     }
   }
+  const mode = readMode()
+  if (mode === null) {
+    return {
+      id: 'server.record_permissions',
+      status: 'skipped',
+      summary: 'Skipped because the server record permissions could not be read',
+    }
+  }
+  if ((mode & 0o077) !== 0) {
+    return {
+      id: 'server.record_permissions',
+      status: 'warning',
+      summary: 'Server record file has broad permissions',
+      detail: 'Group or other has read, write, or execute access to the server record file.',
+      remediation: 'Restrict the server record so only the current user can read and write it.',
+    }
+  }
+  return {
+    id: 'server.record_permissions',
+    status: 'ok',
+    summary: 'Server record permissions are restricted',
+  }
+}
 
-  // ── 7. server.identity ───────────────────────────────────────────
+async function checkIdentity(
+  record: ServerModeRecord | null,
+  isPidAlive: (pid: number) => boolean,
+  verifyIdentity: (record: ServerModeRecord) => Promise<boolean>,
+): Promise<Check> {
   if (record === null) {
-    checks.push({
+    return {
       id: 'server.identity',
       status: 'skipped',
       summary: 'Skipped because the server record is unavailable',
-    })
-  } else if (!isPidAlive(record.pid)) {
-    checks.push({
+    }
+  }
+  if (!isPidAlive(record.pid)) {
+    return {
       id: 'server.identity',
       status: 'skipped',
       summary: 'Skipped because the recorded server process is not running',
-    })
-  } else {
-    const rightProcess = await verifyIdentity(record)
-    if (!rightProcess) {
-      checks.push({
-        id: 'server.identity',
-        status: 'warning',
-        summary: 'Server process identity could not be confirmed',
-        remediation: 'Restart the server to refresh the server record.',
-      })
-    } else {
-      checks.push({
-        id: 'server.identity',
-        status: 'ok',
-        summary: 'Server process identity confirmed',
-      })
     }
   }
+  if (!(await verifyIdentity(record))) {
+    return {
+      id: 'server.identity',
+      status: 'warning',
+      summary: 'Server process identity could not be confirmed',
+      remediation: 'Restart the server to refresh the server record.',
+    }
+  }
+  return { id: 'server.identity', status: 'ok', summary: 'Server process identity confirmed' }
+}
 
-  // ── 8. server.runtime_ping ───────────────────────────────────────
-  const identityCheck = checks.find((c) => c.id === 'server.identity')
-  const identityOk = identityCheck?.status === 'ok'
+/**
+ * Both runtime checks are gated on a CONFIRMED identity: talking to whatever
+ * answers on the recorded port without it would be diagnosing a process this
+ * doctor has no reason to believe is ours.
+ */
+const RUNTIME_UNCONFIRMED = 'Skipped because server identity is not confirmed'
 
+async function checkRuntimePing(
+  record: ServerModeRecord | null,
+  identityOk: boolean,
+  fetchPing: RequiredSeams['fetchPing'],
+): Promise<Check> {
   if (!identityOk || record === null) {
-    checks.push({
+    return { id: 'server.runtime_ping', status: 'skipped', summary: RUNTIME_UNCONFIRMED }
+  }
+  const result = await fetchPing(record.host, record.port, record.instanceId)
+  if (!result.ok) {
+    return {
       id: 'server.runtime_ping',
-      status: 'skipped',
-      summary: 'Skipped because server identity is not confirmed',
-    })
-  } else {
-    const pingResult = await fetchPing(record.host, record.port, record.instanceId)
-    if (!pingResult.ok) {
-      checks.push({
-        id: 'server.runtime_ping',
-        status: 'error',
-        summary: 'Runtime ping endpoint did not respond',
-        remediation: 'Check that the server is running and bound to the recorded host and port.',
-      })
-    } else if (!pingResult.pidMatches) {
-      checks.push({
-        id: 'server.runtime_ping',
-        status: 'warning',
-        summary: 'Runtime ping responded but PID does not match the server record',
-        remediation: 'Restart the server to refresh the server record.',
-      })
-    } else {
-      checks.push({
-        id: 'server.runtime_ping',
-        status: 'ok',
-        summary: 'Runtime ping responded successfully',
-      })
+      status: 'error',
+      summary: 'Runtime ping endpoint did not respond',
+      remediation: 'Check that the server is running and bound to the recorded host and port.',
     }
   }
+  if (!result.pidMatches) {
+    return {
+      id: 'server.runtime_ping',
+      status: 'warning',
+      summary: 'Runtime ping responded but PID does not match the server record',
+      remediation: 'Restart the server to refresh the server record.',
+    }
+  }
+  return { id: 'server.runtime_ping', status: 'ok', summary: 'Runtime ping responded successfully' }
+}
 
-  // ── 9. server.runtime_status ─────────────────────────────────────
+async function checkRuntimeStatus(
+  record: ServerModeRecord | null,
+  identityOk: boolean,
+  fetchRuntimeStatus: RequiredSeams['fetchRuntimeStatus'],
+): Promise<Check> {
   if (!identityOk || record === null) {
-    checks.push({
+    return { id: 'server.runtime_status', status: 'skipped', summary: RUNTIME_UNCONFIRMED }
+  }
+  const result = await fetchRuntimeStatus(record.host, record.port)
+  if (!result.ok) {
+    return {
       id: 'server.runtime_status',
-      status: 'skipped',
-      summary: 'Skipped because server identity is not confirmed',
-    })
-  } else {
-    const statusResult = await fetchRuntimeStatus(record.host, record.port)
-    if (!statusResult.ok) {
-      checks.push({
-        id: 'server.runtime_status',
-        status: 'error',
-        summary: 'Runtime status endpoint did not respond',
-        remediation: 'Check that the server is running and accepting requests.',
-      })
-    } else if (statusResult.protected) {
-      // 401/403: the endpoint is correctly protected by OAuth — this is
-      // expected behavior for a server-mode deployment.
-      checks.push({
-        id: 'server.runtime_status',
-        status: 'ok',
-        summary: 'Runtime status endpoint is properly protected',
-      })
-    } else if (statusResult.leakDetected) {
-      checks.push({
-        id: 'server.runtime_status',
-        status: 'warning',
-        summary: 'Runtime status response may contain sensitive field names',
-        remediation: 'Review the /api/runtime/status endpoint for information disclosure.',
-      })
-    } else {
-      checks.push({
-        id: 'server.runtime_status',
-        status: 'ok',
-        summary: 'Runtime status endpoint responded without detected leaks',
-      })
+      status: 'error',
+      summary: 'Runtime status endpoint did not respond',
+      remediation: 'Check that the server is running and accepting requests.',
     }
   }
+  // 401/403: the endpoint is correctly protected by OAuth — this is
+  // expected behavior for a server-mode deployment.
+  if (result.protected) {
+    return {
+      id: 'server.runtime_status',
+      status: 'ok',
+      summary: 'Runtime status endpoint is properly protected',
+    }
+  }
+  if (result.leakDetected) {
+    return {
+      id: 'server.runtime_status',
+      status: 'warning',
+      summary: 'Runtime status response may contain sensitive field names',
+      remediation: 'Review the /api/runtime/status endpoint for information disclosure.',
+    }
+  }
+  return {
+    id: 'server.runtime_status',
+    status: 'ok',
+    summary: 'Runtime status endpoint responded without detected leaks',
+  }
+}
 
+/** The seams with their defaults applied, as the checks above take them. */
+type RequiredSeams = {
+  [K in
+    | 'isPidAlive'
+    | 'verifyIdentity'
+    | 'fetchJwks'
+    | 'checkDataDir'
+    | 'readRecordMode'
+    | 'fetchPing'
+    | 'fetchRuntimeStatus']-?: NonNullable<RunServerDoctorOptions[K]>
+}
+
+function finish(checks: Check[]): RunServerDoctorOutcome {
   const redactedChecks = checks.map(redactDoctorCheck)
   const { ok, status } = aggregateOverallStatus(redactedChecks)
   const result: DaemonDoctorResult = daemonDoctorResultSchema.parse({
@@ -514,4 +517,64 @@ export async function runServerDoctor(
     checks: redactedChecks,
   })
   return { result, exitCode: ok ? 0 : 1 }
+}
+
+export async function runServerDoctor(
+  options: RunServerDoctorOptions,
+): Promise<RunServerDoctorOutcome> {
+  const env = mergeCliFlagsIntoEnv(options.env ?? process.env, options.flags)
+  const seams: RequiredSeams = {
+    isPidAlive: options.isPidAlive ?? defaultIsPidAlive,
+    verifyIdentity: options.verifyIdentity ?? defaultVerifyIdentity,
+    fetchJwks: options.fetchJwks ?? defaultFetchJwks,
+    checkDataDir: options.checkDataDir ?? defaultCheckDataDir,
+    readRecordMode: options.readRecordMode ?? defaultReadRecordMode,
+    fetchPing: options.fetchPing ?? defaultFetchPing,
+    fetchRuntimeStatus: options.fetchRuntimeStatus ?? defaultFetchRuntimeStatus,
+  }
+
+  const configResult = parseServerModeEnvConfig(env)
+  if (!configResult.ok) {
+    // Cannot proceed: every downstream check depends on a valid config.
+    return finish([
+      {
+        id: 'server.config',
+        status: 'error',
+        summary: 'Server config is invalid',
+        detail: `Config error: code=${configResult.code}`,
+        remediation: 'Check your WHITEBOARD_SERVER_* environment variables.',
+      },
+      ...skippedBelowConfig('Skipped because the server config is invalid'),
+    ])
+  }
+  const config = configResult.config
+
+  const dataDir = config.dataDir ?? resolveDefaultDataDir(env)
+  const recordResult = readServerModeRecord(dataDir)
+  const record = recordResult.kind === 'ok' ? recordResult.record : null
+
+  // In declared order, because each of these calls out: reordering them
+  // would reorder the doctor's own network and filesystem reads.
+  const checks: Check[] = [
+    { id: 'server.config', status: 'ok', summary: 'Server config is valid' },
+    checkExposure(config),
+    checkJwks(await seams.fetchJwks(config.jwksUri)),
+    checkDataDirState(seams.checkDataDir(dataDir)),
+    checkRecord(recordResult),
+    checkRecordPermissions(recordResult.kind === 'ok', process.platform, () =>
+      seams.readRecordMode(dataDir),
+    ),
+  ]
+
+  const identity = await checkIdentity(record, seams.isPidAlive, seams.verifyIdentity)
+  // Read from the check itself rather than looking `server.identity` up in
+  // the array being built, which is what the two runtime checks used to do.
+  const identityOk = identity.status === 'ok'
+  checks.push(
+    identity,
+    await checkRuntimePing(record, identityOk, seams.fetchPing),
+    await checkRuntimeStatus(record, identityOk, seams.fetchRuntimeStatus),
+  )
+
+  return finish(checks)
 }
