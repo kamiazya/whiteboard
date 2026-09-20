@@ -763,7 +763,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1666 -> 1863 for the v19 -> v20 upgrade block (S4b's plaintext
   // replica discard): the seed fixture, the chunk-range no-op case, and the
   // drop-and-leaves-others-byte-identical test.
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1863,
+  // Raised 1863 -> 1892: the v20 idempotency case now seeds a post-v20
+  // sealed replica row so the version guard has something it would delete.
+  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
@@ -826,7 +828,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // GREW by an over-budget file, which is the one thing that can only be
   // recorded by raising this number. Then the four S4b raises and their
   // sentences.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 949,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 951,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
