@@ -45,7 +45,15 @@ runs:
     - name: Activate pnpm via corepack
       shell: bash
       run: |
-        command -v corepack >/dev/null 2>&1 || npm install -g corepack
+        # Exact-pinned and script-free, for the reason the wrangler install in
+        # preview-pr-deploy.yml is: an unpinned `npm install -g` in CI fetches
+        # whatever `latest` is at that moment, with no lockfile behind it, and
+        # this action runs in every job of every workflow — the widest place in
+        # the repo for a lifecycle script to run. corepack needs none, and its
+        # own version only has to be recent enough to read `packageManager`,
+        # so bumping this is deliberate and rare. Reached only on a runner
+        # whose Node no longer bundles corepack (25+); today's do.
+        command -v corepack >/dev/null 2>&1 || npm install -g corepack@0.36.0 --ignore-scripts
         corepack enable
         corepack prepare --activate
 

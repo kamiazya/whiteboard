@@ -26,15 +26,24 @@ on:
         required: false
         default: ''
 
-# Needed for release-please: write PRs, create tags/releases.
-# packages: write is NOT included here — it is scoped to docker-publish-sign only.
-permissions:
-  contents: write
-  pull-requests: write
+# No workflow-level `permissions` block on purpose: a write granted here is
+# ambient to every job that does not override it, and the only job that needs
+# one is release-please. The other four already declare their own, so moving
+# the grant down changes what they get by exactly nothing and removes a
+# standing write from whichever job is added next. A job-level block REPLACES
+# the workflow-level one rather than adding to it, which is what makes this
+# safe — and also what made the old block invisible to four of five jobs.
+# ci-policy.test.ts fails on a write reappearing at the root, or on a job that
+# declares no permissions of its own.
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Needed for release-please: write PRs, create tags/releases.
+    # packages: write is NOT included — it is scoped to docker-publish-sign.
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       mcp_release_created: ${{ steps.release.outputs['packages/mcp-server--release_created'] }}
       mcp_tag_name: ${{ steps.release.outputs['packages/mcp-server--tag_name'] }}

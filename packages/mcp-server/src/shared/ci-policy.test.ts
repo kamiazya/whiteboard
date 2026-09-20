@@ -53,17 +53,51 @@ describe('setup-pnpm composite action — pinning policy', () => {
   })
 })
 
-describe('release.yml — root permissions policy', () => {
-  it('packages: write is absent from the workflow root permissions block', async () => {
+describe('release.yml — permissions are granted per job, never at the root', () => {
+  // A workflow-level `permissions` block is ambient to every job that does not
+  // override it, and a job-level block REPLACES it rather than adding to it —
+  // so a root grant is read by exactly the jobs that declare nothing, which is
+  // the set nobody is looking at. This workflow pushes tags, publishes to npm
+  // under OIDC and pushes a signed image, so the root is where a write costs
+  // the most and is seen the least.
+  //
+  // The pair below is deliberately two conditions, not one: dropping the root
+  // block is only an improvement while every job still says what it needs, and
+  // a later job added with no block would otherwise inherit the repository
+  // default silently.
+  async function releaseWorkflow(): Promise<{
+    permissions?: unknown
+    jobs: Record<string, { permissions?: Record<string, string> }>
+  }> {
     const text = await readFile(join(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')
+    return parseYaml(text)
+  }
 
-    // Everything before `jobs:` is the workflow preamble (root-level keys).
-    // `packages: write` with 2-space indent is a root-level permissions entry.
-    const preamble = text.split(/^jobs:/m)[0] ?? text
+  it('grants no permission at the workflow root', async () => {
+    const workflow = await releaseWorkflow()
     expect(
-      preamble,
-      'packages: write found at workflow root — it must be scoped to docker-publish-sign job only',
-    ).not.toMatch(/^ {2}packages:\s+write/m)
+      workflow.permissions,
+      'release.yml declares workflow-level permissions — move the grant to the job that needs it',
+    ).toBeUndefined()
+  })
+
+  it('has every job declare its own permissions', async () => {
+    const workflow = await releaseWorkflow()
+    const jobIds = Object.keys(workflow.jobs)
+    expect(jobIds.length, 'no jobs parsed — the check would pass vacuously').toBeGreaterThan(1)
+    const undeclared = jobIds.filter((id) => workflow.jobs[id].permissions === undefined)
+    expect(
+      undeclared,
+      'these jobs inherit the repository default instead of saying what they need',
+    ).toEqual([])
+  })
+
+  it('scopes packages: write to docker-publish-sign alone', async () => {
+    const workflow = await releaseWorkflow()
+    const withPackagesWrite = Object.entries(workflow.jobs)
+      .filter(([, job]) => job.permissions?.packages === 'write')
+      .map(([id]) => id)
+    expect(withPackagesWrite).toEqual(['docker-publish-sign'])
   })
 })
 
