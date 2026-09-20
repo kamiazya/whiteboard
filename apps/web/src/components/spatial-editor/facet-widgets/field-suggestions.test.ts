@@ -46,6 +46,27 @@ const registry = createFacetRegistry([
 ])
 
 describe('collectFieldSuggestions', () => {
+  /**
+   * By LOCALE, not by code unit. These are values a person typed on the
+   * board and is about to read back in the Facets panel, and this project
+   * supports Japanese: a default `.sort()` orders by UTF-16 code unit,
+   * which files every kana value after every Latin one.
+   *
+   * `ä` and `z` are the discriminator — code units put `z` first, a locale
+   * puts `ä` first — so this fails if the comparator is dropped, which the
+   * ASCII-only case below cannot see.
+   */
+  it('orders values the way a reader expects, not by code unit', () => {
+    const nodes = [
+      box('a', { 'demo.class/v0': { axis: 'health', value: 'zulu' } }),
+      box('b', { 'demo.class/v0': { axis: 'health', value: 'ähnlich' } }),
+    ]
+    expect(collectFieldSuggestions(nodes, registry)['demo.class/v0']?.value).toEqual([
+      'ähnlich',
+      'zulu',
+    ])
+  })
+
   it("lists each text field's distinct values across the board, sorted", () => {
     const nodes = [
       box('a', { 'demo.class/v0': { axis: 'health', value: 'failing' } }),
