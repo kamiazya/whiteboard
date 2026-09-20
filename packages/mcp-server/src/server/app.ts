@@ -28,6 +28,7 @@ import { createMcpServer } from './mcp/index.js'
 import type { PairingUnavailableReason } from './mcp/pairing-link.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
+import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
@@ -72,11 +73,6 @@ import { FileVersionStore } from './store/version-store.js'
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
 
 const httpLog = getLogger('mcp-http')
-
-// Mirrors replica-env.ts's own default, for the ad-hoc/test caller that
-// supplies `replicaKeys` but not `replicaLeaseTtlMs` — production always
-// threads the resolved env value through http-server.ts.
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
 // MCP_HTTP_DEBUG=1 historically meant "show http traces unconditionally". Keep
 // that contract: bump the logger threshold down to info so the structured
@@ -477,7 +473,7 @@ export function createApp(options: AppOptions) {
       createReplicaKeyRouter({
         keys: replicaKeys,
         members,
-        leaseTtlMs: options.replicaLeaseTtlMs ?? SEVEN_DAYS_MS,
+        leaseTtlMs: options.replicaLeaseTtlMs ?? DEFAULT_REPLICA_LEASE_TTL_MS,
         workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
         credentialResolver,
       }),

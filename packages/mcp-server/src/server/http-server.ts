@@ -3,6 +3,7 @@ import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
 import type { Socket } from 'node:net'
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
+import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { WHITEBOARD_WS_PROTOCOL } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
 import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
@@ -21,6 +22,7 @@ import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
+import { DEFAULT_REPLICA_TIER } from './replica-env.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import {
   getConnectionStats,
@@ -95,7 +97,7 @@ export interface StartHttpServerOptions {
   exitProcess?: (code: number) => void
   /** The read plane's default tier (WHITEBOARD_REPLICA_TIER, replica-env.ts).
    *  Defaults to `offline` when omitted — see replica-env.ts's own default. */
-  replicaTier?: 'no-offline' | 'offline' | 'bounded'
+  replicaTier?: ReplicaTier
   /** How long a `bounded`-tier lease lasts (WHITEBOARD_REPLICA_LEASE_TTL_MS).
    *  Defaults to 7 days when omitted. */
   replicaLeaseTtlMs?: number
@@ -337,7 +339,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
   // from the same post-migration handle as `members` above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {
-    defaultTier: options.replicaTier ?? 'offline',
+    defaultTier: options.replicaTier ?? DEFAULT_REPLICA_TIER,
   })
   // The WS-route bridge is attached HERE, not in resolveServerDeps: the di
   // graph must not import the routes layer (value cycle), and this root is

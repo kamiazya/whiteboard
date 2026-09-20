@@ -1,4 +1,7 @@
-import { replicaTierSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import {
+  type ReplicaTier,
+  replicaTierSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { EnvIssue, ParsedSetting } from '../shared/env-setting.js'
 import { parseOptionalMilliseconds } from '../shared/env-setting.js'
 
@@ -12,14 +15,13 @@ import { parseOptionalMilliseconds } from '../shared/env-setting.js'
 const REPLICA_TIER_ENV = 'WHITEBOARD_REPLICA_TIER'
 const REPLICA_LEASE_TTL_ENV = 'WHITEBOARD_REPLICA_LEASE_TTL_MS'
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+export const DEFAULT_REPLICA_TIER: ReplicaTier = 'offline'
+export const DEFAULT_REPLICA_LEASE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /** What a workspace with no per-workspace `replicaTier` override gets. */
-export function parseReplicaTier(
-  env: NodeJS.ProcessEnv = process.env,
-): ParsedSetting<'no-offline' | 'offline' | 'bounded'> {
+export function parseReplicaTier(env: NodeJS.ProcessEnv = process.env): ParsedSetting<ReplicaTier> {
   const trimmed = env[REPLICA_TIER_ENV]?.trim()
-  if (trimmed === undefined || trimmed === '') return { ok: true, value: 'offline' }
+  if (trimmed === undefined || trimmed === '') return { ok: true, value: DEFAULT_REPLICA_TIER }
   const parsed = replicaTierSchema.safeParse(trimmed)
   if (!parsed.success) {
     return { ok: false, reason: "must be one of: 'no-offline', 'offline', 'bounded'" }
@@ -32,14 +34,14 @@ export function parseReplicaTier(
 export function parseReplicaLeaseTtlMs(
   env: NodeJS.ProcessEnv = process.env,
 ): ParsedSetting<number> {
-  const parsed = parseOptionalMilliseconds(env[REPLICA_LEASE_TTL_ENV], SEVEN_DAYS_MS)
+  const parsed = parseOptionalMilliseconds(env[REPLICA_LEASE_TTL_ENV], DEFAULT_REPLICA_LEASE_TTL_MS)
   if (!parsed.ok) return parsed
   // fallback is a number, never null, so a successful parse always carries one.
   return { ok: true, value: parsed.value as number }
 }
 
 export interface ReplicaEnv {
-  tier: 'no-offline' | 'offline' | 'bounded'
+  tier: ReplicaTier
   leaseTtlMs: number
 }
 
@@ -49,8 +51,8 @@ export function resolveReplicaEnv(env: NodeJS.ProcessEnv = process.env): Replica
   const tier = parseReplicaTier(env)
   const leaseTtlMs = parseReplicaLeaseTtlMs(env)
   return {
-    tier: tier.ok ? tier.value : 'offline',
-    leaseTtlMs: leaseTtlMs.ok ? leaseTtlMs.value : SEVEN_DAYS_MS,
+    tier: tier.ok ? tier.value : DEFAULT_REPLICA_TIER,
+    leaseTtlMs: leaseTtlMs.ok ? leaseTtlMs.value : DEFAULT_REPLICA_LEASE_TTL_MS,
   }
 }
 
