@@ -280,6 +280,48 @@ describe('server/index main() WHITEBOARD_OAUTH_CLIENT_REGISTRY startup gate', ()
   })
 })
 
+describe('server/index main() WHITEBOARD_REPLICA_TIER wiring', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllEnvs()
+    delete process.env.WHITEBOARD_REPLICA_TIER
+    delete process.env.WHITEBOARD_TOKEN
+  })
+
+  it('threads a valid override through to startHttpServer', async () => {
+    process.env.WHITEBOARD_REPLICA_TIER = 'no-offline'
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await main()
+      expect(exitSpy).not.toHaveBeenCalled()
+      expect(startHttpServerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ replicaTier: 'no-offline' }),
+      )
+    } finally {
+      exitSpy.mockRestore()
+      stdoutSpy.mockRestore()
+    }
+  })
+
+  it('defaults to offline when the env var is unset', async () => {
+    delete process.env.WHITEBOARD_REPLICA_TIER
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await main()
+      expect(startHttpServerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ replicaTier: 'offline' }),
+      )
+    } finally {
+      stdoutSpy.mockRestore()
+    }
+  })
+})
+
 describe('server/index main() config-file wiring', () => {
   let dir: string
   let originalCwd: string
