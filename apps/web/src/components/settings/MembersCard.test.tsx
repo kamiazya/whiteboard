@@ -441,6 +441,52 @@ describe('MembersCard', () => {
     expect(screen.getByTestId('members-status').textContent).toMatch(/Ada was removed/)
   })
 
+  it('keeps the confirm dialog open against Escape and the disabled Cancel while a removal is in flight', async () => {
+    const ada = {
+      profileId: 'profile-ada',
+      displayName: 'Ada',
+      credentials: [{ credentialId: 'c1', origin: 'https://a.example' }],
+      createdAt: '2026-09-01T00:00:00.000Z',
+    }
+    let resolveDelete: ((res: Response) => void) | undefined
+
+    renderCard(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'GET' && url === MEMBERS_URL) return jsonResponse({ members: [ada] })
+      if (method === 'GET' && url === CREDENTIALS_URL) return jsonResponse({ credentials: [] })
+      if (method === 'DELETE' && url === `${MEMBERS_URL}/${encodeURIComponent(ada.profileId)}`) {
+        return new Promise<Response>((resolve) => {
+          resolveDelete = resolve
+        })
+      }
+      return jsonResponse({}, 404)
+    })
+
+    await screen.findByText('Ada')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Ada from this workspace' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(resolveDelete).toBeDefined())
+
+    // Escape is the dialog's own dismiss path (Radix's DismissableLayer);
+    // the guard in MembersCard's onOpenChange must swallow it while the
+    // DELETE is still in flight, or a user could walk away believing a
+    // removal never happened when it is still running.
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+
+    // Cancel is disabled for the same reason, so a click reaches nothing.
+    const cancelButton = within(dialog).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement
+    expect(cancelButton.disabled).toBe(true)
+    fireEvent.click(cancelButton)
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+
+    // Once the DELETE genuinely settles, the dialog is free to close.
+    resolveDelete?.(jsonResponse({ removed: true, sessionsEnded: 0 }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(screen.queryByText('Ada')).toBeNull()
+  })
+
   it('offers no form when the browser has no pinned passkeys, and points at Connections › Passkeys', async () => {
     renderCard(async (url, init) => {
       const method = init?.method ?? 'GET'
