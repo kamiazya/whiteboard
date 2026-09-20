@@ -111,11 +111,6 @@ export function decodeEnvelope(bytes: Uint8Array): SealedEnvelope {
   return sealedEnvelopeSchema.parse({ v: 1, iv, ct, epoch })
 }
 
-/** A private copy narrowed to the buffer-backed generic `sealBytes`/`openBytes` require. */
-function narrow(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(bytes)
-}
-
 function sealManifest(manifest: SnapshotManifest): SnapshotManifest {
   return {
     chunkCount: manifest.chunkCount,
@@ -162,7 +157,8 @@ export class SealedDocumentStore implements DocumentStore {
     documentId: string,
     plaintext: Uint8Array,
   ): Promise<Uint8Array<ArrayBuffer>> {
-    const envelope = await sealBytes(key, narrow(plaintext), { documentId, epoch })
+    // A private copy: `sealBytes` wants the buffer-backed narrowing WebCrypto requires.
+    const envelope = await sealBytes(key, new Uint8Array(plaintext), { documentId, epoch })
     return encodeEnvelope(envelope)
   }
 
@@ -198,19 +194,29 @@ export class SealedDocumentStore implements DocumentStore {
     }
   }
 
+  /**
+   * Resolves the key once per batch and not at all for an empty one — an
+   * empty batch must succeed even while the key is withheld.
+   */
+  async #withKey<T, R>(
+    documentId: string,
+    items: readonly T[],
+    fn: (resolved: { key: CryptoKey; epoch: number }, item: T) => Promise<R>,
+  ): Promise<R[]> {
+    if (items.length === 0) return []
+    const resolved = await this.#resolveKey(documentId)
+    return Promise.all(items.map((item) => fn(resolved, item)))
+  }
+
   async #sealChunks(
     documentId: string,
     manifest: SnapshotManifest,
     chunks: readonly SnapshotChunk[],
   ): Promise<{ manifest: SnapshotManifest; chunks: SnapshotChunk[] }> {
-    if (chunks.length === 0) return { manifest: sealManifest(manifest), chunks: [] }
-    const { key, epoch } = await this.#resolveKey(documentId)
-    const sealed = await Promise.all(
-      chunks.map(async (chunk) => ({
-        ...chunk,
-        bytes: await this.#seal(key, epoch, documentId, chunk.bytes),
-      })),
-    )
+    const sealed = await this.#withKey(documentId, chunks, async ({ key, epoch }, chunk) => ({
+      ...chunk,
+      bytes: await this.#seal(key, epoch, documentId, chunk.bytes),
+    }))
     return { manifest: sealManifest(manifest), chunks: sealed }
   }
 
@@ -237,18 +243,10 @@ export class SealedDocumentStore implements DocumentStore {
     if (result === null) return null
     const documentId = docRefKey(input.docRef)
     const manifest = openManifest(result.manifest, documentId)
-    const chunks =
-      result.chunks.length === 0
-        ? []
-        : await (async () => {
-            const { key } = await this.#resolveKey(documentId)
-            return Promise.all(
-              result.chunks.map(async (chunk) => ({
-                ...chunk,
-                bytes: await this.#open(key, documentId, chunk.bytes, `chunk ${chunk.index}`),
-              })),
-            )
-          })()
+    const chunks = await this.#withKey(documentId, result.chunks, async ({ key }, chunk) => ({
+      ...chunk,
+      bytes: await this.#open(key, documentId, chunk.bytes, `chunk ${chunk.index}`),
+    }))
     return { ...result, manifest, chunks }
   }
 
@@ -266,27 +264,17 @@ export class SealedDocumentStore implements DocumentStore {
 
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {
     const documentId = docRefKey(input.docRef)
-    const updates = input.deltaBatch.updates
-    const sealed =
-      updates.length === 0
-        ? updates
-        : await (async () => {
-            const { key, epoch } = await this.#resolveKey(documentId)
-            return Promise.all(updates.map((update) => this.#seal(key, epoch, documentId, update)))
-          })()
-    return this.inner.appendDeltas({
-      ...input,
-      deltaBatch: { ...input.deltaBatch, updates: sealed },
-    })
+    const updates = await this.#withKey(documentId, input.deltaBatch.updates, ({ key, epoch }, u) =>
+      this.#seal(key, epoch, documentId, u),
+    )
+    return this.inner.appendDeltas({ ...input, deltaBatch: { ...input.deltaBatch, updates } })
   }
 
   async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
-    const result = await this.inner.loadDeltas(input)
-    if (result.updates.length === 0) return result
     const documentId = docRefKey(input.docRef)
-    const { key } = await this.#resolveKey(documentId)
-    const updates = await Promise.all(
-      result.updates.map((update) => this.#open(key, documentId, update, 'a delta')),
+    const result = await this.inner.loadDeltas(input)
+    const updates = await this.#withKey(documentId, result.updates, ({ key }, u) =>
+      this.#open(key, documentId, u, 'a delta'),
     )
     return { ...result, updates }
   }
