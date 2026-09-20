@@ -56,6 +56,21 @@ describe('ensureProfile', () => {
     expect(second.displayName).toBe('Ada')
   })
 
+  it('re-registration: an explicit profileId that matches the existing owner succeeds (no conflict)', async () => {
+    const owner = await store.ensureProfile({
+      origin: 'https://a.example',
+      credentialId: 'cred-1',
+      displayName: 'Ada',
+    })
+    const reregistered = await store.ensureProfile({
+      origin: 'https://a.example',
+      credentialId: 'cred-1',
+      displayName: 'Ada',
+      profileId: owner.id,
+    })
+    expect(reregistered).toEqual(owner)
+  })
+
   it('treats the same credentialId under two different origins as independent claims', async () => {
     const a = await store.ensureProfile({
       origin: 'https://a.example',

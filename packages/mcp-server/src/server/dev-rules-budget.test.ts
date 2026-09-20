@@ -183,7 +183,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // is about to be built in, fixed here BEFORE the code so the naming is not
   // settled by whichever file happens to be written first — which is the one
   // thing this table is for, and what it costs is a bucket.
-  '.claude/rules/vocabulary.md': 18,
+  //
+  // 19 since the **Member** and **Membership** rows (ADR-0041/0042) plus the
+  // `revoke` disambiguation paragraph — a bare `revoke` spans two layers
+  // (workspace access vs. credential acceptance) and the ambiguity is worth
+  // a bucket to name before more call sites write one without saying which.
+  '.claude/rules/vocabulary.md': 19,
 }
 
 /**
