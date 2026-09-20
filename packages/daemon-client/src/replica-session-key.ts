@@ -3,6 +3,7 @@ import { membershipRefusalSchema } from './api-contracts/membership.js'
 import type { ReplicaTier } from './api-contracts/replica-key.js'
 import { replicaKeyResponseSchema } from './api-contracts/replica-key.js'
 import { deriveDocumentKey } from './read-plane.js'
+import { fromBase64 } from './sse-stream-hub.js'
 
 /**
  * The read plane's in-memory session-key holder (ADR-0042 decisions 2/3/5,
@@ -38,26 +39,19 @@ export type SessionKeyResult =
     }
   | { kind: 'withheld'; reason: MembershipRefusalCode | 'unreachable' | 'lapsed' }
 
-interface CacheEntry {
-  result: SessionKeyResult
-  leaseExpiresAtMs?: number
-}
-
 // Module-singleton: one shared entry and one shared in-flight request per
 // (daemonBaseUrl, workspaceId), so every caller in a tab awaits the same
 // request instead of minting N of them.
-const cache = new Map<string, CacheEntry>()
+const cache = new Map<string, SessionKeyResult>()
 const inFlight = new Map<string, Promise<SessionKeyResult>>()
 
 function cacheKey(daemonBaseUrl: string, workspaceId: string): string {
   return `${daemonBaseUrl}\u0000${workspaceId}`
 }
 
+// Unpadded, which `atob` accepts; the schema pins both lengths to 43/22 chars.
 function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/')
-  const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
-  const binary = atob(padded + pad)
-  return Uint8Array.from(binary, (c) => c.charCodeAt(0))
+  return fromBase64(value.replace(/-/g, '+').replace(/_/g, '/'))
 }
 
 async function fetchSessionKey(
@@ -66,17 +60,12 @@ async function fetchSessionKey(
   source: ReplicaSource,
 ): Promise<SessionKeyResult> {
   let response: Response
+  let body: unknown
   try {
     response = await source.fetch(
       `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/replica-key`,
       { method: 'POST' },
     )
-  } catch {
-    return { kind: 'withheld', reason: 'unreachable' }
-  }
-
-  let body: unknown
-  try {
     body = await response.json()
   } catch {
     return { kind: 'withheld', reason: 'unreachable' }
@@ -137,11 +126,15 @@ export async function sessionKey(
   const key = cacheKey(daemonBaseUrl, workspaceId)
   const cached = cache.get(key)
   if (cached !== undefined) {
-    if (cached.leaseExpiresAtMs !== undefined && Date.now() >= cached.leaseExpiresAtMs) {
+    if (
+      cached.kind === 'key' &&
+      cached.leaseExpiresAt !== undefined &&
+      Date.now() >= cached.leaseExpiresAt
+    ) {
       cache.delete(key)
       return { kind: 'withheld', reason: 'lapsed' }
     }
-    return cached.result
+    return cached
   }
 
   if (source === undefined) {
@@ -155,10 +148,7 @@ export async function sessionKey(
 
   const promise = requestSessionKey(daemonBaseUrl, workspaceId, source).then((result) => {
     inFlight.delete(key)
-    cache.set(key, {
-      result,
-      leaseExpiresAtMs: result.kind === 'key' ? result.leaseExpiresAt : undefined,
-    })
+    cache.set(key, result)
     return result
   })
   inFlight.set(key, promise)
@@ -167,8 +157,9 @@ export async function sessionKey(
 
 /** Drops the held key for one (daemon, workspace) pair — used on disconnect and reconnect. */
 export function forget(daemonBaseUrl: string, workspaceId: string): void {
-  cache.delete(cacheKey(daemonBaseUrl, workspaceId))
-  clearDerivedKeyMemo(cacheKey(daemonBaseUrl, workspaceId))
+  const key = cacheKey(daemonBaseUrl, workspaceId)
+  cache.delete(key)
+  derivedKeyMemo.delete(key)
 }
 
 /** Drops every held key — used on logout. */
@@ -187,23 +178,17 @@ export interface ReplicaKeyProvider {
 // Cleared by forget()/forgetAll() alongside the session key they derive from.
 const derivedKeyMemo = new Map<string, Map<string, CryptoKey>>()
 
-function clearDerivedKeyMemo(key: string): void {
-  derivedKeyMemo.delete(key)
-}
+// v1 derives every document at epoch 0 — a document's own epoch, once
+// tracked, threads through the envelope it seals rather than this provider.
+const EPOCH = 0
 
-/**
- * Builds the `ReplicaKeyProvider` `SealedDocumentStore` takes for a
- * daemon-kept replica. v1 derives every document at epoch 0 — a document's
- * own epoch, once tracked, threads through the envelope it seals rather
- * than through this provider.
- */
+/** Builds the `ReplicaKeyProvider` `SealedDocumentStore` takes for a daemon-kept replica. */
 export function replicaKeyProviderFor(
   daemonBaseUrl: string,
   workspaceId: string,
   source?: ReplicaSource,
 ): ReplicaKeyProvider {
   const key = cacheKey(daemonBaseUrl, workspaceId)
-  const EPOCH = 0
   return {
     async keyFor(documentId: string) {
       const result = await sessionKey(daemonBaseUrl, workspaceId, source)
