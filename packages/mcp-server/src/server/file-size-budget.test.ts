@@ -705,9 +705,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // over generated NODES — and the ledger's fourth direction fails on a
   // `not modelled` the run DOES produce, so each entry is a sentence
   // somebody had to be able to defend rather than a line of boilerplate.
-  // 2724 -> 2728 for the two `attach` ledger entries, unreachable from this
-  // model for the reason every other end-drag entry is.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2728,
+  // 2724 -> 2730 for the `attach` entries: two command kinds and the
+  // `pointerdown-end` that arms them, all unreachable from this model for
+  // the reason every other overlay gesture is — it generates node
+  // interactions and never renders the handle the press starts on.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2730,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,

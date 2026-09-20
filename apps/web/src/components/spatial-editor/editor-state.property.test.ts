@@ -415,6 +415,8 @@ const GESTURE_EVENT_COVERAGE = {
   'update-text-edit': 'covered',
   'commit-text-edit': 'covered',
   'cancel-text-edit': 'covered',
+  'pointerdown-end':
+    'not modelled: the press on an END handle. This model generates NODE interactions and never renders the overlay a handle sits on, so nothing here produces one; its reducer arms are gesture-ends.test.ts and the whole way from a pointer to the moved end is edge-reattach.browser.test.tsx',
   'pointerdown-bend':
     'not modelled: its only command is set-edge-facet, which this model already declares unmodelled — a plugin-owned payload it cannot observe. The gesture arithmetic is edge-bend-gesture.test.ts and the flow is edge-bend.browser.test.tsx',
   'remove-bend':

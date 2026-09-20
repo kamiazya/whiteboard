@@ -14,6 +14,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { bendInkCommand } from '../../lib/spatial/commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
+import { routableElement } from './gesture-ends.js'
 
 /**
  * A bend being dragged on one element.
@@ -41,18 +42,12 @@ export interface BendSnapshot {
  * than as "I looked in one place".
  */
 export function storedWaypoints(canvas: SpatialCanvas, id: string): readonly Point[] {
-  const element =
-    canvas.edges.find((candidate) => candidate.id === id) ??
-    (canvas.lines ?? []).find((candidate) => candidate.id === id)
-  return element?.bends ?? []
+  return routableElement(canvas, id)?.bends ?? []
 }
 
 /** Whether this id still names something with bends — the drag's target check. */
 export function bendTargetExists(canvas: SpatialCanvas, id: string): boolean {
-  return (
-    canvas.edges.some((edge) => edge.id === id) ||
-    (canvas.lines ?? []).some((line) => line.id === id)
-  )
+  return routableElement(canvas, id) !== undefined
 }
 
 /**
