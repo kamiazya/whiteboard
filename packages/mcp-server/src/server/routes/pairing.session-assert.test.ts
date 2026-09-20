@@ -252,6 +252,46 @@ describe('POST /api/pairing/session-assert', () => {
     expect(fixture.tokens.bindingOf(token, HOSTED)).toEqual({ origin: HOSTED, credentialId })
   })
 
+  it('answers 401 when the session dies between the bearer check and the bind', async () => {
+    // A verified assertion whose token was revoked or expired in the window
+    // between requireSession and tokens.bind: nothing to bind, so the answer
+    // is the session's 401, not a 403 about the assertion.
+    const fixture = makeApp()
+    const { token, credentialId, keypair } = await pairedSession(fixture)
+
+    const challengeRes = await mintChallenge(fixture, token, HOSTED)
+    const { challenge } = sessionAssertChallengeResponseSchema.parse(await challengeRes.json())
+    const assertion = buildAssertion({
+      privateKey: keypair.privateKey,
+      rpId: HOST,
+      origin: HOSTED,
+      challenge: Buffer.from(challenge, 'base64url'),
+      flags: FLAGS,
+      signCount: 1,
+    })
+
+    const realBind = fixture.tokens.bind
+    fixture.tokens.bind = (t, binding) => {
+      fixture.tokens.revokeOrigin(HOSTED)
+      return realBind(t, binding)
+    }
+
+    const res = await post(
+      fixture.app,
+      '/api/pairing/session-assert',
+      {
+        credentialId,
+        authenticatorData: assertion.authenticatorData.toString('base64url'),
+        clientDataJSON: assertion.clientDataJSON.toString('base64url'),
+        signature: assertion.signature.toString('base64url'),
+      },
+      { Authorization: `Bearer ${token}`, Origin: HOSTED },
+    )
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'unauthorized' })
+    expect(fixture.tokens.bindingOf(token, HOSTED)).toBeNull()
+  })
+
   it('refuses an assertion over a fabricated challenge', async () => {
     const fixture = makeApp()
     const { token, credentialId, keypair } = await pairedSession(fixture)
