@@ -31,7 +31,7 @@ import { assertSecretFileIsOwnerOnly, writeSecretFileAtomicSync } from './secret
 
 const log = getLogger('daemon-identity')
 
-const DAEMON_IDENTITY_FILENAME = 'daemon-identity.json'
+export const DAEMON_IDENTITY_FILENAME = 'daemon-identity.json'
 
 const ed25519JwkSchema = z
   .object({

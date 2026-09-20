@@ -33,7 +33,7 @@ import { assertSecretFileIsOwnerOnly, writeSecretFileAtomicSync } from './secret
 
 const log = getLogger('macaroon-root-key')
 
-const MACAROON_ROOT_KEY_FILENAME = 'macaroon-root-key.json'
+export const MACAROON_ROOT_KEY_FILENAME = 'macaroon-root-key.json'
 
 // 32 bytes: HMAC-SHA-256's block-independent sweet spot — a key at the hash's
 // output length, so it is neither padded nor pre-hashed by the HMAC
