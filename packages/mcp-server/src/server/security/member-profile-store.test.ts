@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CapturedLogsHandle, captureLogsForTests } from '../log.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import {
@@ -137,6 +137,39 @@ describe('addMember / listMembers', () => {
 
     const members = await store.listMembers('ws-1')
     expect(members).toEqual([profile])
+  })
+
+  it('orders multiple members by (createdAt, id) regardless of addMember call order', async () => {
+    // Pin distinct createdAt values: ensureProfile's `now` comes from
+    // Date.now(), and two calls in the same millisecond would tie on
+    // createdAt and fall through to an id order this test cannot predict.
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(1_000)
+      const ada = await store.ensureProfile({
+        origin: 'https://a.example',
+        credentialId: 'cred-1',
+        displayName: 'Ada',
+      })
+      vi.setSystemTime(2_000)
+      const bea = await store.ensureProfile({
+        origin: 'https://b.example',
+        credentialId: 'cred-2',
+        displayName: 'Bea',
+      })
+
+      // Insert in the OPPOSITE order from profile creation: with no ORDER BY,
+      // sqlite would answer in this (reversed) insertion order, so this
+      // catches a dropped/reversed `orderBy` where the tie-insensitive
+      // Set-based property test cannot.
+      await store.addMember('ws-1', bea.id)
+      await store.addMember('ws-1', ada.id)
+
+      const members = await store.listMembers('ws-1')
+      expect(members.map((m) => m.id)).toEqual([ada.id, bea.id])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
