@@ -20,9 +20,10 @@
  * do differ, deliberately, and each entry below says how. The rule is that a
  * surface cannot arrive without an answer.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const SCAN_DIR = 'packages/mcp-server/src'
@@ -61,28 +62,14 @@ const AUTH_SURFACES = {
     'own-strategy: server-mode validates a JWT against an external IdP, so there is no credential this daemon issued to resolve. Folding it into the resolver is a separate increment with its own review; what it shares today is the scope vocabulary and the route-scope registry.',
 } satisfies Record<string, SurfacePolicy>
 
-function walk(dir: string, out: string[]): void {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules' || entry === 'dist') continue
-      walk(full, out)
-    } else if (/\.(ts|tsx)$/.test(entry)) out.push(full)
-  }
-}
-
-function isTest(path: string): boolean {
-  return /\.(test|spec)\.tsx?$/.test(path) || path.split(sep).includes('test-utils')
-}
-
 function scan(): { readonly surfaces: string[]; readonly fileCount: number } {
   const files: string[] = []
-  walk(join(REPO_ROOT, SCAN_DIR), files)
+  walkSourceFiles(join(REPO_ROOT, SCAN_DIR), files)
   const surfaces: string[] = []
   let fileCount = 0
   for (const file of files) {
     const rel = relative(REPO_ROOT, file).split(sep).join('/')
-    if (isTest(rel)) continue
+    if (isTestPath(rel)) continue
     fileCount += 1
     const source = readFileSync(file, 'utf8')
     if (RESOLVES.test(source) || OWN_STRATEGY.test(source)) surfaces.push(rel)

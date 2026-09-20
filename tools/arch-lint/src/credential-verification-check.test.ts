@@ -20,9 +20,10 @@
  * requires the read half, `/mcp` admits only full authority) and it
  * deliberately stays where it is.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 
@@ -64,116 +65,6 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
 // of these primitives at all. An entry for either would be an exemption for
 // something that was never flagged, which the staleness check below refuses.
 
-function walk(dir: string, out: string[]): void {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules' || entry === 'dist') continue
-      walk(full, out)
-    } else if (/\.(ts|tsx)$/.test(entry)) out.push(full)
-  }
-}
-
-/** A test may call a primitive directly; the rule is about production wiring. */
-function isTest(path: string): boolean {
-  return /\.(test|spec)\.tsx?$/.test(path) || path.split(sep).includes('test-utils')
-}
-
-/**
- * Comments out and string bodies blanked, so prose naming a primitive is not
- * read as calling one.
- *
- * REGEX LITERALS ARE TRACKED, and that is not defensive: the first version of
- * this scan did not, and `bearer-token.ts` contains `/[\s,"]/`. The `"` inside
- * it opened a string that ran to the next quote far below, blanking the rest
- * of the file — so `isAuthorized`'s own declaration became invisible and the
- * allowlist reported the entry as stale. The failure mode is the dangerous
- * direction: any file with a quote inside a regex would have had its tail
- * silently exempted from the scan.
- *
- * Telling division from a regex needs the previous token. The standard
- * heuristic is enough here: a `/` opens a regex when the last meaningful
- * character was an operator, an opening bracket, or nothing at all.
- */
-function stripComments(source: string): string {
-  let out = ''
-  let i = 0
-  let lastMeaningful = ''
-  const REGEX_MAY_FOLLOW = new Set([
-    '',
-    '(',
-    ',',
-    '=',
-    ':',
-    '[',
-    '!',
-    '&',
-    '|',
-    '?',
-    '{',
-    '}',
-    ';',
-    '+',
-    '-',
-    '*',
-    '%',
-    '<',
-    '>',
-    '~',
-    '^',
-  ])
-  while (i < source.length) {
-    const ch = source[i] as string
-    const next = source[i + 1]
-    if (ch === '/' && next === '/') {
-      while (i < source.length && source[i] !== '\n') i += 1
-      continue
-    }
-    if (ch === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2)
-      i = end === -1 ? source.length : end + 2
-      continue
-    }
-    if (ch === '/' && REGEX_MAY_FOLLOW.has(lastMeaningful)) {
-      // A regex literal: consume to the unescaped closing slash, honouring a
-      // character class, where an unescaped `/` is literal.
-      i += 1
-      let inClass = false
-      while (i < source.length) {
-        const r = source[i] as string
-        if (r === '\\') {
-          i += 2
-          continue
-        }
-        if (r === '[') inClass = true
-        else if (r === ']') inClass = false
-        else if (r === '/' && !inClass) break
-        else if (r === '\n') break
-        i += 1
-      }
-      i += 1
-      lastMeaningful = ')'
-      continue
-    }
-    if (ch === "'" || ch === '"' || ch === '`') {
-      const start = i + 1
-      i = start
-      while (i < source.length && source[i] !== ch) {
-        if (source[i] === '\\') i += 1
-        i += 1
-      }
-      i += 1
-      out += `${ch}${ch}`
-      lastMeaningful = ch
-      continue
-    }
-    out += ch
-    if (!/\s/.test(ch)) lastMeaningful = ch
-    i += 1
-  }
-  return out
-}
-
 /**
  * The scan reading its own blind spot. A quote inside a regex used to blank
  * everything after it, so this fixture is the shape that regressed — if
@@ -188,14 +79,14 @@ const REGEX_BLIND_SPOT_FIXTURE = [
 
 function scan(): { readonly callers: Map<string, string[]>; readonly fileCount: number } {
   const files: string[] = []
-  walk(join(REPO_ROOT, SCAN_DIR), files)
+  walkSourceFiles(join(REPO_ROOT, SCAN_DIR), files)
   const callers = new Map<string, string[]>()
   let fileCount = 0
   for (const file of files) {
     const rel = relative(REPO_ROOT, file).split(sep).join('/')
-    if (isTest(rel)) continue
+    if (isTestPath(rel)) continue
     fileCount += 1
-    const source = stripComments(readFileSync(file, 'utf8'))
+    const source = stripCommentsAndStrings(readFileSync(file, 'utf8'))
     // An import is not a call; the primitive has to be invoked.
     const body = source
       .split('\n')
@@ -209,14 +100,14 @@ function scan(): { readonly callers: Map<string, string[]>; readonly fileCount: 
 
 describe('the scan can see what it claims to scan', () => {
   it('still finds a call after a regex literal containing a quote', () => {
-    const stripped = stripComments(REGEX_BLIND_SPOT_FIXTURE)
+    const stripped = stripCommentsAndStrings(REGEX_BLIND_SPOT_FIXTURE)
 
     expect(stripped).toContain('isAuthorized(')
     expect(PRIMITIVES.some((p) => p.pattern.test(stripped))).toBe(true)
   })
 
   it('still blanks a real string, so prose naming a primitive is not a call', () => {
-    const stripped = stripComments('const note = "call isAuthorized(x) somewhere"')
+    const stripped = stripCommentsAndStrings('const note = "call isAuthorized(x) somewhere"')
 
     expect(PRIMITIVES.some((p) => p.pattern.test(stripped))).toBe(false)
   })
