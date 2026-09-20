@@ -162,6 +162,23 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.reason).toMatch(/empty/)
   })
 
+  /**
+   * `typeof null === 'object'`, so the null half of the entry guard is the
+   * only thing between a `[null]` pack document and a TypeError thrown out
+   * of the release gate — a crash instead of a stated reason, at the step
+   * that decides what ships.
+   *
+   * Nothing covered it: removing `|| entry === null` left all 41 tests
+   * green. It read as dead code too, because a JSDoc cast asserted
+   * `Record<string, unknown>` before anything had checked.
+   */
+  it('rejects a null entry rather than throwing on it', async () => {
+    const { verifyPackContents } = await importModule()
+    const result = verifyPackContents([null]) as { ok: false; reason: string }
+    expect(result.ok).toBe(false)
+    expect(result.reason).toMatch(/object/)
+  })
+
   it('rejects an entry missing files', async () => {
     const { verifyPackContents } = await importModule()
     const result = verifyPackContents([{ size: 1 }]) as { ok: false; reason: string }
