@@ -82,6 +82,22 @@ export type RestoreVersionResult =
  * backstop no surface can skip; an adapter with richer per-segment
  * diagnostics may still run its own validation for the message.
  */
+/**
+ * What all three modes have in hand once the version is resolved: the live
+ * document, the past state, and how to narrate the write.
+ */
+interface RestoreContext {
+  readonly workspaceId: string
+  /** The SOURCE document, whose history holds the version. */
+  readonly path: string
+  readonly versionId: string
+  /** The live doc at `path`, loaded before the version is resolved. */
+  readonly doc: LoroDoc
+  readonly past: LoroDoc
+  readonly label: string | undefined
+  readonly progress: RestoreProgress
+}
+
 export async function restoreVersion(
   deps: Pick<ServerDeps, 'versions' | 'liveDocuments'>,
   input: RestoreVersionInput,
@@ -101,129 +117,173 @@ export async function restoreVersion(
     // progress events show.
     const owned = (await versions.list(workspaceId, path)).find((v) => v.id === versionId)
     if (owned === undefined) return { kind: 'not-found' }
-    const label = owned.label
 
-    const targetPath = input.targetPath
+    const ctx: RestoreContext = {
+      workspaceId,
+      path,
+      versionId,
+      doc,
+      past,
+      label: owned.label,
+      progress,
+    }
+
+    // The three modes the header describes, in the order they take
+    // precedence. A `targetPath` equal to `path` collapses into in-place,
+    // which is why it is compared rather than merely present.
+    const { targetPath } = input
     if (targetPath !== undefined && targetPath !== path) {
-      if (!documentPathSchema.safeParse(targetPath).success) {
-        return { kind: 'invalid-target-path' }
-      }
-      if (input.subtree === true) return { kind: 'subtree-takes-no-target' }
-
-      const targetAlreadyExists = await live.exists(workspaceId, targetPath)
-      if (targetAlreadyExists && input.overwrite !== true) {
-        return { kind: 'output-exists', targetPath }
-      }
-
-      if (targetAlreadyExists) {
-        const targetDoc = await live.get(workspaceId, targetPath)
-        // The merged content is the source's own shape (spatial nodes/edges
-        // vs. a markdown body), so the target's stored kind must follow it or
-        // a kind-aware consumer (editor routing) opens the overwritten
-        // document with the wrong editor.
-        const sourceKind = await live.kind(workspaceId, path)
-        await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
-          label,
-          kind: sourceKind,
-          progress,
-        })
-        await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
-        return {
-          kind: 'restored-to-target',
-          targetPath,
-          elementCount: countAliveNodes(targetDoc),
-        }
-      }
-
-      // Genuinely new document: no live doc and no connected clients, so
-      // there is nothing to reconcile against. The restored content is
-      // whatever the source stores, so the new row carries the source's own
-      // kind rather than the store default.
-      try {
-        const sourceKind = await live.kind(workspaceId, path)
-        await live.save(workspaceId, targetPath, past, {
-          overwrite: false,
-          ...(sourceKind !== null ? { kind: sourceKind } : {}),
-        })
-      } catch (err) {
-        if (err instanceof DocumentPathTakenError) {
-          return { kind: 'output-exists', targetPath }
-        }
-        throw err
-      }
-      // Guard against a stale cache entry from a since-deleted document at
-      // this path being served instead of the just-written snapshot.
-      live.evict(workspaceId, targetPath)
-      await recordMerge(versions, workspaceId, targetPath, past, versionId)
-      return { kind: 'restored-to-target', targetPath, elementCount: countAliveNodes(past) }
+      return await restoreToTarget(live, versions, ctx, targetPath, input)
     }
-
     if (input.subtree === true) {
-      const pastWorkspace = await versions.loadWorkspaceAt(workspaceId, versionId)
-      if (pastWorkspace === null) return { kind: 'subtree-needs-workspace-version' }
-      const inSubtree = (p: string) => p === path || p.startsWith(`${path}/`)
-      const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
-        node.type === 'document' && inSubtree(node.path) ? [node] : [],
-      )
-      const pastIds = new Set(pastDocs.map((node) => node.meta.documentId))
-      // A row without an id cannot be correlated to the version and is left
-      // alone.
-      const rows = (await live.list(workspaceId)).flatMap((row) =>
-        row.id === undefined ? [] : [{ id: row.id, path: row.path }],
-      )
-      const rowsById = new Map(rows.map((row) => [row.id, row]))
-      await progress({
-        workspaceId,
-        path,
-        phase: 'started',
-        ...(label === undefined ? {} : { label }),
-      })
-      try {
-        // Deletions first, so a past document whose path a later-born one
-        // occupies can land after the squatter is gone. The tree delete
-        // EVACUATES, so nothing here is unrecoverable.
-        for (const row of rows) {
-          if (inSubtree(row.path) && !pastIds.has(row.id)) {
-            await live.delete(workspaceId, row.path)
-          }
-        }
-        for (const node of pastDocs) {
-          const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
-          if (pastDoc === null) continue
-          const liveRow = rowsById.get(node.meta.documentId)
-          if (liveRow !== undefined) {
-            if (liveRow.path !== node.path) {
-              await live.rename(workspaceId, liveRow.path, node.path)
-            }
-            const liveDoc = await live.get(workspaceId, node.path)
-            reconcileDocContent(liveDoc, pastDoc)
-            await live.save(workspaceId, node.path, liveDoc, {
-              overwrite: true,
-              kind: node.meta.kind,
-            })
-          } else {
-            // Deleted since the version: recreated under the SAME
-            // documentId's row lineage as far as the tree is concerned (the
-            // write-through places it by path + kind).
-            await live.save(workspaceId, node.path, pastDoc, { kind: node.meta.kind })
-            live.evict(workspaceId, node.path)
-          }
-          // Every document the rollback moved gains the point, not just the
-          // one that was addressed: leaving the rest unrecorded would make
-          // this the one mode whose history reads as a straight line through
-          // a merge.
-          await recordMerge(versions, workspaceId, node.path, pastDoc, versionId)
-        }
-      } finally {
-        await progress({ workspaceId, path, phase: 'complete' })
-      }
-      return { kind: 'restored-subtree', restoredCount: pastDocs.length }
+      return await restoreSubtree(live, versions, ctx)
     }
-
-    await reconcileAndSave(live, workspaceId, path, doc, past, { label, kind: null, progress })
-    await recordMerge(versions, workspaceId, path, doc, versionId)
-    return { kind: 'restored-in-place' }
+    return await restoreInPlace(live, versions, ctx)
   })
+}
+
+/** Mode 3: reconcile the past onto the document that holds the history. */
+async function restoreInPlace(
+  live: LiveDocuments,
+  versions: Pick<ServerDeps, 'versions'>['versions'],
+  ctx: RestoreContext,
+): Promise<RestoreVersionResult> {
+  const { workspaceId, path, doc, past, label, progress, versionId } = ctx
+  await reconcileAndSave(live, workspaceId, path, doc, past, { label, kind: null, progress })
+  await recordMerge(versions, workspaceId, path, doc, versionId)
+  return { kind: 'restored-in-place' }
+}
+
+/** Mode 2: restore the past state into a DIFFERENT document. */
+async function restoreToTarget(
+  live: LiveDocuments,
+  versions: Pick<ServerDeps, 'versions'>['versions'],
+  ctx: RestoreContext,
+  targetPath: string,
+  input: RestoreVersionInput,
+): Promise<RestoreVersionResult> {
+  const { workspaceId, path, past, label, progress, versionId } = ctx
+
+  if (!documentPathSchema.safeParse(targetPath).success) {
+    return { kind: 'invalid-target-path' }
+  }
+  if (input.subtree === true) return { kind: 'subtree-takes-no-target' }
+
+  const targetAlreadyExists = await live.exists(workspaceId, targetPath)
+  if (targetAlreadyExists && input.overwrite !== true) {
+    return { kind: 'output-exists', targetPath }
+  }
+
+  if (targetAlreadyExists) {
+    const targetDoc = await live.get(workspaceId, targetPath)
+    // The merged content is the source's own shape (spatial nodes/edges
+    // vs. a markdown body), so the target's stored kind must follow it or
+    // a kind-aware consumer (editor routing) opens the overwritten
+    // document with the wrong editor.
+    const sourceKind = await live.kind(workspaceId, path)
+    await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
+      label,
+      kind: sourceKind,
+      progress,
+    })
+    await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
+    return {
+      kind: 'restored-to-target',
+      targetPath,
+      elementCount: countAliveNodes(targetDoc),
+    }
+  }
+
+  // Genuinely new document: no live doc and no connected clients, so
+  // there is nothing to reconcile against. The restored content is
+  // whatever the source stores, so the new row carries the source's own
+  // kind rather than the store default.
+  try {
+    const sourceKind = await live.kind(workspaceId, path)
+    await live.save(workspaceId, targetPath, past, {
+      overwrite: false,
+      ...(sourceKind !== null ? { kind: sourceKind } : {}),
+    })
+  } catch (err) {
+    if (err instanceof DocumentPathTakenError) {
+      return { kind: 'output-exists', targetPath }
+    }
+    throw err
+  }
+  // Guard against a stale cache entry from a since-deleted document at
+  // this path being served instead of the just-written snapshot.
+  live.evict(workspaceId, targetPath)
+  await recordMerge(versions, workspaceId, targetPath, past, versionId)
+  return { kind: 'restored-to-target', targetPath, elementCount: countAliveNodes(past) }
+}
+
+/** Mode 1: roll the document AND every descendant back together. */
+async function restoreSubtree(
+  live: LiveDocuments,
+  versions: Pick<ServerDeps, 'versions'>['versions'],
+  ctx: RestoreContext,
+): Promise<RestoreVersionResult> {
+  const { workspaceId, path, label, progress, versionId } = ctx
+
+  const pastWorkspace = await versions.loadWorkspaceAt(workspaceId, versionId)
+  if (pastWorkspace === null) return { kind: 'subtree-needs-workspace-version' }
+  const inSubtree = (p: string) => p === path || p.startsWith(`${path}/`)
+  const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
+    node.type === 'document' && inSubtree(node.path) ? [node] : [],
+  )
+  const pastIds = new Set(pastDocs.map((node) => node.meta.documentId))
+  // A row without an id cannot be correlated to the version and is left
+  // alone.
+  const rows = (await live.list(workspaceId)).flatMap((row) =>
+    row.id === undefined ? [] : [{ id: row.id, path: row.path }],
+  )
+  const rowsById = new Map(rows.map((row) => [row.id, row]))
+  await progress({
+    workspaceId,
+    path,
+    phase: 'started',
+    ...(label === undefined ? {} : { label }),
+  })
+  try {
+    // Deletions first, so a past document whose path a later-born one
+    // occupies can land after the squatter is gone. The tree delete
+    // EVACUATES, so nothing here is unrecoverable.
+    for (const row of rows) {
+      if (inSubtree(row.path) && !pastIds.has(row.id)) {
+        await live.delete(workspaceId, row.path)
+      }
+    }
+    for (const node of pastDocs) {
+      const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
+      if (pastDoc === null) continue
+      const liveRow = rowsById.get(node.meta.documentId)
+      if (liveRow !== undefined) {
+        if (liveRow.path !== node.path) {
+          await live.rename(workspaceId, liveRow.path, node.path)
+        }
+        const liveDoc = await live.get(workspaceId, node.path)
+        reconcileDocContent(liveDoc, pastDoc)
+        await live.save(workspaceId, node.path, liveDoc, {
+          overwrite: true,
+          kind: node.meta.kind,
+        })
+      } else {
+        // Deleted since the version: recreated under the SAME
+        // documentId's row lineage as far as the tree is concerned (the
+        // write-through places it by path + kind).
+        await live.save(workspaceId, node.path, pastDoc, { kind: node.meta.kind })
+        live.evict(workspaceId, node.path)
+      }
+      // Every document the rollback moved gains the point, not just the
+      // one that was addressed: leaving the rest unrecorded would make
+      // this the one mode whose history reads as a straight line through
+      // a merge.
+      await recordMerge(versions, workspaceId, node.path, pastDoc, versionId)
+    }
+  } finally {
+    await progress({ workspaceId, path, phase: 'complete' })
+  }
+  return { kind: 'restored-subtree', restoredCount: pastDocs.length }
 }
 
 /**
