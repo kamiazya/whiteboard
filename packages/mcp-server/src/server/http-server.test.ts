@@ -233,13 +233,22 @@ describe('startHttpServer membership route wiring (ADR-0041 S0-4)', () => {
     running = undefined
   })
 
-  it('GET /api/workspaces/:workspaceId/members answers 200 on the real HTTP server', async () => {
+  // An unregistered workspace 404s rather than answering an empty list (the
+  // same honesty rule the workspace-document snapshot route uses), so this
+  // proves MORE of the composition wiring than a 200 would: reaching that
+  // answer requires the router to be mounted AND `serverDeps.workspaceDocuments`
+  // to be wired through — an unmounted router would fall through to Hono's
+  // own plain-text 404 instead of this JSON body.
+  it('GET /api/workspaces/:workspaceId/members answers 404 for an unregistered workspace on the real HTTP server', async () => {
     const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1' })
 
     const res = await fetch(`http://127.0.0.1:${port}/api/workspaces/any-workspace/members`)
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ members: [] })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({
+      error: 'unknown_workspace',
+      message: 'no such workspace: any-workspace',
+    })
   })
 })
 

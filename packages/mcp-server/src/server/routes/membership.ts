@@ -62,6 +62,13 @@ export function createMembershipRouter({
 
   app.get('/api/workspaces/:workspaceId/members', async (c) => {
     const workspaceId = c.req.param('workspaceId')
+    if (!(await workspaceExists(workspaceId))) {
+      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'membership refused')
+      return c.json(
+        { error: 'unknown_workspace', message: `no such workspace: ${workspaceId}` },
+        404,
+      )
+    }
     const list = await members.listMembers(workspaceId)
     const response: ListMembersResponse = listMembersResponseSchema.parse({
       members: list.map(toSummary),

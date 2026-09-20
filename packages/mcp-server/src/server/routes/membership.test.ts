@@ -18,6 +18,7 @@ import {
   sessionAssertChallengeResponseSchema,
   sessionAssertResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
+import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   buildAssertion,
@@ -26,12 +27,15 @@ import {
   WEBAUTHN_FLAG_UP,
   WEBAUTHN_FLAG_UV,
 } from '../../shared/test-utils/webauthn-fixtures.js'
+import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
+import { mintMacaroon } from '../security/macaroon.js'
 import { createMemberProfileStore } from '../security/member-profile-store.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
+import { createDaemonAuthMiddleware } from './auth.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
 
@@ -60,13 +64,41 @@ async function makeApp(known: readonly string[] = [WS]) {
   return { app, grants, tokens, credentials, members }
 }
 
+const DAEMON_TOKEN = 'the-daemon-token'
+const MACAROON_ROOT_KEY = new Uint8Array(32).fill(7)
+
+/**
+ * `makeApp` builds the router directly, bypassing `createApp`'s `/api/*`
+ * `createDaemonAuthMiddleware` mount entirely (`app.ts`'s local-daemon
+ * branch) — a real client never reaches these routes that way. This wraps
+ * the same real middleware `app.ts` mounts (mirroring `auth.macaroon.test.ts`'s
+ * pattern) around the membership router, so the auth/scope enforcement below
+ * exercises the actual gate rather than only what is behind it.
+ */
+async function makeAuthedApp(known: readonly string[] = [WS]) {
+  const fixture = await makeApp(known)
+  const authed = new Hono()
+  authed.use(
+    '/api/*',
+    createDaemonAuthMiddleware(
+      createCredentialResolver({ daemonToken: DAEMON_TOKEN, macaroonRootKey: MACAROON_ROOT_KEY }),
+    ),
+  )
+  authed.route('/', fixture.app)
+  return { ...fixture, app: authed }
+}
+
 afterEach(async () => {
   await dbHandle?.dispose()
   if (dir) rmSync(dir, { recursive: true, force: true })
 })
 
-async function get(app: Awaited<ReturnType<typeof makeApp>>['app'], path: string) {
-  return app.request(path)
+async function get(
+  app: Awaited<ReturnType<typeof makeApp>>['app'],
+  path: string,
+  headers: Record<string, string> = {},
+) {
+  return app.request(path, { headers })
 }
 
 async function post(
@@ -110,6 +142,17 @@ describe('GET /api/workspaces/:workspaceId/members', () => {
     expect(res.status).toBe(200)
     expect(listMembersResponseSchema.parse(await res.json())).toEqual({ members: [] })
   })
+
+  // Same refusal as POST/DELETE (which already check workspaceExists) —
+  // otherwise an unregistered workspace id reads as "real, but empty" rather
+  // than "never heard of it".
+  it('refuses an unknown workspace, matching POST/DELETE', async () => {
+    const { app } = await makeApp([])
+    const res = await get(app, `/api/workspaces/${WS}/members`)
+    expect(res.status).toBe(404)
+    const body = membershipRefusalSchema.parse(await res.json())
+    expect(body.error).toBe('unknown_workspace')
+  })
 })
 
 describe('POST /api/workspaces/:workspaceId/members', () => {
@@ -144,6 +187,19 @@ describe('POST /api/workspaces/:workspaceId/members', () => {
       credentialId: 'x',
     })
     expect(res.status).toBe(400)
+  })
+
+  // addMemberRequestSchema only checks origin is a non-empty string, not that
+  // it parses as a URL — this is the `new URL(...)` catch branch's own case.
+  it('rejects an origin that does not parse as a URL', async () => {
+    const fixture = await makeApp()
+    const res = await post(fixture.app, `/api/workspaces/${WS}/members`, {
+      credentialId: 'x',
+      origin: 'not-a-url',
+      displayName: 'Ada Lovelace',
+    } satisfies AddMemberRequest)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'malformed origin' })
   })
 
   it('adds a pinned passkey as a member and the list reflects it', async () => {
@@ -319,5 +375,69 @@ describe('the full pairing chain: pin -> unbound assertion -> add member -> boun
     expect(await fixture.members.isWorkspaceMember(WS, member.profileId)).toBe('not-a-member')
     // L1 is not L2: the pin itself survives removal.
     expect(fixture.credentials.find(HOSTED, credentialId)).not.toBeNull()
+  })
+})
+
+// route-scope-registry.test.ts only proves these three paths are CLASSIFIED
+// as runtime:admin; it never runs a request through the daemon's real auth
+// middleware. This does, through the same createDaemonAuthMiddleware app.ts
+// mounts in front of every /api/* route.
+describe('membership routes enforce the runtime:admin scope through the real auth middleware', () => {
+  it('refuses every verb with no Authorization header once a daemon token is configured', async () => {
+    const { app } = await makeAuthedApp()
+
+    expect((await get(app, `/api/workspaces/${WS}/members`)).status).toBe(401)
+    expect(
+      (
+        await post(app, `/api/workspaces/${WS}/members`, {
+          credentialId: 'x',
+          origin: HOSTED,
+          displayName: 'Ada Lovelace',
+        } satisfies AddMemberRequest)
+      ).status,
+    ).toBe(401)
+    expect((await del(app, `/api/workspaces/${WS}/members/some-profile`)).status).toBe(401)
+  })
+
+  it('refuses a macaroon caveated below runtime:admin', async () => {
+    const { app } = await makeAuthedApp()
+    const underScoped = await mintMacaroon({
+      rootKey: MACAROON_ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['canvas:read'] }],
+    })
+
+    const res = await get(app, `/api/workspaces/${WS}/members`, {
+      Authorization: `Bearer ${underScoped}`,
+    })
+    expect(res.status).toBe(401)
+  })
+
+  it('admits a macaroon caveated with runtime:admin, through the real middleware', async () => {
+    const { app } = await makeAuthedApp()
+    const scoped = await mintMacaroon({
+      rootKey: MACAROON_ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['runtime:admin'] }],
+    })
+
+    const res = await get(app, `/api/workspaces/${WS}/members`, {
+      Authorization: `Bearer ${scoped}`,
+    })
+    expect(res.status).toBe(200)
+    expect(listMembersResponseSchema.parse(await res.json())).toEqual({ members: [] })
+  })
+
+  it('the daemon token itself authorizes POST through the real middleware', async () => {
+    const fixture = await makeAuthedApp()
+    const pin = pinPasskey(fixture)
+
+    const res = await post(
+      fixture.app,
+      `/api/workspaces/${WS}/members`,
+      { credentialId: pin.credentialId, origin: pin.origin, displayName: 'Ada Lovelace' },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    expect(res.status).toBe(201)
   })
 })
