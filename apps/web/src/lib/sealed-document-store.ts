@@ -121,7 +121,18 @@ function sealManifest(manifest: SnapshotManifest): SnapshotManifest {
 
 function openManifest(manifest: SnapshotManifest, documentId: string): SnapshotManifest {
   const overhead = ENVELOPE_OVERHEAD * manifest.chunkCount
-  if (manifest.totalBytes < overhead || manifest.maxChunkBytes <= ENVELOPE_OVERHEAD) {
+  const totalBytes = manifest.totalBytes - overhead
+  // Re-check the port's own `(chunkCount === 0) === (totalBytes === 0)` invariant
+  // (`snapshotManifestSchema`'s `.refine`) after subtracting overhead: a sealed
+  // chunk's plaintext is always >= 1 byte, so a real sealed manifest with
+  // chunkCount > 0 always has totalBytes strictly greater than its own overhead.
+  // A `totalBytes < overhead` check alone misses the exact-equality boundary and
+  // would let a corrupted manifest through as a schema-invalid plaintext one.
+  const malformed =
+    totalBytes < 0 ||
+    manifest.maxChunkBytes <= ENVELOPE_OVERHEAD ||
+    (manifest.chunkCount === 0) !== (totalBytes === 0)
+  if (malformed) {
     throw new StoredDocumentUnreadableError(
       'malformed',
       `sealed manifest for document ${documentId} is smaller than its own envelope overhead`,
@@ -129,7 +140,7 @@ function openManifest(manifest: SnapshotManifest, documentId: string): SnapshotM
   }
   return {
     chunkCount: manifest.chunkCount,
-    totalBytes: manifest.totalBytes - overhead,
+    totalBytes,
     maxChunkBytes: manifest.maxChunkBytes - ENVELOPE_OVERHEAD,
   }
 }

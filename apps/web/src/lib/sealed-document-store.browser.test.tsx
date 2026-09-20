@@ -4,8 +4,8 @@
  * and — the increment's actual claim — a saved replica's content is never
  * readable as plaintext straight out of the database.
  */
-import type { DocRef } from '@kamiazya/whiteboard-ports'
-import { chunkSnapshot, docRefKey } from '@kamiazya/whiteboard-ports'
+import type { DocRef, DocumentStore, SnapshotManifest } from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot, docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
@@ -404,6 +404,65 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     const outerManifest = await store.readSnapshotManifest({ docRef })
     expect(outerManifest?.manifest).toEqual(manifest)
     expect(outerManifest?.manifest).toEqual((await store.loadSnapshot({ docRef }))?.manifest)
+  })
+})
+
+describe('openManifest refuses a manifest smaller than its own envelope overhead', () => {
+  const docRef: DocRef = {
+    kind: 'document',
+    workspaceId: 'sealed-ws',
+    documentId: '01JD0MANIFESTBOUNDARY00001',
+  }
+
+  /**
+   * Answers a fixed (possibly corrupted) manifest for both manifest-reading
+   * methods, and refuses every other call — `openManifest` never reads a
+   * chunk or a key, so a test of its own boundary needs neither.
+   */
+  function manifestOnlyInner(manifest: SnapshotManifest): DocumentStore {
+    const unused = (): never => {
+      throw new Error('not exercised by this test')
+    }
+    return {
+      loadSnapshot: async () => ({ manifest, chunks: [], frontier: new Uint8Array(0) }),
+      readSnapshotManifest: async () => ({ manifest, generation: 0 }),
+      saveSnapshot: unused,
+      saveCompactedSnapshot: unused,
+      appendDeltas: unused,
+      loadDeltas: unused,
+      readFrontier: async () => null,
+      deleteDoc: unused,
+    }
+  }
+
+  it('refuses totalBytes exactly at chunkCount * ENVELOPE_OVERHEAD (chunkCount > 0)', async () => {
+    const key = await generateKey()
+    // A real sealed chunk's plaintext is always >= 1 byte, so this exact
+    // boundary is unreachable except via a corrupted/tampered record.
+    const corrupted: SnapshotManifest = {
+      chunkCount: 1,
+      totalBytes: ENVELOPE_OVERHEAD,
+      maxChunkBytes: ENVELOPE_OVERHEAD + 1,
+    }
+    const store = new SealedDocumentStore(manifestOnlyInner(corrupted), fixedKeyProvider(key, 0))
+    await expect(store.readSnapshotManifest({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+    await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+  })
+
+  it('accepts totalBytes one byte past the boundary (a real single-byte-plaintext chunk)', async () => {
+    const key = await generateKey()
+    const minimalReal: SnapshotManifest = {
+      chunkCount: 1,
+      totalBytes: ENVELOPE_OVERHEAD + 1,
+      maxChunkBytes: ENVELOPE_OVERHEAD + 1,
+    }
+    const store = new SealedDocumentStore(manifestOnlyInner(minimalReal), fixedKeyProvider(key, 0))
+    const opened = await store.readSnapshotManifest({ docRef })
+    expect(opened?.manifest).toEqual({ chunkCount: 1, totalBytes: 1, maxChunkBytes: 1 })
   })
 })
 
