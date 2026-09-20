@@ -88,6 +88,16 @@
       ],
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]
     },
+    "packages/daemon-client": {
+      // read-plane.ts (ADR-0043 decision 3's content-key derivation and
+      // sealed-bytes primitive) has no caller yet: the read plane's S2 (the
+      // daemon's key-handout route) and S3 (apps/web's ciphertext-at-rest
+      // replica store decorator) are the ones that will import it. Its own
+      // test files already exercise every export, so knip does not flag it
+      // today — this entry documents the surface as deliberate rather than
+      // relying on that being true forever.
+      "entry": ["src/read-plane.ts"]
+    },
     "apps/web": {
       "entry": [
         // Compile-time-only regression guard (tsc --noEmit fails/passes
