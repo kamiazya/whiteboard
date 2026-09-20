@@ -101,6 +101,7 @@ export function createMcpHttpAuthMiddleware(strategy: McpHttpAuthStrategy): Midd
       method: c.req.method,
       authorizationHeader: c.req.header('authorization'),
       requestUrl: c.req.url,
+      origin: c.req.header('origin'),
     })
     if (!decision.ok) {
       return mcpHttpError(decision.status, decision.message, decision.headers)
