@@ -229,9 +229,7 @@ const EXPECTED_TOOLS = [
   'wb_pairing_link_create',
 ]
 
-async function main() {
-  console.log(`[e2e] entry → ${entry}`)
-
+async function toolsListMatchesTheRegisteredSet() {
   await rpc('initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
@@ -280,7 +278,9 @@ async function main() {
     'without createWorkspace',
     'Workspace not found',
   )
+}
 
+async function aDocumentCarriesItsBodyFromTheCreateCall(ctx) {
   // The first daemon-dependent RPC (cold-start latency).
   const created = await createDocument(
     { path: 'e2e-src', kind: 'spatial' },
@@ -353,7 +353,11 @@ async function main() {
     throw new Error(`a bare body did not survive as the body: ${bareBack.content}`)
   }
   console.log('[e2e] document.create → a bare body is minted as a note')
+  Object.assign(ctx, { documentId, named, withBody })
+}
 
+async function twoKindsReadInOneCallAndAPassageReplaced(ctx) {
+  const { documentId, withBody } = ctx
   // Axis B on a read: the two documents come back in ONE call, each in its
   // own format, and an id nothing was created under lands in `failed`
   // rather than taking the other two with it. Provable only through a
@@ -443,7 +447,10 @@ async function main() {
     'e2e-passage-stale',
   )
   console.log('[e2e] wb_body_edit → passage replaced by quote, stale assumption refused by name')
+}
 
+async function anEditWithNoModeIsProposedAndTheBatchActorIsStamped(ctx) {
+  const { withBody } = ctx
   // The flipped default (ADR-0029 decision 7, applied to prose): a call that
   // names no mode PROPOSES, and the body does not move. Asserted in both
   // directions in one place, because a default is exactly the kind of
@@ -525,7 +532,10 @@ async function main() {
     )
   }
   console.log('[e2e] wb_workspace_edit → two documents, ids returned, batch actor stamped')
+}
 
+async function placementNamingAndDeletionRoundTrip(ctx) {
+  const { documentId, named } = ctx
   // A failing op stops the run, and the message must say how far it got:
   // documents are separate CRDTs, so "nothing was written" would be false
   // and a caller acting on it would create the earlier ones twice.
@@ -602,7 +612,10 @@ async function main() {
     'on a spatial document',
     'Facets are OKF frontmatter',
   )
+}
 
+async function aRegisteredFacetWriteIsValidated(ctx) {
+  const { documentId, named } = ctx
   // A REGISTERED facet is checked on write (ADR-0013 decision 6). What this
   // step provably exercises is the TARGET check: visual.edges is
   // canvas-target, and this document-writing tool rejects it before the
@@ -717,7 +730,11 @@ async function main() {
       `wb_facet_list did not report the workspace's own stencil: ${JSON.stringify(vocabulary.assets)}`,
     )
   }
+  Object.assign(ctx, { vocabulary })
+}
 
+async function stencilsAndTagsFromTheWorkspaceLibrary(ctx) {
+  const { documentId, vocabulary } = ctx
   // The FILTERED answer, called explicitly: `otherTargets` is a partial
   // record, and the SDK validates `structuredContent` against the output
   // schema at runtime, so a scope-keyed field that drifts back to requiring
@@ -1003,7 +1020,10 @@ async function main() {
   console.log(
     '[e2e] tag library → admitted write lands, undeclared and exclusive refused, painted by intent',
   )
+}
 
+async function aFreeEndedLineAndEdgeTargetFacets(ctx) {
+  const { documentId } = ctx
   // A FREE END (ADR-0037 slice 3): an edge from a node to a bare point on
   // the canvas. Here rather than only at the unit layer because the endpoint
   // is a discriminated union crossing a process boundary in BOTH directions
@@ -1133,7 +1153,10 @@ async function main() {
     'targets an edge',
   )
   console.log('[e2e] wb_facet_set → a node-target facet is refused on an edge')
+}
 
+async function storedBendsDrawAndProposeModeStores(ctx) {
+  const { documentId } = ctx
   // An edge's stored BENDS, end to end. Nothing in the type system connects
   // the field a tool writes to the polyline the daemon emits, so this is the
   // step that would catch a bend being lost between the Loro edge bucket and
@@ -1193,7 +1216,10 @@ async function main() {
     'a proposal cannot carry this verb',
   )
   console.log('[e2e] wb_canvas_edit(mode:propose) → stored, board untouched, tidy refused')
+}
 
+async function nodeFacetsAndTheEditorLock(ctx) {
+  const { documentId, named } = ctx
   // ADR-0029 decision 7's flip, through a real MCP client: with NO mode, a
   // batch of content is proposed and the board does not move, while a batch
   // carrying something a proposal cannot represent applies. The compiler
@@ -1374,7 +1400,10 @@ async function main() {
     ops: [{ op: 'node.lock', id: 'lockable', locked: true }],
   })
   console.log('[e2e] wb_canvas_edit → lockable locked')
+}
 
+async function theLockStaysOutOfTheExportAndTheSceneDraws(ctx) {
+  const { documentId } = ctx
   // The lock binds agents, not just the pointer.
   await expectToolError(
     'wb_canvas_edit',
@@ -1416,7 +1445,10 @@ async function main() {
     throw new Error(`wb_scene_render returned unexpected shape: ${JSON.stringify(rendered)}`)
   }
   console.log('[e2e] wb_scene_render → svg with chrome for the seeded text node')
+}
 
+async function themedAndReferenceEmbeddingRenders(ctx) {
+  const { documentId, withBody } = ctx
   // A canvas-target facet (ADR-0030): the document names a theme through
   // wb_facet_set's canvas target, the default render stays clean, and a
   // styled render draws it — the whole agent path, end to end.
@@ -1503,7 +1535,10 @@ async function main() {
   console.log(
     '[e2e] wb_scene_render(markdown, embedReferences:true) → page with the embedded canvas',
   )
+}
 
+async function canvasViewAnswersTheWidget(ctx) {
+  const { documentId, withBody } = ctx
   // The same page under `style: 'document'`. A markdown host names no theme,
   // so what must be drawn is the EMBEDDED board's own (ADR-0030 decision 5) —
   // the style argument reaching a nested layout is exactly what a type check
@@ -1612,7 +1647,11 @@ async function main() {
     facets: { 'visual.theme/v0': null },
   })
   console.log("[e2e] canvas_view(style: 'document') → themeFont for the widget; none under clean")
+  Object.assign(ctx, { viewed })
+}
 
+async function theAnnotationLayerThroughWidgetShapes(ctx) {
+  const { documentId, viewed } = ctx
   // The widget's sticky-note append, in ITS EXACT argument shape (a text
   // node with no geometry, auto-placed server-side) — the runtime guard
   // against cross-package literal drift between widget-entry.ts and
@@ -1715,7 +1754,10 @@ async function main() {
     throw new Error(`thread.resolve did not close the thread: ${JSON.stringify(closed)}`)
   }
   console.log('[e2e] wb_thread_edit → thread.add / message.add / thread.resolve on a markdown note')
+}
 
+async function threadAnchorsAndTheLayoutSnapshot(ctx) {
+  const { documentId, viewed } = ctx
   // The two references a spatial anchor may carry beyond a node, and the
   // text arm naming a node: an EDGE comment, and a comment on a passage of
   // a node's text. Both reach canvas_view through the projection — the edge
@@ -1855,7 +1897,10 @@ async function main() {
     )
   }
   console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
+}
 
+async function nodeEditsAndTransactionAtomicity(ctx) {
+  const { documentId } = ctx
   // The two arms wb_body_patch had, now as ops. Only a real MCP SDK client
   // can prove the registered schema accepts them — this is what tools/list
   // validates arguments against — and the result is read back through
@@ -1964,7 +2009,10 @@ async function main() {
     throw new Error('wb_canvas_edit persisted the first op of a batch it rejected')
   }
   console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
+}
 
+async function regionsViewportAndTidy(ctx) {
+  const { documentId } = ctx
   // region.set is the one op that deletes by OMISSION, so the smoke drives
   // the full reconcile through the real wire: add two inside, name both,
   // then name one, and the other must be gone. The group sits far from everything else so
@@ -2085,7 +2133,10 @@ async function main() {
     'with an id the canvas does not have',
     'is not on the canvas',
   )
+}
 
+async function versionsAreSavedAndListed(ctx) {
+  const { documentId, named } = ctx
   // wb_version_save — into the SAME history the History panel lists, so the
   // answer is the panel's row shape.
   const saved = await callTool('wb_version_save', {
@@ -2137,7 +2188,11 @@ async function main() {
     throw new Error(`wb_version_list missing the saved id: ${JSON.stringify(listed)}`)
   }
   console.log(`[e2e] wb_version_list → ${listed.versions.length} version(s)`)
+  Object.assign(ctx, { savedRow })
+}
 
+async function versionsAreRestoredCopiedAndRolledBack(ctx) {
+  const { documentId, savedRow } = ctx
   // wb_version_restore
   const restored = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
@@ -2260,7 +2315,11 @@ async function main() {
   // diagram for its markdown — exactly what wb_document_get stopped doing.
   const mdCreated = await createDocument({ path: 'e2e-okf', kind: 'markdown' })
   const mdCanvasId = mdCreated.documentId
+  Object.assign(ctx, { mdCanvasId })
+}
 
+async function anImportedDocumentIsFoundAndRoundTrips(ctx) {
+  const { documentId, mdCanvasId } = ctx
   // A write in the format the document is not in destroys rather than
   // fails: OKF into the spatial one replaces its nodes, a node into the
   // markdown one lands beside the text node holding its body.
@@ -2397,6 +2456,51 @@ async function main() {
     '[e2e] wb_document_get → generated stamped from the declared actor, unmodelled OKF keys preserved at the root',
   )
   console.log('[e2e] wb_document_get → round-trip verified (core facets + extension facets)')
+}
+
+/**
+ * The smoke's body, as an ordered list of phases.
+ *
+ * It is a list rather than one long function for the reason AGENTS.md gives
+ * this file a standing rule: a new tool must be exercised here, and appending
+ * to a two-thousand-line body is how that turns into "somewhere near the
+ * end". A phase is a subject — what it proves is its NAME — and a new tool
+ * gets its own, placed where its preconditions already exist.
+ *
+ * Phases share one `ctx`: what an earlier phase minted (a workspace, a
+ * document id, a seeded board) and a later one needs. It is a bag rather than
+ * an argument list because the chain is long and mostly ids; each phase
+ * destructures exactly what it reads at its top, so what a phase depends on
+ * is visible in its first line.
+ */
+const PHASES = [
+  toolsListMatchesTheRegisteredSet,
+  aDocumentCarriesItsBodyFromTheCreateCall,
+  twoKindsReadInOneCallAndAPassageReplaced,
+  anEditWithNoModeIsProposedAndTheBatchActorIsStamped,
+  placementNamingAndDeletionRoundTrip,
+  aRegisteredFacetWriteIsValidated,
+  stencilsAndTagsFromTheWorkspaceLibrary,
+  aFreeEndedLineAndEdgeTargetFacets,
+  storedBendsDrawAndProposeModeStores,
+  nodeFacetsAndTheEditorLock,
+  theLockStaysOutOfTheExportAndTheSceneDraws,
+  themedAndReferenceEmbeddingRenders,
+  canvasViewAnswersTheWidget,
+  theAnnotationLayerThroughWidgetShapes,
+  threadAnchorsAndTheLayoutSnapshot,
+  nodeEditsAndTransactionAtomicity,
+  regionsViewportAndTidy,
+  versionsAreSavedAndListed,
+  versionsAreRestoredCopiedAndRolledBack,
+  anImportedDocumentIsFoundAndRoundTrips,
+]
+
+async function main() {
+  console.log(`[e2e] entry → ${entry}`)
+
+  const ctx = {}
+  for (const phase of PHASES) await phase(ctx)
 
   console.log('\n[e2e] ALL OK')
 }
