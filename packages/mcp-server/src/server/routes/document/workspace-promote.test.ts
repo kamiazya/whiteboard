@@ -61,6 +61,11 @@ const BE = 0x08
 
 const sha256 = (input: Uint8Array | string): Buffer => createHash('sha256').update(input).digest()
 const b64u = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url')
+const flipLastByte = (encoded: string): string => {
+  const bytes = Buffer.from(encoded, 'base64url')
+  bytes[bytes.length - 1] ^= 0xff
+  return b64u(bytes)
+}
 
 function browserSnapshot(): Uint8Array {
   const doc = new LoroDoc()
@@ -193,9 +198,12 @@ it('a refused attestation merges nothing and writes nothing, and says why', asyn
   const good = attest(key, snapshot, { signCount: 1 })
 
   const cases: { attestation: unknown; headers?: Record<string, string>; reason: string }[] = [
-    // A flipped signature byte.
+    // A flipped signature byte — flipped in the DECODED bytes, because
+    // rewriting the last base64url characters can land on the same bytes
+    // (an ECDSA signature is random per run and can already end in those
+    // characters), which is a mutation that mutates nothing.
     {
-      attestation: { ...good, signature: `${good.signature.slice(0, -2)}AA` },
+      attestation: { ...good, signature: flipLastByte(good.signature) },
       reason: 'signature',
     },
     // Signed for another workspace: the challenge binds the target handle.
