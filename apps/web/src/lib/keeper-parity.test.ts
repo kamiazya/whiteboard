@@ -66,6 +66,10 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "lists, registers and removes the passkeys a daemon will accept a move from — the pins are the daemon's, and a browser keeper is what a move comes FROM, so it has none to hold",
   },
+  'src/components/settings/PromoteWorkspaceSection.tsx': {
+    reach: 'daemon-itself',
+    why: 'moves a browser-kept workspace INTO the daemon and shows what the daemon keeps of the workspace in view (its replica tier line) — both are about the daemon as the destination or the keeper, and a browser-kept workspace has no counterpart for either',
+  },
   'src/components/settings/MembersCard.tsx': {
     reach: 'daemon-itself',
     why: 'lists, adds and removes the people a daemon workspace admits — membership is a daemon-side record (member profiles over pinned passkeys) with no browser-keeper equivalent, since a browser workspace has exactly one person and no sessions to end',

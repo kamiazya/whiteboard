@@ -274,7 +274,11 @@ function ConnectionsSection({
         <section aria-label="Storage">
           <StorageReportCard />
         </section>
-        <PromoteWorkspaceSection daemon={daemon} settingsStore={settingsStore} />
+        <PromoteWorkspaceSection
+          daemon={daemon}
+          settingsStore={settingsStore}
+          workspaceId={workspaceId}
+        />
         {/* Hidden without a known workspace id: a cold load with a daemon
             merely detected names none yet, and the card would have nothing
             to manage. */}

@@ -6,6 +6,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { REPLICA_TIER_COPY } from '../lib/replica-tier-copy.js'
 import { SettingsPage } from './SettingsPage.js'
 
 afterEach(() => {
@@ -77,5 +78,28 @@ describe('SettingsPage — Members card wiring', () => {
     renderAt('/settings/connections', undefined, 'ws-1')
     const section = screen.getByTestId('settings-section')
     expect(within(section).queryByLabelText('Members')).toBeNull()
+  })
+
+  it('shows what this device keeps of the workspace in view, in "This workspace"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/pairing/grants')) return jsonResponse({ grants: [] })
+        if (url.includes('/api/runtime/storage')) {
+          return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
+        }
+        if (url.includes('/api/workspaces/ws-1/members')) return jsonResponse({ members: [] })
+        if (url.includes('/api/pairing/credentials')) return jsonResponse({ credentials: [] })
+        if (url.endsWith('/api/workspaces')) {
+          return jsonResponse({ workspaces: [{ workspaceId: 'ws-1', tier: 'offline' }] })
+        }
+        return jsonResponse({}, 404)
+      }),
+    )
+
+    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' }, 'ws-1')
+    const thisWorkspace = await screen.findByLabelText('This workspace')
+    await within(thisWorkspace).findByText(REPLICA_TIER_COPY.offline)
   })
 })

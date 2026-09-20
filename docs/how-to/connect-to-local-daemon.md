@@ -258,4 +258,23 @@ remove someone, click **Remove** on their row and confirm — this ends their
 access immediately, and anything they changed offline after that point is
 not kept.
 
+## See what this device keeps of a daemon-kept workspace
+
+Once a workspace is kept by a daemon, **Settings → Connections → This
+workspace** shows a short line describing what this device keeps of it,
+below the move description:
+
+- *Needs a connection. No copy is kept on this device.* — nothing is stored
+  here; the workspace is unreadable while the daemon is unreachable.
+- *A copy is kept on this device while this tab stays open.* — an offline
+  copy is kept, readable while the daemon is unreachable, for the current
+  session.
+- *A copy is kept on this device for a limited time.* — an offline copy is
+  kept, readable until it expires.
+
+This line is read-only status; nothing on this screen changes it — the
+workspace's offline policy is set by the daemon operator (see
+[security model → Replica key](../explanation/security-model.md#replica-key-offline-read-plane)
+for what each policy means and how it is set today).
+
 ← Back to [How-to guides](README.md)
