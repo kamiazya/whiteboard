@@ -173,6 +173,103 @@ export type WorkspaceEditOutput = z.infer<typeof workspaceEditOutputSchema>
  * there is one implementation of "create a document" and one of "write a
  * body", not a batch copy that drifts from them.
  */
+type WorkspaceEditOp = WorkspaceEditInput['ops'][number]
+type OpNamed<K extends WorkspaceEditOp['op']> = Extract<WorkspaceEditOp, { op: K }>
+type ResultRow = WorkspaceEditOutput['results'][number]
+
+/** What one op of a batch is applied against. */
+interface WorkspaceEditContext {
+  readonly deps: ServerDeps
+  /** The single-document write tool, built once for the whole batch. */
+  readonly set: ReturnType<typeof createDocumentSetTool>
+  /**
+   * The workspace ops 1..n address, which op 0 may have MINTED — see the
+   * note at `applyOps`. A handler that changes it says so by returning it.
+   */
+  readonly workspaceId: string
+  readonly actor: WorkspaceEditInput['actor']
+  readonly createWorkspace: boolean
+  /** Which op this is. Only op 0 may bootstrap a workspace. */
+  readonly index: number
+}
+
+/** What an op did: its result row, and the workspace it left the batch in. */
+interface OpOutcome {
+  readonly result: ResultRow
+  readonly workspaceId?: string
+}
+
+/**
+ * One handler per op, keyed by the op's own discriminator.
+ *
+ * A TABLE rather than an if/else chain, for the reason `canvas-edit-handlers`
+ * is one: the chain ended in a bare `else` that ran the DELETE, so a fourth
+ * op added to the schema would have been deleted documents instead of
+ * failing to compile. The mapped type owes a handler per member.
+ */
+const WORKSPACE_EDIT_HANDLERS: {
+  [K in WorkspaceEditOp['op']]: (ctx: WorkspaceEditContext, op: OpNamed<K>) => Promise<OpOutcome>
+} = {
+  'document.create': async (ctx, op) => {
+    const created = await wbDocumentCreate(ctx.deps, {
+      workspaceId: ctx.workspaceId,
+      path: op.path,
+      // The actor rides only on the markdown arm. A spatial create
+      // authors no content — its canvas is built by `wb_canvas_edit`
+      // — so `wbDocumentCreateInputSchema`'s spatial arm has no
+      // `actor` field and, being `.strict()`, refuses one. Passing it
+      // unconditionally made a mixed-kind batch fail at the spatial
+      // op with an unrecognized-key error, which no test sending one
+      // kind at a time could see.
+      ...(op.kind === 'markdown'
+        ? {
+            kind: 'markdown' as const,
+            ...(op.markdown === undefined ? {} : { markdown: op.markdown }),
+            ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
+          }
+        : { kind: 'spatial' as const }),
+      ...(op.name === undefined ? {} : { name: op.name }),
+      // Only op 0 may bootstrap, and this is belt-and-braces rather than a
+      // load-bearing guard: the flag is an IDEMPOTENT bootstrap (see
+      // mintWorkspace), and a later op only runs at all because op 0
+      // succeeded — which means the handle already resolves. Removing the
+      // index check is therefore unobservable, and no test can catch it.
+      // Kept because it states the intent at the one place a reader asks.
+      ...(ctx.index === 0 && ctx.createWorkspace ? { createWorkspace: true } : {}),
+    })
+    return {
+      result: { op: op.op, documentId: created.documentId, path: created.path },
+      workspaceId: created.workspaceId,
+    }
+  },
+
+  'document.set': async (ctx, op) => {
+    await ctx.set.execute({
+      workspaceId: ctx.workspaceId,
+      documentId: op.documentId,
+      markdown: op.markdown,
+      ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
+    })
+    return { result: { op: op.op, documentId: op.documentId } }
+  },
+
+  'document.delete': async (ctx, op) => {
+    await wbDocumentDelete(ctx.deps, {
+      workspaceId: ctx.workspaceId,
+      documentId: op.documentId,
+    })
+    return { result: { op: op.op, documentId: op.documentId } }
+  },
+}
+
+function applyOp(ctx: WorkspaceEditContext, op: WorkspaceEditOp): Promise<OpOutcome> {
+  const handle = WORKSPACE_EDIT_HANDLERS[op.op] as (
+    ctx: WorkspaceEditContext,
+    op: WorkspaceEditOp,
+  ) => Promise<OpOutcome>
+  return handle(ctx, op)
+}
+
 export function createWorkspaceEditTool(deps: ServerDeps) {
   return {
     name: 'wb_workspace_edit' as const,
@@ -183,7 +280,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
     execute: async (rawInput: WorkspaceEditInput): Promise<WorkspaceEditOutput> => {
       const input = workspaceEditInputSchema.parse(rawInput)
       const set = createDocumentSetTool(deps)
-      const results: WorkspaceEditOutput['results'] = []
+      const results: ResultRow[] = []
       // The batch addresses ONE workspace, and a bootstrapping first op is
       // what decides which. Creating is ADR-0019's mint boundary, so after
       // op 0 the caller's handle is that workspace's SEGMENT rather than its
@@ -195,46 +292,19 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
 
       for (const [index, op] of input.ops.entries()) {
         try {
-          if (op.op === 'document.create') {
-            const created = await wbDocumentCreate(deps, {
+          const outcome = await applyOp(
+            {
+              deps,
+              set,
               workspaceId,
-              path: op.path,
-              // The actor rides only on the markdown arm. A spatial create
-              // authors no content — its canvas is built by `wb_canvas_edit`
-              // — so `wbDocumentCreateInputSchema`'s spatial arm has no
-              // `actor` field and, being `.strict()`, refuses one. Passing it
-              // unconditionally made a mixed-kind batch fail at the spatial
-              // op with an unrecognized-key error, which no test sending one
-              // kind at a time could see.
-              ...(op.kind === 'markdown'
-                ? {
-                    kind: 'markdown' as const,
-                    ...(op.markdown === undefined ? {} : { markdown: op.markdown }),
-                    ...(input.actor === undefined ? {} : { actor: input.actor }),
-                  }
-                : { kind: 'spatial' as const }),
-              ...(op.name === undefined ? {} : { name: op.name }),
-              // Only the first op may bootstrap the workspace; asking again
-              // per op would make a typo'd id create one silently.
-              ...(index === 0 && input.createWorkspace === true ? { createWorkspace: true } : {}),
-            })
-            workspaceId = created.workspaceId
-            results.push({ op: op.op, documentId: created.documentId, path: created.path })
-          } else if (op.op === 'document.set') {
-            await set.execute({
-              workspaceId,
-              documentId: op.documentId,
-              markdown: op.markdown,
-              ...(input.actor === undefined ? {} : { actor: input.actor }),
-            })
-            results.push({ op: op.op, documentId: op.documentId })
-          } else {
-            await wbDocumentDelete(deps, {
-              workspaceId,
-              documentId: op.documentId,
-            })
-            results.push({ op: op.op, documentId: op.documentId })
-          }
+              actor: input.actor,
+              createWorkspace: input.createWorkspace === true,
+              index,
+            },
+            op,
+          )
+          if (outcome.workspaceId !== undefined) workspaceId = outcome.workspaceId
+          results.push(outcome.result)
         } catch (err) {
           throw new WorkspaceEditError(
             index,
