@@ -21,26 +21,30 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createApp } from '../app.js'
 import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-route.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
+import { createMemberProfileStore } from '../security/member-profile-store.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
 const WEB_SRC = join(ROOT, 'apps/web/src')
 
 const tempDirs: string[] = []
+let dbHandle: IsolatedDbHandle | null = null
 function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'web-api-paths-'))
   tempDirs.push(dir)
   return dir
 }
-afterAll(() => {
+afterAll(async () => {
+  await dbHandle?.dispose()
   for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true })
 })
 
@@ -111,7 +115,7 @@ function webApiPaths(): WebPath[] {
  * missing — which is the same failure as not checking at all, only louder and
  * wrong. The reach assertions below pin that both halves are present.
  */
-function mountedApiRoutes(): string[] {
+async function mountedApiRoutes(): Promise<string[]> {
   const serverMode = createApp({
     authMode: 'server-mode',
     publicBaseUrl: 'https://example.com',
@@ -124,6 +128,11 @@ function mountedApiRoutes(): string[] {
   })
 
   const pairingDir = tempDir()
+  // The membership routes mount only when the daemon also has a member
+  // store and server deps (app.ts), the way http-server.ts composes it; a
+  // fixture without them would report apps/web's members requests as
+  // unmounted while production serves them.
+  dbHandle = await createIsolatedDb({ dataDir: tempDir() })
   const localDaemon = createApp({
     authMode: 'local-daemon',
     token: 'test-token',
@@ -139,6 +148,8 @@ function mountedApiRoutes(): string[] {
       tokens: createPairingTokenStore(),
       credentials: createWebAuthnCredentialStore(pairingDir),
     },
+    members: createMemberProfileStore(dbHandle.db),
+    serverDeps: resolveServerDeps(createContainer()),
   })
 
   return [
@@ -187,8 +198,11 @@ function isMounted(webPath: string, routes: readonly string[]): boolean {
 }
 
 describe('apps/web only asks for /api routes the daemon mounts', () => {
-  const routes = mountedApiRoutes()
+  let routes: string[] = []
   const paths = webApiPaths()
+  beforeAll(async () => {
+    routes = await mountedApiRoutes()
+  })
 
   // Both scans are asserted to reach their subject first. A scan that stops
   // matching reports every path as fine, which is the shape of a pass.
@@ -196,6 +210,7 @@ describe('apps/web only asks for /api routes the daemon mounts', () => {
     expect(routes.length).toBeGreaterThan(20)
     expect(routes.some((route) => route.startsWith('/api/v1/'))).toBe(true)
     expect(routes.some((route) => route.startsWith('/api/pairing'))).toBe(true)
+    expect(routes).toContain('/api/workspaces/:workspaceId/members')
   })
 
   it('finds the paths apps/web asks for', () => {

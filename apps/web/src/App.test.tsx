@@ -1413,6 +1413,10 @@ describe('App /settings routing', () => {
     renderAppWithRouter(BROWSER_STATE, '/settings')
     await screen.findByTestId('settings-page')
     expect(receivedSettingsPageProps?.daemon).toBeUndefined()
+    // settingsDaemon is undefined in browser mode, so the ternary that
+    // gates workspaceId on it must answer undefined too — regardless of
+    // whatever daemonView.workspace happens to hold.
+    expect(receivedSettingsPageProps?.workspaceId).toBeUndefined()
   })
 
   it('passes the daemon baseUrl/token when the provider state is "daemon"', async () => {
@@ -1440,6 +1444,34 @@ describe('App /settings routing', () => {
       baseUrl: 'http://127.0.0.1:3099',
       token: 'tok',
     })
+  })
+
+  // The other half of the ternary at App.tsx's /settings branch: once
+  // settingsDaemon is defined, workspaceId must be the workspace the daemon
+  // connection actually names (daemonView.workspace) rather than always
+  // undefined — a regression that dropped this branch entirely would still
+  // pass every other test in this describe block.
+  it('passes the workspace a paired fragment names as workspaceId', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'ws-fragment',
+        path: undefined,
+      },
+    }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
+    renderAppWithRouter(BROWSER_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(receivedSettingsPageProps?.workspaceId).toBe('ws-fragment')
+
+    // Disconnecting (forcedBrowser=true) must drop workspaceId along with
+    // the daemon prop — a mutation that instead kept passing daemonView's
+    // workspace regardless of forcedBrowser would query the wrong keeper.
+    const onDisconnected = receivedSettingsPageProps?.onDisconnected as () => void
+    await act(async () => onDisconnected())
+    expect(receivedSettingsPageProps?.daemon).toBeUndefined()
+    expect(receivedSettingsPageProps?.workspaceId).toBeUndefined()
   })
 
   // A `#wb=` fragment names a daemon and carries no credential, so the token

@@ -35,6 +35,7 @@ export type DestructiveActionId =
   | 'delete-document-daemon'
   | 'delete-documents-browser'
   | 'delete-documents-daemon'
+  | 'remove-member'
 
 /**
  * Built from the noun for the thing being destroyed, so a note reads "The
@@ -70,6 +71,13 @@ export const DESTRUCTIVE_COPY = {
 
   'delete-documents-daemon': (noun) =>
     `The selected ${noun} move to the Trash, where you can restore them. Their versions and branches are deleted, and restoring does not bring them back.`,
+
+  // The subject here is a PERSON'S NAME, not a kind noun — `DestructiveDescription`'s
+  // parameter still fits, since a name is just the string it is handed.
+  // Removal is L1 revocation (ADR-0041 decision 3): synchronous, and it ends
+  // access now rather than at some later sync.
+  'remove-member': (name) =>
+    `Remove ${name} from this workspace? They lose access now, and anything they change offline after this point will not be kept.`,
 } satisfies Record<DestructiveActionId, DestructiveDescription>
 
 /**

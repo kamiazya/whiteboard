@@ -267,7 +267,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // components/LinkPairingPending.tsx) and two dead locals deleted; what is
   // left is the wiring itself, and shaving it further would be shuffling
   // lines to satisfy a number.
-  'apps/web/src/App.tsx': 986,
+  // Raised 986 -> 988, +2, for the Settings /settings branch passing
+  // `workspaceId` (from `daemonView.workspace`) to SettingsPage so its
+  // Members card knows which workspace to manage (ADR-0041 S0-5).
+  'apps/web/src/App.tsx': 988,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
@@ -717,7 +720,12 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
 // record. `gestures.test` and this file itself are new entries rather than
 // raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/App.test.tsx': 1611,
+  // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
+  // (ADR-0041 S0-5's Members card): the browser-mode case that pins
+  // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
+  // case that pins it to daemonView.workspace and drops it again on
+  // disconnect.
+  'apps/web/src/App.test.tsx': 1643,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
@@ -792,7 +800,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // raise reads exactly like one that covers all of it.
   // 909 -> 917: this entry is self-referential, so every raise recorded
   // above costs this file the lines that record it — including these.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 917,
+  // 917 -> 919 for the App.tsx raise above (ADR-0041 S0-5's Members card).
+  // 919 -> 926 for the App.test.tsx raise above, the same increment's two
+  // new assertions.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 926,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
