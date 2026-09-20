@@ -2,7 +2,7 @@ import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/a
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { DaemonIdentity } from './security/daemon-identity.js'
-import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
+import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import type { PairingGrantStore } from './security/pairing-grant-store.js'
@@ -20,7 +20,13 @@ interface LocalDaemonAppOptions {
    *  container. */
   serverDeps?: ServerDeps
   token?: string
-  mcpAuth?: McpHttpAuthStrategy
+  /**
+   * RFC 9728 metadata for `/mcp`'s protected-resource discovery. The strategy
+   * that CHECKS the credential is no longer injected — `createApp` builds it
+   * over the one credential resolver, so there is no second place a secret is
+   * compared.
+   */
+  mcpProtectedResourceMetadata?: McpProtectedResourceMetadataConfig
   /** Per-process-start identifier for /api/runtime/ping. Falls back to a
    *  fresh crypto.randomUUID() when omitted (tests, ad-hoc callers). */
   instanceId?: string

@@ -9,11 +9,11 @@ import {
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
-
 import { type RunningServer, startHttpServer } from './http-server.js'
 import { captureLogsForTests } from './log.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
+import { createCredentialResolver } from './security/credential-resolver.js'
 
 // Ports advance monotonically across the whole file INCLUDING repeat runs
 // (vitest --repeats re-executes a test body in the same process): undici's
@@ -36,7 +36,7 @@ describe('authorizeWsUpgrade', () => {
         {
           host: '127.0.0.1:3099',
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret' }),
       ),
     ).toEqual({ accept: false, statusCode: 401 })
   })
@@ -48,7 +48,7 @@ describe('authorizeWsUpgrade', () => {
           host: '127.0.0.1:3099',
           'sec-websocket-protocol': 'whiteboard-v1, daemon-token.nope',
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret' }),
       ),
     ).toEqual({ accept: false, statusCode: 401 })
   })
@@ -61,16 +61,19 @@ describe('authorizeWsUpgrade', () => {
           origin: 'http://127.0.0.1:5173',
           'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret',
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret' }),
       ),
     ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
   })
 
   it('keeps websocket auth disabled when daemon token is unset', async () => {
     expect(
-      await authorizeWsUpgrade({
-        host: '127.0.0.1:3099',
-      }),
+      await authorizeWsUpgrade(
+        {
+          host: '127.0.0.1:3099',
+        },
+        createCredentialResolver({}),
+      ),
     ).toEqual({ accept: true, protocol: undefined, scopes: ALL_AUTH_SCOPES })
   })
 
@@ -85,7 +88,7 @@ describe('authorizeWsUpgrade', () => {
           origin: 'http://localhost:5173',
           'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret',
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret' }),
       ),
     ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
 
@@ -96,7 +99,7 @@ describe('authorizeWsUpgrade', () => {
           origin: 'https://example.com',
           'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret',
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret' }),
       ),
     ).toEqual({ accept: false, statusCode: 403 })
   })

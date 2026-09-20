@@ -48,6 +48,7 @@ import { setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
+import { createCredentialResolver } from './security/credential-resolver.js'
 import { createDaemonIdentity } from './security/daemon-identity.js'
 import {
   buildMcpProtectedResourceMetadata,
@@ -124,10 +125,6 @@ export function createApp(options: AppOptions) {
   // /api/runtime/verify, and pairing-token response signatures.
   const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
   const token = options.authMode === 'local-daemon' ? options.token : undefined
-  const mcpAuth =
-    options.authMode === 'local-daemon'
-      ? (options.mcpAuth ?? createLocalTokenMcpHttpAuthStrategy({ token: options.token }))
-      : undefined
 
   let serverModeGetStatus: (() => RuntimeStatusResponse) | undefined
   if (options.authMode === 'server-mode') {
@@ -172,6 +169,28 @@ export function createApp(options: AppOptions) {
         }
       : undefined
 
+  // Built ONCE and shared by every surface that checks a credential. A
+  // surface takes it as a required argument, so a credential cannot go
+  // missing on one of them while the others keep working — which is the
+  // defect `security/credential-resolver.ts` exists to make impossible.
+  const localDaemon = options.authMode === 'local-daemon' ? options : undefined
+  const credentialResolver = createCredentialResolver({
+    daemonToken: token,
+    grantStore: oauthAuthz?.store,
+    pairingTokens: localDaemon?.pairing?.tokens,
+    macaroonRootKey: localDaemon?.macaroonRootKey,
+    redeemTicket: localDaemon?.wsTicketStore?.redeemTicket,
+  })
+  // Built AFTER the resolver, over it. `/mcp`'s own policy (which grants it
+  // admits) lives in the strategy; the credential check does not.
+  const mcpAuth =
+    localDaemon !== undefined
+      ? createLocalTokenMcpHttpAuthStrategy({
+          resolver: credentialResolver,
+          protectedResourceMetadata: localDaemon.mcpProtectedResourceMetadata,
+        })
+      : undefined
+
   if (options.authMode === 'server-mode') {
     app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
     app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
@@ -187,18 +206,11 @@ export function createApp(options: AppOptions) {
     // while every other method (GET included — see auth.js) falls through to
     // the auth chain unchanged.
     app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
-    // Three credentials: the daemon token (full authority, unchanged), an
-    // OAuth access token, and a macaroon — the last two additionally checked
-    // against the route's declared scope. All fail identically.
-    app.use(
-      '/api/*',
-      createDaemonAuthMiddleware(
-        token,
-        oauthAuthz?.store,
-        options.pairing?.tokens,
-        options.macaroonRootKey,
-      ),
-    )
+    // Every credential this daemon accepts is resolved in ONE place, and the
+    // resolver is a required argument — see `security/credential-resolver.ts`
+    // for why that is load-bearing rather than tidy. What stays here is the
+    // route-scope policy and the refusal shape, which are this surface's.
+    app.use('/api/*', createDaemonAuthMiddleware(credentialResolver))
   }
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
@@ -452,20 +464,20 @@ export function createApp(options: AppOptions) {
   app.route('/', createFontsRouter())
   app.route('/', createViewportRouter())
   app.route('/', createSyncSseRouter())
-  app.route('/', createDebugRouter({ token }))
+  app.route('/', createDebugRouter({ credentialResolver }))
   app.route('/', createStatusRouter())
   // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
   // OAuth grant to a WS upgrade — server-mode's WS auth goes through its own
   // AsyncAuthStrategy and never needs this. Mounted even when no OAuth
-  // registry is configured (oauthAuthz undefined): the route always 401s in
-  // that case because there is no grantStore to verify a presented bearer
-  // against, same "declared but always-refuses when unconfigured" shape as
-  // the rest of this surface.
+  // registry is configured (oauthAuthz undefined): the resolver then has no
+  // OAuth branch, so nothing presented can resolve to an `oauth-grant` and
+  // the route always 401s — the same "declared but always-refuses when
+  // unconfigured" shape as the rest of this surface.
   if (options.authMode === 'local-daemon') {
     app.route(
       '/',
       createWsTicketRouter({
-        grantStore: oauthAuthz?.store,
+        credentialResolver,
         ticketStore: options.wsTicketStore ?? createWsTicketStore(),
       }),
     )
@@ -473,15 +485,12 @@ export function createApp(options: AppOptions) {
   app.route(
     '/',
     createRuntimeRouter({
-      token,
-      mcpAuth: mcpAuth ?? undefined,
       instanceId,
       identity,
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       shutdown: options.shutdown,
-      grantStore: oauthAuthz?.store,
-      pairingTokens: options.authMode === 'local-daemon' ? options.pairing?.tokens : undefined,
+      credentialResolver,
     }),
   )
   if (options.authMode === 'server-mode') {
@@ -493,7 +502,11 @@ export function createApp(options: AppOptions) {
       }
       return c.html(SERVER_MODE_PLACEHOLDER_HTML)
     })
-    return app
+    // Same shape as the local-daemon return below, so callers see one type
+    // rather than a union. Server-mode does not consult this resolver — its
+    // `/api/*` goes through `createServerModeApiAuthMiddleware` over the
+    // AsyncAuthStrategy — but returning it keeps the two exits honest.
+    return Object.assign(app, { credentialResolver })
   }
 
   for (const pattern of ['/fonts/*', '/assets/*']) {
@@ -549,5 +562,15 @@ export function createApp(options: AppOptions) {
     }
   })
 
-  return app
+  // Returned alongside the app so the WEBSOCKET UPGRADE shares this exact
+  // instance. `http-server.ts` owns that surface and is outside the Hono app,
+  // so without this it would have to build a second resolver from a second
+  // copy of the config — and a credential added to one copy and not the other
+  // is the defect this whole component exists to make impossible.
+  //
+  // Attached to the return rather than threaded through the options because
+  // `createApp` has 133 call sites: making the resolver a required OPTION
+  // would be a mechanical rewrite of all of them, and a mechanical rewrite is
+  // where the last precedence bug came from.
+  return Object.assign(app, { credentialResolver })
 }

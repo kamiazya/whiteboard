@@ -1,9 +1,8 @@
 import type { MiddlewareHandler } from 'hono'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
-import { isAuthorized, parseBearerAuthorizationHeader } from '../security/bearer-token.js'
-import { verifyMacaroon } from '../security/macaroon.js'
-import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
-import { resolveApiRouteScope } from '../security/route-scope-registry.js'
+import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
+import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
+import { type RouteScopeDecision, resolveApiRouteScope } from '../security/route-scope-registry.js'
 
 // Local-daemon mode requires the shared bearer token on every /api/* request,
 // read or write. `/api/runtime/ping` is the sole exception — it is the
@@ -29,72 +28,41 @@ export function requiresDaemonAuth(path: string): boolean {
   return true
 }
 
-// Is this bearer an OAuth access token whose approved grant covers the route
-// being called? Two credentials reach /api/* in local-daemon mode:
-//
-//   - the shared daemon token, which is the machine-local operator's own
-//     credential and carries full authority (it is what the daemon-served app
-//     and the MCP server already hold);
-//   - an OAuth access token from a hosted origin the user explicitly approved
-//     (ADR-0005), which carries ONLY the scopes that approval granted.
-//
-// The second is the one that has to be scope-checked on every request. RFC
-// 6749 §7 puts this check on the resource server, and route-scope-registry is
-// where "what does this route need" is declared once. An undeclared route
-// resolves to `null` there and is refused: a route added later must be given
-// a scope deliberately, never inherit one by accident.
-export function isAuthorizedOAuthGrant(
-  authorization: string | undefined,
-  grantStore: OAuthTransactionStore,
-  method: string,
-  path: string,
+/**
+ * Does this GRANT cover this route?
+ *
+ * The daemon token (and an open daemon) authorize every route without
+ * consulting the registry at all — that is what "full authority" means here.
+ * Every narrower credential goes through `route-scope-registry.ts`, which is
+ * where "what does this route need" is declared once, and RFC 6749 §7 puts
+ * this check on the resource server.
+ *
+ * Said once for every narrow credential rather than per credential, which is
+ * the point of the resolver. It also closes a shape: the pairing token used to
+ * skip this check entirely, so it alone could have reached a
+ * `daemon-token-only` route. No route produces that decision today, so nothing
+ * changes in behaviour — but the exemption was an omission rather than a
+ * decision, and now there is nowhere for it to live.
+ */
+export function grantCoversRoute(
+  grant: ResolvedGrant,
+  required: RouteScopeDecision | null,
 ): boolean {
-  const presented = parseBearerAuthorizationHeader(authorization)
-  if (presented === null) return false
-  const grant = grantStore.verifyAccessToken(presented)
-  if (grant === null) return false
-  const required = resolveApiRouteScope(method, path)
+  if (grant.kind === 'anonymous' || grant.kind === 'daemon-token') return true
+
+  // An undeclared route fails closed: a route added later must be given a
+  // scope deliberately, never inherit one by accident.
   if (required === null) return false
   if (required.kind === 'public') return true
-  // `daemon-token-only` routes never accept an OAuth grant, no matter its
-  // scopes — see route-scope-registry.ts for why (a route whose whole
-  // purpose is handing out daemon-level authority must not be reachable via
-  // a scope-limited grant, or that grant could escalate itself).
+  // ADR-0043 decision 8's promoted rule: a route whose whole purpose is
+  // handing out daemon-level authority must not be reachable by a credential
+  // narrower than what it hands out, or that credential can mint a path back
+  // to the full one.
   if (required.kind === 'daemon-token-only') return false
   return hasRequiredScopes(grant.scopes, required.scopes)
 }
 
-// A pairing bearer is only honored WITH the browser-enforced Origin header it
-// was minted for — presenting it originless or cross-origin fails.
-export function isAuthorizedPairingOrigin(
-  authorization: string | undefined,
-  originHeader: string | undefined,
-  pairingTokens: { validate(token: string, origin: string): boolean },
-): boolean {
-  const bearer = parseBearerAuthorizationHeader(authorization)
-  if (bearer === null || originHeader === undefined) return false
-  let origin: string
-  try {
-    origin = new URL(originHeader).origin
-  } catch {
-    return false
-  }
-  return pairingTokens.validate(bearer, origin)
-}
-
-export function createDaemonAuthMiddleware(
-  token?: string,
-  // Absent unless the operator configured the hosted-origin OAuth surface, in
-  // which case /api/* is daemon-token-only exactly as before.
-  grantStore?: OAuthTransactionStore,
-  // Origin-scoped pairing session tokens (pairing-grant flow). A pairing
-  // bearer is only honored WITH the browser-enforced Origin header it was
-  // minted for — presenting it originless or cross-origin fails.
-  pairingTokens?: { validate(token: string, origin: string): boolean },
-  // ADR-0043 decision 9: absent until a composition root supplies one, so a
-  // daemon that mints no macaroons carries no macaroon branch at all.
-  macaroonRootKey?: Uint8Array,
-): MiddlewareHandler {
+export function createDaemonAuthMiddleware(resolver: CredentialResolver): MiddlewareHandler {
   return async (c, next) => {
     // The route-scope registry is the single source of truth for which routes
     // are public; consult it first so a route declared public there can never
@@ -106,96 +74,27 @@ export function createDaemonAuthMiddleware(
     if (!requiresDaemonAuth(c.req.path)) {
       return next()
     }
-    if (isAuthorized(c.req.header('authorization'), token)) {
+
+    const grant = await resolver.resolve({
+      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
+      carrier: 'bearer',
+      origin: c.req.header('origin'),
+    })
+
+    if (grant !== null && grantCoversRoute(grant, resolveApiRouteScope(c.req.method, c.req.path))) {
       return next()
     }
-    if (
-      grantStore !== undefined &&
-      isAuthorizedOAuthGrant(c.req.header('authorization'), grantStore, c.req.method, c.req.path)
-    ) {
-      return next()
-    }
-    if (
-      pairingTokens !== undefined &&
-      isAuthorizedPairingOrigin(
-        c.req.header('authorization'),
-        c.req.header('origin'),
-        pairingTokens,
-      )
-    ) {
-      return next()
-    }
-    // Last of the credential branches, so the two that authorize every route
-    // keep their existing cost and a macaroon pays the verification. It is
-    // also the only branch here that consults the route's declared scopes and
-    // can refuse on them.
-    if (
-      macaroonRootKey !== undefined &&
-      (await isAuthorizedMacaroon(
-        c.req.header('authorization'),
-        macaroonRootKey,
-        c.req.method,
-        c.req.path,
-      ))
-    ) {
-      return next()
-    }
+
     // One rejection for every way a request can fail: no credential, a wrong
     // daemon token, a forged/expired/revoked access token, a valid access
     // token whose grant does not cover this route, and a macaroon that is
-    // forged, expired, or caveated below what this route declares. Distinguishing them —
-    // even by status code — would tell an attacker which of the two
-    // credentials they are close to holding, and would tell a hostile page
-    // whether a given bearer is a live grant at all. (The bodies match; a
+    // forged, expired, or caveated below what this route declares.
+    // Distinguishing them — even by status code — would tell an attacker which
+    // of the credentials they are close to holding, and would tell a hostile
+    // page whether a given bearer is a live grant at all. (The bodies match; a
     // valid-but-out-of-scope token does run one extra O(1) hash lookup, a
     // timing delta that only matters if this daemon is ever exposed beyond
     // loopback — at which point the grant check needs a constant-time floor.)
     return c.json({ error: 'unauthorized' }, 401)
   }
-}
-
-/**
- * A macaroon bearer, checked against the route's DECLARED scopes
- * ([ADR-0043](../../../../../docs/contributing/adr/0043-authority-as-keys.md)
- * decision 9's first application).
- *
- * This is the first credential in local-daemon mode whose authority is
- * narrower than the daemon's. The daemon token above authorizes every route
- * without consulting the registry at all; an OAuth grant is already
- * scope-checked; a macaroon joins the second group.
- *
- * `daemon-token-only` fails closed here for the reason it fails closed for an
- * OAuth grant, and the reason is ADR-0043 decision 8's promoted rule: a route
- * whose purpose is handing out daemon-level authority must not be reachable
- * by a credential narrower than what it hands out, or that credential can
- * mint a path back to the full one.
- *
- * `workspaceId` is deliberately left undefined for now. Nothing mints a
- * workspace-caveated macaroon yet, and a token that carries one therefore
- * fails closed on every route until the path's workspace is threaded through
- * — which is the safe direction to be wrong in, and is the next slice rather
- * than a gap.
- */
-export async function isAuthorizedMacaroon(
-  authorization: string | undefined,
-  rootKey: Uint8Array,
-  method: string,
-  path: string,
-  now: number = Date.now(),
-): Promise<boolean> {
-  const bearer = parseBearerAuthorizationHeader(authorization)
-  if (bearer === null) return false
-  const required = resolveApiRouteScope(method, path)
-  // A public route never reaches here — the middleware short-circuits it
-  // before any credential branch — so this does not re-decide publicness. An
-  // undeclared route resolves to null and fails closed, which is the
-  // registry's own posture.
-  if (required?.kind !== 'scoped') return false
-
-  const verdict = await verifyMacaroon({
-    token: bearer,
-    rootKey,
-    context: { requiredScopes: required.scopes, now },
-  })
-  return verdict.ok
 }

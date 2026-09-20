@@ -11,6 +11,11 @@ import {
   runtimeVerifyResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  type CredentialResolverConfig,
+  createCredentialResolver,
+} from '../security/credential-resolver.js'
+import { mintMacaroon } from '../security/macaroon.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR) and the helpers behind
@@ -68,12 +73,21 @@ function verifyIdentitySignature(parts: readonly string[], signatureB64u: string
   return cryptoVerify(null, buildSignedPayload(parts), key, Buffer.from(signatureB64u, 'base64url'))
 }
 
-function createApp(extra: Partial<Parameters<typeof createRuntimeRouter>[0]> = {}) {
+// Credentials go through a REAL resolver rather than reaching the router as
+// separate optional fields. That is the point of the refactor: these tests
+// exercise the same component production does, so a branch that works here
+// works there.
+//
+// Typed as the resolver's own config rather than `Partial<RouterOptions>`:
+// the previous shape spread a Partial, which let a MISSING required option
+// typecheck (TypeScript assumes the spread may supply it and drops excess
+// property checks). Measured — the router ran without a resolver and every
+// case answered 500.
+function createApp(credentials: Omit<CredentialResolverConfig, 'daemonToken'> = {}) {
   const touch = vi.fn()
   const shutdown = vi.fn(async () => undefined)
   const app = createRuntimeRouter({
-    ...extra,
-    token: 'secret',
+    credentialResolver: createCredentialResolver({ daemonToken: 'secret', ...credentials }),
     instanceId: 'test-instance-id',
     identity: testIdentity,
     touch,
@@ -409,5 +423,87 @@ describe('daemon identity surfaces', () => {
     // First 60 succeed; everything after the boundary is throttled.
     expect(statuses.slice(0, 60).every((status) => status === 200)).toBe(true)
     expect(statuses.slice(60).every((status) => status === 429)).toBe(true)
+  })
+})
+
+// What the unification FIXED, stated as a behaviour test rather than a claim.
+//
+// `/api/runtime/*` had its own credential branches — the daemon token, an
+// OAuth grant and a pairing token — and no macaroon branch. The global
+// `/api/*` gate already admitted a macaroon carrying the route's declared
+// scope, so the two disagreed: the registry said `runtime:read` opens
+// `/api/runtime/storage`, the outer gate agreed, and the inner one refused.
+// Failing closed, so not a hole — but a feature that did not work where the
+// registry said it did, with nothing red anywhere.
+//
+// It is not that the branch was forgotten once. It is that there was a place
+// for it to be forgotten, four times over.
+describe('runtime routes — a macaroon reaches the read half, like every other narrow credential', () => {
+  const ROOT_KEY = new Uint8Array(32).fill(11)
+
+  it('allows GET /api/runtime/storage with a macaroon caveated to runtime:read', async () => {
+    const { app } = createApp({ macaroonRootKey: ROOT_KEY })
+    const token = await mintMacaroon({
+      rootKey: ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['runtime:read'] }],
+    })
+
+    const res = await app.request('/api/runtime/storage', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses a macaroon that does not carry runtime:read', async () => {
+    const { app } = createApp({ macaroonRootKey: ROOT_KEY })
+    const token = await mintMacaroon({
+      rootKey: ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['canvas:read'] }],
+    })
+
+    const res = await app.request('/api/runtime/storage', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(res.status).toBe(401)
+  })
+
+  // The per-surface policy this router keeps, and the reason its check is not
+  // just `hasRequiredScopes`: the admin half is daemon-token-only whatever
+  // scopes a narrow credential holds — including `runtime:admin` itself.
+  it('refuses a macaroon on the admin half even when it carries runtime:admin', async () => {
+    const { app, shutdown } = createApp({ macaroonRootKey: ROOT_KEY })
+    const token = await mintMacaroon({
+      rootKey: ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['runtime:admin', 'runtime:read'] }],
+    })
+
+    const res = await app.request('/api/runtime/shutdown', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(res.status).toBe(401)
+    expect(shutdown).not.toHaveBeenCalled()
+  })
+
+  it('refuses a macaroon on POST /api/runtime/logs/prune, which is daemon-token-only in the handler', async () => {
+    const { app } = createApp({ macaroonRootKey: ROOT_KEY })
+    const token = await mintMacaroon({
+      rootKey: ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['runtime:admin', 'runtime:read'] }],
+    })
+
+    const res = await app.request('/api/runtime/logs/prune', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    expect(res.status).toBe(401)
   })
 })

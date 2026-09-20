@@ -32,7 +32,7 @@ import {
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
-import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
+import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
@@ -57,7 +57,7 @@ export interface StartHttpServerOptions {
   port: number
   host?: string
   token?: string
-  mcpAuth?: McpHttpAuthStrategy
+  mcpProtectedResourceMetadata?: McpProtectedResourceMetadataConfig
   idleTimeoutMs?: number
   onClose?: () => Promise<void> | void
   /** Exact-match hosted origins admitted alongside loopback, on /api CORS,
@@ -343,7 +343,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       autoVersionTrigger = trigger
     },
     token: options.token,
-    mcpAuth: options.mcpAuth,
+    mcpProtectedResourceMetadata: options.mcpProtectedResourceMetadata,
     instanceId,
     touch,
     getStatus: getRuntimeStatus,
@@ -486,13 +486,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         socket.destroy()
         return
       }
+      // The SAME resolver instance the Hono app's surfaces use — see the end
+      // of `createApp`. Two resolvers built from two copies of the config is
+      // how a credential ends up admitted on one surface and refused on
+      // another, which is what this component exists to prevent.
       const decision = await authorizeWsUpgrade(
         req.headers,
-        options.token,
+        app.credentialResolver,
         allowedWebOrigins,
-        wsTicketStore.redeemTicket,
-        pairing.tokens,
-        macaroonRootKey,
       )
       if (!decision.accept) {
         const statusCode = decision.statusCode ?? 401
