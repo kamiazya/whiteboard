@@ -138,11 +138,10 @@ export function createPairingTokenStore({ ttlMs = TOKEN_TTL_MS }: { ttlMs?: numb
     },
     revokeBoundTo(credentials) {
       let count = 0
-      for (const [token, entry] of tokens) {
-        if (entry.binding === undefined) continue
+      for (const [token, { binding }] of tokens) {
+        if (!binding) continue
         const matches = credentials.some(
-          (c) =>
-            c.origin === entry.binding?.origin && c.credentialId === entry.binding?.credentialId,
+          (c) => c.origin === binding.origin && c.credentialId === binding.credentialId,
         )
         if (matches) {
           tokens.delete(token)

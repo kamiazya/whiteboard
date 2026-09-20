@@ -39,7 +39,6 @@
 //   token; this slice answers `profileId: null` always — mapping the bound
 //   credential to a MemberProfile is a later slice's job.
 import { createHash } from 'node:crypto'
-import { membershipRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   type CreateGrantResponse,
   createGrantRequestSchema,
@@ -330,29 +329,21 @@ export function createPairingRouter({
     }
     const { credentialId } = parsed.data
 
-    const pin = credentials.find(session.origin, credentialId)
-    if (pin === null) {
+    const refuse = (error: 'unknown_credential' | 'assertion_rejected', message: string) => {
       log.warning(
-        { origin: session.origin, credentialId, reason: 'unknown_credential' },
+        { origin: session.origin, credentialId, reason: message },
         'session assertion refused',
       )
-      return c.json(
-        membershipRefusalSchema.parse({
-          error: 'unknown_credential',
-          message: 'no passkey is pinned for this origin and credential',
-        }),
-        403,
-      )
+      return c.json({ error, message }, 403)
+    }
+
+    const pin = credentials.find(session.origin, credentialId)
+    if (pin === null) {
+      return refuse('unknown_credential', 'no passkey is pinned for this origin and credential')
     }
 
     const nonce = challenges.redeem(session.token)
-    if (nonce === null) {
-      log.warning(
-        { origin: session.origin, credentialId, reason: 'challenge' },
-        'session assertion refused',
-      )
-      return c.json({ error: 'assertion_rejected', message: 'challenge' }, 403)
-    }
+    if (nonce === null) return refuse('assertion_rejected', 'challenge')
 
     const verdict = verifyWebAuthnAssertion(
       decodeAttestation({ kind: 'webauthn', ...parsed.data }),
@@ -363,26 +354,12 @@ export function createPairingRouter({
         publicKeyJwk: pin.publicKeyJwk,
       },
     )
-    if (!verdict.ok) {
-      log.warning(
-        { origin: session.origin, credentialId, reason: verdict.reason },
-        'session assertion refused',
-      )
-      return c.json({ error: 'assertion_rejected', message: verdict.reason }, 403)
-    }
+    if (!verdict.ok) return refuse('assertion_rejected', verdict.reason)
     if (verdict.backupEligible !== pin.backupEligible) {
-      log.warning(
-        { origin: session.origin, credentialId, reason: 'backupEligibility' },
-        'session assertion refused',
-      )
-      return c.json({ error: 'assertion_rejected', message: 'backupEligibility' }, 403)
+      return refuse('assertion_rejected', 'backupEligibility')
     }
     if (!credentials.recordSignCount(session.origin, credentialId, verdict.signCount)) {
-      log.warning(
-        { origin: session.origin, credentialId, reason: 'signCount' },
-        'session assertion refused',
-      )
-      return c.json({ error: 'assertion_rejected', message: 'signCount' }, 403)
+      return refuse('assertion_rejected', 'signCount')
     }
 
     const bound = tokens.bind(session.token, { origin: session.origin, credentialId })
