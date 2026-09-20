@@ -126,8 +126,11 @@ replica the browser already decrypted before removal keeps whatever it
 already read; the protection is against a *future* fetch, not against
 something already on disk.
 
-Three tiers, set per workspace or by the daemon's own
-`WHITEBOARD_REPLICA_TIER` default (see
+Three tiers. `workspaces.replicaTier` is a per-workspace override the daemon
+already reads (falling back to the `WHITEBOARD_REPLICA_TIER` default below
+when unset), but nothing yet writes it — no CLI flag or admin route sets a
+workspace's tier today, so every workspace runs on the process default until
+that write path ships (see
 [Configuration](../reference/configuration.md)):
 
 - `no-offline` — the daemon refuses to hand out a key for this workspace at
