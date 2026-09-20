@@ -160,7 +160,24 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and neither shrank on the merge.
   // Raised 1165 -> 1197 for `ungroup-ink`: breaking a handwritten mark
   // apart, which is the escape the automatic grouping owes its user.
-  'apps/web/src/lib/spatial/commands.ts': 1197,
+  // Raised 1197 -> 1297 for `move-line` and `set-line-color`, the two
+  // cheapest of the seven gaps `element-verb-parity.test.ts` reported on its
+  // first reading: a `CanvasLine` stored seven things a person could want
+  // changed and the editor wrote none of them. Two union arms, `updateLine`
+  // (the `updateNode` sibling both need), the two writes, and
+  // `moveInkCommand` — `deleteInkCommand`'s twin, and the one place that
+  // looks at which collection a selected ink id came from.
+  // Raised 1297 -> 1338 for the clipboard carrying ink: `ownedLinePoints`
+  // (what a stroke occupies, with three readers now), `shiftLine` (the one
+  // producer both the move and the paste offset go through), and the
+  // fragment insert reading both collections for its bounds.
+  // Raised 1338 -> 1498 as ink gained the rest of its verbs: `set-line-bends`,
+  // `set-line-label`, the generic `set-line-facet`, `set-line-ends` and
+  // `set-line-side`, plus `bendInkCommand` and `labelInkCommand` joining the
+  // id-picking family. Every one of them is a cell
+  // `element-verb-parity.test.ts` reported on its first reading, and with
+  // them its `lines` column is empty.
+  'apps/web/src/lib/spatial/commands.ts': 1498,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -562,7 +579,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3015 -> 3016: the node lock became a predicate beside the path lock
   // instead of a swapped box list, so the menu's "locked included" is one
   // statement per kind rather than two different mechanisms.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3016,
+  // Raised 3016 -> 3097 for the ink drag: the press arm that decides what
+  // travels, the offset the selection highlight is drawn at while it does,
+  // and the release branch that keeps what the marquee used to do for a
+  // press ON ink — the double-press label and the root focus, both found by
+  // the full browser run rather than by reading.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3097,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -671,11 +693,31 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 968,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2708,
+  // Raised 2708 -> 2724, two lines for each of the eight ink entries the
+  // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
+  // ends/side/facet/label/bends/color) and `pointerdown-ink`. Each one is a
+  // command kind this model does not drive — it reduces POINTER gestures
+  // over generated NODES — and the ledger's fourth direction fails on a
+  // `not modelled` the run DOES produce, so each entry is a sentence
+  // somebody had to be able to defend rather than a line of boilerplate.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2724,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
-  'apps/web/src/lib/spatial/commands.test.ts': 1550,
+  // Raised 1550 -> 1615 with the two ink writes above: five examples for the
+  // move (both ends, a node end held, the two no-ops) and the colour.
+  // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
+  // ink, the offset on every point a stroke owns, and the anchor bounds that
+  // used to read Infinity over nodes alone.
+  // Raised 1675 -> 1808 with the rest of the verbs a stroke stores and the
+  // editor could not write — bends, label, arrowheads, the side a pinned end
+  // leaves from and the free end that has none, a facet, and the colour
+  // write against a line the canvas does not hold — plus the two
+  // collection-picking siblings (`labelInkCommand`, `bendInkCommand`), whose
+  // whole content is that a relation and a stroke of the same id go to
+  // different writes. A table of ink verbs where every row is one example is
+  // what stops the next one being added without one.
+  'apps/web/src/lib/spatial/commands.test.ts': 1808,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
@@ -700,7 +742,16 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 858,
+  // 858 -> 892 for the raises the two ink writes needed, each with the
+  // reason beside it. That is the entry doing its job rather than growing:
+  // a raise costs a sentence, so a change that widens a file pays for it in
+  // the diff a reviewer reads.
+  // 892 -> 909 for completing two of those sentences. A review found both
+  // annotations stopping short of the ceiling they sit on — 2712 written
+  // against 2724, 1675 against 1808 — which is the failure mode this entry
+  // is the antidote to, one level up: an annotation that covers part of a
+  // raise reads exactly like one that covers all of it.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 909,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

@@ -74,14 +74,23 @@ export function useEditSessionState({ canvas, selectedId }: EditSessionStateInpu
     readonly snapshot: ReadonlyMap<string, string>
   } | null>(null)
   useEffect(() => {
-    // Anyone touching a held node — local drag, remote edit, delete —
-    // lifts the hold; the veil must never dim a node that changed under
+    // Anyone touching a held element — local drag, remote edit, delete —
+    // lifts the hold; the veil must never dim something that changed under
     // it. The move resolution clears the hold before it applies, so its
     // own geometry change never races this.
+    //
+    // BOTH collections, because a cut holds strokes too. Looking in
+    // `canvas.nodes` alone did not merely miss them: a held id that names no
+    // node reads as DELETED, so the hold lifted on the very next render and
+    // a cut stroke pasted as a copy instead of moving. That is the shape
+    // this session has been closing all day — a reader that names one
+    // collection, over a canvas that holds four.
     if (pendingCut === null) return
     const touched = [...pendingCut.snapshot].some(([id, frozen]) => {
-      const node = canvas.nodes.find((n) => n.id === id)
-      return node === undefined || JSON.stringify(node) !== frozen
+      const held =
+        canvas.nodes.find((node) => node.id === id) ??
+        (canvas.lines ?? []).find((line) => line.id === id)
+      return held === undefined || JSON.stringify(held) !== frozen
     })
     if (touched) setPendingCut(null)
   }, [canvas, pendingCut])

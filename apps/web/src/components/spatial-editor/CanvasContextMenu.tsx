@@ -11,6 +11,7 @@ import type {
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
+import { deleteInkCommand } from '../../lib/spatial/commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import type { ActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
@@ -144,6 +145,10 @@ export interface CanvasContextMenuProps {
   readonly isLocked: (nodeId: string) => boolean
   readonly extraIds: ReadonlySet<string>
   readonly selectedId: string | null
+  /** Every selected stroke or relation — what the ink menu's Group acts on. */
+  readonly selectedInkIds: readonly string[]
+  /** The editor's id factory, so a menu verb mints no identity of its own. */
+  readonly createId: () => string
   readonly isImageFileRef?: (file: string) => boolean
   /** Contribution source; a test seam — production uses the bundled registry. */
   readonly facetRegistry?: FacetRegistry
@@ -166,6 +171,8 @@ export function CanvasContextMenu({
   isLocked,
   extraIds,
   selectedId,
+  selectedInkIds,
+  createId,
   isImageFileRef,
   missingFileRef,
   facetRegistry = bundledFacetRegistry,
@@ -264,11 +271,16 @@ export function CanvasContextMenu({
             ? inkMenuItems({
                 line,
                 lines: canvas.lines ?? [],
+                palette: resolveCanvasPalette(canvas, theme),
                 isEdgeLocked,
                 edgeLockEnabled,
                 onToggleEdgeLock,
                 applyResult,
                 setSelectedEdgeId,
+                setEdgeLabelEditId,
+                selectedInkIds,
+                createId,
+                deleteInk: (id) => deleteInkCommand(canvas, id),
               })
             : node === undefined && edge !== undefined
               ? edgeMenuItems({

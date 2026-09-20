@@ -5,18 +5,7 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  */
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
-import { endSide } from '@kamiazya/whiteboard-model'
-import {
-  Lock as LockIcon,
-  LockOpen,
-  PanelBottom,
-  PanelLeft,
-  PanelRight,
-  PanelTop,
-  SquareDashed,
-  Tag,
-  Trash2,
-} from 'lucide-react'
+import { Lock as LockIcon, LockOpen, Tag, Trash2 } from 'lucide-react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { Point } from '../../../lib/spatial/viewport.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
@@ -24,6 +13,7 @@ import type { ContextMenuItem } from '../ContextMenu.js'
 import { facetPropertyItems } from '../facet-widgets/index.js'
 import { commentOnEdgeItem } from './annotation-verbs.js'
 import { colorRow } from './color-row.js'
+import { arrowRow, sideRow } from './end-rows.js'
 
 export interface EdgeMenuItemsInput {
   readonly edge: CanvasEdge
@@ -75,64 +65,15 @@ export function edgeMenuItems({
   // actions, then properties, then the destructive entry.
   // Arrow direction reads the JSON Canvas defaults (fromEnd
   // none, toEnd arrow).
-  const fromEnd = edge.from.end ?? 'none'
-  const toEnd = edge.to.end ?? 'arrow'
-  const arrowStates = [
-    { label: '→', ariaLabel: 'Forward', fromEnd: 'none', toEnd: 'arrow' },
-    { label: '↔', ariaLabel: 'Both', fromEnd: 'arrow', toEnd: 'arrow' },
-    { label: '←', ariaLabel: 'Backward', fromEnd: 'arrow', toEnd: 'none' },
-    { label: '−', ariaLabel: 'None', fromEnd: 'none', toEnd: 'none' },
-  ] as const
   const applyEdgeCommand = (command: EditorCommand) =>
     applyResult({ state: { kind: 'idle' }, commands: [command] })
-  // Excel-border-style side pickers: a rectangle with the
-  // pinned side emphasized; dashed = unpinned (auto).
-  const SIDES = [
-    { label: 'auto', ariaLabel: 'Auto', icon: <SquareDashed />, side: undefined },
-    { label: 'top', ariaLabel: 'Top', icon: <PanelTop />, side: 'top' },
-    { label: 'right', ariaLabel: 'Right', icon: <PanelRight />, side: 'right' },
-    { label: 'bottom', ariaLabel: 'Bottom', icon: <PanelBottom />, side: 'bottom' },
-    { label: 'left', ariaLabel: 'Left', icon: <PanelLeft />, side: 'left' },
-  ] as const
-  const sideRow = (endpoint: 'from' | 'to') => {
-    const current = endSide(endpoint === 'from' ? edge.from : edge.to)
-    return {
-      kind: 'options' as const,
-      label: endpoint === 'from' ? 'From side' : 'To side',
-      options: SIDES.map((entry) => ({
-        label: entry.label,
-        icon: entry.icon,
-        ariaLabel: entry.ariaLabel,
-        selected: current === entry.side,
-        onSelect: () =>
-          applyEdgeCommand({
-            kind: 'set-edge-side',
-            id: edge.id,
-            endpoint,
-            side: entry.side,
-          }),
-      })),
-    }
-  }
   return [
-    {
-      kind: 'options' as const,
-      label: 'Arrows',
-      options: arrowStates.map((state) => ({
-        label: state.label,
-        ariaLabel: state.ariaLabel,
-        selected: state.fromEnd === fromEnd && state.toEnd === toEnd,
-        onSelect: () =>
-          applyEdgeCommand({
-            kind: 'set-edge-ends',
-            id: edge.id,
-            fromEnd: state.fromEnd,
-            toEnd: state.toEnd,
-          }),
-      })),
-    },
-    sideRow('from'),
-    sideRow('to'),
+    arrowRow(edge, (ends) => applyEdgeCommand({ kind: 'set-edge-ends', id: edge.id, ...ends })),
+    ...(['from', 'to'] as const).map((endpoint) =>
+      sideRow(edge, endpoint, (side) =>
+        applyEdgeCommand({ kind: 'set-edge-side', id: edge.id, endpoint, side }),
+      ),
+    ),
     colorRow(palette, edge.color, (color) =>
       applyEdgeCommand({ kind: 'set-edge-color', id: edge.id, color }),
     ),

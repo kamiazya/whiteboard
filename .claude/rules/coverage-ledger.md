@@ -253,6 +253,74 @@ sentence). `gap` on a pinned cell records the missing part with its reason.
 Extending the matrix in one dimension only is a type error (`satisfies
 Record<Capability, Record<Surface, Cell>>`).
 
+### Derive the second axis when you can
+
+`apps/web/src/components/spatial-editor/element-verb-parity.test.ts` is the
+matrix one step stronger, and the step is worth naming because the weakness
+it closes is invisible: **a hand-kept axis is a list, and a list is what a
+ledger exists to replace.**
+
+`element-pick.property.test.ts` already derives its ELEMENT axis from
+`SpatialCanvas`, so a collection the model gains stops `tsc`. Its other axis
+is a seven-member `EditorSurface` union written by hand — the seven places a
+line was forgotten in one session — and a surface added tomorrow is a surface
+nobody is asked about. So the verb matrix derives that one too, through a
+chain where each link is a type error: every `EditorLeafCommand` kind
+declares `{verb, target}` (`satisfies Record<kind, …>`, so a new command
+stops the build), the verb vocabulary is a `const` tuple those entries are
+typed against (so a new verb stops it again), and the matrix is `satisfies
+Record<ElementVerb, Record<ElementCollection, Cell>>` (so a new verb row owes
+all four collections). A cell says `command`, `gap: <reason>` or
+`n/a: <reason>`, and **`command` is checked against the classification rather
+than believed** — the two runtime directions are a `command` with no command
+behind it, and a `gap`/`n/a` whose command now exists. The second is the one
+the file is for: a filled gap makes its own entry fail, so a missing
+affordance stays visible instead of being rediscovered by whoever next tries
+to drag one.
+
+Two things it measured:
+
+- **The first reading is the finding.** A `CanvasLine` stores seven things a
+  person could want changed — both ends, a side, bends, colour, label,
+  facets, and where the stroke sits — and the editor wrote NONE of them.
+  Ink could be drawn, picked, banded, shift-added, ungrouped, locked and
+  deleted, and after that it was fixed. Nothing was red about that.
+  All seven were closed in the increments after, and the pinned count moved
+  7 -> 5 -> 4 -> 3 -> 2 -> 0 one diff at a time. That is the matrix working
+  in the direction it exists for: each fix had to come past the `gap:` entry
+  that named it, and each entry had to stop being true before the suite went
+  green again.
+  Three things the burn-down measured, none of which a reading would have
+  found. **Most of the work was already done and pointed at one collection**
+  — the renderer draws a line's label (`composeEdgeLabel` takes a relation
+  or a line), the bend affordance reads only `{id, bends}`, and the double
+  press already armed the label editor; four reads of `canvas.edges` were
+  what made each look absent. **Building a verb is how its blocker is
+  found**: Group could never be offered because a right-click on ink
+  collapsed the selection to one id, where the node branch two lines above
+  had always promoted and kept it. And **the full browser run found what the
+  increment's own tests could not** — the ink drag replaced the marquee
+  branch, which was also where a press on ink took focus and where its
+  double press opened the label editor, and the event it replaced was also
+  what dropped the node selection. Each is about what happens AFTER a
+  release that writes nothing, so a test of the new behaviour passes over
+  all three.
+- **A family that issues no verb of its own is invisible to a verb matrix.**
+  Copy, cut, paste and duplicate build a batch of `create-node`/`create-edge`,
+  so every cell reads `command` for them and the family looks answered; what
+  actually decides which kinds survive a copy is `clipboardFragmentSchema`'s
+  shape. That needed its own four-cell table, read off the schema's own keys,
+  and closing it turned up a defect of the same family: the effect that lifts
+  a pending cut looked a held id up in `canvas.nodes` alone, so a held stroke
+  read as DELETED and a cut stroke pasted as a copy. Before reaching for a
+  matrix, ask what the axis CANNOT see.
+  A fourth answer came out of the burn-down and is worth copying. A cell is
+  (verb, collection), so the moment ANY command exists for the pair it flips
+  to `command` — and whatever that command does not reach goes quiet again.
+  `command, gap: <reason>` is how a partly-closed cell keeps saying so; the
+  ink drag carried one for exactly as long as the pointer could not do what
+  the arrow keys already did.
+
 It is NOT a coverage ledger, and the difference decides where each belongs:
 a ledger tallies what a run PRODUCED over one declared surface, and a matrix
 declares a cross-surface intent that no single run can produce. So a matrix

@@ -327,6 +327,20 @@ const COMMAND_COVERAGE = {
   // line-ink.browser.test.tsx.
   'delete-line':
     'not modelled: no gesture deletes ink; the Delete keypress against a selected line is line-ink.browser.test.tsx',
+  'move-line':
+    'not modelled: a pointer gesture DOES move ink — this model just cannot reach it, because it generates node interactions and so never produces the `pointerdown-ink` that arms the drag. Its canvas meaning is commands.test.ts (plus the additivity property beside it), its keyboard path is ink-nudge.browser.test.tsx and its pointer path is ink-drag.browser.test.tsx',
+  'set-line-ends':
+    'not modelled: the ink menu\u2019s Arrows row, a single-field write with no gesture or selection coupling — the same class as set-edge-ends beside it. Its canvas meaning is commands.test.ts and its row is ink-ends.browser.test.tsx',
+  'set-line-side':
+    'not modelled: the ink menu\u2019s From/To side rows, the same class as set-edge-side beside them. Its canvas meaning is commands.test.ts and its rows are ink-ends.browser.test.tsx',
+  'set-line-facet':
+    'not modelled: a facet write with no gesture or selection coupling — the same class as set-node-facet and set-edge-facet beside it. Its canvas meaning is commands.test.ts and its one surface is the ink menu\u2019s Group (freehand-ink.browser.test.tsx)',
+  'set-line-label':
+    'not modelled: the in-place label editor is an overlay this model never renders, exactly as the edge label editor is. Its canvas meaning is commands.test.ts and its two ways in — the double press and the ink menu — are line-ink-label.browser.test.tsx',
+  'set-line-bends':
+    'not modelled: the bend drag is an OVERLAY gesture — its press starts on a handle this model never renders, so there is nothing here to drive. Its canvas meaning is commands.test.ts, its reducer arms edge-bend-gesture.test.ts, and the whole way from a pointer to the ink edge-bend.browser.test.tsx',
+  'set-line-color':
+    'not modelled: the ink menu’s swatch row, a single-field write with no gesture or selection coupling — the same class as set-edge-color beside it. Its canvas meaning is commands.test.ts and its menu is freehand-ink.browser.test.tsx',
   'reorder-nodes': 'covered',
   'set-body':
     'not modelled: the markdown editor writes the document body, which is not in the canvas at all — applyCommand returns the same reference',
@@ -401,6 +415,8 @@ const GESTURE_EVENT_COVERAGE = {
     'not modelled: its only command is set-edge-facet, which this model already declares unmodelled — a plugin-owned payload it cannot observe. The gesture arithmetic is edge-bend-gesture.test.ts and the flow is edge-bend.browser.test.tsx',
   'remove-bend':
     'not modelled: the same set-edge-facet write with one point dropped, and no gesture or selection state to model; edge-bend-gesture.test.ts pins both the last-bend and the keep-the-rest cases',
+  'pointerdown-ink':
+    'not modelled: the press that arms an ink drag. This model reduces gestures over generated NODES and never draws a stroke, so nothing here produces one; its reducer arms are ink-drag.test.ts and the whole way from a pointer to the moved ink is ink-drag.browser.test.tsx',
   'move-bend':
     'not modelled: the keyboard twin of the bend drag — one set-edge-facet write with one point moved, no gesture state; edge-bend-gesture.test.ts pins it and edge-bend.browser.test.tsx drives the arrow keys',
 } satisfies Record<GestureEvent['type'], SurfaceCoverage>

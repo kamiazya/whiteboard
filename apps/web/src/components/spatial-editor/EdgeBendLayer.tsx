@@ -1,5 +1,5 @@
 /**
- * The selected connection's bend affordance, wired to the gesture machine.
+ * The selected element's bend affordance, wired to the gesture machine.
  *
  * Its own component rather than a block in the editor: the three handlers
  * are the same shape (take the press, dispatch one gesture event), and the
@@ -7,7 +7,7 @@
  * the editor is only what no overlay can compute for itself — the pointer's
  * canvas point once capture is taken, and somewhere to send an event.
  */
-import type { CanvasEdge } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine } from '@kamiazya/whiteboard-model'
 import type { Point, Viewport } from '../../lib/spatial/viewport.js'
 import { clientPointToRootLocal, screenToCanvas } from '../../lib/spatial/viewport.js'
 import { EdgeBendHandles } from './EdgeBendHandles.js'
@@ -20,7 +20,13 @@ export function EdgeBendLayer({
   begin,
   dispatch,
 }: {
-  readonly edge: CanvasEdge
+  /**
+   * The RELATION or the STROKE whose bends these are. A line stores them in
+   * the same field an edge does (`bendsFieldSchema` is declared once and used
+   * by both), and this layer only ever reads `id` and `bends` — so it was
+   * generic already and said it was not.
+   */
+  readonly edge: CanvasEdge | CanvasLine
   /** The DRAWN line, which is where a ghost handle can sit. */
   readonly path: readonly Point[]
   readonly viewport: Viewport

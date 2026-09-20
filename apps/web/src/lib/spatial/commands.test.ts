@@ -21,9 +21,12 @@ import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-vi
 import { describe, expect, it } from 'vitest'
 import {
   applyCommand,
+  bendInkCommand,
   buildFragmentInsertCommand,
+  DUPLICATE_OFFSET_PX,
   deleteInkCommand,
   type EditorCommand,
+  labelInkCommand,
 } from './commands.js'
 
 function baseCanvas(): SpatialCanvas {
@@ -871,6 +874,65 @@ describe('set-line-jumps', () => {
   })
 })
 
+describe('buildFragmentInsertCommand carries ink', () => {
+  const strokeFragment = {
+    nodes: [],
+    edges: [],
+    lines: [
+      {
+        id: 'l1',
+        from: { kind: 'point' as const, point: { x: 100, y: 100 } },
+        to: { kind: 'point' as const, point: { x: 200, y: 200 } },
+        bends: [{ x: 150, y: 120 }],
+      },
+    ],
+  }
+
+  it('pastes a stroke on its own, where a fragment of pure ink used to be nothing', () => {
+    // The guard was `fragment.nodes.length === 0`, so a copied stroke and an
+    // empty clipboard answered the same way.
+    const command = buildFragmentInsertCommand(baseCanvas(), strokeFragment, () => 'fresh')
+    expect(command?.kind).toBe('batch')
+    const next = applyCommand(baseCanvas(), command as EditorCommand)
+    expect(next.lines).toHaveLength(1)
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('offsets every point the stroke owns, so the copy lands beside the original', () => {
+    const next = applyCommand(
+      baseCanvas(),
+      buildFragmentInsertCommand(baseCanvas(), strokeFragment, () => 'fresh') as EditorCommand,
+    )
+    const line = next.lines?.[0]
+    // The same +16 cascade a duplicated node takes.
+    expect(line?.from).toEqual({
+      kind: 'point',
+      point: { x: 100 + DUPLICATE_OFFSET_PX, y: 100 + DUPLICATE_OFFSET_PX },
+    })
+    expect(line?.bends).toEqual([{ x: 150 + DUPLICATE_OFFSET_PX, y: 120 + DUPLICATE_OFFSET_PX }])
+  })
+
+  it('centres an ink-only paste on the anchor, reading the stroke for its bounds', () => {
+    // A node-only bounds computation answers Infinity here, so "paste here"
+    // put the stroke nowhere a person could find it.
+    const next = applyCommand(
+      baseCanvas(),
+      buildFragmentInsertCommand(baseCanvas(), strokeFragment, () => 'fresh', {
+        x: 500,
+        y: 500,
+      }) as EditorCommand,
+    )
+    const line = next.lines?.[0]
+    const from = line?.from.kind === 'point' ? line.from.point : undefined
+    const to = line?.to.kind === 'point' ? line.to.point : undefined
+    expect(from).toBeDefined()
+    expect(to).toBeDefined()
+    // The stroke spans 100..200 on both axes, so its middle lands on 500,500.
+    expect(((from?.x ?? 0) + (to?.x ?? 0)) / 2).toBe(500)
+    expect(((from?.y ?? 0) + (to?.y ?? 0)) / 2).toBe(500)
+  })
+})
+
 describe('buildFragmentInsertCommand', () => {
   // Shared core of pasteFragment (with/without an anchor) and
   // duplicateSelection (always cascades, never anchors).
@@ -1396,6 +1458,202 @@ describe('lines in the editor', () => {
   it('is a no-op for a line id the canvas does not hold', () => {
     const canvas = lineCanvas()
     expect(applyCommand(canvas, { kind: 'delete-line', id: 'nope' })).toBe(canvas)
+  })
+
+  // A stroke could be drawn, picked, banded, shift-added, ungrouped, locked
+  // and deleted, and after that it was fixed — `element-verb-parity.test.ts`
+  // is what made that visible by asking every verb of every collection.
+  // These are the two cheapest of the seven it reported.
+
+  it('moves a stroke by translating the points it owns', () => {
+    const canvas: SpatialCanvas = {
+      ...baseCanvas(),
+      lines: [
+        {
+          id: 'l1',
+          from: { kind: 'point', point: { x: 10, y: 20 } },
+          to: { kind: 'point', point: { x: 110, y: 220 } },
+          bends: [{ x: 60, y: 120 }],
+        },
+      ],
+    }
+    const next = applyCommand(canvas, { kind: 'move-line', id: 'l1', dx: 5, dy: -7 })
+    expect(next.lines?.[0]).toEqual({
+      id: 'l1',
+      from: { kind: 'point', point: { x: 15, y: 13 } },
+      to: { kind: 'point', point: { x: 115, y: 213 } },
+      bends: [{ x: 65, y: 113 }],
+    })
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('leaves an end that is ON a node where it is, because the node carries it', () => {
+    // The attachment is the point of the end: a stroke hung on a box follows
+    // the box, so translating that end would tear it off the thing it names.
+    // What moves is the geometry the line itself owns.
+    const next = applyCommand(lineCanvas(), { kind: 'move-line', id: 'l1', dx: 40, dy: 40 })
+    expect(next.lines?.[0]).toEqual({
+      id: 'l1',
+      from: { kind: 'node', node: 'a' },
+      to: { kind: 'point', point: { x: 440, y: 440 } },
+    })
+  })
+
+  it('is a no-op for a move that goes nowhere, and for a line that is not there', () => {
+    const canvas = lineCanvas()
+    expect(applyCommand(canvas, { kind: 'move-line', id: 'l1', dx: 0, dy: 0 })).toBe(canvas)
+    expect(applyCommand(canvas, { kind: 'move-line', id: 'nope', dx: 5, dy: 5 })).toBe(canvas)
+  })
+
+  it('colours a stroke, and clears the colour by naming none', () => {
+    const coloured = applyCommand(lineCanvas(), {
+      kind: 'set-line-color',
+      id: 'l1',
+      color: '#ff0000',
+    })
+    expect(coloured.lines?.[0]?.color).toBe('#ff0000')
+    // Absent, not `undefined`: the same canonicalisation every other colour
+    // write here makes, so a cleared line serialises the way a never-coloured
+    // one does.
+    const cleared = applyCommand(coloured, { kind: 'set-line-color', id: 'l1', color: undefined })
+    expect(cleared.lines?.[0]).not.toHaveProperty('color')
+    expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
+  })
+
+  it('stores the points a stroke is drawn through, and clears them with an empty list', () => {
+    const bent = applyCommand(lineCanvas(), {
+      kind: 'set-line-bends',
+      id: 'l1',
+      bends: [{ x: 250, y: 250 }],
+    })
+    expect(bent.lines?.[0]?.bends).toEqual([{ x: 250, y: 250 }])
+    // Absence already says "take a computed route again", which is why the
+    // model refuses an empty array — the same contract `set-edge-bends` has.
+    const straight = applyCommand(bent, { kind: 'set-line-bends', id: 'l1', bends: [] })
+    expect(straight.lines?.[0]).not.toHaveProperty('bends')
+    expect(() => spatialCanvasSchema.parse(straight)).not.toThrow()
+  })
+
+  it('names a stroke, and clears the name with an empty one', () => {
+    const named = applyCommand(lineCanvas(), { kind: 'set-line-label', id: 'l1', label: 'north' })
+    expect(named.lines?.[0]?.label).toBe('north')
+    const cleared = applyCommand(named, { kind: 'set-line-label', id: 'l1', label: '' })
+    expect(cleared.lines?.[0]).not.toHaveProperty('label')
+    expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
+  })
+
+  it('draws arrowheads on a stroke, both ends at once', () => {
+    const next = applyCommand(lineCanvas(), {
+      kind: 'set-line-ends',
+      id: 'l1',
+      fromEnd: 'arrow',
+      toEnd: 'none',
+    })
+    expect(next.lines?.[0]?.from.end).toBe('arrow')
+    expect(next.lines?.[0]?.to.end).toBe('none')
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('pins the side a stroke leaves a box from, and unpins it', () => {
+    const pinned = applyCommand(lineCanvas(), {
+      kind: 'set-line-side',
+      id: 'l1',
+      endpoint: 'from',
+      side: 'left',
+    })
+    expect(pinned.lines?.[0]?.from).toEqual({ kind: 'node', node: 'a', side: 'left' })
+    const loose = applyCommand(pinned, {
+      kind: 'set-line-side',
+      id: 'l1',
+      endpoint: 'from',
+      side: undefined,
+    })
+    // Absent, so the router decides again — the same canonicalisation the
+    // relation's side write makes.
+    expect(loose.lines?.[0]?.from).toEqual({ kind: 'node', node: 'a' })
+  })
+
+  it('leaves a FREE end alone, because it meets no box to have a side of', () => {
+    // A `point` end has no `side` field at all, so writing one would put a
+    // key on an arm the schema does not give it.
+    const canvas = lineCanvas()
+    const next = applyCommand(canvas, {
+      kind: 'set-line-side',
+      id: 'l1',
+      endpoint: 'to',
+      side: 'top',
+    })
+    expect(next.lines?.[0]?.to).toEqual({ kind: 'point', point: { x: 400, y: 400 } })
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('writes one facet on a stroke, and removes it by naming no payload', () => {
+    // Facet-GENERIC, exactly as its node and edge twins are: the key comes
+    // from the caller, so this module never names a domain.
+    const set = applyCommand(lineCanvas(), {
+      kind: 'set-line-facet',
+      id: 'l1',
+      key: VISUAL_INK_KEY,
+      payload: { group: 'mark-1' },
+    })
+    expect(set.lines?.[0]?.facets).toEqual({ [VISUAL_INK_KEY]: { group: 'mark-1' } })
+    const cleared = applyCommand(set, {
+      kind: 'set-line-facet',
+      id: 'l1',
+      key: VISUAL_INK_KEY,
+      payload: undefined,
+    })
+    // The empty bucket goes too: an element carrying `facets: {}` says the
+    // same thing as one carrying none, and only one of them round-trips
+    // identically.
+    expect(cleared.lines?.[0]).not.toHaveProperty('facets')
+    expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
+  })
+
+  it('picks the label write by the collection the id came from', () => {
+    const canvas: SpatialCanvas = {
+      ...lineCanvas(),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    expect(labelInkCommand(canvas, 'e1', 'x')).toEqual({
+      kind: 'set-edge-label',
+      id: 'e1',
+      label: 'x',
+    })
+    expect(labelInkCommand(canvas, 'l1', 'x')).toEqual({
+      kind: 'set-line-label',
+      id: 'l1',
+      label: 'x',
+    })
+    expect(labelInkCommand(canvas, 'nope', 'x')).toBeUndefined()
+  })
+
+  it('picks the bend write by the collection the id came from', () => {
+    // The selection carries ink ids without knowing which collection each is
+    // in — the scene hands an edge and a line out identically — so exactly
+    // one place looks, the way `deleteInkCommand` already does for a delete.
+    const canvas: SpatialCanvas = {
+      ...lineCanvas(),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    const bends = [{ x: 1, y: 2 }]
+    expect(bendInkCommand(canvas, 'e1', bends)).toEqual({
+      kind: 'set-edge-bends',
+      id: 'e1',
+      bends,
+    })
+    expect(bendInkCommand(canvas, 'l1', bends)).toEqual({
+      kind: 'set-line-bends',
+      id: 'l1',
+      bends,
+    })
+    // A stale id must not write to whatever happens to share it.
+    expect(bendInkCommand(canvas, 'nope', bends)).toBeUndefined()
+  })
+
+  it('is a no-op when the colour write names a line the canvas does not hold', () => {
+    const canvas = lineCanvas()
+    expect(applyCommand(canvas, { kind: 'set-line-color', id: 'nope', color: '1' })).toBe(canvas)
   })
 
   it('takes a line with it when the node one of its ends names is deleted', () => {

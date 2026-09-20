@@ -31,10 +31,12 @@ import {
   type CommentThreadStatus,
   canvasCommentFromThread,
   type EdgeRoutingStyle,
+  type EdgeSide,
   endIn,
   endNode,
   isFrame,
   isSelfLoop,
+  type LineEnd,
   type LineJumps,
   nodeFile,
   nodeText,
@@ -107,6 +109,69 @@ export type EditorLeafCommand =
    */
   | { readonly kind: 'create-line'; readonly line: CanvasLine }
   | { readonly kind: 'delete-line'; readonly id: string }
+  /**
+   * Translate a stroke by a DELTA, where a node is moved to an absolute
+   * position.
+   *
+   * A node has one origin to name; a line is several points and no one of
+   * them is the line's position, so an absolute form would have to invent a
+   * reference point and every caller would have to agree on which. The
+   * delta is also what makes the round trip exact: it is rounded once, here,
+   * so a stroke keeps the sub-pixel offsets the pen reported instead of
+   * being re-quantised on every move.
+   */
+  | { readonly kind: 'move-line'; readonly id: string; readonly dx: number; readonly dy: number }
+  | { readonly kind: 'set-line-label'; readonly id: string; readonly label: string }
+  | {
+      /** The arrowheads a stroke is drawn with — `set-edge-ends`'s twin. */
+      readonly kind: 'set-line-ends'
+      readonly id: string
+      readonly fromEnd: 'none' | 'arrow'
+      readonly toEnd: 'none' | 'arrow'
+    }
+  | {
+      /**
+       * Which side of the box an end leaves from, when that end is ON one.
+       * `undefined` unpins it and the router decides again. A POINT end is a
+       * no-op: it meets no box, so there is no side to pin.
+       */
+      readonly kind: 'set-line-side'
+      readonly id: string
+      readonly endpoint: 'from' | 'to'
+      readonly side: EdgeSide | undefined
+    }
+  | {
+      /**
+       * One STROKE's own facets bucket, generic in the key for the reason
+       * its node, edge and canvas twins are: the key comes from the caller,
+       * so this module never names a domain. `visual.ink/v0` — which strokes
+       * are one handwritten mark — is the first payload to use it, and
+       * `ungroup-ink` stays its own command because REMOVING that key from
+       * a whole mark at once is a verb rather than a field write.
+       */
+      readonly kind: 'set-line-facet'
+      readonly id: string
+      readonly key: string
+      /** undefined removes the facet, leaving no empty bucket behind. */
+      readonly payload: unknown
+    }
+  | {
+      /**
+       * The points a stroke is drawn THROUGH, as a whole list — the bend
+       * drag's write, exactly as `set-edge-bends` is for a relation. An
+       * empty list clears the field, because absence already says "take a
+       * computed route again" and the model refuses an empty array for that
+       * reason.
+       */
+      readonly kind: 'set-line-bends'
+      readonly id: string
+      readonly bends: readonly { readonly x: number; readonly y: number }[]
+    }
+  | {
+      readonly kind: 'set-line-color'
+      readonly id: string
+      readonly color: CanvasColor | undefined
+    }
   | { readonly kind: 'set-edge-label'; readonly id: string; readonly label: string }
   | {
       readonly kind: 'set-edge-ends'
@@ -491,6 +556,69 @@ export function deleteInkCommand(canvas: SpatialCanvas, id: string): EditorComma
 }
 
 /**
+ * `deleteInkCommand`'s sibling for a MOVE, and the same reason for existing:
+ * the selection holds ink ids without knowing which collection each came
+ * from, and exactly one place should look.
+ *
+ * An EDGE answers `undefined` rather than a command that would do nothing. A
+ * relation's path is routed from the boxes it joins, so there is no geometry
+ * of its own to translate — moving one means moving an end or placing a bend.
+ * A caller nudging a mixed selection therefore moves the strokes and leaves
+ * the relations to follow the nodes they connect, which is what a person
+ * watching the board expects either way.
+ */
+/**
+ * The third of the ink-id siblings, and the reason there is a family: the
+ * selection carries ink ids without knowing which collection each came from,
+ * so exactly one place per VERB looks, rather than every call site
+ * remembering to search two lists.
+ *
+ * Unlike the move, both collections answer — a relation's bends are as real
+ * as a stroke's, and the drag affordance is the same one.
+ */
+/**
+ * The label write, picked by collection.
+ *
+ * The renderer has drawn a line's label all along — `composeEdgeLabel` takes
+ * a `RoutableElement` — so this was never a rendering gap and only ever an
+ * editing one: the in-place editor and the menu verb both named
+ * `canvas.edges`, so a stroke could carry a name that nothing could write or
+ * clear.
+ */
+export function labelInkCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  label: string,
+): EditorLeafCommand | undefined {
+  if (canvas.edges.some((edge) => edge.id === id)) return { kind: 'set-edge-label', id, label }
+  if ((canvas.lines ?? []).some((line) => line.id === id))
+    return { kind: 'set-line-label', id, label }
+  return undefined
+}
+
+export function bendInkCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  bends: readonly { readonly x: number; readonly y: number }[],
+): EditorLeafCommand | undefined {
+  if (canvas.edges.some((edge) => edge.id === id)) return { kind: 'set-edge-bends', id, bends }
+  if ((canvas.lines ?? []).some((line) => line.id === id))
+    return { kind: 'set-line-bends', id, bends }
+  return undefined
+}
+
+export function moveInkCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  dx: number,
+  dy: number,
+): EditorLeafCommand | undefined {
+  return (canvas.lines ?? []).some((line) => line.id === id)
+    ? { kind: 'move-line', id, dx, dy }
+    : undefined
+}
+
+/**
  * Appends `line`, rejecting a colliding id as a no-op — the same guard
  * `createNode` and `connectNodes` carry, for the same reason: the schema's id
  * check refuses a canvas holding two of anything with one id.
@@ -507,6 +635,147 @@ function createLine(canvas: SpatialCanvas, line: CanvasLine): SpatialCanvas {
  * writing one would make a no-op look like an edit to every value comparison
  * downstream.
  */
+/**
+ * Replaces the line with `id` by `update(line)`, or returns the input canvas
+ * when there is no such line — `updateNode`'s sibling, and the same totality
+ * contract.
+ */
+function updateLine(
+  canvas: SpatialCanvas,
+  id: string,
+  update: (line: CanvasLine) => CanvasLine,
+): SpatialCanvas {
+  const lines = canvas.lines
+  if (lines === undefined || !lines.some((line) => line.id === id)) return canvas
+  return { ...canvas, lines: lines.map((line) => (line.id === id ? update(line) : line)) }
+}
+
+function moveLine(canvas: SpatialCanvas, id: string, dx: number, dy: number): SpatialCanvas {
+  // Whole units, the way a node position and a dragged bend are rounded. The
+  // MODEL takes a fraction since ADR-0037 slice 4, so this is a UI decision:
+  // rounding the DELTA rather than the points is what lets a stroke keep the
+  // sub-pixel geometry the pen reported while still landing on the grid a
+  // person is nudging it along.
+  const stepX = toPosition(dx)
+  const stepY = toPosition(dy)
+  if (stepX === 0 && stepY === 0) return canvas
+  return updateLine(canvas, id, (line) => shiftLine(line, stepX, stepY))
+}
+
+/**
+ * The points a line OWNS — its free ends and its bends, never an end that
+ * names a node, whose position is the node's.
+ *
+ * One definition with three readers — the paste's bounds, the cut-as-move's
+ * bounds, and whoever asks next. They have to agree about what a stroke
+ * occupies, or a fragment centres on a box it does not have.
+ */
+export function ownedLinePoints(line: CanvasLine): readonly Point[] {
+  return [
+    ...(line.from.kind === 'point' ? [line.from.point] : []),
+    ...(line.to.kind === 'point' ? [line.to.point] : []),
+    ...(line.bends ?? []),
+  ]
+}
+
+/**
+ * Translate a stroke's own geometry — the ONE producer, shared by the move
+ * command and the paste offset, so a stroke that travels cannot disagree
+ * with one that is dragged about what moving it means.
+ *
+ * An end ON a node stays where it is: the attachment is the whole point of
+ * that end, and the node is what carries it.
+ */
+function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
+  const shift = (end: LineEnd): LineEnd =>
+    end.kind === 'point' ? { ...end, point: { x: end.point.x + dx, y: end.point.y + dy } } : end
+  return {
+    ...line,
+    from: shift(line.from),
+    to: shift(line.to),
+    ...(line.bends === undefined
+      ? {}
+      : { bends: line.bends.map((bend) => ({ x: bend.x + dx, y: bend.y + dy })) }),
+  }
+}
+
+function setLineEnds(
+  canvas: SpatialCanvas,
+  id: string,
+  fromEnd: 'none' | 'arrow',
+  toEnd: 'none' | 'arrow',
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => ({
+    ...line,
+    from: { ...line.from, end: fromEnd },
+    to: { ...line.to, end: toEnd },
+  }))
+}
+
+function setLineSide(
+  canvas: SpatialCanvas,
+  id: string,
+  endpoint: 'from' | 'to',
+  side: EdgeSide | undefined,
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    const end = endpoint === 'from' ? line.from : line.to
+    // A free end meets no box, so there is no side to pin — and writing one
+    // would make a `point` end carry a field its arm does not have.
+    if (end.kind !== 'node') return line
+    const { side: _previous, ...rest } = end
+    const next = side === undefined ? rest : { ...rest, side }
+    return endpoint === 'from' ? { ...line, from: next } : { ...line, to: next }
+  })
+}
+
+function setLineFacet(
+  canvas: SpatialCanvas,
+  id: string,
+  key: string,
+  payload: unknown,
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    const { facets, ...rest } = line
+    const { [key]: _previous, ...others } = facets ?? {}
+    const next = payload === undefined ? others : { ...others, [key]: payload }
+    return Object.keys(next).length === 0 ? rest : { ...rest, facets: next }
+  })
+}
+
+function setLineLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    // Empty clears the field, the same canonicalisation `setEdgeLabel` makes.
+    const { label: _removed, ...rest } = line
+    return label === '' ? rest : { ...rest, label }
+  })
+}
+
+function setLineBends(
+  canvas: SpatialCanvas,
+  id: string,
+  bends: readonly { readonly x: number; readonly y: number }[],
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    const { bends: _previous, ...rest } = line
+    return bends.length === 0 ? rest : { ...rest, bends: [...bends] }
+  })
+}
+
+function setLineColor(
+  canvas: SpatialCanvas,
+  id: string,
+  color: CanvasColor | undefined,
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    // Removed rather than set to `undefined`, the same canonicalisation
+    // `setEdgeColor` makes: absence is how a canvas says "no colour", and a
+    // present-but-undefined key would serialise differently for no reason.
+    const { color: _removed, ...rest } = line
+    return color === undefined ? rest : { ...rest, color }
+  })
+}
+
 function deleteLine(canvas: SpatialCanvas, id: string): SpatialCanvas {
   const lines = canvas.lines
   if (lines === undefined || !lines.some((line) => line.id === id)) return canvas
@@ -926,6 +1195,20 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return createLine(canvas, command.line)
     case 'delete-line':
       return deleteLine(canvas, command.id)
+    case 'move-line':
+      return moveLine(canvas, command.id, command.dx, command.dy)
+    case 'set-line-color':
+      return setLineColor(canvas, command.id, command.color)
+    case 'set-line-bends':
+      return setLineBends(canvas, command.id, command.bends)
+    case 'set-line-label':
+      return setLineLabel(canvas, command.id, command.label)
+    case 'set-line-facet':
+      return setLineFacet(canvas, command.id, command.key, command.payload)
+    case 'set-line-ends':
+      return setLineEnds(canvas, command.id, command.fromEnd, command.toEnd)
+    case 'set-line-side':
+      return setLineSide(canvas, command.id, command.endpoint, command.side)
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
     case 'set-edge-ends':
@@ -1131,25 +1414,40 @@ export const DUPLICATE_OFFSET_PX = 16
  */
 export function buildFragmentInsertCommand(
   canvas: SpatialCanvas,
-  fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
+  fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines' | 'cut'>,
   createId: () => string,
   anchor?: Point,
 ): EditorCommand | undefined {
-  if (fragment.nodes.length === 0) return undefined
+  // Ink alone is a fragment: a copied stroke used to answer here exactly as
+  // an empty clipboard does.
+  if (fragment.nodes.length === 0 && (fragment.lines ?? []).length === 0) return undefined
   const existingIds = new Set([
     ...canvas.nodes.map((node) => node.id),
     ...canvas.edges.map((edge) => edge.id),
+    ...(canvas.lines ?? []).map((line) => line.id),
   ])
   const reminted = remintClipboardFragment(fragment, createId, existingIds)
   let dx = DUPLICATE_OFFSET_PX
   let dy = DUPLICATE_OFFSET_PX
   if (anchor !== undefined) {
-    const minX = Math.min(...reminted.nodes.map((node) => node.x))
-    const minY = Math.min(...reminted.nodes.map((node) => node.y))
-    const maxX = Math.max(...reminted.nodes.map((node) => node.x + node.width))
-    const maxY = Math.max(...reminted.nodes.map((node) => node.y + node.height))
-    dx = Math.round(anchor.x - (minX + maxX) / 2)
-    dy = Math.round(anchor.y - (minY + maxY) / 2)
+    // Read from the boxes AND the strokes, because either may be the whole
+    // fragment: over nodes alone an ink-only paste computed `Infinity` and
+    // landed nowhere a person could find it.
+    const xs = [
+      ...reminted.nodes.flatMap((node) => [node.x, node.x + node.width]),
+      ...reminted.lines.flatMap((line) => ownedLinePoints(line).map((point) => point.x)),
+    ]
+    const ys = [
+      ...reminted.nodes.flatMap((node) => [node.y, node.y + node.height]),
+      ...reminted.lines.flatMap((line) => ownedLinePoints(line).map((point) => point.y)),
+    ]
+    // A fragment of strokes hung entirely on boxes owns no point of its own,
+    // and there is nothing to centre; the cascade offset is the honest
+    // answer rather than a NaN.
+    if (xs.length > 0 && ys.length > 0) {
+      dx = Math.round(anchor.x - (Math.min(...xs) + Math.max(...xs)) / 2)
+      dy = Math.round(anchor.y - (Math.min(...ys) + Math.max(...ys)) / 2)
+    }
   }
   // A cut fragment reconnects its severed boundary edges to peers that
   // still exist on THIS canvas (same-canvas paste is a move); a missing
@@ -1191,6 +1489,9 @@ export function buildFragmentInsertCommand(
       ),
       ...[...reminted.edges, ...boundaryEdges].map(
         (edge) => ({ kind: 'create-edge', edge }) as const,
+      ),
+      ...reminted.lines.map(
+        (line) => ({ kind: 'create-line', line: shiftLine(line, dx, dy) }) as const,
       ),
     ],
   }

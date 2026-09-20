@@ -52,6 +52,59 @@ const canvas: SpatialCanvas = {
   ],
 }
 
+const inked: SpatialCanvas = {
+  ...canvas,
+  lines: [
+    // Free at both ends: the freehand case, and every stroke the pen makes.
+    {
+      id: 'free',
+      from: { kind: 'point', point: { x: 10, y: 300 } },
+      to: { kind: 'point', point: { x: 90, y: 360 } },
+      bends: [{ x: 50, y: 330 }],
+    },
+    // Hung on a box at one end, which is what decides whether it travels.
+    { id: 'onA', from: { kind: 'node', node: 'a' }, to: { kind: 'point', point: { x: 5, y: 5 } } },
+  ],
+}
+
+describe('a stroke in a fragment', () => {
+  // Ink was not in the clipboard at all: `clipboardFragmentSchema` carried
+  // `nodes` and `edges`, and the fragment was built from the NODE selection,
+  // so a stroke was dropped by copy, cut, paste and duplicate alike —
+  // silently, because it had never been in the set being copied.
+  it('travels when it is selected, whatever else is', () => {
+    const fragment = extractClipboardFragment(inked, new Set(['free']))
+    expect(fragment.lines?.map((line) => line.id)).toEqual(['free'])
+    expect(fragment.nodes).toEqual([])
+  })
+
+  it('is left behind when it hangs on a box that is not coming', () => {
+    // The edge rule, applied to the other collection: a fragment is
+    // SELF-CONTAINED, so an end naming a node nobody copied has nothing to
+    // name on the other side. Answering with a stroke whose end was silently
+    // turned into a point would invent geometry the router owns.
+    const fragment = extractClipboardFragment(inked, new Set(['onA']))
+    expect(fragment.lines ?? []).toEqual([])
+  })
+
+  it('travels with the box it hangs on, when that box is coming too', () => {
+    const fragment = extractClipboardFragment(inked, new Set(['a', 'onA']))
+    expect(fragment.lines?.map((line) => line.id)).toEqual(['onA'])
+  })
+
+  it('is reminted, and its node end follows the box to its new id', () => {
+    const fragment = extractClipboardFragment(inked, new Set(['a', 'onA', 'free']))
+    let n = 0
+    const reminted = remintClipboardFragment(fragment, () => `fresh-${n++}`, new Set())
+    expect(reminted.lines).toHaveLength(2)
+    const onA = reminted.lines.find((line) => line.from.kind === 'node')
+    expect(onA?.from).toEqual({ kind: 'node', node: reminted.idMap.get('a') })
+    // A fresh id, and never the one it had: pasting twice into one canvas
+    // is what the remint exists for.
+    expect(reminted.lines.map((line) => line.id)).not.toContain('free')
+  })
+})
+
 describe('extractClipboardFragment', () => {
   it('keeps selected nodes in canvas (z) order and only fully-selected edges', () => {
     const fragment = extractClipboardFragment(canvas, new Set(['b', 'a']))

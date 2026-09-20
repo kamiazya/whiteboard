@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { canvasEdgeSchema, endNode, spatialNodeSchema } from './spatial.js'
+import { canvasEdgeSchema, canvasLineSchema, endNode, spatialNodeSchema } from './spatial.js'
 
 /**
  * The typed clipboard envelope for copy/paste of canvas fragments
@@ -26,6 +26,16 @@ export const clipboardFragmentSchema = z
     version: z.literal(1),
     nodes: z.array(spatialNodeSchema),
     edges: z.array(canvasEdgeSchema),
+    /**
+     * The strokes travelling with the selection.
+     *
+     * OPTIONAL rather than required, and not for the reason `SpatialCanvas`'s
+     * is: a fragment written by a tab that has not reloaded yet is pasted
+     * into one that has, and a required field would refuse it. `version` is
+     * the knob for a shape that really changed; a field nobody wrote yet is
+     * not that.
+     */
+    lines: z.array(canvasLineSchema).optional(),
     /** Inline assets keyed by the file-node `file` reference they carry. */
     files: z.record(z.string(), clipboardFileAssetSchema).optional(),
     /**

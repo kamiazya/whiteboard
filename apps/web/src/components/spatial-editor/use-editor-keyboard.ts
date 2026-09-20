@@ -8,8 +8,8 @@
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { EditorTool } from '../../lib/editor-tool.js'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { applyCommand, deleteInkCommand } from '../../lib/spatial/commands.js'
+import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
+import { applyCommand, deleteInkCommand, moveInkCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
   type ResizeHandleKind,
@@ -264,8 +264,7 @@ export function useEditorKeyboard({
     const nudge = ARROW_KEY_DELTA[e.key]
     if (
       nudge !== undefined &&
-      selection !== undefined &&
-      selectedNode !== undefined &&
+      (selectedNode !== undefined || selectedInkIds.length > 0) &&
       gestureState.kind === 'idle'
     ) {
       e.preventDefault()
@@ -275,8 +274,8 @@ export function useEditorKeyboard({
       // makes trivial to hit. Positions are read from canvasRef, not the
       // render closure — key auto-repeat delivers keydowns faster than
       // commits re-render, and a stale base clobbers the previous nudge.
-      const ids = [selectedNode.id, ...extraIds]
-      const moves = ids.flatMap((id) => {
+      const ids = selectedNode === undefined ? [] : [selectedNode.id, ...extraIds]
+      const moves: EditorLeafCommand[] = ids.flatMap((id) => {
         const current = canvasRef.current.nodes.find((n) => n.id === id)
         if (current === undefined) return []
         return [
@@ -288,6 +287,19 @@ export function useEditorKeyboard({
           },
         ]
       })
+      // Ink travels with the rest of the selection rather than in a branch of
+      // its own, for the same reason the node half stopped moving only its
+      // primary: the two would tear apart, and a mixed selection is one press
+      // away now that shift adds a stroke. `moveInkCommand` is the one place
+      // that looks at which collection an id came from — an EDGE answers
+      // nothing, because a relation's path is routed from the boxes it joins
+      // and follows them.
+      moves.push(
+        ...selectedInkIds.flatMap((id) => {
+          const command = moveInkCommand(canvasRef.current, id, nudge.dx * step, nudge.dy * step)
+          return command === undefined ? [] : [command]
+        }),
+      )
       if (moves.length === 0) return
       // ONE batch, not N commands: a multi-node nudge is one user action
       // and must undo as one step (N separate commits would only group by

@@ -15,6 +15,7 @@
  */
 import type {
   CanvasEdge,
+  CanvasLine,
   ClipboardFragment,
   SpatialCanvas,
   SpatialNode,
@@ -47,7 +48,33 @@ export function extractClipboardFragment(
   const edges = canvas.edges.filter(
     (edge) => endIn(edge.from, included) && endIn(edge.to, included),
   )
-  const base = { type: 'whiteboard/clipboard', version: 1, nodes, edges } as const
+  // A stroke comes along when it was SELECTED — ink has an id of its own and
+  // is not implied by any node — and only when every end that names a box
+  // names one that is coming too. That second half is the edge's rule applied
+  // to the other collection, and it is what keeps the fragment
+  // self-contained: an end naming a node nobody copied has nothing to name on
+  // the other side, and answering with a point instead would invent the
+  // geometry the router owns.
+  // NOT `endIn`: that answers "sits on one of these nodes", which is false
+  // for a free end — and a free end is precisely the case that must travel.
+  // What has to hold is the other statement: no end names a box outside the
+  // fragment.
+  const endIsSatisfied = (end: CanvasLine['from']) => {
+    const node = endNode(end)
+    return node === undefined || included.has(node)
+  }
+  const lines = (canvas.lines ?? []).filter(
+    (line) => selectedIds.has(line.id) && endIsSatisfied(line.from) && endIsSatisfied(line.to),
+  )
+  const base = {
+    type: 'whiteboard/clipboard',
+    version: 1,
+    nodes,
+    edges,
+    // Absent rather than empty, so a fragment carrying no ink is byte-identical
+    // to one written before the field existed.
+    ...(lines.length === 0 ? {} : { lines }),
+  } as const
   if (options?.cutId === undefined) return base
   // A cut also records its cut surface — the edges it severs (exactly one
   // endpoint selected) — so a same-canvas paste can reconnect them. The
@@ -61,6 +88,7 @@ export function extractClipboardFragment(
 export interface RemintedFragment {
   readonly nodes: readonly SpatialNode[]
   readonly edges: readonly CanvasEdge[]
+  readonly lines: readonly CanvasLine[]
   /** Source id → reminted id, for reconnecting a cut's boundary edges. */
   readonly idMap: ReadonlyMap<string, string>
   /** Mints further ids from the same collision-free pool (boundary edges). */
@@ -68,7 +96,7 @@ export interface RemintedFragment {
 }
 
 export function remintClipboardFragment(
-  fragment: Pick<ClipboardFragment, 'nodes' | 'edges'>,
+  fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines'>,
   createId: () => string,
   existingIds: ReadonlySet<string>,
 ): RemintedFragment {
@@ -105,5 +133,20 @@ export function remintClipboardFragment(
       },
     ]
   })
-  return { nodes, edges, idMap, mintId: freshId }
+  // Same remap, one difference: a line end may be a POINT, which names
+  // nothing and travels untouched. `endNode` answers undefined for one, so
+  // the two cases are told apart by the end's own kind rather than by a
+  // lookup that cannot distinguish "a free end" from "a box we did not copy".
+  const lines = (fragment.lines ?? []).flatMap((line) => {
+    const remap = (end: CanvasLine['from']): CanvasLine['from'] | undefined => {
+      if (end.kind !== 'node') return end
+      const node = idMap.get(end.node)
+      return node === undefined ? undefined : { ...end, node }
+    }
+    const from = remap(line.from)
+    const to = remap(line.to)
+    if (from === undefined || to === undefined) return []
+    return [{ ...line, id: freshId(), from, to }]
+  })
+  return { nodes, edges, lines, idMap, mintId: freshId }
 }

@@ -120,6 +120,59 @@ it('copy then paste clones the selection with reminted ids, offset, as ONE batch
   expect(new Set(latest.canvas.nodes.map((n) => n.id)).size).toBe(4)
 })
 
+const inkBoard: SpatialCanvas = {
+  ...initial,
+  lines: [
+    {
+      id: 'stroke',
+      from: { kind: 'point', point: { x: 200, y: 300 } },
+      to: { kind: 'point', point: { x: 400, y: 460 } },
+    },
+  ],
+}
+
+it('copies a stroke and pastes it beside the original', () => {
+  // Ink was invisible to the clipboard: the fragment was built from the NODE
+  // selection, and a stroke carries an id of its own that no node implies —
+  // so copy, cut, paste and duplicate all dropped one without saying so.
+  const { Host, latest } = makeHost(inkBoard)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  // A point the drawn stroke passes through: its midpoint, with the viewport
+  // at rest so canvas and screen coordinates agree.
+  selectAt(root, 300, 380)
+
+  clip(root, 'copy')
+  clip(root, 'paste')
+
+  expect(latest.canvas.lines).toHaveLength(2)
+  const copy = latest.canvas.lines?.[1]
+  expect(copy?.id).not.toBe('stroke')
+  // The same +16 cascade a duplicated box takes, on every point it owns.
+  expect(copy?.from).toEqual({ kind: 'point', point: { x: 216, y: 316 } })
+  expect(copy?.to).toEqual({ kind: 'point', point: { x: 416, y: 476 } })
+  // One batch, so one undo step.
+  expect(latest.commands.at(-1)?.kind).toBe('batch')
+})
+
+it('cuts a stroke: the board is untouched until the paste decides', () => {
+  const { Host, latest } = makeHost(inkBoard)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 300, 380)
+
+  clip(root, 'cut')
+  // Deferred, exactly as a cut node is: the stroke is still there, held.
+  expect(latest.canvas.lines).toHaveLength(1)
+
+  clip(root, 'paste')
+  // A same-canvas paste of this cut is a MOVE — the id survives, so nothing
+  // is reminted and there is still one stroke.
+  expect(latest.canvas.lines).toHaveLength(1)
+  expect(latest.canvas.lines?.[0]?.id).toBe('stroke')
+  expect(latest.canvas.lines?.[0]?.from).toEqual({ kind: 'point', point: { x: 216, y: 316 } })
+})
+
 it("the context menu's Cut is the same deferred cut as the keyboard's", () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
