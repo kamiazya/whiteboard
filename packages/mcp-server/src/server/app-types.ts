@@ -10,6 +10,7 @@ import type { PairingGrantStore } from './security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from './security/pairing-session.js'
 import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
 import type { WebAuthnCredentialStore } from './security/webauthn-credential-store.js'
+import type { WorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
@@ -70,6 +71,19 @@ interface LocalDaemonAppOptions {
    *  membership surface and a session-assert `profileId` of null — the same
    *  answer S0-2 always gave. */
   members?: MemberProfileStore
+  /** The read plane's workspace-key store (ADR-0042 decisions 1/3/5). When
+   *  present alongside `pairing`, `members` and `serverDeps`,
+   *  POST /api/workspaces/:workspaceId/replica-key mounts — same mount
+   *  condition as the membership router, since a member's session is what
+   *  this route hands the key to. Absent in ad-hoc/test callers, which get
+   *  no replica-key surface at all. */
+  replicaKeys?: WorkspaceReplicaKeyStore
+  /** How long a `bounded`-tier lease lasts (replica-env.ts's
+   *  WHITEBOARD_REPLICA_LEASE_TTL_MS). Only read when `replicaKeys` is
+   *  present. Defaults to 7 days when both are supplied but this is not —
+   *  ad-hoc/test callers that construct their own store typically pass this
+   *  too. */
+  replicaLeaseTtlMs?: number
   /** Daemon signing identity (security/daemon-identity.ts). Injectable for
    *  tests; when omitted, createApp loads-or-creates it from the data dir. */
   identity?: DaemonIdentity

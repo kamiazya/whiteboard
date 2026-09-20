@@ -150,6 +150,15 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
 
+  // The read plane's workspace content key (ADR-0042 decisions 1/3/5). The
+  // key confers READ, so workspace:read is the bar here rather than the
+  // catch-all's write-by-default answer below — a grant lacking the
+  // required passkey binding is refused by the handler itself regardless of
+  // scope.
+  if (/^\/api\/workspaces\/[^/]+\/replica-key$/.test(path)) {
+    return { kind: 'scoped', scopes: ['workspace:read'] }
+  }
+
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
   if (path.startsWith('/api/workspaces')) {
     return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }

@@ -139,6 +139,33 @@ describe('GET /api/workspaces', () => {
     expect('displayName' in (bare ?? {})).toBe(false)
   })
 
+  // ADR-0042 decisions 1/3/5: app.ts only wires `replicaTier` when a
+  // replica-key store was supplied, so a caller without one keeps parsing
+  // under listWorkspacesResponseSchema exactly as before this field existed.
+  it('echoes tier per row when a resolver is threaded, and omits it otherwise', async () => {
+    const db = await getDb(tmp.dir)
+    const deps = resolveServerDeps(
+      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
+    )
+    await deps.documentIndex.createWorkspace({ workspaceId: 'workspace-tiered' })
+
+    const withResolver = createWorkspacesRouter({
+      serverDeps: deps,
+      replicaTier: async () => 'bounded',
+    })
+    const withRes = await withResolver.request('/api/workspaces')
+    const withParsed = listWorkspacesResponseSchema.parse(await withRes.json())
+    expect(withParsed.workspaces.find((w) => w.workspaceId === 'workspace-tiered')?.tier).toBe(
+      'bounded',
+    )
+
+    const withoutResolver = createWorkspacesRouter({ serverDeps: deps })
+    const withoutRes = await withoutResolver.request('/api/workspaces')
+    const withoutParsed = listWorkspacesResponseSchema.parse(await withoutRes.json())
+    const row = withoutParsed.workspaces.find((w) => w.workspaceId === 'workspace-tiered')
+    expect(row && 'tier' in row).toBe(false)
+  })
+
   // SEQUENTIAL, and that is the load-bearing part (the route's own comment):
   // `Promise.all` over the rows opens N workspace records at once against
   // the one SQLite file, and on a real daemon holding real workspaces that

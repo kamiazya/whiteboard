@@ -5,6 +5,7 @@ import {
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { replicaTierSchema } from './replica-key.js'
 
 // Request/response schemas for the canvas / workspace mutation endpoints.
 // Imported by routes/document.ts (validates incoming bodies) and by any client
@@ -207,6 +208,14 @@ export const workspaceSummarySchema = z.object({
    * responder did not count. Only a keeper that cannot count leaves it out.
    */
   documentCount: z.number().int().nonnegative().optional(),
+  /**
+   * The read plane's offline-replica tier (ADR-0042 decisions 1/3/5),
+   * resolved server-side from `workspaces.replicaTier` or the daemon's
+   * `WHITEBOARD_REPLICA_TIER` default. Optional for the same additive reason
+   * as `documentCount`: a caller that does not thread a tier resolver
+   * through omits the field rather than guessing.
+   */
+  tier: replicaTierSchema.optional(),
 })
 
 export const listWorkspacesResponseSchema = z.object({

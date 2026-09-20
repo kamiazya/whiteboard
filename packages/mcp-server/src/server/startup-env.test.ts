@@ -84,4 +84,9 @@ describe('collectStartupEnvIssues', () => {
     })
     expect(issues).toHaveLength(3)
   })
+
+  it('still reports the replica family', () => {
+    const issues = collectStartupEnvIssues(DATA_DIR, { WHITEBOARD_REPLICA_TIER: 'full-offline' })
+    expect(issues.map((issue) => issue.variable)).toEqual(['WHITEBOARD_REPLICA_TIER'])
+  })
 })

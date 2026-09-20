@@ -41,6 +41,7 @@ import {
   OAUTH_AUTHZ_PATHS,
 } from './routes/oauth-authz.js'
 import { createPairingRouter } from './routes/pairing.js'
+import { createReplicaKeyRouter } from './routes/replica-key.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
@@ -71,6 +72,11 @@ import { FileVersionStore } from './store/version-store.js'
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
 
 const httpLog = getLogger('mcp-http')
+
+// Mirrors replica-env.ts's own default, for the ad-hoc/test caller that
+// supplies `replicaKeys` but not `replicaLeaseTtlMs` — production always
+// threads the resolved env value through http-server.ts.
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
 // MCP_HTTP_DEBUG=1 historically meant "show http traces unconditionally". Keep
 // that contract: bump the logger threshold down to info so the structured
@@ -454,6 +460,29 @@ export function createApp(options: AppOptions) {
       }),
     )
   }
+  // The read plane's workspace-key route (ADR-0042 decisions 1/3/5). Same
+  // mount condition as membership above, plus `replicaKeys` — a member's
+  // session is what this route hands the key to, so it needs the same
+  // membership lookup and workspace-existence check.
+  if (
+    options.authMode === 'local-daemon' &&
+    options.pairing !== undefined &&
+    options.members !== undefined &&
+    options.serverDeps !== undefined &&
+    options.replicaKeys !== undefined
+  ) {
+    const { members, serverDeps, replicaKeys } = options
+    app.route(
+      '/',
+      createReplicaKeyRouter({
+        keys: replicaKeys,
+        members,
+        leaseTtlMs: options.replicaLeaseTtlMs ?? SEVEN_DAYS_MS,
+        workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
+        credentialResolver,
+      }),
+    )
+  }
 
   // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
@@ -474,6 +503,9 @@ export function createApp(options: AppOptions) {
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
+      ...(options.authMode === 'local-daemon' && options.replicaKeys !== undefined
+        ? { replicaTier: options.replicaKeys.effectiveTier.bind(options.replicaKeys) }
+        : {}),
     }),
   )
   // Shared versionStore so the files router can do version-aware purge

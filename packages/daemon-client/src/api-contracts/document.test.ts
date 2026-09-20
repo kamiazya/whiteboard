@@ -405,6 +405,18 @@ describe('workspaceSummarySchema', () => {
       }).success,
     ).toBe(false)
   })
+
+  it('accepts a tier when the daemon threads a resolver', () => {
+    expect(
+      workspaceSummarySchema.safeParse({ workspaceId: 'ws-abc', tier: 'bounded' }).success,
+    ).toBe(true)
+  })
+
+  it('rejects an unknown tier string', () => {
+    expect(
+      workspaceSummarySchema.safeParse({ workspaceId: 'ws-abc', tier: 'full-offline' }).success,
+    ).toBe(false)
+  })
 })
 
 describe('listWorkspacesResponseSchema', () => {

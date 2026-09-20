@@ -50,6 +50,10 @@
       "types": "./src/api-contracts/promotion.ts",
       "import": "./src/api-contracts/promotion.ts"
     },
+    "./api-contracts/replica-key": {
+      "types": "./src/api-contracts/replica-key.ts",
+      "import": "./src/api-contracts/replica-key.ts"
+    },
     "./api-contracts/roundtrip.test-helper": {
       "types": "./src/api-contracts/roundtrip.test-helper.ts",
       "import": "./src/api-contracts/roundtrip.test-helper.ts"

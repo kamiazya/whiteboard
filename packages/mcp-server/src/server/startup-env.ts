@@ -1,5 +1,6 @@
 import type { EnvIssue } from '../shared/env-setting.js'
 import { LOG_LEVELS, parseLogLevel } from './log.js'
+import { collectReplicaEnvIssues } from './replica-env.js'
 import { collectStorageEnvIssues } from './store/storage-env.js'
 
 /**
@@ -52,5 +53,9 @@ export function collectStartupEnvIssues(
   dataDir: string,
   env: NodeJS.ProcessEnv = process.env,
 ): EnvIssue[] {
-  return [...collectStorageEnvIssues(dataDir, env), ...collectLogLevelIssue(env)]
+  return [
+    ...collectStorageEnvIssues(dataDir, env),
+    ...collectLogLevelIssue(env),
+    ...collectReplicaEnvIssues(env),
+  ]
 }

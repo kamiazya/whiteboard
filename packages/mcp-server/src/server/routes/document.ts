@@ -1,3 +1,4 @@
+import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
@@ -53,6 +54,10 @@ export interface DocumentRouterOptions {
   daemonActor?: string
   /** Passkey pins for the promote route (ADR-0039); see `WorkspaceDocumentRouterOptions`. */
   credentials?: WebAuthnCredentialStore
+  /** Resolves the read plane's effective tier for GET /api/workspaces to
+   *  echo per row (ADR-0042 decisions 1/3/5). Absent means the listing omits
+   *  `tier` entirely — see `WorkspacesRouterOptions`. */
+  replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -90,7 +95,13 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   // compact path calls `uninstallAutoCompact()`.
   installAutoCompact(versionStore)
 
-  app.route('/', createWorkspacesRouter({ serverDeps: options.serverDeps }))
+  app.route(
+    '/',
+    createWorkspacesRouter({
+      serverDeps: options.serverDeps,
+      ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
+    }),
+  )
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter())
   app.route(

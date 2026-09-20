@@ -240,6 +240,13 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     }
   })
 
+  it('the replica-key route sits at workspace:read, not the catch-all write default', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/replica-key')).toEqual({
+      kind: 'scoped',
+      scopes: ['workspace:read'],
+    })
+  })
+
   it('session assertion routes are scoped (the handler itself checks for a bound session)', () => {
     for (const path of [
       '/api/pairing/session-assert/challenge',

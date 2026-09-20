@@ -12,6 +12,7 @@ import {
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
+import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import {
   deriveWorkspaceSegment,
   generateDocumentId,
@@ -115,6 +116,11 @@ export interface WorkspacesRouterOptions {
    *  not been given a container — see `getDefaultServerDeps`, which is the
    *  same wiring production passes in, not a stand-in for it. */
   serverDeps?: ServerDeps
+  /** Resolves the read plane's effective tier per workspace (ADR-0042
+   *  decisions 1/3/5). Absent means the listing omits `tier` — app.ts wires
+   *  this from `options.replicaKeys?.effectiveTier` only when a replica-key
+   *  store was supplied. */
+  replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
 }
 
 // GET /api/workspaces
@@ -155,6 +161,9 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
           ...(segment === undefined ? {} : { segment }),
           ...(displayName === undefined ? {} : { displayName }),
           documentCount: await countDocuments(deps.documentIndex, workspaceId),
+          ...(options.replicaTier === undefined
+            ? {}
+            : { tier: await options.replicaTier(workspaceId) }),
         })
       }
       const response: ListWorkspacesResponse = { workspaces: counted }
