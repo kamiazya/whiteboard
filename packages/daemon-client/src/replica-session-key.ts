@@ -131,7 +131,11 @@ export async function sessionKey(
       cached.leaseExpiresAt !== undefined &&
       Date.now() >= cached.leaseExpiresAt
     ) {
+      // A lapsed lease's derived keys must go with it — otherwise a later
+      // re-mint (once key rotation ships, with different bytes) would still
+      // answer keyFor() from this memo, derived from the superseded key.
       cache.delete(key)
+      derivedKeyMemo.delete(key)
       return { kind: 'withheld', reason: 'lapsed' }
     }
     return cached

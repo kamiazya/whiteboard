@@ -244,6 +244,48 @@ describe('replica-session-key: bounded lease lapse', () => {
     const noSource = await sessionKey(DAEMON, WORKSPACE)
     expect(noSource).toEqual({ kind: 'withheld', reason: 'unreachable' })
   })
+
+  it('replicaKeyProviderFor re-derives after a natural lapse + re-mint, with no forget() in between', async () => {
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const leaseExpiresAt = new Date('2026-01-01T01:00:00.000Z').toISOString()
+    const fetchImpl1 = vi.fn(async () =>
+      jsonResponse(keyResponse({ tier: 'bounded', leaseExpiresAt })),
+    )
+    const provider = replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl1))
+    const first = await provider.keyFor('doc-1')
+    expect(first).not.toBe('withheld')
+
+    // Past the lease. The next `keyFor` mints fresh bytes with no explicit
+    // forget() — the automatic lapse path is what must clear the memo.
+    vi.setSystemTime(new Date('2026-01-01T01:00:01.000Z'))
+    const otherWorkspaceKey = Uint8Array.from({ length: 32 }, (_, i) => 255 - i)
+    const fetchImpl2 = vi.fn(async () =>
+      jsonResponse(
+        keyResponse({
+          workspaceKey: base64Url(otherWorkspaceKey),
+          tier: 'bounded',
+          leaseExpiresAt: new Date('2026-01-01T02:00:00.000Z').toISOString(),
+        }),
+      ),
+    )
+    const providerAfterLapse = replicaKeyProviderFor(DAEMON, WORKSPACE, sourceWith(fetchImpl2))
+    // The read immediately after lapse consumes the lapsed cache entry and
+    // answers withheld:lapsed (documented behaviour, above); the next read
+    // is what actually fetches and mints the fresh bytes.
+    await providerAfterLapse.keyFor('doc-1')
+    const second = await providerAfterLapse.keyFor('doc-1')
+    expect(second).not.toBe('withheld')
+    if (first === 'withheld' || second === 'withheld') return
+
+    const context = { documentId: 'doc-1', epoch: 0 }
+    const envelope = await sealBytes(first.key, new TextEncoder().encode('probe'), context)
+    // If the lapse path failed to clear the memo, `second.key` would be the
+    // SAME memoized CryptoKey derived from the pre-lapse workspace key, and
+    // this would open cleanly instead of failing.
+    await expect(openBytes(second.key, envelope, context)).rejects.toMatchObject({
+      name: 'OperationError',
+    })
+  })
 })
 
 describe('replica-session-key: forget / forgetAll', () => {
