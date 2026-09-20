@@ -20,6 +20,7 @@
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
+import { markReplica } from './replica-store.js'
 
 /** VersionVector bytes as a registry-storable string. */
 export function encodeVersionForRegistry(bytes: Uint8Array): string {
@@ -60,6 +61,12 @@ export async function cacheDaemonWorkspace(
   options: CacheDaemonWorkspaceOptions,
 ): Promise<CacheDaemonWorkspaceResult> {
   const { fetch, daemonBaseUrl, workspaceId, workspaceDocs } = options
+  // Marks the replica BEFORE the save below, not after: both callers (the
+  // Settings move and the background refresh) register the settings-store
+  // entry only once this function returns, so without this mark the FIRST
+  // pull would land through `openDocumentStore`'s plaintext arm — sealed
+  // only from the second pull on, once the registry entry exists.
+  markReplica(workspaceId, daemonBaseUrl)
   try {
     const res = await fetch(
       `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/snapshot`,

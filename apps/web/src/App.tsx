@@ -55,6 +55,7 @@ import {
   workspaceRoutePath,
 } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-auth-fetch.js'
+import { passkeySupported } from './lib/passkey-attestation.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import { findReplicaForHandle } from './lib/replicas.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
@@ -677,6 +678,36 @@ export function App({ providerState }: AppProps) {
       : providerStateForSettings.kind === 'daemon'
         ? { baseUrl: providerStateForSettings.daemonBaseUrl, token: daemonToken ?? null }
         : undefined
+
+  // Tells `openDocumentStore` (S4b) which daemon this tab is connected to,
+  // so a daemon-kept workspace's replica routes to a real session-key
+  // source instead of the withheld answer an unconnected ref gets.
+  // `credentials` is read the same way PromoteWorkspaceSection reads it —
+  // undefined where WebAuthn is unsupported, so `bindPasskeySession` answers
+  // `no-passkey` rather than throwing on a missing API.
+  //
+  // Dynamically imported rather than statically, like every other lib this
+  // file only NEEDS once a daemon resolves: a static import pulled the
+  // session-key holder's whole chain into App's own critical-path chunk and
+  // tripped `smoke:bundle-size`'s modulepreload budget (154.9 KB against a
+  // 152 KB budget, measured before this became dynamic).
+  useEffect(() => {
+    const daemon =
+      settingsDaemon === undefined
+        ? null
+        : {
+            baseUrl: settingsDaemon.baseUrl,
+            token: settingsDaemon.token,
+            credentials: passkeySupported() ? globalThis.navigator.credentials : undefined,
+          }
+    let cancelled = false
+    import('./lib/replica-store.js').then(({ connectReplicaKeeper }) => {
+      if (!cancelled) connectReplicaKeeper(daemon)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [settingsDaemon?.baseUrl, settingsDaemon?.token])
 
   // The daemon-served /pair consent page (pairing-grant flow) — rendered
   // in place of every other view; approving needs the R3-injected token.

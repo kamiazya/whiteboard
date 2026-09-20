@@ -12,12 +12,12 @@
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { IdbDocumentStore } from './idb-document-store.js'
+import { openDocumentStore } from './replica-store.js'
 
 export class BrowserWorkspaceDocs extends DocumentStoreWorkspaceDocs {
   /** Only tests pass this; see `openWhiteboardDb`'s note on why it exists. */
   constructor(dbName?: string) {
-    super(new IdbDocumentStore(dbName))
+    super(openDocumentStore(dbName))
   }
 }
 

@@ -9,6 +9,7 @@
  * section's count and the posted bytes come from the production read path.
  */
 
+import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
@@ -28,6 +29,7 @@ import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import type { PasskeyCredentials } from '../../lib/passkey-attestation.js'
+import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -102,10 +104,24 @@ function fakePasskey(): PasskeyCredentials & { asked: CredentialRequestOptions[]
   }
 }
 
-/** The daemon routes the flow touches, answering from `target`. */
+/**
+ * The daemon routes the flow touches, answering from `target` — and, as a
+ * side effect of building it, connects the S4b replica-key holder to THIS
+ * double. The demote pull inside `promoteWorkspace` (via `cacheDaemonWorkspace`)
+ * now seals its write, which needs a connected keeper and a `/replica-key`
+ * answer to do at all; every caller here already builds a fresh double
+ * before triggering the flow, so this is the one place to wire it from.
+ */
 function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
+    if (url.endsWith('/replica-key') && init?.method === 'POST') {
+      return Response.json({
+        workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
+        workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
+        tier: 'offline',
+      })
+    }
     if (url.endsWith('/api/workspaces') && (init?.method ?? 'GET') === 'GET') {
       return Response.json({
         workspaces: opts.workspaces ?? [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
@@ -174,6 +190,8 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof globalThis.fetch
+  connectReplicaKeeper({ baseUrl: BASE, token: DAEMON.token, fetch: fetchImpl })
+  return fetchImpl
 }
 
 async function seedTwoDocuments(): Promise<{ roadmapId: string; sketchId: string }> {
@@ -266,7 +284,11 @@ beforeEach(async () => {
   localStorage.removeItem(PASSKEYS_KEY)
   await clearWhiteboardDb()
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  connectReplicaKeeper(null)
+  forgetAll()
+})
 
 describe('PromoteWorkspaceSection', () => {
   it('with a passkey registered here, the move is confirmed with it, the assertion travels, and the result says so', async () => {

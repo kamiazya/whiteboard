@@ -4,17 +4,20 @@
  * through the same merge endpoint the promote uses. Real IndexedDB, and a
  * LoroDoc standing in as the daemon's record behind the update route.
  */
+
+import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { pushReplicaEdits } from './replica-push.js'
+import { connectReplicaKeeper } from './replica-store.js'
 
 claimIsolatedWhiteboardDb('replica-push')
 
@@ -23,11 +26,28 @@ const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FA0'
 const DOC_A = '01ARZ3NDEKTSV4RRFFQ69G5FA1'
 const DOC_B = '01ARZ3NDEKTSV4RRFFQ69G5FA2'
 
-/** The daemon: snapshot GET serves `record`; update POST imports into it. */
+afterEach(() => {
+  connectReplicaKeeper(null)
+  forgetAll()
+})
+
+/**
+ * The daemon: snapshot GET serves `record`; update POST imports into it;
+ * `/replica-key` seals the pull `cacheDaemonWorkspace` writes — connected as
+ * a side effect of building this double, since every caller here builds one
+ * before driving the flow.
+ */
 function daemonStub(record: LoroDoc): { fetch: typeof globalThis.fetch; posts: () => number } {
   let posts = 0
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
+    if (url.endsWith('/replica-key') && init?.method === 'POST') {
+      return Response.json({
+        workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
+        workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
+        tier: 'offline',
+      })
+    }
     if (url.endsWith('/workspace-document/snapshot')) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
     }
@@ -38,6 +58,7 @@ function daemonStub(record: LoroDoc): { fetch: typeof globalThis.fetch; posts: (
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof globalThis.fetch
+  connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch: fetchImpl })
   return { fetch: fetchImpl, posts: () => posts }
 }
 

@@ -139,6 +139,15 @@ vi.mock('./pages/DaemonIndexPage.js', () => ({
   },
 }))
 
+// S4b's replica-key-holder wiring: watched through this spy rather than
+// through a real IndexedDB round-trip — App's own contract is WHICH daemon
+// (and whose credentials) it hands the holder, not what the holder then
+// does with them (replica-store.browser.test.tsx covers that separately).
+const connectReplicaKeeperMock = vi.fn()
+vi.mock('./lib/replica-store.js', () => ({
+  connectReplicaKeeper: (...args: unknown[]) => connectReplicaKeeperMock(...args),
+}))
+
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
 }
@@ -158,6 +167,7 @@ describe('silent renewal on a hosted origin', () => {
     resetShellStatusForTests()
     localStorage.clear()
     renewPairingTokenMock.mockClear()
+    connectReplicaKeeperMock.mockClear()
     mockRenewResult = { status: 'none' }
   })
 
@@ -178,22 +188,97 @@ describe('silent renewal on a hosted origin', () => {
       }),
     )
     mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
-    await act(async () => {
-      render(
-        <MemoryRouter initialEntries={['/']}>
-          <App providerState={BROWSER_STATE} />
-        </MemoryRouter>,
-      )
+    // jsdom has no `navigator.credentials` property at all by default, which
+    // would make "credentials is undefined" true whether or not App reads
+    // `passkeySupported()` first — a sentinel here is what makes the GATE
+    // itself, not merely jsdom's own absence, the thing under test.
+    // `PublicKeyCredential` stays absent (jsdom's default), so the gate
+    // must still answer false.
+    Object.defineProperty(globalThis.navigator, 'credentials', {
+      value: { get: async () => null },
+      configurable: true,
     })
+    try {
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={['/']}>
+            <App providerState={BROWSER_STATE} />
+          </MemoryRouter>,
+        )
+      })
 
-    await screen.findByTestId('daemon-index-page')
-    expect(renewPairingTokenMock).toHaveBeenCalledWith(
-      expect.objectContaining({ daemonBaseUrl: 'http://127.0.0.1:3099' }),
-    )
-    expect(receivedDaemonIndexPageProps).toMatchObject({
-      daemonBaseUrl: 'http://127.0.0.1:3099',
-      token: 'tok-r',
+      await screen.findByTestId('daemon-index-page')
+      expect(renewPairingTokenMock).toHaveBeenCalledWith(
+        expect.objectContaining({ daemonBaseUrl: 'http://127.0.0.1:3099' }),
+      )
+      expect(receivedDaemonIndexPageProps).toMatchObject({
+        daemonBaseUrl: 'http://127.0.0.1:3099',
+        token: 'tok-r',
+      })
+      // S4b: the resolved daemon reaches the replica-key holder too, not
+      // only the page — and gated on `passkeySupported()`, so an origin
+      // with a `navigator.credentials` but no `PublicKeyCredential` (this
+      // stub) is still answered `undefined`, the unsupported half of the
+      // credentials-gating pair below.
+      await vi.waitFor(() => {
+        expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ baseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }),
+        )
+      })
+      expect(connectReplicaKeeperMock.mock.lastCall?.[0].credentials).toBeUndefined()
+    } finally {
+      // @ts-expect-error test-only stub removal
+      delete globalThis.navigator.credentials
+    }
+  })
+
+  it('passes navigator.credentials to the replica-key holder when the platform supports passkeys', async () => {
+    const originalPublicKeyCredential = (globalThis as { PublicKeyCredential?: unknown })
+      .PublicKeyCredential
+    ;(globalThis as { PublicKeyCredential?: unknown }).PublicKeyCredential = class {}
+    // jsdom's own `navigator.credentials` is undefined even with
+    // `PublicKeyCredential` stubbed, which would make `toBe(globalThis.
+    // navigator.credentials)` below pass vacuously (undefined === undefined)
+    // whether or not App actually forwards the value — a real sentinel is
+    // what makes this assert the VALUE flows through, not just that both
+    // sides happen to be absent.
+    Object.defineProperty(globalThis.navigator, 'credentials', {
+      value: { get: async () => null },
+      configurable: true,
     })
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          version: 3,
+          storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
+          migration: {},
+          capabilities: {},
+        }),
+      )
+      mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={['/']}>
+            <App providerState={BROWSER_STATE} />
+          </MemoryRouter>,
+        )
+      })
+      await screen.findByTestId('daemon-index-page')
+      await vi.waitFor(() => {
+        expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ baseUrl: 'http://127.0.0.1:3099' }),
+        )
+      })
+      expect(connectReplicaKeeperMock.mock.lastCall?.[0].credentials).toBe(
+        globalThis.navigator.credentials,
+      )
+    } finally {
+      ;(globalThis as { PublicKeyCredential?: unknown }).PublicKeyCredential =
+        originalPublicKeyCredential
+      // @ts-expect-error test-only stub removal
+      delete globalThis.navigator.credentials
+    }
   })
 
   it('serves the replica read-only when the daemon is unreachable and a replica exists', async () => {
@@ -275,6 +360,11 @@ describe('silent renewal on a hosted origin', () => {
 
     await screen.findByTestId('browser-index-page')
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
+    // S4b: no resolved daemon means the replica-key holder is told to
+    // disconnect too, so a stale held key does not keep answering.
+    await vi.waitFor(() => {
+      expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith(null)
+    })
   })
 
   it('surfaces the identity-mismatch warning when renewal fails closed', async () => {

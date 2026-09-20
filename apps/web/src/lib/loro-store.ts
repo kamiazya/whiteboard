@@ -26,8 +26,8 @@ import {
 import { Loro } from 'loro-crdt'
 import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { IdbDocumentStore } from './idb-document-store.js'
 import { inTransaction, request } from './idb-tx.js'
+import { openDocumentStore } from './replica-store.js'
 
 /**
  * Narrow surface consumers need to seed, read back, and persist a document's
@@ -161,13 +161,13 @@ export class LoroStore {
    * competing fold placed deliberately inside the window between this
    * store's read and its write, which a wrapper around the port can do and
    * nothing outside it can. Production passes nothing and gets the
-   * `IdbDocumentStore` it always had.
+   * sealed-aware store `openDocumentStore` always builds.
    */
   constructor(
     private readonly dbName?: string,
     store?: DocumentStore,
   ) {
-    this.#store = store ?? new IdbDocumentStore(dbName)
+    this.#store = store ?? openDocumentStore(dbName)
   }
 
   #serialise<T>(documentId: string, body: () => Promise<T>): Promise<T> {
@@ -207,7 +207,7 @@ export class LoroStore {
 
   async #loadInner(documentId: string): Promise<LoroLoadResult> {
     const docRef = refOf(documentId)
-    let stored: Awaited<ReturnType<IdbDocumentStore['loadSnapshot']>>
+    let stored: Awaited<ReturnType<DocumentStore['loadSnapshot']>>
     try {
       stored = await this.#store.loadSnapshot({ docRef })
     } catch (err) {

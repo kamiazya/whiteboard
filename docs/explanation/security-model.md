@@ -146,6 +146,24 @@ mention of "tier", "replica", or "key". See
 [Connect to a local daemon → See what this device keeps of a daemon-kept
 workspace](../how-to/connect-to-local-daemon.md#see-what-this-device-keeps-of-a-daemon-kept-workspace).
 
+**The browser half: sealed at rest, held only in memory.** Every daemon
+workspace's replica is encrypted per chunk before it ever reaches IndexedDB —
+a browser-kept workspace (and every single document, replica or not) stores
+plain bytes as it always did, and the split is decided in one place
+(`apps/web/src/lib/replica-store.ts`'s `openDocumentStore`). The session key
+itself is never persisted: it lives only in an in-memory holder for the tab's
+life, so closing the tab and reopening it offline finds ciphertext with
+nothing to open it — there is no browser-side unlock without the daemon
+(a `prf`-derived cold start is deferred future work). A `bounded` lease
+lapses client-side on the same clock check the daemon's own copy uses, and a
+membership revocation is felt at the next ask, not before: an already-read
+replica stays readable in memory until the tab closes, matching the
+plaintext-doesn't-mean-invalidated point above. A replica this browser
+stored **before** this sealing shipped is plaintext on disk with no key ever
+recorded to seal it retroactively — the next IndexedDB open (`DB_VERSION`
+20) discards that record outright, chunks included, and the next daemon
+resolve re-pulls it sealed.
+
 ## Daemon impersonation (loopback port squatting, the other direction)
 
 The section above concerns a process inheriting a browser ORIGIN. The

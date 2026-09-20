@@ -144,6 +144,15 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'both-keepers',
     browser: 'src/pages/use-browser-document-controller.ts',
   },
+  'src/lib/replica-store.ts': {
+    reach: 'both-keepers',
+    browser: 'src/lib/idb-document-store.ts',
+    note: 'the one store factory: a daemon replica is sealed under the session key, a browser-kept workspace is the inner IdbDocumentStore unsealed',
+  },
+  'src/lib/passkey-session.ts': {
+    reach: 'daemon-itself',
+    why: "binds this pairing session to the person's passkey so the daemon will issue the replica key — the session is the daemon's; a browser keeper has no session and no key to withhold",
+  },
 }
 
 // `?raw` rather than node:fs — apps/web is browser-only and must not import a
