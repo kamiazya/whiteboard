@@ -5,6 +5,7 @@
 // deliberately outranks the document editor's task-toggle binding), and
 // losing focus commits too, so nothing typed is ever lost.
 
+import { EditorView } from '@codemirror/view'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -12,6 +13,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { tapElement } from '../../test-utils/tap.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -169,4 +171,40 @@ it('a blur after Escape does not resurrect the cancelled edit as a commit', asyn
   const node = latest.canvas.nodes[0]
   expect(node === undefined ? undefined : nodeText(node)).toBe('keep me')
   expect(latest.commands.filter((k) => k === 'set-text')).toHaveLength(0)
+})
+
+// A node's editor installs the `:` shortcode source, so its popup is a real
+// surface a finger meets — and until now it was the one popup in the app with
+// no deterministic touch path. Upstream accepts on the SYNTHESIZED mousedown
+// and separately closes on the contenteditable's blur; a synthetic TouchEvent
+// synthesizes no mouse events at all, so a tap that reaches nothing else is
+// exactly the ordering a phone was observed losing on the document editor.
+it('a touch tap on a shortcode option commits it inside a node editor', async () => {
+  const { Host } = makeHost('ship it')
+  const { container } = render(<Host />)
+  openEditor(container)
+  const content = await vi.waitFor(() => {
+    const el = container.querySelector('[data-testid="text-node-editor"] .cm-content')
+    expect(el).not.toBeNull()
+    return el as HTMLElement
+  })
+
+  await userEvent.keyboard(' :rocke')
+  await vi.waitFor(() => {
+    const listed = [...document.querySelectorAll('.cm-tooltip-autocomplete li')]
+    expect(listed.some((li) => li.textContent?.includes('rocket'))).toBe(true)
+  })
+
+  // Re-resolved at the moment of the gesture, never held: the popup
+  // re-renders its whole list on every completion update, and a detached
+  // node makes the tap a no-op that reads as the feature being broken.
+  const option = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
+    li.textContent?.includes('rocket'),
+  ) as HTMLElement
+  tapElement(option, 7)
+
+  const view = EditorView.findFromDOM(content)
+  await vi.waitFor(() => {
+    expect(view?.state.doc.toString()).toBe('ship it :rocket:')
+  })
 })
