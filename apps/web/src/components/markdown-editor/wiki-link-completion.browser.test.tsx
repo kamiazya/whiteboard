@@ -57,6 +57,13 @@ function tap(label: string, identifier: number, travel = 0): void {
   tapElement(el, identifier, travel)
 }
 
+/** A real keydown, so CodeMirror's keymap decides what Enter means. */
+function pressEnter(view: EditorView): void {
+  view.contentDOM.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }),
+  )
+}
+
 describe('wiki link completion (real browser)', () => {
   it('typing [[Re offers documents and Enter inserts the readable link', async () => {
     let value = ''
@@ -257,6 +264,95 @@ describe('wiki link completion (real browser)', () => {
     tap('Retro notes', 3)
     await vi.waitFor(() => {
       expect(value).toBe('see [[retro-notes]]')
+    })
+  })
+
+  it('Enter in the same window accepts the drawn option instead of writing a newline', async () => {
+    // The keyboard half of the window above. The Enter keymap gave the key
+    // to the completion only while the dialog was ACTIVE, and `pending`
+    // has to fall through or Enter after `- item` would lose its list
+    // continuation — so a list that is DRAWN but disabled got a newline
+    // under it, which is the one thing that handler exists to prevent.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    await userEvent.keyboard('see [[[[Ret')
+    await vi.waitFor(() => {
+      expect(currentCompletions(view.state).length).toBeGreaterThan(0)
+    })
+
+    // Induced as a CONDITION, the way the tap case above is: one synchronous
+    // transaction, so no timer runs between the keystroke and the Enter.
+    const head = view.state.doc.length
+    view.dispatch({
+      changes: { from: head, insert: 'r' },
+      selection: { anchor: head + 1 },
+      userEvent: 'input.type',
+    })
+    expect(
+      document
+        .querySelector('.cm-tooltip-autocomplete')
+        ?.classList.contains('cm-tooltip-autocomplete-disabled'),
+    ).toBe(true)
+    expect(completionStatus(view.state)).toBe('pending')
+    expect(optionLabelled('Retro notes')).toBeDefined()
+
+    pressEnter(view)
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[retro-notes]]')
+    })
+    expect(value).not.toContain('\n')
+  })
+
+  it('Enter still writes a newline, and still continues a list, when no option is drawn', async () => {
+    // The other side of the same guard, and the reason it cannot simply be
+    // widened to "not closed": for prose the sources are pending too, and
+    // the popup that will never appear must not take the key.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    await userEvent.keyboard('- item')
+    // Same synchronous keystroke as the case above, so the sources are
+    // pending here too — the difference is only that nothing is drawn.
+    const head = view.state.doc.length
+    view.dispatch({
+      changes: { from: head, insert: 's' },
+      selection: { anchor: head + 1 },
+      userEvent: 'input.type',
+    })
+    expect(document.querySelector('.cm-tooltip-autocomplete')).toBeNull()
+
+    pressEnter(view)
+    await vi.waitFor(() => {
+      expect(value).toBe('- items\n- ')
     })
   })
 

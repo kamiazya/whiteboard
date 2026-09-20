@@ -225,7 +225,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `autocompletion()` call — `completionConfig` is not exported, so it
   // cannot ride the shared theme, and a second `autocompletion()` beside
   // this one would replace its `override`.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1146,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1130,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first

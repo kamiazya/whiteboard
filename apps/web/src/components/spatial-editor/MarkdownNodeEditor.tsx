@@ -195,6 +195,14 @@ export function MarkdownNodeEditor({
                 // exit/continuation verb below fires under the popup, which
                 // is the same thing `Prec.highest` is here to prevent for
                 // the language keymap.
+                // No `acceptRenderedCompletion` fallback here, unlike the
+                // document editor: this editor installs ONE source, and a
+                // lone source's `validFor` keeps its result alive across a
+                // keystroke, so the dialog never enters the disabled state
+                // that guard exists for. Measured through both routes that
+                // could reach it — a synchronous insert inside the token
+                // and a backspace — and the dialog read `active` for both.
+                // Add it here when a second source arrives.
                 if (completionStatus(view.state) === 'active') return acceptCompletion(view) || true
                 return exitEmptyListItem(view)
               },
