@@ -6,28 +6,63 @@
 //      (production logic belongs in a versioned, unit-tested script)
 //   2. an environment variable placed at job scope (ambient to every step)
 //      when it is only needed by one step
-// The raw-text scan is deliberate: ci-workflow-steps.mjs explicitly skips
-// multi-line `run: |` blocks, so it cannot see an inline interpreter buried
-// inside one.
+// The raw-text scan is deliberate FOR (1): ci-workflow-steps.mjs explicitly
+// skips multi-line `run: |` blocks, so it cannot see an inline interpreter
+// buried inside one.
+//
+// (2) is asked of the PARSED workflow. It used to be a 165-line hand-rolled
+// indentation scanner in tools/checks, at cognitive complexity 102 — four
+// nested loops sharing one cursor, carrying its own comment-dedent fixes and
+// its own assumption that this repo indents two spaces. That package stays
+// dependency-free because it is the last mile before a real publish, and must
+// not need this repo's build pipeline to validate its own policy file; this
+// scan is not on that path — its only caller was this file, which already
+// parses YAML two tests over. So the question is asked of `yaml`, and the
+// hand scanner is deleted rather than simplified.
 
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { parse as parseYaml } from 'yaml'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..', '..')
 const WORKFLOWS_DIR = resolve(REPO_ROOT, '.github', 'workflows')
 const RELEASE_WORKFLOW_PATH = resolve(WORKFLOWS_DIR, 'release.yml')
-const SCANNER_MODULE = join(REPO_ROOT, 'tools/checks/src/env-scope-scanner.mjs')
 
-async function importScanner() {
-  const mod = await import(pathToFileURL(SCANNER_MODULE).href)
-  return mod as {
-    scanEnvKeyPlacements: (
-      yamlText: string,
-      key: string,
-    ) => { jobLevel: { jobId: string }[]; stepLevel: { jobId: string; stepName: string }[] }
+interface ParsedWorkflow {
+  jobs?: Record<
+    string,
+    { env?: Record<string, unknown>; steps?: { name?: string; env?: Record<string, unknown> }[] }
+  >
+}
+
+/**
+ * Where `key` is declared: on a JOB (ambient to every step that does not
+ * override it) or on one STEP.
+ *
+ * `Object.hasOwn`, not `env[key] !== undefined`: a parsed mapping is an
+ * ordinary object, so `env['toString']` answers `Object.prototype.toString`
+ * and every job with any `env:` block reports a hit. Measured — the first
+ * version of this function did exactly that on four of ci.yml's jobs, caught
+ * by differential-testing it against the scanner it replaces over every
+ * workflow and every env key in the repo.
+ */
+function scanEnvKeyPlacements(
+  yamlText: string,
+  key: string,
+): { jobLevel: { jobId: string }[]; stepLevel: { jobId: string; stepName: string }[] } {
+  const jobs = Object.entries((parseYaml(yamlText) as ParsedWorkflow | null)?.jobs ?? {})
+  return {
+    jobLevel: jobs
+      .filter(([, job]) => Object.hasOwn(job?.env ?? {}, key))
+      .map(([jobId]) => ({ jobId })),
+    stepLevel: jobs.flatMap(([jobId, job]) =>
+      (job?.steps ?? [])
+        .filter((step) => Object.hasOwn(step?.env ?? {}, key))
+        .map((step) => ({ jobId, stepName: step.name ?? '' })),
+    ),
   }
 }
 
@@ -73,7 +108,6 @@ describe('workflow hygiene: no inline interpreters', () => {
 
 describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () => {
   it('scanner fixture: flags a job-level placement', async () => {
-    const { scanEnvKeyPlacements } = await importScanner()
     const fixture = [
       'jobs:',
       '  example:',
@@ -90,7 +124,6 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
   })
 
   it('scanner fixture: an allow-listed step-level placement passes (no job-level hit)', async () => {
-    const { scanEnvKeyPlacements } = await importScanner()
     const fixture = [
       'jobs:',
       '  example:',
@@ -106,8 +139,26 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
     expect(result.stepLevel).toEqual([{ jobId: 'example', stepName: 'Allowed step' }])
   })
 
-  it('scanner fixture: does not drop later env keys when a comment is dedented inside the env block', async () => {
-    const { scanEnvKeyPlacements } = await importScanner()
+  it('does not report an inherited object key as a placement', async () => {
+    const fixture = [
+      'jobs:',
+      '  example:',
+      '    env:',
+      '      FOO: bar',
+      '    steps:',
+      '      - name: A step',
+      '        env:',
+      '          BAR: baz',
+      '        run: echo hi',
+      '',
+    ].join('\n')
+    // A parsed mapping is an ordinary object. Asking `env[key] !== undefined`
+    // answers `Object.prototype.toString` here and reports the job AND the
+    // step; `Object.hasOwn` is what makes the answer about this workflow.
+    expect(scanEnvKeyPlacements(fixture, 'toString')).toEqual({ jobLevel: [], stepLevel: [] })
+  })
+
+  it('is unaffected by a comment dedented inside the env block', async () => {
     const fixture = [
       'jobs:',
       '  example:',
@@ -125,7 +176,6 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
   })
 
   it('scanner fixture: reports a non-allow-listed step by name too', async () => {
-    const { scanEnvKeyPlacements } = await importScanner()
     const fixture = [
       'jobs:',
       '  example:',
@@ -144,7 +194,6 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
   // it would silence the src-vs-dist daemon spawn switch (spawn-args.ts) for
   // every step in that job, not just the one that actually needs it.
   it('release.yml has zero job-level WHITEBOARD_DEV placements', async () => {
-    const { scanEnvKeyPlacements } = await importScanner()
     const text = readFileSync(RELEASE_WORKFLOW_PATH, 'utf-8')
     const result = scanEnvKeyPlacements(text, 'WHITEBOARD_DEV')
     expect(result.jobLevel).toEqual([])
@@ -156,7 +205,6 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
   // precedes the smokes in matrix order).
   const ALLOW_LISTED_STEPS: string[] = []
   it('release.yml has no step-level WHITEBOARD_DEV placements outside the allow-list', async () => {
-    const { scanEnvKeyPlacements } = await importScanner()
     const text = readFileSync(RELEASE_WORKFLOW_PATH, 'utf-8')
     const result = scanEnvKeyPlacements(text, 'WHITEBOARD_DEV')
     const unexpected = result.stepLevel.filter((hit) => !ALLOW_LISTED_STEPS.includes(hit.stepName))

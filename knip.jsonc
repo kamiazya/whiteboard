@@ -22,7 +22,6 @@
         // (`join(ROOT, 'tools/checks/src/...')`) from mcp-server's release
         // tests, not statically imported within this workspace.
         "src/ci-workflow-steps.mjs",
-        "src/env-scope-scanner.mjs",
         "src/verify-pack-contents.mjs",
         "src/release-gate-matrix-schema.mjs",
         // run-shared-layer-tests.mjs itself is NOT listed here: knip's
