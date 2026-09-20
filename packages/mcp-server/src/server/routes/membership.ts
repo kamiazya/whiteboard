@@ -26,15 +26,13 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
-import type { MemberProfileStore } from '../security/member-profile-store.js'
+import type { MemberProfile, MemberProfileStore } from '../security/member-profile-store.js'
 import type { PairingTokenStore } from '../security/pairing-session.js'
 import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 
 const log = getLogger('membership')
 
-type Profile = Awaited<ReturnType<MemberProfileStore['ensureProfile']>>
-
-function toSummary(profile: Profile): MemberProfileSummary {
+function toSummary(profile: MemberProfile): MemberProfileSummary {
   return memberProfileSummarySchema.parse({
     profileId: profile.id,
     displayName: profile.displayName,
