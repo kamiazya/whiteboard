@@ -45,7 +45,10 @@ runs:
     - name: Activate pnpm via corepack
       shell: bash
       run: |
-        command -v corepack >/dev/null 2>&1 || npm install -g corepack
+        # --ignore-scripts: corepack needs no lifecycle script to install, and
+        # this action runs in every job of every workflow, so it is the widest
+        # place in the repo for one to execute.
+        command -v corepack >/dev/null 2>&1 || npm install -g corepack --ignore-scripts
         corepack enable
         corepack prepare --activate
 
