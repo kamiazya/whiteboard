@@ -612,7 +612,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // comments a reader has to attach to the right `if`. The cost is a doc
   // comment per step; the alternative — module functions — would have moved
   // 32 closed-over values into parameters and grown the file further.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3194,
+  // Raised 3194 -> 3195, +1, for one IMPORT: `defaultCreateId` moved to
+  // `lib/spatial/element-id.ts`, so one import line became two.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3195,
 }
 
 describe('the path form both ledgers are keyed with', () => {

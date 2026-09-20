@@ -10,9 +10,10 @@ import {
   type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { CommentComposeState } from './CanvasContextMenu.js'
-import { defaultCreateId, type reduceGesture } from './gestures.js'
+import type { reduceGesture } from './gestures.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 
 /** The compose bubble sits where the saved comment's bubble will be drawn,
