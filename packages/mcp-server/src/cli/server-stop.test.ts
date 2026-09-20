@@ -272,3 +272,88 @@ describe('defaultVerifyIdentity', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The stale record is REMOVED, on every path that decides the server is
+ * gone.
+ *
+ * Nothing asserted this: making `forgetRecord` a no-op left all 14 tests
+ * green. The record is what `server status` reads, so one left behind
+ * reports a running server that is not there — and `stop` is documented as
+ * desired-state idempotent, which is exactly the promise a surviving record
+ * breaks.
+ *
+ * The missing-record case is the one path that must NOT remove anything:
+ * there is nothing to remove, and a call would be this command inventing
+ * filesystem work out of an absence.
+ */
+describe('runServerStop clears the record it acted on', () => {
+  const cases = [
+    {
+      name: 'the recorded process is not alive',
+      read: { kind: 'ok' as const, record: VALID_RECORD },
+      isPidAlive: deadPid,
+    },
+    {
+      name: 'the record is malformed',
+      read: { kind: 'malformed' as const },
+      isPidAlive: deadPid,
+    },
+    {
+      name: 'the pid belongs to someone else now',
+      read: { kind: 'ok' as const, record: VALID_RECORD },
+      isPidAlive: alivePid,
+      verifyIdentity: identityFail,
+    },
+    {
+      name: 'the server stopped on SIGTERM',
+      read: { kind: 'ok' as const, record: VALID_RECORD },
+      // Alive for the liveness gate, gone by the time the wait polls.
+      isPidAlive: vi.fn().mockReturnValueOnce(true).mockReturnValue(false),
+      verifyIdentity: identityOk,
+    },
+  ]
+
+  for (const test of cases) {
+    it(`removes it when ${test.name}`, async () => {
+      mockRead.mockReturnValueOnce(test.read)
+      const removeRecord = vi.fn(async () => {})
+      await runServerStop({
+        dataDir: '/tmp/test',
+        isPidAlive: test.isPidAlive,
+        verifyIdentity: test.verifyIdentity ?? identityOk,
+        killFn: noKill,
+        removeRecord,
+        sleep: noOp,
+      })
+      expect(removeRecord).toHaveBeenCalledWith('/tmp/test')
+    })
+  }
+
+  it('removes nothing when there was no record to begin with', async () => {
+    mockRead.mockReturnValueOnce({ kind: 'missing' })
+    const removeRecord = vi.fn(async () => {})
+    await runServerStop({
+      dataDir: '/tmp/test',
+      isPidAlive: deadPid,
+      killFn: noKill,
+      removeRecord,
+    })
+    expect(removeRecord).not.toHaveBeenCalled()
+  })
+
+  it('still reports the stop when removing the record fails', async () => {
+    mockRead.mockReturnValueOnce({ kind: 'ok', record: VALID_RECORD })
+    const { result, exitCode } = await runServerStop({
+      dataDir: '/tmp/test',
+      isPidAlive: deadPid,
+      killFn: noKill,
+      removeRecord: async () => {
+        throw new Error('read-only filesystem')
+      },
+    })
+    expect(exitCode).toBe(0)
+    expect(result.ok).toBe(true)
+    expect(result.action).toBe('not-running')
+  })
+})
