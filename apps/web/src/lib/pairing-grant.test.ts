@@ -87,8 +87,17 @@ describe('renewPairingToken', () => {
     expect(JSON.parse(String(init.body))).toEqual({ grantType: 'origin' })
   })
 
-  it('reports none on a 403 (grant revoked / daemon restarted unpaired)', async () => {
+  it('reports refused on a 403 (grant revoked) — distinct from unreachable, since ADR-0042 shows a removed member a different page', async () => {
     const fetchFn = vi.fn(async () => new Response('no grant', { status: 403 }))
+    const result = await renewPairingToken({
+      daemonBaseUrl: DAEMON,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result).toEqual({ status: 'refused' })
+  })
+
+  it('reports none on a 500 (transient server error, not a refusal)', async () => {
+    const fetchFn = vi.fn(async () => new Response('boom', { status: 500 }))
     const result = await renewPairingToken({
       daemonBaseUrl: DAEMON,
       fetch: fetchFn as unknown as typeof globalThis.fetch,

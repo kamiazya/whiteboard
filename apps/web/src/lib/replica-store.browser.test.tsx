@@ -14,6 +14,7 @@ import {
   forgetDaemonKeys,
   markReplica,
   openDocumentStore,
+  replicaKeyStatus,
 } from './replica-store.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from './user-settings-store.js'
@@ -60,7 +61,7 @@ function offlineKeyFetch(): typeof fetch {
 }
 
 function refusalFetch(reason: string): typeof fetch {
-  return (async () => jsonResponse({ error: reason }, 403)) as typeof fetch
+  return (async () => jsonResponse({ error: reason, message: reason }, 403)) as typeof fetch
 }
 
 async function getAllRaw(dbName: string): Promise<{ store: string; records: unknown[] }[]> {
@@ -266,5 +267,24 @@ describe('replica-store', () => {
       StoredDocumentUnreadableError,
     )
     expect(keyCalls).toBe(2)
+  })
+
+  it('replicaKeyStatus reads the S4a holder without a request, and reflects a subsequent ask', async () => {
+    const workspaceId = freshWorkspaceId()
+    expect(replicaKeyStatus(DAEMON, workspaceId)).toBeUndefined()
+
+    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: refusalFetch('not_a_member') })
+    markReplica(workspaceId, DAEMON)
+    const store = openDocumentStore(DB_NAME)
+    const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
+    const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
+    await expect(
+      store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array(4) }),
+    ).rejects.toBeInstanceOf(ReplicaKeyWithheldError)
+
+    expect(replicaKeyStatus(DAEMON, workspaceId)).toEqual({
+      kind: 'withheld',
+      reason: 'not_a_member',
+    })
   })
 })

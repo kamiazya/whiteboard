@@ -132,6 +132,16 @@ export type GrantConsumeResult =
    *  key-changed warning UI has its evidence; re-approving on /pair
    *  re-pins. */
   | { status: 'identity-mismatch'; daemonBaseUrl: string }
+  /**
+   * The daemon was REACHED and said no (HTTP 403): this origin holds no
+   * pairing grant there any more — revoked, or lost with the daemon's grant
+   * store. It says nothing about the person's membership; that is the
+   * replica-key route's answer. Distinct from `'none'`, which also covers a
+   * daemon that could not be reached at all: the replica read plane
+   * (ADR-0042) tells an unpaired device from an unreachable daemon, and
+   * conflating the two would read a network blip as a lost pairing.
+   */
+  | { status: 'refused' }
 
 export async function consumeGrantFragment({
   hash,
@@ -235,10 +245,12 @@ export async function consumeGrantFragment({
  * Silent renewal on a later visit: the browser-enforced Origin header
  * matched against the daemon's persisted grant is the whole credential, so
  * this never redirects and carries no secret. A 403 (grant revoked, or a
- * restarted daemon that lost nothing but was never granted) and an
- * unreachable daemon both collapse to 'none' — the caller falls back to
- * the browser exactly as if nothing had been stored, and the banner
- * remains the path back to a fresh consent.
+ * restarted daemon that lost nothing but was never granted) answers
+ * `'refused'`; any other non-ok response or an unreachable daemon answers
+ * `'none'`. `link-pairing.ts`'s consent-redirect fallback treats both the
+ * same (falling back to the browser, or re-consenting), but the replica
+ * read plane (ADR-0042 decision 4) tells the two apart — a removed member
+ * sees a stated ban, not a page that reads like a network blip.
  */
 export async function renewPairingToken({
   daemonBaseUrl,
@@ -260,7 +272,7 @@ export async function renewPairingToken({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ grantType: 'origin', ...(nonce !== undefined ? { nonce } : {}) }),
     })
-    if (!response.ok) return { status: 'none' }
+    if (!response.ok) return response.status === 403 ? { status: 'refused' } : { status: 'none' }
     const parsed = pairingTokenResponseSchema.safeParse(await response.json())
     if (!parsed.success) return { status: 'none' }
     const body = parsed.data

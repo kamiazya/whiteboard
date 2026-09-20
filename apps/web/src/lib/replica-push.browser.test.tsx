@@ -214,6 +214,47 @@ describe('pushReplicaEdits', () => {
     expect(result.kind).toBe('withheld')
   })
 
+  it('a removed member (not_a_member) sends nothing — ADR-0042 decision 4, with or without a recorded frontier', async () => {
+    // The daemon double's `posts()` counts POSTs to /workspace-document/update
+    // regardless of body — a plaintext workspaceDocs double would let one
+    // through, which is what this asserts against (mutation-checked): a
+    // withheld key must refuse the export BEFORE any request is built, not
+    // merely fail to ship a well-formed one.
+    for (const withFrontier of [true, false]) {
+      const daemon = daemonStub(daemonRecord())
+      const { docs, syncedFrontier } = await pulledReplica(daemon)
+      const replica = await docs.open(DAEMON_WS)
+      createWorkspaceDocumentAtPath(replica!, {
+        path: 'offline/note',
+        documentId: DOC_B,
+        kind: 'markdown',
+      })
+      replica!.commit()
+      await docs.save(DAEMON_WS, replica!)
+
+      connectReplicaKeeper({
+        baseUrl: BASE,
+        token: 'tok-2',
+        fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString()
+          if (url.endsWith('/replica-key') && init?.method === 'POST') {
+            return new Response(JSON.stringify({ error: 'not_a_member' }), { status: 403 })
+          }
+          throw new Error(`unexpected fetch: ${url}`)
+        }) as typeof globalThis.fetch,
+      })
+      const result = await pushReplicaEdits({
+        fetch: daemon.fetch,
+        daemonBaseUrl: BASE,
+        workspaceId: DAEMON_WS,
+        workspaceDocs: docs,
+        ...(withFrontier ? { syncedFrontier } : {}),
+      })
+      expect(result).toEqual({ kind: 'withheld' })
+      expect(daemon.posts()).toBe(0)
+    }
+  })
+
   it('a missing replica record is clean — nothing to ship', async () => {
     const result = await pushReplicaEdits({
       fetch: vi.fn() as unknown as typeof globalThis.fetch,

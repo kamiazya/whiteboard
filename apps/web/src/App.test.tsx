@@ -125,10 +125,21 @@ vi.mock('./pages/SettingsPage.js', () => ({
   },
 }))
 
+let receivedReplicaPageProps: Record<string, unknown> | undefined
 vi.mock('./pages/ReplicaReadPage.js', () => ({
-  ReplicaReadPage: (props: Record<string, unknown>) => (
-    <div data-testid="replica-read-page-stub" data-workspace-id={String(props.workspaceId)} />
-  ),
+  ReplicaReadPage: (props: Record<string, unknown>) => {
+    receivedReplicaPageProps = props
+    return (
+      <div data-testid="replica-read-page-stub" data-workspace-id={String(props.workspaceId)}>
+        <button
+          type="button"
+          onClick={() => void (props.onReconnect as () => void | Promise<void>)()}
+        >
+          Reconnect
+        </button>
+      </div>
+    )
+  },
 }))
 
 let receivedDaemonIndexPageProps: Record<string, unknown> | undefined
@@ -315,6 +326,81 @@ describe('silent renewal on a hosted origin', () => {
     })
     const page = await screen.findByTestId('replica-read-page-stub')
     expect(page.getAttribute('data-workspace-id')).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    // ADR-0042 S5: the page decides its own degradation state from what the
+    // renewal answered, so App must pass the REASON, not merely a boolean.
+    expect(receivedReplicaPageProps?.renewal).toBe('unreachable')
+    expect(receivedReplicaPageProps?.daemonBaseUrl).toBe('http://127.0.0.1:3099')
+  })
+
+  it("passes renewal:'refused' when the daemon reached and revoked the grant (ADR-0042 decision 4)", async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        storage: {
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+          replicas: {
+            '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
+              daemonBaseUrl: 'http://127.0.0.1:3099',
+              syncedAt: '2026-09-01T12:00:00.000Z',
+              segment: 'team',
+              displayName: 'Design team',
+            },
+          },
+        },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'refused' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/w/team']}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
+    })
+    await screen.findByTestId('replica-read-page-stub')
+    expect(receivedReplicaPageProps?.renewal).toBe('refused')
+  })
+
+  it('Reconnect re-runs renewal, and a now-paired answer unmounts the replica page for the daemon page', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        storage: {
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+          replicas: {
+            '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
+              daemonBaseUrl: 'http://127.0.0.1:3099',
+              syncedAt: '2026-09-01T12:00:00.000Z',
+              segment: 'team',
+              displayName: 'Design team',
+            },
+          },
+        },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'none' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/w/team']}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
+    })
+    await screen.findByTestId('replica-read-page-stub')
+    renewPairingTokenMock.mockClear()
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+    await act(async () => {
+      screen.getByRole('button', { name: 'Reconnect' }).click()
+    })
+    expect(renewPairingTokenMock).toHaveBeenCalledTimes(1)
+    await screen.findByTestId('daemon-index-page')
+    expect(screen.queryByTestId('replica-read-page-stub')).toBeNull()
   })
 
   it('an address with no replica behind it still falls to the browser flow when unreachable', async () => {

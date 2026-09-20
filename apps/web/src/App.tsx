@@ -1,6 +1,15 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-daemon-client/api-client'
 import type { RenameWorkspaceInput } from '@kamiazya/whiteboard-ports'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { AppShellWorkspaces } from './components/AppShell.js'
 import { AppShellLazy } from './components/AppShellLazy.js'
@@ -208,37 +217,49 @@ export function App({ providerState }: AppProps) {
   // pairing grant reconnects without any redirect — the browser-enforced
   // Origin header against the daemon's persisted grant is the whole
   // credential (POST /api/pairing/token, grantType 'origin'). Gated to the
-  // no-fragment cold load: an in-flight #wb=/#wb-grant flow always wins,
-  // and a 403/unreachable daemon collapses to 'none' so the app falls back
-  // to the browser exactly as before, with the banner as the path back.
-  // The stored daemon answered the silent renewal with nothing usable —
-  // revoked or unreachable. Held so the render can offer the replica read
-  // (ADR-0023) instead of silently landing on the browser's own workspaces.
-  const [daemonRenewalFailed, setDaemonRenewalFailed] = useState(false)
+  // no-fragment cold load: an in-flight #wb=/#wb-grant flow always wins.
+  // The stored daemon answered the silent renewal with nothing usable:
+  // `'refused'` (reached, HTTP 403 — a revoked grant) or `'unreachable'`
+  // (any other non-ok response, or the daemon could not be reached at
+  // all). Held so the render can offer the replica read (ADR-0023) instead
+  // of silently landing on the browser's own workspaces, and so the two
+  // are told apart (ADR-0042 decision 4: a removed member is shown a
+  // stated ban, not a page that reads like a network blip).
+  const [daemonRenewal, setDaemonRenewal] = useState<'refused' | 'unreachable' | null>(null)
   const attemptedRenewalRef = useRef(false)
-  useEffect(() => {
-    if (attemptedRenewalRef.current) return
-    attemptedRenewalRef.current = true
+  // Re-run by ReplicaReadPage's Reconnect action as well as the cold-load
+  // effect below — both go through the SAME gate and the SAME state
+  // setters, so a manual reconnect can never diverge from what a fresh
+  // page load would have decided.
+  const attemptRenewal = useCallback(async () => {
     if (isPairRoute) return
     if (daemonConnection.status !== 'none') return
     if (grantConnection !== null) return
     if ((providerState ?? defaultProviderState).kind !== 'browser') return
     const storedBaseUrl = userSettingsStore.load().storage.daemonBaseUrl
     if (storedBaseUrl === undefined) return
-    void renewPairingToken({
+    const result = await renewPairingToken({
       daemonBaseUrl: storedBaseUrl,
       fetch: globalThis.fetch.bind(globalThis),
-    }).then((result) => {
-      // 'paired' connects; 'identity-mismatch' must ALSO land in state — it
-      // is the fail-closed warning ("this daemon's identity changed"), and
-      // dropping it here would silently swallow the whole verification.
-      if (result.status === 'paired' || result.status === 'identity-mismatch') {
-        setGrantConnection(result)
-      } else {
-        setDaemonRenewalFailed(true)
-      }
     })
+    // 'paired' connects; 'identity-mismatch' must ALSO land in state — it
+    // is the fail-closed warning ("this daemon's identity changed"), and
+    // dropping it here would silently swallow the whole verification.
+    if (result.status === 'paired' || result.status === 'identity-mismatch') {
+      setDaemonRenewal(null)
+      setGrantConnection(result)
+    } else {
+      setDaemonRenewal(result.status === 'refused' ? 'refused' : 'unreachable')
+    }
+  }, [isPairRoute, daemonConnection.status, grantConnection, providerState])
+  useEffect(() => {
+    if (attemptedRenewalRef.current) return
+    attemptedRenewalRef.current = true
+    void attemptRenewal()
     // Cold-load decision over mount-time facts; the ref guards StrictMode.
+    // attemptRenewal is intentionally omitted from the deps — its own
+    // identity changes with the gate values it closes over, and re-running
+    // this effect for that would defeat the once-per-mount ref guard above.
   }, [])
 
   // A #wb= fragment carrying both workspaceId+path skips straight to the
@@ -354,7 +375,7 @@ export function App({ providerState }: AppProps) {
   // by the canonical id and captured the segment at sync time, because
   // offline is exactly when a segment cannot be resolved.
   const replicaMatch =
-    daemonRenewalFailed && !daemonKept && browserRoute?.workspace !== undefined
+    daemonRenewal !== null && !daemonKept && browserRoute?.workspace !== undefined
       ? findReplicaForHandle(userSettingsStore.load(), browserRoute.workspace)
       : null
   const isFirstUrlSyncRef = useRef(true)
@@ -990,6 +1011,11 @@ export function App({ providerState }: AppProps) {
                   ? {}
                   : { displayName: replicaMatch.displayName })}
                 syncedAt={replicaMatch.syncedAt}
+                daemonBaseUrl={replicaMatch.daemonBaseUrl}
+                // Non-null here by construction: replicaMatch only exists
+                // when daemonRenewal !== null (see its own definition above).
+                renewal={daemonRenewal ?? 'unreachable'}
+                onReconnect={attemptRenewal}
               />
             ) : browserPath === undefined ? (
               // An index route lands on the document list. The editor mounts

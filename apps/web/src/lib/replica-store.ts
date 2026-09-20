@@ -16,10 +16,14 @@
  * place deciding sealed-vs-plaintext, which is exactly what the ONE factory
  * exists to rule out (`replica-key-holder-seam.test.ts`).
  */
-import type { ReplicaSource } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import type {
+  ReplicaSource,
+  SessionKeyStatus,
+} from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   forget,
   replicaKeyProviderFor,
+  sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { DocumentStore } from '@kamiazya/whiteboard-ports'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
@@ -74,6 +78,23 @@ const routingProvider: ReplicaKeyProvider = {
       documentId,
     )
   },
+}
+
+/**
+ * The S4a holder's cached answer for one workspace's replica key — no
+ * request, no key bytes — for a reader that only needs to know whether a
+ * daemon-kept replica is readable right now and why not (ADR-0042 decision
+ * 4/5's degraded read-plane states). `undefined` both before any ask and
+ * for a workspace this build never marked/registered as a replica: neither
+ * is this module's routing decision to make, since `sealed-document-store.ts`
+ * stays ignorant of membership vocabulary and only ever sees the provider's
+ * `keyFor` answer.
+ */
+export function replicaKeyStatus(
+  daemonBaseUrl: string,
+  workspaceId: string,
+): SessionKeyStatus | undefined {
+  return sessionKeyStatus(daemonBaseUrl, workspaceId)
 }
 
 /**

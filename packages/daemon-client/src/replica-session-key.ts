@@ -39,6 +39,14 @@ export type SessionKeyResult =
     }
   | { kind: 'withheld'; reason: MembershipRefusalCode | 'unreachable' | 'lapsed' }
 
+/** The reason a workspace's key is withheld — `SessionKeyResult`'s own union, named for callers that only care about that arm. */
+export type WithheldReason = Extract<SessionKeyResult, { kind: 'withheld' }>['reason']
+
+/** `sessionKeyStatus`'s answer — the holder's cached state without the key bytes, for a caller that only needs to know WHY, not to read. */
+export type SessionKeyStatus =
+  | { kind: 'held'; tier: ReplicaTier; leaseExpiresAt?: number }
+  | { kind: 'withheld'; reason: WithheldReason }
+
 // Module-singleton: one shared entry and one shared in-flight request per
 // (daemonBaseUrl, workspaceId), so every caller in a tab awaits the same
 // request instead of minting N of them.
@@ -47,6 +55,13 @@ const inFlight = new Map<string, Promise<SessionKeyResult>>()
 
 function cacheKey(daemonBaseUrl: string, workspaceId: string): string {
   return `${daemonBaseUrl}\u0000${workspaceId}`
+}
+
+/** True for a cached `'key'` entry whose bounded lease has passed — the one check `sessionKey` and `sessionKeyStatus` must never disagree on. */
+function lapsed(entry: SessionKeyResult): boolean {
+  return (
+    entry.kind === 'key' && entry.leaseExpiresAt !== undefined && Date.now() >= entry.leaseExpiresAt
+  )
 }
 
 // Unpadded, which `atob` accepts; the schema pins both lengths to 43/22 chars.
@@ -126,11 +141,7 @@ export async function sessionKey(
   const key = cacheKey(daemonBaseUrl, workspaceId)
   const cached = cache.get(key)
   if (cached !== undefined) {
-    if (
-      cached.kind === 'key' &&
-      cached.leaseExpiresAt !== undefined &&
-      Date.now() >= cached.leaseExpiresAt
-    ) {
+    if (lapsed(cached)) {
       // A lapsed lease's derived keys must go with it — otherwise a later
       // re-mint (once key rotation ships, with different bytes) would still
       // answer keyFor() from this memo, derived from the superseded key.
@@ -178,6 +189,32 @@ export async function sessionKey(
   )
   inFlight.set(key, promise)
   return promise
+}
+
+/**
+ * Reads this session's CACHED answer for a (daemon, workspace) pair without
+ * the key bytes and without triggering a request — for a caller that only
+ * needs to know whether a document could be read right now, and why not
+ * (ADR-0042 decision 4/5's degraded read-plane states). `undefined` means
+ * nothing has been asked yet, which reads the same as `'unreachable'` to a
+ * caller: neither one implies a request was ever made. Shares `lapsed()`
+ * with `sessionKey` so the two can never disagree about a bounded lease —
+ * a status read is otherwise side-effect-free, unlike `sessionKey`'s own
+ * lapse check, which purges the cache entry it finds lapsed.
+ */
+export function sessionKeyStatus(
+  daemonBaseUrl: string,
+  workspaceId: string,
+): SessionKeyStatus | undefined {
+  const cached = cache.get(cacheKey(daemonBaseUrl, workspaceId))
+  if (cached === undefined) return undefined
+  if (lapsed(cached)) return { kind: 'withheld', reason: 'lapsed' }
+  if (cached.kind === 'withheld') return cached
+  return {
+    kind: 'held',
+    tier: cached.tier,
+    ...(cached.leaseExpiresAt === undefined ? {} : { leaseExpiresAt: cached.leaseExpiresAt }),
+  }
 }
 
 /** Drops the held key for one (daemon, workspace) pair — used on disconnect and reconnect. */
