@@ -29,10 +29,7 @@
 
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { getLogger } from '../log.js'
 import type { Database } from '../store/db/index.js'
-
-const log = getLogger('member-profiles')
 
 const memberProfileRowSchema = z
   .object({
@@ -63,28 +60,10 @@ const memberProfileSchema = memberProfileRowSchema.extend({
 type MemberProfile = z.infer<typeof memberProfileSchema>
 type MembershipStatus = 'member' | 'not-a-member'
 
-export class CredentialClaimedError extends Error {
-  constructor(
-    readonly origin: string,
-    readonly credentialId: string,
-    readonly ownerProfileId: string,
-  ) {
-    super(`credential already belongs to another profile: ${ownerProfileId}`)
-    this.name = 'CredentialClaimedError'
-  }
-}
-
 interface EnsureProfileInput {
   origin: string
   credentialId: string
   displayName: string
-  /**
-   * Names the profile the caller expects this credential to belong to. Only
-   * meaningful when a credential is already claimed: it decides whether that
-   * claim is the expected one or a conflict — `ensureProfile` never merges
-   * two profiles (ADR-0041 decision 7).
-   */
-  profileId?: string
 }
 
 export interface MemberProfileStore {
@@ -128,7 +107,7 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
       return loadProfile(db, pin.profileId)
     },
 
-    async ensureProfile({ origin, credentialId, displayName, profileId }) {
+    async ensureProfile({ origin, credentialId, displayName }) {
       return db.transaction().execute(async (trx) => {
         const existing = await trx
           .selectFrom('profileCredentials')
@@ -137,19 +116,11 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
           .where('credentialId', '=', credentialId)
           .executeTakeFirst()
 
+        // A claimed credential names its person; the display name given here
+        // does not rename them, and nothing here ever merges two profiles —
+        // linking is an explicit operation (ADR-0041 decision 7), not a side
+        // effect of registering.
         if (existing !== undefined) {
-          if (profileId !== undefined && existing.profileId !== profileId) {
-            log.warning(
-              {
-                origin,
-                credentialId,
-                ownerProfileId: existing.profileId,
-                requestedProfileId: profileId,
-              },
-              'refused: credential already belongs to another profile',
-            )
-            throw new CredentialClaimedError(origin, credentialId, existing.profileId)
-          }
           const profile = await loadProfile(trx, existing.profileId)
           if (profile === null) {
             throw new Error(

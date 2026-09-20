@@ -2,13 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type CapturedLogsHandle, captureLogsForTests } from '../log.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
-import {
-  CredentialClaimedError,
-  createMemberProfileStore,
-  type MemberProfileStore,
-} from './member-profile-store.js'
+import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -56,21 +51,6 @@ describe('ensureProfile', () => {
     expect(second.displayName).toBe('Ada')
   })
 
-  it('re-registration: an explicit profileId that matches the existing owner succeeds (no conflict)', async () => {
-    const owner = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
-      displayName: 'Ada',
-    })
-    const reregistered = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
-      displayName: 'Ada',
-      profileId: owner.id,
-    })
-    expect(reregistered).toEqual(owner)
-  })
-
   it('treats the same credentialId under two different origins as independent claims', async () => {
     const a = await store.ensureProfile({
       origin: 'https://a.example',
@@ -83,45 +63,6 @@ describe('ensureProfile', () => {
       displayName: 'Bea',
     })
     expect(b.id).not.toBe(a.id)
-  })
-
-  it('refuses a credential already claimed by a different profile, and logs the refusal', async () => {
-    const owner = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
-      displayName: 'Ada',
-    })
-    const other = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-2',
-      displayName: 'Bea',
-    })
-
-    const cap: CapturedLogsHandle = captureLogsForTests('debug')
-    try {
-      await expect(
-        store.ensureProfile({
-          origin: 'https://a.example',
-          credentialId: 'cred-1',
-          displayName: 'Ada',
-          profileId: other.id,
-        }),
-      ).rejects.toBeInstanceOf(CredentialClaimedError)
-
-      const record = cap.records.find((r) => r.scope === 'member-profiles')
-      expect(record?.level).toBe('warning')
-      expect(record?.data).toMatchObject({
-        origin: 'https://a.example',
-        credentialId: 'cred-1',
-        ownerProfileId: owner.id,
-        requestedProfileId: other.id,
-      })
-    } finally {
-      cap.restore()
-    }
-
-    // never merged: cred-1 still belongs to `owner` alone.
-    expect(await store.profileForCredential('https://a.example', 'cred-1')).toEqual(owner)
   })
 })
 
