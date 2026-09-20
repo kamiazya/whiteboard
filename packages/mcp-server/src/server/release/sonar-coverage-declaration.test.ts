@@ -142,3 +142,34 @@ describe('sonar.coverage.exclusions is the complement of what pnpm coverage meas
     ).toEqual([])
   })
 })
+
+/**
+ * The DEFAULT BRANCH's analysis is the project's record — the ratings, the
+ * issue counts, the coverage history every other number here is compared
+ * against. Cancelling it when the next merge lands means main is never
+ * analysed at all while merges arrive faster than an analysis takes.
+ *
+ * Measured before this guard: SIX consecutive main analyses cancelled in a
+ * row, each killed by the following push. The dashboard kept answering from
+ * an analysis over an hour old and nothing said so — a cancelled run is not
+ * a failed one, so no check goes red and no notification fires. The only
+ * tell was a triage whose effect refused to show up in the numbers.
+ *
+ * A PR is the opposite case and keeps cancelling: there, only the latest
+ * push is worth analysing.
+ */
+describe('main is analysed, not cancelled by the next merge', () => {
+  it('scopes cancel-in-progress so the default branch is exempt', () => {
+    const workflow = readFileSync(join(ROOT, '.github/workflows/sonarqube.yml'), 'utf-8')
+    const cancel = workflow.match(/^\s*cancel-in-progress:\s*(.+)$/m)?.[1]?.trim()
+
+    expect(cancel, 'sonarqube.yml declares no cancel-in-progress').toBeDefined()
+    expect(
+      cancel,
+      'a bare `true` cancels the default branch’s own analysis, which is the one nothing else can replace',
+    ).not.toBe('true')
+    // The condition has to name the default branch specifically; `false`
+    // everywhere would also pass the line above while queueing every PR.
+    expect(cancel).toContain('refs/heads/main')
+  })
+})
