@@ -26,6 +26,10 @@ export * from './document.js'
 export * from './document-url.js'
 export * from './errors.js'
 export * from './fonts.js'
+// membership: the workspace member list/add/remove contract (ADR-0041),
+// exported so the Settings members card parses the daemon's membership
+// routes through the same schemas the routes themselves answer with.
+export * from './membership.js'
 export type {
   CreateGrantResponse,
   ListCredentialsResponse,

@@ -748,7 +748,11 @@ export function App({ providerState }: AppProps) {
           />
           <div className="min-h-0 flex-1">
             <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-              <SettingsPage daemon={settingsDaemon} onDisconnected={() => setForcedBrowser(true)} />
+              <SettingsPage
+                daemon={settingsDaemon}
+                onDisconnected={() => setForcedBrowser(true)}
+                workspaceId={settingsDaemon === undefined ? undefined : daemonView.workspace}
+              />
             </Suspense>
           </div>
         </div>

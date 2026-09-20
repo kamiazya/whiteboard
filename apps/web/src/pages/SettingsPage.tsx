@@ -29,6 +29,7 @@ import { PasskeysCard } from '../components/PasskeysCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { AppVersionRow } from '../components/settings/AppVersionRow.js'
 import { GestureTraceRow } from '../components/settings/GestureTraceRow.js'
+import { MembersCard } from '../components/settings/MembersCard.js'
 import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspaceSection.js'
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
 import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
@@ -63,6 +64,13 @@ export interface SettingsPageProps {
    * no-op for the rest of the session.
    */
   onDisconnected?: () => void
+  /**
+   * The workspace currently in view, so the Members card knows which
+   * workspace's membership to manage. Undefined on a cold load with a
+   * daemon merely detected (no workspace named yet) — the card is hidden
+   * rather than guessing.
+   */
+  workspaceId?: string
 }
 
 const THEME_OPTIONS: Array<{
@@ -219,9 +227,11 @@ function GeneralSection({
 function ConnectionsSection({
   daemon,
   onDisconnected,
+  workspaceId,
 }: {
   daemon?: ConnectedDaemon
   onDisconnected?: () => void
+  workspaceId?: string
 }) {
   // Keyed on the primitive fields, not `daemon` itself, so a re-render that
   // rebuilds the same `daemon` object (a new reference, same values) does not
@@ -265,6 +275,14 @@ function ConnectionsSection({
           <StorageReportCard />
         </section>
         <PromoteWorkspaceSection daemon={daemon} settingsStore={settingsStore} />
+        {/* Hidden without a known workspace id: a cold load with a daemon
+            merely detected names none yet, and the card would have nothing
+            to manage. */}
+        {workspaceId !== undefined && (
+          <section aria-label="Members">
+            <MembersCard workspaceId={workspaceId} />
+          </section>
+        )}
         {/* Management, not status: the chip reports which daemon keeps this
             workspace, and changing that is an intent you arrive here with. */}
         <section aria-label="This daemon" className="flex flex-col gap-1.5">
@@ -348,6 +366,7 @@ function sectionContent(
     daemonStorageBytes: number | null
     daemon?: ConnectedDaemon
     onDisconnected?: () => void
+    workspaceId?: string
   },
 ) {
   switch (section) {
@@ -384,7 +403,13 @@ function sectionContent(
     case 'fonts':
       return <FontsSection daemon={props.daemon} />
     case 'connections':
-      return <ConnectionsSection daemon={props.daemon} onDisconnected={props.onDisconnected} />
+      return (
+        <ConnectionsSection
+          daemon={props.daemon}
+          onDisconnected={props.onDisconnected}
+          workspaceId={props.workspaceId}
+        />
+      )
     case 'developer':
       return <GestureTraceRow />
   }
@@ -415,7 +440,7 @@ const SECTION_TITLE: Record<SettingsSection, string> = {
  * `sm`. `SettingsPage.test.tsx`'s "the active section is mounted once" block
  * holds the invariant.
  */
-export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
+export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPageProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const parsed = parseSettingsRoute(location.pathname)
@@ -574,6 +599,7 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
     daemonStorageBytes,
     daemon,
     onDisconnected,
+    workspaceId,
   }
 
   return (

@@ -245,4 +245,17 @@ not be confirmed (for example an image upload failed), the browser copy is
 kept unchanged and the result says so; moving again later is safe and
 simply re-merges.
 
+## Manage who can use a workspace
+
+Once a workspace is kept by a daemon, **Settings → Connections → Members**
+lists everyone the daemon has let in — their name, and the address of the
+passkey (or passkeys) that recognise them. It only appears once the app
+knows which workspace you are looking at.
+
+To add someone, first register their passkey under **Settings → Connections
+→ Passkeys**, then pick it from the list here and give them a name. To
+remove someone, click **Remove** on their row and confirm — this ends their
+access immediately, and anything they changed offline after that point is
+not kept.
+
 ← Back to [How-to guides](README.md)

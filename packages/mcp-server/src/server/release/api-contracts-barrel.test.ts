@@ -43,6 +43,11 @@ describe('api-contracts barrel scope', () => {
       // picker sends an id the daemon gave it. Publishing the contract is
       // what keeps a URL out of the request (ADR-0012).
       './fonts.js',
+      // membership: the workspace member list/add/remove contract
+      // (ADR-0041), exported so the Settings members card parses the
+      // daemon's membership routes through the same schemas the routes
+      // answer with.
+      './membership.js',
       './pairing.js',
       // pairing-link: the daemon-pairing-link `#wb=` fragment contract,
       // exported so apps/web parses the same schema wb_pairing_link_create
