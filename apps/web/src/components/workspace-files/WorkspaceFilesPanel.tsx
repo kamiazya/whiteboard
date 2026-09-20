@@ -46,6 +46,7 @@ import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
 import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
+import { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -173,49 +174,11 @@ export function WorkspaceFilesPanel({
     remember: rememberOpen,
     reset: resetDeviceMemory,
   } = useDeviceMemory(workspace, documents)
-  /**
-   * A write that LANDED, whose list refresh or open failed after the fact.
-   * Separate from the refusal states because the two need opposite things:
-   * a refusal invites another attempt, this one must not — pressing again
-   * would create a second document, or toggle the pin straight back off.
-   *
-   * Carries the action because the verb is the whole message: "Created" and
-   * "Pinned" tell the person a different thing about what is now true.
-   */
-  const [refreshError, setRefreshError] = useState<{
-    action: 'created' | 'pinned' | 'unpinned'
-    path: string
-  } | null>(null)
-  /**
-   * A refused pin, as the direction that was asked for and the source's own
-   * reason. Only the store knows why it said no — that a workspace is
-   * read-only, say — and a pin is the one verb on the card menu with no form
-   * of its own to report into.
-   */
-  const [pinError, setPinError] = useState<{
-    pinning: boolean
-    path: string
-    reason: string
-  } | null>(null)
-  /**
-   * A refused create, as the kind that was asked for and the reason given.
-   *
-   * The reason is the source's own words — the same treatment a refused MOVE
-   * already gets, and for the same purpose: only the store knows which path
-   * actually collided, and an address the message will not name cannot be
-   * corrected.
-   *
-   * The dialog renders `reason` too, so both are in the DOM while it is
-   * open. Only one is ANNOUNCED — Radix marks the page behind a modal
-   * `aria-hidden` (measured: DOM 2, accessible 1) — and dismissing the form
-   * clears this, so the panel's generic line never outlives the submission
-   * it describes. That is why there is no "which surface asked" flag here:
-   * it would be a second rule for an outcome the clearing already produces,
-   * and no test could tell the two apart.
-   */
-  const [createError, setCreateError] = useState<{ kind: DocumentKind; reason: string } | null>(
-    null,
-  )
+  // What the panel has to SAY about its last write — a refused create, a
+  // refused pin, or a write that landed while its list re-read did not.
+  // Each one's reasoning lives with it in use-write-outcome.ts; `beginWrite`
+  // is the rule the three share, and the reason they are one hook.
+  const outcome = useWriteOutcome()
   // The `disabled` attribute is the whole double-press mechanism: React
   // flushes this state before a second click can dispatch, while a
   // handler-side early return would read a stale closure in exactly the
@@ -432,10 +395,9 @@ export function WorkspaceFilesPanel({
     // after its debounce — until then these rows name documents that are not
     // here.
     resetSearchResults()
-    // Both name a path, and their message is about a write that happened
-    // somewhere else.
-    setRefreshError(null)
-    setPinError(null)
+    // Every one of them names a path, and their message is about a write
+    // that happened somewhere else.
+    outcome.beginWrite()
     // The vocabulary is the departed keeper's until the new one answers.
     setTagsInUse(null)
     // Guarded by the source's IDENTITY, not by a first-run flag: an
@@ -547,9 +509,7 @@ export function WorkspaceFilesPanel({
       // Every action here clears ALL of the panel's transient reports, not
       // just its own: an alert that outlives the action it describes is
       // attached to nothing the person can still see.
-      setCreateError(null)
-      setPinError(null)
-      setRefreshError(null)
+      outcome.beginWrite()
       setCreating(true)
       try {
         // No options means nobody expressed an opinion, so the address is
@@ -564,7 +524,7 @@ export function WorkspaceFilesPanel({
         try {
           await source.createDocument(path, kind, options?.name)
         } catch (err) {
-          setCreateError({
+          outcome.reportCreateRefusal({
             kind,
             reason:
               err instanceof Error ? err.message : `Could not create a ${kind} document here.`,
@@ -591,7 +551,7 @@ export function WorkspaceFilesPanel({
           // Swallowed as a REJECTION, reported as its own message. The
           // document exists; letting this propagate would hold the dialog
           // open on a form whose only offer is to make it again.
-          setRefreshError({ action: 'created', path })
+          outcome.reportStaleList({ action: 'created', path })
         }
       } finally {
         setCreating(false)
@@ -643,9 +603,7 @@ export function WorkspaceFilesPanel({
     async (entry: WorkspaceDocumentEntry) => {
       if (source.setPinned === undefined) return
       const pinning = entry.pinOrder === undefined
-      setPinError(null)
-      setCreateError(null)
-      setRefreshError(null)
+      outcome.beginWrite()
       // ONLY this write decides whether the pin was refused. What follows is
       // bookkeeping on an order that has already changed, and reporting a
       // failed refresh as "could not pin" invites a second press that would
@@ -653,7 +611,7 @@ export function WorkspaceFilesPanel({
       try {
         await source.setPinned(entry, pinning)
       } catch (err) {
-        setPinError({
+        outcome.reportPinRefusal({
           pinning,
           path: entry.path,
           reason: err instanceof Error ? err.message : 'The store gave no reason.',
@@ -666,7 +624,7 @@ export function WorkspaceFilesPanel({
       try {
         await refreshAndSelect(entry.path)
       } catch {
-        setRefreshError({ action: pinning ? 'pinned' : 'unpinned', path: entry.path })
+        outcome.reportStaleList({ action: pinning ? 'pinned' : 'unpinned', path: entry.path })
       }
     },
     [source, readList],
@@ -1040,9 +998,9 @@ export function WorkspaceFilesPanel({
           disabled={creating}
           workspace={workspace}
           defaultPath={derivedNewPath}
-          createError={createError?.reason ?? null}
+          createError={outcome.createRefusal?.reason ?? null}
           onCreate={createHere}
-          onDismiss={() => setCreateError(null)}
+          onDismiss={outcome.dismissCreateRefusal}
         />
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>
@@ -1077,22 +1035,23 @@ export function WorkspaceFilesPanel({
         </fieldset>
       </div>
 
-      {createError !== null && (
+      {outcome.createRefusal !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {createError.kind} document here.
+          Could not create a {outcome.createRefusal.kind} document here.
         </p>
       )}
 
-      {pinError !== null && (
+      {outcome.pinRefusal !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Could not {pinError.pinning ? 'pin' : 'unpin'} “{pinError.path}”. {pinError.reason}
+          Could not {outcome.pinRefusal.pinning ? 'pin' : 'unpin'} “{outcome.pinRefusal.path}”.{' '}
+          {outcome.pinRefusal.reason}
         </p>
       )}
 
-      {refreshError !== null && (
+      {outcome.staleList !== null && (
         <p role="alert" className="text-destructive text-sm">
-          {REFRESH_FAILURE_VERB[refreshError.action]} “{refreshError.path}”, but this list could not
-          be refreshed. Reload to see it.
+          {REFRESH_FAILURE_VERB[outcome.staleList.action]} “{outcome.staleList.path}”, but this list
+          could not be refreshed. Reload to see it.
         </p>
       )}
 
