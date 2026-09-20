@@ -194,9 +194,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // `scene-extent.ts` is the two-line extent the two overlays were each
     // computing with the same `Math.max(0, ...)` pair, pinned by every
     // bubble-placement example that reads a bubble's size.
+    // 82 and 16 since `min-heap.ts` came out of `grid-route.ts` (the A*
+    // priority queue, forty lines of index arithmetic that could not be
+    // tested where it sat). It is IN the lane rather than merely counted:
+    // its two properties are stated from what a min-heap means, not from
+    // the sift, and both were mutation-checked by hand when written —
+    // inverting the sift-up comparison fails three cases, re-rooting with
+    // the wrong value fails one.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 15,
-      production: 81,
+      mutated: 16,
+      production: 82,
     })
   })
 

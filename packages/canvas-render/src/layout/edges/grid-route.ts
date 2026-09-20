@@ -1,4 +1,5 @@
 import type { Point, Rect } from './edge-rules.js'
+import { MinHeap } from './min-heap.js'
 
 /**
  * A rectilinear shortest path around rectangles, used ONLY as a fallback
@@ -56,12 +57,18 @@ const enteredHorizontally = (axis: Axis) => axis === 0
  * too large to search). The returned path always begins at `start` and ends
  * at `end`, with collinear intermediate points removed.
  */
-export function routeOnGrid(
+/** The Hanan grid for this pair of endpoints, or undefined when it would be
+ *  larger than `MAX_GRID_CELLS`. `near` is every obstacle a path inside the
+ *  search window could touch, so a search over this grid is exact there.
+ *  (No sentence here ends on the word `window` followed by a full stop:
+ *  import-guard.test.ts scans this file's raw TEXT for `/\bwindow\./`, and
+ *  prose satisfies that pattern as readily as a DOM access does.) */
+function buildGrid(
   start: Point,
   end: Point,
   obstacles: readonly Rect[],
   clearance: number,
-): Point[] | undefined {
+): { xs: number[]; ys: number[]; near: readonly Rect[] } | undefined {
   // The search is confined to a window around the two endpoints: only
   // obstacles that reach into it are considered, and only their grid
   // coordinates inside it. Every obstacle a path inside the window could
@@ -100,8 +107,95 @@ export function routeOnGrid(
     addY(r.y + r.h + clearance)
   }
   if (xSet.size * ySet.size > MAX_GRID_CELLS) return undefined
-  const xs = [...xSet].sort((a, b) => a - b)
-  const ys = [...ySet].sort((a, b) => a - b)
+  return {
+    xs: [...xSet].sort((a, b) => a - b),
+    ys: [...ySet].sort((a, b) => a - b),
+    near,
+  }
+}
+
+/**
+ * Obstacles bucketed by the grid line a step travels along.
+ *
+ * Every step is axis-aligned, so a horizontal one at `ys[j]` can only be
+ * BLOCKED by a rect whose interior strictly spans that y — touching a border
+ * is allowed, since obstacles are already offset outward by the caller's
+ * clearance and a route riding that offset line is at the intended distance —
+ * and can only TRACE the border of one whose top or bottom IS that y.
+ * Bucketing costs lines * obstacles once; scanning every obstacle per
+ * neighbour cost pops * 4 * obstacles, and a search that finds nothing still
+ * expands every reachable cell — which two thirds of them do.
+ */
+function bucketByLine(
+  values: readonly number[],
+  near: readonly Rect[],
+  lo: (r: Rect) => number,
+  size: (r: Rect) => number,
+): { blockers: (readonly Rect[])[]; borders: (readonly Rect[])[] } {
+  return {
+    blockers: values.map((v) => near.filter((r) => v > lo(r) && v < lo(r) + size(r))),
+    borders: values.map((v) => near.filter((r) => v === lo(r) || v === lo(r) + size(r))),
+  }
+}
+
+/**
+ * The grid cells `cameFrom` chains back from `goal`, as points, with repeats
+ * and collinear runs collapsed. Undefined when fewer than two points survive.
+ *
+ * Both start states seed the search, so the walk back can end on either —
+ * which is why the same cell can appear twice and the first loop dedupes.
+ */
+function reconstructPath(
+  goal: number,
+  cameFrom: Int32Array,
+  xs: readonly number[],
+  ys: readonly number[],
+  width: number,
+): Point[] | undefined {
+  const reversed: Point[] = []
+  for (let state = goal; state >= 0; state = cameFrom[state] as number) {
+    const axis = state % 2
+    const cell = (state - axis) / 2
+    const i = cell % width
+    const j = (cell - i) / width
+    const point = { x: xs[i] as number, y: ys[j] as number }
+    const last = reversed[reversed.length - 1]
+    if (last === undefined || last.x !== point.x || last.y !== point.y) reversed.push(point)
+  }
+  reversed.reverse()
+
+  const path: Point[] = []
+  for (const point of reversed) {
+    const a = path[path.length - 2]
+    const b = path[path.length - 1]
+    if (
+      a !== undefined &&
+      b !== undefined &&
+      ((a.x === b.x && b.x === point.x) || (a.y === b.y && b.y === point.y))
+    ) {
+      path[path.length - 1] = point
+      continue
+    }
+    path.push(point)
+  }
+  return path.length >= 2 ? path : undefined
+}
+
+/**
+ * The cheapest rectilinear path from `start` to `end` whose interior avoids
+ * every rect in `obstacles`, or undefined when there is none (or the grid is
+ * too large to search). The returned path always begins at `start` and ends
+ * at `end`, with collinear intermediate points removed.
+ */
+export function routeOnGrid(
+  start: Point,
+  end: Point,
+  obstacles: readonly Rect[],
+  clearance: number,
+): Point[] | undefined {
+  const grid = buildGrid(start, end, obstacles, clearance)
+  if (grid === undefined) return undefined
+  const { xs, ys, near } = grid
 
   const si = xs.indexOf(start.x)
   const sj = ys.indexOf(start.y)
@@ -133,54 +227,11 @@ export function routeOnGrid(
   const stateCount = width * ys.length * 2
   const best = new Float64Array(stateCount).fill(Number.POSITIVE_INFINITY)
   const cameFrom = new Int32Array(stateCount).fill(-1)
-  // A small binary heap: the grid is bounded but still large enough that a
-  // linear scan per pop dominates the search.
-  const heap: { cost: number; state: number }[] = []
-  const push = (cost: number, state: number) => {
-    heap.push({ cost, state })
-    let child = heap.length - 1
-    while (child > 0) {
-      const parent = (child - 1) >> 1
-      if ((heap[parent] as { cost: number }).cost <= (heap[child] as { cost: number }).cost) break
-      const swap = heap[parent] as { cost: number; state: number }
-      heap[parent] = heap[child] as { cost: number; state: number }
-      heap[child] = swap
-      child = parent
-    }
-  }
-  const pop = () => {
-    const top = heap[0] as { cost: number; state: number }
-    const last = heap.pop() as { cost: number; state: number }
-    if (heap.length > 0) {
-      heap[0] = last
-      let parent = 0
-      for (;;) {
-        const left = parent * 2 + 1
-        const right = left + 1
-        let smallest = parent
-        if (
-          left < heap.length &&
-          (heap[left] as { cost: number }).cost < (heap[smallest] as { cost: number }).cost
-        )
-          smallest = left
-        if (
-          right < heap.length &&
-          (heap[right] as { cost: number }).cost < (heap[smallest] as { cost: number }).cost
-        )
-          smallest = right
-        if (smallest === parent) break
-        const swap = heap[parent] as { cost: number; state: number }
-        heap[parent] = heap[smallest] as { cost: number; state: number }
-        heap[smallest] = swap
-        parent = smallest
-      }
-    }
-    return top
-  }
+  const heap = new MinHeap()
 
   for (const axis of [0, 1] as const) {
     best[stateOf(si, sj, axis)] = 0
-    push(heuristic(si, sj), stateOf(si, sj, axis))
+    heap.push(heuristic(si, sj), stateOf(si, sj, axis))
   }
 
   const steps: readonly (readonly [number, number, Axis])[] = [
@@ -190,37 +241,22 @@ export function routeOnGrid(
     [0, -1, 1],
   ]
 
-  // Obstacles bucketed by the grid line a step travels along. Every step is
-  // axis-aligned, so a horizontal one at `ys[j]` can only be BLOCKED by a
-  // rect whose interior strictly spans that y — touching a border is
-  // allowed, since obstacles are already offset outward by the caller's
-  // clearance and a route riding that offset line is at the intended
-  // distance — and can only TRACE the border of one whose top or bottom IS
-  // that y. Bucketing costs lines * obstacles once; scanning every obstacle
-  // per neighbour cost pops * 4 * obstacles, and a search that finds nothing
-  // still expands every reachable cell — which two thirds of them do.
-  const bucket = (
-    values: readonly number[],
-    lo: (r: Rect) => number,
-    size: (r: Rect) => number,
-  ) => ({
-    blockers: values.map((v) => near.filter((r) => v > lo(r) && v < lo(r) + size(r))),
-    borders: values.map((v) => near.filter((r) => v === lo(r) || v === lo(r) + size(r))),
-  })
-  const rows = bucket(
+  const rows = bucketByLine(
     ys,
+    near,
     (r) => r.y,
     (r) => r.h,
   )
-  const cols = bucket(
+  const cols = bucketByLine(
     xs,
+    near,
     (r) => r.x,
     (r) => r.w,
   )
 
   let goal: number | undefined
-  while (heap.length > 0) {
-    const { cost, state } = pop()
+  while (heap.size > 0) {
+    const { cost, value: state } = heap.pop() as { cost: number; value: number }
     const axis = (state % 2) as Axis
     const cell = (state - axis) / 2
     const i = cell % width
@@ -274,38 +310,9 @@ export function routeOnGrid(
       if (next >= (best[nextState] as number)) continue
       best[nextState] = next
       cameFrom[nextState] = state
-      push(next + heuristic(ni, nj), nextState)
+      heap.push(next + heuristic(ni, nj), nextState)
     }
   }
   if (goal === undefined) return undefined
-
-  const reversed: Point[] = []
-  for (let state = goal; state >= 0; state = cameFrom[state] as number) {
-    const axis = state % 2
-    const cell = (state - axis) / 2
-    const i = cell % width
-    const j = (cell - i) / width
-    const point = { x: xs[i] as number, y: ys[j] as number }
-    const last = reversed[reversed.length - 1]
-    if (last === undefined || last.x !== point.x || last.y !== point.y) reversed.push(point)
-  }
-  reversed.reverse()
-
-  // Both start states seed the search, so the walk back can end on either;
-  // collinear runs collapse to their endpoints.
-  const path: Point[] = []
-  for (const point of reversed) {
-    const a = path[path.length - 2]
-    const b = path[path.length - 1]
-    if (
-      a !== undefined &&
-      b !== undefined &&
-      ((a.x === b.x && b.x === point.x) || (a.y === b.y && b.y === point.y))
-    ) {
-      path[path.length - 1] = point
-      continue
-    }
-    path.push(point)
-  }
-  return path.length >= 2 ? path : undefined
+  return reconstructPath(goal, cameFrom, xs, ys, width)
 }
