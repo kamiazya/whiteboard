@@ -67,46 +67,56 @@ export function MembersCard({ workspaceId }: { workspaceId: string }) {
   const selectId = useId()
   const nameId = useId()
 
-  const load = useCallback(async () => {
-    const generation = ++generationRef.current
-    setState({ kind: 'loading' })
-    try {
-      const membersRes = await fetchApi(membersUrl(workspaceId))
-      if (generation !== generationRef.current) return
-      if (!membersRes.ok) {
-        setState({ kind: 'error' })
-        return
-      }
-      const membersParsed = listMembersResponseSchema.safeParse(await membersRes.json())
-      if (generation !== generationRef.current) return
-      if (!membersParsed.success) {
-        setState({ kind: 'error' })
-        return
-      }
+  const load = useCallback(
+    async (options?: { generation?: number }) => {
+      // A refresh after a successful mutation (handleAddSubmit's post-add
+      // reload) reuses the caller's own generation instead of minting a new
+      // one: minting one here would read as a daemon-identity change and
+      // silently invalidate an unrelated in-flight request — e.g. a member
+      // removal confirmed while an add was still in flight, whose success
+      // would then fail the generation check for a removal the server had
+      // genuinely completed.
+      const generation = options?.generation ?? ++generationRef.current
+      setState({ kind: 'loading' })
+      try {
+        const membersRes = await fetchApi(membersUrl(workspaceId))
+        if (generation !== generationRef.current) return
+        if (!membersRes.ok) {
+          setState({ kind: 'error' })
+          return
+        }
+        const membersParsed = listMembersResponseSchema.safeParse(await membersRes.json())
+        if (generation !== generationRef.current) return
+        if (!membersParsed.success) {
+          setState({ kind: 'error' })
+          return
+        }
 
-      const pinsRes = await fetchApi('/api/pairing/credentials')
-      if (generation !== generationRef.current) return
-      if (!pinsRes.ok) {
-        setState({ kind: 'error' })
-        return
-      }
-      const pinsParsed = listCredentialsResponseSchema.safeParse(await pinsRes.json())
-      if (generation !== generationRef.current) return
-      if (!pinsParsed.success) {
-        setState({ kind: 'error' })
-        return
-      }
+        const pinsRes = await fetchApi('/api/pairing/credentials')
+        if (generation !== generationRef.current) return
+        if (!pinsRes.ok) {
+          setState({ kind: 'error' })
+          return
+        }
+        const pinsParsed = listCredentialsResponseSchema.safeParse(await pinsRes.json())
+        if (generation !== generationRef.current) return
+        if (!pinsParsed.success) {
+          setState({ kind: 'error' })
+          return
+        }
 
-      setState({
-        kind: 'loaded',
-        members: membersParsed.data.members,
-        pins: pinsParsed.data.credentials,
-      })
-    } catch {
-      if (generation !== generationRef.current) return
-      setState({ kind: 'error' })
-    }
-  }, [fetchApi, workspaceId])
+        setState({
+          kind: 'loaded',
+          members: membersParsed.data.members,
+          pins: pinsParsed.data.credentials,
+        })
+      } catch {
+        if (generation !== generationRef.current) return
+        setState({ kind: 'error' })
+      }
+    },
+    [fetchApi, workspaceId],
+  )
 
   useEffect(() => {
     void load()
@@ -150,7 +160,7 @@ export function MembersCard({ workspaceId }: { workspaceId: string }) {
       }
       form.reset()
       setStatus(`${parsed.data.displayName} was added.`)
-      await load()
+      await load({ generation })
     } catch {
       if (generation !== generationRef.current) return
       setAddError('Request failed.')

@@ -372,6 +372,75 @@ describe('MembersCard', () => {
     expect(screen.getByText('Bob')).toBeTruthy()
   })
 
+  it('confirms a removal whose success arrives after a concurrent add has reloaded the list', async () => {
+    const ada = {
+      profileId: 'profile-ada',
+      displayName: 'Ada',
+      credentials: [{ credentialId: 'c1', origin: 'https://a.example' }],
+      createdAt: '2026-09-01T00:00:00.000Z',
+    }
+    const bob = {
+      profileId: 'profile-bob',
+      displayName: 'Bob',
+      credentials: [{ credentialId: PIN_A.credentialId, origin: PIN_A.origin }],
+      createdAt: '2026-09-17T00:00:00.000Z',
+    }
+    let members: unknown[] = [ada]
+    let resolveAddPost: (() => void) | undefined
+    let resolveDelete: (() => void) | undefined
+
+    renderCard(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'GET' && url === MEMBERS_URL) return jsonResponse({ members })
+      if (method === 'GET' && url === CREDENTIALS_URL) return jsonResponse({ credentials: [PIN_A] })
+      if (method === 'POST' && url === MEMBERS_URL) {
+        return new Promise<Response>((resolve) => {
+          resolveAddPost = () => {
+            members = [...members, bob]
+            resolve(jsonResponse(bob, 201))
+          }
+        })
+      }
+      if (method === 'DELETE' && url === `${MEMBERS_URL}/${encodeURIComponent(ada.profileId)}`) {
+        return new Promise<Response>((resolve) => {
+          resolveDelete = () => {
+            members = members.filter(
+              (m) => (m as { profileId: string }).profileId !== ada.profileId,
+            )
+            resolve(jsonResponse({ removed: true, sessionsEnded: 1 }))
+          }
+        })
+      }
+      return jsonResponse({}, 404)
+    })
+
+    await screen.findByText('Ada')
+
+    // Start an add: its POST is held in flight.
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Bob' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(resolveAddPost).toBeDefined())
+
+    // While the add is still in flight, confirm removing Ada: its DELETE is
+    // also held in flight.
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Ada from this workspace' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(resolveDelete).toBeDefined())
+
+    // The add resolves first, and its post-success reload lands before the
+    // removal's response does.
+    resolveAddPost?.()
+    await screen.findByText('Bob')
+
+    // The removal's response arrives afterwards and genuinely succeeded.
+    resolveDelete?.()
+
+    await waitFor(() => expect(screen.queryByText('Ada')).toBeNull())
+    expect(screen.getByText('Bob')).toBeTruthy()
+    expect(screen.getByTestId('members-status').textContent).toMatch(/Ada was removed/)
+  })
+
   it('offers no form when the browser has no pinned passkeys, and points at Connections › Passkeys', async () => {
     renderCard(async (url, init) => {
       const method = init?.method ?? 'GET'
