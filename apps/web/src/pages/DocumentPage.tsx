@@ -399,113 +399,140 @@ function DocumentPageBody({
   // editing is what the extra space is for.
   const { isFullscreen } = useFullscreen()
 
-  return (
-    <DocumentPageShell
-      srTitle={model.srTitle}
-      aside={
-        inspector === 'history' && versions.enabled ? (
-          <VersionPanel
-            workspaceId={versions.workspaceId}
-            path={versions.path}
-            onRestored={sync.clearLocalUndo}
-            onPreview={setPreview}
-            refreshSignal={versionRefreshSignal}
-            onClose={() => setInspector(null)}
-            headerActions={
-              <BookmarkAction
-                saving={savingVersion}
-                outcome={saveVersionOutcome}
-                armed={bookmarkArmed}
-                onSave={(label) => void saveVersionFromPanel(label)}
-              />
-            }
-          />
-        ) : inspector === 'comments' ? (
-          /* The annotation layer's document-level surface (ADR-0026
-             decision 5) sits BESIDE the editor rather than inside it,
-             because one panel serves both document kinds and a markdown
-             document has no canvas chrome to host one. Its opener lives in
-             the document actions row, in flow.
+  /**
+   * The slot's switchboard, keyed by the union rather than by a chain of
+   * `inspector === K &&` ternaries.
+   *
+   * Same shape `INSPECTOR_ORDER` and `INSPECTOR_LABELS` already use, one step
+   * further: the union drove the header's order and its labels, and the
+   * RENDER was the last place a panel was still named by hand — so a seventh
+   * `InspectorKind` compiled, took a place in the header, and showed nothing
+   * when pressed. It no longer compiles.
+   *
+   * A thunk rather than a node, so only the selected panel's JSX is built —
+   * and so each arm keeps closing over exactly what it reads today instead of
+   * being threaded through a component with fourteen props.
+   *
+   * `undefined` from an arm means "selected, but this document has nothing to
+   * show there", which is what the guards in the chain meant: the slot then
+   * stays empty rather than falling through to another panel.
+   */
+  const inspectorPanels: Record<InspectorKind, () => ReactNode> = {
+    history: () =>
+      versions.enabled ? (
+        <VersionPanel
+          workspaceId={versions.workspaceId}
+          path={versions.path}
+          onRestored={sync.clearLocalUndo}
+          onPreview={setPreview}
+          refreshSignal={versionRefreshSignal}
+          onClose={() => setInspector(null)}
+          headerActions={
+            <BookmarkAction
+              saving={savingVersion}
+              outcome={saveVersionOutcome}
+              armed={bookmarkArmed}
+              onSave={(label) => void saveVersionFromPanel(label)}
+            />
+          }
+        />
+      ) : undefined,
+    comments: () => (
+      /* The annotation layer's document-level surface (ADR-0026
+         decision 5) sits BESIDE the editor rather than inside it,
+         because one panel serves both document kinds and a markdown
+         document has no canvas chrome to host one. Its opener lives in
+         the document actions row, in flow.
 
-             Not writable while a past state is on screen: the editor is
-             replaced by DocumentPreview but this rail is not, and its
-             writes go to the LIVE document. */
-          <CommentsRailAside
-            rail={commentsRail}
-            threads={threads.annotations}
-            writable={preview === null}
+         Not writable while a past state is on screen: the editor is
+         replaced by DocumentPreview but this rail is not, and its
+         writes go to the LIVE document. */
+      <CommentsRailAside
+        rail={commentsRail}
+        threads={threads.annotations}
+        writable={preview === null}
+      />
+    ),
+    proposals: () => (
+      <InspectorPanel kind="proposals" onClose={() => setInspector(null)}>
+        <ProposalsPanel
+          proposals={threads.proposals}
+          // Two ways to have no viewport to move, and the panel wants
+          // the same answer for both. A markdown body draws its
+          // passages where they are already; and while a past state is
+          // on screen the live editor is UNMOUNTED (`preview ?
+          // DocumentPreview : DocumentEditorSurface` below), so the
+          // handle is null and a row would be a button that does
+          // nothing. The index still counts either way — it just has
+          // nowhere to send you, which the panel draws as a row that is
+          // not a button rather than a dead one.
+          {...(documentKind === 'spatial' && preview === null
+            ? { onOpen: (id: string) => spatialHandle.current?.openProposal(id) }
+            : {})}
+        />
+      </InspectorPanel>
+    ),
+    connections: () =>
+      model.connections !== undefined && model.connections.backlinks !== null ? (
+        <InspectorPanel kind="connections" onClose={() => setInspector(null)}>
+          <ConnectionsPanel
+            backlinks={model.connections.backlinks}
+            {...(model.connections.mentions === undefined
+              ? {}
+              : { mentions: model.connections.mentions })}
+            // Following a row leaves for the source document, which is
+            // the panel's job done — so the slot is released with it.
+            onOpen={(entry) => {
+              setInspector(null)
+              model.connections?.onOpen(entry)
+            }}
+            {...(model.connections.onLinkify === undefined
+              ? {}
+              : { onLinkify: model.connections.onLinkify })}
           />
-        ) : inspector === 'proposals' ? (
-          <InspectorPanel kind="proposals" onClose={() => setInspector(null)}>
-            <ProposalsPanel
-              proposals={threads.proposals}
-              // Two ways to have no viewport to move, and the panel wants
-              // the same answer for both. A markdown body draws its
-              // passages where they are already; and while a past state is
-              // on screen the live editor is UNMOUNTED (`preview ?
-              // DocumentPreview : DocumentEditorSurface` below), so the
-              // handle is null and a row would be a button that does
-              // nothing. The index still counts either way — it just has
-              // nowhere to send you, which the panel draws as a row that is
-              // not a button rather than a dead one.
-              {...(documentKind === 'spatial' && preview === null
-                ? { onOpen: (id: string) => spatialHandle.current?.openProposal(id) }
-                : {})}
-            />
-          </InspectorPanel>
-        ) : inspector === 'connections' &&
-          model.connections !== undefined &&
-          model.connections.backlinks !== null ? (
-          <InspectorPanel kind="connections" onClose={() => setInspector(null)}>
-            <ConnectionsPanel
-              backlinks={model.connections.backlinks}
-              {...(model.connections.mentions === undefined
-                ? {}
-                : { mentions: model.connections.mentions })}
-              // Following a row leaves for the source document, which is
-              // the panel's job done — so the slot is released with it.
-              onOpen={(entry) => {
-                setInspector(null)
-                model.connections?.onOpen(entry)
-              }}
-              {...(model.connections.onLinkify === undefined
-                ? {}
-                : { onLinkify: model.connections.onLinkify })}
-            />
-          </InspectorPanel>
-        ) : inspector === 'properties' && model.properties.facets !== undefined ? (
-          <InspectorPanel kind="properties" onClose={() => setInspector(null)}>
-            <DocumentFacetsEditor
-              facets={model.properties.facets}
-              {...(model.properties.onFacetsChange === undefined
-                ? {}
-                : { onChange: model.properties.onFacetsChange })}
+        </InspectorPanel>
+      ) : undefined,
+    properties: () =>
+      model.properties.facets !== undefined ? (
+        <InspectorPanel kind="properties" onClose={() => setInspector(null)}>
+          <DocumentFacetsEditor
+            facets={model.properties.facets}
+            {...(model.properties.onFacetsChange === undefined
+              ? {}
+              : { onChange: model.properties.onFacetsChange })}
+            {...(model.tags === undefined
+              ? {}
+              : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
+          />
+        </InspectorPanel>
+      ) : undefined,
+    display: () =>
+      documentKind === 'spatial' ? (
+        /* Canvas-wide display settings, in the slot the other panels
+         share. They were a popover off the ⋯ kebab until this, which
+         on a phone had no way out at all: Radix dismisses a popover on
+         an outside click or Escape, and at 424px of panel against a
+         390px screen there was neither a keyboard nor much outside.
+         Here the sheet brings its own close, and opening any other
+         panel takes the slot back. */
+        <InspectorPanel kind="display" onClose={() => setInspector(null)}>
+          <div className="p-3">
+            <CanvasDisplaySettings
+              canvas={sync.canvas}
+              onChange={sync.onChange}
               {...(model.tags === undefined
                 ? {}
                 : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
             />
-          </InspectorPanel>
-        ) : inspector === 'display' && documentKind === 'spatial' ? (
-          /* Canvas-wide display settings, in the slot the other panels
-             share. They were a popover off the ⋯ kebab until this, which
-             on a phone had no way out at all: Radix dismisses a popover on
-             an outside click or Escape, and at 424px of panel against a
-             390px screen there was neither a keyboard nor much outside.
-             Here the sheet brings its own close, and opening any other
-             panel takes the slot back. */
-          <InspectorPanel kind="display" onClose={() => setInspector(null)}>
-            <div className="p-3">
-              <CanvasDisplaySettings
-                canvas={sync.canvas}
-                onChange={sync.onChange}
-                {...(model.tags === undefined
-                  ? {}
-                  : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
-              />
-            </div>
-          </InspectorPanel>
-        ) : undefined
-      }
+          </div>
+        </InspectorPanel>
+      ) : undefined,
+  }
+
+  return (
+    <DocumentPageShell
+      srTitle={model.srTitle}
+      aside={inspector === null ? undefined : inspectorPanels[inspector]()}
       header={
         <>
           {topBar !== null && !isFullscreen && (
