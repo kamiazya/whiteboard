@@ -15,7 +15,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
-import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
+import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { WsTicketStore } from '../security/ws-ticket-store.js'
 
 const mintWsTicketResponseSchema = z.object({
@@ -29,23 +29,28 @@ export interface WsTicketRouterOptions {
   // Absent when the operator has not configured the hosted-origin OAuth
   // surface at all (empty-by-default oauthClientRegistry) — in which case no
   // presented bearer can ever be a valid grant, so every request 401s.
-  grantStore?: OAuthTransactionStore
+  /**
+   * Who may mint a ticket. Only an OAuth grant can — a ticket exists to
+   * bridge one onto the websocket — so this is judged by the grant's KIND,
+   * and the daemon token is refused here exactly as it was when this route
+   * called `verifyAccessToken` directly.
+   */
+  credentialResolver: CredentialResolver
   ticketStore: WsTicketStore
 }
 
 export function createWsTicketRouter(options: WsTicketRouterOptions) {
   const app = new Hono()
 
-  app.post('/api/ws-ticket', (c) => {
-    const presented = parseBearerAuthorizationHeader(c.req.header('authorization'))
-    if (presented === null || options.grantStore === undefined) {
+  app.post('/api/ws-ticket', async (c) => {
+    const grant = await options.credentialResolver.resolve({
+      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
+      carrier: 'bearer',
+    })
+    if (grant?.kind !== 'oauth-grant' || grant.subject === undefined) {
       return c.json({ error: 'unauthorized' }, 401)
     }
-    const grant = options.grantStore.verifyAccessToken(presented)
-    if (grant === null) {
-      return c.json({ error: 'unauthorized' }, 401)
-    }
-    const { ticket, expiresIn } = options.ticketStore.mintTicket(grant.scopes, grant.clientId)
+    const { ticket, expiresIn } = options.ticketStore.mintTicket(grant.scopes, grant.subject)
     return c.json(
       mintWsTicketResponseSchema.parse({ ticket, expiresIn } satisfies MintWsTicketResponse),
     )

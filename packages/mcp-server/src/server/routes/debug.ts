@@ -1,6 +1,7 @@
 import { countAliveNodes, countLegacyTombstones } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { isAuthorized } from '../security/bearer-token.js'
+import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
+import type { CredentialResolver } from '../security/credential-resolver.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { listDocuments, listWorkspaces, loadDocument } from '../store/document-store.js'
 
@@ -32,11 +33,21 @@ async function summarizeCanvas(workspaceId: string, path: string): Promise<Docum
 }
 
 export interface CreateDebugRouterOptions {
-  token?: string
+  /**
+   * Daemon-token-only, resolved through the one resolver so there is no
+   * second place a secret is compared.
+   *
+   * REQUIRED. It was optional for one iteration and every test that built the
+   * router without one went from open to 401 — an absent resolver silently
+   * CLOSING a route is the mirror image of the defect this work removes, and
+   * just as quiet. An open daemon is `createCredentialResolver({})`, said out
+   * loud.
+   */
+  credentialResolver: CredentialResolver
   enabled?: boolean
 }
 
-export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
+export function createDebugRouter(options: CreateDebugRouterOptions) {
   const app = new Hono()
   const enabled = options.enabled ?? process.env.WHITEBOARD_DEBUG === '1'
 
@@ -52,7 +63,13 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
   }
 
   app.use('/api/debug', async (c, next) => {
-    if (!isAuthorized(c.req.header('authorization'), options.token)) {
+    const grant = await options.credentialResolver.resolve({
+      secret: parseBearerAuthorizationHeader(c.req.header('authorization')),
+      carrier: 'bearer',
+    })
+    // Judged by KIND, not scopes: a debug dump of live documents is not
+    // something a narrow credential gets, however wide its scope set.
+    if (grant?.kind !== 'daemon-token' && grant?.kind !== 'anonymous') {
       return c.json({ error: 'unauthorized' }, 401)
     }
     return next()

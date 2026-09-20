@@ -253,3 +253,46 @@ describe('createCredentialResolver — how the daemon token is compared', () => 
     }
   })
 })
+
+describe('createCredentialResolver — an open daemon still identifies a real credential', () => {
+  // `anonymous` is a property of the DAEMON (no token configured), not a
+  // verdict on the secret. Answering it before trying the specific branches
+  // made every presented credential unidentifiable, and `/api/ws-ticket` —
+  // which must know WHICH OAuth grant is asking in order to bind a ticket to
+  // its scopes and client — answered 401 on the configuration its own
+  // end-to-end test uses.
+  it('resolves a real OAuth token to its grant, not to anonymous', async () => {
+    const resolver = createCredentialResolver({
+      grantStore: {
+        verifyAccessToken: (token) =>
+          token === 'access-token'
+            ? { grantId: 'g1', clientId: 'client-a', scopes: ['canvas:read'] }
+            : null,
+      },
+    })
+
+    expect(await resolver.resolve(bearer('access-token'))).toEqual({
+      kind: 'oauth-grant',
+      scopes: ['canvas:read'],
+      subject: 'client-a',
+    })
+  })
+
+  it('falls back to anonymous for a secret nothing identifies, and for none at all', async () => {
+    const resolver = createCredentialResolver({
+      grantStore: { verifyAccessToken: () => null },
+    })
+
+    expect((await resolver.resolve(bearer('unknown')))?.kind).toBe('anonymous')
+    expect((await resolver.resolve(bearer(null)))?.kind).toBe('anonymous')
+  })
+
+  // The guard that makes the fallback safe: `isAuthorized` answers true for
+  // ANY secret when no token is configured, so the daemon-token branch has to
+  // be skipped entirely rather than relied on to say no.
+  it('never reports a bearer as the daemon token when none is configured', async () => {
+    const resolver = createCredentialResolver({})
+
+    expect((await resolver.resolve(bearer('anything at all')))?.kind).toBe('anonymous')
+  })
+})

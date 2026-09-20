@@ -110,54 +110,70 @@ export function createCredentialResolver(config: CredentialResolverConfig): Cred
         return { kind: 'ws-ticket', scopes: redeemed.scopes, subject: redeemed.clientId }
       }
 
-      // An open daemon is open whatever was presented, including nothing.
-      // This is `isAuthorized`'s own "no token configured → true", said once.
-      if (!config.daemonToken) {
+      if (secret !== null) {
+        // Order is a cost decision: the credential that authorizes everything
+        // comes first so it never pays for the verification of the ones that
+        // do not, and the macaroon is last because its check is the only one
+        // that computes an HMAC chain.
+        //
+        // Guarded on `daemonToken` being set, because `isAuthorized` answers
+        // TRUE for any secret when no token is configured — which would make
+        // an open daemon report every bearer as the daemon token.
+        if (
+          config.daemonToken !== undefined &&
+          isAuthorized(`Bearer ${secret}`, config.daemonToken)
+        ) {
+          return { kind: 'daemon-token', scopes: ALL_AUTH_SCOPES }
+        }
+
+        if (config.grantStore !== undefined) {
+          const grant = config.grantStore.verifyAccessToken(secret)
+          if (grant !== null) {
+            return { kind: 'oauth-grant', scopes: grant.scopes, subject: grant.clientId }
+          }
+        }
+
+        if (config.pairingTokens !== undefined && origin !== undefined) {
+          let normalized: string | null = null
+          try {
+            normalized = new URL(origin).origin
+          } catch {
+            normalized = null
+          }
+          if (normalized !== null && config.pairingTokens.validate(secret, normalized)) {
+            return { kind: 'pairing', scopes: ALL_AUTH_SCOPES }
+          }
+        }
+
+        if (config.macaroonRootKey !== undefined) {
+          // No `requiredScopes` here: what a holder may do is the surface's
+          // question, and this one only establishes that the token is genuine,
+          // unexpired, and carries the scopes it claims.
+          const verdict = await verifyMacaroon({
+            token: secret,
+            rootKey: config.macaroonRootKey,
+            context: { requiredScopes: [], now },
+          })
+          if (verdict.ok) {
+            return { kind: 'macaroon', scopes: verdict.scopes }
+          }
+        }
+      }
+
+      // Nothing identified the secret. A daemon with no token configured
+      // requires no credential at all, so the caller holds everything — this
+      // is `isAuthorized`'s own "no token configured → true", said once.
+      //
+      // It is a FALLBACK rather than a shortcut, and that ordering is
+      // load-bearing: answering `anonymous` first would have shadowed a
+      // credential that was presented and does verify. Measured — the
+      // `/api/ws-ticket` mint route needs to know WHICH OAuth grant is
+      // asking, and on an open daemon (the configuration its own end-to-end
+      // test uses) an early `anonymous` made every real access token
+      // unidentifiable and the route answered 401.
+      if (config.daemonToken === undefined) {
         return { kind: 'anonymous', scopes: ALL_AUTH_SCOPES }
       }
-      if (secret === null) return null
-
-      // Order is a cost decision. The two credentials that authorize
-      // everything come first so they never pay for the verification of the
-      // ones that do not, and the macaroon is last because its check is the
-      // only one that computes an HMAC chain.
-      if (isAuthorized(`Bearer ${secret}`, config.daemonToken)) {
-        return { kind: 'daemon-token', scopes: ALL_AUTH_SCOPES }
-      }
-
-      if (config.grantStore !== undefined) {
-        const grant = config.grantStore.verifyAccessToken(secret)
-        if (grant !== null) {
-          return { kind: 'oauth-grant', scopes: grant.scopes, subject: grant.clientId }
-        }
-      }
-
-      if (config.pairingTokens !== undefined && origin !== undefined) {
-        let normalized: string | null = null
-        try {
-          normalized = new URL(origin).origin
-        } catch {
-          normalized = null
-        }
-        if (normalized !== null && config.pairingTokens.validate(secret, normalized)) {
-          return { kind: 'pairing', scopes: ALL_AUTH_SCOPES }
-        }
-      }
-
-      if (config.macaroonRootKey !== undefined) {
-        // No `requiredScopes` here: what a holder may do is the surface's
-        // question, and this one only establishes that the token is genuine,
-        // unexpired, and carries the scopes it claims.
-        const verdict = await verifyMacaroon({
-          token: secret,
-          rootKey: config.macaroonRootKey,
-          context: { requiredScopes: [], now },
-        })
-        if (verdict.ok) {
-          return { kind: 'macaroon', scopes: verdict.scopes }
-        }
-      }
-
       return null
     },
   }

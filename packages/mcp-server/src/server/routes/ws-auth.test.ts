@@ -44,11 +44,11 @@ describe('authorizeWsUpgrade', () => {
   })
 
   it('an accepted upgrade always carries a `scopes` grant for downstream per-message enforcement', async () => {
-    // Today's only WS credential is the single shared daemon token, which —
-    // matching createLocalTokenAuthStrategy's documented single-tenant
-    // concession — grants every scope. This pins that the grant is present
-    // and explicit, not an implicit "everything is allowed" left for
-    // routes/ws.ts to assume.
+    // The daemon token grants every scope, and this pins that the grant is
+    // PRESENT and explicit rather than an implicit "everything is allowed"
+    // left for routes/ws.ts to assume. Which credentials produce a narrower
+    // set is `credential-resolver.ts`'s business; this only asserts the field
+    // is always there on an accepted upgrade.
     const decision = await authorizeWsUpgrade(
       { host: 'localhost:3099' },
       createCredentialResolver({ daemonToken: 'secret-token' }),

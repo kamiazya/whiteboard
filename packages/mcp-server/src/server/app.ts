@@ -464,20 +464,20 @@ export function createApp(options: AppOptions) {
   app.route('/', createFontsRouter())
   app.route('/', createViewportRouter())
   app.route('/', createSyncSseRouter())
-  app.route('/', createDebugRouter({ token }))
+  app.route('/', createDebugRouter({ credentialResolver }))
   app.route('/', createStatusRouter())
   // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
   // OAuth grant to a WS upgrade — server-mode's WS auth goes through its own
   // AsyncAuthStrategy and never needs this. Mounted even when no OAuth
-  // registry is configured (oauthAuthz undefined): the route always 401s in
-  // that case because there is no grantStore to verify a presented bearer
-  // against, same "declared but always-refuses when unconfigured" shape as
-  // the rest of this surface.
+  // registry is configured (oauthAuthz undefined): the resolver then has no
+  // OAuth branch, so nothing presented can resolve to an `oauth-grant` and
+  // the route always 401s — the same "declared but always-refuses when
+  // unconfigured" shape as the rest of this surface.
   if (options.authMode === 'local-daemon') {
     app.route(
       '/',
       createWsTicketRouter({
-        grantStore: oauthAuthz?.store,
+        credentialResolver,
         ticketStore: options.wsTicketStore ?? createWsTicketStore(),
       }),
     )

@@ -15,7 +15,10 @@ describe('POST /api/ws-ticket', () => {
     const grantStore = createOAuthTransactionStore()
     const ticketStore = createWsTicketStore()
     const { accessToken } = grantStore.mintAccessToken(['canvas:read', 'canvas:write'], 'client-a')
-    const app = createWsTicketRouter({ grantStore, ticketStore })
+    const app = createWsTicketRouter({
+      credentialResolver: createCredentialResolver({ grantStore }),
+      ticketStore,
+    })
 
     const res = await app.request('/api/ws-ticket', {
       method: 'POST',
@@ -34,7 +37,10 @@ describe('POST /api/ws-ticket', () => {
   it('refuses with 401 when no Authorization header is presented', async () => {
     const grantStore = createOAuthTransactionStore()
     const ticketStore = createWsTicketStore()
-    const app = createWsTicketRouter({ grantStore, ticketStore })
+    const app = createWsTicketRouter({
+      credentialResolver: createCredentialResolver({ grantStore }),
+      ticketStore,
+    })
 
     const res = await app.request('/api/ws-ticket', { method: 'POST' })
     expect(res.status).toBe(401)
@@ -43,7 +49,10 @@ describe('POST /api/ws-ticket', () => {
   it('refuses with 401 for a forged bearer that verifies against no grant', async () => {
     const grantStore = createOAuthTransactionStore()
     const ticketStore = createWsTicketStore()
-    const app = createWsTicketRouter({ grantStore, ticketStore })
+    const app = createWsTicketRouter({
+      credentialResolver: createCredentialResolver({ grantStore }),
+      ticketStore,
+    })
 
     const res = await app.request('/api/ws-ticket', {
       method: 'POST',
@@ -59,7 +68,10 @@ describe('POST /api/ws-ticket', () => {
     const grant = grantStore.verifyAccessToken(accessToken)
     if (!grant) throw new Error('expected a live grant')
     grantStore.revokeGrant(grant.grantId)
-    const app = createWsTicketRouter({ grantStore, ticketStore })
+    const app = createWsTicketRouter({
+      credentialResolver: createCredentialResolver({ grantStore }),
+      ticketStore,
+    })
 
     const res = await app.request('/api/ws-ticket', {
       method: 'POST',
@@ -70,7 +82,10 @@ describe('POST /api/ws-ticket', () => {
 
   it('refuses with 401 when no grantStore is configured at all (OAuth surface unmounted)', async () => {
     const ticketStore = createWsTicketStore()
-    const app = createWsTicketRouter({ ticketStore })
+    const app = createWsTicketRouter({
+      credentialResolver: createCredentialResolver({}),
+      ticketStore,
+    })
 
     const res = await app.request('/api/ws-ticket', {
       method: 'POST',
@@ -83,7 +98,10 @@ describe('POST /api/ws-ticket', () => {
     const grantStore = createOAuthTransactionStore()
     const ticketStore = createWsTicketStore()
     const { accessToken } = grantStore.mintAccessToken(['canvas:read'], 'client-a')
-    const app = createWsTicketRouter({ grantStore, ticketStore })
+    const app = createWsTicketRouter({
+      credentialResolver: createCredentialResolver({ grantStore }),
+      ticketStore,
+    })
 
     const res = await app.request('/api/ws-ticket', {
       method: 'POST',
