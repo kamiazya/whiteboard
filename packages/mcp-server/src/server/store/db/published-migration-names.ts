@@ -38,4 +38,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0025-version-operator-actor',
   '0026-version-content-digest',
   '0027-version-attestation',
+  '0028-member-profiles',
 ] as const satisfies readonly string[]

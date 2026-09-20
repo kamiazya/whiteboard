@@ -126,6 +126,34 @@ interface LeasesTable {
   expiresAt: Timestamp
 }
 
+// ADR-0041's L1 subject: a person, identified by the passkey credentials the
+// daemon has already pinned. No key material — a credential id is only a
+// public handle (decision 1).
+interface MemberProfilesTable {
+  id: string
+  displayName: string
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+// A pinned passkey belongs to at most one profile; (credentialId, origin)
+// mirrors the pin's own identity in webauthn-credential-store.ts. No FK to
+// memberProfiles — house style since 0016/0017.
+interface ProfileCredentialsTable {
+  credentialId: string
+  origin: string
+  profileId: string
+}
+
+// L1 membership as a ROW, deliberately outside the CRDT-synced workspace
+// record (ADR-0019) so a sync merge cannot resurrect a revoked row. No
+// tombstone: revocation is a plain delete (ADR-0042 decision 3).
+interface WorkspaceMembershipsTable {
+  workspaceId: string
+  profileId: string
+  createdAt: Timestamp
+}
+
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
   branches: BranchesTable
@@ -136,4 +164,7 @@ export interface DatabaseSchema {
   documentDeltas: DocumentDeltasTable
   documentFrontiers: DocumentFrontiersTable
   leases: LeasesTable
+  memberProfiles: MemberProfilesTable
+  profileCredentials: ProfileCredentialsTable
+  workspaceMemberships: WorkspaceMembershipsTable
 }

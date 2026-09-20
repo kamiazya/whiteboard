@@ -34,6 +34,10 @@
       "types": "./src/api-contracts/index.ts",
       "import": "./src/api-contracts/index.ts"
     },
+    "./api-contracts/membership": {
+      "types": "./src/api-contracts/membership.ts",
+      "import": "./src/api-contracts/membership.ts"
+    },
     "./api-contracts/pairing": {
       "types": "./src/api-contracts/pairing.ts",
       "import": "./src/api-contracts/pairing.ts"

@@ -27,6 +27,12 @@ import {
   pairingTokenResponseSchema,
   type RegisterCredentialRequest,
   registerCredentialRequestSchema,
+  type SessionAssertChallengeResponse,
+  type SessionAssertRequest,
+  type SessionAssertResponse,
+  sessionAssertChallengeResponseSchema,
+  sessionAssertRequestSchema,
+  sessionAssertResponseSchema,
 } from './pairing.js'
 import { roundtrip } from './roundtrip.test-helper.js'
 
@@ -152,22 +158,22 @@ describe('listGrantsResponseSchema', () => {
   })
 })
 
-describe('pairingTokenNonceSchema bounds', () => {
-  function nonceOfBytes(byteLength: number): string {
-    return Buffer.alloc(byteLength, 7).toString('base64url')
-  }
+function base64urlOfBytes(byteLength: number): string {
+  return Buffer.alloc(byteLength, 7).toString('base64url')
+}
 
+describe('pairingTokenNonceSchema bounds', () => {
   it('accepts nonces that decode to 16-32 bytes', () => {
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(16)).success).toBe(true)
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(32)).success).toBe(true)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(16)).success).toBe(true)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(32)).success).toBe(true)
   })
 
   it('rejects a nonce one byte short of the minimum', () => {
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(15)).success).toBe(false)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(15)).success).toBe(false)
   })
 
   it('rejects a nonce one byte over the maximum', () => {
-    expect(pairingTokenNonceSchema.safeParse(nonceOfBytes(33)).success).toBe(false)
+    expect(pairingTokenNonceSchema.safeParse(base64urlOfBytes(33)).success).toBe(false)
   })
 
   it('rejects a non-base64url string', () => {
@@ -244,5 +250,121 @@ describe('credential pin schemas', () => {
         credentials: [{ ...valid.credentials[0], publicKeyJwk: { kty: 'EC' } }],
       }).success,
     ).toBe(false)
+  })
+})
+
+describe('sessionAssertChallengeResponseSchema', () => {
+  const valid: SessionAssertChallengeResponse = {
+    challenge: base64urlOfBytes(32),
+    expiresAt: '2099-01-01T00:00:00.000Z',
+  }
+
+  it('roundtrips a 43-char base64url challenge (exactly 32 decoded bytes)', () => {
+    expect(roundtrip(sessionAssertChallengeResponseSchema, valid)).toEqual(valid)
+  })
+
+  it('rejects a 42-char challenge (31 decoded bytes)', () => {
+    expect(
+      sessionAssertChallengeResponseSchema.safeParse({
+        ...valid,
+        challenge: base64urlOfBytes(31),
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a 44-char challenge (33 decoded bytes)', () => {
+    expect(
+      sessionAssertChallengeResponseSchema.safeParse({
+        ...valid,
+        challenge: base64urlOfBytes(33),
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a padded value', () => {
+    expect(
+      sessionAssertChallengeResponseSchema.safeParse({ ...valid, challenge: 'Y3JlZA==' }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an extra origin field', () => {
+    expect(
+      sessionAssertChallengeResponseSchema.safeParse({
+        ...valid,
+        origin: 'https://a.example',
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe('sessionAssertRequestSchema', () => {
+  const valid: SessionAssertRequest = {
+    credentialId: 'Y3JlZC0x',
+    authenticatorData: 'YXV0aA',
+    clientDataJSON: 'Y2xpZW50',
+    signature: 'c2ln',
+  }
+
+  it('roundtrips four canonical base64url fields', () => {
+    expect(roundtrip(sessionAssertRequestSchema, valid)).toEqual(valid)
+  })
+
+  it('rejects a `+/` alphabet signature', () => {
+    expect(sessionAssertRequestSchema.safeParse({ ...valid, signature: 'c2ln+/' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects a padded credentialId', () => {
+    expect(
+      sessionAssertRequestSchema.safeParse({ ...valid, credentialId: 'Y3JlZA==' }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a `kind: webauthn` field (omitted, so strict refuses it)', () => {
+    expect(sessionAssertRequestSchema.safeParse({ ...valid, kind: 'webauthn' }).success).toBe(false)
+  })
+
+  it('rejects an origin field (the Origin header names it, never the body)', () => {
+    expect(
+      sessionAssertRequestSchema.safeParse({ ...valid, origin: 'https://a.example' }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a missing clientDataJSON', () => {
+    const { clientDataJSON: _omit, ...missing } = valid
+    expect(sessionAssertRequestSchema.safeParse(missing).success).toBe(false)
+  })
+})
+
+describe('sessionAssertResponseSchema', () => {
+  const valid: SessionAssertResponse = {
+    credentialId: 'Y3JlZC0x',
+    profileId: '01J9Z8QK2N3X4Y5Z6A7B8C9D0E',
+    boundUntil: '2099-01-01T00:00:00.000Z',
+  }
+
+  it('roundtrips with a profileId', () => {
+    expect(roundtrip(sessionAssertResponseSchema, valid)).toEqual(valid)
+  })
+
+  it('roundtrips with profileId null (pinned, no claiming profile yet)', () => {
+    const withNull: SessionAssertResponse = { ...valid, profileId: null }
+    expect(roundtrip(sessionAssertResponseSchema, withNull)).toEqual(withNull)
+  })
+
+  it('rejects a missing profileId (undefined is not the same as null)', () => {
+    const { profileId: _omit, ...missing } = valid
+    expect(sessionAssertResponseSchema.safeParse(missing).success).toBe(false)
+  })
+
+  it('rejects an empty credentialId', () => {
+    expect(sessionAssertResponseSchema.safeParse({ ...valid, credentialId: '' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects an extra token field', () => {
+    expect(sessionAssertResponseSchema.safeParse({ ...valid, token: 'tok' }).success).toBe(false)
   })
 })
