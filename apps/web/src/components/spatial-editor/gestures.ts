@@ -37,7 +37,6 @@ import { moveInkCommand } from '../../lib/spatial/commands.js'
 import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
   type Box,
-  boxContains,
   type ResizeHandleKind,
   resizeBoxByDelta,
   scaleBoxWithin,
@@ -50,6 +49,8 @@ import {
   movedWaypoints,
   storedWaypoints,
 } from './gesture-bends.js'
+import type { EndSnapshot } from './gesture-ends.js'
+import { connectRelease, endCommands, endTargetExists } from './gesture-ends.js'
 
 interface MoveSnapshot {
   readonly kind: 'moving'
@@ -152,6 +153,7 @@ export type GestureState =
   | BendSnapshot
   | DrawSnapshot
   | MoveInkSnapshot
+  | EndSnapshot
 
 export function createIdleState(): GestureState {
   return { kind: 'idle' }
@@ -169,6 +171,17 @@ export type GestureEvent =
       readonly members?: readonly ResizeMember[]
     }
   | { readonly type: 'pointerdown-connect'; readonly nodeId: string }
+  | {
+      /**
+       * A press on one END of a selected relation or stroke — the handle
+       * that moves it onto something else. It carries no point: a
+       * re-attachment is not a translation, so what the RELEASE names is
+       * the whole answer.
+       */
+      readonly type: 'pointerdown-end'
+      readonly elementId: string
+      readonly endpoint: 'from' | 'to'
+    }
   | {
       readonly type: 'pointerdown-bend'
       readonly edgeId: string
@@ -290,6 +303,10 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
       // affordance, so a canvas replaced mid-drag would otherwise abandon
       // the gesture on the ground that the element had vanished.
       return bendTargetExists(canvas, state.edgeId)
+    case 'reattaching':
+      // Both collections, for `bending`'s reason: the handle sits on an
+      // element the scene hands out identically whichever one holds it.
+      return endTargetExists(canvas, state.elementId)
     case 'moving-ink':
       // As long as ONE of them survives there is still a move to make; the
       // release drops whatever went. Requiring all of them would abandon a
@@ -476,62 +493,6 @@ function reducePointerUpResizing(
   }
 }
 
-function reducePointerUpConnecting(
-  state: ConnectSnapshot,
-  event: Extract<GestureEvent, { type: 'pointerup' }>,
-  createId: () => string,
-  canvas: SpatialCanvas,
-): GestureResult {
-  // Releasing over the SOURCE node keeps the connect armed: that is the
-  // first click of the object-first click-A-click-B flow (the press and its
-  // own release both land on A), and in the drag flow it just means "still
-  // choosing a target".
-  //
-  // Releasing over EMPTY canvas draws a line. It used to cancel, and could
-  // not have done anything else: an edge is a RELATION and cannot end in
-  // empty space, so there was nothing to make. ADR-0038 decision 2 split ink
-  // from relation, and a line's end is exactly the `{kind:'point'}` this
-  // release has been carrying all along.
-  //
-  // The click flow is unaffected, which is worth stating because it looks
-  // like it should be: cancelling an armed connect means pressing empty
-  // canvas, and `pointerdown-empty` resets to idle BEFORE its pointerup
-  // arrives, so this arm never sees it. The only gesture that changed is a
-  // real drag off the connect handle.
-  if (event.targetNodeId === state.fromNodeId) return stateOnly(state)
-  if (event.targetNodeId === undefined) {
-    const source = findNode(canvas, state.fromNodeId)
-    // A release still inside the source box is not a drag anywhere: the
-    // handle is drawn on the node and can overhang it, and a line from a box
-    // to itself is zero-length ink that cannot then be clicked to remove.
-    if (source !== undefined && boxContains(source, event.point)) return idle
-    return {
-      state: { kind: 'idle' },
-      commands: [
-        {
-          kind: 'create-line',
-          line: {
-            id: createId(),
-            from: { kind: 'node', node: state.fromNodeId },
-            to: { kind: 'point', point: { x: event.point.x, y: event.point.y } },
-          },
-        },
-      ],
-    }
-  }
-  return {
-    state: { kind: 'idle' },
-    commands: [
-      {
-        kind: 'connect-nodes',
-        edgeId: createId(),
-        fromNode: state.fromNodeId,
-        toNode: event.targetNodeId,
-      },
-    ],
-  }
-}
-
 /** Default geometry (canvas-space px) for a node created via dblclick-empty/Add-note. */
 export const NEW_NODE_WIDTH = 200
 export const NEW_NODE_HEIGHT = 100
@@ -667,6 +628,17 @@ export function reduceGesture(
         state,
         stateOnly({ kind: 'connecting', fromNodeId: event.nodeId }),
       )
+    case 'pointerdown-end':
+      return endTargetExists(canvas, event.elementId)
+        ? withPendingTextCommit(
+            state,
+            stateOnly({
+              kind: 'reattaching',
+              elementId: event.elementId,
+              endpoint: event.endpoint,
+            }),
+          )
+        : idle
     case 'pointerdown-bend': {
       if (!bendTargetExists(canvas, event.edgeId)) return idle
       if (event.waypoints[event.index] === undefined) return idle
@@ -760,12 +732,26 @@ export function reduceGesture(
           return reducePointerUpMoving(state, event)
         case 'resizing':
           return reducePointerUpResizing(state, event)
-        case 'connecting':
-          return reducePointerUpConnecting(state, event, createId, canvas)
+        case 'connecting': {
+          const release = connectRelease(
+            canvas,
+            state.fromNodeId,
+            event.point,
+            event.targetNodeId,
+            createId,
+          )
+          if (release.kind === 'stay-armed') return stateOnly(state)
+          if (release.kind === 'cancel') return idle
+          return { state: { kind: 'idle' }, commands: release.commands }
+        }
         case 'bending':
           return reducePointerUpBending(state, event, canvas)
         case 'moving-ink':
           return reducePointerUpMovingInk(state, event, canvas)
+        case 'reattaching': {
+          const commands = endCommands(canvas, state, event.point, event.targetNodeId)
+          return commands.length === 0 ? idle : { state: { kind: 'idle' }, commands }
+        }
         case 'drawing': {
           const line = freehandLine(
             createId(),

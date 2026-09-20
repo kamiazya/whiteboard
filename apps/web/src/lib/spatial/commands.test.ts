@@ -2,6 +2,8 @@
 
 import type {
   CanvasComment,
+  CanvasEdge,
+  CanvasLine,
   ClipboardFragment,
   ProposedChange,
   SpatialCanvas,
@@ -26,6 +28,7 @@ import {
   DUPLICATE_OFFSET_PX,
   deleteInkCommand,
   type EditorCommand,
+  endInkCommand,
   labelInkCommand,
 } from './commands.js'
 
@@ -1804,5 +1807,130 @@ describe('ungroup-ink', () => {
     // memoise on.
     const canvas = { nodes: [], edges: [], lines: [grouped('a', 'g')] }
     expect(applyCommand(canvas, { kind: 'ungroup-ink', ids: ['gone'] })).toBe(canvas)
+  })
+})
+
+describe('re-attaching an end', () => {
+  // The one verb the element matrix found missing from BOTH collections: an
+  // end could be given an arrowhead and a side, and could not be moved to a
+  // different box. `set-edge-side`/`set-line-side` write the `side` field
+  // and `set-*-ends` the arrowheads; nothing wrote what an end is ON.
+  const boxes = (): SpatialCanvas => ({
+    ...baseCanvas(),
+    nodes: [
+      ...baseCanvas().nodes,
+      textNode({ id: 'c', x: 400, y: 0, width: 90, height: 50, text: 'third' }),
+    ],
+  })
+
+  const related = (to: CanvasEdge['to']): SpatialCanvas => ({
+    ...boxes(),
+    edges: [{ id: 'e1', from: { node: 'a' }, to }],
+  })
+
+  const inked = (from: CanvasLine['from'], to: CanvasLine['to']): SpatialCanvas => ({
+    ...boxes(),
+    lines: [{ id: 'l1', from, to }],
+  })
+
+  it('moves a relation onto another box, dropping the side the old box pinned', () => {
+    // The pin was a statement about THAT box's geometry — "leave from its
+    // left" — so carrying it to a box somewhere else would be a choice
+    // nobody made. The arrowhead survives, because an arrow is what a
+    // person asked for rather than anything about the box.
+    const next = applyCommand(related({ node: 'b', side: 'left', end: 'arrow' }), {
+      kind: 'set-edge-end',
+      id: 'e1',
+      endpoint: 'to',
+      node: 'c',
+    })
+    expect(next.edges[0]?.to).toEqual({ node: 'c', end: 'arrow' })
+    expect(next.edges[0]?.from).toEqual({ node: 'a' })
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('refuses a relation from a box to itself, and a box the canvas does not hold', () => {
+    // `connectNodes` already refuses the first when MINTING one; a
+    // re-attachment that could produce it would be the same edge by another
+    // route.
+    const canvas = related({ node: 'b' })
+    const loop = applyCommand(canvas, { kind: 'set-edge-end', id: 'e1', endpoint: 'to', node: 'a' })
+    expect(loop.edges[0]?.to).toEqual({ node: 'b' })
+    const absent = applyCommand(canvas, {
+      kind: 'set-edge-end',
+      id: 'e1',
+      endpoint: 'from',
+      node: 'nope',
+    })
+    expect(absent.edges[0]?.from).toEqual({ node: 'a' })
+  })
+
+  it('drops a stroke end in empty space, where it becomes a free point', () => {
+    // What the line/relation split is FOR (ADR-0038 decision 2): ink may end
+    // nowhere, so the same drag that a relation must refuse is ordinary here.
+    const next = applyCommand(
+      inked(
+        { kind: 'node', node: 'a', side: 'top', end: 'arrow' },
+        {
+          kind: 'point',
+          point: { x: 400, y: 400 },
+        },
+      ),
+      {
+        kind: 'set-line-end',
+        id: 'l1',
+        endpoint: 'from',
+        target: { kind: 'point', point: { x: 30, y: 60 } },
+      },
+    )
+    // The arrowhead travels and the side does not: a point has no side, and
+    // the schema's `point` arm carries no such field to put it in.
+    expect(next.lines?.[0]?.from).toEqual({ kind: 'point', point: { x: 30, y: 60 }, end: 'arrow' })
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('drops a free stroke end on a box, where it becomes attached', () => {
+    const next = applyCommand(
+      inked(
+        { kind: 'point', point: { x: 10, y: 10 } },
+        { kind: 'point', point: { x: 400, y: 400 }, end: 'arrow' },
+      ),
+      { kind: 'set-line-end', id: 'l1', endpoint: 'to', target: { kind: 'node', node: 'c' } },
+    )
+    // Unpinned: the router decides which way it leaves, exactly as a fresh
+    // attachment does.
+    expect(next.lines?.[0]?.to).toEqual({ kind: 'node', node: 'c', end: 'arrow' })
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('picks the end write by the collection the id came from, and refuses a relation in empty space', () => {
+    const canvas: SpatialCanvas = {
+      ...inked({ kind: 'node', node: 'a' }, { kind: 'point', point: { x: 400, y: 400 } }),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    const onC = { kind: 'node', node: 'c' } as const
+    const inAir = { kind: 'point', point: { x: 5, y: 5 } } as const
+    expect(endInkCommand(canvas, 'e1', 'to', onC)).toEqual({
+      kind: 'set-edge-end',
+      id: 'e1',
+      endpoint: 'to',
+      node: 'c',
+    })
+    expect(endInkCommand(canvas, 'l1', 'to', onC)).toEqual({
+      kind: 'set-line-end',
+      id: 'l1',
+      endpoint: 'to',
+      target: onC,
+    })
+    expect(endInkCommand(canvas, 'l1', 'from', inAir)).toEqual({
+      kind: 'set-line-end',
+      id: 'l1',
+      endpoint: 'from',
+      target: inAir,
+    })
+    // A RELATION cannot end in empty space, so there is no command to make —
+    // which is what the gesture reads to leave the end where it was.
+    expect(endInkCommand(canvas, 'e1', 'to', inAir)).toBeUndefined()
+    expect(endInkCommand(canvas, 'nope', 'to', onC)).toBeUndefined()
   })
 })

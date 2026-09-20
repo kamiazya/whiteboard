@@ -125,16 +125,17 @@ import {
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
+import { BoxTargetOverlay } from './BoxTargetOverlay.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
-import { ConnectOverlay } from './ConnectOverlay.js'
 import { CommentComposeOverlay, commentComposeStyle } from './comment-compose-overlay.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
 import { EdgeBendLayer } from './EdgeBendLayer.js'
+import { EdgeEndHandles } from './EdgeEndHandles.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import {
@@ -148,6 +149,7 @@ import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { collectFieldSuggestions } from './facet-widgets/field-suggestions.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
+import { otherEndNodeOf } from './gesture-ends.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
@@ -1809,7 +1811,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         },
       ).point
       const targetNodeId =
-        gestureState.kind === 'connecting' ? hitTest(selectableBoxes, point) : undefined
+        gestureState.kind === 'connecting' || gestureState.kind === 'reattaching'
+          ? hitTest(selectableBoxes, point)
+          : undefined
       const result = reduceGesture(
         gestureState,
         canvas,
@@ -2964,6 +2968,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               />
             )}
             {selectedRoutable !== undefined && (
+              <EdgeEndHandles
+                path={edgePathOf(selectedRoutable.id) ?? []}
+                zoom={viewport.zoom}
+                onArm={(endpoint, event) => {
+                  if (event !== undefined) beginOverlayGesture(event)
+                  applyResult(
+                    reduceGesture(gestureState, canvas, {
+                      type: 'pointerdown-end',
+                      elementId: selectedRoutable.id,
+                      endpoint,
+                    }),
+                  )
+                }}
+              />
+            )}
+            {selectedRoutable !== undefined && (
               <EdgeBendLayer
                 edge={selectedRoutable}
                 path={edgePathOf(selectedRoutable.id) ?? []}
@@ -2972,9 +2992,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 dispatch={(event) => applyResult(reduceGesture(gestureState, canvas, event))}
               />
             )}
-            {gestureState.kind === 'connecting' && (
-              <ConnectOverlay
+            {(gestureState.kind === 'connecting' || gestureState.kind === 'reattaching') && (
+              <BoxTargetOverlay
                 gestureState={gestureState}
+                sourceNodeId={
+                  gestureState.kind === 'connecting'
+                    ? gestureState.fromNodeId
+                    : // The box the OTHER end is on, which this end may not
+                      // land on either: the write refuses a self-loop, so
+                      // offering it as a target would offer a no-op.
+                      otherEndNodeOf(canvas, gestureState.elementId, gestureState.endpoint)
+                }
+                hoveredNodeId={livePoint === null ? undefined : hitTest(selectableBoxes, livePoint)}
                 canvas={canvas}
                 boxes={boxes}
                 selectableBoxes={selectableBoxes}

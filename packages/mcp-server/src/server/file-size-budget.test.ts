@@ -177,7 +177,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // id-picking family. Every one of them is a cell
   // `element-verb-parity.test.ts` reported on its first reading, and with
   // them its `lines` column is empty.
-  'apps/web/src/lib/spatial/commands.ts': 1498,
+  // Raised 1498 -> 1629 for the `attach` verb: `set-edge-end`,
+  // `set-line-end`, the `EndTarget` both take, the `otherEndNode` self-loop
+  // guard they share, and `endInkCommand` joining the id-picking family. It
+  // is the first verb the matrix reported missing from BOTH collections
+  // rather than from one, which is why one increment adds two writes.
+  'apps/web/src/lib/spatial/commands.ts': 1629,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -584,14 +589,19 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and the release branch that keeps what the marquee used to do for a
   // press ON ink — the double-press label and the root focus, both found by
   // the full browser run rather than by reading.
-  // Raised 3097 -> 3165, +68, for naming `handlePointerMove`'s seven steps.
+  // Raised 3097 -> 3126 for the `attach` verb's wiring: the end handles
+  // beside the bend layer, the box the pointer is over threaded into the
+  // target overlay, and the two release branches that now answer for a
+  // re-attachment as well as a connect — the hit-test for `targetNodeId`,
+  // and the source box the overlay marks instead of offering.
+  // Raised 3126 -> 3194, +68, for naming `handlePointerMove`'s seven steps.
   // The file GREW and is more readable for it: 121 lines of guard chain
   // became seven named steps plus a handler that reads as the order they run
   // in, and each step's reason now sits on the step rather than in a run of
   // comments a reader has to attach to the right `if`. The cost is a doc
   // comment per step; the alternative — module functions — would have moved
   // 32 closed-over values into parameters and grown the file further.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3165,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3194,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -707,7 +717,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // over generated NODES — and the ledger's fourth direction fails on a
   // `not modelled` the run DOES produce, so each entry is a sentence
   // somebody had to be able to defend rather than a line of boilerplate.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2724,
+  // 2724 -> 2730 for the `attach` entries: two command kinds and the
+  // `pointerdown-end` that arms them, all unreachable from this model for
+  // the reason every other overlay gesture is — it generates node
+  // interactions and never renders the handle the press starts on.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2730,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
@@ -724,7 +738,12 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // whole content is that a relation and a stroke of the same id go to
   // different writes. A table of ink verbs where every row is one example is
   // what stops the next one being added without one.
-  'apps/web/src/lib/spatial/commands.test.ts': 1808,
+  // Raised 1808 -> 1936 with the five re-attachment cases: a relation moved
+  // onto another box, the two it refuses (a self-loop, a box the canvas does
+  // not hold), a stroke end dropped in empty space and one dropped on a box,
+  // and the collection-picking sibling that answers nothing for a relation
+  // aimed at empty space.
+  'apps/web/src/lib/spatial/commands.test.ts': 1936,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
