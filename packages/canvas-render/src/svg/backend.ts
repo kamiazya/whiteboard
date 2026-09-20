@@ -1,17 +1,16 @@
 import type {
   BoundingBox,
   CodeBlockNode,
+  GlyphSceneNode,
+  ImageSceneNode,
   ListItemNode,
   Scene,
   SceneNode,
+  SvgFragmentNode,
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
-import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
-import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
-import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
-import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
 import type { ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
 import { collectDefs } from './defs.js'
@@ -21,16 +20,15 @@ import { type IconTable, renderIconUse } from './icon.js'
 import { renderLegend } from './legend.js'
 import {
   appearanceAttrs,
-  idToken,
   isFiniteBox,
   isNonNegativeLength,
   isPositiveLength,
   PRESENTATION,
-  pointsAttr,
   rectAttrs,
 } from './paint.js'
+import { renderEdge } from './render-edge.js'
 import { serializeSvg } from './serialize.js'
-import { glowOf, type ResolveTables, renderShape, renderSketchEdge } from './shapes.js'
+import { glowOf, type ResolveTables, renderShape } from './shapes.js'
 import { applyOptimizationPasses } from './transform.js'
 import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
@@ -275,109 +273,68 @@ function renderCodeBlock(node: CodeBlockNode, tables?: ResolveTables): SvgChild 
   return [panel, node.runs.map((run) => renderTextRun(run, tables))]
 }
 
-type EdgePoint = { readonly x: number; readonly y: number }
-
-type EdgeJump = { readonly segment: number; readonly x: number; readonly y: number }
-
-/**
- * Path commands for one straight run from `from` to `to`, hopping over each
- * jump point with a half-circle arc. Sweep 1 bulges to the LEFT of travel
- * in SVG's y-down coordinates (up, for a rightward run) — drawio-style
- * "over", and the side `flattenDrawnEdgePath` samples for hit-testing and
- * the selection highlight. Jumps arrive ordered along the run.
- */
-function lineWithJumps(
-  from: EdgePoint,
-  to: EdgePoint,
-  jumps: readonly EdgeJump[],
-): readonly string[] {
-  const parts: string[] = []
-  for (const jump of jumps) {
-    const hop = hopEndpoints(from, to, jump)
-    if (hop === undefined) continue
-    parts.push(`L ${formatCoord(hop.entry.x)} ${formatCoord(hop.entry.y)}`)
-    parts.push(
-      `A ${EDGE_JUMP_RADIUS_PX} ${EDGE_JUMP_RADIUS_PX} 0 0 1 ${formatCoord(hop.exit.x)} ${formatCoord(hop.exit.y)}`,
-    )
-  }
-  parts.push(`L ${formatCoord(to.x)} ${formatCoord(to.y)}`)
-  return parts
-}
-
-/** The polyline as a path `d`, hopping over each jump on its segment. */
-function jumpedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[]): string {
-  const first = path[0]
-  if (first === undefined) return ''
-  const parts = [`M ${formatCoord(first.x)} ${formatCoord(first.y)}`]
-  for (let seg = 0; seg < path.length - 1; seg += 1) {
-    parts.push(
-      ...lineWithJumps(
-        path[seg] as EdgePoint,
-        path[seg + 1] as EdgePoint,
-        jumps.filter((jump) => jump.segment === seg),
-      ),
-    )
-  }
-  return parts.join(' ')
-}
-
-/**
- * The same polyline with its corners rounded off, per the shared
- * `roundedEdgeCorners` decomposition (see layout/edges/edge-rounding.ts — the
- * editor's hit-testing flattens the SAME corners, which is what keeps a tap
- * landing on the ink). Degenerate inputs fall back to the straight reading
- * rather than emitting a malformed `d`, matching this package's never-throw
- * rule.
- */
-function roundedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[] = []): string {
-  const first = path[0]
-  const last = path.at(-1)
-  if (first === undefined || last === undefined) return ''
-  if (path.length < 3) {
-    return [
-      `M ${formatCoord(first.x)} ${formatCoord(first.y)}`,
-      ...lineWithJumps(first, last, jumpsWithinSpan(jumps, 0, first, last)),
-    ].join(' ')
-  }
-
-  const parts = [`M ${formatCoord(first.x)} ${formatCoord(first.y)}`]
-  let current = first
-  const corners = roundedEdgeCorners(path)
-  for (const [index, { enter, control, leave }] of corners.entries()) {
-    parts.push(...lineWithJumps(current, enter, jumpsWithinSpan(jumps, index, current, enter)))
-    parts.push(
-      `Q ${formatCoord(control.x)} ${formatCoord(control.y)} ${formatCoord(leave.x)} ${formatCoord(leave.y)}`,
-    )
-    current = leave
-  }
-  parts.push(...lineWithJumps(current, last, jumpsWithinSpan(jumps, corners.length, current, last)))
-  return parts.join(' ')
-}
-
-function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
-  const geometry = ARROW_MARKER[direction]
-  const id = `wb-arrow-${direction}-${idToken(fill)}`
-  return {
-    id,
-    node: el(
-      'marker',
-      {
-        id,
-        markerWidth: ARROW_MARKER.width,
-        markerHeight: ARROW_MARKER.height,
-        refX: geometry.refX,
-        refY: geometry.refY,
-        markerUnits: 'userSpaceOnUse',
-        orient: 'auto',
-      },
-      [el('polygon', { points: pointsAttr(geometry.points), fill })],
-    ),
-  }
-}
-
 /** Baseline drop below the bbox center, as a fraction of the glyph size —
  * roughly half a typical glyph cap height, so the badge reads centered. */
 const GLYPH_BASELINE_FACTOR = 0.35
+
+function renderSvgFragment(node: SvgFragmentNode): SvgChild {
+  // Precondition: the caller has already validated `svg` is well-formed
+  // XML before constructing this node — emitted verbatim, not escaped.
+  // A nested <svg> carries the position: the fragment's own coordinates
+  // stay untouched, the wrapper's x/y move them into document flow, and
+  // this deliberately does NOT use a transform so the listItem/tableCell
+  // x-transform-boundary set (translate-scene.ts) stays exactly two —
+  // a fragment has no scene-graph children for that machinery to see.
+  // overflow stays visible so a fragment taller than its reported size
+  // renders rather than silently clipping. A non-finite bbox degrades
+  // to the unpositioned group form (total rule, mirroring shape).
+  const { x, y, w, h } = node.bbox
+  const positioned =
+    Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(w) && Number.isFinite(h)
+  const role = node.role === 'presentation' ? PRESENTATION : undefined
+  if (!positioned) {
+    return el('g', role === undefined ? undefined : { role }, [rawXml(node.svg)])
+  }
+  return el('svg', { x, y, width: w, height: h, overflow: 'visible', role }, [rawXml(node.svg)])
+}
+
+function renderGlyph(node: GlyphSceneNode): SvgChild {
+  if (!isFiniteBox(node.bbox) || node.glyph.length === 0) return []
+  // A single glyph sized to the smaller bbox side and centered via
+  // text-anchor plus a fixed baseline offset. The offset approximates
+  // vertical centering without dominant-baseline, whose resolution
+  // differs across renderers (browsers vs resvg) and would break the
+  // pixel-agreement this backend otherwise keeps.
+  const size = Math.min(node.bbox.w, node.bbox.h)
+  return el(
+    'text',
+    {
+      x: node.bbox.x + node.bbox.w / 2,
+      y: node.bbox.y + node.bbox.h / 2 + size * GLYPH_BASELINE_FACTOR,
+      'font-size': size,
+      'text-anchor': 'middle',
+    },
+    [node.glyph],
+  )
+}
+
+function renderImage(node: ImageSceneNode): SvgChild {
+  // Fixed attribute order (x y width height href preserveAspectRatio)
+  // per this package's canonical-serialization rule. Aspect is always
+  // preserved; alt renders as a <title> child (the SVG accessible-name
+  // mechanism), absence marks the image as presentation.
+  const hasAlt = node.alt !== undefined && node.alt.length > 0
+  return el(
+    'image',
+    {
+      ...rectAttrs(node.bbox),
+      href: node.href,
+      preserveAspectRatio: `xMidYMid ${node.fit === 'cover' ? 'slice' : 'meet'}`,
+      role: hasAlt ? undefined : PRESENTATION,
+    },
+    hasAlt ? [el('title', undefined, [node.alt as string])] : [],
+  )
+}
 
 /**
  * Caller-supplied icon geometry, merged over the vendored table (caller
@@ -446,26 +403,8 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
       return el('text', rectAttrs(node.bbox), [node.value])
     case 'unresolvedReference':
       return el('g', { role: PRESENTATION })
-    case 'svgFragment': {
-      // Precondition: the caller has already validated `svg` is well-formed
-      // XML before constructing this node — emitted verbatim, not escaped.
-      // A nested <svg> carries the position: the fragment's own coordinates
-      // stay untouched, the wrapper's x/y move them into document flow, and
-      // this deliberately does NOT use a transform so the listItem/tableCell
-      // x-transform-boundary set (translate-scene.ts) stays exactly two —
-      // a fragment has no scene-graph children for that machinery to see.
-      // overflow stays visible so a fragment taller than its reported size
-      // renders rather than silently clipping. A non-finite bbox degrades
-      // to the unpositioned group form (total rule, mirroring shape).
-      const { x, y, w, h } = node.bbox
-      const positioned =
-        Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(w) && Number.isFinite(h)
-      const role = node.role === 'presentation' ? PRESENTATION : undefined
-      if (!positioned) {
-        return el('g', role === undefined ? undefined : { role }, [rawXml(node.svg)])
-      }
-      return el('svg', { x, y, width: w, height: h, overflow: 'visible', role }, [rawXml(node.svg)])
-    }
+    case 'svgFragment':
+      return renderSvgFragment(node)
     case 'embedPlaceholder':
       // SVG <text> y is the BASELINE, so the box TOP would paint the title
       // one line above the placeholder's own space, colliding with the
@@ -481,75 +420,8 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         undefined,
         node.children.map((child) => renderNode(child, tables)),
       )
-    case 'edge': {
-      if (node.ink?.style === 'sketch') return renderSketchEdge(node, node.ink, tables)
-      const appearance = appearanceAttrs(node.appearance)
-      // `fill="none"` is not decoration. SVG's initial fill is black and a
-      // <polyline> fills the region its points enclose, so a bent edge would
-      // paint a solid wedge across its own corner in whatever fill the
-      // surrounding document inherits — invisible while every path had two
-      // points, glaring the moment routing started bending them. A <path>
-      // needs it for exactly the same reason. It is declared before the
-      // appearance spread, matching the string backend's emission order (an
-      // edge appearance never carries a fill of its own).
-      const jumps = node.jumps ?? []
-      // Arrowheads are shared <marker> definitions in the edge's stroke
-      // color, referenced per end — one definition per (direction, color)
-      // instead of a polygon per edge end. Marker geometry derives from the
-      // same constants as `edgeArrowPolygons` (edge-arrows.ts), which
-      // sceneBounds keeps reading for the wings' reach; the arrowhead pixel
-      // goldens pin that the two stay the same ink. Which ends get one is
-      // `edgeArrowEnds` — the polygon renderer's own skip rule — because a
-      // marker on a direction-less end would paint at angle 0 where the
-      // polygon drew nothing.
-      const stroke = node.appearance?.stroke
-      // No stroke means the polyline itself is invisible (SVG's default
-      // stroke is none) — the arrow must match it, not fall back to the
-      // marker content's default black fill and float detached.
-      const arrowFill = typeof stroke === 'string' && stroke.length > 0 ? stroke : 'none'
-      const ends = edgeArrowEnds(node)
-      const startDef = ends.from ? arrowMarkerDef('start', arrowFill) : undefined
-      const endDef = ends.to ? arrowMarkerDef('end', arrowFill) : undefined
-      const markers = {
-        'marker-start': startDef === undefined ? undefined : `url(#${startDef.id})`,
-        'marker-end': endDef === undefined ? undefined : `url(#${endDef.id})`,
-      }
-      const polyline =
-        node.rounded === true
-          ? el('path', {
-              d: roundedPathData(node.path, jumps),
-              fill: 'none',
-              ...appearance,
-              ...markers,
-              role: PRESENTATION,
-            })
-          : jumps.length > 0
-            ? el('path', {
-                d: jumpedPathData(node.path, jumps),
-                fill: 'none',
-                ...appearance,
-                ...markers,
-                role: PRESENTATION,
-              })
-            : el('polyline', {
-                points: pointsAttr(node.path),
-                fill: 'none',
-                ...appearance,
-                ...markers,
-                role: PRESENTATION,
-              })
-      const glow = glowOf(node.appearance, tables)
-      const defs = [
-        ...(startDef === undefined ? [] : [startDef]),
-        ...(endDef === undefined ? [] : [endDef]),
-        ...glow.defs,
-      ]
-      const line =
-        glow.filter === undefined
-          ? polyline
-          : { ...polyline, attrs: { ...polyline.attrs, filter: glow.filter } }
-      return defs.length > 0 ? withDefs(line, defs) : line
-    }
+    case 'edge':
+      return renderEdge(node, tables)
     case 'shape':
       return renderShape(node, tables)
     case 'icon':
@@ -562,42 +434,10 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
           glowOf(node.appearance, tables),
         ) ?? []
       )
-    case 'glyph': {
-      if (!isFiniteBox(node.bbox) || node.glyph.length === 0) return []
-      // A single glyph sized to the smaller bbox side and centered via
-      // text-anchor plus a fixed baseline offset. The offset approximates
-      // vertical centering without dominant-baseline, whose resolution
-      // differs across renderers (browsers vs resvg) and would break the
-      // pixel-agreement this backend otherwise keeps.
-      const size = Math.min(node.bbox.w, node.bbox.h)
-      return el(
-        'text',
-        {
-          x: node.bbox.x + node.bbox.w / 2,
-          y: node.bbox.y + node.bbox.h / 2 + size * GLYPH_BASELINE_FACTOR,
-          'font-size': size,
-          'text-anchor': 'middle',
-        },
-        [node.glyph],
-      )
-    }
-    case 'image': {
-      // Fixed attribute order (x y width height href preserveAspectRatio)
-      // per this package's canonical-serialization rule. Aspect is always
-      // preserved; alt renders as a <title> child (the SVG accessible-name
-      // mechanism), absence marks the image as presentation.
-      const hasAlt = node.alt !== undefined && node.alt.length > 0
-      return el(
-        'image',
-        {
-          ...rectAttrs(node.bbox),
-          href: node.href,
-          preserveAspectRatio: `xMidYMid ${node.fit === 'cover' ? 'slice' : 'meet'}`,
-          role: hasAlt ? undefined : PRESENTATION,
-        },
-        hasAlt ? [el('title', undefined, [node.alt as string])] : [],
-      )
-    }
+    case 'glyph':
+      return renderGlyph(node)
+    case 'image':
+      return renderImage(node)
   }
 }
 
