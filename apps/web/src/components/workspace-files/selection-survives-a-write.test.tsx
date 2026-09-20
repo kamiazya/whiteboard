@@ -72,4 +72,33 @@ describe('a write leaves the row it acted on selected', () => {
       expect(within(screen.getByTestId('okf-preview')).getByText('Standup notes')).toBeTruthy()
     })
   })
+
+  it('closes the rename dialog once the write has landed', async () => {
+    // Mutation-checked when the flow moved into `useRenameDocument`: nothing
+    // asserted that a SUCCESSFUL rename closes the dialog. Leaving it open
+    // over the renamed document passed all 287 jsdom tests, and the refusal
+    // path has its own case in rename-document-dialog.test.tsx — so the
+    // happy path was the half nobody watched.
+    let rows = before
+    const source = fakeFilesSource({
+      listDocuments: async () => rows,
+      setDocumentName: async () => {
+        rows = after
+      },
+    })
+    render(<WorkspaceFilesPanel source={source} onOpenDocument={() => {}} />)
+
+    await selectCard('Meeting notes')
+    const preview = await screen.findByTestId('okf-preview')
+    fireEvent.click(within(preview).getByRole('button', { name: /rename/i }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getAllByRole('textbox')[0] as HTMLElement, {
+      target: { value: 'Standup notes' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+  })
 })

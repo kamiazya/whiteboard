@@ -45,6 +45,7 @@ import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
+import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -238,9 +239,6 @@ export function WorkspaceFilesPanel({
   const [peek, setPeek] = useState<WorkspaceDocumentEntry | null>(null)
   // The rename dialog's target, plus the in-flight/refusal state its form
   // shows. Null means closed.
-  const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
-  const [renameBusy, setRenameBusy] = useState(false)
-  const [renameError, setRenameError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   // The vocabulary in use, as the keeper counts it (ADR-0040 decision 5),
   // reloaded with the list so deleting the last carrier of a tag removes
@@ -413,7 +411,7 @@ export function WorkspaceFilesPanel({
     setDocuments(null)
     setListStatus('ok')
     // Everything here NAMES A DOCUMENT, and a document belongs to exactly one
-    // workspace. `submitRename` and the card menu's verbs close over the
+    // workspace. The rename flow and the card menu's verbs close over the
     // CURRENT source while holding a captured entry, so anything left behind
     // addresses the departed workspace's path into the one now on screen —
     // and paths collide freely across workspaces, `untitled` most of all.
@@ -428,9 +426,7 @@ export function WorkspaceFilesPanel({
     setSelection(null)
     // The departed workspace's memory names its documents.
     resetDeviceMemory()
-    setRenaming(null)
-    setRenameError(null)
-    setRenameBusy(false)
+    renameRef.current.cancel()
     // Results computed against the departed workspace's content, still
     // clickable. The search effect does re-run on a source change, but only
     // after its debounce — until then these rows name documents that are not
@@ -635,40 +631,6 @@ export function WorkspaceFilesPanel({
    * leaves the new name applied, which is honest: the dialog stays open on
    * the server's refusal and the field still shows what was typed.
    */
-  const submitRename = useCallback(
-    async (entry: WorkspaceDocumentEntry, name: string | undefined, newPath: string) => {
-      setRenameBusy(true)
-      setRenameError(null)
-      try {
-        if ((entry.name ?? undefined) !== name) {
-          await source.setDocumentName(entry, name)
-        }
-        if (newPath !== entry.path) {
-          await moveDocumentRef.current(entry, newPath)
-        } else {
-          await refreshAndSelect(entry.path)
-        }
-        setRenaming(null)
-      } catch (err) {
-        // The server names the PRODUCED path that collided, which on a
-        // subtree move is often not the one typed here.
-        setRenameError(err instanceof Error ? err.message : 'Could not rename it.')
-        // A rename applies two writes; the first may have landed before the
-        // second was refused. Re-reading here is what stops the panel from
-        // showing a name the store no longer holds — the refusal is about
-        // the path, and the rest of the screen must still be true.
-        try {
-          await refreshAndSelect(entry.path)
-        } catch {
-          // The list read failing on top of a failed rename leaves what is
-          // already on screen; the dialog's own message is the report.
-        }
-      } finally {
-        setRenameBusy(false)
-      }
-    },
-    [source, readList],
-  )
 
   /**
    * Pinning used to be settable only from the editor header's document
@@ -720,12 +682,16 @@ export function WorkspaceFilesPanel({
     },
     [source, readList],
   )
-  // submitRename is declared above moveDocument (it reads better beside the
-  // dialog state) and calls it through a ref rather than being reordered:
-  // both are hooks, so their ORDER is load-bearing and a reader should not
-  // have to verify it twice.
-  const moveDocumentRef = useRef(moveDocument)
-  moveDocumentRef.current = moveDocument
+  // The rename flow owns its own three states (see use-rename-document.ts)
+  // and takes `moveDocument` directly — it is declared above, so the ref that
+  // used to bridge the two is gone with it.
+  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect })
+  // The scope reset runs ABOVE this (it clears everything a document names
+  // the moment the workspace changes), so it reaches the flow through a ref
+  // rather than by moving one of the two — both are hooks, and their order
+  // is load-bearing.
+  const renameRef = useRef<RenameDocument>(rename)
+  renameRef.current = rename
 
   /**
    * Moving the contents pane always empties the preview.
@@ -820,8 +786,7 @@ export function WorkspaceFilesPanel({
             icon: <Pencil />,
             onSelect: () => {
               setSelected(cardMenu.entry)
-              setRenameError(null)
-              setRenaming(cardMenu.entry)
+              rename.open(cardMenu.entry)
             },
           },
           ...(onRequestDelete === undefined
@@ -1184,8 +1149,7 @@ export function WorkspaceFilesPanel({
                 ? {}
                 : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
               onRename={(entry: WorkspaceDocumentEntry) => {
-                setRenameError(null)
-                setRenaming(entry)
+                rename.open(entry)
               }}
               {...(onDuplicateDocument === undefined
                 ? {}
@@ -1230,17 +1194,14 @@ export function WorkspaceFilesPanel({
         onClose={() => setPeek(null)}
       />
       <RenameDocumentDialog
-        document={renaming}
+        document={rename.renaming}
         workspace={workspace}
-        busy={renameBusy}
-        error={renameError}
-        onCancel={() => {
-          setRenaming(null)
-          setRenameError(null)
-        }}
+        busy={rename.busy}
+        error={rename.error}
+        onCancel={rename.cancel}
         onSubmit={(name, newPath) => {
-          if (renaming === null) return
-          void submitRename(renaming, name, newPath)
+          if (rename.renaming === null) return
+          void rename.submit(rename.renaming, name, newPath)
         }}
       />
       {cardMenu !== null && (
