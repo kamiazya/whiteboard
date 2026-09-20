@@ -25,6 +25,13 @@ export const MUTATED = [
   'src/layout/edges/diagonal-ink.ts',
   'src/layout/edges/edge-crossing-sweep.ts',
   'src/layout/edges/grid-route.ts',
+  // The priority queue grid-route searches with, extracted from inside it so
+  // it could be read and tested at all. Two properties — non-decreasing cost
+  // order, and the same multiset out as in — and neither is stated from the
+  // sift code: they are what a min-heap MEANS. Ties are deliberately not
+  // pinned, because the router has several optimal routes and ordering them
+  // here would fix one by accident.
+  'src/layout/edges/min-heap.ts',
   // Colour by intent (ADR-0040 decision 5): three properties over random
   // boards and libraries, stated from the declaration rather than the code.
   'src/tags/declared-colours.ts',
