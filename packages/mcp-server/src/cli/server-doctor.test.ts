@@ -4,7 +4,12 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
-import { defaultFetchPing, defaultVerifyIdentity, runServerDoctor } from './server-doctor.js'
+import {
+  defaultFetchPing,
+  defaultVerifyIdentity,
+  runServerDoctor,
+  SERVER_DOCTOR_CHECK_IDS,
+} from './server-doctor.js'
 
 let dataDir: string
 
@@ -577,3 +582,108 @@ async function runServerDoctorWithCapture(
 }
 
 type DaemonDoctorResultLike = Awaited<ReturnType<typeof runServerDoctor>>['result']
+
+/**
+ * Every declared check REPORTS, whatever happened.
+ *
+ * The invalid-config path answers the eight downstream checks as `skipped`,
+ * and it used to do that from a list of ids written out by hand beside the
+ * nine checks below it — two lists that had to agree, with nothing making
+ * them. A tenth check added to the sequence and not to that list would
+ * simply be absent from the result on an invalid config: no error, one
+ * fewer row, and `ok`/`status` aggregated over whatever did report.
+ *
+ * `SERVER_DOCTOR_CHECK_IDS` is the one declaration now, and this asserts
+ * the result covers it on BOTH paths — the gate is exactly where a missing
+ * row is invisible, and the happy path is what proves the declaration is
+ * not merely a list nobody runs.
+ */
+describe('the doctor reports every check it declares', () => {
+  it('on an invalid config, where every downstream check is skipped', async () => {
+    const { result } = await runServerDoctor({
+      // No JWKS URI: config parse fails, so the gate fires.
+      flags: { ...VALID_FLAGS, dataDir, jwksUri: undefined },
+      env: {},
+    })
+
+    expect(result.checks.map((c) => c.id)).toEqual([...SERVER_DOCTOR_CHECK_IDS])
+    expect(checkById(result.checks, 'server.config').status).toBe('error')
+    for (const id of SERVER_DOCTOR_CHECK_IDS.filter((each) => each !== 'server.config')) {
+      expect(checkById(result.checks, id).status).toBe('skipped')
+    }
+  })
+
+  it('on a valid config, where each one really runs', async () => {
+    await writeServerRecord(makeRecord())
+    const { result } = await runServerDoctor({
+      flags: { ...VALID_FLAGS, dataDir },
+      env: {},
+      isPidAlive: () => true,
+      verifyIdentity: async () => true,
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+      checkDataDir: () => 'ok',
+      readRecordMode: () => 0o600,
+      fetchPing: async () => ({ ok: true, pidMatches: true }),
+      fetchRuntimeStatus: async () => ({ ok: true, protected: true, leakDetected: false }),
+    })
+
+    expect(result.checks.map((c) => c.id)).toEqual([...SERVER_DOCTOR_CHECK_IDS])
+    expect(result.checks.every((c) => c.status !== 'skipped')).toBe(true)
+  })
+})
+
+/**
+ * The Windows branch of the permissions check, which the tests beside it
+ * say outright they cannot reach ("we can't override process.platform").
+ * It IS reachable — `process.platform` is a configurable property — and the
+ * branch has two halves worth pinning, because the second is invisible in
+ * the result: Windows reports `skipped`, AND never reads the mode bits at
+ * all. POSIX mode bits do not describe a Windows ACL, so reading them is
+ * not merely useless, it is a filesystem call made to ask a meaningless
+ * question.
+ */
+describe('the record-permissions check on Windows', () => {
+  const realPlatform = process.platform
+  const asPlatform = (value: NodeJS.Platform) => {
+    Object.defineProperty(process, 'platform', { value, configurable: true })
+  }
+  afterEach(() => asPlatform(realPlatform))
+
+  it('skips, and does not read POSIX mode bits to get there', async () => {
+    await writeServerRecord(makeRecord())
+    asPlatform('win32')
+    const readRecordMode = vi.fn(() => 0o644)
+
+    const { result } = await runServerDoctor({
+      flags: { ...VALID_FLAGS, dataDir },
+      env: {},
+      isPidAlive: () => false,
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+      checkDataDir: () => 'ok',
+      readRecordMode,
+    })
+
+    const check = checkById(result.checks, 'server.record_permissions')
+    expect(check.status).toBe('skipped')
+    expect(check.summary).toContain('Windows')
+    expect(readRecordMode).not.toHaveBeenCalled()
+  })
+
+  it('reads them on a POSIX platform, and reports what they say', async () => {
+    await writeServerRecord(makeRecord())
+    asPlatform('linux')
+    const readRecordMode = vi.fn(() => 0o644)
+
+    const { result } = await runServerDoctor({
+      flags: { ...VALID_FLAGS, dataDir },
+      env: {},
+      isPidAlive: () => false,
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+      checkDataDir: () => 'ok',
+      readRecordMode,
+    })
+
+    expect(checkById(result.checks, 'server.record_permissions').status).toBe('warning')
+    expect(readRecordMode).toHaveBeenCalledTimes(1)
+  })
+})
