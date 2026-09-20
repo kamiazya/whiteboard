@@ -38,7 +38,7 @@ const passkeysFileSchema = z.record(z.string(), registeredPasskeySchema)
 
 export type RegisteredPasskey = z.infer<typeof registeredPasskeySchema>
 
-interface StorageLike {
+export interface StorageLike {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
 }
@@ -102,7 +102,7 @@ function bytesToBase64Url(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
+export function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/')
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
   return Uint8Array.from(binary, (char) => char.charCodeAt(0))

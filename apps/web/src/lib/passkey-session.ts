@@ -11,37 +11,27 @@
  * matches on `['"\`]\/api\/` — this file's ledger entry stays live rather
  * than silently going stale the way a helper-hidden URL would.
  */
-import type {
-  SessionAssertChallengeResponse,
-  SessionAssertResponse,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
 import {
   sessionAssertChallengeResponseSchema,
   sessionAssertResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
 import type { BindOutcome } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import type { z } from 'zod'
 import {
   assertWithRegisteredPasskey,
+  base64UrlToBytes,
   getRegisteredPasskey,
   type PasskeyCredentials,
+  type StorageLike,
 } from './passkey-attestation.js'
 
-interface StorageLike {
-  getItem(key: string): string | null
-  setItem(key: string, value: string): void
-}
+const rejected = { ok: false, outcome: { ok: false, reason: 'rejected' } } as const
 
-function base64UrlToBytes(value: string): Uint8Array {
-  const padded = value.replaceAll('-', '+').replaceAll('_', '/')
-  const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0))
-}
-
-/** POSTs to `path` and answers the parsed body, or a `BindOutcome` failure describing why it could not. */
+/** POSTs to `url` and answers the parsed body, or a `BindOutcome` failure describing why it could not. */
 async function postAndParse<T>(
   fetchImpl: typeof globalThis.fetch,
   url: string,
-  schema: { safeParse(value: unknown): { success: boolean; data?: T } },
+  schema: z.ZodType<T>,
   body?: unknown,
 ): Promise<{ ok: true; data: T } | { ok: false; outcome: BindOutcome & { ok: false } }> {
   let response: Response
@@ -55,18 +45,9 @@ async function postAndParse<T>(
   } catch {
     return { ok: false, outcome: { ok: false, reason: 'unreachable' } }
   }
-  let json: unknown
-  try {
-    json = await response.json()
-  } catch {
-    json = undefined
-  }
-  if (!response.ok) return { ok: false, outcome: { ok: false, reason: 'rejected' } }
-  const parsed = schema.safeParse(json)
-  if (!parsed.success || parsed.data === undefined) {
-    return { ok: false, outcome: { ok: false, reason: 'rejected' } }
-  }
-  return { ok: true, data: parsed.data }
+  if (!response.ok) return rejected
+  const parsed = schema.safeParse(await response.json().catch(() => undefined))
+  return parsed.success ? { ok: true, data: parsed.data } : rejected
 }
 
 /**
@@ -95,7 +76,7 @@ export async function bindPasskeySession({
   // spelled with the quote directly before `/api/` on purpose: that is
   // literally what `keeper-parity.test.ts`'s daemon-reach scan matches, so
   // this file's ledger entry stays live instead of silently going stale.
-  const challengeResult = await postAndParse<SessionAssertChallengeResponse>(
+  const challengeResult = await postAndParse(
     fetch,
     '/api/pairing/session-assert/challenge',
     sessionAssertChallengeResponseSchema,
@@ -114,7 +95,7 @@ export async function bindPasskeySession({
   }
 
   const { kind: _kind, ...assertBody } = attestOutcome.attestation
-  const assertResult = await postAndParse<SessionAssertResponse>(
+  const assertResult = await postAndParse(
     fetch,
     '/api/pairing/session-assert',
     sessionAssertResponseSchema,
