@@ -55,6 +55,10 @@ const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
   'pnpm-workspace.yaml',
   'release-please-config.json',
   'server.json',
+  // The scanner reads it from the directory it is pointed at, and the lane
+  // points it at the repo — a monorepo has one Sonar project, not one per
+  // package, so this file has no package to live in.
+  'sonar-project.properties',
   // The one definition of the browser-mode project config, spread by the
   // three vitest.browser.config.ts files. Root on purpose: it sits beside
   // vitest.config.ts (which registers those projects) and belongs to no

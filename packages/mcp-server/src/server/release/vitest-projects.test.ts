@@ -22,6 +22,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
 const VITEST_PROJECTS_MODULE_PATH = join(ROOT, 'tools/checks/src/vitest-projects.mjs')
 const RUN_SHARED_LAYER_TESTS_MODULE_PATH = join(ROOT, 'tools/checks/src/run-shared-layer-tests.mjs')
+const RUN_COVERAGE_MODULE_PATH = join(ROOT, 'tools/checks/src/run-coverage.mjs')
 
 interface FixtureProject {
   configPath: string
@@ -54,6 +55,25 @@ interface RunSharedLayerTestsModule {
       opts: Record<string, unknown>,
     ) => { status: number | null; error?: Error }
   }) => number
+}
+
+interface RunCoverageModule {
+  deriveCoverageProjectNames: (repoRoot: string) => string[]
+  main: (options?: {
+    repoRoot?: string
+    stderr?: { write: (chunk: string) => boolean }
+    spawn?: (
+      cmd: string,
+      args: string[],
+      opts: Record<string, unknown>,
+    ) => { status: number | null; error?: Error }
+  }) => number
+}
+
+async function importRunCoverage(): Promise<RunCoverageModule> {
+  return (await import(
+    pathToFileURL(RUN_COVERAGE_MODULE_PATH).href
+  )) as unknown as RunCoverageModule
 }
 
 async function importVitestProjects(): Promise<VitestProjectsModule> {
@@ -501,5 +521,111 @@ describe('every test file belongs to a vitest project', () => {
     // matchedProjects, or the include parsing has silently gone empty.
     const anyMcp = matchedProjects('packages/mcp-server/src/server/app.test.ts')
     expect(anyMcp.map((p) => p.name)).toContain('mcp-node')
+  })
+})
+
+// The SonarQube lane's derivation (tools/checks/src/run-coverage.mjs). It is a
+// DIFFERENT cut of the same inventory from the shared-layer one above and the
+// difference is the whole point: coverage wants mcp-node and apps/web, which
+// that derivation deliberately leaves to their own CI jobs.
+describe('run-coverage.mjs (CLI)', () => {
+  let fixtureRoot: string
+
+  beforeEach(async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), 'run-coverage-fixture-'))
+  })
+
+  afterEach(async () => {
+    await rm(fixtureRoot, { recursive: true, force: true })
+  })
+
+  it('measures every non-browser project, including the ones the shared-layer step skips', async () => {
+    const { deriveCoverageProjectNames } = await importRunCoverage()
+    await writeFixtureRepo(fixtureRoot, [
+      // In PROJECTS_RUN_ELSEWHERE, so the shared-layer derivation drops both —
+      // and they are exactly the packages coverage most needs.
+      { configPath: 'packages/mcp-server/vitest.node.config.ts', name: 'mcp-node' },
+      { configPath: 'apps/web/vitest.config.ts', name: 'web-jsdom' },
+      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
+    ])
+
+    expect(deriveCoverageProjectNames(fixtureRoot)).toEqual(['alpha-node', 'mcp-node', 'web-jsdom'])
+  })
+
+  it('leaves out the browser projects and the one that needs a build', async () => {
+    const { deriveCoverageProjectNames } = await importRunCoverage()
+    await writeFixtureRepo(fixtureRoot, [
+      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
+      // Needs `pnpm build`; the coverage job deliberately does not run one.
+      { configPath: 'packages/mcp-server/vitest.smoke.config.ts', name: 'mcp-smoke' },
+      // Held out by nothing: arch-lint IS measured, under the widened
+      // per-test budget the run passes (see run-coverage.mjs).
+      { configPath: 'tools/arch-lint/vitest.node.config.ts', name: 'arch-lint-node' },
+      {
+        configPath: 'packages/alpha/vitest.browser.config.ts',
+        name: 'alpha-browser',
+        browser: true,
+      },
+      {
+        configPath: 'packages/beta/vitest.browser.config.ts',
+        name: 'beta-browser',
+        browser: 'shared-helper',
+      },
+    ])
+
+    expect(deriveCoverageProjectNames(fixtureRoot)).toEqual(['alpha-node', 'arch-lint-node'])
+  })
+
+  it('spawns the derived projects with --coverage and forwards the exit code', async () => {
+    const { main } = await importRunCoverage()
+    await writeFixtureRepo(fixtureRoot, [
+      { configPath: 'packages/zeta/vitest.node.config.ts', name: 'zeta-node' },
+      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
+    ])
+    const stderr = makeSink()
+    let capturedArgv: string[] | undefined
+    const exitCode = main({
+      repoRoot: fixtureRoot,
+      stderr,
+      spawn: (_cmd, args) => {
+        capturedArgv = args
+        return { status: 3 }
+      },
+    })
+
+    expect(capturedArgv).toEqual([
+      'exec',
+      'vitest',
+      'run',
+      '--project=alpha-node',
+      '--project=zeta-node',
+      '--coverage',
+      '--testTimeout=30000',
+    ])
+    expect(exitCode).toBe(3)
+  })
+
+  it('exits non-zero and never spawns anything when the derivation comes back empty', async () => {
+    const { main } = await importRunCoverage()
+    await writeFixtureRepo(fixtureRoot, [
+      { configPath: 'packages/mcp-server/vitest.smoke.config.ts', name: 'mcp-smoke' },
+    ])
+    const stderr = makeSink()
+    let spawnCalled = false
+    const exitCode = main({
+      repoRoot: fixtureRoot,
+      stderr,
+      spawn: () => {
+        spawnCalled = true
+        return { status: 0 }
+      },
+    })
+
+    expect(exitCode).not.toBe(0)
+    expect(
+      spawnCalled,
+      'an empty --project filter set runs EVERY project, browser ones included',
+    ).toBe(false)
+    expect(stderr.chunks.join('')).toMatch(/derivation failed/)
   })
 })
