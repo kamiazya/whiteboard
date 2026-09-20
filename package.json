@@ -18,6 +18,7 @@
     "test": "vitest run",
     "test:all": "vitest run",
     "test:coverage": "pnpm --filter @kamiazya/whiteboard-mcp test:coverage",
+    "coverage": "node tools/checks/src/run-coverage.mjs",
     "test:node": "vitest run --project mcp-node",
     "test:mcp-node": "vitest run --project mcp-node",
     "test:web-jsdom": "vitest run --project web-jsdom",
@@ -87,6 +88,7 @@
     "secretlint": "13.0.5",
     "@vitest/browser-playwright": "catalog:",
     "@vitest/ui": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "vitest": "catalog:"
   }
 }

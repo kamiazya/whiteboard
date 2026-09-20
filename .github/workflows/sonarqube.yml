@@ -1,0 +1,66 @@
+# SonarQube Cloud analysis — REPORT-ONLY, in its own workflow for that reason.
+#
+# It is deliberately NOT a job in ci.yml: every job there is listed in
+# ci-gate's `needs` (ci-gate.test.ts fails on a missing one), and ci-gate is
+# the single required check, so a Sonar job inside ci.yml would gate merges
+# whether or not anyone decided it should. Living here keeps the decision
+# explicit — turn it into a gate by adding the SonarQube Cloud check to branch
+# protection, not by moving the job.
+#
+# What it measures that nothing else in this repo can: duplication, the
+# maintainability/complexity ratings, and line coverage tracked over time.
+# The scanner does NOT wait on the quality gate (no sonar.qualitygate.wait),
+# so this job is green whenever the analysis uploaded; the verdict arrives as
+# SonarQube Cloud's own PR check and comment.
+#
+# Configuration lives in sonar-project.properties, next to the exclusions it
+# has to stay in sync with.
+name: SonarQube
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonarqube-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    # A pull request from a fork gets no secrets, so SONAR_TOKEN is empty and
+    # the scan would fail on authentication after paying for a full coverage
+    # run. Skip the job outright rather than spend ~10 minutes to fail.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Sonar's "new code" period is decided from git history, and its
+          # issue attribution from blame; a shallow clone has neither.
+          fetch-depth: 0
+          # Nothing here performs an authenticated git operation, and the job
+          # installs and runs the tree's own tooling — keep the job token away
+          # from it.
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Every non-browser vitest project in one run, so v8 writes a single
+      # merged tmp/coverage/lcov.info. Report-only means report-only: a failing
+      # test here must not hide the analysis, which is still worth having.
+      - name: Collect coverage
+        continue-on-error: true
+        run: pnpm coverage
+
+      - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
