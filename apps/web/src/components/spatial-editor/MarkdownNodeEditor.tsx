@@ -57,6 +57,7 @@ import {
   setAnnotationProjection,
 } from '../markdown-editor/annotation-decorations.js'
 import { completionOnDelete } from '../markdown-editor/completion-on-delete.js'
+import { completionPopupTheme, completionTouchAccept } from '../markdown-editor/completion-popup.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { emojiShortcodeMarks } from '../markdown-editor/emoji-shortcode-marks.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
@@ -66,10 +67,6 @@ import {
   shortcodeCompletionSource,
   shortcodeOptionRenderers,
 } from '../markdown-editor/shortcode-completion.js'
-import {
-  wikiLinkCompletionTheme,
-  wikiLinkTouchAccept,
-} from '../markdown-editor/wiki-link-completion.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null
@@ -226,7 +223,7 @@ export function MarkdownNodeEditor({
         // deletion, so a name finished long ago could not be corrected with
         // the list that wrote it.
         completionOnDelete(),
-        wikiLinkCompletionTheme,
+        completionPopupTheme,
         // The popup this node draws is a surface a finger meets, so it needs
         // the deterministic tap the document editor has: upstream accepts on
         // the SYNTHESIZED mousedown and separately closes when the
@@ -234,7 +231,7 @@ export function MarkdownNodeEditor({
         // accept is also the tap that blurs. Named for the source it was
         // written against; what it does is accept whatever option was
         // tapped, whichever source offered it.
-        wikiLinkTouchAccept,
+        completionTouchAccept,
         syntaxHighlighting(markdownHighlightStyle),
         // The node behind this editor draws its body with the shortcode
         // expanded, so the draft over it does too — otherwise committing
