@@ -25,7 +25,21 @@
 //   CSRF shape: the endpoint mints a token only FOR the requesting origin;
 //   it never mutates daemon data and never widens any other origin's
 //   access, so a forged cross-site POST yields the attacker nothing.
+//
+// POST /api/pairing/session-assert/challenge, POST /api/pairing/session-assert
+//   (ADR-0041 S0-2) — a paired browser session becomes a PERSON's session by
+//   asserting a pinned passkey over a daemon-minted challenge. Both require a
+//   valid pairing SESSION token as bearer for the request's Origin (the thing
+//   being bound), checked against the token store directly in the handler —
+//   the surrounding scope middleware alone would also admit the daemon token
+//   and, on an open daemon, the `anonymous` grant, neither of which has a
+//   session to bind. The challenge is keyed to the SESSION TOKEN that asked
+//   (never the origin alone), so another session paired with the same origin
+//   cannot spend it. `bind` on a successful assertion is what promotes the
+//   token; this slice answers `profileId: null` always — mapping the bound
+//   credential to a MemberProfile is a later slice's job.
 import { createHash } from 'node:crypto'
+import { membershipRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   type CreateGrantResponse,
   createGrantRequestSchema,
@@ -39,16 +53,30 @@ import {
   pairingTokenResponseSchema,
   pinnedCredentialSummarySchema,
   registerCredentialRequestSchema,
+  type SessionAssertChallengeResponse,
+  type SessionAssertResponse,
+  sessionAssertChallengeResponseSchema,
+  sessionAssertRequestSchema,
+  sessionAssertResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
 import { Hono } from 'hono'
+import { getLogger } from '../log.js'
+import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
-import type { PairingCodeStore, PairingTokenStore } from '../security/pairing-session.js'
+import {
+  createSessionChallengeStore,
+  type PairingCodeStore,
+  type PairingTokenStore,
+} from '../security/pairing-session.js'
+import { decodeAttestation, verifyWebAuthnAssertion } from '../security/webauthn-assertion.js'
 import type {
   PinnedCredential,
   WebAuthnCredentialStore,
 } from '../security/webauthn-credential-store.js'
 import { verifyWebAuthnRegistration } from '../security/webauthn-registration.js'
+
+const log = getLogger('pairing')
 
 function signTokenResponse(
   identity: DaemonIdentity,
@@ -247,6 +275,125 @@ export function createPairingRouter({
       ...(parsed.data.nonce !== undefined
         ? { identity: signTokenResponse(identity, parsed.data.nonce, minted, origin) }
         : {}),
+    })
+    return c.json(response, 200)
+  })
+
+  // In-memory, 60s, one live challenge per session — never persisted, and
+  // scoped to this router because nothing else reads it.
+  const challenges = createSessionChallengeStore()
+
+  // Authenticates by a valid pairing SESSION token for the requesting
+  // Origin, checked against the token store directly rather than the
+  // surrounding scope middleware: an `/api/*` route only admits a Bearer
+  // that resolves to SOME grant, and both the daemon token and (on an open
+  // daemon) `anonymous` resolve fine there — neither has a session to bind.
+  function requireSession(c: {
+    req: { header(name: string): string | undefined }
+  }): { token: string; origin: string } | null {
+    const token = parseBearerAuthorizationHeader(c.req.header('authorization'))
+    if (token === null) return null
+    const originHeader = c.req.header('origin')
+    if (!originHeader) return null
+    let origin: string
+    try {
+      origin = new URL(originHeader).origin
+    } catch {
+      return null
+    }
+    if (!tokens.validate(token, origin)) return null
+    return { token, origin }
+  }
+
+  app.post('/api/pairing/session-assert/challenge', (c) => {
+    const session = requireSession(c)
+    if (session === null) return c.json({ error: 'unauthorized' }, 401)
+    const minted = challenges.mint(session.token)
+    const response: SessionAssertChallengeResponse =
+      sessionAssertChallengeResponseSchema.parse(minted)
+    return c.json(response, 200)
+  })
+
+  app.post('/api/pairing/session-assert', async (c) => {
+    const session = requireSession(c)
+    if (session === null) return c.json({ error: 'unauthorized' }, 401)
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json({ error: 'invalid JSON body' }, 400)
+    }
+    const parsed = sessionAssertRequestSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+    }
+    const { credentialId } = parsed.data
+
+    const pin = credentials.find(session.origin, credentialId)
+    if (pin === null) {
+      log.warning(
+        { origin: session.origin, credentialId, reason: 'unknown_credential' },
+        'session assertion refused',
+      )
+      return c.json(
+        membershipRefusalSchema.parse({
+          error: 'unknown_credential',
+          message: 'no passkey is pinned for this origin and credential',
+        }),
+        403,
+      )
+    }
+
+    const nonce = challenges.redeem(session.token)
+    if (nonce === null) {
+      log.warning(
+        { origin: session.origin, credentialId, reason: 'challenge' },
+        'session assertion refused',
+      )
+      return c.json({ error: 'assertion_rejected', message: 'challenge' }, 403)
+    }
+
+    const verdict = verifyWebAuthnAssertion(
+      decodeAttestation({ kind: 'webauthn', ...parsed.data }),
+      {
+        challenge: nonce,
+        origin: session.origin,
+        rpId: pin.rpId,
+        publicKeyJwk: pin.publicKeyJwk,
+      },
+    )
+    if (!verdict.ok) {
+      log.warning(
+        { origin: session.origin, credentialId, reason: verdict.reason },
+        'session assertion refused',
+      )
+      return c.json({ error: 'assertion_rejected', message: verdict.reason }, 403)
+    }
+    if (verdict.backupEligible !== pin.backupEligible) {
+      log.warning(
+        { origin: session.origin, credentialId, reason: 'backupEligibility' },
+        'session assertion refused',
+      )
+      return c.json({ error: 'assertion_rejected', message: 'backupEligibility' }, 403)
+    }
+    if (!credentials.recordSignCount(session.origin, credentialId, verdict.signCount)) {
+      log.warning(
+        { origin: session.origin, credentialId, reason: 'signCount' },
+        'session assertion refused',
+      )
+      return c.json({ error: 'assertion_rejected', message: 'signCount' }, 403)
+    }
+
+    const bound = tokens.bind(session.token, { origin: session.origin, credentialId })
+    if (bound === null) {
+      // The token expired between requireSession's check and here.
+      return c.json({ error: 'unauthorized' }, 401)
+    }
+    const response: SessionAssertResponse = sessionAssertResponseSchema.parse({
+      credentialId,
+      profileId: null,
+      boundUntil: bound.expiresAt,
     })
     return c.json(response, 200)
   })

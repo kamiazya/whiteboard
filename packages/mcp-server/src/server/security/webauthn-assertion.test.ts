@@ -9,66 +9,27 @@
  * what makes the tamper property honest — it can flip any bit anywhere and
  * know the verifier, not the fixture, is what refused it.
  */
-import { createHash, sign as cryptoSign, generateKeyPairSync, type KeyObject } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { attestationSchema } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import {
+  WEBAUTHN_FLAG_BE as BE,
+  WEBAUTHN_FLAG_BS as BS,
+  buildAssertion as build,
+  p256Keypair as keypair,
+  registrationAuthData,
+  WEBAUTHN_FLAG_UP as UP,
+  WEBAUTHN_FLAG_UV as UV,
+} from '../../shared/test-utils/webauthn-fixtures.js'
 import {
   decodeAttestation,
   parseAuthenticatorData,
   verifyWebAuthnAssertion,
 } from './webauthn-assertion.js'
 
-const UP = 0x01
-const UV = 0x04
-const BE = 0x08
-const BS = 0x10
-
 const sha256 = (input: Uint8Array | string): Buffer => createHash('sha256').update(input).digest()
 const b64u = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url')
-
-function keypair() {
-  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
-  const jwk = publicKey.export({ format: 'jwk' }) as { x: string; y: string }
-  return {
-    privateKey,
-    publicKeyJwk: { kty: 'EC' as const, crv: 'P-256' as const, x: jwk.x, y: jwk.y },
-  }
-}
-
-interface BuildInput {
-  privateKey: KeyObject
-  rpId: string
-  origin: string
-  challenge: Uint8Array
-  flags: number
-  signCount: number
-  type?: string
-}
-
-function build({
-  privateKey,
-  rpId,
-  origin,
-  challenge,
-  flags,
-  signCount,
-  type = 'webauthn.get',
-}: BuildInput) {
-  const authenticatorData = Buffer.alloc(37)
-  sha256(rpId).copy(authenticatorData, 0)
-  authenticatorData[32] = flags
-  authenticatorData.writeUInt32BE(signCount, 33)
-  const clientDataJSON = Buffer.from(
-    JSON.stringify({ type, challenge: b64u(challenge), origin, crossOrigin: false }),
-  )
-  const signature = cryptoSign(
-    'sha256',
-    Buffer.concat([authenticatorData, sha256(clientDataJSON)]),
-    privateKey,
-  )
-  return { authenticatorData, clientDataJSON, signature }
-}
 
 const rpIdArb = fc.constantFrom('kamiazya-whiteboard.pages.dev', 'localhost', 'example.test')
 const challengeArb = fc.uint8Array({ minLength: 16, maxLength: 64 })
@@ -341,34 +302,6 @@ describe('attestationSchema and decodeAttestation', () => {
     expect(attestationSchema.safeParse({ ...base, kind: 'other' }).success).toBe(false)
   })
 })
-
-/**
- * Registration authenticatorData: the assertion layout plus, under the AT
- * flag, the attested credential data — aaguid (16) || credentialIdLength (2)
- * || credentialId || a COSE key this parser does not read (the key reaches
- * the daemon as SPKI, which `node:crypto` already understands).
- */
-function registrationAuthData({
-  rpId,
-  flags,
-  signCount,
-  credentialId,
-  coseKeyBytes = Buffer.alloc(77),
-}: {
-  rpId: string
-  flags: number
-  signCount: number
-  credentialId: Uint8Array
-  coseKeyBytes?: Buffer
-}): Buffer {
-  const head = Buffer.alloc(37)
-  sha256(rpId).copy(head, 0)
-  head[32] = flags
-  head.writeUInt32BE(signCount, 33)
-  const length = Buffer.alloc(2)
-  length.writeUInt16BE(credentialId.length, 0)
-  return Buffer.concat([head, Buffer.alloc(16, 0xaa), length, credentialId, coseKeyBytes])
-}
 
 describe('parseAuthenticatorData', () => {
   const AT = 0x40

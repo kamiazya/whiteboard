@@ -36,6 +36,7 @@ import { ALL_AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
 import { isAuthorized } from './bearer-token.js'
 import { verifyMacaroon } from './macaroon.js'
 import type { OAuthTransactionStore } from './oauth-authz-transactions.js'
+import type { PairingTokenStore, PasskeyBinding } from './pairing-session.js'
 
 type GrantKind =
   /** No daemon token is configured, so every caller holds everything. */
@@ -51,6 +52,11 @@ export interface ResolvedGrant {
   readonly scopes: readonly AuthScope[]
   /** Who the credential names, where it names anyone (an OAuth client). */
   readonly subject?: string
+  /** Set only for a pairing token bound to a passkey (ADR-0041 S0-2) — a
+   *  session becomes a PERSON's session this way, never through `subject`,
+   *  which names an OAuth client rather than a person. Mapping this to a
+   *  MemberProfile is a later slice's job. */
+  readonly passkey?: PasskeyBinding
 }
 
 /**
@@ -83,7 +89,7 @@ export interface CredentialResolverConfig {
   daemonToken?: string
   /** Absent unless the operator configured the hosted-origin OAuth surface. */
   grantStore?: Pick<OAuthTransactionStore, 'verifyAccessToken'>
-  pairingTokens?: { validate(token: string, origin: string): boolean }
+  pairingTokens?: Pick<PairingTokenStore, 'validate' | 'bindingOf'>
   redeemTicket?: RedeemTicketFn
   /** Absent until a composition root supplies one (ADR-0043 decision 9). */
   macaroonRootKey?: Uint8Array
@@ -141,7 +147,10 @@ export function createCredentialResolver(config: CredentialResolverConfig): Cred
             normalized = null
           }
           if (normalized !== null && config.pairingTokens.validate(secret, normalized)) {
-            return { kind: 'pairing', scopes: ALL_AUTH_SCOPES }
+            const passkey = config.pairingTokens.bindingOf(secret, normalized)
+            return passkey === null
+              ? { kind: 'pairing', scopes: ALL_AUTH_SCOPES }
+              : { kind: 'pairing', scopes: ALL_AUTH_SCOPES, passkey }
           }
         }
 

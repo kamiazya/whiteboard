@@ -132,10 +132,11 @@ export const listCredentialsResponseSchema = z
   .strict()
 export type ListCredentialsResponse = z.infer<typeof listCredentialsResponseSchema>
 
-// GET /api/pairing/session-assert/challenge — mints the nonce a paired
+// POST /api/pairing/session-assert/challenge — mints the nonce a paired
 // session signs to become a PERSON's session (a passkey-bound session,
-// ADR-0041). 43 chars is the canonical unpadded base64url length of exactly
-// 32 decoded bytes.
+// ADR-0041). POST rather than GET: minting is a state change (it consumes
+// the session's one live challenge slot). 43 chars is the canonical
+// unpadded base64url length of exactly 32 decoded bytes.
 export const sessionAssertChallengeResponseSchema = z
   .object({
     challenge: base64urlSchema.length(43, '32 decoded bytes'),
