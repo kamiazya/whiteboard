@@ -452,3 +452,76 @@ describe('elements whose fields hold objects', () => {
     })
   })
 })
+
+/**
+ * A removal is proposed for EVERY collection, not only for edges.
+ *
+ * Measured before this: dropping the node removals, or the line removals,
+ * from the diff left all 15 tests green — only the edge path was covered.
+ * A proposal that deleted a box would have stored no change at all, and
+ * `applied: 0` reads exactly like "there was nothing to propose".
+ *
+ * The three walks are one `diffCollection` now, so these reach the same
+ * code; they are written per collection anyway, because the op SHAPES are
+ * what a reviewer of a proposal reads and each names a different key.
+ */
+describe('a removal is proposed whatever was removed', () => {
+  const INKED: SpatialCanvas = {
+    ...BOARD,
+    lines: [
+      {
+        id: 'ln',
+        from: { kind: 'point', point: { x: 0, y: 0 } },
+        to: { kind: 'point', point: { x: 10, y: 10 } },
+      },
+    ],
+  }
+
+  test('a node removal carries the whole node as its prior value', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+
+    await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      // Removing `a` also removes the edge that ends on it, so the proposal
+      // carries both — which is the point: the cascade is proposed too.
+      ops: [{ op: 'node.remove', id: 'a' }],
+    })
+
+    const [proposal] = await storedProposals(deps)
+    const removal = proposal?.changes.find((change) => change.op === 'node.remove')
+    expect(removal).toMatchObject({ id: 'node:a', status: 'open', op: 'node.remove', nodeId: 'a' })
+    expect((removal as { assumed: { id: string } }).assumed.id).toBe('a')
+  })
+
+  test('a line removal carries the whole line as its prior value', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, INKED)
+    const deps = makeDeps(store)
+
+    await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      ops: [{ op: 'line.remove', id: 'ln' }],
+    })
+
+    const [proposal] = await storedProposals(deps)
+    expect(proposal?.changes).toEqual([
+      {
+        id: 'line:ln',
+        status: 'open',
+        op: 'line.remove',
+        lineId: 'ln',
+        assumed: {
+          id: 'ln',
+          from: { kind: 'point', point: { x: 0, y: 0 } },
+          to: { kind: 'point', point: { x: 10, y: 10 } },
+        },
+      },
+    ])
+  })
+})
