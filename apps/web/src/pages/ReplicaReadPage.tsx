@@ -334,11 +334,17 @@ export function ReplicaReadPage({
     [state, selected, scheduleSave],
   )
 
+  const lockedLine = state.kind === 'withheld' ? lockedDetail(state.reason) : undefined
+
   // Mounted before it speaks (polite-live-region.test.ts): a role="status"
   // region that arrives already carrying its message is announced
   // inconsistently, so this ONE region stays in the DOM for the page's whole
   // life and only its text changes — sr-only when there is nothing to say,
   // since the visible copy below says the same thing for a sighted reader.
+  // 'locked' and 'needs-connection' both render NOTHING but a connectivity
+  // message, so a screen-reader user landing there (first mount, or after a
+  // Reconnect attempt that settles back) must hear it — not just 'Loading…'
+  // followed by silence.
   const liveStatus =
     state.kind === 'loading'
       ? 'Loading…'
@@ -346,9 +352,9 @@ export function ReplicaReadPage({
         ? 'Reconnecting…'
         : pageState === 'removed'
           ? REPLICA_STATE_COPY.removed.body
-          : null
-
-  const lockedLine = state.kind === 'withheld' ? lockedDetail(state.reason) : undefined
+          : pageState === 'locked' || pageState === 'needs-connection'
+            ? REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')
+            : null
 
   return (
     <div className="flex h-full flex-col" data-testid="replica-read-page">

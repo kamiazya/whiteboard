@@ -27,6 +27,7 @@ import {
 } from '../components/spatial-editor/node-editor-test-utils.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
 import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
 import { REPLICA_TIER_COPY } from '../lib/replica-tier-copy.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -545,7 +546,28 @@ describe('ReplicaReadPage states', () => {
     releaseReconnect()
     await vi.waitFor(() => {
       expect(screen.queryByTestId('replica-reconnecting-line')).toBeNull()
-      expect(status.textContent).toBe('')
+      // 'locked' is itself a page-critical connectivity message, not
+      // silence: a screen-reader user who was mid-'Reconnecting…' must
+      // still hear why the page settled back where it did.
+      expect(status.textContent).toBe(REPLICA_STATE_COPY.locked.body)
     })
+  })
+
+  it('locked and needs-connection are announced in the live region, not left silent', async () => {
+    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+    markReplica(DAEMON_WS, DAEMON)
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        syncedAt={SYNCED}
+        daemonBaseUrl={DAEMON}
+        renewal="unreachable"
+        onReconnect={noopReconnect}
+      />,
+    )
+    await screen.findByTestId('replica-state-needs-connection')
+    expect((await screen.findByTestId('replica-live-status')).textContent).toBe(
+      REPLICA_STATE_COPY['needs-connection'].body,
+    )
   })
 })
