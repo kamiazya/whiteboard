@@ -26,9 +26,20 @@ on:
 permissions:
   contents: read
 
+# A PR only cares about its latest push, so superseding an in-flight
+# analysis there is right. The DEFAULT BRANCH is the opposite: its analysis
+# is the project's record — the ratings, the issue counts, the coverage
+# history — and cancelling it means main is never analysed at all while
+# merges arrive faster than an analysis takes.
+#
+# Measured before this: six consecutive main analyses cancelled in a row,
+# the newest push killing the previous run each time. The dashboard kept
+# answering from an analysis over an hour old, and nothing said so — a
+# cancelled run is not a failed one, so no check went red and no
+# notification fired.
 concurrency:
   group: sonarqube-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   analyze:
