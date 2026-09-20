@@ -253,6 +253,45 @@ sentence). `gap` on a pinned cell records the missing part with its reason.
 Extending the matrix in one dimension only is a type error (`satisfies
 Record<Capability, Record<Surface, Cell>>`).
 
+### Derive the second axis when you can
+
+`apps/web/src/components/spatial-editor/element-verb-parity.test.ts` is the
+matrix one step stronger, and the step is worth naming because the weakness
+it closes is invisible: **a hand-kept axis is a list, and a list is what a
+ledger exists to replace.**
+
+`element-pick.property.test.ts` already derives its ELEMENT axis from
+`SpatialCanvas`, so a collection the model gains stops `tsc`. Its other axis
+is a seven-member `EditorSurface` union written by hand — the seven places a
+line was forgotten in one session — and a surface added tomorrow is a surface
+nobody is asked about. So the verb matrix derives that one too, through a
+chain where each link is a type error: every `EditorLeafCommand` kind
+declares `{verb, target}` (`satisfies Record<kind, …>`, so a new command
+stops the build), the verb vocabulary is a `const` tuple those entries are
+typed against (so a new verb stops it again), and the matrix is `satisfies
+Record<ElementVerb, Record<ElementCollection, Cell>>` (so a new verb row owes
+all four collections). A cell says `command`, `gap: <reason>` or
+`n/a: <reason>`, and **`command` is checked against the classification rather
+than believed** — the two runtime directions are a `command` with no command
+behind it, and a `gap`/`n/a` whose command now exists. The second is the one
+the file is for: a filled gap makes its own entry fail, so a missing
+affordance stays visible instead of being rediscovered by whoever next tries
+to drag one.
+
+Two things it measured:
+
+- **The first reading is the finding.** A `CanvasLine` stores seven things a
+  person could want changed — both ends, a side, bends, colour, label,
+  facets, and where the stroke sits — and the editor writes NONE of them.
+  Ink could be drawn, picked, banded, shift-added, ungrouped, locked and
+  deleted, and after that it was fixed. Nothing was red about that.
+- **A family that issues no verb of its own is invisible to a verb matrix.**
+  Copy, cut, paste and duplicate build a batch of `create-node`/`create-edge`,
+  so every cell reads `command` for them and the family looks answered; what
+  actually decides which kinds survive a copy is `clipboardFragmentSchema`'s
+  shape. That needed its own four-cell table, read off the schema's own keys.
+  Before reaching for a matrix, ask what the axis CANNOT see.
+
 It is NOT a coverage ledger, and the difference decides where each belongs:
 a ledger tallies what a run PRODUCED over one declared surface, and a matrix
 declares a cross-surface intent that no single run can produce. So a matrix
