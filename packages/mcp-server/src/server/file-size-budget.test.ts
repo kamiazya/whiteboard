@@ -599,7 +599,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // target overlay, and the two release branches that now answer for a
   // re-attachment as well as a connect — the hit-test for `targetNodeId`,
   // and the source box the overlay marks instead of offering.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3126,
+  // Raised 3126 -> 3194, +68, for naming `handlePointerMove`'s seven steps.
+  // The file GREW and is more readable for it: 121 lines of guard chain
+  // became seven named steps plus a handler that reads as the order they run
+  // in, and each step's reason now sits on the step rather than in a run of
+  // comments a reader has to attach to the right `if`. The cost is a doc
+  // comment per step; the alternative — module functions — would have moved
+  // 32 closed-over values into parameters and grown the file further.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3194,
 }
 
 describe('the path form both ledgers are keyed with', () => {
