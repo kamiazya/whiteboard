@@ -1,11 +1,19 @@
 # ADR-0042: An offline policy decides whether a replica exists, and revocation withholds its key
 
-**Status:** Accepted — human gate 2026-09-19. Design of record; nothing
-implemented. Split out of [ADR-0041](0041-profile-and-authority.md), which
-decides profiles and authority. Constrains [ADR-0023](0023-replica-model.md)
+**Status:** Accepted — human gate 2026-09-19, in effect since 2026-09-21.
+Decisions 1, 2, 3 and 5 are implemented end to end: the daemon's
+`POST /api/workspaces/:id/replica-key` route enforces the per-workspace tier
+and issues a `bounded` lease's timestamp, and every production
+`DocumentStore` construction in `apps/web` goes through one factory
+(`replica-store.ts`'s `openDocumentStore`) that seals a daemon-kept
+workspace's IndexedDB chunks under the session key it holds in memory only,
+while a browser-kept workspace stays plaintext as it always did (see
+[`docs/explanation/security-model.md`](../../explanation/security-model.md)).
+Split out of [ADR-0041](0041-profile-and-authority.md), which decides
+profiles and authority. Constrains [ADR-0023](0023-replica-model.md)
 decision 2's offline-readable replica with an organisation policy, and makes
-the revocation cryptographic rather than advisory. The cold-start-offline case
-is the one part deferred, and it shares a gesture with
+the revocation cryptographic rather than advisory. Decision 6,
+cold-start-offline, is the one part still deferred — it shares a gesture with
 [ADR-0039](0039-passkey-attestation.md) decision 6.
 
 ## Context
