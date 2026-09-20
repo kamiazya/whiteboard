@@ -3,9 +3,9 @@ import {
   TICKET_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
-import * as timingSafe from '../security/timing-safe.js'
+import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createWsTicketStore } from '../security/ws-ticket-store.js'
 import { authorizeWsUpgrade } from './ws-auth.js'
 
@@ -17,20 +17,29 @@ import { authorizeWsUpgrade } from './ws-auth.js'
 
 describe('authorizeWsUpgrade', () => {
   it('rejects with 403 when the Host header is non-loopback (DNS rebinding guard)', async () => {
-    const decision = await authorizeWsUpgrade({ host: 'evil.example.com:3099' })
+    const decision = await authorizeWsUpgrade(
+      { host: 'evil.example.com:3099' },
+      createCredentialResolver({}),
+    )
     expect(decision).toEqual({ accept: false, statusCode: 403 })
   })
 
   it('rejects with 403 when Origin host disagrees with the loopback Host header', async () => {
-    const decision = await authorizeWsUpgrade({
-      host: '127.0.0.1:3099',
-      origin: 'http://attacker.test',
-    })
+    const decision = await authorizeWsUpgrade(
+      {
+        host: '127.0.0.1:3099',
+        origin: 'http://attacker.test',
+      },
+      createCredentialResolver({}),
+    )
     expect(decision).toEqual({ accept: false, statusCode: 403 })
   })
 
   it('accepts loopback Host with no Origin (curl / MCP daemon client) when no token is required', async () => {
-    const decision = await authorizeWsUpgrade({ host: 'localhost:3099' })
+    const decision = await authorizeWsUpgrade(
+      { host: 'localhost:3099' },
+      createCredentialResolver({}),
+    )
     expect(decision.accept).toBe(true)
   })
 
@@ -40,24 +49,31 @@ describe('authorizeWsUpgrade', () => {
     // concession — grants every scope. This pins that the grant is present
     // and explicit, not an implicit "everything is allowed" left for
     // routes/ws.ts to assume.
-    const decision = await authorizeWsUpgrade({ host: 'localhost:3099' }, 'secret-token', [])
+    const decision = await authorizeWsUpgrade(
+      { host: 'localhost:3099' },
+      createCredentialResolver({ daemonToken: 'secret-token' }),
+      [],
+    )
     expect(decision.accept).toBe(false) // no protocol/token offered
     const acceptedDecision = await authorizeWsUpgrade(
       {
         host: 'localhost:3099',
         'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret-token`,
       },
-      'secret-token',
+      createCredentialResolver({ daemonToken: 'secret-token' }),
     )
     expect(acceptedDecision.accept).toBe(true)
     expect(acceptedDecision.scopes).toEqual(ALL_AUTH_SCOPES)
   })
 
   it('reports the negotiated subprotocol when the client offers it', async () => {
-    const decision = await authorizeWsUpgrade({
-      host: 'localhost:3099',
-      'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
-    })
+    const decision = await authorizeWsUpgrade(
+      {
+        host: 'localhost:3099',
+        'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
+      },
+      createCredentialResolver({}),
+    )
     expect(decision).toEqual({
       accept: true,
       protocol: WHITEBOARD_WS_PROTOCOL,
@@ -71,7 +87,7 @@ describe('authorizeWsUpgrade', () => {
         host: 'localhost:3099',
         'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
       },
-      'secret',
+      createCredentialResolver({ daemonToken: 'secret' }),
     )
     expect(decision).toEqual({ accept: false, statusCode: 401 })
   })
@@ -82,7 +98,7 @@ describe('authorizeWsUpgrade', () => {
         host: 'localhost:3099',
         'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
       },
-      'secret',
+      createCredentialResolver({ daemonToken: 'secret' }),
     )
     expect(decision).toEqual({
       accept: true,
@@ -91,24 +107,10 @@ describe('authorizeWsUpgrade', () => {
     })
   })
 
-  it('compares the offered daemon token through the shared timing-safe helper, not a plain !==', async () => {
-    const spy = vi.spyOn(timingSafe, 'timingSafeEqualStrings')
-    try {
-      await authorizeWsUpgrade(
-        {
-          host: 'localhost:3099',
-          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
-        },
-        'secret',
-      )
-      expect(spy).toHaveBeenCalledWith(
-        `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
-        `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
-      )
-    } finally {
-      spy.mockRestore()
-    }
-  })
+  // The timing-safe comparison moved with the credential branch: it is now
+  // `credential-resolver.test.ts`'s to assert, against the resolver rather
+  // than against this surface. Kept as a pointer rather than deleted, because
+  // "this file no longer checks that" is worth a reader knowing.
 
   it('rejects with 401 for a same-length but wrong offered token', async () => {
     const decision = await authorizeWsUpgrade(
@@ -118,7 +120,7 @@ describe('authorizeWsUpgrade', () => {
         // partial/prefix comparison bug.
         'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}wrongy`,
       },
-      'secret',
+      createCredentialResolver({ daemonToken: 'secret' }),
     )
     expect(decision).toEqual({ accept: false, statusCode: 401 })
   })
@@ -130,7 +132,7 @@ describe('authorizeWsUpgrade', () => {
         origin: 'https://evil.example',
         'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
       },
-      'secret',
+      createCredentialResolver({ daemonToken: 'secret' }),
     )
     expect(decision).toEqual({ accept: false, statusCode: 403 })
   })
@@ -141,7 +143,7 @@ describe('authorizeWsUpgrade', () => {
         host: 'localhost:3099',
         'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}wrong`,
       },
-      'secret',
+      createCredentialResolver({ daemonToken: 'secret' }),
     )
     expect(decision).toEqual({ accept: false, statusCode: 401 })
   })
@@ -150,10 +152,13 @@ describe('authorizeWsUpgrade', () => {
     // Node's URL parser keeps the brackets in .hostname for IPv6 ("[::1]"),
     // while the Host header side is normalized to bare "::1" — both sides
     // must agree once stripped, or real IPv6 loopback dev setups get a 403.
-    const decision = await authorizeWsUpgrade({
-      host: '[::1]:3099',
-      origin: 'http://[::1]:5173',
-    })
+    const decision = await authorizeWsUpgrade(
+      {
+        host: '[::1]:3099',
+        origin: 'http://[::1]:5173',
+      },
+      createCredentialResolver({}),
+    )
     expect(decision.accept).toBe(true)
   })
 
@@ -169,7 +174,7 @@ describe('authorizeWsUpgrade', () => {
     it('admits a localhost Origin against a 127.0.0.1 Host without an allowlist entry', async () => {
       const decision = await authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
-        undefined,
+        createCredentialResolver({}),
         [],
       )
       expect(decision.accept).toBe(true)
@@ -178,7 +183,7 @@ describe('authorizeWsUpgrade', () => {
     it('still requires the token for a cross-name loopback Origin when token auth is on', async () => {
       const decision = await authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
-        'secret-token',
+        createCredentialResolver({ daemonToken: 'secret-token' }),
         [],
       )
       expect(decision).toEqual({ accept: false, statusCode: 401 })
@@ -191,7 +196,7 @@ describe('authorizeWsUpgrade', () => {
           origin: 'http://localhost:5173',
           'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret-token',
         },
-        'secret-token',
+        createCredentialResolver({ daemonToken: 'secret-token' }),
         [],
       )
       expect(decision.accept).toBe(true)
@@ -204,7 +209,7 @@ describe('authorizeWsUpgrade', () => {
     it('admits an exact allowlisted hosted origin against a loopback Host', async () => {
       const decision = await authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'https://kamiazya-whiteboard.pages.dev' },
-        undefined,
+        createCredentialResolver({}),
         allowedOrigins,
       )
       expect(decision.accept).toBe(true)
@@ -213,7 +218,7 @@ describe('authorizeWsUpgrade', () => {
     it('still rejects a non-loopback Host even for an allowlisted origin (DNS-rebinding guard)', async () => {
       const decision = await authorizeWsUpgrade(
         { host: 'evil.example.com:3099', origin: 'https://kamiazya-whiteboard.pages.dev' },
-        undefined,
+        createCredentialResolver({}),
         allowedOrigins,
       )
       expect(decision).toEqual({ accept: false, statusCode: 403 })
@@ -222,7 +227,7 @@ describe('authorizeWsUpgrade', () => {
     it('rejects a lookalike origin not present in the allowlist', async () => {
       const decision = await authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'https://evil-kamiazya-whiteboard.pages.dev' },
-        undefined,
+        createCredentialResolver({}),
         allowedOrigins,
       )
       expect(decision).toEqual({ accept: false, statusCode: 403 })
@@ -235,7 +240,7 @@ describe('authorizeWsUpgrade', () => {
           origin: 'https://kamiazya-whiteboard.pages.dev',
           'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret' }),
         allowedOrigins,
       )
       expect(decision).toEqual({ accept: false, statusCode: 401 })
@@ -252,7 +257,7 @@ describe('authorizeWsUpgrade', () => {
           origin: 'https://preview-42.kamiazya-whiteboard.pages.dev',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret' }),
         wildcardAllowedOrigins,
       )
       expect(decision.accept).toBe(true)
@@ -261,7 +266,7 @@ describe('authorizeWsUpgrade', () => {
     it('still 403s a non-matching origin', async () => {
       const decision = await authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'https://evil.com' },
-        undefined,
+        createCredentialResolver({}),
         wildcardAllowedOrigins,
       )
       expect(decision).toEqual({ accept: false, statusCode: 403 })
@@ -270,7 +275,7 @@ describe('authorizeWsUpgrade', () => {
     it('403s a two-label subdomain — only one label is matched', async () => {
       const decision = await authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'https://a.b.kamiazya-whiteboard.pages.dev' },
-        undefined,
+        createCredentialResolver({}),
         wildcardAllowedOrigins,
       )
       expect(decision).toEqual({ accept: false, statusCode: 403 })
@@ -284,10 +289,12 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}abc123`,
         },
-        'daemon-token-irrelevant-here',
+        createCredentialResolver({
+          daemonToken: 'daemon-token-irrelevant-here',
+          redeemTicket: (ticket) =>
+            ticket === 'abc123' ? { scopes: ['canvas:read'], clientId: 'client-a' } : null,
+        }),
         [],
-        (ticket) =>
-          ticket === 'abc123' ? { scopes: ['canvas:read'], clientId: 'client-a' } : null,
       )
       expect(decision).toEqual({
         accept: true,
@@ -302,9 +309,8 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}spent`,
         },
-        undefined,
+        createCredentialResolver({ redeemTicket: () => null }),
         [],
-        () => null,
       )
       expect(decision).toEqual({ accept: false, statusCode: 401 })
     })
@@ -315,7 +321,7 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}abc123`,
         },
-        undefined,
+        createCredentialResolver({}),
         [],
       )
       expect(decision).toEqual({ accept: false, statusCode: 401 })
@@ -327,9 +333,8 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
         },
-        'secret',
+        createCredentialResolver({ daemonToken: 'secret', redeemTicket: () => null }),
         [],
-        () => null,
       )
       expect(decision).toEqual({
         accept: true,
@@ -339,10 +344,13 @@ describe('authorizeWsUpgrade', () => {
     })
 
     it('preserves the no-auth-required path: still returns ALL_AUTH_SCOPES when no token is configured', async () => {
-      const decision = await authorizeWsUpgrade({
-        host: 'localhost:3099',
-        'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
-      })
+      const decision = await authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
+        },
+        createCredentialResolver({}),
+      )
       expect(decision).toEqual({
         accept: true,
         protocol: WHITEBOARD_WS_PROTOCOL,
@@ -359,9 +367,11 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, oauth-access-token-raw-value`,
         },
-        'daemon-secret',
+        createCredentialResolver({
+          daemonToken: 'daemon-secret',
+          redeemTicket: () => ({ scopes: ALL_AUTH_SCOPES, clientId: 'should-not-be-reached' }),
+        }),
         [],
-        () => ({ scopes: ALL_AUTH_SCOPES, clientId: 'should-not-be-reached' }),
       )
       expect(decision).toEqual({ accept: false, statusCode: 401 })
     })
@@ -375,9 +385,8 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
         },
-        undefined,
+        createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
         [],
-        ticketStore.redeemTicket,
       )
       expect(first).toEqual({
         accept: true,
@@ -390,9 +399,8 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
         },
-        undefined,
+        createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
         [],
-        ticketStore.redeemTicket,
       )
       expect(replay).toEqual({ accept: false, statusCode: 401 })
     })
@@ -407,9 +415,8 @@ describe('authorizeWsUpgrade', () => {
           // Base protocol (WHITEBOARD_WS_PROTOCOL) omitted, ticket only.
           'sec-websocket-protocol': `${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
         },
-        undefined,
+        createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
         [],
-        ticketStore.redeemTicket,
       )
       expect(malformed).toEqual({ accept: false, statusCode: 401 })
 
@@ -418,9 +425,8 @@ describe('authorizeWsUpgrade', () => {
           host: 'localhost:3099',
           'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
         },
-        undefined,
+        createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
         [],
-        ticketStore.redeemTicket,
       )
       expect(retry).toEqual({
         accept: true,

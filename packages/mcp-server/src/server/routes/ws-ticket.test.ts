@@ -4,6 +4,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
 import { describe, expect, it } from 'vitest'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
+import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createOAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { createWsTicketStore } from '../security/ws-ticket-store.js'
 import { authorizeWsUpgrade } from './ws-auth.js'
@@ -95,9 +96,8 @@ describe('POST /api/ws-ticket', () => {
         host: 'localhost:3099',
         'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
       },
-      undefined,
+      createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
       [],
-      ticketStore.redeemTicket,
     )
     expect(decision).toEqual({
       accept: true,

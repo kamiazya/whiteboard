@@ -92,23 +92,30 @@ export interface CredentialResolverConfig {
 export function createCredentialResolver(config: CredentialResolverConfig): CredentialResolver {
   return {
     async resolve({ secret, carrier, origin, now = Date.now() }) {
+      // A ticket is its own lane in both directions: only tried when offered
+      // as one, and never falling through to the other credentials when it
+      // fails. A secret offered as a ticket is a claim about what it is, and a
+      // failed claim is a malformed offer rather than something to keep
+      // guessing at.
+      //
+      // Tried BEFORE the open-daemon shortcut below, which is not arbitrary:
+      // on a daemon with no token configured, `authorizeWsUpgrade` redeems an
+      // offered ticket and the socket carries the ticket's own NARROWER
+      // scopes. Answering `anonymous` first would widen that to everything and
+      // leave the ticket unburned.
+      if (carrier === 'ws-ticket') {
+        if (secret === null) return null
+        const redeemed = config.redeemTicket?.(secret) ?? null
+        if (redeemed === null) return null
+        return { kind: 'ws-ticket', scopes: redeemed.scopes, subject: redeemed.clientId }
+      }
+
       // An open daemon is open whatever was presented, including nothing.
       // This is `isAuthorized`'s own "no token configured → true", said once.
       if (!config.daemonToken) {
         return { kind: 'anonymous', scopes: ALL_AUTH_SCOPES }
       }
       if (secret === null) return null
-
-      // A ticket is its own lane in both directions: only tried when offered
-      // as one, and never falling through to the other credentials when it
-      // fails. A secret offered as a ticket is a claim about what it is, and a
-      // failed claim is a malformed offer rather than something to keep
-      // guessing at.
-      if (carrier === 'ws-ticket') {
-        const redeemed = config.redeemTicket?.(secret) ?? null
-        if (redeemed === null) return null
-        return { kind: 'ws-ticket', scopes: redeemed.scopes, subject: redeemed.clientId }
-      }
 
       // Order is a cost decision. The two credentials that authorize
       // everything come first so they never pay for the verification of the

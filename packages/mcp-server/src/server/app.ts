@@ -183,6 +183,7 @@ export function createApp(options: AppOptions) {
     grantStore: oauthAuthz?.store,
     pairingTokens: localDaemon?.pairing?.tokens,
     macaroonRootKey: localDaemon?.macaroonRootKey,
+    redeemTicket: localDaemon?.wsTicketStore?.redeemTicket,
   })
 
   if (options.authMode === 'server-mode') {
@@ -497,7 +498,11 @@ export function createApp(options: AppOptions) {
       }
       return c.html(SERVER_MODE_PLACEHOLDER_HTML)
     })
-    return app
+    // Same shape as the local-daemon return below, so callers see one type
+    // rather than a union. Server-mode does not consult this resolver — its
+    // `/api/*` goes through `createServerModeApiAuthMiddleware` over the
+    // AsyncAuthStrategy — but returning it keeps the two exits honest.
+    return Object.assign(app, { credentialResolver })
   }
 
   for (const pattern of ['/fonts/*', '/assets/*']) {
@@ -553,5 +558,15 @@ export function createApp(options: AppOptions) {
     }
   })
 
-  return app
+  // Returned alongside the app so the WEBSOCKET UPGRADE shares this exact
+  // instance. `http-server.ts` owns that surface and is outside the Hono app,
+  // so without this it would have to build a second resolver from a second
+  // copy of the config — and a credential added to one copy and not the other
+  // is the defect this whole component exists to make impossible.
+  //
+  // Attached to the return rather than threaded through the options because
+  // `createApp` has 133 call sites: making the resolver a required OPTION
+  // would be a mechanical rewrite of all of them, and a mechanical rewrite is
+  // where the last precedence bug came from.
+  return Object.assign(app, { credentialResolver })
 }

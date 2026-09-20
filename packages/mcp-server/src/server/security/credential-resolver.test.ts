@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ALL_AUTH_SCOPES } from './auth-strategy.js'
 import { createCredentialResolver } from './credential-resolver.js'
 import { mintMacaroon } from './macaroon.js'
+import * as timingSafe from './timing-safe.js'
 
 const DAEMON_TOKEN = 'the-daemon-token'
 const ROOT_KEY = new Uint8Array(32).fill(7)
@@ -186,5 +187,69 @@ describe('createCredentialResolver — branch order is a cost decision', () => {
 
     // No root key configured, so a macaroon is just an unknown secret.
     expect(await resolver.resolve(bearer(token))).toBeNull()
+  })
+})
+
+describe('createCredentialResolver — an open daemon does not swallow a ticket', () => {
+  // `authorizeWsUpgrade` redeems an offered ticket before it reaches its own
+  // "no token configured" shortcut, so the socket carries the ticket's own
+  // narrower scopes. Answering `anonymous` first would widen that to
+  // everything AND leave the ticket unburned — a silent widening on exactly
+  // the configuration with the least else protecting it.
+  it('redeems a ticket even with no daemon token configured', async () => {
+    const redeemTicket = vi.fn(() => ({ scopes: ['canvas:read'] as const, clientId: 'client-c' }))
+    const resolver = createCredentialResolver({ redeemTicket })
+
+    expect(await resolver.resolve({ secret: 'tkt', carrier: 'ws-ticket' })).toEqual({
+      kind: 'ws-ticket',
+      scopes: ['canvas:read'],
+      subject: 'client-c',
+    })
+    expect(redeemTicket).toHaveBeenCalledTimes(1)
+  })
+
+  it('still refuses a ticket that does not redeem, open daemon or not', async () => {
+    const resolver = createCredentialResolver({ redeemTicket: () => null })
+
+    expect(await resolver.resolve({ secret: 'tkt', carrier: 'ws-ticket' })).toBeNull()
+  })
+
+  it('leaves every other carrier anonymous on an open daemon', async () => {
+    const resolver = createCredentialResolver({ redeemTicket: () => null })
+
+    expect((await resolver.resolve(bearer('anything')))?.kind).toBe('anonymous')
+    expect((await resolver.resolve({ secret: 'anything', carrier: 'ws-subprotocol' }))?.kind).toBe(
+      'anonymous',
+    )
+  })
+})
+
+describe('createCredentialResolver — how the daemon token is compared', () => {
+  // Followed the credential branch here from `ws-auth.test.ts`. The invariant
+  // is unchanged and still worth pinning: a secret compared with `!==` leaks
+  // its length and a prefix through timing, and the shared helper is the one
+  // place that is handled.
+  it('goes through the shared timing-safe helper, not a plain !==', async () => {
+    const spy = vi.spyOn(timingSafe, 'timingSafeEqualStrings')
+    try {
+      const resolver = createCredentialResolver({ daemonToken: DAEMON_TOKEN })
+      await resolver.resolve(bearer(DAEMON_TOKEN))
+
+      expect(spy).toHaveBeenCalledWith(DAEMON_TOKEN, DAEMON_TOKEN)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('uses it for a wrong secret too, so the refusal path is no faster to probe', async () => {
+    const spy = vi.spyOn(timingSafe, 'timingSafeEqualStrings')
+    try {
+      const resolver = createCredentialResolver({ daemonToken: DAEMON_TOKEN })
+      await resolver.resolve(bearer('wrong-but-same-length!'))
+
+      expect(spy).toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

@@ -4,14 +4,13 @@ import {
   TICKET_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
-import { ALL_AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'
+import type { AuthScope } from '../security/auth-strategy.js'
 import {
   isLoopbackHostname,
   normalizeHostHeader,
   normalizeOriginHostname,
 } from '../security/cors-loopback.js'
-import { verifyMacaroon } from '../security/macaroon.js'
-import { timingSafeEqualStrings } from '../security/timing-safe.js'
+import type { CredentialResolver } from '../security/credential-resolver.js'
 import {
   type AllowedWebOrigins,
   isAllowedWebOrigin,
@@ -64,40 +63,32 @@ export interface WsUpgradeDecision {
   accept: boolean
   statusCode?: number
   protocol?: string
-  // Present only when `accept` is true. Local-daemon's single shared token
-  // is the only credential this upgrade path issues today, and — matching
-  // `createLocalTokenAuthStrategy`'s documented single-tenant concession —
-  // it grants every scope. The field exists so the per-message enforcement
-  // in `routes/ws.ts` has something real to check against now, and so a
-  // future scoped credential (a server-mode connection ticket, per
-  // ADR-0005) has a seam to plug a narrower grant into without changing the
-  // enforcement call site.
+  // Present only when `accept` is true, and it is what the socket may do:
+  // `routes/ws.ts` checks it per operation against `ws-scope-registry.ts`.
+  // Which credentials can produce a NARROWER set than the full one is the
+  // resolver's business, not this file's.
   scopes?: readonly AuthScope[]
 }
 
-// Redeems a connection ticket minted by POST /api/ws-ticket (ADR-0005),
-// returning the grant's own scopes on success. Injected rather than imported
-// directly so this module stays agnostic of the concrete ws-ticket-store
-// instance — the caller (http-server.ts) owns the one store shared with the
-// route handler that mints tickets.
-export type RedeemTicketFn = (ticket: string) => {
-  scopes: readonly AuthScope[]
-  clientId: string
-} | null
-
+/**
+ * Who may open this socket, and with what.
+ *
+ * The credential branches live in `security/credential-resolver.ts`; what is
+ * here is this surface's own three things — the carrier (a
+ * `Sec-WebSocket-Protocol` entry rather than a header), the policy (NONE at
+ * the handshake, because `routes/ws.ts` enforces per operation downstream
+ * against `ws-scope-registry.ts`), and the refusal shape (a status code on a
+ * decision object, not a response).
+ *
+ * The resolver is a REQUIRED argument. It used to be five optional ones, and
+ * dropping `macaroonRootKey` from the call site left all eleven macaroon tests
+ * green because each supplied its own key — the defect that motivated the
+ * whole refactor.
+ */
 export async function authorizeWsUpgrade(
   headers: IncomingHttpHeaders,
-  token?: string,
+  resolver: CredentialResolver,
   allowedOrigins: AllowedWebOrigins = [],
-  redeemTicket?: RedeemTicketFn,
-  // Origin-scoped pairing session tokens: accepted through the same
-  // daemon-token subprotocol carrier the paired web app already uses, but
-  // only when the upgrade's own Origin header matches the origin the token
-  // was minted for.
-  pairingTokens?: { validate(token: string, origin: string): boolean },
-  // ADR-0043 decision 9: absent until a composition root supplies one, so a
-  // daemon that mints no macaroons carries no macaroon branch at all.
-  macaroonRootKey?: Uint8Array,
 ): Promise<WsUpgradeDecision> {
   if (!isAllowedBrowserOrigin(headers.origin, headers.host, allowedOrigins)) {
     return { accept: false, statusCode: 403 }
@@ -105,86 +96,67 @@ export async function authorizeWsUpgrade(
 
   const protocols = parseProtocolHeader(headers['sec-websocket-protocol'])
   const offeredBaseProtocol = protocols.includes(WHITEBOARD_WS_PROTOCOL)
+  const origin = typeof headers.origin === 'string' ? headers.origin : undefined
 
-  // Checked ahead of the daemon-token branch: a ticket is a narrower,
-  // single-use credential distinct from the shared daemon token, and an
-  // offered ticket protocol entry must be redeemed (or rejected) on its own
-  // terms even when a daemon token is also configured for this daemon.
+  // Checked ahead of everything else: a ticket is a narrower, single-use
+  // credential distinct from the shared daemon token, and an offered ticket
+  // must be redeemed (or rejected) on its own terms even when a daemon token
+  // is also configured.
   const offeredTicketProtocol = protocols.find((protocol) =>
     protocol.startsWith(TICKET_WS_PROTOCOL_PREFIX),
   )
   if (offeredTicketProtocol !== undefined) {
-    // Redemption is single-use, so it must only be attempted once the
-    // request is otherwise well-formed: a malformed request missing the base
-    // protocol is rejected without ever touching the store, so a still-valid
-    // ticket survives to be retried with a correctly-formed request.
+    // Redemption is single-use, so it must only be attempted once the request
+    // is otherwise well-formed: a malformed request missing the base protocol
+    // is rejected without ever touching the store, so a still-valid ticket
+    // survives to be retried with a correctly-formed request.
     if (!offeredBaseProtocol) {
       return { accept: false, statusCode: 401 }
     }
-    const rawTicket = offeredTicketProtocol.slice(TICKET_WS_PROTOCOL_PREFIX.length)
-    const redeemed = redeemTicket?.(rawTicket) ?? null
-    if (redeemed === null) {
+    const grant = await resolver.resolve({
+      secret: offeredTicketProtocol.slice(TICKET_WS_PROTOCOL_PREFIX.length),
+      carrier: 'ws-ticket',
+      origin,
+    })
+    if (grant === null) {
       return { accept: false, statusCode: 401 }
     }
-    // Never ALL_AUTH_SCOPES here: a ticket carries exactly the scopes its
+    // Never the full set here: a ticket carries exactly the scopes its
     // originating OAuth grant held, which is the whole point of bridging
-    // through a ticket rather than reusing the daemon-token's full-authority
-    // path.
-    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: redeemed.scopes }
-  }
-
-  if (!token) {
-    return {
-      accept: true,
-      protocol: offeredBaseProtocol ? WHITEBOARD_WS_PROTOCOL : undefined,
-      scopes: ALL_AUTH_SCOPES,
-    }
+    // through a ticket rather than reusing the daemon token's path.
+    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: grant.scopes }
   }
 
   const offeredToken = protocols.find((protocol) =>
     protocol.startsWith(DAEMON_TOKEN_WS_PROTOCOL_PREFIX),
   )
-  const expectedToken = `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`
+  const grant = await resolver.resolve({
+    secret:
+      offeredToken === undefined
+        ? null
+        : offeredToken.slice(DAEMON_TOKEN_WS_PROTOCOL_PREFIX.length),
+    carrier: 'ws-subprotocol',
+    origin,
+  })
+
+  // A daemon with no token configured accepts the upgrade whether or not the
+  // base protocol was offered — the one place this surface answers without
+  // one, and it predates the resolver.
+  if (grant?.kind === 'anonymous') {
+    return {
+      accept: true,
+      protocol: offeredBaseProtocol ? WHITEBOARD_WS_PROTOCOL : undefined,
+      scopes: grant.scopes,
+    }
+  }
   if (!offeredBaseProtocol || offeredToken === undefined) {
     return { accept: false, statusCode: 401 }
   }
-  if (timingSafeEqualStrings(offeredToken, expectedToken)) {
-    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+  if (grant === null) {
+    return { accept: false, statusCode: 401 }
   }
-  if (pairingTokens !== undefined && typeof headers.origin === 'string') {
-    let origin: string | null = null
-    try {
-      origin = new URL(headers.origin).origin
-    } catch {
-      origin = null
-    }
-    const rawToken = offeredToken.slice(DAEMON_TOKEN_WS_PROTOCOL_PREFIX.length)
-    if (origin !== null && pairingTokens.validate(rawToken, origin)) {
-      return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
-    }
-  }
-
-  // A macaroon rides the same subprotocol carrier as the daemon token, and is
-  // tried last so neither of the two credentials above pays for its
-  // verification. It is the second credential here — after the OAuth ticket —
-  // whose grant is NARROWER than the full set, and `routes/ws.ts` enforces
-  // that grant on every text message and every binary update against
-  // `ws-scope-registry.ts`, so a narrower array here really narrows what the
-  // socket can do rather than being a value nobody reads.
-  //
-  // No `requiredScopes` is imposed at the handshake: what a socket may do is
-  // decided per operation downstream, so the upgrade's job is to establish
-  // that the token is genuine and unexpired and to hand its grant along. This
-  // is the same shape the ticket branch takes with `redeemed.scopes`.
-  if (macaroonRootKey !== undefined) {
-    const verdict = await verifyMacaroon({
-      token: offeredToken.slice(DAEMON_TOKEN_WS_PROTOCOL_PREFIX.length),
-      rootKey: macaroonRootKey,
-      context: { requiredScopes: [], now: Date.now() },
-    })
-    if (verdict.ok) {
-      return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: verdict.scopes }
-    }
-  }
-  return { accept: false, statusCode: 401 }
+  // `routes/ws.ts` runs `hasRequiredScopes` on every text message and every
+  // binary update, so a narrower array here really narrows what the socket can
+  // do rather than being a value nobody reads.
+  return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: grant.scopes }
 }

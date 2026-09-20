@@ -4,6 +4,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
 import { describe, expect, it } from 'vitest'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
+import { createCredentialResolver } from '../security/credential-resolver.js'
 import { mintMacaroon } from '../security/macaroon.js'
 import { authorizeWsUpgrade } from './ws-auth.js'
 
@@ -17,7 +18,11 @@ const headers = (offered: string) => ({
 })
 
 const upgrade = (offered: string, rootKey?: Uint8Array) =>
-  authorizeWsUpgrade(headers(offered), DAEMON_TOKEN, [], undefined, undefined, rootKey)
+  authorizeWsUpgrade(
+    headers(offered),
+    createCredentialResolver({ daemonToken: DAEMON_TOKEN, macaroonRootKey: rootKey }),
+    [],
+  )
 
 describe('authorizeWsUpgrade — a macaroon carries its own scopes, not the full grant', () => {
   // The point of the slice. `ws.ts` already enforces per operation
@@ -105,11 +110,8 @@ describe('authorizeWsUpgrade — what a macaroon must not change', () => {
 
     const decision = await authorizeWsUpgrade(
       { ...headers(token), host: 'evil.example.com:3099' },
-      DAEMON_TOKEN,
+      createCredentialResolver({ daemonToken: DAEMON_TOKEN, macaroonRootKey: ROOT_KEY }),
       [],
-      undefined,
-      undefined,
-      ROOT_KEY,
     )
 
     expect(decision).toEqual({ accept: false, statusCode: 403 })
@@ -130,11 +132,8 @@ describe('authorizeWsUpgrade — what a macaroon must not change', () => {
         host: 'localhost:3099',
         'sec-websocket-protocol': `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`,
       },
-      DAEMON_TOKEN,
+      createCredentialResolver({ daemonToken: DAEMON_TOKEN, macaroonRootKey: ROOT_KEY }),
       [],
-      undefined,
-      undefined,
-      ROOT_KEY,
     )
 
     expect(decision).toEqual({ accept: false, statusCode: 401 })

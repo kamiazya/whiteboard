@@ -486,13 +486,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         socket.destroy()
         return
       }
+      // The SAME resolver instance the Hono app's surfaces use — see the end
+      // of `createApp`. Two resolvers built from two copies of the config is
+      // how a credential ends up admitted on one surface and refused on
+      // another, which is what this component exists to prevent.
       const decision = await authorizeWsUpgrade(
         req.headers,
-        options.token,
+        app.credentialResolver,
         allowedWebOrigins,
-        wsTicketStore.redeemTicket,
-        pairing.tokens,
-        macaroonRootKey,
       )
       if (!decision.accept) {
         const statusCode = decision.statusCode ?? 401
