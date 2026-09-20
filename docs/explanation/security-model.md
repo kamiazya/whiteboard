@@ -164,7 +164,7 @@ recorded to seal it retroactively — the next IndexedDB open (`DB_VERSION`
 20) discards that record outright, chunks included, and the next daemon
 resolve re-pulls it sealed.
 
-**The offline read page shows one of four states**, decided from what the
+**The offline read page shows one of five states**, decided from what the
 daemon's renewal answered and what the in-memory key holder knows, never
 from a raw network error read directly:
 
@@ -176,16 +176,23 @@ from a raw network error read directly:
   not held (a cold start, or a `bounded` lease that lapsed); a Reconnect
   action re-asks the daemon and, if it answers, unlocks the same page
   without losing the person's place.
-- **Removed** — the daemon was reached and refused, either because the
-  pairing grant itself was revoked or because the replica-key request came
+- **Unpaired** — the daemon was reached and no longer accepts this
+  browser's pairing (the grant was revoked, or lost with the daemon's grant
+  store). That says nothing about the person's membership, so the page says
+  only that the device must be paired again; pairing starts from the
+  daemon's own pair link.
+- **Removed** — the daemon was reached and the replica-key request came
   back a membership refusal. The person is told plainly ("You were removed
   from this workspace; changes made since then were not sent") and offered
   no export and no retry that would send anything — discard-and-tell is
   the ban.
 
 A reason the daemon never answered (an unreachable network, an expired
-lease) never renders as the fourth state: only a request the daemon
-actually reached and refused does.
+lease) never renders as removed or unpaired: only a request the daemon
+actually reached and refused does. And only the replica-key route, which
+checks membership, can say "removed" — the pairing route's refusal answers
+the same way for a revoked grant and for a lost grant store, so it is never
+read as a claim about the person.
 
 ## Daemon impersonation (loopback port squatting, the other direction)
 

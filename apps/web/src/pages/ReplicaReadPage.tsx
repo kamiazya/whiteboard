@@ -350,8 +350,8 @@ export function ReplicaReadPage({
       ? 'Loading…'
       : reconnecting
         ? 'Reconnecting…'
-        : pageState === 'removed'
-          ? REPLICA_STATE_COPY.removed.body
+        : pageState === 'removed' || pageState === 'unpaired'
+          ? REPLICA_STATE_COPY[pageState].body
           : pageState === 'locked' || pageState === 'needs-connection'
             ? REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')
             : null
@@ -442,9 +442,9 @@ export function ReplicaReadPage({
           )}
         </div>
       )}
-      {pageState === 'removed' && (
-        <p className="p-4 text-sm text-muted-foreground" data-testid="replica-state-removed">
-          {REPLICA_STATE_COPY.removed.body}
+      {(pageState === 'removed' || pageState === 'unpaired') && (
+        <p className="p-4 text-sm text-muted-foreground" data-testid={`replica-state-${pageState}`}>
+          {REPLICA_STATE_COPY[pageState].body}
         </p>
       )}
     </div>

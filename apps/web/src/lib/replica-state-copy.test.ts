@@ -9,7 +9,7 @@ import { REPLICA_TIER_COPY } from './replica-tier-copy.js'
 const JARGON = /\b(tier|replica|epoch|key)\b/i
 
 describe('REPLICA_STATE_COPY', () => {
-  it('declares exactly the four page states, no more and no fewer', () => {
+  it('declares exactly the five page states, no more and no fewer', () => {
     expect(Object.keys(REPLICA_STATE_COPY).sort()).toEqual([...REPLICA_PAGE_STATES].sort())
   })
 
@@ -23,8 +23,14 @@ describe('REPLICA_STATE_COPY', () => {
     )
   })
 
-  it('removed offers no action', () => {
+  it('removed and unpaired offer no action', () => {
     expect(REPLICA_STATE_COPY.removed.action).toBeUndefined()
+    expect(REPLICA_STATE_COPY.unpaired.action).toBeUndefined()
+  })
+
+  it('unpaired says the device is unpaired and never claims the person was removed', () => {
+    expect(REPLICA_STATE_COPY.unpaired.body).toContain('no longer paired')
+    expect(REPLICA_STATE_COPY.unpaired.body).not.toMatch(/removed/i)
   })
 
   it('locked and needs-connection each name an action', () => {

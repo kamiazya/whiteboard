@@ -1,5 +1,5 @@
 /**
- * The replica read page's four degradation states (ADR-0042 decisions 3-5),
+ * The replica read page's five degradation states (ADR-0042 decisions 3-5),
  * as a pure function of what the renewal answered and what the S4a holder
  * knows about this workspace's key — never of the tier or of whether a
  * registry entry exists, both of which the caller has already resolved
@@ -7,7 +7,7 @@
  *
  * Exhaustive over the full (renewal x key) input space rather than a
  * sample: the space is small and finite (2 x 11 = 22), and it is exactly
- * what a dropped arm — or a fifth state nobody wired a case for — would
+ * what a dropped arm — or a sixth state nobody wired a case for — would
  * change the count of.
  */
 import { membershipRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
@@ -46,7 +46,7 @@ const LOCKED_REASONS = [
 ] as const
 
 function expectedState(renewal: ReplicaRenewalInput, key: ReplicaKeyInput): ReplicaPageState {
-  if (renewal === 'refused') return 'removed'
+  if (renewal === 'refused') return 'unpaired'
   if (key === 'missing') return 'needs-connection'
   if (key === 'readable') return 'readable'
   const reason = key.withheld
@@ -67,11 +67,12 @@ describe('replicaPageState', () => {
     expect(keys.length).toBe(11)
   })
 
-  it('is exhaustive: every (renewal x key) input maps to exactly one of the four states, 22 total', () => {
+  it('is exhaustive: every (renewal x key) input maps to exactly one of the five states, 22 total', () => {
     const tally: Record<ReplicaPageState, number> = {
       'needs-connection': 0,
       readable: 0,
       locked: 0,
+      unpaired: 0,
       removed: 0,
     }
     let total = 0
@@ -85,12 +86,26 @@ describe('replicaPageState', () => {
       }
     }
     expect(total).toBe(22)
-    expect(tally).toEqual({ 'needs-connection': 1, readable: 1, locked: 4, removed: 16 })
+    expect(tally).toEqual({
+      'needs-connection': 1,
+      readable: 1,
+      locked: 4,
+      unpaired: 11,
+      removed: 5,
+    })
   })
 
-  it('fails closed: a refused renewal is always removed, even with a key still held readable', () => {
+  it('fails closed: a refused renewal is always unpaired, even with a key still held readable', () => {
     for (const key of keys) {
-      expect(replicaPageState({ renewal: 'refused', key })).toBe('removed')
+      expect(replicaPageState({ renewal: 'refused', key })).toBe('unpaired')
+    }
+  })
+
+  it('a refused renewal is never removed: the token route cannot speak for membership', () => {
+    // The same 403 answers a revoked grant and a daemon whose grant store was
+    // lost; the person's membership is only ever decided by the key route.
+    for (const key of keys) {
+      expect(replicaPageState({ renewal: 'refused', key })).not.toBe('removed')
     }
   })
 

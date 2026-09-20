@@ -243,9 +243,10 @@ keeps a **cached replica** instead — it opens read-only when the daemon
 cannot be reached, so your data stays viewable offline. What it shows
 depends on what is actually on this device and what the daemon last said:
 a copy that is readable in memory, a copy that is present but locked until
-the daemon can be reached again (with a Reconnect action), or — if you
-were removed from the workspace — a plain notice that you were removed and
-that nothing you changed since is sent anywhere. If anything could
+the daemon can be reached again (with a Reconnect action), a notice that
+this device is no longer paired with the daemon and must be paired again,
+or — if you were removed from the workspace — a plain notice that you were
+removed and that nothing you changed since is sent anywhere. If anything could
 not be confirmed (for example an image upload failed), the browser copy is
 kept unchanged and the result says so; moving again later is safe and
 simply re-merges.

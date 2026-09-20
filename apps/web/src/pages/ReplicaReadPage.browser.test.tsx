@@ -430,7 +430,7 @@ describe('ReplicaReadPage states', () => {
     }
   })
 
-  it('removed (renewal refused): no tree, no editor, no button, no export', async () => {
+  it('unpaired (renewal refused): says the device is unpaired, never that the person was removed', async () => {
     await seedReplica()
     render(
       <ReplicaReadPage
@@ -441,10 +441,10 @@ describe('ReplicaReadPage states', () => {
         onReconnect={noopReconnect}
       />,
     )
-    const removed = await screen.findByTestId('replica-state-removed')
-    expect(removed.textContent).toContain(
-      'removed from this workspace; changes made since then were not sent',
-    )
+    const unpaired = await screen.findByTestId('replica-state-unpaired')
+    expect(unpaired.textContent).toContain('no longer paired')
+    expect(unpaired.textContent).not.toContain('removed')
+    expect(screen.queryByTestId('replica-state-removed')).toBeNull()
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(document.querySelector('[contenteditable]')).toBeNull()
   })

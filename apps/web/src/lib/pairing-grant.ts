@@ -133,12 +133,13 @@ export type GrantConsumeResult =
    *  re-pins. */
   | { status: 'identity-mismatch'; daemonBaseUrl: string }
   /**
-   * The daemon was REACHED and said no (HTTP 403) — a revoked grant, most
-   * often because the membership behind it was removed. Distinct from
-   * `'none'`, which also covers a daemon that could not be reached at all:
-   * the replica read plane (ADR-0042 decision 4) shows a removed member a
-   * different page than an unreachable one, and conflating the two would
-   * read a network blip as a ban.
+   * The daemon was REACHED and said no (HTTP 403): this origin holds no
+   * pairing grant there any more — revoked, or lost with the daemon's grant
+   * store. It says nothing about the person's membership; that is the
+   * replica-key route's answer. Distinct from `'none'`, which also covers a
+   * daemon that could not be reached at all: the replica read plane
+   * (ADR-0042) tells an unpaired device from an unreachable daemon, and
+   * conflating the two would read a network blip as a lost pairing.
    */
   | { status: 'refused' }
 

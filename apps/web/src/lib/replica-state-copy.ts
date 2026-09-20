@@ -3,8 +3,8 @@ import type { ReplicaPageState } from './replica-page-state.js'
 import { REPLICA_TIER_COPY } from './replica-tier-copy.js'
 
 /**
- * Plain-language copy for the replica read page's four states (ADR-0042
- * decisions 3-5), declared once so a fifth state is a type error rather
+ * Plain-language copy for the replica read page's five states (ADR-0042
+ * decisions 3-5), declared once so a sixth state is a type error rather
  * than a place a second spelling can fork — no "tier"/"replica"/"epoch"/
  * "key" jargon, the same rule `replica-tier-copy.ts` writes under.
  */
@@ -22,6 +22,14 @@ export const REPLICA_STATE_COPY = {
   locked: {
     body: 'A copy of this workspace is on this device, but it stays locked until the daemon that keeps it can be reached again.',
     action: 'Reconnect',
+  },
+  unpaired: {
+    // The daemon was reached and no longer accepts this browser's pairing.
+    // That is all a refused renewal proves — not that the person was
+    // removed — so it says exactly that. No action here: pairing starts
+    // from the daemon's own pair link, which this page cannot mint.
+    body: 'This device is no longer paired with the daemon that keeps this workspace. Pair it again to continue.',
+    action: undefined,
   },
   removed: {
     // ADR-0042 decision 4's sentence, verbatim — "discard-and-tell is a
