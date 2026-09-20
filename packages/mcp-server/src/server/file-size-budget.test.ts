@@ -268,7 +268,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // left is the wiring itself, and shaving it further would be shuffling
   // lines to satisfy a number.
   'apps/web/src/App.tsx': 986,
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
+  // Raised 1196 -> 1245, +49, for naming the column area's four views. The
+  // file GREW and says more for it: a four-arm ternary chain over three
+  // unrelated tests became a discriminated union built once and a switch
+  // that draws it, so the narrowing every later arm depended on — `documents`
+  // is non-null — is stated in the type instead of implied by position.
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1245,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
   // map on a document's node, and the read that never opens one. They sit
   // here rather than in a new file because `nodeById` is this module's, and

@@ -12,7 +12,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -828,6 +828,201 @@ export function WorkspaceFilesPanel({
               ]),
         ]
 
+  /**
+   * Which of four things the column area is showing, and the documents that
+   * view has — named rather than left implicit in a chain of tests about
+   * different subjects.
+   *
+   * It was `documents === null ? … : query.trim() !== '' ? … : columns ===
+   * 'one' ? … : …`, and a reader had to derive the last arm from the absence
+   * of the other three. The chain also carried a NARROWING that its shape
+   * hid: every arm after the first runs only when `documents` is non-null,
+   * and nothing said so except the order. Here the union says it, so the
+   * three loaded views get the array and the loading view cannot ask for one.
+   */
+  type ColumnView =
+    | { kind: 'loading' }
+    | { kind: 'searching'; documents: readonly WorkspaceDocumentEntry[] }
+    | { kind: 'browseOne'; documents: readonly WorkspaceDocumentEntry[] }
+    | { kind: 'browseTwo'; documents: readonly WorkspaceDocumentEntry[] }
+
+  const columnView: ColumnView =
+    documents === null
+      ? { kind: 'loading' }
+      : query.trim() !== ''
+        ? { kind: 'searching', documents }
+        : columns === 'one'
+          ? { kind: 'browseOne', documents }
+          : { kind: 'browseTwo', documents }
+
+  const renderColumns = (): ReactNode => {
+    switch (columnView.kind) {
+      case 'loading':
+        return (
+          // A re-read (a workspace switch, most of all) keeps the toolbar
+          // above and the room below: measured on a real switch, replacing
+          // the whole section with one line of text moved the card area up
+          // 38px and back within 54ms, which is the jolt everything inherits.
+          // `.skeleton-appear` holds it invisible for 300ms, so a fast
+          // re-read shows quiet background rather than a flash of
+          // placeholders.
+          <div
+            role="status"
+            aria-label="Loading documents"
+            className="skeleton-appear grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
+          >
+            {Array.from({ length: Math.max(lastCardCount.current, 1) }, (_, i) => (
+              <div key={i} className="overflow-hidden rounded-md border">
+                <div className="bg-muted/40 aspect-video w-full animate-pulse" />
+                <div className="px-2 py-1.5">
+                  <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      case 'searching':
+        return (
+          // Results come from everywhere, so neither the folder tree nor the
+          // folder's own contents describes them. One flat list, in both
+          // column modes — a search that behaved differently per mode would
+          // be two features wearing one box.
+          <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
+            <div data-testid="search-results">
+              {/* Always mounted, text swapped: a polite live region added to
+                the DOM already carrying its message is announced
+                inconsistently (see polite-live-region.test.ts). */}
+              <p
+                role="status"
+                className={searchDegraded ? 'text-muted-foreground mb-1 text-xs' : 'sr-only'}
+              >
+                {searchDegraded
+                  ? 'Searching names and paths only — this workspace’s content search is unavailable.'
+                  : ''}
+              </p>
+              <SearchResults
+                {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
+                // A `#tag` query is a FILTER over what is loaded (#975's
+                // contract), not a content search — it never leaves the
+                // client. Everything else asks the source.
+                results={
+                  activeTag !== null || hits === null
+                    ? // A `#tag` query is a FILTER over what is loaded
+                      // (#975's contract) and never leaves the client; and
+                      // while content search is unreachable or still in
+                      // flight, the names and paths already in hand are a
+                      // real answer rather than a blank pane.
+                      searchDocuments(columnView.documents, query).map((document) => ({ document }))
+                    : withNameMatches(
+                        hits.map((hit) => ({
+                          document: hit.document,
+                          contexts: hit.contexts,
+                          ...(hit.lexicalRank === undefined
+                            ? {}
+                            : { lexicalRank: hit.lexicalRank }),
+                          ...(hit.semanticRank === undefined
+                            ? {}
+                            : { semanticRank: hit.semanticRank }),
+                        })),
+                        columnView.documents,
+                        query,
+                      )
+                }
+                query={query}
+                searchedContents={activeTag === null && hits !== null}
+                selectedPath={selected?.path}
+                onSelect={tapOpens ? openEntry : setSelected}
+                onDocumentContextMenu={openCardMenu}
+                renderThumbnail={(entry) => (
+                  <DocumentThumbnail
+                    key={entry.documentId}
+                    document={entry}
+                    loadRender={loadRender}
+                    className="size-full"
+                  />
+                )}
+              />
+            </div>
+          </div>
+        )
+      case 'browseOne':
+        return (
+          <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
+            <WorkspaceFileTree
+              documents={columnView.documents}
+              onOpen={tapOpens ? openEntry : setSelected}
+              {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
+              onDocumentContextMenu={openCardMenu}
+              selectedPath={selected?.path}
+              renderIcon={(entry) => (
+                <DocumentMinimap
+                  key={entry.documentId}
+                  document={entry}
+                  loadOutline={loadOutline}
+                />
+              )}
+            />
+          </div>
+        )
+      case 'browseTwo':
+        return (
+          <>
+            {/* Below md the folder column goes: the breadcrumb already walks
+              the same hierarchy, and three columns in a phone's width
+              leaves none of them readable. */}
+            <div className="hidden w-56 shrink-0 overflow-y-auto border-r pr-3 md:block">
+              <WorkspaceFolderTree
+                documents={columnView.documents}
+                onSelectFolder={selectFolder}
+                selectedFolder={folder}
+              />
+            </div>
+            <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
+              <div data-testid="folder-contents">
+                <FolderContentsList
+                  documents={columnView.documents}
+                  folder={folder}
+                  selectedPath={selected?.path}
+                  onOpen={(target) =>
+                    target.kind === 'folder'
+                      ? selectFolder(target.path)
+                      : selection !== null
+                        ? toggleSelected(target.document)
+                        : tapOpens
+                          ? openEntry(target.document)
+                          : setSelected(target.document)
+                  }
+                  {...(selection === null ? { selection: undefined } : { selection })}
+                  {...(changed === undefined ? {} : { changed })}
+                  {...(onOpenDocument === undefined || selection !== null
+                    ? {}
+                    : { onActivateDocument: openEntry })}
+                  onDocumentContextMenu={openCardMenu}
+                  renderThumbnail={(entry) => (
+                    <DocumentThumbnail
+                      key={entry.documentId}
+                      document={entry}
+                      loadRender={loadRender}
+                      className="size-full"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+          </>
+        )
+      default: {
+        // A view this component can SELECT and cannot draw is a type error
+        // here rather than a blank column area. Measured: adding a fifth arm
+        // to `ColumnView` and a branch producing it fails with
+        // `Type '{ kind: "timeline"; … }' is not assignable to type 'never'`;
+        // adding the arm alone does not, because nothing can reach it.
+        const unreachable: never = columnView
+        return unreachable
+      }
+    }
+  }
+
   return (
     // The panel names ITSELF, because the page heading above it now names the
     // workspace ("Mark as Switcher"). The generic word did not disappear when
@@ -962,153 +1157,7 @@ export function WorkspaceFilesPanel({
         />
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
-        {documents === null ? (
-          // A re-read (a workspace switch, most of all) keeps the toolbar
-          // above and the room below: measured on a real switch, replacing
-          // the whole section with one line of text moved the card area up
-          // 38px and back within 54ms, which is the jolt everything inherits.
-          // `.skeleton-appear` holds it invisible for 300ms, so a fast
-          // re-read shows quiet background rather than a flash of
-          // placeholders.
-          <div
-            role="status"
-            aria-label="Loading documents"
-            className="skeleton-appear grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
-          >
-            {Array.from({ length: Math.max(lastCardCount.current, 1) }, (_, i) => (
-              <div key={i} className="overflow-hidden rounded-md border">
-                <div className="bg-muted/40 aspect-video w-full animate-pulse" />
-                <div className="px-2 py-1.5">
-                  <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : query.trim() !== '' ? (
-          // Results come from everywhere, so neither the folder tree nor the
-          // folder's own contents describes them. One flat list, in both
-          // column modes — a search that behaved differently per mode would
-          // be two features wearing one box.
-          <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
-            <div data-testid="search-results">
-              {/* Always mounted, text swapped: a polite live region added to
-                  the DOM already carrying its message is announced
-                  inconsistently (see polite-live-region.test.ts). */}
-              <p
-                role="status"
-                className={searchDegraded ? 'text-muted-foreground mb-1 text-xs' : 'sr-only'}
-              >
-                {searchDegraded
-                  ? 'Searching names and paths only — this workspace’s content search is unavailable.'
-                  : ''}
-              </p>
-              <SearchResults
-                {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
-                // A `#tag` query is a FILTER over what is loaded (#975's
-                // contract), not a content search — it never leaves the
-                // client. Everything else asks the source.
-                results={
-                  activeTag !== null || hits === null
-                    ? // A `#tag` query is a FILTER over what is loaded
-                      // (#975's contract) and never leaves the client; and
-                      // while content search is unreachable or still in
-                      // flight, the names and paths already in hand are a
-                      // real answer rather than a blank pane.
-                      searchDocuments(documents, query).map((document) => ({ document }))
-                    : withNameMatches(
-                        hits.map((hit) => ({
-                          document: hit.document,
-                          contexts: hit.contexts,
-                          ...(hit.lexicalRank === undefined
-                            ? {}
-                            : { lexicalRank: hit.lexicalRank }),
-                          ...(hit.semanticRank === undefined
-                            ? {}
-                            : { semanticRank: hit.semanticRank }),
-                        })),
-                        documents,
-                        query,
-                      )
-                }
-                query={query}
-                searchedContents={activeTag === null && hits !== null}
-                selectedPath={selected?.path}
-                onSelect={tapOpens ? openEntry : setSelected}
-                onDocumentContextMenu={openCardMenu}
-                renderThumbnail={(entry) => (
-                  <DocumentThumbnail
-                    key={entry.documentId}
-                    document={entry}
-                    loadRender={loadRender}
-                    className="size-full"
-                  />
-                )}
-              />
-            </div>
-          </div>
-        ) : columns === 'one' ? (
-          <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
-            <WorkspaceFileTree
-              documents={documents}
-              onOpen={tapOpens ? openEntry : setSelected}
-              {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
-              onDocumentContextMenu={openCardMenu}
-              selectedPath={selected?.path}
-              renderIcon={(entry) => (
-                <DocumentMinimap
-                  key={entry.documentId}
-                  document={entry}
-                  loadOutline={loadOutline}
-                />
-              )}
-            />
-          </div>
-        ) : (
-          <>
-            {/* Below md the folder column goes: the breadcrumb already walks
-                the same hierarchy, and three columns in a phone's width
-                leaves none of them readable. */}
-            <div className="hidden w-56 shrink-0 overflow-y-auto border-r pr-3 md:block">
-              <WorkspaceFolderTree
-                documents={documents}
-                onSelectFolder={selectFolder}
-                selectedFolder={folder}
-              />
-            </div>
-            <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
-              <div data-testid="folder-contents">
-                <FolderContentsList
-                  documents={documents}
-                  folder={folder}
-                  selectedPath={selected?.path}
-                  onOpen={(target) =>
-                    target.kind === 'folder'
-                      ? selectFolder(target.path)
-                      : selection !== null
-                        ? toggleSelected(target.document)
-                        : tapOpens
-                          ? openEntry(target.document)
-                          : setSelected(target.document)
-                  }
-                  {...(selection === null ? { selection: undefined } : { selection })}
-                  {...(changed === undefined ? {} : { changed })}
-                  {...(onOpenDocument === undefined || selection !== null
-                    ? {}
-                    : { onActivateDocument: openEntry })}
-                  onDocumentContextMenu={openCardMenu}
-                  renderThumbnail={(entry) => (
-                    <DocumentThumbnail
-                      key={entry.documentId}
-                      document={entry}
-                      loadRender={loadRender}
-                      className="size-full"
-                    />
-                  )}
-                />
-              </div>
-            </div>
-          </>
-        )}
+        {renderColumns()}
         {/* When a tap opens, selection can no longer fill this pane, so it
             would sit permanently on its empty state — below the grid on a
             phone, where it held the only Open button (the 2-tap bug). The
