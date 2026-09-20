@@ -57,7 +57,7 @@ const memberProfileSchema = memberProfileRowSchema.extend({
   credentials: z.array(profileCredentialSchema),
 })
 
-type MemberProfile = z.infer<typeof memberProfileSchema>
+export type MemberProfile = z.infer<typeof memberProfileSchema>
 type MembershipStatus = 'member' | 'not-a-member'
 
 interface EnsureProfileInput {

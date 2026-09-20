@@ -227,6 +227,19 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     }
   })
 
+  it('membership routes sit at the same admin bar as grants and credential pins', () => {
+    for (const [method, path] of [
+      ['GET', '/api/workspaces/w1/members'],
+      ['POST', '/api/workspaces/w1/members'],
+      ['DELETE', '/api/workspaces/w1/members/01ARZ3NDEKTSV4RRFFQ69G5FAV'],
+    ] as const) {
+      expect(resolveApiRouteScope(method, path)).toEqual({
+        kind: 'scoped',
+        scopes: ['runtime:admin'],
+      })
+    }
+  })
+
   it('session assertion routes are scoped (the handler itself checks for a bound session)', () => {
     for (const path of [
       '/api/pairing/session-assert/challenge',

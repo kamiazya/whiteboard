@@ -3,6 +3,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { DaemonIdentity } from './security/daemon-identity.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
+import type { MemberProfileStore } from './security/member-profile-store.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import type { PairingGrantStore } from './security/pairing-grant-store.js'
@@ -62,6 +63,13 @@ interface LocalDaemonAppOptions {
     /** Passkey pins paired origins registered (ADR-0039); durable like grants. */
     credentials: WebAuthnCredentialStore
   }
+  /** The daemon's MemberProfile store (ADR-0041). When present alongside
+   *  `pairing` and `serverDeps`, /api/workspaces/:workspaceId/members mounts
+   *  and session-assert answers a real `profileId` for a pinned passkey that
+   *  has been admitted to L1. Absent in ad-hoc/test callers, which get no
+   *  membership surface and a session-assert `profileId` of null — the same
+   *  answer S0-2 always gave. */
+  members?: MemberProfileStore
   /** Daemon signing identity (security/daemon-identity.ts). Injectable for
    *  tests; when omitted, createApp loads-or-creates it from the data dir. */
   identity?: DaemonIdentity

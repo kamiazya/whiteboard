@@ -141,6 +141,15 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['versions:write'] }
   }
 
+  // Membership (ADR-0041/0042): who has L1 access to a workspace. Same bar
+  // as pairing-grant and credential-pin management — a paired browser
+  // session that can manage grants and passkey pins can manage members too
+  // (accepted v1 posture; narrowing what a pairing session may do is its
+  // own future increment, per routes/membership.ts's header).
+  if (/^\/api\/workspaces\/[^/]+\/members(\/[^/]+)?$/.test(path)) {
+    return { kind: 'scoped', scopes: ['runtime:admin'] }
+  }
+
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
   if (path.startsWith('/api/workspaces')) {
     return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
