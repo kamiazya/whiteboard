@@ -9,12 +9,11 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  type CanvasEdge,
   documentIdSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
   nodeIdSchema,
-  type SpatialNode,
+  type SpatialCanvas,
   tagWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -370,6 +369,81 @@ export function createFacetSetTool(deps: ServerDeps) {
   }
 }
 
+/**
+ * What differs between writing facets to a NODE and to an EDGE. Everything
+ * else about the two is identical, which the branches this replaced said in
+ * prose three times over — "Same order as the node branch, and for the same
+ * reason", "The same canonical emptiness the node and canvas branches keep".
+ * A comment claiming two blocks agree is a sync obligation nothing enforces:
+ * a change to the emptiness rule, or to how a tag change is applied, had to
+ * be made twice or the two targets would quietly diverge.
+ */
+const ELEMENT_TARGETS = {
+  node: {
+    collection: 'nodes',
+    notFound: (documentId: string, id: string) => new NodeNotFoundError(documentId, id),
+    mismatch:
+      "Node-target facets live on a spatial document's node. Omit nodeId to set facets on a markdown document.",
+  },
+  edge: {
+    collection: 'edges',
+    notFound: (documentId: string, id: string) => new EdgeNotFoundError(documentId, id),
+    mismatch:
+      "Edge-target facets live on a spatial document's edge. Omit edgeId to set facets on a markdown document.",
+  },
+} as const
+
+/**
+ * Writes facets and tags to ONE node or ONE edge of a spatial document.
+ *
+ * A kind-less document (freshly created, nothing declared) has no canvas, so
+ * the element cannot exist — that is reported rather than a kind being
+ * fabricated for a mismatch message, which is why the not-found check comes
+ * before the kind check.
+ */
+async function setElementFacets(
+  deps: ServerDeps,
+  input: FacetSetInput,
+  documentId: string,
+  doc: LoroDoc,
+  kind: ReturnType<typeof readDocumentKind>,
+  sets: Record<string, unknown>,
+  deletions: readonly string[],
+  which: keyof typeof ELEMENT_TARGETS,
+): Promise<FacetSetOutput['updated'][number]> {
+  const target = ELEMENT_TARGETS[which]
+  const id = (which === 'node' ? input.nodeId : input.edgeId) as string
+  if (kind === undefined) throw target.notFound(documentId, id)
+  if (kind !== 'spatial') throw new DocumentKindMismatchError(documentId, kind, target.mismatch)
+
+  const canvas = readSpatialCanvas(doc)
+  const members: readonly { id: string; facets?: ExtensionFacets; tags?: readonly string[] }[] =
+    canvas[target.collection]
+  const found = members.find((candidate) => candidate.id === id)
+  if (found === undefined) throw target.notFound(documentId, id)
+
+  const merged: ExtensionFacets = { ...found.facets, ...sets }
+  for (const key of deletions) delete merged[key]
+  // Canonical emptiness: an empty bucket disappears rather than being stored
+  // as `{}`, so an element that set a facet and cleared it is identical to one
+  // that never had it. A node's `embed` is untouched — they are independent
+  // fields now, where the format's extension made them two arms of a union and
+  // the branch this replaced had to preserve the other one by hand.
+  const { facets: _replaced, tags: _tags, ...rest } = found
+  const tags = input.tags === undefined ? undefined : applyTagChange(found.tags, input.tags)
+  const next = {
+    ...rest,
+    ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
+    ...withTags(tags ?? found.tags),
+  }
+  writeSpatialCanvas(doc, {
+    ...canvas,
+    [target.collection]: members.map((candidate) => (candidate.id === id ? next : candidate)),
+  } as SpatialCanvas)
+  await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+  return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
+}
+
 async function setOne(
   deps: ServerDeps,
   input: FacetSetInput,
@@ -380,86 +454,10 @@ async function setOne(
   const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
   const kind = readDocumentKind(doc)
 
-  if (input.nodeId !== undefined) {
-    const nodeId = input.nodeId
-    // A kind-less document (freshly created, nothing declared) has no
-    // canvas, so the node cannot exist — report THAT, rather than
-    // fabricating a kind for the mismatch message.
-    if (kind === undefined) {
-      throw new NodeNotFoundError(documentId, nodeId)
-    }
-    if (kind !== 'spatial') {
-      throw new DocumentKindMismatchError(
-        documentId,
-        kind,
-        "Node-target facets live on a spatial document's node. Omit nodeId to set facets on a markdown document.",
-      )
-    }
-    const canvas = readSpatialCanvas(doc)
-    const node = canvas.nodes.find((candidate) => candidate.id === nodeId)
-    if (node === undefined) {
-      throw new NodeNotFoundError(documentId, nodeId)
-    }
-    const merged: ExtensionFacets = { ...node.facets, ...sets }
-    for (const key of deletions) delete merged[key]
-    // Canonical emptiness: an empty bucket disappears rather than being
-    // stored as `{}`, so a node that set a facet and cleared it is identical
-    // to one that never had it. The node's `embed` is untouched — they are
-    // independent fields now, where the format's extension made them two arms
-    // of a union and this branch had to preserve the other one by hand.
-    const { facets: _replaced, tags: _tags, ...nodeRest } = node
-    const tags = input.tags === undefined ? undefined : applyTagChange(node.tags, input.tags)
-    const nextNode = {
-      ...nodeRest,
-      ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
-      ...withTags(tags ?? node.tags),
-    } as SpatialNode
-    writeSpatialCanvas(doc, {
-      ...canvas,
-      nodes: canvas.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
-    })
-    await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
-    return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
-  }
-
-  if (input.edgeId !== undefined) {
-    const edgeId = input.edgeId
-    // Same order as the node branch, and for the same reason: a kind-less
-    // document has no canvas, so the edge cannot exist — say THAT rather
-    // than fabricating a kind for a mismatch message.
-    if (kind === undefined) {
-      throw new EdgeNotFoundError(documentId, edgeId)
-    }
-    if (kind !== 'spatial') {
-      throw new DocumentKindMismatchError(
-        documentId,
-        kind,
-        "Edge-target facets live on a spatial document's edge. Omit edgeId to set facets on a markdown document.",
-      )
-    }
-    const canvas = readSpatialCanvas(doc)
-    const edge = canvas.edges.find((candidate) => candidate.id === edgeId)
-    if (edge === undefined) {
-      throw new EdgeNotFoundError(documentId, edgeId)
-    }
-    const merged: ExtensionFacets = { ...edge.facets, ...sets }
-    for (const key of deletions) delete merged[key]
-    // The same canonical emptiness the node and canvas branches keep: an
-    // empty bucket disappears, so an edge that set a facet and cleared it
-    // serializes identically to one that never had it.
-    const { facets: _replaced, tags: _tags, ...edgeRest } = edge
-    const tags = input.tags === undefined ? undefined : applyTagChange(edge.tags, input.tags)
-    const nextEdge: CanvasEdge = {
-      ...edgeRest,
-      ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
-      ...withTags(tags ?? edge.tags),
-    }
-    writeSpatialCanvas(doc, {
-      ...canvas,
-      edges: canvas.edges.map((candidate) => (candidate.id === edgeId ? nextEdge : candidate)),
-    })
-    await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
-    return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
+  const element =
+    input.nodeId !== undefined ? 'node' : input.edgeId !== undefined ? 'edge' : undefined
+  if (element !== undefined) {
+    return await setElementFacets(deps, input, documentId, doc, kind, sets, deletions, element)
   }
 
   // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
