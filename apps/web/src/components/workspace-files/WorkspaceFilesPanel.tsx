@@ -16,14 +16,9 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
-import {
-  type TagInUse,
-  type WorkspaceFilesSource,
-  WorkspaceMissingError,
-} from '../../lib/files-source.js'
+import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/files-source.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
-import { countTagsInUse } from '../../lib/tags-in-use.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -45,6 +40,10 @@ import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
+import { useDocumentPointers } from './use-document-pointers.js'
+import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
+import { useTagsInUse } from './use-tags-in-use.js'
+import { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -148,8 +147,21 @@ export function WorkspaceFilesPanel({
   // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
-  const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
-  const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
+  // The four things the panel points AT, and the two rules that keep a
+  // pointer from naming a document that is not there — see
+  // use-document-pointers.ts.
+  const {
+    selected,
+    setSelected,
+    selection,
+    setSelection,
+    cardMenu,
+    setCardMenu,
+    peek,
+    setPeek,
+    clear: clearPointers,
+    reconcile: reconcilePointers,
+  } = useDocumentPointers()
   /**
    * How many cards the last successful listing drew, kept so a RE-READ can
    * hold the layout it is about to replace.
@@ -172,49 +184,11 @@ export function WorkspaceFilesPanel({
     remember: rememberOpen,
     reset: resetDeviceMemory,
   } = useDeviceMemory(workspace, documents)
-  /**
-   * A write that LANDED, whose list refresh or open failed after the fact.
-   * Separate from the refusal states because the two need opposite things:
-   * a refusal invites another attempt, this one must not — pressing again
-   * would create a second document, or toggle the pin straight back off.
-   *
-   * Carries the action because the verb is the whole message: "Created" and
-   * "Pinned" tell the person a different thing about what is now true.
-   */
-  const [refreshError, setRefreshError] = useState<{
-    action: 'created' | 'pinned' | 'unpinned'
-    path: string
-  } | null>(null)
-  /**
-   * A refused pin, as the direction that was asked for and the source's own
-   * reason. Only the store knows why it said no — that a workspace is
-   * read-only, say — and a pin is the one verb on the card menu with no form
-   * of its own to report into.
-   */
-  const [pinError, setPinError] = useState<{
-    pinning: boolean
-    path: string
-    reason: string
-  } | null>(null)
-  /**
-   * A refused create, as the kind that was asked for and the reason given.
-   *
-   * The reason is the source's own words — the same treatment a refused MOVE
-   * already gets, and for the same purpose: only the store knows which path
-   * actually collided, and an address the message will not name cannot be
-   * corrected.
-   *
-   * The dialog renders `reason` too, so both are in the DOM while it is
-   * open. Only one is ANNOUNCED — Radix marks the page behind a modal
-   * `aria-hidden` (measured: DOM 2, accessible 1) — and dismissing the form
-   * clears this, so the panel's generic line never outlives the submission
-   * it describes. That is why there is no "which surface asked" flag here:
-   * it would be a second rule for an outcome the clearing already produces,
-   * and no test could tell the two apart.
-   */
-  const [createError, setCreateError] = useState<{ kind: DocumentKind; reason: string } | null>(
-    null,
-  )
+  // What the panel has to SAY about its last write — a refused create, a
+  // refused pin, or a write that landed while its list re-read did not.
+  // Each one's reasoning lives with it in use-write-outcome.ts; `beginWrite`
+  // is the rule the three share, and the reason they are one hook.
+  const outcome = useWriteOutcome()
   // The `disabled` attribute is the whole double-press mechanism: React
   // flushes this state before a second click can dispatch, while a
   // handler-side early return would read a stale closure in exactly the
@@ -227,36 +201,12 @@ export function WorkspaceFilesPanel({
     searchDegraded,
     resetResults: resetSearchResults,
   } = useDebouncedDocumentSearch(source, revision)
-  // The object-action menu: which document was right-clicked, and where.
-  const [cardMenu, setCardMenu] = useState<{
-    entry: WorkspaceDocumentEntry
-    x: number
-    y: number
-  } | null>(null)
-  // The peek: a document being looked at without being opened. Only ever
-  // set where tapOpens (no preview pane); see PeekDialog.
-  const [peek, setPeek] = useState<WorkspaceDocumentEntry | null>(null)
-  // The rename dialog's target, plus the in-flight/refusal state its form
-  // shows. Null means closed.
-  const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
-  const [renameBusy, setRenameBusy] = useState(false)
-  const [renameError, setRenameError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
-  // The vocabulary in use, as the keeper counts it (ADR-0040 decision 5),
-  // reloaded with the list so deleting the last carrier of a tag removes
-  // its chip. A keeper that does not answer, or has not yet, gets the strip
-  // derived from the entries' own tags — documents only, no counts of what
-  // a board's boxes carry.
-  const [tagsInUse, setTagsInUse] = useState<readonly TagInUse[] | null>(null)
-  const workspaceTags = useMemo<readonly TagInUse[]>(() => {
-    if (tagsInUse !== null) return tagsInUse
-    return countTagsInUse(
-      (documents ?? []).map((entry) => ({
-        what: entry.kind === 'spatial' ? 'board' : 'document',
-        tags: entry.tags ?? [],
-      })),
-    )
-  }, [documents, tagsInUse])
+  const {
+    tags: workspaceTags,
+    reload: loadTagsInUse,
+    reset: resetTagsInUse,
+  } = useTagsInUse(source, documents)
   const activeTag = query.trim().startsWith('#') ? query.trim().slice(1) : null
 
   // One broker for the whole panel. Deliberately NOT keyed on the theme the
@@ -279,25 +229,28 @@ export function WorkspaceFilesPanel({
   const loadOutline = useMemo(() => createRowOutlineLoader({ source, broker }), [source, broker])
 
   const readList = useCallback(() => source.listDocuments(), [source])
-  const readTagsInUse = useCallback(
-    () =>
-      source.listTagsInUse === undefined
-        ? Promise.resolve(null)
-        : source.listTagsInUse().catch(() => null),
-    [source],
+
+  /**
+   * Re-reads the list and re-selects the row at `path`.
+   *
+   * Five call sites did these three lines: after a create, after a rename
+   * that only renamed, after a rename that was REFUSED (the first of its two
+   * writes may already have landed, so the screen has to be made true again),
+   * after a pin toggle, and after a move. A document the read no longer holds
+   * clears the selection rather than leaving a row nothing backs — which is
+   * what `?? null` means and why it is the same in all five.
+   *
+   * It throws what `readList` throws; each caller already decides what a
+   * failed re-read means there, and those answers genuinely differ.
+   */
+  const refreshAndSelect = useCallback(
+    async (path: string) => {
+      const entries = await readList()
+      setDocuments(entries)
+      setSelected(entries.find((row) => row.path === path) ?? null)
+    },
+    [readList],
   )
-  // Rows land only from the LATEST ask. The workspace-load effect and the
-  // revision effect each ask, and the earlier ask can answer after the
-  // later one — which would show the vocabulary from before the write that
-  // bumped the revision until the next one. A counter rather than a
-  // per-effect flag, since the two effects do not know about each other.
-  const tagsRequest = useRef(0)
-  const loadTagsInUse = useCallback(() => {
-    const token = ++tagsRequest.current
-    return readTagsInUse().then((rows) => {
-      if (token === tagsRequest.current) setTagsInUse(rows)
-    })
-  }, [readTagsInUse])
 
   // Through a ref so it never joins an effect's dependencies: a host that
   // passes an inline arrow would otherwise re-run the workspace-load effect
@@ -389,36 +342,23 @@ export function WorkspaceFilesPanel({
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
-    // Everything here NAMES A DOCUMENT, and a document belongs to exactly one
-    // workspace. `submitRename` and the card menu's verbs close over the
-    // CURRENT source while holding a captured entry, so anything left behind
-    // addresses the departed workspace's path into the one now on screen —
-    // and paths collide freely across workspaces, `untitled` most of all.
-    // Measured before this: a rename dialog left open across a switch called
-    // `setDocumentName` on the new workspace's store.
-    setSelected(null)
-    setCardMenu(null)
-    setPeek(null)
-    // A selection names paths, and paths collide across workspaces — a
-    // bulk delete carried across a switch would address the departed
-    // workspace's names into the store now on screen.
-    setSelection(null)
+    clearPointers()
     // The departed workspace's memory names its documents.
     resetDeviceMemory()
-    setRenaming(null)
-    setRenameError(null)
-    setRenameBusy(false)
+    // A rename dialog left open across a switch called `setDocumentName` on
+    // the NEW workspace's store — it holds a captured entry the same way a
+    // pointer does, and paths collide freely across workspaces.
+    renameRef.current.cancel()
     // Results computed against the departed workspace's content, still
     // clickable. The search effect does re-run on a source change, but only
     // after its debounce — until then these rows name documents that are not
     // here.
     resetSearchResults()
-    // Both name a path, and their message is about a write that happened
-    // somewhere else.
-    setRefreshError(null)
-    setPinError(null)
+    // Every one of them names a path, and their message is about a write
+    // that happened somewhere else.
+    outcome.beginWrite()
     // The vocabulary is the departed keeper's until the new one answers.
-    setTagsInUse(null)
+    resetTagsInUse()
     // Guarded by the source's IDENTITY, not by a first-run flag: an
     // `initialFolder` is a deliberate address and must survive mounting,
     // while StrictMode replays this effect with the SAME readList — which a
@@ -459,21 +399,9 @@ export function WorkspaceFilesPanel({
       .then((entries) => {
         if (cancelled) return
         setDocuments(entries)
-        setSelected((current) =>
-          current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
-        )
-        // An open context menu is a captured snapshot; a refresh behind the
-        // panel's back (the whole reason `revision` exists) re-resolves it
-        // the same way, and a menu whose document is GONE closes rather
-        // than offering verbs for a target that no longer exists.
-        setCardMenu((current) => {
-          if (current === null) return null
-          const entry = entries.find((row) => row.path === current.entry.path)
-          return entry === undefined ? null : { ...current, entry }
-        })
-        setPeek((current) =>
-          current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
-        )
+        // A refresh behind the panel's back is the whole reason `revision`
+        // exists, and every pointer is a captured snapshot taken before it.
+        reconcilePointers(entries)
       })
       .catch(() => undefined)
     return () => {
@@ -528,9 +456,7 @@ export function WorkspaceFilesPanel({
       // Every action here clears ALL of the panel's transient reports, not
       // just its own: an alert that outlives the action it describes is
       // attached to nothing the person can still see.
-      setCreateError(null)
-      setPinError(null)
-      setRefreshError(null)
+      outcome.beginWrite()
       setCreating(true)
       try {
         // No options means nobody expressed an opinion, so the address is
@@ -545,7 +471,7 @@ export function WorkspaceFilesPanel({
         try {
           await source.createDocument(path, kind, options?.name)
         } catch (err) {
-          setCreateError({
+          outcome.reportCreateRefusal({
             kind,
             reason:
               err instanceof Error ? err.message : `Could not create a ${kind} document here.`,
@@ -556,9 +482,7 @@ export function WorkspaceFilesPanel({
           throw err
         }
         try {
-          const entries = await readList()
-          setDocuments(entries)
-          setSelected(entries.find((row) => row.path === path) ?? null)
+          await refreshAndSelect(path)
           // Creating exists to produce content, and an empty document is
           // worth nothing until it is open — so the create ends where the
           // next thing happens, as every other creation path in the app
@@ -574,7 +498,7 @@ export function WorkspaceFilesPanel({
           // Swallowed as a REJECTION, reported as its own message. The
           // document exists; letting this propagate would hold the dialog
           // open on a form whose only offer is to make it again.
-          setRefreshError({ action: 'created', path })
+          outcome.reportStaleList({ action: 'created', path })
         }
       } finally {
         setCreating(false)
@@ -614,44 +538,6 @@ export function WorkspaceFilesPanel({
    * leaves the new name applied, which is honest: the dialog stays open on
    * the server's refusal and the field still shows what was typed.
    */
-  const submitRename = useCallback(
-    async (entry: WorkspaceDocumentEntry, name: string | undefined, newPath: string) => {
-      setRenameBusy(true)
-      setRenameError(null)
-      try {
-        if ((entry.name ?? undefined) !== name) {
-          await source.setDocumentName(entry, name)
-        }
-        if (newPath !== entry.path) {
-          await moveDocumentRef.current(entry, newPath)
-        } else {
-          const entries = await readList()
-          setDocuments(entries)
-          setSelected(entries.find((row) => row.path === entry.path) ?? null)
-        }
-        setRenaming(null)
-      } catch (err) {
-        // The server names the PRODUCED path that collided, which on a
-        // subtree move is often not the one typed here.
-        setRenameError(err instanceof Error ? err.message : 'Could not rename it.')
-        // A rename applies two writes; the first may have landed before the
-        // second was refused. Re-reading here is what stops the panel from
-        // showing a name the store no longer holds — the refusal is about
-        // the path, and the rest of the screen must still be true.
-        try {
-          const entries = await readList()
-          setDocuments(entries)
-          setSelected(entries.find((row) => row.path === entry.path) ?? null)
-        } catch {
-          // The list read failing on top of a failed rename leaves what is
-          // already on screen; the dialog's own message is the report.
-        }
-      } finally {
-        setRenameBusy(false)
-      }
-    },
-    [source, readList],
-  )
 
   /**
    * Pinning used to be settable only from the editor header's document
@@ -664,9 +550,7 @@ export function WorkspaceFilesPanel({
     async (entry: WorkspaceDocumentEntry) => {
       if (source.setPinned === undefined) return
       const pinning = entry.pinOrder === undefined
-      setPinError(null)
-      setCreateError(null)
-      setRefreshError(null)
+      outcome.beginWrite()
       // ONLY this write decides whether the pin was refused. What follows is
       // bookkeeping on an order that has already changed, and reporting a
       // failed refresh as "could not pin" invites a second press that would
@@ -674,7 +558,7 @@ export function WorkspaceFilesPanel({
       try {
         await source.setPinned(entry, pinning)
       } catch (err) {
-        setPinError({
+        outcome.reportPinRefusal({
           pinning,
           path: entry.path,
           reason: err instanceof Error ? err.message : 'The store gave no reason.',
@@ -685,11 +569,9 @@ export function WorkspaceFilesPanel({
         return
       }
       try {
-        const entries = await readList()
-        setDocuments(entries)
-        setSelected(entries.find((row) => row.path === entry.path) ?? null)
+        await refreshAndSelect(entry.path)
       } catch {
-        setRefreshError({ action: pinning ? 'pinned' : 'unpinned', path: entry.path })
+        outcome.reportStaleList({ action: pinning ? 'pinned' : 'unpinned', path: entry.path })
       }
     },
     [source, readList],
@@ -698,21 +580,23 @@ export function WorkspaceFilesPanel({
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await source.renameDocumentPath(entry.path, newPath)
-      const entries = await readList()
-      setDocuments(entries)
-      setSelected(entries.find((row) => row.path === newPath) ?? null)
+      await refreshAndSelect(newPath)
       const landedIn = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : ''
       setFolder(landedIn)
       onFolderChangeRef.current?.(landedIn)
     },
     [source, readList],
   )
-  // submitRename is declared above moveDocument (it reads better beside the
-  // dialog state) and calls it through a ref rather than being reordered:
-  // both are hooks, so their ORDER is load-bearing and a reader should not
-  // have to verify it twice.
-  const moveDocumentRef = useRef(moveDocument)
-  moveDocumentRef.current = moveDocument
+  // The rename flow owns its own three states (see use-rename-document.ts)
+  // and takes `moveDocument` directly — it is declared above, so the ref that
+  // used to bridge the two is gone with it.
+  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect })
+  // The scope reset runs ABOVE this (it clears everything a document names
+  // the moment the workspace changes), so it reaches the flow through a ref
+  // rather than by moving one of the two — both are hooks, and their order
+  // is load-bearing.
+  const renameRef = useRef<RenameDocument>(rename)
+  renameRef.current = rename
 
   /**
    * Moving the contents pane always empties the preview.
@@ -807,8 +691,7 @@ export function WorkspaceFilesPanel({
             icon: <Pencil />,
             onSelect: () => {
               setSelected(cardMenu.entry)
-              setRenameError(null)
-              setRenaming(cardMenu.entry)
+              rename.open(cardMenu.entry)
             },
           },
           ...(onRequestDelete === undefined
@@ -1062,9 +945,9 @@ export function WorkspaceFilesPanel({
           disabled={creating}
           workspace={workspace}
           defaultPath={derivedNewPath}
-          createError={createError?.reason ?? null}
+          createError={outcome.createRefusal?.reason ?? null}
           onCreate={createHere}
-          onDismiss={() => setCreateError(null)}
+          onDismiss={outcome.dismissCreateRefusal}
         />
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>
@@ -1099,22 +982,23 @@ export function WorkspaceFilesPanel({
         </fieldset>
       </div>
 
-      {createError !== null && (
+      {outcome.createRefusal !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {createError.kind} document here.
+          Could not create a {outcome.createRefusal.kind} document here.
         </p>
       )}
 
-      {pinError !== null && (
+      {outcome.pinRefusal !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Could not {pinError.pinning ? 'pin' : 'unpin'} “{pinError.path}”. {pinError.reason}
+          Could not {outcome.pinRefusal.pinning ? 'pin' : 'unpin'} “{outcome.pinRefusal.path}”.{' '}
+          {outcome.pinRefusal.reason}
         </p>
       )}
 
-      {refreshError !== null && (
+      {outcome.staleList !== null && (
         <p role="alert" className="text-destructive text-sm">
-          {REFRESH_FAILURE_VERB[refreshError.action]} “{refreshError.path}”, but this list could not
-          be refreshed. Reload to see it.
+          {REFRESH_FAILURE_VERB[outcome.staleList.action]} “{outcome.staleList.path}”, but this list
+          could not be refreshed. Reload to see it.
         </p>
       )}
 
@@ -1171,8 +1055,7 @@ export function WorkspaceFilesPanel({
                 ? {}
                 : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
               onRename={(entry: WorkspaceDocumentEntry) => {
-                setRenameError(null)
-                setRenaming(entry)
+                rename.open(entry)
               }}
               {...(onDuplicateDocument === undefined
                 ? {}
@@ -1217,17 +1100,14 @@ export function WorkspaceFilesPanel({
         onClose={() => setPeek(null)}
       />
       <RenameDocumentDialog
-        document={renaming}
+        document={rename.renaming}
         workspace={workspace}
-        busy={renameBusy}
-        error={renameError}
-        onCancel={() => {
-          setRenaming(null)
-          setRenameError(null)
-        }}
+        busy={rename.busy}
+        error={rename.error}
+        onCancel={rename.cancel}
         onSubmit={(name, newPath) => {
-          if (renaming === null) return
-          void submitRename(renaming, name, newPath)
+          if (rename.renaming === null) return
+          void rename.submit(rename.renaming, name, newPath)
         }}
       />
       {cardMenu !== null && (
