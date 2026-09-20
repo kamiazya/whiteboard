@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { focusEditable } from '../../test-utils/focus-editable.js'
+import { tapElement } from '../../test-utils/tap.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 // Real-keyboard regression for the [[ completion: CodeMirror's completion
@@ -39,25 +40,6 @@ const optionsLabelled = (label: string): HTMLElement[] =>
   [...document.querySelectorAll('.cm-tooltip-autocomplete li')].filter(
     (li) => li.querySelector('.cm-completionLabel')?.textContent === label,
   ) as HTMLElement[]
-
-/**
- * Taps a specific element, re-resolved by the caller at the moment of the
- * gesture — see `tap` below for why a held reference is unsafe.
- *
- * `travel` moves the finger between touchstart and touchend, which is how
- * the scroll case says it is a scroll.
- */
-function tapElement(el: HTMLElement, identifier: number, travel = 0): void {
-  const rect = el.getBoundingClientRect()
-  const at = (type: 'touchstart' | 'touchend', y: number) =>
-    new TouchEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      changedTouches: [new Touch({ identifier, target: el, clientX: rect.x + 4, clientY: y })],
-    })
-  el.dispatchEvent(at('touchstart', rect.y + 4))
-  el.dispatchEvent(at('touchend', rect.y + 4 + travel))
-}
 
 /**
  * Taps an option, re-resolving it at the moment of the gesture.

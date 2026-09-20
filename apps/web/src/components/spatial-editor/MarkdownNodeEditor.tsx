@@ -66,7 +66,10 @@ import {
   shortcodeCompletionSource,
   shortcodeOptionRenderers,
 } from '../markdown-editor/shortcode-completion.js'
-import { wikiLinkCompletionTheme } from '../markdown-editor/wiki-link-completion.js'
+import {
+  wikiLinkCompletionTheme,
+  wikiLinkTouchAccept,
+} from '../markdown-editor/wiki-link-completion.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null
@@ -224,6 +227,14 @@ export function MarkdownNodeEditor({
         // the list that wrote it.
         completionOnDelete(),
         wikiLinkCompletionTheme,
+        // The popup this node draws is a surface a finger meets, so it needs
+        // the deterministic tap the document editor has: upstream accepts on
+        // the SYNTHESIZED mousedown and separately closes when the
+        // contenteditable blurs, and on a touch device the tap that should
+        // accept is also the tap that blurs. Named for the source it was
+        // written against; what it does is accept whatever option was
+        // tapped, whichever source offered it.
+        wikiLinkTouchAccept,
         syntaxHighlighting(markdownHighlightStyle),
         // The node behind this editor draws its body with the shortcode
         // expanded, so the draft over it does too — otherwise committing
