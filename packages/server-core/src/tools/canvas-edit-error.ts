@@ -19,3 +19,17 @@ export class CanvasEditError extends Error {
     this.name = 'CanvasEditError'
   }
 }
+
+/**
+ * Declared as a function rather than a closure so TypeScript narrows through
+ * it: a `never`-returning const arrow does not act as a control-flow
+ * terminator, which is what forced the double `if (!parsed.success)` this
+ * replaced.
+ *
+ * It lives beside the error rather than in the tool for the reason the class
+ * does — a helper split out of `canvas-edit.ts` raises it, and importing the
+ * tool back would close a value cycle `cycle-check.ts` refuses.
+ */
+export function fail(opIndex: number, op: string, detail: string): never {
+  throw new CanvasEditError(opIndex, op, detail)
+}
