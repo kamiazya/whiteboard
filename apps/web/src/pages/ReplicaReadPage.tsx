@@ -348,6 +348,8 @@ export function ReplicaReadPage({
           ? REPLICA_STATE_COPY.removed.body
           : null
 
+  const lockedLine = state.kind === 'withheld' ? lockedDetail(state.reason) : undefined
+
   return (
     <div className="flex h-full flex-col" data-testid="replica-read-page">
       <p role="status" aria-live="polite" data-testid="replica-live-status" className="sr-only">
@@ -422,11 +424,7 @@ export function ReplicaReadPage({
         >
           <p>
             {REPLICA_STATE_COPY[pageState].body}
-            {state.kind === 'withheld' &&
-              (() => {
-                const detail = lockedDetail(state.reason)
-                return detail === undefined ? null : <> {detail}</>
-              })()}
+            {lockedLine && ` ${lockedLine}`}
           </p>
           <button type="button" aria-disabled={reconnecting} onClick={() => void handleReconnect()}>
             {REPLICA_STATE_COPY[pageState].action}
