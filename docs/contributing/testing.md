@@ -387,6 +387,23 @@ with `projects`, a per-project `coverage` block is ignored, and the `include` gl
 resolved against each project's OWN root, so they are written `**/src/**`, never
 `packages/*/src/**`.
 
+### SonarQube's coverage verdict does not apply to a UI change
+
+The browser projects are not measured, so a change under `apps/web/src/components/**` or
+`apps/web/src/pages/**` shows a LOW "Coverage on New Code" however thoroughly a real browser
+covers it. Measured on the first one to hit it: a `DocumentPage` change with 113 passing
+`web-browser` tests over the very panels it touched reported 68.4% against the gate's 80%.
+
+**Read the rest of the analysis and ignore that one condition on such a PR** (user decision,
+2026-09-20). The lane is report-only, so nothing is blocked; what this note exists to stop is
+the next reader treating the number as a statement about the tests.
+
+The two alternatives were considered and rejected. Excluding `components/**` and `pages/**`
+from `sonar.coverage.exclusions` would say "not measured" honestly but give up the metric
+permanently and be awkward to undo. Measuring the browser projects needs Playwright and a real
+Chrome in the coverage job, costs CI time, and charges v8's counts to a page rather than to the
+module graph — which is the reason they are left out in the first place.
+
 **Additional gates by change type:**
 
 | Change type | Required gate |
