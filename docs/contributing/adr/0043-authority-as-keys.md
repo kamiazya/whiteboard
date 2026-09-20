@@ -8,8 +8,13 @@ scopes enforced (#1647, #1651, #1653), and the root key is written owner-only
 and never copied into a backup (#1648, #1666). Nothing in production mints
 one — decision 9's first application was withdrawn in the 2026-09-20 addendum
 below, on the finding that no shipped agent path presents a credential. The
-**read plane** (decision 3, over ADR-0042) is design of record; nothing of it
-is implemented. Gives
+**read plane** (decision 3, over ADR-0042) shipped 2026-09-21: the daemon
+mints a per-workspace content key at `POST /api/workspaces/:id/replica-key`
+and `apps/web` seals a daemon-kept workspace's IndexedDB replica under it,
+held in memory only for the tab's life (see
+[`docs/explanation/security-model.md`](../../explanation/security-model.md)).
+Not yet reached: `prf`-wrapped cold-start-offline unlock (ADR-0042 decision
+6), still deferred. Gives
 [ADR-0041](0041-profile-and-authority.md)'s "authority" and
 [ADR-0042](0042-offline-revocation.md)'s content key one mechanism, and brings
 the attenuation [ADR-0005](0005-hosted-origin-authorization.md) built for

@@ -51,11 +51,22 @@ afterAll(async () => {
 /**
  * Paths a literal can carry that are not a request target.
  *
- * Kept tiny and each one reasoned about — an exclusion list is how a guard
- * stops reaching its subject. `/api/...` is prose inside a doc comment;
  * `/api/v1` is a prefix a caller concatenates onto, never fetched whole.
+ * (Prose inside a doc comment used to need an entry here too — `/api/...` —
+ * until comments were stripped before matching below; a doc comment that
+ * spells a real backtick-quoted route, like `/api/pairing/session-assert*`
+ * in passkey-session.ts, would otherwise be read as a literal request this
+ * app makes and fail as an unmounted route.)
  */
-const NOT_A_REQUEST_TARGET = new Set(['/api/...', '/api/v1'])
+const NOT_A_REQUEST_TARGET = new Set(['/api/v1'])
+
+/**
+ * Matches `keeper-parity.test.ts`'s own fix for the same trap: a module
+ * that only MENTIONS a route in prose is not a caller of it.
+ */
+function code(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+}
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -86,7 +97,7 @@ interface WebPath {
 function webApiPaths(): WebPath[] {
   const seen = new Map<string, WebPath>()
   for (const file of sourceFiles(WEB_SRC)) {
-    const text = readFileSync(file, 'utf-8')
+    const text = code(readFileSync(file, 'utf-8'))
     // All three quotings, matched with a backreference so the closing quote is
     // the opening one. Double quotes are not hypothetical here: biome.json sets
     // `jsxQuoteStyle: "double"`, so a JSX `src="/api/…"` is the style the

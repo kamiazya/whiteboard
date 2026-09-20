@@ -9,6 +9,7 @@
  * section's count and the posted bytes come from the production read path.
  */
 
+import { forget, forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
@@ -16,6 +17,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -28,6 +30,7 @@ import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import type { PasskeyCredentials } from '../../lib/passkey-attestation.js'
+import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -102,10 +105,24 @@ function fakePasskey(): PasskeyCredentials & { asked: CredentialRequestOptions[]
   }
 }
 
-/** The daemon routes the flow touches, answering from `target`. */
+/**
+ * The daemon routes the flow touches, answering from `target` — and, as a
+ * side effect of building it, connects the S4b replica-key holder to THIS
+ * double. The demote pull inside `promoteWorkspace` (via `cacheDaemonWorkspace`)
+ * now seals its write, which needs a connected keeper and a `/replica-key`
+ * answer to do at all; every caller here already builds a fresh double
+ * before triggering the flow, so this is the one place to wire it from.
+ */
 function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
+    if (url.endsWith('/replica-key') && init?.method === 'POST') {
+      return Response.json({
+        workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
+        workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
+        tier: 'offline',
+      })
+    }
     if (url.endsWith('/api/workspaces') && (init?.method ?? 'GET') === 'GET') {
       return Response.json({
         workspaces: opts.workspaces ?? [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
@@ -174,6 +191,8 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof globalThis.fetch
+  connectReplicaKeeper({ baseUrl: BASE, token: DAEMON.token, fetch: fetchImpl })
+  return fetchImpl
 }
 
 async function seedTwoDocuments(): Promise<{ roadmapId: string; sketchId: string }> {
@@ -266,7 +285,12 @@ beforeEach(async () => {
   localStorage.removeItem(PASSKEYS_KEY)
   await clearWhiteboardDb()
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  connectReplicaKeeper(null)
+  forgetAll()
+  vi.restoreAllMocks()
+})
 
 describe('PromoteWorkspaceSection', () => {
   it('with a passkey registered here, the move is confirmed with it, the assertion travels, and the result says so', async () => {
@@ -903,6 +927,67 @@ describe('PromoteWorkspaceSection', () => {
     const promotion = createUserSettingsStore().load().migration.promotion
     if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
     expect(promotion.localCopyRemoved).toBe(false)
+  })
+
+  it('a successful move is reported ok even when the session key is withheld exactly at the demote read-back', async () => {
+    // The move and the demote-cache write both already landed by the time
+    // `replicaCarriesAll`'s read-back runs. Simulating the session lapsing
+    // in that exact gap (ADR-0042: "a membership revocation is felt at the
+    // next ask") must not turn the already-successful outcome into a
+    // reported failure — it defers the demote decision instead.
+    await seedTwoDocuments()
+    const sourceId = getBrowserWorkspaceId()
+    const target = new LoroDoc()
+    const baseFetch = daemonStub(target)
+    let keyRefused = false
+    const interceptingFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (keyRefused && url.endsWith('/replica-key') && init?.method === 'POST') {
+        return Response.json({ error: 'not_a_member' }, { status: 403 })
+      }
+      return baseFetch(input, init)
+    }) as typeof globalThis.fetch
+    // Re-wires the session-key fetch to the intercepting one without
+    // changing baseUrl/token, so this is not a reconnect (no key forgotten
+    // as a side effect of the swap itself).
+    connectReplicaKeeper({ baseUrl: BASE, token: DAEMON.token, fetch: interceptingFetch })
+    // After the demote-cache write for the promoted workspace lands, drop
+    // the held key and start refusing — the next ask (replicaCarriesAll's
+    // read-back) must re-mint and finds the session gone.
+    const originalSave = DocumentStoreWorkspaceDocs.prototype.save
+    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'save').mockImplementation(async function (
+      this: DocumentStoreWorkspaceDocs,
+      workspaceId: string,
+      doc,
+    ) {
+      const result = await originalSave.call(this, workspaceId, doc)
+      if (workspaceId === 'ws-a') {
+        forget(BASE, workspaceId)
+        keyRefused = true
+      }
+      return result
+    })
+
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={interceptingFetch}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/moved 2 documents/i)
+    expect(result.textContent).not.toMatch(/failed/i)
+
+    const promotion = createUserSettingsStore().load().migration.promotion
+    if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
+    expect(promotion.localCopyRemoved).toBe(false)
+    // The source browser copy survives — the demote decision was deferred,
+    // not silently taken as "carries nothing".
+    expect(await new BrowserWorkspaceDocs().open(sourceId)).not.toBeNull()
   })
 
   it('stays discoverable but disabled with no daemon connected', async () => {

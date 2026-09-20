@@ -28,6 +28,7 @@ import {
   BROWSER_DEFAULT_SEGMENT,
   DB_VERSION,
   DOCUMENT_INDEX_STORE,
+  discardPlaintextReplicas,
   mintBrowserWorkspaceSegment,
   openWhiteboardDb,
   rekeyBrowserWorkspace,
@@ -1662,5 +1663,230 @@ describe('IndexedDB v18 -> v19 (sweeps points written before content digests)', 
 
     expect(afterBump).toHaveLength(1)
     expect((afterBump[0] as { id: string }).id).toBe('v-2')
+  })
+})
+
+describe('IndexedDB v19 -> v20 (discards a plaintext replica record)', () => {
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
+
+  it('current DB_VERSION is 20 or higher', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(20)
+  })
+
+  const BROWSER_WORKSPACE_ID = 'browser-ws-b'
+  const REPLICA_WORKSPACE_ID = 'daemon-replica-r'
+
+  /** A v19 database holding one browser-kept workspace record, one plaintext replica, and one document. */
+  async function seedV19Fixture(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(MIGRATION_DB, 19)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+        if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
+        if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE)) {
+          db.createObjectStore(SYNC_DOCUMENTS_STORE)
+        }
+        if (!db.objectStoreNames.contains(SYNC_SNAPSHOT_CHUNKS_STORE)) {
+          db.createObjectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+        }
+        if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
+          const idx = db.createObjectStore(DOCUMENT_INDEX_STORE, {
+            keyPath: ['workspaceId', 'path'],
+          })
+          idx.createIndex('byId', ['workspaceId', 'documentId'], { unique: true })
+        }
+        if (!db.objectStoreNames.contains('documentFiles')) db.createObjectStore('documentFiles')
+        if (!db.objectStoreNames.contains('blobs')) db.createObjectStore('blobs')
+        if (!db.objectStoreNames.contains('contentTimestamps')) {
+          db.createObjectStore('contentTimestamps')
+        }
+        if (!db.objectStoreNames.contains(VERSIONS_STORE)) {
+          const versions = db.createObjectStore(VERSIONS_STORE, { keyPath: 'id' })
+          versions.createIndex(VERSIONS_BY_DOCUMENT_INDEX, ['workspaceId', 'documentId'])
+        }
+      }
+      req.onsuccess = () => {
+        const db = req.result
+        letFixtureStepAside(db)
+        const tx = db.transaction(
+          [WORKSPACES_STORE, SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE],
+          'readwrite',
+        )
+        tx.objectStore(WORKSPACES_STORE).put(
+          { workspaceId: BROWSER_WORKSPACE_ID },
+          BROWSER_WORKSPACE_ID,
+        )
+        tx.objectStore(SYNC_DOCUMENTS_STORE).put(
+          {
+            v: 2,
+            snapshot: { manifest: { chunkCount: 1 } },
+            frontier: new Uint8Array(),
+            deltas: [],
+          },
+          `workspace-tree:${BROWSER_WORKSPACE_ID}`,
+        )
+        tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).put(
+          { index: 0, of: 1, bytes: new Uint8Array([1, 2, 3]) },
+          [`workspace-tree:${BROWSER_WORKSPACE_ID}`, 0],
+        )
+        // No `workspaces` row for R: exactly a replica seeded before this
+        // migration existed.
+        tx.objectStore(SYNC_DOCUMENTS_STORE).put(
+          {
+            v: 2,
+            snapshot: { manifest: { chunkCount: 2 } },
+            frontier: new Uint8Array(),
+            deltas: [],
+          },
+          `workspace-tree:${REPLICA_WORKSPACE_ID}`,
+        )
+        tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).put(
+          { index: 0, of: 2, bytes: new Uint8Array([4, 5, 6]) },
+          [`workspace-tree:${REPLICA_WORKSPACE_ID}`, 0],
+        )
+        tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).put(
+          { index: 1, of: 2, bytes: new Uint8Array([7, 8, 9]) },
+          [`workspace-tree:${REPLICA_WORKSPACE_ID}`, 1],
+        )
+        tx.objectStore(SYNC_DOCUMENTS_STORE).put(
+          {
+            v: 2,
+            snapshot: { manifest: { chunkCount: 0 } },
+            frontier: new Uint8Array(),
+            deltas: [],
+          },
+          'document:D',
+        )
+        tx.onerror = () => {
+          db.close()
+          reject(tx.error)
+        }
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+      }
+      req.onerror = () => reject(req.error)
+    })
+  }
+
+  async function syncRows(): Promise<{ key: string; value: unknown }[]> {
+    const db = await openAtCurrentVersion(MIGRATION_DB)
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SYNC_DOCUMENTS_STORE, 'readonly')
+      const store = tx.objectStore(SYNC_DOCUMENTS_STORE)
+      const keysReq = store.getAllKeys()
+      const valuesReq = store.getAll()
+      tx.onerror = () => reject(tx.error)
+      tx.oncomplete = () => {
+        db.close()
+        resolve(keysReq.result.map((key, i) => ({ key: String(key), value: valuesReq.result[i] })))
+      }
+    })
+  }
+
+  async function chunkRowCount(docKey: string): Promise<number> {
+    const db = await openAtCurrentVersion(MIGRATION_DB)
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(SYNC_SNAPSHOT_CHUNKS_STORE, 'readonly')
+      const range = IDBKeyRange.bound([docKey], [docKey, []])
+      const req = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).getAllKeys(range)
+      tx.onerror = () => reject(tx.error)
+      tx.oncomplete = () => {
+        db.close()
+        resolve(req.result.length)
+      }
+    })
+  }
+
+  it('drops a plaintext replica record and its chunk range, and leaves the others byte-identical', async () => {
+    await seedV19Fixture()
+    // A probe, so "gone afterwards" cannot be satisfied by a fixture that
+    // never wrote the replica row in the first place.
+    expect(await chunkRowCount(`workspace-tree:${REPLICA_WORKSPACE_ID}`)).toBe(2)
+
+    const db = await openWhiteboardDb(MIGRATION_DB)
+    db.close()
+
+    const rows = await syncRows()
+    const keys = rows.map((r) => r.key)
+    expect(keys).not.toContain(`workspace-tree:${REPLICA_WORKSPACE_ID}`)
+    expect(keys).toContain(`workspace-tree:${BROWSER_WORKSPACE_ID}`)
+    expect(keys).toContain('document:D')
+    expect(await chunkRowCount(`workspace-tree:${REPLICA_WORKSPACE_ID}`)).toBe(0)
+    expect(await chunkRowCount(`workspace-tree:${BROWSER_WORKSPACE_ID}`)).toBe(1)
+
+    const browserRow = rows.find((r) => r.key === `workspace-tree:${BROWSER_WORKSPACE_ID}`)?.value
+    expect(browserRow).toEqual({
+      v: 2,
+      snapshot: { manifest: { chunkCount: 1 } },
+      frontier: new Uint8Array(),
+      deltas: [],
+    })
+    const documentRow = rows.find((r) => r.key === 'document:D')?.value
+    expect(documentRow).toEqual({
+      v: 2,
+      snapshot: { manifest: { chunkCount: 0 } },
+      frontier: new Uint8Array(),
+      deltas: [],
+    })
+  })
+
+  it('is a no-op told it is already at DB_VERSION', async () => {
+    await seedV19Fixture()
+    const db = await openWhiteboardDb(MIGRATION_DB)
+    db.close()
+    expect(await chunkRowCount(`workspace-tree:${REPLICA_WORKSPACE_ID}`)).toBe(0)
+
+    // A later bump, told it is already past the discard's own version, must
+    // not re-run it. What survived the first run is out of its reach either
+    // way, so the probe is a row it WOULD delete — a sealed replica written
+    // after v20, keyed by an id with no `workspaces` row — which only the
+    // version guard keeps.
+    const sealedAfterV20 = 'workspace-tree:daemon-replica-sealed-after-v20'
+    {
+      const db = await openAtCurrentVersion(MIGRATION_DB)
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction([SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE], 'readwrite')
+        tx.objectStore(SYNC_DOCUMENTS_STORE).put(
+          {
+            v: 2,
+            snapshot: { manifest: { chunkCount: 1 } },
+            frontier: new Uint8Array(),
+            deltas: [],
+          },
+          sealedAfterV20,
+        )
+        tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).put(
+          { index: 0, of: 1, bytes: new Uint8Array([1, 0, 0, 0, 0]) },
+          [sealedAfterV20, 0],
+        )
+        tx.onerror = () => reject(tx.error)
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+      })
+    }
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION + 1)
+      req.onupgradeneeded = () => {
+        const tx = req.transaction
+        if (!tx) return
+        discardPlaintextReplicas(tx, DB_VERSION, () => {})
+      }
+      req.onsuccess = () => {
+        req.result.close()
+        resolve()
+      }
+      req.onerror = () => reject(req.error)
+    })
+    const rows = await syncRows()
+    expect(rows.map((r) => r.key)).toContain(`workspace-tree:${BROWSER_WORKSPACE_ID}`)
+    expect(rows.map((r) => r.key)).toContain('document:D')
+    expect(rows.map((r) => r.key)).toContain(sealedAfterV20)
+    expect(await chunkRowCount(sealedAfterV20)).toBe(1)
   })
 })

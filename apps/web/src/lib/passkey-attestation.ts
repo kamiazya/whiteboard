@@ -38,7 +38,7 @@ const passkeysFileSchema = z.record(z.string(), registeredPasskeySchema)
 
 export type RegisteredPasskey = z.infer<typeof registeredPasskeySchema>
 
-interface StorageLike {
+export interface StorageLike {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
 }
@@ -102,7 +102,7 @@ function bytesToBase64Url(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
+export function base64UrlToBytes(value: string): Uint8Array {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/')
   const binary = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='))
   return Uint8Array.from(binary, (char) => char.charCodeAt(0))
@@ -234,28 +234,25 @@ export type AttestOutcome =
   | { ok: false; reason: 'cancelled' | 'rejected'; detail?: string }
 
 /**
- * Asks the passkey registered for this daemon to sign THIS snapshot into
- * THIS workspace. Null when no passkey is registered here — the caller then
- * promotes without evidence and says so, which is the honest reading of a
- * browser that could not ask (decision 5: absence means not asked).
+ * Asks the passkey registered for this daemon to sign an arbitrary CHALLENGE
+ * — shared by promotion (over the workspace+snapshot digest) and
+ * `passkey-session.ts`'s session bind (over a daemon-minted nonce). Null
+ * when no passkey is registered here, the same "absence means not asked"
+ * reading `attestPromotion` documents below.
  */
-export async function attestPromotion({
+export async function assertWithRegisteredPasskey({
   daemonBaseUrl,
-  workspaceId,
-  snapshot,
+  challenge,
   credentials = globalThis.navigator?.credentials,
   storage = globalThis.localStorage,
 }: {
   daemonBaseUrl: string
-  /** The handle as the promote URL will address it — what the daemon hashes. */
-  workspaceId: string
-  snapshot: Uint8Array
+  challenge: Uint8Array
   credentials?: PasskeyCredentials
   storage?: StorageLike
 }): Promise<AttestOutcome | null> {
   const registered = getRegisteredPasskey(daemonBaseUrl, storage)
   if (registered === null || credentials === undefined) return null
-  const challenge = await promotionChallenge(workspaceId, snapshot)
   let credential: Credential | null
   try {
     credential = await credentials.get({
@@ -284,4 +281,28 @@ export async function attestPromotion({
       signature: bytesToBase64Url(response.signature),
     },
   }
+}
+
+/**
+ * Asks the passkey registered for this daemon to sign THIS snapshot into
+ * THIS workspace. Null when no passkey is registered here — the caller then
+ * promotes without evidence and says so, which is the honest reading of a
+ * browser that could not ask (decision 5: absence means not asked).
+ */
+export async function attestPromotion({
+  daemonBaseUrl,
+  workspaceId,
+  snapshot,
+  credentials = globalThis.navigator?.credentials,
+  storage = globalThis.localStorage,
+}: {
+  daemonBaseUrl: string
+  /** The handle as the promote URL will address it — what the daemon hashes. */
+  workspaceId: string
+  snapshot: Uint8Array
+  credentials?: PasskeyCredentials
+  storage?: StorageLike
+}): Promise<AttestOutcome | null> {
+  const challenge = await promotionChallenge(workspaceId, snapshot)
+  return assertWithRegisteredPasskey({ daemonBaseUrl, challenge, credentials, storage })
 }

@@ -489,6 +489,69 @@ export function sweepVersionsWrittenBeforeDigests(tx: IDBTransaction, oldVersion
   tx.objectStore(VERSIONS_STORE).clear()
 }
 
+/** The version at which a plaintext daemon replica stops being possible on disk. */
+export const SEALED_REPLICA_DB_VERSION = 20
+
+/**
+ * v20's discard: a `workspace-tree:*` record whose id is not one of this
+ * browser's OWN workspaces (`WORKSPACES_STORE`'s keys) is a daemon replica
+ * that was pulled and stored before this release sealed it — plaintext at
+ * rest. There is no key to seal it with retroactively (the session key is
+ * never persisted), so it is discarded outright, chunk rows included; the
+ * next daemon resolve re-pulls it through `openDocumentStore`, sealed.
+ *
+ * A `document:*` row is untouched: that ref is always plaintext, replica or
+ * not (S4b's routing), so nothing about it changes at this version.
+ *
+ * The REGISTRY (`storage.replicas`, in localStorage) cannot be consulted
+ * from inside a `versionchange` transaction — IndexedDB and localStorage are
+ * separate stores with no shared transaction — so this step uses the only
+ * signal available inside the transaction itself: every browser workspace
+ * has carried a `workspaces` row since v14 (minted on an empty registry and
+ * on a demote), so a `workspace-tree` record with no such row was already
+ * unreachable by any browser code path before this version existed, and is
+ * discarded on that basis alone rather than by asking what it is.
+ *
+ * Told the FROM version, like `sweepVersionsWrittenBeforeDigests`: a no-op
+ * for a fresh install (oldVersion 0, nothing to discard) and for any bump at
+ * or past this version (idempotent — a later replica pull writes a SEALED
+ * record, which is indistinguishable in shape from a browser-kept one and
+ * must never be swept a second time).
+ */
+export function discardPlaintextReplicas(
+  tx: IDBTransaction,
+  oldVersion: number,
+  done: () => void,
+): void {
+  if (oldVersion === 0 || oldVersion >= SEALED_REPLICA_DB_VERSION) {
+    done()
+    return
+  }
+  const workspaces = tx.objectStore(WORKSPACES_STORE)
+  const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
+  const chunks = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+  const keysReq = workspaces.getAllKeys()
+  keysReq.onsuccess = () => {
+    const browserWorkspaceIds = new Set(keysReq.result.map(String))
+    const cursorReq = sync.openCursor()
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result
+      if (!cursor) {
+        done()
+        return
+      }
+      const key = String(cursor.primaryKey)
+      const prefix = 'workspace-tree:'
+      if (key.startsWith(prefix) && !browserWorkspaceIds.has(key.slice(prefix.length))) {
+        cursor.delete()
+        const chunkRange = IDBKeyRange.bound([key], [key, []])
+        chunks.delete(chunkRange)
+      }
+      cursor.continue()
+    }
+  }
+}
+
 export function renameMetaKey(tx: IDBTransaction, from: string, to: string): void {
   const meta = tx.objectStore('meta')
   const req = meta.get(from)

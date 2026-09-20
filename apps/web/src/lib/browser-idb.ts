@@ -34,6 +34,7 @@ import {
   backfillDocumentIndex,
   carryLoroDocuments,
   copyStoreThenDelete,
+  discardPlaintextReplicas,
   discardPrePathDocuments,
   mintBrowserWorkspaceSegment,
   RENAMED_STORES,
@@ -49,6 +50,7 @@ import {
 export * from './browser-idb-stores.js'
 export {
   BROWSER_DEFAULT_SEGMENT,
+  discardPlaintextReplicas,
   mintBrowserWorkspaceSegment,
   rekeyBrowserWorkspace,
   sweepVersionsWrittenBeforeDigests,
@@ -196,8 +198,14 @@ export function whiteboardDbName(): string {
  * row carried its content's digest can never gain one. The reasoning, and why
  * it is a `clear()` rather than the cursor rewrite the v18 note below refuses,
  * is at `sweepVersionsWrittenBeforeDigests`.
+ *
+ * v19 -> v20: DISCARDS a `workspace-tree` record this browser did not keep
+ * itself (ADR-0042/0043's read plane) — a daemon replica pulled and stored
+ * before this release sealed it, plaintext at rest, with no key ever
+ * persisted to seal it with retroactively. The next daemon resolve re-pulls
+ * it through `openDocumentStore`, sealed. See `discardPlaintextReplicas`.
  */
-export const DB_VERSION = 19
+export const DB_VERSION = 20
 
 /**
  * The database name is a parameter so a test can have one of its own. Browser
@@ -272,7 +280,17 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
             backfillDocumentIndex(tx, () =>
               carryLoroDocuments(tx, () =>
                 splitInlineSnapshotChunks(tx, () =>
-                  rekeyBrowserWorkspace(tx, () => mintBrowserWorkspaceSegment(tx, () => {})),
+                  rekeyBrowserWorkspace(tx, () =>
+                    mintBrowserWorkspaceSegment(tx, () =>
+                      // Chained LAST: it walks `syncDocuments`, which the
+                      // carriers above are still filling on an older
+                      // database, and it needs `WORKSPACES_STORE`'s final
+                      // membership (the rename/rekey/mint chain above is
+                      // what settles it) to tell a browser workspace from a
+                      // replica.
+                      discardPlaintextReplicas(tx, event.oldVersion, () => {}),
+                    ),
+                  ),
                 ),
               ),
             ),

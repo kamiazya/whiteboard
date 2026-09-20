@@ -1,7 +1,7 @@
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { openWhiteboardDb, SYNC_DOCUMENTS_STORE } from '../lib/browser-idb.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { IdbDocumentStore } from '../lib/idb-document-store.js'
+import { openDocumentStore } from '../lib/replica-store.js'
 
 /**
  * Write a `DocumentStore` record straight into IndexedDB, bypassing the store.
@@ -23,7 +23,7 @@ export async function seedSyncDocument(
   // Only the `raw` path bypasses the store. A snapshot of arbitrary bytes is
   // a perfectly valid record — what makes it a fixture is that Loro cannot
   // import it, which is the store's caller's problem and not the store's — so
-  // writing it through `IdbDocumentStore` keeps this helper from carrying its
+  // writing it through `openDocumentStore` keeps this helper from carrying its
   // own copy of a storage layout that has already changed once underneath it.
   if (!('raw' in content)) {
     // `docRefKey` never reads `workspaceId` for a `'document'` ref (a
@@ -32,7 +32,7 @@ export async function seedSyncDocument(
     // the real accessor rather than a stale literal so this fixture never
     // reads as evidence for a workspace id that no longer exists.
     const docRef = { kind: 'document', workspaceId: getBrowserWorkspaceId(), documentId } as const
-    const store = new IdbDocumentStore(dbName)
+    const store = openDocumentStore(dbName)
     const { manifest, chunks } = chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)
     // Empty, matching what `LoroStore` writes: nothing in the browser reads a
     // frontier, and a fixture inventing one would be a value the first real

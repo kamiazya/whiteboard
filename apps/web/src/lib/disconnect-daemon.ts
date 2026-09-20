@@ -1,3 +1,4 @@
+import { disconnectReplicaKeeper } from './replica-store.js'
 import type { UserSettingsStore } from './user-settings-store.js'
 
 /**
@@ -19,6 +20,13 @@ import type { UserSettingsStore } from './user-settings-store.js'
  *   the same daemon straight back and the action would read as a no-op.
  */
 export function disconnectFromDaemon(store: UserSettingsStore, target: string): void {
+  // Held replica keys for this daemon must not keep answering after the
+  // browser has stopped using it — a session that outlives its own "stop
+  // using this daemon" reads as still connected to whatever asked it. The
+  // connection goes with them, synchronously: App only learns of the
+  // disconnect on its next render, and a load in between must not mint a
+  // replacement key through the session that was just given up.
+  disconnectReplicaKeeper(target)
   store.update((current) => {
     const known = (current.storage.knownDaemonBaseUrls ?? []).filter((entry) => entry !== target)
     const dismissed = (current.storage.dismissedDaemonBaseUrls ?? []).filter(

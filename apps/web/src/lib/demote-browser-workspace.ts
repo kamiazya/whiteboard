@@ -27,7 +27,7 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import type { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { switchBrowserWorkspace } from './browser-workspace-id.js'
-import { IdbDocumentStore } from './idb-document-store.js'
+import { openDocumentStore } from './replica-store.js'
 
 /**
  * Does the replica this browser stores under the DAEMON workspace id hold
@@ -84,7 +84,7 @@ export async function demoteBrowserWorkspace(
   }
   await switchBrowserWorkspace(nextHandle, dbName)
   try {
-    await new IdbDocumentStore(dbName).deleteDoc({
+    await openDocumentStore(dbName).deleteDoc({
       docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
     })
   } catch {

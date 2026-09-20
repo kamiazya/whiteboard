@@ -308,6 +308,46 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     expect(absentCalls()).toBe(0)
   })
 
+  it('saves and reads a snapshot with zero chunks even while the key is withheld', async () => {
+    // The bypass `#sealChunks`/`#openManifestArm` document in comments: an
+    // empty manifest hides nothing, so it must save and read back without
+    // ever asking a withheld provider for a key.
+    const inner = new IdbDocumentStore(DB_NAME)
+    const store = new SealedDocumentStore(inner, withheldProvider())
+    const emptyRef: DocRef = {
+      kind: 'document',
+      workspaceId: 'sealed-ws',
+      documentId: '01JD0EMPTYCHUNKS00000000001',
+    }
+    const { manifest, chunks } = chunkSnapshot(new Uint8Array(0), 64)
+    expect(manifest.chunkCount).toBe(0)
+    await store.saveSnapshot({ docRef: emptyRef, manifest, chunks, frontier: randomBytes(4) })
+
+    const loaded = await store.loadSnapshot({ docRef: emptyRef })
+    expect(loaded?.manifest).toEqual(manifest)
+    expect(loaded?.chunks).toEqual([])
+
+    const reported = await store.readSnapshotManifest({ docRef: emptyRef })
+    expect(reported?.manifest).toEqual(manifest)
+  })
+
+  it('readSnapshotManifest throws ReplicaKeyWithheldError for a present, non-empty record while the key is withheld', async () => {
+    const key = await generateKey()
+    const inner = new IdbDocumentStore(DB_NAME)
+    const { manifest, chunks } = chunkSnapshot(randomBytes(64), 32)
+    await new SealedDocumentStore(inner, fixedKeyProvider(key, 0)).saveSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier: randomBytes(4),
+    })
+
+    const locked = new SealedDocumentStore(inner, withheldProvider())
+    await expect(locked.readSnapshotManifest({ docRef })).rejects.toBeInstanceOf(
+      ReplicaKeyWithheldError,
+    )
+  })
+
   it('refuses a tampered chunk and a tampered delta as unreadable, not withheld', async () => {
     const key = await generateKey()
     const inner = new IdbDocumentStore(DB_NAME)
@@ -465,6 +505,68 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     expect(outerManifest?.manifest).toEqual(manifest)
     expect(outerManifest?.manifest).toEqual((await store.loadSnapshot({ docRef }))?.manifest)
   })
+
+  // "the plaintext arm": a browser-kept workspace, or any document ref.
+  describe('the plaintext arm', () => {
+    const plaintextRef: DocRef = {
+      kind: 'workspace-tree',
+      workspaceId: '01JD0PLAINTEXT000000000001',
+    }
+
+    it('round-trips byte-identically to a bare IdbDocumentStore', async () => {
+      const bytes = randomBytes(300)
+      const { manifest, chunks } = chunkSnapshot(bytes, 128)
+      const frontier = randomBytes(4)
+      const delta = randomBytes(10)
+      const deltaFrontier = randomBytes(4)
+
+      const sealedInner = new IdbDocumentStore(DB_NAME)
+      const sealed = new SealedDocumentStore(sealedInner, plaintextProvider())
+      await sealed.saveSnapshot({ docRef: plaintextRef, manifest, chunks, frontier })
+      await sealed.appendDeltas({
+        docRef: plaintextRef,
+        deltaBatch: { updates: [delta], newFrontier: deltaFrontier },
+      })
+
+      const BARE_DB = `${DB_NAME}-bare`
+      await clearNamedDb(BARE_DB)
+      const bare = new IdbDocumentStore(BARE_DB)
+      await bare.saveSnapshot({ docRef: plaintextRef, manifest, chunks, frontier })
+      await bare.appendDeltas({
+        docRef: plaintextRef,
+        deltaBatch: { updates: [delta], newFrontier: deltaFrontier },
+      })
+
+      const sealedDb = await openRaw()
+      const bareDb = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open(BARE_DB)
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+      const sealedSync = await getAll(sealedDb, SYNC_DOCUMENTS_STORE)
+      const bareSync = await getAll(bareDb, SYNC_DOCUMENTS_STORE)
+      expect(sealedSync).toEqual(bareSync)
+      const sealedChunks = await getAll(sealedDb, SYNC_SNAPSHOT_CHUNKS_STORE)
+      const bareChunks = await getAll(bareDb, SYNC_SNAPSHOT_CHUNKS_STORE)
+      expect(sealedChunks).toEqual(bareChunks)
+      sealedDb.close()
+      bareDb.close()
+      await clearNamedDb(BARE_DB)
+
+      const loaded = await sealed.loadSnapshot({ docRef: plaintextRef })
+      expect(loaded?.manifest).toEqual(manifest)
+      expect(loaded?.chunks.map((c) => [...c.bytes])).toEqual(chunks.map((c) => [...c.bytes]))
+    })
+
+    it('readSnapshotManifest answers the inner manifest unchanged', async () => {
+      const bytes = randomBytes(50)
+      const { manifest, chunks } = chunkSnapshot(bytes, 50)
+      const store = new SealedDocumentStore(new IdbDocumentStore(DB_NAME), plaintextProvider())
+      await store.saveSnapshot({ docRef: plaintextRef, manifest, chunks, frontier: randomBytes(4) })
+      const reported = await store.readSnapshotManifest({ docRef: plaintextRef })
+      expect(reported?.manifest).toEqual(manifest)
+    })
+  })
 })
 
 describe('openManifest refuses a manifest smaller than its own envelope overhead', () => {
@@ -557,6 +659,10 @@ describe('openManifest refuses a manifest smaller than its own envelope overhead
     )
   })
 })
+
+function plaintextProvider(): ReplicaKeyProvider {
+  return { keyFor: async () => 'plaintext' }
+}
 
 describe('envelope encoding', () => {
   it('rejects an unknown version byte and a buffer shorter than the minimum envelope', () => {

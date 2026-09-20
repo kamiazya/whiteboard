@@ -270,7 +270,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 986 -> 988, +2, for the Settings /settings branch passing
   // `workspaceId` (from `daemonView.workspace`) to SettingsPage so its
   // Members card knows which workspace to manage (ADR-0041 S0-5).
-  'apps/web/src/App.tsx': 988,
+  // Raised 988 -> 1019 for S4b's replica-key-holder effect: the dynamic
+  // `import('./lib/replica-store.js')` (kept dynamic to stay under
+  // smoke:bundle-size's modulepreload budget) and its cancellation guard.
+  'apps/web/src/App.tsx': 1019,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
@@ -730,11 +733,19 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
   // case that pins it to daemonView.workspace and drops it again on
   // disconnect.
-  'apps/web/src/App.test.tsx': 1643,
+  // Raised 1643 -> 1733 for S4b's replica-key-holder wiring: a
+  // `connectReplicaKeeper` spy mock, the `navigator.credentials` sentinel
+  // helpers the gate needed to be provable rather than vacuous, and the two
+  // new tests (supported/unsupported credentials, and the disconnect-forgets
+  // case).
+  'apps/web/src/App.test.tsx': 1733,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 968,
+  // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
+  // `connectReplicaKeeper` wiring every existing move/demote test now needs,
+  // since the pull those flows drive is sealed.
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1053,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // Raised 2708 -> 2724, two lines for each of the eight ink entries the
   // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
@@ -749,7 +760,12 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // interactions and never renders the handle the press starts on.
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2730,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
+  // Raised 1666 -> 1863 for the v19 -> v20 upgrade block (S4b's plaintext
+  // replica discard): the seed fixture, the chunk-range no-op case, and the
+  // drop-and-leaves-others-byte-identical test.
+  // Raised 1863 -> 1892: the v20 idempotency case now seeds a post-v20
+  // sealed replica row so the version guard has something it would delete.
+  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
@@ -810,8 +826,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // new assertions.
   // +5 for the two entries the pointer-surface move needs: this list
   // GREW by an over-budget file, which is the one thing that can only be
-  // recorded by raising this number.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 934,
+  // recorded by raising this number. Then the four S4b raises and their
+  // sentences.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 951,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
