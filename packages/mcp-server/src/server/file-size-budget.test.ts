@@ -728,9 +728,13 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 968,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
-  // Raised 2708 -> 2712 for the two ink command kinds' ledger entries, which
-  // the model does not drive: it reduces POINTER gestures and both verbs are
-  // a keypress and a menu row.
+  // Raised 2708 -> 2724, two lines for each of the eight ink entries the
+  // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
+  // ends/side/facet/label/bends/color) and `pointerdown-ink`. Each one is a
+  // command kind this model does not drive — it reduces POINTER gestures
+  // over generated NODES — and the ledger's fourth direction fails on a
+  // `not modelled` the run DOES produce, so each entry is a sentence
+  // somebody had to be able to defend rather than a line of boilerplate.
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2724,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
@@ -740,6 +744,14 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
   // ink, the offset on every point a stroke owns, and the anchor bounds that
   // used to read Infinity over nodes alone.
+  // Raised 1675 -> 1808 with the rest of the verbs a stroke stores and the
+  // editor could not write — bends, label, arrowheads, the side a pinned end
+  // leaves from and the free end that has none, a facet, and the colour
+  // write against a line the canvas does not hold — plus the two
+  // collection-picking siblings (`labelInkCommand`, `bendInkCommand`), whose
+  // whole content is that a relation and a stroke of the same id go to
+  // different writes. A table of ink verbs where every row is one example is
+  // what stops the next one being added without one.
   'apps/web/src/lib/spatial/commands.test.ts': 1808,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
@@ -769,7 +781,12 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reason beside it. That is the entry doing its job rather than growing:
   // a raise costs a sentence, so a change that widens a file pays for it in
   // the diff a reviewer reads.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 892,
+  // 892 -> 909 for completing two of those sentences. A review found both
+  // annotations stopping short of the ceiling they sit on — 2712 written
+  // against 2724, 1675 against 1808 — which is the failure mode this entry
+  // is the antidote to, one level up: an annotation that covers part of a
+  // raise reads exactly like one that covers all of it.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 909,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

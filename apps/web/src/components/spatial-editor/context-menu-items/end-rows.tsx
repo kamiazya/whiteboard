@@ -41,7 +41,12 @@ export function arrowRow(
   // something a person asked for, where on a relation it is the format's own
   // default (JSON Canvas `toEnd: arrow`). Reading the default per kind is
   // what keeps the row's ticked state honest for both.
-  const pointsByDefault = 'node' in element.from
+  //
+  // The discriminant is the ABSENCE of `kind`, which is what `endSide` and
+  // `endNode` already read. Asking whether the end names a node cannot tell
+  // the two apart: a line end on a box carries `node` exactly as an edge end
+  // does, and the extra `kind` is the only thing that distinguishes them.
+  const pointsByDefault = !('kind' in element.from)
   const fromEnd = element.from.end ?? 'none'
   const toEnd = element.to.end ?? (pointsByDefault ? 'arrow' : 'none')
   return {

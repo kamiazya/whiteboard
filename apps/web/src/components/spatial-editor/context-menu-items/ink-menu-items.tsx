@@ -38,10 +38,19 @@ export interface InkMenuItemsInput {
   /** Opens the in-place label editor on this stroke. */
   readonly setEdgeLabelEditId: (id: string | null) => void
   /**
-   * Every selected stroke or relation, which is what Group acts on — the
-   * pressed line alone can never be a mark.
+   * Every selected stroke or relation, which is what Group and Delete act on
+   * — the pressed line alone can never be a mark.
    */
   readonly selectedInkIds: readonly string[]
+  /**
+   * The removal for one selected id, whichever collection holds it.
+   *
+   * A selection carries ink ids without knowing whether each came from
+   * `edges` or `lines`, so exactly one place looks — `deleteInkCommand`, the
+   * same one the Delete KEY goes through. Passed in rather than resolved
+   * here because this menu is handed the strokes and never the relations.
+   */
+  readonly deleteInk: (id: string) => EditorCommand | undefined
   /** Mints the group id, so the menu invents no identity of its own. */
   readonly createId: () => string
 }
@@ -58,6 +67,7 @@ export function inkMenuItems({
   setEdgeLabelEditId,
   selectedInkIds,
   createId,
+  deleteInk,
 }: InkMenuItemsInput): ContextMenuItem[] {
   // Locked ink offers exactly one action, the same contract the edge branch
   // keeps: everything else here is a mutation the lock exists to refuse.
@@ -196,10 +206,15 @@ export function inkMenuItems({
         // "this stroke" were the same thing. Now that a press on a member
         // keeps the set, a menu Delete that took one would be the odd one
         // out — and would read as the menu losing the rest.
-        const targets = joinable.length > 1 ? joinable : [line]
+        //
+        // Resolved through `deleteInk` rather than the stroke list beside
+        // it: a marquee band fills the selection from BOTH collections, so
+        // a Delete that only knew the strokes left the banded relations
+        // standing while the Delete key took them.
+        const targets = selectedInkIds.length > 1 ? selectedInkIds : [line.id]
         applyResult({
           state: { kind: 'idle' },
-          commands: targets.map((entry) => ({ kind: 'delete-line', id: entry.id }) as const),
+          commands: targets.flatMap((id) => deleteInk(id) ?? []),
         })
         setSelectedEdgeId(null)
       },

@@ -85,6 +85,25 @@ it('gives a stroke an arrowhead', async () => {
   expect(latest.canvas.lines?.[0]?.from.end).toBe('none')
 })
 
+it('ticks None on a stroke attached to a box, which is not a relation', async () => {
+  // What the row shows when the stroke stores no arrowhead at all. A
+  // RELATION points by default and ink never does, and the two are told
+  // apart by the `kind` a line end carries — asking whether the end names a
+  // node says yes for both, so this menu showed an attached stroke a
+  // Forward arrowhead it has not got.
+  const { Host } = makeHost(attached)
+  const { container } = render(<Host />)
+
+  await openInkMenuAt(container, { x: 488, y: 388 })
+
+  await expect
+    .element(page.getByRole('menuitemradio', { name: 'None' }))
+    .toHaveAttribute('aria-checked', 'true')
+  await expect
+    .element(page.getByRole('menuitemradio', { name: 'Forward' }))
+    .toHaveAttribute('aria-checked', 'false')
+})
+
 it('pins the side an attached end leaves the box from', async () => {
   const { Host, latest } = makeHost(attached)
   const { container } = render(<Host />)
