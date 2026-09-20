@@ -273,7 +273,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // unrelated tests became a discriminated union built once and a switch
   // that draws it, so the narrowing every later arm depended on — `documents`
   // is non-null — is stated in the type instead of implied by position.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1245,
+  // Raised 1245 -> 1258, +13, for `refreshAndSelect`. The five call sites
+  // that each re-read the list and re-selected a row lost three lines apiece
+  // (-15), and the one definition plus the paragraph saying which five flows
+  // it serves cost more than that. A net +13 to delete a rule that had to be
+  // remembered in five places is the trade, said plainly rather than hidden
+  // behind a smaller number.
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1258,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
   // map on a document's node, and the read that never opens one. They sit
   // here rather than in a new file because `nodeById` is this module's, and
@@ -782,7 +788,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // against 2724, 1675 against 1808 — which is the failure mode this entry
   // is the antidote to, one level up: an annotation that covers part of a
   // raise reads exactly like one that covers all of it.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 909,
+  // 909 -> 917: this entry is self-referential, so every raise recorded
+  // above costs this file the lines that record it — including these.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 917,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

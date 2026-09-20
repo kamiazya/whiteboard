@@ -279,6 +279,29 @@ export function WorkspaceFilesPanel({
   const loadOutline = useMemo(() => createRowOutlineLoader({ source, broker }), [source, broker])
 
   const readList = useCallback(() => source.listDocuments(), [source])
+
+  /**
+   * Re-reads the list and re-selects the row at `path`.
+   *
+   * Five call sites did these three lines: after a create, after a rename
+   * that only renamed, after a rename that was REFUSED (the first of its two
+   * writes may already have landed, so the screen has to be made true again),
+   * after a pin toggle, and after a move. A document the read no longer holds
+   * clears the selection rather than leaving a row nothing backs — which is
+   * what `?? null` means and why it is the same in all five.
+   *
+   * It throws what `readList` throws; each caller already decides what a
+   * failed re-read means there, and those answers genuinely differ.
+   */
+  const refreshAndSelect = useCallback(
+    async (path: string) => {
+      const entries = await readList()
+      setDocuments(entries)
+      setSelected(entries.find((row) => row.path === path) ?? null)
+    },
+    [readList],
+  )
+
   const readTagsInUse = useCallback(
     () =>
       source.listTagsInUse === undefined
@@ -556,9 +579,7 @@ export function WorkspaceFilesPanel({
           throw err
         }
         try {
-          const entries = await readList()
-          setDocuments(entries)
-          setSelected(entries.find((row) => row.path === path) ?? null)
+          await refreshAndSelect(path)
           // Creating exists to produce content, and an empty document is
           // worth nothing until it is open — so the create ends where the
           // next thing happens, as every other creation path in the app
@@ -625,9 +646,7 @@ export function WorkspaceFilesPanel({
         if (newPath !== entry.path) {
           await moveDocumentRef.current(entry, newPath)
         } else {
-          const entries = await readList()
-          setDocuments(entries)
-          setSelected(entries.find((row) => row.path === entry.path) ?? null)
+          await refreshAndSelect(entry.path)
         }
         setRenaming(null)
       } catch (err) {
@@ -639,9 +658,7 @@ export function WorkspaceFilesPanel({
         // showing a name the store no longer holds — the refusal is about
         // the path, and the rest of the screen must still be true.
         try {
-          const entries = await readList()
-          setDocuments(entries)
-          setSelected(entries.find((row) => row.path === entry.path) ?? null)
+          await refreshAndSelect(entry.path)
         } catch {
           // The list read failing on top of a failed rename leaves what is
           // already on screen; the dialog's own message is the report.
@@ -685,9 +702,7 @@ export function WorkspaceFilesPanel({
         return
       }
       try {
-        const entries = await readList()
-        setDocuments(entries)
-        setSelected(entries.find((row) => row.path === entry.path) ?? null)
+        await refreshAndSelect(entry.path)
       } catch {
         setRefreshError({ action: pinning ? 'pinned' : 'unpinned', path: entry.path })
       }
@@ -698,9 +713,7 @@ export function WorkspaceFilesPanel({
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await source.renameDocumentPath(entry.path, newPath)
-      const entries = await readList()
-      setDocuments(entries)
-      setSelected(entries.find((row) => row.path === newPath) ?? null)
+      await refreshAndSelect(newPath)
       const landedIn = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : ''
       setFolder(landedIn)
       onFolderChangeRef.current?.(landedIn)
