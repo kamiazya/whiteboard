@@ -24,7 +24,9 @@ function settingsStore() {
 }
 
 function stubFor(workspaces: Array<{ workspaceId: string; tier?: ReplicaTier }>, status = 200) {
-  return vi.fn(async () => new Response(JSON.stringify({ workspaces }), { status }))
+  return vi.fn(
+    async () => new Response(JSON.stringify({ workspaces }), { status }),
+  ) as unknown as typeof globalThis.fetch & ReturnType<typeof vi.fn>
 }
 
 describe('PromoteWorkspaceSection — read-plane tier line', () => {
@@ -42,7 +44,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
         daemon={DAEMON}
         settingsStore={settingsStore()}
         workspaceId="ws-1"
-        baseFetch={stub as unknown as typeof globalThis.fetch}
+        baseFetch={stub}
       />,
     )
     const line = await screen.findByTestId('replica-tier-line')
@@ -56,7 +58,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
         daemon={DAEMON}
         settingsStore={settingsStore()}
         workspaceId="ws-1"
-        baseFetch={stub as unknown as typeof globalThis.fetch}
+        baseFetch={stub}
       />,
     )
     const line = await screen.findByTestId('replica-tier-line')
@@ -70,7 +72,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
         daemon={DAEMON}
         settingsStore={settingsStore()}
         workspaceId="ws-1"
-        baseFetch={stub as unknown as typeof globalThis.fetch}
+        baseFetch={stub}
       />,
     )
     const line = await screen.findByTestId('replica-tier-line')
@@ -84,7 +86,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
         daemon={DAEMON}
         settingsStore={settingsStore()}
         workspaceId="ws-1"
-        baseFetch={stub as unknown as typeof globalThis.fetch}
+        baseFetch={stub}
       />,
     )
     await waitFor(() => expect(stub).toHaveBeenCalled())
@@ -98,7 +100,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
         daemon={DAEMON}
         settingsStore={settingsStore()}
         workspaceId="ws-1"
-        baseFetch={stub as unknown as typeof globalThis.fetch}
+        baseFetch={stub}
       />,
     )
     await waitFor(() => expect(stub).toHaveBeenCalled())
@@ -107,12 +109,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
 
   it('never fetches without a daemon or without a workspace id', async () => {
     const stub = stubFor([{ workspaceId: 'ws-1', tier: 'offline' }])
-    render(
-      <PromoteWorkspaceSection
-        settingsStore={settingsStore()}
-        baseFetch={stub as unknown as typeof globalThis.fetch}
-      />,
-    )
+    render(<PromoteWorkspaceSection settingsStore={settingsStore()} baseFetch={stub} />)
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(stub).not.toHaveBeenCalled()
     expect(screen.queryByTestId('replica-tier-line')).toBeNull()
@@ -125,7 +122,7 @@ describe('PromoteWorkspaceSection — read-plane tier line', () => {
         daemon={DAEMON}
         settingsStore={settingsStore()}
         workspaceId="ws-1"
-        baseFetch={stub as unknown as typeof globalThis.fetch}
+        baseFetch={stub}
       />,
     )
     await screen.findByTestId('replica-tier-line')

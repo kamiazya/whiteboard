@@ -44,6 +44,14 @@ import { type WorkspaceIdentity, workspaceLabel } from '../../lib/workspace-hand
 
 const log = getAppLogger('promote-workspace-section')
 
+function daemonFetch(daemon: ConnectedDaemon, baseFetch?: typeof globalThis.fetch) {
+  return createDaemonFetch(
+    daemon.baseUrl,
+    daemon.token ?? undefined,
+    baseFetch ?? globalThis.fetch.bind(globalThis),
+  )
+}
+
 export interface PromoteWorkspaceSectionProps {
   daemon?: ConnectedDaemon
   settingsStore: {
@@ -140,7 +148,7 @@ export function PromoteWorkspaceSection({
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const [flow, setFlow] = useState<PromoteFlow>({ step: 'idle' })
   const [passkey, setPasskey] = useState<PasskeyState>({ kind: 'none' })
-  const [tier, setTier] = useState<ReplicaTier | undefined>(undefined)
+  const [tier, setTier] = useState<ReplicaTier>()
 
   // What this device keeps of the workspace in view (ADR-0042's read plane).
   // Reads the summary this section otherwise never fetches for itself — the
@@ -152,12 +160,7 @@ export function PromoteWorkspaceSection({
       return
     }
     let cancelled = false
-    const fetchImpl = createDaemonFetch(
-      daemon.baseUrl,
-      daemon.token ?? undefined,
-      baseFetch ?? globalThis.fetch.bind(globalThis),
-    )
-    listWorkspaces(fetchImpl, daemon.baseUrl)
+    listWorkspaces(daemonFetch(daemon, baseFetch), daemon.baseUrl)
       .then((response) => {
         if (cancelled) return
         const row = response.workspaces.find((ws) => ws.workspaceId === workspaceId)
@@ -188,11 +191,7 @@ export function PromoteWorkspaceSection({
 
   const openConfirmation = useCallback(async () => {
     if (!daemon) return
-    const fetchImpl = createDaemonFetch(
-      daemon.baseUrl,
-      daemon.token ?? undefined,
-      baseFetch ?? globalThis.fetch.bind(globalThis),
-    )
+    const fetchImpl = daemonFetch(daemon, baseFetch)
     try {
       const [
         { countBrowserWorkspaceDocuments },
@@ -258,11 +257,7 @@ export function PromoteWorkspaceSection({
     setPasskey({ kind: 'registering' })
     const result = await registerPasskey({
       daemonBaseUrl: daemon.baseUrl,
-      fetch: createDaemonFetch(
-        daemon.baseUrl,
-        daemon.token ?? undefined,
-        baseFetch ?? globalThis.fetch.bind(globalThis),
-      ),
+      fetch: daemonFetch(daemon, baseFetch),
       credentials,
     })
     if (result.ok) setPasskey({ kind: 'registered' })
@@ -279,11 +274,7 @@ export function PromoteWorkspaceSection({
       setFlow({ step: 'running', phase: 'record' })
       let record: PromotionResultRecord
       try {
-        const fetchImpl = createDaemonFetch(
-          daemon.baseUrl,
-          daemon.token ?? undefined,
-          baseFetch ?? globalThis.fetch.bind(globalThis),
-        )
+        const fetchImpl = daemonFetch(daemon, baseFetch)
         const [{ promoteWorkspace }, { BrowserWorkspaceDocs }] = await Promise.all([
           import('../../lib/promote-workspace.js'),
           import('../../lib/browser-workspace-docs.js'),
