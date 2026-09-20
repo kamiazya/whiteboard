@@ -8,6 +8,7 @@ import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
+import { disconnectFromDaemon } from './disconnect-daemon.js'
 import {
   connectReplicaKeeper,
   forgetDaemonKeys,
@@ -15,6 +16,7 @@ import {
   openDocumentStore,
 } from './replica-store.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
+import { createUserSettingsStore } from './user-settings-store.js'
 
 const DB_NAME = 'whiteboard-replica-store'
 const DAEMON = 'http://127.0.0.1:3099'
@@ -194,6 +196,31 @@ describe('replica-store', () => {
 
     // Explicit forget is idempotent and safe to call again.
     forgetDaemonKeys(DAEMON)
+  })
+
+  it('Settings disconnect drops the connection at once: a load before App re-renders mints nothing', async () => {
+    // `disconnectFromDaemon` runs synchronously in a click handler; App's
+    // `connectReplicaKeeper(null)` follows on the next render. In between,
+    // a load must find no connection — otherwise the old session mints a
+    // replacement for the key that was just forgotten.
+    const workspaceId = freshWorkspaceId()
+    const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
+    let keyCalls = 0
+    const countingFetch: typeof fetch = (async (input: Request | string | URL) => {
+      keyCalls += 1
+      return offlineKeyFetch()(input)
+    }) as typeof fetch
+    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: countingFetch })
+    markReplica(workspaceId, DAEMON)
+    const store = openDocumentStore(DB_NAME)
+    const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
+    await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array(4) })
+    expect(keyCalls).toBe(1)
+
+    disconnectFromDaemon(createUserSettingsStore(), DAEMON)
+    await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(ReplicaKeyWithheldError)
+    expect(keyCalls).toBe(1)
+    localStorage.clear()
   })
 
   it('a reconnect to the same daemon with a different token forgets the previous key rather than continuing to answer under it', async () => {

@@ -1841,8 +1841,35 @@ describe('IndexedDB v19 -> v20 (discards a plaintext replica record)', () => {
     expect(await chunkRowCount(`workspace-tree:${REPLICA_WORKSPACE_ID}`)).toBe(0)
 
     // A later bump, told it is already past the discard's own version, must
-    // not re-run it against rows that by then are exactly what survived —
-    // there is nothing left resembling a v19 replica to discard.
+    // not re-run it. What survived the first run is out of its reach either
+    // way, so the probe is a row it WOULD delete — a sealed replica written
+    // after v20, keyed by an id with no `workspaces` row — which only the
+    // version guard keeps.
+    const sealedAfterV20 = 'workspace-tree:daemon-replica-sealed-after-v20'
+    {
+      const db = await openAtCurrentVersion(MIGRATION_DB)
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction([SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE], 'readwrite')
+        tx.objectStore(SYNC_DOCUMENTS_STORE).put(
+          {
+            v: 2,
+            snapshot: { manifest: { chunkCount: 1 } },
+            frontier: new Uint8Array(),
+            deltas: [],
+          },
+          sealedAfterV20,
+        )
+        tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).put(
+          { index: 0, of: 1, bytes: new Uint8Array([1, 0, 0, 0, 0]) },
+          [sealedAfterV20, 0],
+        )
+        tx.onerror = () => reject(tx.error)
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+      })
+    }
     await new Promise<void>((resolve, reject) => {
       const req = indexedDB.open(MIGRATION_DB, DB_VERSION + 1)
       req.onupgradeneeded = () => {
@@ -1859,5 +1886,7 @@ describe('IndexedDB v19 -> v20 (discards a plaintext replica record)', () => {
     const rows = await syncRows()
     expect(rows.map((r) => r.key)).toContain(`workspace-tree:${BROWSER_WORKSPACE_ID}`)
     expect(rows.map((r) => r.key)).toContain('document:D')
+    expect(rows.map((r) => r.key)).toContain(sealedAfterV20)
+    expect(await chunkRowCount(sealedAfterV20)).toBe(1)
   })
 })

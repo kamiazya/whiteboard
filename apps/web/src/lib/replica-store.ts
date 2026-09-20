@@ -126,6 +126,18 @@ export function markReplica(workspaceId: string, daemonBaseUrl: string): void {
   pending.set(workspaceId, daemonBaseUrl)
 }
 
+/**
+ * "Stop using this daemon" from Settings. Drops the connection SYNCHRONOUSLY
+ * when it is the one being disconnected, then forgets its keys — App's own
+ * `connectReplicaKeeper(null)` follows on the next render, but a load in
+ * that window would otherwise still find `connected` and mint a fresh key
+ * through the old session. A different daemon's connection is untouched.
+ */
+export function disconnectReplicaKeeper(daemonBaseUrl: string): void {
+  if (connected?.baseUrl === daemonBaseUrl) connected = null
+  forgetDaemonKeys(daemonBaseUrl)
+}
+
 /** Forgets every held key for `daemonBaseUrl` — used on disconnect and on a reconnect that changes identity. */
 export function forgetDaemonKeys(daemonBaseUrl: string): void {
   for (const [workspaceId, markedBaseUrl] of pending) {
