@@ -45,6 +45,7 @@ import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
+import { useDocumentPointers } from './use-document-pointers.js'
 import { type RenameDocument, useRenameDocument } from './use-rename-document.js'
 import { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
@@ -150,8 +151,21 @@ export function WorkspaceFilesPanel({
   // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
-  const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
-  const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
+  // The four things the panel points AT, and the two rules that keep a
+  // pointer from naming a document that is not there — see
+  // use-document-pointers.ts.
+  const {
+    selected,
+    setSelected,
+    selection,
+    setSelection,
+    cardMenu,
+    setCardMenu,
+    peek,
+    setPeek,
+    clear: clearPointers,
+    reconcile: reconcilePointers,
+  } = useDocumentPointers()
   /**
    * How many cards the last successful listing drew, kept so a RE-READ can
    * hold the layout it is about to replace.
@@ -191,17 +205,6 @@ export function WorkspaceFilesPanel({
     searchDegraded,
     resetResults: resetSearchResults,
   } = useDebouncedDocumentSearch(source, revision)
-  // The object-action menu: which document was right-clicked, and where.
-  const [cardMenu, setCardMenu] = useState<{
-    entry: WorkspaceDocumentEntry
-    x: number
-    y: number
-  } | null>(null)
-  // The peek: a document being looked at without being opened. Only ever
-  // set where tapOpens (no preview pane); see PeekDialog.
-  const [peek, setPeek] = useState<WorkspaceDocumentEntry | null>(null)
-  // The rename dialog's target, plus the in-flight/refusal state its form
-  // shows. Null means closed.
   const rootRef = useRef<HTMLDivElement | null>(null)
   // The vocabulary in use, as the keeper counts it (ADR-0040 decision 5),
   // reloaded with the list so deleting the last carrier of a tag removes
@@ -373,22 +376,12 @@ export function WorkspaceFilesPanel({
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
-    // Everything here NAMES A DOCUMENT, and a document belongs to exactly one
-    // workspace. The rename flow and the card menu's verbs close over the
-    // CURRENT source while holding a captured entry, so anything left behind
-    // addresses the departed workspace's path into the one now on screen —
-    // and paths collide freely across workspaces, `untitled` most of all.
-    // Measured before this: a rename dialog left open across a switch called
-    // `setDocumentName` on the new workspace's store.
-    setSelected(null)
-    setCardMenu(null)
-    setPeek(null)
-    // A selection names paths, and paths collide across workspaces — a
-    // bulk delete carried across a switch would address the departed
-    // workspace's names into the store now on screen.
-    setSelection(null)
+    clearPointers()
     // The departed workspace's memory names its documents.
     resetDeviceMemory()
+    // A rename dialog left open across a switch called `setDocumentName` on
+    // the NEW workspace's store — it holds a captured entry the same way a
+    // pointer does, and paths collide freely across workspaces.
     renameRef.current.cancel()
     // Results computed against the departed workspace's content, still
     // clickable. The search effect does re-run on a source change, but only
@@ -440,21 +433,9 @@ export function WorkspaceFilesPanel({
       .then((entries) => {
         if (cancelled) return
         setDocuments(entries)
-        setSelected((current) =>
-          current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
-        )
-        // An open context menu is a captured snapshot; a refresh behind the
-        // panel's back (the whole reason `revision` exists) re-resolves it
-        // the same way, and a menu whose document is GONE closes rather
-        // than offering verbs for a target that no longer exists.
-        setCardMenu((current) => {
-          if (current === null) return null
-          const entry = entries.find((row) => row.path === current.entry.path)
-          return entry === undefined ? null : { ...current, entry }
-        })
-        setPeek((current) =>
-          current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
-        )
+        // A refresh behind the panel's back is the whole reason `revision`
+        // exists, and every pointer is a captured snapshot taken before it.
+        reconcilePointers(entries)
       })
       .catch(() => undefined)
     return () => {
