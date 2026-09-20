@@ -13,8 +13,8 @@ import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { completionPopupTheme } from './completion-popup.js'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
-import { wikiLinkCompletionTheme } from './wiki-link-completion.js'
 
 let view: EditorView | undefined
 
@@ -173,7 +173,7 @@ describe('the popup under the app theme', () => {
       state: EditorState.create({
         doc: 'mark it ',
         extensions: [
-          wikiLinkCompletionTheme,
+          completionPopupTheme,
           autocompletion({
             override: [shortcodeCompletionSource],
             addToOptions: shortcodeOptionRenderers,

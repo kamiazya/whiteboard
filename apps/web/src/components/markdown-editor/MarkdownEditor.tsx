@@ -40,6 +40,7 @@ import {
 } from './annotation-decorations.js'
 import { useAnnotationEntry } from './annotation-scope.js'
 import { completionOnDelete } from './completion-on-delete.js'
+import { completionPopupTheme, completionTouchAccept } from './completion-popup.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
@@ -58,11 +59,7 @@ import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode
 import { useDebouncedValue } from './use-debounced-value.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
-import {
-  wikiLinkCompletionSource,
-  wikiLinkCompletionTheme,
-  wikiLinkTouchAccept,
-} from './wiki-link-completion.js'
+import { wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
   value: string
@@ -411,8 +408,8 @@ export function MarkdownEditor({
           },
         ]),
       ),
-      wikiLinkCompletionTheme,
-      wikiLinkTouchAccept,
+      completionPopupTheme,
+      completionTouchAccept,
     ],
     [],
   )
