@@ -158,7 +158,10 @@ describe('what reaches /mcp in local-daemon mode', () => {
     const strategy = createLocalTokenMcpHttpAuthStrategy({
       resolver: createCredentialResolver({
         daemonToken: 'secret',
-        pairingTokens: { validate: (token, origin) => token === 'paired' && origin === ORIGIN },
+        pairingTokens: {
+          validate: (token, origin) => token === 'paired' && origin === ORIGIN,
+          bindingOf: () => null,
+        },
       }),
     })
 

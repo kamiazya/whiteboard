@@ -34,6 +34,10 @@
       "types": "./src/api-contracts/index.ts",
       "import": "./src/api-contracts/index.ts"
     },
+    "./api-contracts/membership": {
+      "types": "./src/api-contracts/membership.ts",
+      "import": "./src/api-contracts/membership.ts"
+    },
     "./api-contracts/pairing": {
       "types": "./src/api-contracts/pairing.ts",
       "import": "./src/api-contracts/pairing.ts"
@@ -61,6 +65,10 @@
     "./document-backend-contract": {
       "types": "./src/document-backend-contract.ts",
       "import": "./src/document-backend-contract.ts"
+    },
+    "./read-plane": {
+      "types": "./src/read-plane.ts",
+      "import": "./src/read-plane.ts"
     },
     "./select-document-transport": {
       "types": "./src/select-document-transport.ts",

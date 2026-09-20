@@ -227,6 +227,18 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     }
   })
 
+  it('session assertion routes are scoped (the handler itself checks for a bound session)', () => {
+    for (const path of [
+      '/api/pairing/session-assert/challenge',
+      '/api/pairing/session-assert',
+    ] as const) {
+      expect(resolveApiRouteScope('POST', path)).toEqual({
+        kind: 'scoped',
+        scopes: ['runtime:admin'],
+      })
+    }
+  })
+
   it('GET /api/runtime/ping is a declared public route', () => {
     expect(resolveApiRouteScope('GET', '/api/runtime/ping')).toEqual({ kind: 'public' })
   })

@@ -67,7 +67,10 @@ describe('createCredentialResolver — what each credential carries', () => {
   it('honours a pairing token only with the origin it was minted for', async () => {
     const resolver = createCredentialResolver({
       daemonToken: DAEMON_TOKEN,
-      pairingTokens: { validate: (token, origin) => token === 'paired' && origin === ORIGIN },
+      pairingTokens: {
+        validate: (token, origin) => token === 'paired' && origin === ORIGIN,
+        bindingOf: () => null,
+      },
     })
 
     expect(await resolver.resolve(bearer('paired', ORIGIN))).toEqual({
@@ -78,6 +81,29 @@ describe('createCredentialResolver — what each credential carries', () => {
     // own, and a pairing token presented without it is a token out of its lane.
     expect(await resolver.resolve(bearer('paired'))).toBeNull()
     expect(await resolver.resolve(bearer('paired', 'https://evil.example.com'))).toBeNull()
+  })
+
+  it('carries the passkey binding when the pairing token is bound, and omits it when unbound', async () => {
+    const bound = createCredentialResolver({
+      daemonToken: DAEMON_TOKEN,
+      pairingTokens: {
+        validate: () => true,
+        bindingOf: () => ({ origin: ORIGIN, credentialId: 'cred-1' }),
+      },
+    })
+    expect(await bound.resolve(bearer('paired', ORIGIN))).toEqual({
+      kind: 'pairing',
+      scopes: ALL_AUTH_SCOPES,
+      passkey: { origin: ORIGIN, credentialId: 'cred-1' },
+    })
+
+    const unbound = createCredentialResolver({
+      daemonToken: DAEMON_TOKEN,
+      pairingTokens: { validate: () => true, bindingOf: () => null },
+    })
+    const grant = await unbound.resolve(bearer('paired', ORIGIN))
+    expect(grant).toEqual({ kind: 'pairing', scopes: ALL_AUTH_SCOPES })
+    expect(grant).not.toHaveProperty('passkey')
   })
 
   it('answers a macaroon with its caveated scopes', async () => {
@@ -171,6 +197,7 @@ describe('createCredentialResolver — branch order is a cost decision', () => {
         validate: () => {
           throw new Error('pairing branch must not be reached for the daemon token')
         },
+        bindingOf: () => null,
       },
     })
 

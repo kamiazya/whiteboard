@@ -34,7 +34,7 @@ const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 const HOSTED = 'https://latest.kamiazya-whiteboard.pages.dev'
 
-function makeApp() {
+function makeApp({ token }: { token?: string } = { token: 'daemon-secret' }) {
   const grants = createPairingGrantStore(join(tmp.dir, 'data'))
   const pairing = {
     grants,
@@ -45,7 +45,7 @@ function makeApp() {
   const envOrigins: readonly string[] = []
   const app = createApp({
     authMode: 'local-daemon' as const,
-    token: 'daemon-secret',
+    ...(token === undefined ? {} : { token }),
     touch: vi.fn(),
     shutdown: vi.fn(async () => undefined),
     allowedWebOrigins: () => [...envOrigins, ...grants.origins()],
@@ -162,5 +162,18 @@ describe('pairing-grant flow through createApp', () => {
       headers: { Authorization: 'Bearer daemon-secret', Origin: 'https://evil.example.com' },
     })
     expect(listRes.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  // An open daemon's `anonymous` grant resolves through the SAME scope
+  // middleware every other /api route uses, so it would sail past a
+  // scope-only gate — there is no session for it to bind, and the
+  // session-assert routes refuse it in the handler for exactly that reason.
+  it('an open daemon (no token) still refuses session-assert/challenge with no bearer', async () => {
+    const app = makeApp({ token: undefined })
+    const res = await app.request('/api/pairing/session-assert/challenge', {
+      method: 'POST',
+      headers: { Origin: HOSTED },
+    })
+    expect(res.status).toBe(401)
   })
 })

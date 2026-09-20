@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   computeS256Challenge,
   createPairingCodeStore,
   createPairingTokenStore,
+  createSessionChallengeStore,
 } from './pairing-session.js'
 
 const ORIGIN = 'https://latest.kamiazya-whiteboard.pages.dev'
@@ -66,5 +67,117 @@ describe('pairing token store (memory-only session tokens)', () => {
     expect(store.validate(a.token, ORIGIN)).toBe(false)
     expect(store.validate(b.token, ORIGIN)).toBe(false)
     expect(store.validate(other.token, 'https://other.example.com')).toBe(true)
+  })
+})
+
+const CREDENTIAL_A = { origin: ORIGIN, credentialId: 'cred-a' }
+const CREDENTIAL_B = { origin: ORIGIN, credentialId: 'cred-b' }
+
+describe('pairing token store — passkey binding', () => {
+  it('bind then bindingOf answers the binding for the right origin, and null for another origin', () => {
+    const store = createPairingTokenStore()
+    const { token } = store.mint(ORIGIN)
+    expect(store.bind(token, CREDENTIAL_A)).not.toBeNull()
+    expect(store.bindingOf(token, ORIGIN)).toEqual(CREDENTIAL_A)
+    expect(store.bindingOf(token, 'https://other.example.com')).toBeNull()
+  })
+
+  it('bindingOf answers null for an unknown token and for an unbound one', () => {
+    const store = createPairingTokenStore()
+    const { token } = store.mint(ORIGIN)
+    expect(store.bindingOf('unknown-token', ORIGIN)).toBeNull()
+    expect(store.bindingOf(token, ORIGIN)).toBeNull()
+  })
+
+  it('bind on an unknown or expired token answers null and binds nothing', () => {
+    const store = createPairingTokenStore({ ttlMs: 1000 })
+    const { token } = store.mint(ORIGIN)
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(Date.now() + 1001)
+      expect(store.bind(token, CREDENTIAL_A)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(store.bind('never-minted', CREDENTIAL_A)).toBeNull()
+  })
+
+  it('revokeBoundTo returns the count and kills only tokens bound to a matching pair', () => {
+    const store = createPairingTokenStore()
+    const bound = store.mint(ORIGIN)
+    const otherCredential = store.mint(ORIGIN)
+    const unbound = store.mint(ORIGIN)
+    store.bind(bound.token, CREDENTIAL_A)
+    store.bind(otherCredential.token, CREDENTIAL_B)
+
+    expect(store.revokeBoundTo([CREDENTIAL_A])).toBe(1)
+    expect(store.validate(bound.token, ORIGIN)).toBe(false)
+    // A sibling bound to a different credential survives.
+    expect(store.validate(otherCredential.token, ORIGIN)).toBe(true)
+    // An unbound token is untouched by a credential-scoped revoke.
+    expect(store.validate(unbound.token, ORIGIN)).toBe(true)
+  })
+
+  it('revokeOrigin still kills bound and unbound tokens alike', () => {
+    const store = createPairingTokenStore()
+    const bound = store.mint(ORIGIN)
+    const unbound = store.mint(ORIGIN)
+    store.bind(bound.token, CREDENTIAL_A)
+    store.revokeOrigin(ORIGIN)
+    expect(store.validate(bound.token, ORIGIN)).toBe(false)
+    expect(store.validate(unbound.token, ORIGIN)).toBe(false)
+  })
+})
+
+describe('session challenge store (single-use, session-scoped)', () => {
+  it('mints a 43-char base64url challenge and redeems the same bytes exactly once', () => {
+    const store = createSessionChallengeStore()
+    const { challenge } = store.mint('token-a')
+    expect(challenge).toHaveLength(43)
+    expect(challenge).toMatch(/^[A-Za-z0-9_-]{43}$/)
+
+    const redeemed = store.redeem('token-a')
+    expect(redeemed).not.toBeNull()
+    expect(Buffer.from(redeemed ?? new Uint8Array()).toString('base64url')).toBe(challenge)
+    // Single-use: a second redemption of the same mint answers null.
+    expect(store.redeem('token-a')).toBeNull()
+  })
+
+  it('redeem for a token that never minted answers null', () => {
+    const store = createSessionChallengeStore()
+    expect(store.redeem('never-minted')).toBeNull()
+  })
+
+  it('a challenge minted for token A is refused for token B', () => {
+    const store = createSessionChallengeStore()
+    store.mint('token-a')
+    expect(store.redeem('token-b')).toBeNull()
+    // The original mint is still live — token B could not spend it.
+    expect(store.redeem('token-a')).not.toBeNull()
+  })
+
+  it('a second mint for the same token replaces the first', () => {
+    const store = createSessionChallengeStore()
+    const first = store.mint('token-a')
+    const second = store.mint('token-a')
+    expect(second.challenge).not.toBe(first.challenge)
+    const redeemed = store.redeem('token-a')
+    expect(Buffer.from(redeemed ?? new Uint8Array()).toString('base64url')).toBe(second.challenge)
+  })
+
+  describe('TTL expiry', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('rejects a challenge redeemed after its TTL', () => {
+      const store = createSessionChallengeStore({ ttlMs: 60_000 })
+      store.mint('token-a')
+      vi.setSystemTime(Date.now() + 60_001)
+      expect(store.redeem('token-a')).toBeNull()
+    })
   })
 })

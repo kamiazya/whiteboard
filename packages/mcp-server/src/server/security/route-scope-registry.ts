@@ -223,6 +223,14 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   if (path === '/api/pairing/credentials' || path.startsWith('/api/pairing/credentials/')) {
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
+  // Session assertion (ADR-0041 S0-2): the scope check here only keeps a
+  // narrower OAuth grant out. The real gate is the handler's own token-store
+  // check (a valid pairing SESSION token for the requesting Origin) — an
+  // open daemon's `anonymous` grant carries this scope too but has no
+  // session to bind, and the handler refuses it with no bearer at all.
+  if (path === '/api/pairing/session-assert' || path === '/api/pairing/session-assert/challenge') {
+    return { kind: 'scoped', scopes: ['runtime:admin'] }
+  }
 
   // No rule matched: an undeclared /api/* route. Callers must fail closed.
   return null
