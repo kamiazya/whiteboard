@@ -54,8 +54,32 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
   interface DeferredTap {
     readonly label: string
     readonly occurrence: number
+    readonly attemptsLeft: number
   }
   let deferred: DeferredTap | null = null
+  /**
+   * `acceptCompletion` refuses for a second reason, and it is one only TIME
+   * clears: upstream ignores an accept within `interactionDelay` of the
+   * dialog OPENING, so that a keystroke arriving with the list cannot accept
+   * by accident. A dialog that closed and reopened under the finger restamps
+   * that clock, and the tap — on an option the user is looking at — is
+   * refused exactly like a disabled one. Nothing dispatches an update when
+   * the window expires, so `update()` below would never be asked again and
+   * the tap would be lost for good; this timer is what asks.
+   */
+  const INTERACTION_DELAY_MS = 75
+  let askAgain: ReturnType<typeof setTimeout> | null = null
+  const arm = (tap: DeferredTap) => {
+    deferred = tap
+    if (askAgain !== null) clearTimeout(askAgain)
+    askAgain = setTimeout(() => {
+      askAgain = null
+      // An empty transaction: enough to run `update()`, and it touches
+      // neither the document nor the selection, so it cannot disturb the
+      // dialog it is asking about.
+      if (deferred !== null) view.dispatch({})
+    }, INTERACTION_DELAY_MS)
+  }
   const optionAt = (target: EventTarget | null): HTMLElement | null => {
     const li = target instanceof Element ? target.closest('.cm-tooltip-autocomplete li') : null
     return li instanceof HTMLElement && view.dom.contains(li) ? li : null
@@ -86,7 +110,7 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
         .filter(
           (sibling) => sibling.querySelector('.cm-completionLabel')?.textContent === label,
         ).length
-      deferred = { label, occurrence }
+      arm({ label, occurrence, attemptsLeft: 1 })
     }
   }
   view.dom.addEventListener('touchstart', onTouchStart, { passive: true })
@@ -101,7 +125,7 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
         if (completionStatus(view.state) === null) deferred = null
         return
       }
-      const { label, occurrence } = deferred
+      const { label, occurrence, attemptsLeft } = deferred
       deferred = null
       let seen = 0
       let index = -1
@@ -118,10 +142,12 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
       // right after CodeMirror finishes applying this one.
       queueMicrotask(() => {
         view.dispatch({ effects: setSelectedCompletion(index) })
-        acceptCompletion(view)
+        if (acceptCompletion(view) || attemptsLeft === 0) return
+        arm({ label, occurrence, attemptsLeft: attemptsLeft - 1 })
       })
     },
     destroy() {
+      if (askAgain !== null) clearTimeout(askAgain)
       view.dom.removeEventListener('touchstart', onTouchStart)
       view.dom.removeEventListener('touchend', onTouchEnd)
     },

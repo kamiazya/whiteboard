@@ -75,6 +75,20 @@ function tap(label: string, identifier: number, travel = 0): void {
   tapElement(el, identifier, travel)
 }
 
+/**
+ * Waits on a condition without reading the clock, for the two tests that
+ * freeze `Date.now` across the gesture — `vi.waitFor` reads the same clock
+ * and would never time out under a frozen one.
+ */
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+async function until(held: () => boolean, what: string): Promise<void> {
+  for (let i = 0; i < 200; i++) {
+    if (held()) return
+    await tick()
+  }
+  throw new Error(`never held: ${what}`)
+}
+
 describe('wiki link completion (real browser)', () => {
   it('typing [[Re offers documents and Enter inserts the readable link', async () => {
     let value = ''
@@ -273,6 +287,111 @@ describe('wiki link completion (real browser)', () => {
     expect(optionLabelled('Retro notes')).toBeDefined()
 
     tap('Retro notes', 3)
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[retro-notes]]')
+    })
+  })
+
+  it('a tap within the interaction delay of the list opening is committed once the delay passes', async () => {
+    // Upstream refuses `acceptCompletion` for `interactionDelay` (75ms)
+    // after the dialog opens, so a fast keystroke is not read as an accept.
+    // A dialog that closes and reopens restamps that clock, and a tap that
+    // lands inside the new window is refused for a reason only TIME clears
+    // — no view update is coming to retry it, so the tap was dropped for
+    // good. Frozen `Date.now` makes that window a CONDITION rather than a
+    // race: it must stay frozen only across the synchronous gesture, since
+    // `vi.waitFor` reads the same clock.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    // Taken before the dialog exists, so reporting it as "now" puts the tap
+    // inside any interaction delay the dialog is stamped with.
+    const beforeTheListOpened = Date.now()
+    await userEvent.keyboard('see [[[[Ret')
+    await vi.waitFor(() => expect(optionLabelled('Retro notes')).toBeDefined())
+
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(beforeTheListOpened)
+    try {
+      // Premise: the list is OPEN and enabled, so the interaction delay is
+      // the only thing left that can refuse this tap. Asserted rather than
+      // assumed — the disabled window has its own test above.
+      expect(currentCompletions(view.state).length).toBeGreaterThan(0)
+      expect(
+        document
+          .querySelector('.cm-tooltip-autocomplete')
+          ?.classList.contains('cm-tooltip-autocomplete-disabled'),
+      ).toBe(false)
+      tap('Retro notes', 4)
+    } finally {
+      clock.mockRestore()
+    }
+
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[retro-notes]]')
+    })
+  })
+
+  it('a tap refused by the refresh and then by the interaction delay is still committed', async () => {
+    // The two refusals compose: the tap lands in the sibling source's
+    // disabled window, and the list that comes back is a FRESH dialog, so
+    // the commit that window triggers is inside the new interaction delay
+    // and refused again. The retry after the delay is the only thing left
+    // to ask, since the dialog is open and settled by then.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    const beforeTheRefresh = Date.now()
+    await userEvent.keyboard('see [[[[Re')
+    await vi.waitFor(() => expect(currentCompletions(view.state).length).toBeGreaterThan(0))
+
+    const head = view.state.doc.length
+    view.dispatch({
+      changes: { from: head, insert: 't' },
+      selection: { anchor: head + 1 },
+      userEvent: 'input.type',
+    })
+    expect(currentCompletions(view.state)).toHaveLength(0)
+    expect(completionStatus(view.state)).toBe('pending')
+
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(beforeTheRefresh)
+    try {
+      tap('Retro notes', 5)
+      await until(() => currentCompletions(view.state).length > 0, 'the list comes back')
+      // The commit the refresh queues runs on the next turn, under the
+      // frozen clock — so it is refused, and the retry is what is left.
+      await tick()
+    } finally {
+      clock.mockRestore()
+    }
+
     await vi.waitFor(() => {
       expect(value).toBe('see [[retro-notes]]')
     })
