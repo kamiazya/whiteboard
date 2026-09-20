@@ -1,6 +1,15 @@
 # ADR-0043: Authority is a key, delegation derives a narrower one, and revocation is declining to hand out the next
 
-**Status:** Proposed — design of record; nothing implemented. Gives
+**Status:** Accepted — in effect since 2026-09-20, by increment rather than
+by a single gate. The **act plane** (decisions 4, 5 and 8) ships as
+enforcement only: `security/macaroon.ts` is the HMAC chain (#1647), a
+macaroon presented to `/api/*`, the websocket or `/mcp` is verified and its
+scopes enforced (#1647, #1651, #1653), and the root key is written owner-only
+and never copied into a backup (#1648, #1666). Nothing in production mints
+one — decision 9's first application was withdrawn in the 2026-09-20 addendum
+below, on the finding that no shipped agent path presents a credential. The
+**read plane** (decision 3, over ADR-0042) is design of record; nothing of it
+is implemented. Gives
 [ADR-0041](0041-profile-and-authority.md)'s "authority" and
 [ADR-0042](0042-offline-revocation.md)'s content key one mechanism, and brings
 the attenuation [ADR-0005](0005-hosted-origin-authorization.md) built for
