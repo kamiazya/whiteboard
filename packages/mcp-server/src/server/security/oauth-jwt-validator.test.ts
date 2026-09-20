@@ -8,7 +8,7 @@ import {
 } from 'jose'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
-import { createOAuthJwtValidator, type JwtKeyResolver } from './oauth-jwt-validator.js'
+import { createOAuthJwtValidator, type JwtKeyResolver, refusalFor } from './oauth-jwt-validator.js'
 import {
   createAsyncAuthStrategyMiddleware,
   createOAuthResourceServerAuthStrategy,
@@ -688,5 +688,87 @@ describe('createOAuthResourceServerAuthStrategy + createOAuthJwtValidator — in
     expect(body).not.toContain(tampered)
     expect(body).not.toContain('eyJ')
     expect(body).not.toContain('Bearer')
+  })
+})
+
+/**
+ * The JOSE-error → refusal-reason mapping, stated directly.
+ *
+ * Every one of these branches used to be reachable only by persuading
+ * `jose` to throw that exact error, so most were asserted by a comment and
+ * nothing else. The table is the mapping; a row is what a client is told
+ * about a token it presented.
+ */
+describe('refusalFor', () => {
+  const cases: ReadonlyArray<{
+    readonly name: string
+    readonly err: unknown
+    readonly resolverFailed?: boolean
+    readonly reason: string
+  }> = [
+    {
+      name: 'a key resolver that threw is OUR failure, not the token’s',
+      err: { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' },
+      resolverFailed: true,
+      reason: 'validator_unavailable',
+    },
+    { name: 'an expired token', err: { code: 'ERR_JWT_EXPIRED' }, reason: 'expired' },
+    {
+      name: 'the issuer claim',
+      err: { code: 'ERR_JWT_CLAIM_VALIDATION_FAILED', claim: 'iss' },
+      reason: 'invalid_issuer',
+    },
+    {
+      name: 'the audience claim',
+      err: { code: 'ERR_JWT_CLAIM_VALIDATION_FAILED', claim: 'aud' },
+      reason: 'invalid_audience',
+    },
+    {
+      name: 'any OTHER failed claim is not named back to the caller',
+      err: { code: 'ERR_JWT_CLAIM_VALIDATION_FAILED', claim: 'sub' },
+      reason: 'malformed',
+    },
+    {
+      name: 'a bad signature',
+      err: { code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' },
+      reason: 'invalid_signature',
+    },
+    {
+      name: 'an algorithm outside the allowed set',
+      err: { code: 'ERR_JOSE_ALG_NOT_ALLOWED' },
+      reason: 'invalid_signature',
+    },
+    {
+      name: 'an algorithm jose does not implement',
+      err: { code: 'ERR_JOSE_NOT_SUPPORTED' },
+      reason: 'invalid_signature',
+    },
+    { name: 'a structural parse failure', err: { code: 'ERR_JWS_INVALID' }, reason: 'malformed' },
+    { name: 'an unrecognised JOSE code', err: { code: 'ERR_SOMETHING_NEW' }, reason: 'malformed' },
+    { name: 'an error carrying no code', err: new Error('boom'), reason: 'malformed' },
+    { name: 'something that is not an Error at all', err: 'a string', reason: 'malformed' },
+    { name: 'null', err: null, reason: 'malformed' },
+  ]
+
+  for (const test of cases) {
+    it(`answers ${test.reason} for ${test.name}`, () => {
+      expect(refusalFor(test.err, test.resolverFailed ?? false)).toEqual({
+        ok: false,
+        reason: test.reason,
+      })
+    })
+  }
+
+  it('never carries anything from the thrown error into the refusal', () => {
+    // A JOSE error's message can hold the IdP URL or the JWKS endpoint, and
+    // a refusal reason reaches a client. The result is a fixed vocabulary,
+    // so there is nowhere for it to land — asserted rather than assumed.
+    const err = Object.assign(new Error('https://idp.internal/.well-known/jwks.json is down'), {
+      code: 'ERR_JWKS_NO_MATCHING_KEY',
+      claim: 'https://idp.internal/secret-claim',
+    })
+    const refusal = refusalFor(err, false)
+    expect(JSON.stringify(refusal)).not.toContain('idp.internal')
+    expect(Object.keys(refusal).sort()).toEqual(['ok', 'reason'])
   })
 })
