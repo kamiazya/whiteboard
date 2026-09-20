@@ -11,8 +11,9 @@
 // local-gate-command.test.ts exists for, one workflow over.
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { extractWorkflowJobs } from './workflow-jobs.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -30,9 +31,6 @@ interface WorkflowJob {
 }
 
 async function jobsOf(workflowPath: string): Promise<WorkflowJob[]> {
-  const { extractWorkflowJobs } = (await import(
-    pathToFileURL(join(ROOT, 'tools/checks/src/ci-workflow-steps.mjs')).href
-  )) as { extractWorkflowJobs: (yamlText: string) => WorkflowJob[] }
   return extractWorkflowJobs(readFileSync(join(ROOT, workflowPath), 'utf-8'))
 }
 

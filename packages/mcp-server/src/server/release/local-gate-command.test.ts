@@ -13,8 +13,9 @@
 // `check:local` runs it too.
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { extractWorkflowJobs } from './workflow-jobs.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -42,9 +43,6 @@ const NOT_A_GATE = new Set(['pnpm install --frozen-lockfile'])
 const BORROWED_FROM_VERIFY = ['pnpm knip']
 
 async function checkJobCommands(): Promise<string[]> {
-  const { extractWorkflowJobs } = (await import(
-    pathToFileURL(join(ROOT, 'tools/checks/src/ci-workflow-steps.mjs')).href
-  )) as { extractWorkflowJobs: (yamlText: string) => WorkflowJob[] }
   const jobs = extractWorkflowJobs(readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf-8'))
   const check = jobs.find((job) => job.id === 'check')
   if (check === undefined) throw new Error('ci.yml has no `check` job')

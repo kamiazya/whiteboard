@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { extractWorkflowJobs } from './workflow-jobs.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -71,8 +72,7 @@ interface WorkflowJob {
 const ALWAYS_TRUE_ON_PR_IF = new Set([`\${{ github.event_name == 'pull_request' }}`])
 
 async function loadExtractor() {
-  const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/ci-workflow-steps.mjs')).href)
-  return mod as { extractWorkflowJobs: (yamlText: string) => WorkflowJob[] }
+  return { extractWorkflowJobs }
 }
 
 async function loadSchema() {

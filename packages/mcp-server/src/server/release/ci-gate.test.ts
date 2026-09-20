@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { extractWorkflowJobs } from './workflow-jobs.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -21,10 +22,6 @@ interface WorkflowJob {
   if: string | null
   needs: string[]
 }
-
-const { extractWorkflowJobs } = (await import(
-  pathToFileURL(join(ROOT, 'tools/checks/src/ci-workflow-steps.mjs')).href
-)) as { extractWorkflowJobs: (yaml: string) => WorkflowJob[] }
 
 interface RunJob {
   name: string
