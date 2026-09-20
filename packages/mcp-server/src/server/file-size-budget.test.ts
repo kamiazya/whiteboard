@@ -234,41 +234,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and the kind switch the resource replaced was the shorter of the two.
   'packages/loro-adapter/src/loro-bridge.ts': 1126,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
-  // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
-  // field, and the branch that stores a proposal instead of the board. Most
-  // of it is the prose those three fields carry, which IS this tool's
-  // published contract: an agent reads the schema, not this repo. The
-  // mechanics went to `canvas-propose.ts` rather than here.
-  // +24 for ADR-0029 decision 7's flip: the default now reads the batch to
-  // decide whether it is content, and most of the growth is the note saying
-  // why that line and not "propose unless told otherwise" — the widget's
-  // comment box is a caller a refusing default would have broken.
-  // +77 for absorbing wb_body_patch: `node.splice` (its range arm, now an op
-  // that batches) and the dropped-key guard that had to exist before
-  // `node.patch` could carry content at all. This file grew and the REPO
-  // shrank — body-patch.ts (134) and its two test files (165 + 106) are
-  // deleted, so 14 files come to 295 insertions against 541 deletions.
-  // +7 where two increments met: this file gained a workspace stencil
-  // library's resolution from main and the endpoint helpers from the model
-  // move, and neither alone crossed the line it was already over.
-  // 1112 -> 1180 for ADR-0038 decision 2's three LINE op executors plus the
-  // `lines` collection threaded through the working copy — including the
-  // sweep that takes ink anchored to a removed node and leaves free ink
-  // alone, which is the one place the two element kinds must differ.
-  // 1180 -> 1183 for ADR-0038 decision 3's seam: two imports, and one line
-  // binding the text this file reads twice. Raised rather than shrunk because
-  // the alternative is reading `nodeText(node)` a second time to save a line,
-  // which is the opposite of what the accessor is for.
-  // 1183 -> 1184 for `tidyBoxes`: the tool hands tidy a canvas's real nodes,
-  // and tidy no longer mirrors the model's node union to ask whether one is a
-  // frame. One import line.
-  // +45: the by-name refusal rebuilt. `.strict()` on the node schemas was the
-  // DETECTOR for a content key the target has no room for, and ADR-0038
-  // decision 3 dissolves the union it detected over — so the tool reads the
-  // patch back through the content seam instead, and the eight destructured
-  // draft keys plus `draftContent`'s call sites carry the rest. What a caller
-  // sees is unchanged; without it the op reported success and wrote nothing.
-  'packages/server-core/src/tools/canvas-edit.ts': 1229,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
