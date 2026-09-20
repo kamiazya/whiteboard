@@ -22,11 +22,42 @@ const TARGETS = [
   { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'retro-notes', name: 'Retro notes' },
 ]
 
+/** Two distinct documents that happen to share a display name. */
+const SAME_NAME_TARGETS = [
+  { id: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'retro-notes-a', name: 'Retro notes' },
+  { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'retro-notes-b', name: 'Retro notes' },
+]
+
 /** The option carrying this label, RIGHT NOW. Never stored. */
 const optionLabelled = (label: string): HTMLElement | undefined =>
   [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
     li.textContent?.includes(label),
   ) as HTMLElement | undefined
+
+/** Every option currently labelled exactly `label`, in list order. */
+const optionsLabelled = (label: string): HTMLElement[] =>
+  [...document.querySelectorAll('.cm-tooltip-autocomplete li')].filter(
+    (li) => li.querySelector('.cm-completionLabel')?.textContent === label,
+  ) as HTMLElement[]
+
+/**
+ * Taps a specific element, re-resolved by the caller at the moment of the
+ * gesture — see `tap` below for why a held reference is unsafe.
+ *
+ * `travel` moves the finger between touchstart and touchend, which is how
+ * the scroll case says it is a scroll.
+ */
+function tapElement(el: HTMLElement, identifier: number, travel = 0): void {
+  const rect = el.getBoundingClientRect()
+  const at = (type: 'touchstart' | 'touchend', y: number) =>
+    new TouchEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      changedTouches: [new Touch({ identifier, target: el, clientX: rect.x + 4, clientY: y })],
+    })
+  el.dispatchEvent(at('touchstart', rect.y + 4))
+  el.dispatchEvent(at('touchend', rect.y + 4 + travel))
+}
 
 /**
  * Taps an option, re-resolving it at the moment of the gesture.
@@ -37,22 +68,11 @@ const optionLabelled = (label: string): HTMLElement | undefined =>
  * `wikiLinkTouchAccept` refuses a node the view no longer contains — so a
  * held reference makes the tap a no-op and the failure reads as "the option
  * did not commit", naming the feature rather than the stale node.
- *
- * `travel` moves the finger between touchstart and touchend, which is how
- * the scroll case says it is a scroll.
  */
 function tap(label: string, identifier: number, travel = 0): void {
   const el = optionLabelled(label)
   if (el === undefined) throw new Error(`no completion option labelled ${label}`)
-  const rect = el.getBoundingClientRect()
-  const at = (type: 'touchstart' | 'touchend', y: number) =>
-    new TouchEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      changedTouches: [new Touch({ identifier, target: el, clientX: rect.x + 4, clientY: y })],
-    })
-  el.dispatchEvent(at('touchstart', rect.y + 4))
-  el.dispatchEvent(at('touchend', rect.y + 4 + travel))
+  tapElement(el, identifier, travel)
 }
 
 describe('wiki link completion (real browser)', () => {
@@ -256,6 +276,164 @@ describe('wiki link completion (real browser)', () => {
     await vi.waitFor(() => {
       expect(value).toBe('see [[retro-notes]]')
     })
+  })
+
+  it('a deferred tap on the SECOND of two same-named options links the one actually tapped', async () => {
+    // Two documents named "Retro notes": the deferred-tap commit resolves
+    // the tapped option by label once the list re-enables, and a label
+    // alone cannot tell them apart. Tapping the second occurrence must not
+    // silently link the first.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={SAME_NAME_TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    await userEvent.keyboard('see [[[[Re')
+    await vi.waitFor(() => {
+      expect(optionsLabelled('Retro notes')).toHaveLength(2)
+    })
+
+    // Same disabled-window trigger as the sibling-refresh test above: one
+    // synchronous keystroke, so the tap below deterministically lands while
+    // the dialog is disabled rather than racing a timer for it.
+    const head = view.state.doc.length
+    view.dispatch({
+      changes: { from: head, insert: 't' },
+      selection: { anchor: head + 1 },
+      userEvent: 'input.type',
+    })
+    expect(completionStatus(view.state)).toBe('pending')
+    expect(currentCompletions(view.state)).toHaveLength(0)
+    const [first, second] = optionsLabelled('Retro notes')
+    if (first === undefined || second === undefined) throw new Error('expected two options')
+
+    tapElement(second, 4)
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[retro-notes-b]]')
+    })
+  })
+
+  it('a deferred tap given up on (the label re-render dropped) commits nothing', async () => {
+    // The query changes between the tap and the list re-enabling — the
+    // refreshed list no longer contains an option labelled "Retro notes" at
+    // all, so the commit must give up rather than link something the user
+    // never selected. "l" is the disabling keystroke rather than "t": it
+    // is in "Release plan" and not in "Retro notes" at all, so the settled
+    // list is deterministic rather than resting on how fuzzily an unrelated
+    // matcher scores a typo.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    await userEvent.keyboard('see [[[[Re')
+    await vi.waitFor(() => expect(optionLabelled('Retro notes')).toBeDefined())
+
+    // Disable the dialog (as above), then tap the now-frozen "Retro notes"
+    // option while it is unresponsive.
+    const disableHead = view.state.doc.length
+    view.dispatch({
+      changes: { from: disableHead, insert: 'l' },
+      selection: { anchor: disableHead + 1 },
+      userEvent: 'input.type',
+    })
+    expect(completionStatus(view.state)).toBe('pending')
+    expect(currentCompletions(view.state)).toHaveLength(0)
+    tap('Retro notes', 5)
+
+    // The dialog re-enables against the now-narrowed "Rel" query: "Release
+    // plan" survives, "Retro notes" — the option actually tapped — does not.
+    await vi.waitFor(() => {
+      const selected = document.querySelector('.cm-tooltip-autocomplete li[aria-selected="true"]')
+      expect(selected?.textContent).toContain('Release plan')
+    })
+    expect(optionLabelled('Retro notes')).toBeUndefined()
+
+    // Give the deferred commit's queued microtask a turn, then confirm it
+    // committed nothing — neither the vanished "Retro notes" option nor an
+    // accidental commit of whatever is now selected. The document is
+    // exactly what was typed.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(value).toBe('see [[Rel')
+  })
+
+  it('a real close (query leaves the [[ grammar) clears a deferred tap for good', async () => {
+    // Closing the popup for real — not merely the sibling source's disabled
+    // window — must drop the deferred tap so a LATER list that happens to
+    // reuse the same label is never auto-committed against.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    const view = EditorView.findFromDOM(document.activeElement as HTMLElement)
+    if (view === null) throw new Error('the source pane is not a mounted CodeMirror view')
+
+    await userEvent.keyboard('a[[[[Ret')
+    await vi.waitFor(() => expect(optionLabelled('Retro notes')).toBeDefined())
+
+    const disableHead = view.state.doc.length
+    view.dispatch({
+      changes: { from: disableHead, insert: 't' },
+      selection: { anchor: disableHead + 1 },
+      userEvent: 'input.type',
+    })
+    expect(completionStatus(view.state)).toBe('pending')
+    tap('Retro notes', 6)
+
+    // `]` leaves the `[[query` grammar the source matches on, so the next
+    // re-evaluation closes the popup for real rather than merely refreshing.
+    const closeHead = view.state.doc.length
+    view.dispatch({
+      changes: { from: closeHead, insert: ']' },
+      selection: { anchor: closeHead + 1 },
+      userEvent: 'input.type',
+    })
+    await vi.waitFor(() => {
+      expect(completionStatus(view.state)).toBeNull()
+      expect(document.querySelector('.cm-tooltip-autocomplete')).toBeNull()
+    })
+
+    // Reopen a fresh list that happens to offer the same label again.
+    await userEvent.keyboard(' [[[[Ret')
+    await vi.waitFor(() => expect(optionLabelled('Retro notes')).toBeDefined())
+
+    // No stale commit landed: the document is exactly what was typed, with
+    // no injected [[retro-notes]] markup from the tap that was given up on.
+    expect(value).toBe('a[[Rett] [[Ret')
   })
 
   it('plain prose never opens the popup', async () => {

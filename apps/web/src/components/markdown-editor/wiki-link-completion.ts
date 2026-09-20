@@ -35,17 +35,27 @@ const TAP_SLOP_PX = 12
 export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
   let startY: number | null = null
   /**
-   * A label whose tap `acceptCompletion` refused. The dialog shares one
+   * A tap whose `acceptCompletion` refused. The dialog shares one
    * `autocompletion()` with the `:` shortcode source, which re-activates on
    * EVERY keystroke — even inside `[[`, where its own trigger never matches
    * — and CodeMirror disables the whole dialog for as long as any source is
    * pending, this sibling included (`cm-tooltip-autocomplete-disabled`,
    * `currentCompletions` empty). A tap landing in that window is a real,
-   * visible option; `update()` below commits it once the dialog re-enables,
-   * matched by LABEL because the refreshed list is a fresh render with new
-   * indices.
+   * visible option; `update()` below commits it once the dialog re-enables.
+   *
+   * Matched by LABEL plus OCCURRENCE, not label alone: the refreshed list is
+   * a fresh render with new indices, but two documents can share a display
+   * name, and matching the first same-labelled option would link whichever
+   * one now sorts first rather than the one actually tapped. Occurrence
+   * survives the refresh because `getTargets()`'s order does not change
+   * between keystrokes and `rankLinkTargets` keeps ties in that order, so
+   * two same-labelled options keep the same relative position.
    */
-  let deferred: string | null = null
+  interface DeferredTap {
+    readonly label: string
+    readonly occurrence: number
+  }
+  let deferred: DeferredTap | null = null
   const optionAt = (target: EventTarget | null): HTMLElement | null => {
     const li = target instanceof Element ? target.closest('.cm-tooltip-autocomplete li') : null
     return li instanceof HTMLElement && view.dom.contains(li) ? li : null
@@ -60,12 +70,23 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
     if (Math.abs(endY - startY) > TAP_SLOP_PX) return
     const match = /-(\d+)$/.exec(li.id)
     if (match === null) return
+    const label = li.querySelector('.cm-completionLabel')?.textContent ?? null
     // No synthesized mouse events after this tap: upstream must not accept
     // a second time, and the blur that would close the popup never fires.
     event.preventDefault()
     view.dispatch({ effects: setSelectedCompletion(Number(match[1])) })
-    if (!acceptCompletion(view)) {
-      deferred = li.querySelector('.cm-completionLabel')?.textContent ?? null
+    if (!acceptCompletion(view) && label !== null) {
+      // From the RENDERED list, not `currentCompletions(view.state)` — a
+      // tap refused during the disabled window has already dropped to an
+      // empty completions array by this point, so the state can't answer
+      // "which occurrence". The DOM the user was looking at still can.
+      const siblings = li.parentElement === null ? [li] : [...li.parentElement.children]
+      const occurrence = siblings
+        .slice(0, siblings.indexOf(li) + 1)
+        .filter(
+          (sibling) => sibling.querySelector('.cm-completionLabel')?.textContent === label,
+        ).length
+      deferred = { label, occurrence }
     }
   }
   view.dom.addEventListener('touchstart', onTouchStart, { passive: true })
@@ -80,8 +101,18 @@ export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
         if (completionStatus(view.state) === null) deferred = null
         return
       }
-      const index = options.findIndex((option) => option.label === deferred)
+      const { label, occurrence } = deferred
       deferred = null
+      let seen = 0
+      let index = -1
+      for (let i = 0; i < options.length; i++) {
+        if (options[i]?.label !== label) continue
+        seen += 1
+        if (seen === occurrence) {
+          index = i
+          break
+        }
+      }
       if (index === -1) return
       // A ViewPlugin's own update() cannot dispatch synchronously; queue for
       // right after CodeMirror finishes applying this one.
