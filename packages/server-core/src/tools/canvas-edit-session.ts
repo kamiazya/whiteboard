@@ -35,10 +35,18 @@ import {
 import { publishedKind } from './published-node-kind.js'
 
 /**
- * The height a text node needs to hold its text at its width. A height is
- * derived from a width and a text, never from a position: text laid out
- * at a width wraps to a height, and a height read from a position would
- * need the position first.
+ * The height a node needs for its own text, never less than the default it
+ * would otherwise get.
+ *
+ * GROW-ONLY on purpose. A one-word node measures about 32px, and shrinking
+ * every short node to that would redraw how a whole diagram looks for a
+ * defect that is only ever about content NOT FITTING. The default stays the
+ * floor; this only lifts it.
+ *
+ * Position does not matter here: `naturalNodeContentSize` lays the content
+ * out unbounded, so only the width it wraps against is an input. That is what
+ * breaks the circularity — placement needs a height, and the height needs a
+ * width, not a position.
  */
 export function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
   // The taller of two readings: the composition root's own font, and the
@@ -77,6 +85,14 @@ export function assertTextFits(
       opName,
       `its text needs ${needs}px of height at width ${node.width}; name at least that, or omit height and the box is sized to fit`,
     )
+  }
+}
+
+/** The first `<prefix><n>` nobody on the canvas has taken. */
+export function mintId(taken: ReadonlySet<string>, prefix: string): string {
+  for (let i = 1; ; i++) {
+    const candidate = `${prefix}${i}`
+    if (!taken.has(candidate)) return candidate
   }
 }
 
