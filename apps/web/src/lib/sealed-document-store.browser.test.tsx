@@ -308,6 +308,46 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     expect(absentCalls()).toBe(0)
   })
 
+  it('saves and reads a snapshot with zero chunks even while the key is withheld', async () => {
+    // The bypass `#sealChunks`/`#openManifestArm` document in comments: an
+    // empty manifest hides nothing, so it must save and read back without
+    // ever asking a withheld provider for a key.
+    const inner = new IdbDocumentStore(DB_NAME)
+    const store = new SealedDocumentStore(inner, withheldProvider())
+    const emptyRef: DocRef = {
+      kind: 'document',
+      workspaceId: 'sealed-ws',
+      documentId: '01JD0EMPTYCHUNKS00000000001',
+    }
+    const { manifest, chunks } = chunkSnapshot(new Uint8Array(0), 64)
+    expect(manifest.chunkCount).toBe(0)
+    await store.saveSnapshot({ docRef: emptyRef, manifest, chunks, frontier: randomBytes(4) })
+
+    const loaded = await store.loadSnapshot({ docRef: emptyRef })
+    expect(loaded?.manifest).toEqual(manifest)
+    expect(loaded?.chunks).toEqual([])
+
+    const reported = await store.readSnapshotManifest({ docRef: emptyRef })
+    expect(reported?.manifest).toEqual(manifest)
+  })
+
+  it('readSnapshotManifest throws ReplicaKeyWithheldError for a present, non-empty record while the key is withheld', async () => {
+    const key = await generateKey()
+    const inner = new IdbDocumentStore(DB_NAME)
+    const { manifest, chunks } = chunkSnapshot(randomBytes(64), 32)
+    await new SealedDocumentStore(inner, fixedKeyProvider(key, 0)).saveSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier: randomBytes(4),
+    })
+
+    const locked = new SealedDocumentStore(inner, withheldProvider())
+    await expect(locked.readSnapshotManifest({ docRef })).rejects.toBeInstanceOf(
+      ReplicaKeyWithheldError,
+    )
+  })
+
   it('refuses a tampered chunk and a tampered delta as unreadable, not withheld', async () => {
     const key = await generateKey()
     const inner = new IdbDocumentStore(DB_NAME)

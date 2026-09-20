@@ -140,7 +140,9 @@ describe('cacheDaemonWorkspace', () => {
       workspaceId: DAEMON_WS,
       workspaceDocs: docs,
     })
-    if (result.kind !== 'ok') throw new Error(`pull failed: ${result.reason}`)
+    if (result.kind !== 'ok') {
+      throw new Error(`pull failed: ${result.kind === 'failed' ? result.reason : result.kind}`)
+    }
 
     // The local edit survived the merge...
     const merged = await docs.open(DAEMON_WS)
@@ -226,6 +228,33 @@ describe('cacheDaemonWorkspace', () => {
       workspaceDocs: new BrowserWorkspaceDocs(),
     })
     expect(result.kind).toBe('failed')
+    expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
+  })
+
+  it('a withheld session key surfaces as kind: withheld, distinct from a network failure', async () => {
+    // The snapshot GET succeeds (options.fetch), but the SEPARATE key fetch
+    // `connectReplicaKeeper`'s daemon connection makes on the store's
+    // behalf is refused — a reconnect question, not "could not reach the
+    // daemon".
+    const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
+    connectReplicaKeeper({
+      baseUrl: BASE,
+      token: 'tok',
+      fetch: (async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/replica-key')) {
+          return new Response(JSON.stringify({ error: 'not_a_member' }), { status: 403 })
+        }
+        throw new Error(`unexpected fetch: ${url}`)
+      }) as typeof globalThis.fetch,
+    })
+    const result = await cacheDaemonWorkspace({
+      fetch: snapshotStub(record),
+      daemonBaseUrl: BASE,
+      workspaceId: DAEMON_WS,
+      workspaceDocs: new BrowserWorkspaceDocs(),
+    })
+    expect(result.kind).toBe('withheld')
     expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
   })
 

@@ -5,7 +5,7 @@
  */
 import { forgetAll } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
-import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import {
@@ -194,5 +194,49 @@ describe('replica-store', () => {
 
     // Explicit forget is idempotent and safe to call again.
     forgetDaemonKeys(DAEMON)
+  })
+
+  it('a reconnect to the same daemon with a different token forgets the previous key rather than continuing to answer under it', async () => {
+    // `connectReplicaKeeper`'s own docstring: a token rotation must forget
+    // whatever key the PREVIOUS connection held. A fetch double that mints a
+    // DIFFERENT workspace key each call is the differential signal — if the
+    // stale key kept answering, the old ciphertext would still open; if it
+    // was really forgotten, opening it with the freshly-minted key fails.
+    const workspaceId = freshWorkspaceId()
+    const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
+    let keyCalls = 0
+    const rotatingKeyFetch: typeof fetch = (async (input: Request | string | URL) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url.endsWith('/replica-key')) {
+        keyCalls += 1
+        const seed = keyCalls === 1 ? 1 : 200
+        return jsonResponse({
+          workspaceKey: b64u(Uint8Array.from({ length: 32 }, (_, i) => seed + i)),
+          workspaceKeySalt: b64u(WORKSPACE_SALT),
+          tier: 'offline',
+        })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    }) as typeof fetch
+
+    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok-1', fetch: rotatingKeyFetch })
+    markReplica(workspaceId, DAEMON)
+    const store = openDocumentStore(DB_NAME)
+    const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
+    await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array(4) })
+    expect(keyCalls).toBe(1)
+
+    // Still held: reads back without another key fetch.
+    const loaded = await store.loadSnapshot({ docRef })
+    expect(loaded?.chunks.map((c) => new TextDecoder().decode(c.bytes))).toEqual([marker])
+    expect(keyCalls).toBe(1)
+
+    // A token rotation on the SAME daemon — must forget the first key.
+    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok-2', fetch: rotatingKeyFetch })
+
+    await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(
+      StoredDocumentUnreadableError,
+    )
+    expect(keyCalls).toBe(2)
   })
 })

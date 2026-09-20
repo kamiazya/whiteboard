@@ -21,6 +21,7 @@ import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { markReplica } from './replica-store.js'
+import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 
 /** VersionVector bytes as a registry-storable string. */
 export function encodeVersionForRegistry(bytes: Uint8Array): string {
@@ -55,6 +56,13 @@ export type CacheDaemonWorkspaceResult =
        */
       syncedFrontier: string
     }
+  /**
+   * The pull reached the daemon, but this build's session key for the
+   * workspace is withheld (`ReplicaKeyWithheldError`) — a reconnect
+   * question, never a network one. Kept distinct from `'failed'` so a
+   * caller can tell a member to reconnect instead of retrying the request.
+   */
+  | { kind: 'withheld' }
   | { kind: 'failed'; reason: string }
 
 export async function cacheDaemonWorkspace(
@@ -86,7 +94,8 @@ export async function cacheDaemonWorkspace(
       documentCount: readWorkspaceDocuments(doc).length,
       syncedFrontier: encodeVersionForRegistry(daemonOnly.oplogVersion().encode()),
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }
     // A thrown fetch (daemon offline mid-pull) surfaces as a structured
     // failure the caller can report; the pull is safe to re-run.
     return { kind: 'failed', reason: 'Could not reach the daemon (network error).' }

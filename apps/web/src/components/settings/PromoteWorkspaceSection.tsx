@@ -340,25 +340,37 @@ export function PromoteWorkspaceSection({
             // "missing", so those references may be retryable — and the
             // record is the retry vehicle.
             if (outcome.blobs.failed.length === 0 && outcome.blobs.missing.length === 0) {
-              const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
-                '../../lib/demote-browser-workspace.js'
-              )
-              const carried = await replicaCarriesAll(
-                new BrowserWorkspaceDocs(),
-                targetId,
-                outcome.promotedDocumentIds,
-              )
-              if (carried) {
-                try {
+              // Scoped to its own try/catch, deliberately NOT the outer
+              // one below: `replicaCarriesAll` reads through the sealed
+              // store and can throw `ReplicaKeyWithheldError` if the
+              // session key lapses between the cache write above and this
+              // read-back. The promotion itself already landed — letting
+              // that escape to the outer catch would report an already-
+              // successful move as a failed one. The demote decision is
+              // simply deferred (the browser copy stays, same as any
+              // other unverified-replica case); a later visit re-asks.
+              try {
+                const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
+                  '../../lib/demote-browser-workspace.js'
+                )
+                const carried = await replicaCarriesAll(
+                  new BrowserWorkspaceDocs(),
+                  targetId,
+                  outcome.promotedDocumentIds,
+                )
+                if (carried) {
                   await demoteBrowserWorkspace(outcome.sourceWorkspaceId)
                   localCopyRemoved = true
-                } catch (err) {
-                  // The move stands either way; a failed deletion only means
-                  // the old copy lingers, which the report says plainly.
-                  log.warn('demote after promote failed', err)
                 }
+              } catch (err) {
+                // The move stands either way; a withheld session key or a
+                // failed deletion only means the old copy lingers, which
+                // the report says plainly.
+                log.warn('demote after promote failed', err)
               }
             }
+          } else if (cache.kind === 'withheld') {
+            log.warn('replica cache after promote withheld: reconnect and try again')
           } else log.warn('replica cache after promote failed', cache.reason)
         }
         record =

@@ -187,6 +187,33 @@ describe('pushReplicaEdits', () => {
     ).toEqual([DOC_A, DOC_B].sort())
   })
 
+  it('a withheld session key surfaces as kind: withheld, distinct from a refused POST', async () => {
+    const daemon = daemonStub(daemonRecord())
+    const { docs, syncedFrontier } = await pulledReplica(daemon)
+    // Reconnect to the same daemon with a different token whose key fetch
+    // refuses — simulating the session lapsing between the pull and the
+    // push, which forgets the previously-held key (replica-store.ts).
+    connectReplicaKeeper({
+      baseUrl: BASE,
+      token: 'tok-2',
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/replica-key') && init?.method === 'POST') {
+          return new Response(JSON.stringify({ error: 'not_a_member' }), { status: 403 })
+        }
+        throw new Error(`unexpected fetch: ${url}`)
+      }) as typeof globalThis.fetch,
+    })
+    const result = await pushReplicaEdits({
+      fetch: daemon.fetch,
+      daemonBaseUrl: BASE,
+      workspaceId: DAEMON_WS,
+      workspaceDocs: docs,
+      syncedFrontier,
+    })
+    expect(result.kind).toBe('withheld')
+  })
+
   it('a missing replica record is clean — nothing to ship', async () => {
     const result = await pushReplicaEdits({
       fetch: vi.fn() as unknown as typeof globalThis.fetch,

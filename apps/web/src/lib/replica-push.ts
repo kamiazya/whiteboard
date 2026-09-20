@@ -19,6 +19,7 @@
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
 import { decodeVersionFromRegistry, encodeVersionForRegistry } from './replica-cache.js'
+import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 
 export interface PushReplicaEditsOptions {
   fetch: typeof globalThis.fetch
@@ -34,6 +35,8 @@ export interface PushReplicaEditsOptions {
 export type PushReplicaEditsResult =
   | { kind: 'clean' }
   | { kind: 'ok'; syncedAt: string; syncedFrontier: string }
+  /** See `CacheDaemonWorkspaceResult`'s `'withheld'` — the same reconnect-not-retry distinction. */
+  | { kind: 'withheld' }
   | { kind: 'failed'; reason: string }
 
 export async function pushReplicaEdits(
@@ -70,7 +73,8 @@ export async function pushReplicaEdits(
       syncedAt: new Date().toISOString(),
       syncedFrontier: encodeVersionForRegistry(current.encode()),
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }
     return { kind: 'failed', reason: 'Could not reach the daemon (network error).' }
   }
 }
