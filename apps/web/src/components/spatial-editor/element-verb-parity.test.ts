@@ -117,6 +117,7 @@ const COMMAND_FACTS = {
   'delete-line': { verb: 'delete', target: 'lines' },
   'move-line': { verb: 'move', target: 'lines' },
   'set-line-bends': { verb: 'set-bends', target: 'lines' },
+  'set-line-label': { verb: 'set-label', target: 'lines' },
   'set-line-color': { verb: 'set-color', target: 'lines' },
   'ungroup-ink': { verb: 'ungroup', target: 'lines' },
 
@@ -217,8 +218,7 @@ const VERB_PARITY = {
   'set-label': {
     nodes: 'command',
     edges: 'command',
-    lines:
-      'gap: `canvasLineSchema` carries an optional `label` and no command writes it, so a stroke imported with one can be read and drawn but never renamed or cleared',
+    lines: 'command',
     comments: 'n/a: a thread is titled by its first message rather than by a label',
   },
   'set-ends': {
@@ -340,7 +340,7 @@ describe('every command kind says which verb it is and what it acts on', () => {
     // `.claude/rules/coverage-ledger.md` asks for one: the type check proves
     // the table matches the union, and nothing else here would notice the
     // union having quietly become five entries.
-    expect(commandFacts).toHaveLength(41)
+    expect(commandFacts).toHaveLength(42)
     expect(elementCommands.length).toBeGreaterThan(30)
   })
 
@@ -440,7 +440,7 @@ describe('what each kind of element can have done to it', () => {
     // whole stroke sits — and the editor writes NONE of them. Ink can be
     // drawn, picked, banded, shift-added, ungrouped, locked and deleted, and
     // after that it is fixed. Nothing was red about that before this line.
-    expect(Object.fromEntries(byCollection)).toEqual({ lines: 4 })
+    expect(Object.fromEntries(byCollection)).toEqual({ lines: 3 })
   })
 })
 

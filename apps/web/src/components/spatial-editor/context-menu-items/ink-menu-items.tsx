@@ -14,7 +14,7 @@
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor, CanvasLine } from '@kamiazya/whiteboard-model'
 import { resolveInkGroup } from '@kamiazya/whiteboard-plugin-visual'
-import { Lock as LockIcon, LockOpen, Trash2, Ungroup } from 'lucide-react'
+import { Lock as LockIcon, LockOpen, Tag, Trash2, Ungroup } from 'lucide-react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
@@ -34,6 +34,8 @@ export interface InkMenuItemsInput {
     commands: readonly EditorCommand[]
   }) => void
   readonly setSelectedEdgeId: (id: string | null) => void
+  /** Opens the in-place label editor on this stroke. */
+  readonly setEdgeLabelEditId: (id: string | null) => void
 }
 
 export function inkMenuItems({
@@ -45,6 +47,7 @@ export function inkMenuItems({
   onToggleEdgeLock,
   applyResult,
   setSelectedEdgeId,
+  setEdgeLabelEditId,
 }: InkMenuItemsInput): ContextMenuItem[] {
   // Locked ink offers exactly one action, the same contract the edge branch
   // keeps: everything else here is a mutation the lock exists to refuse.
@@ -93,6 +96,16 @@ export function inkMenuItems({
           { kind: 'separator' as const },
         ]
       : []),
+    {
+      // A stroke can carry a name, and the renderer has drawn one all along
+      // (`composeEdgeLabel` takes a relation or a line). The double press
+      // already opened this editor; the menu is the device with no keyboard
+      // and no double press to spare.
+      label: 'Edit label',
+      icon: <Tag />,
+      onSelect: () => setEdgeLabelEditId(line.id),
+    },
+    { kind: 'separator' as const },
     ...(edgeLockEnabled
       ? [
           {

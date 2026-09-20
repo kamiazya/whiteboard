@@ -26,6 +26,7 @@ import {
   DUPLICATE_OFFSET_PX,
   deleteInkCommand,
   type EditorCommand,
+  labelInkCommand,
 } from './commands.js'
 
 function baseCanvas(): SpatialCanvas {
@@ -1531,6 +1532,32 @@ describe('lines in the editor', () => {
     const straight = applyCommand(bent, { kind: 'set-line-bends', id: 'l1', bends: [] })
     expect(straight.lines?.[0]).not.toHaveProperty('bends')
     expect(() => spatialCanvasSchema.parse(straight)).not.toThrow()
+  })
+
+  it('names a stroke, and clears the name with an empty one', () => {
+    const named = applyCommand(lineCanvas(), { kind: 'set-line-label', id: 'l1', label: 'north' })
+    expect(named.lines?.[0]?.label).toBe('north')
+    const cleared = applyCommand(named, { kind: 'set-line-label', id: 'l1', label: '' })
+    expect(cleared.lines?.[0]).not.toHaveProperty('label')
+    expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
+  })
+
+  it('picks the label write by the collection the id came from', () => {
+    const canvas: SpatialCanvas = {
+      ...lineCanvas(),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    expect(labelInkCommand(canvas, 'e1', 'x')).toEqual({
+      kind: 'set-edge-label',
+      id: 'e1',
+      label: 'x',
+    })
+    expect(labelInkCommand(canvas, 'l1', 'x')).toEqual({
+      kind: 'set-line-label',
+      id: 'l1',
+      label: 'x',
+    })
+    expect(labelInkCommand(canvas, 'nope', 'x')).toBeUndefined()
   })
 
   it('picks the bend write by the collection the id came from', () => {

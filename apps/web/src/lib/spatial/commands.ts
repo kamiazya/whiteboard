@@ -120,6 +120,7 @@ export type EditorLeafCommand =
    * being re-quantised on every move.
    */
   | { readonly kind: 'move-line'; readonly id: string; readonly dx: number; readonly dy: number }
+  | { readonly kind: 'set-line-label'; readonly id: string; readonly label: string }
   | {
       /**
        * The points a stroke is drawn THROUGH, as a whole list — the bend
@@ -541,6 +542,26 @@ export function deleteInkCommand(canvas: SpatialCanvas, id: string): EditorComma
  * Unlike the move, both collections answer — a relation's bends are as real
  * as a stroke's, and the drag affordance is the same one.
  */
+/**
+ * The label write, picked by collection.
+ *
+ * The renderer has drawn a line's label all along — `composeEdgeLabel` takes
+ * a `RoutableElement` — so this was never a rendering gap and only ever an
+ * editing one: the in-place editor and the menu verb both named
+ * `canvas.edges`, so a stroke could carry a name that nothing could write or
+ * clear.
+ */
+export function labelInkCommand(
+  canvas: SpatialCanvas,
+  id: string,
+  label: string,
+): EditorLeafCommand | undefined {
+  if (canvas.edges.some((edge) => edge.id === id)) return { kind: 'set-edge-label', id, label }
+  if ((canvas.lines ?? []).some((line) => line.id === id))
+    return { kind: 'set-line-label', id, label }
+  return undefined
+}
+
 export function bendInkCommand(
   canvas: SpatialCanvas,
   id: string,
@@ -642,6 +663,14 @@ function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
       ? {}
       : { bends: line.bends.map((bend) => ({ x: bend.x + dx, y: bend.y + dy })) }),
   }
+}
+
+function setLineLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    // Empty clears the field, the same canonicalisation `setEdgeLabel` makes.
+    const { label: _removed, ...rest } = line
+    return label === '' ? rest : { ...rest, label }
+  })
 }
 
 function setLineBends(
@@ -1094,6 +1123,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setLineColor(canvas, command.id, command.color)
     case 'set-line-bends':
       return setLineBends(canvas, command.id, command.bends)
+    case 'set-line-label':
+      return setLineLabel(canvas, command.id, command.label)
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
     case 'set-edge-ends':

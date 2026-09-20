@@ -6,10 +6,12 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   type CanvasEdge,
+  type CanvasLine,
   frameLabel,
   isFrame,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
+import { labelInkCommand } from '../../lib/spatial/commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
@@ -38,7 +40,8 @@ function labelEditorStyle(palette: SpatialPalette, fontFamily: string) {
 
 type ApplyResult = (result: ReturnType<typeof reduceGesture>) => void
 
-/** The in-place editor for an edge's label, opened where the label sits —
+/** The in-place editor for a RELATION's or a STROKE's label, opened where the
+ * label sits —
  * the drawn line's midpoint, or beside it when a box is in the way, from the
  * same producer the renderer places the label with. `edgePaths` is already
  * the DRAWN (flattened) line, so the shared anchor needs no second rounding
@@ -63,7 +66,13 @@ export function EdgeLabelEditorOverlay({
   readonly applyResult: ApplyResult
   readonly onClose: () => void
 }) {
-  const edge: CanvasEdge | undefined = canvas.edges.find((entry) => entry.id === editId)
+  // Both collections: a double press on ink already arrived here (the press
+  // key is `edge:<id>` for a relation and a stroke alike, because the scene
+  // hands the two out identically), and this lookup answering `undefined`
+  // is what made the editor silently not open.
+  const edge: CanvasEdge | CanvasLine | undefined =
+    canvas.edges.find((entry) => entry.id === editId) ??
+    (canvas.lines ?? []).find((entry) => entry.id === editId)
   const path = edgePaths.find((entry) => entry.id === editId)?.path
   if (edge === undefined || path === undefined) return null
   const mid = edgeLabelPlacement(
@@ -85,9 +94,10 @@ export function EdgeLabelEditorOverlay({
       testId="edge-label-editor"
       style={labelEditorStyle(palette, fontFamily)}
       onCommit={(label) => {
+        const command = labelInkCommand(canvas, edge.id, label.trim())
         applyResult({
           state: { kind: 'idle' },
-          commands: [{ kind: 'set-edge-label', id: edge.id, label: label.trim() } as const],
+          commands: command === undefined ? [] : [command],
         })
         onClose()
       }}

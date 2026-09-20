@@ -270,6 +270,7 @@ export function CanvasContextMenu({
                 onToggleEdgeLock,
                 applyResult,
                 setSelectedEdgeId,
+                setEdgeLabelEditId,
               })
             : node === undefined && edge !== undefined
               ? edgeMenuItems({
