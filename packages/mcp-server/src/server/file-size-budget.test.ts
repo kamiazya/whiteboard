@@ -584,7 +584,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and the release branch that keeps what the marquee used to do for a
   // press ON ink — the double-press label and the root focus, both found by
   // the full browser run rather than by reading.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3097,
+  // Raised 3097 -> 3165, +68, for naming `handlePointerMove`'s seven steps.
+  // The file GREW and is more readable for it: 121 lines of guard chain
+  // became seven named steps plus a handler that reads as the order they run
+  // in, and each step's reason now sits on the step rather than in a run of
+  // comments a reader has to attach to the right `if`. The cost is a doc
+  // comment per step; the alternative — module functions — would have moved
+  // 32 closed-over values into parameters and grown the file further.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 3165,
 }
 
 describe('the path form both ledgers are keyed with', () => {

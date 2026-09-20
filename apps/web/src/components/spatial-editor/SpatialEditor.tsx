@@ -1414,24 +1414,43 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
     openContextMenuAtRef.current = openContextMenuAt
 
-    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-      const root = rootRef.current
-      if (root === null) return
-      // Movement past finger-jitter slop turns the press into a drag: the
-      // armed long-press menu must not interrupt it.
+    /**
+     * The steps `handlePointerMove` runs, in the order it runs them — which
+     * is the semantics rather than a detail: a pointer move belongs to at
+     * most one gesture, and an earlier step winning is how that is decided.
+     *
+     * They stay in THIS scope rather than becoming module functions because
+     * the handler closes over 32 values (counted, not guessed); moving them
+     * out turns those into 32 parameters, which is the same knot with a
+     * longer signature. What the split buys is that each step has a name and
+     * keeps its own reason beside it, and the handler below reads as the
+     * order.
+     *
+     * A step that ANSWERS the move returns true; one that only has a side
+     * effect returns nothing.
+     */
+
+    /**
+     * Movement past finger-jitter slop turns the press into a drag: the
+     * armed long-press menu must not interrupt it.
+     */
+    const cancelLongPressPastSlop = (e: React.PointerEvent<HTMLDivElement>, root: HTMLElement) => {
       const armed = longPressRef.current
-      if (armed !== null && armed.pointerId === e.pointerId) {
-        const now = clientPointToRootLocal(e, root)
-        if (Math.hypot(now.x - armed.screen.x, now.y - armed.screen.y) > LONG_PRESS_SLOP_PX) {
-          clearLongPress()
-        }
+      if (armed === null || armed.pointerId !== e.pointerId) return
+      const now = clientPointToRootLocal(e, root)
+      if (Math.hypot(now.x - armed.screen.x, now.y - armed.screen.y) > LONG_PRESS_SLOP_PX) {
+        clearLongPress()
       }
-      const screenPoint = clientPointToRootLocal(e, root)
-      // First movement of an in-flight gesture: take capture now (see the
-      // handlePointerDown comment for why not at the press). Idempotent —
-      // re-capturing the same pointer is a no-op. Taken BEFORE the machine
-      // reduces this move, so it reads the pan that the PRESS started rather
-      // than the one this move is about to advance.
+    }
+
+    /**
+     * First movement of an in-flight gesture: take capture now (see the
+     * handlePointerDown comment for why not at the press). Idempotent —
+     * re-capturing the same pointer is a no-op. Taken BEFORE the machine
+     * reduces this move, so it reads the pan that the PRESS started rather
+     * than the one this move is about to advance.
+     */
+    const captureOnFirstMove = (e: React.PointerEvent<HTMLDivElement>, root: HTMLElement) => {
       if (
         activePointerIdRef.current === null &&
         (navigationRef.current.mode.kind === 'panning' ||
@@ -1440,83 +1459,107 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         capturePointer(root, e.pointerId)
       }
-      // A comment press that travels past the slop is spent as a press.
-      // Under the select tool it becomes the pin drag of a point-anchored
-      // comment (a node-anchored one's anchor is its node's corner, and
-      // moving the node is how it moves); under the hand tool it was a pan,
-      // which navigation below is already running and which the release
-      // must not turn into an opened card. Decided BEFORE navigation because
-      // a pan's moves never fall through. Capture FIRST for the drag: it
-      // takes the committed copy out of the surface, and a touch pointer's
-      // implicit capture sits on that copy.
+    }
+
+    /**
+     * A comment press that travels past the slop is spent as a press.
+     *
+     * Under the select tool it becomes the pin drag of a point-anchored
+     * comment (a node-anchored one's anchor is its node's corner, and moving
+     * the node is how it moves); under the hand tool it was a pan, which
+     * navigation is already running and which the release must not turn into
+     * an opened card. Decided BEFORE navigation because a pan's moves never
+     * fall through. Capture FIRST for the drag: it takes the committed copy
+     * out of the surface, and a touch pointer's implicit capture sits on that
+     * copy.
+     *
+     * The press is spent either way — `pressedCommentRef` is cleared before
+     * the tool is consulted — so a hand-tool press that travelled does not
+     * come back as a card on release.
+     */
+    const startCommentPinDrag = (
+      e: React.PointerEvent<HTMLDivElement>,
+      root: HTMLElement,
+      screenPoint: Point,
+    ): boolean => {
       const pressedComment = pressedCommentRef.current
       if (
-        pressedComment !== null &&
-        commentDrag === null &&
+        pressedComment === null ||
+        commentDrag !== null ||
         Math.hypot(
           screenPoint.x - pressedComment.startScreen.x,
           screenPoint.y - pressedComment.startScreen.y,
-        ) >= COMMENT_PRESS_SLOP_PX
+        ) < COMMENT_PRESS_SLOP_PX
       ) {
-        pressedCommentRef.current = null
-        if (
-          tool !== 'hand' &&
-          !spaceDownRef.current &&
-          pressedComment.comment.targetNodeId === undefined
-        ) {
-          capturePointer(root, e.pointerId)
-          setCommentDrag({
-            comment: pressedComment.comment,
-            startPoint: pressedComment.startPoint,
-            live: screenToCanvas(screenPoint, viewport),
-            obstacles: commentPlacementObstacles(pressedComment.comment.id),
-            dropped: null,
-          })
-          return
-        }
+        return false
       }
-      const navigation = runNavigation(
-        root,
-        {
-          type: 'pointermove',
-          pointerId: e.pointerId,
-          pointerType: navigationPointerKind(e.pointerType),
-          point: screenPoint,
-        },
-        e.timeStamp,
-      )
-      if (!navigation.fallThrough) return
-      if (commentDrag !== null) {
-        if (commentDrag.dropped !== null) return
+      pressedCommentRef.current = null
+      if (
+        tool === 'hand' ||
+        spaceDownRef.current ||
+        pressedComment.comment.targetNodeId !== undefined
+      ) {
+        return false
+      }
+      capturePointer(root, e.pointerId)
+      setCommentDrag({
+        comment: pressedComment.comment,
+        startPoint: pressedComment.startPoint,
+        live: screenToCanvas(screenPoint, viewport),
+        obstacles: commentPlacementObstacles(pressedComment.comment.id),
+        dropped: null,
+      })
+      return true
+    }
+
+    /**
+     * A pin already in flight follows the pointer until it is dropped. A
+     * dropped one still ANSWERS the move — it is the same drag, finished —
+     * so nothing below runs for it.
+     */
+    const advanceCommentDrag = (screenPoint: Point): boolean => {
+      if (commentDrag === null) return false
+      if (commentDrag.dropped === null) {
         setCommentDrag({ ...commentDrag, live: screenToCanvas(screenPoint, viewport) })
-        return
       }
-      if (marquee !== null) {
-        setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
-        return
-      }
-      if (gestureState.kind === 'idle' && gestureStateRef.current.kind !== 'drawing') return
-      // Unsnapped: snapping lines an object up with its neighbours, and a
-      // hand-drawn stroke has no such intent — a guide would redraw it.
-      //
-      // Reduced from the PREVIOUS state through a functional update rather
-      // than through `applyResult`, and that is the difference between a
-      // stroke and a straight line: `pointermove` is a continuous event, so
-      // the browser delivers several before React re-renders, and a handler
-      // reducing from its own render's `gestureState` has each move
-      // overwrite the last. Measured on a 61-sample wave drawn in one turn:
-      // ONE bend survived. No other gesture needs this — they all recompute
-      // from their start snapshot and the current point, and accumulate
-      // nothing.
-      if (gestureStateRef.current.kind === 'drawing') {
-        applyResult(
-          reduceGesture(gestureStateRef.current, canvasRef.current, {
-            type: 'pointermove',
-            point: screenToCanvas(screenPoint, viewport),
-          }),
-        )
-        return
-      }
+      return true
+    }
+
+    const advanceMarquee = (screenPoint: Point): boolean => {
+      if (marquee === null) return false
+      setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
+      return true
+    }
+
+    /**
+     * Unsnapped: snapping lines an object up with its neighbours, and a
+     * hand-drawn stroke has no such intent — a guide would redraw it.
+     *
+     * Reduced from the PREVIOUS state through a functional update rather
+     * than through `applyResult`, and that is the difference between a
+     * stroke and a straight line: `pointermove` is a continuous event, so
+     * the browser delivers several before React re-renders, and a handler
+     * reducing from its own render's `gestureState` has each move overwrite
+     * the last. Measured on a 61-sample wave drawn in one turn: ONE bend
+     * survived. No other gesture needs this — they all recompute from their
+     * start snapshot and the current point, and accumulate nothing.
+     */
+    const advanceDrawing = (screenPoint: Point): boolean => {
+      if (gestureStateRef.current.kind !== 'drawing') return false
+      applyResult(
+        reduceGesture(gestureStateRef.current, canvasRef.current, {
+          type: 'pointermove',
+          point: screenToCanvas(screenPoint, viewport),
+        }),
+      )
+      return true
+    }
+
+    /** Every other gesture: snap the point, show the guides, reduce. */
+    const advanceSnappedGesture = (
+      e: React.PointerEvent<HTMLDivElement>,
+      screenPoint: Point,
+    ): void => {
       const snapped = snapGesturePoint(
         screenToCanvas(screenPoint, viewport),
         e.metaKey || e.ctrlKey,
@@ -1534,6 +1577,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult(
         reduceGesture(gestureState, canvas, { type: 'pointermove', point: snapped.point }),
       )
+    }
+
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+      const root = rootRef.current
+      if (root === null) return
+      cancelLongPressPastSlop(e, root)
+      const screenPoint = clientPointToRootLocal(e, root)
+      captureOnFirstMove(e, root)
+      if (startCommentPinDrag(e, root, screenPoint)) return
+      const navigation = runNavigation(
+        root,
+        {
+          type: 'pointermove',
+          pointerId: e.pointerId,
+          pointerType: navigationPointerKind(e.pointerType),
+          point: screenPoint,
+        },
+        e.timeStamp,
+      )
+      if (!navigation.fallThrough) return
+      if (advanceCommentDrag(screenPoint)) return
+      if (advanceMarquee(screenPoint)) return
+      if (gestureState.kind === 'idle' && gestureStateRef.current.kind !== 'drawing') return
+      if (advanceDrawing(screenPoint)) return
+      advanceSnappedGesture(e, screenPoint)
     }
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
