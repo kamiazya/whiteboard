@@ -3,7 +3,10 @@
 // statically), and a root import there is retained whole by the bundler —
 // measured at 144.5 KB → 413.8 KB gzip, loro's WASM included. See
 // server-core-root-imports.test.ts.
-import { base64urlSchema } from '@kamiazya/whiteboard-server-core/versions/version-entry'
+import {
+  attestationSchema,
+  base64urlSchema,
+} from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { z } from 'zod'
 
 // Pairing-token wire contract, shared between the daemon route
@@ -128,3 +131,37 @@ export const listCredentialsResponseSchema = z
   .object({ credentials: z.array(pinnedCredentialSummarySchema) })
   .strict()
 export type ListCredentialsResponse = z.infer<typeof listCredentialsResponseSchema>
+
+// GET /api/pairing/session-assert/challenge — mints the nonce a paired
+// session signs to become a PERSON's session (a passkey-bound session,
+// ADR-0041). 43 chars is the canonical unpadded base64url length of exactly
+// 32 decoded bytes.
+export const sessionAssertChallengeResponseSchema = z
+  .object({
+    challenge: base64urlSchema.length(43, '32 decoded bytes'),
+    expiresAt: z.string(),
+  })
+  .strict()
+export type SessionAssertChallengeResponse = z.infer<typeof sessionAssertChallengeResponseSchema>
+
+// POST /api/pairing/session-assert — the raw WebAuthn assertion over the
+// minted challenge. Reuses the version row's own attestation shape (minus
+// its `kind` discriminator) rather than a hand-written mirror, so a field
+// added to one travels to both at once. The origin is never in the body:
+// the browser-enforced Origin header names it, same reasoning as
+// registerCredentialRequestSchema.
+export const sessionAssertRequestSchema = attestationSchema.omit({ kind: true }).strict()
+export type SessionAssertRequest = z.infer<typeof sessionAssertRequestSchema>
+
+// What a successful assertion hands back: the credential it verified
+// against, the person it belongs to (null when the passkey is pinned but no
+// MemberProfile claims it yet), and boundUntil — the pairing token's own
+// expiry, since a binding never outlives its session.
+export const sessionAssertResponseSchema = z
+  .object({
+    credentialId: z.string().min(1),
+    profileId: z.string().min(1).nullable(),
+    boundUntil: z.string(),
+  })
+  .strict()
+export type SessionAssertResponse = z.infer<typeof sessionAssertResponseSchema>
