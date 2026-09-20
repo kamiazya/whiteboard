@@ -46,6 +46,8 @@ export function useRenameDocument({
     setRenaming(entry)
   }, [])
 
+  // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
+  // lets scoped-screen-state.test.ts verify the setters from here.
   const cancel = useCallback(() => {
     setRenaming(null)
     setError(null)

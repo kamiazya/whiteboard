@@ -59,6 +59,8 @@ export function useDocumentPointers(): DocumentPointers {
   const [cardMenu, setCardMenu] = useState<CardMenuTarget | null>(null)
   const [peek, setPeek] = useState<WorkspaceDocumentEntry | null>(null)
 
+  // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
+  // lets scoped-screen-state.test.ts verify the setters from here.
   const clear = useCallback(() => {
     setSelected(null)
     setSelection(null)

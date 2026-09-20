@@ -53,5 +53,11 @@ export function useTagsInUse(
     )
   }, [documents, counted])
 
-  return { tags, reload, reset: useCallback(() => setCounted(null), []) }
+  // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
+  // lets scoped-screen-state.test.ts verify the setters from here.
+  const reset = useCallback(() => {
+    setCounted(null)
+  }, [])
+
+  return { tags, reload, reset }
 }

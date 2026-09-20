@@ -46,6 +46,10 @@ const sources = import.meta.glob(
     './components/workspace-files/use-browser-columns.ts',
     './components/workspace-files/use-debounced-document-search.ts',
     './components/workspace-files/use-device-memory.ts',
+    './components/workspace-files/use-rename-document.ts',
+    './components/workspace-files/use-write-outcome.ts',
+    './components/workspace-files/use-document-pointers.ts',
+    './components/workspace-files/use-tags-in-use.ts',
     './pages/DaemonIndexPage.tsx',
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
@@ -86,6 +90,14 @@ const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-s
 // lane and the changed-dot baselines. Extracted from the panel when its
 // file-size budget said so; same SCREEN by the same rule as the two above.
 const PANEL_DEVICE_MEMORY_HOOK = './components/workspace-files/use-device-memory.ts'
+// The rename dialog's target and its form's in-flight/refusal state; what
+// the panel has to SAY about its last write; the four things it points AT;
+// and the tag vocabulary in use. Same SCREEN by the same rule as the three
+// above — each one's state moved there, not away.
+const PANEL_RENAME_HOOK = './components/workspace-files/use-rename-document.ts'
+const PANEL_WRITE_OUTCOME_HOOK = './components/workspace-files/use-write-outcome.ts'
+const PANEL_POINTERS_HOOK = './components/workspace-files/use-document-pointers.ts'
+const PANEL_TAGS_HOOK = './components/workspace-files/use-tags-in-use.ts'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
@@ -127,19 +139,24 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // delete, which is the worst place for that class of mistake.
   selection: 'cleared on switch',
   renaming: 'cleared on switch',
-  renameError: 'cleared on switch',
-  renameBusy: 'cleared on switch',
+  // The rename form's refusal and in-flight flag, named from inside its own
+  // hook. Cleared with the dialog, which the reset closes.
+  error: 'cleared on switch',
+  busy: 'no subject: an in-flight flag for this screen’s own submit',
+  // The panel's own handle on the rename flow, so the reset (which runs
+  // above the hook) can close a dialog left open across a switch.
+  renameRef: 'no subject: mirrors the current flow, reassigned every render',
   hits: 'cleared on switch',
   searchDegraded: 'cleared on switch',
-  refreshError: 'cleared on switch',
-  pinError: 'cleared on switch',
+  staleList: 'cleared on switch',
+  pinRefusal: 'cleared on switch',
   // The keeper's vocabulary names the departed workspace's tags; until the
   // new keeper answers, the strip would offer chips whose press searches
   // the store now on screen for tags it never carried.
-  tagsInUse: 'cleared on switch',
+  counted: 'cleared on switch',
   // A COUNTER: it names nothing that belongs to a workspace, and a stale
   // answer is dropped by comparison, so a switch needs no reset of it.
-  tagsRequest:
+  request:
     'no subject: a monotonic request counter for the tag rows, naming nothing that belongs to a workspace',
 
   listStatus: 'no subject: a load outcome for the list as a whole, reset by the same effect',
@@ -151,11 +168,14 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   onFolderChangeRef: 'no subject: mirrors the callback prop, reassigned every render',
   onOpenDocumentRef: 'no subject: mirrors the callback prop, reassigned every render',
   workspaceRef: 'no subject: mirrors the workspace prop, reassigned every render',
-  moveDocumentRef: 'no subject: mirrors the current handler, reassigned every render',
   lastReadListRef:
     'no subject: holds the PREVIOUS source’s identity so the reset block can tell a real switch from a StrictMode replay — clearing it would make every replay read as a switch, which is the trap the effect’s own note describes',
-  createError:
-    'no subject: a refused create, carrying a kind and the store’s words — no path of its own',
+  // No path of its own — a kind and the store's words — and it was still
+  // `no subject:` until the three write reports became one hook whose
+  // `beginWrite` clears all three. It names no path, but it describes an
+  // attempt made in the DEPARTED workspace, so clearing it is right and the
+  // entry was outlived rather than wrong.
+  createRefusal: 'cleared on switch',
   creating: 'no subject: an in-flight flag for this screen’s own submit',
   query: 'no subject: what was typed; the results it produces are `hits`, which IS cleared',
   lastCardCount:
@@ -459,7 +479,16 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
 const CASES = [
   {
-    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK, PANEL_DEVICE_MEMORY_HOOK],
+    files: [
+      PANEL,
+      PANEL_COLUMNS_HOOK,
+      PANEL_SEARCH_HOOK,
+      PANEL_DEVICE_MEMORY_HOOK,
+      PANEL_RENAME_HOOK,
+      PANEL_WRITE_OUTCOME_HOOK,
+      PANEL_POINTERS_HOOK,
+      PANEL_TAGS_HOOK,
+    ],
     ledger: PANEL_STATE,
     label: 'WorkspaceFilesPanel',
     scanRefs: true,

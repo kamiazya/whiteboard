@@ -78,6 +78,8 @@ export function useWriteOutcome(): WriteOutcome {
   const [pinRefusal, setPinRefusal] = useState<PinRefusal | null>(null)
   const [createRefusal, setCreateRefusal] = useState<CreateRefusal | null>(null)
 
+  // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
+  // lets scoped-screen-state.test.ts verify the setters from here.
   const beginWrite = useCallback(() => {
     setStaleList(null)
     setPinRefusal(null)
