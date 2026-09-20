@@ -45,6 +45,7 @@ type RouteGroupId =
   | 'versions-write'
   | 'files-write'
   | 'runtime-read'
+  | 'runtime-touch'
   | 'runtime-admin'
   | 'mcp'
 
@@ -83,9 +84,12 @@ export type ServerModeAuthPlanDecision =
 // First-wave server-mode route auth plan — one scope per resource group so
 // callers check exactly the scope required, no over- or under-requirement.
 //   runtime-read:  GET /api/runtime/status
-//   runtime-admin: POST /api/runtime/touch + POST /api/runtime/shutdown
-//     (touch is separated from runtime-read because it mutates daemon state;
-//      shutdown is destructive — both require the admin scope, not the read scope)
+//   runtime-touch: POST /api/runtime/touch
+//     (separated from runtime-read because it mutates daemon state, and from
+//      runtime-admin because it only pushes back the idle timer — an agent's
+//      MCP proxy calls it on every tool invocation and needs nothing else here)
+//   runtime-admin: POST /api/runtime/shutdown + POST /api/runtime/logs/prune
+//     (destructive: ends the process, deletes files)
 const SERVER_MODE_ROUTE_AUTH_PLAN: readonly RouteGroupAuthPlan[] = [
   { group: 'canvas-read', requiredScopes: ['canvas:read'] },
   { group: 'workspace-read', requiredScopes: ['workspace:read'] },
@@ -96,6 +100,7 @@ const SERVER_MODE_ROUTE_AUTH_PLAN: readonly RouteGroupAuthPlan[] = [
   { group: 'versions-write', requiredScopes: ['versions:write'] },
   { group: 'files-write', requiredScopes: ['files:write'] },
   { group: 'runtime-read', requiredScopes: ['runtime:read'] },
+  { group: 'runtime-touch', requiredScopes: ['runtime:touch'] },
   { group: 'runtime-admin', requiredScopes: ['runtime:admin'] },
   { group: 'mcp', requiredScopes: ['mcp:call'] },
 ]

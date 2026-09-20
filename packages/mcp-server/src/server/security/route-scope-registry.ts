@@ -165,15 +165,18 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
   }
 
-  // touch/shutdown/logs-prune all mutate daemon-managed process state
-  // (liveness timer, process lifecycle, on-disk log files) and require the
-  // admin tier even though the HTTP verb for prune is POST like any other
-  // write route.
-  if (
-    path === '/api/runtime/touch' ||
-    path === '/api/runtime/shutdown' ||
-    path === '/api/runtime/logs/prune'
-  ) {
+  // The keepalive is separated from the other two by what it COSTS if
+  // granted, not by whether it mutates. All three mutate daemon-managed
+  // process state, but `touch` only pushes back the idle-shutdown timer,
+  // while shutdown ends the process and prune deletes files. Keeping them
+  // together made a narrow agent credential unbuildable: `touch` is the one
+  // runtime route the MCP proxy calls (server/mcp/daemon-client.ts), so an
+  // agent stripped of `runtime:admin` lost its own liveness ping and the
+  // daemon idled out under it.
+  if (path === '/api/runtime/touch') {
+    return { kind: 'scoped', scopes: ['runtime:touch'] }
+  }
+  if (path === '/api/runtime/shutdown' || path === '/api/runtime/logs/prune') {
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
   if (path.startsWith('/api/runtime/')) {

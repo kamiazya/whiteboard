@@ -13,6 +13,7 @@ const AUTH_SCOPE_VOCABULARY = new Set([
   'files:read',
   'files:write',
   'runtime:read',
+  'runtime:touch',
   'runtime:admin',
   'mcp:call',
 ])
@@ -241,6 +242,7 @@ describe('planServerModeAuth — server-mode plan content', () => {
       'versions-write': ['versions:write'],
       'files-write': ['files:write'],
       'runtime-read': ['runtime:read'],
+      'runtime-touch': ['runtime:touch'],
       'runtime-admin': ['runtime:admin'],
       mcp: ['mcp:call'],
     }

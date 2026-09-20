@@ -7,7 +7,7 @@ import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import { getDataDir } from '../config.js'
 import type { RuntimeStatus } from '../http-server.js'
-import { hasRequiredScopes } from '../security/auth-strategy.js'
+import { type AuthScope, hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
@@ -20,6 +20,19 @@ import { computeStorageReport } from './runtime-storage.js'
 // sliding window is enough to stop a tight local loop from burning CPU.
 const VERIFY_RATE_LIMIT = 60
 const VERIFY_RATE_WINDOW_MS = 60_000
+
+/**
+ * The `/api/runtime/*` tiers a NARROW credential (a macaroon, an OAuth grant,
+ * a pairing token) may reach at all, before its own scopes are checked.
+ *
+ * `runtime:admin` is deliberately absent: shutdown and the log prune stay
+ * daemon-token-only however wide a narrow credential's scope set, so holding
+ * `runtime:admin` in a macaroon buys nothing here.
+ */
+const NARROW_REACHABLE: ReadonlySet<AuthScope> = new Set<AuthScope>([
+  'runtime:read',
+  'runtime:touch',
+])
 
 export interface RuntimeRouterOptions {
   instanceId: string
@@ -116,14 +129,18 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     if (grant.kind === 'anonymous' || grant.kind === 'daemon-token') return next()
 
     // This surface is STRICTER than `/api/*`'s, deliberately, and the
-    // difference is the `runtime:read` test rather than the scope check that
-    // follows it: a narrow credential reaches only the READ half of
+    // difference is the tier ALLOWLIST below rather than the scope check that
+    // follows it: a narrow credential reaches only the non-admin tiers of
     // `/api/runtime/*`, whatever scopes it holds. Dropping it in favour of
     // `hasRequiredScopes` alone would let a grant holding `runtime:admin`
     // reach shutdown and the log prune, which the admin routes have never
     // allowed. That is a per-surface policy, so it stays here rather than
     // moving into the resolver.
-    if (scope?.kind === 'scoped' && scope.scopes.includes('runtime:read')) {
+    //
+    // It is an allowlist of tiers rather than a `!== 'runtime:admin'` test on
+    // purpose: a runtime tier added later is refused to narrow credentials
+    // until someone adds it here, which is the direction that fails closed.
+    if (scope?.kind === 'scoped' && scope.scopes.some((s) => NARROW_REACHABLE.has(s))) {
       if (hasRequiredScopes(grant.scopes, scope.scopes)) return next()
     }
     return c.json({ error: 'unauthorized' }, 401)

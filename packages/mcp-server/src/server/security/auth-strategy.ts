@@ -46,6 +46,12 @@ export const AUTH_SCOPES = [
   'files:read',
   'files:write',
   'runtime:read',
+  // The daemon's idle-shutdown keepalive, and nothing else. Its own scope
+  // because it is the one runtime route an agent's MCP proxy calls on every
+  // tool invocation: folded into `runtime:admin` it drags the daemon's stop
+  // and log-delete along, and folded into `runtime:read` it drags the status
+  // and storage reports. Neither is what a keepalive needs.
+  'runtime:touch',
   'runtime:admin',
   'mcp:call',
 ] as const
