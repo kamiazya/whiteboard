@@ -74,6 +74,10 @@
       "types": "./src/read-plane.ts",
       "import": "./src/read-plane.ts"
     },
+    "./replica-session-key": {
+      "types": "./src/replica-session-key.ts",
+      "import": "./src/replica-session-key.ts"
+    },
     "./select-document-transport": {
       "types": "./src/select-document-transport.ts",
       "import": "./src/select-document-transport.ts"
