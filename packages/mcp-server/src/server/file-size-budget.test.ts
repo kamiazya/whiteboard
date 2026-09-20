@@ -177,7 +177,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // id-picking family. Every one of them is a cell
   // `element-verb-parity.test.ts` reported on its first reading, and with
   // them its `lines` column is empty.
-  'apps/web/src/lib/spatial/commands.ts': 1498,
+  // Raised 1498 -> 1629 for the `attach` verb: `set-edge-end`,
+  // `set-line-end`, the `EndTarget` both take, the `otherEndNode` self-loop
+  // guard they share, and `endInkCommand` joining the id-picking family. It
+  // is the first verb the matrix reported missing from BOTH collections
+  // rather than from one, which is why one increment adds two writes.
+  'apps/web/src/lib/spatial/commands.ts': 1629,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -700,7 +705,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // over generated NODES — and the ledger's fourth direction fails on a
   // `not modelled` the run DOES produce, so each entry is a sentence
   // somebody had to be able to defend rather than a line of boilerplate.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2724,
+  // 2724 -> 2728 for the two `attach` ledger entries, unreachable from this
+  // model for the reason every other end-drag entry is.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2728,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
@@ -717,7 +724,12 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // whole content is that a relation and a stroke of the same id go to
   // different writes. A table of ink verbs where every row is one example is
   // what stops the next one being added without one.
-  'apps/web/src/lib/spatial/commands.test.ts': 1808,
+  // Raised 1808 -> 1936 with the five re-attachment cases: a relation moved
+  // onto another box, the two it refuses (a self-loop, a box the canvas does
+  // not hold), a stroke end dropped in empty space and one dropped on a box,
+  // and the collection-picking sibling that answers nothing for a relation
+  // aimed at empty space.
+  'apps/web/src/lib/spatial/commands.test.ts': 1936,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
