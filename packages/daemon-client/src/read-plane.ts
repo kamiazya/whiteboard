@@ -54,23 +54,17 @@ const textEncoder = new TextEncoder()
 
 // A JSON array's own delimiters mark each element's boundary, so
 // (documentId, epoch) pairs that would collide under bare string
-// concatenation ("a1" + "2" === "a" + "12") derive distinct info strings.
-function deriveInfo(documentId: string, epoch: number): Uint8Array<ArrayBuffer> {
-  return textEncoder.encode(JSON.stringify(['wb-doc-key-v1', documentId, epoch]))
-}
-
-function aadFor(documentId: string, epoch: number): Uint8Array<ArrayBuffer> {
-  return textEncoder.encode(JSON.stringify(['wb-doc-aad-v1', documentId, epoch]))
+// concatenation ("a1" + "2" === "a" + "12") encode distinctly.
+function contextBytes(tag: string, { documentId, epoch }: DocumentKeyContext) {
+  return textEncoder.encode(JSON.stringify([tag, documentId, epoch]))
 }
 
 const WORKSPACE_KEY_BYTES = 32
 const DERIVED_KEY_BITS = 256
 
-export interface DeriveDocumentKeyInput {
+export interface DeriveDocumentKeyInput extends DocumentKeyContext {
   workspaceKey: Uint8Array<ArrayBuffer>
   workspaceKeySalt: Uint8Array<ArrayBuffer>
-  documentId: string
-  epoch: number
 }
 
 /**
@@ -82,8 +76,7 @@ export interface DeriveDocumentKeyInput {
 export async function deriveDocumentKeyBytes({
   workspaceKey,
   workspaceKeySalt,
-  documentId,
-  epoch,
+  ...context
 }: DeriveDocumentKeyInput): Promise<Uint8Array<ArrayBuffer>> {
   if (workspaceKey.length !== WORKSPACE_KEY_BYTES) {
     throw new RangeError(
@@ -92,7 +85,12 @@ export async function deriveDocumentKeyBytes({
   }
   const hkdfKey = await crypto.subtle.importKey('raw', workspaceKey, 'HKDF', false, ['deriveBits'])
   const bits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', hash: 'SHA-256', salt: workspaceKeySalt, info: deriveInfo(documentId, epoch) },
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: workspaceKeySalt,
+      info: contextBytes('wb-doc-key-v1', context),
+    },
     hkdfKey,
     DERIVED_KEY_BITS,
   )
@@ -119,7 +117,7 @@ export async function sealBytes(
   const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES))
   const ct = new Uint8Array(
     await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv, additionalData: aadFor(context.documentId, context.epoch) },
+      { name: 'AES-GCM', iv, additionalData: contextBytes('wb-doc-aad-v1', context) },
       key,
       plaintext,
     ),
@@ -135,7 +133,7 @@ export async function openBytes(
 ): Promise<Uint8Array<ArrayBuffer>> {
   const parsed = sealedEnvelopeSchema.parse(envelope)
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: parsed.iv, additionalData: aadFor(context.documentId, context.epoch) },
+    { name: 'AES-GCM', iv: parsed.iv, additionalData: contextBytes('wb-doc-aad-v1', context) },
     key,
     parsed.ct,
   )
