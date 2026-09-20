@@ -109,6 +109,7 @@ describe('createMcpHttpAuthMiddleware carries the request into the strategy', ()
             pairingTokens: {
               validate: (token, origin) =>
                 token === 'paired' && origin === 'https://app.example.com',
+              bindingOf: () => null,
             },
           }),
         }),
