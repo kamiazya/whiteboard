@@ -75,6 +75,91 @@ function buildTree(documents: readonly WorkspaceDocumentEntry[]): TreeNode[] {
   return freeze(root)
 }
 
+/**
+ * The document row: a button, because opening one is the point of the tree.
+ *
+ * Its own component because a document row and a folder row share nothing
+ * but the indent — different element, different roles, different handlers —
+ * and reading them as one `node.canvas ? … : …` expression meant holding
+ * both in mind to check either.
+ */
+function DocumentRow({
+  document,
+  name,
+  onOpen,
+  onActivate,
+  onDocumentContextMenu,
+  renderIcon,
+  selectedPath,
+}: {
+  document: WorkspaceDocumentEntry
+  /** The path segment, shown when the document carries no display name. */
+  name: string
+  onOpen: (document: WorkspaceDocumentEntry) => void
+  onActivate?: (document: WorkspaceDocumentEntry) => void
+  onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
+  renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
+  selectedPath?: string
+}) {
+  return (
+    <button
+      type="button"
+      data-doc-path={document.path}
+      aria-current={document.path === selectedPath ? 'true' : undefined}
+      onClick={() => onOpen(document)}
+      onContextMenu={
+        onDocumentContextMenu === undefined
+          ? undefined
+          : (event) => {
+              event.preventDefault()
+              onDocumentContextMenu(document, event.clientX, event.clientY)
+            }
+      }
+      onDoubleClick={onActivate === undefined ? undefined : () => onActivate(document)}
+      onKeyDown={
+        onActivate === undefined
+          ? undefined
+          : (event) => {
+              if (event.key === 'Enter') {
+                // Without this the keydown ALSO fires the native
+                // button click, selecting after the open.
+                event.preventDefault()
+                onActivate(document)
+              }
+            }
+      }
+      className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
+    >
+      {/* A caller-supplied miniature when there is one; otherwise the
+          kind, which the list already carries. */}
+      {renderIcon?.(document) ?? <KindIcon kind={document.kind} />}
+      {/* The display name, which is what every other surface shows and
+          what a `[[reference]]` resolves by. The segment is the
+          fallback, not the label. */}
+      <span className="truncate">{document.name ?? name}</span>
+    </button>
+  )
+}
+
+/** The kind the list already carries, when no caller draws its own. */
+function KindIcon({ kind }: { kind: WorkspaceDocumentEntry['kind'] }) {
+  return kind === 'spatial' ? (
+    <LayoutGrid data-kind="spatial" className="text-muted-foreground size-3.5 shrink-0" />
+  ) : (
+    <FileText data-kind={kind ?? 'markdown'} className="text-muted-foreground size-3.5 shrink-0" />
+  )
+}
+
+/** A folder: a label, never a target. Only its children can be opened. */
+function FolderRow({ name }: { name: string }) {
+  return (
+    <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5 text-sm">
+      <Folder className="size-3.5 shrink-0" />
+      <span className="truncate">{name}</span>
+    </span>
+  )
+}
+
 function TreeItem({
   node,
   onOpen,
@@ -122,62 +207,18 @@ function TreeItem({
         ) : (
           <span className="w-[1.125rem]" aria-hidden="true" />
         )}
-        {node.canvas ? (
-          <button
-            type="button"
-            data-doc-path={node.canvas.path}
-            aria-current={node.canvas.path === selectedPath ? 'true' : undefined}
-            onClick={() => node.canvas && onOpen(node.canvas)}
-            onContextMenu={
-              onDocumentContextMenu === undefined
-                ? undefined
-                : (event) => {
-                    event.preventDefault()
-                    if (node.canvas)
-                      onDocumentContextMenu(node.canvas, event.clientX, event.clientY)
-                  }
-            }
-            onDoubleClick={
-              onActivate === undefined ? undefined : () => node.canvas && onActivate(node.canvas)
-            }
-            onKeyDown={
-              onActivate === undefined
-                ? undefined
-                : (event) => {
-                    if (event.key === 'Enter' && node.canvas) {
-                      // Without this the keydown ALSO fires the native
-                      // button click, selecting after the open.
-                      event.preventDefault()
-                      onActivate(node.canvas)
-                    }
-                  }
-            }
-            className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
-          >
-            {/* A caller-supplied miniature when there is one; otherwise the
-                kind, which the list already carries. */}
-            {renderIcon?.(node.canvas) ??
-              (node.canvas.kind === 'spatial' ? (
-                <LayoutGrid
-                  data-kind="spatial"
-                  className="text-muted-foreground size-3.5 shrink-0"
-                />
-              ) : (
-                <FileText
-                  data-kind={node.canvas.kind ?? 'markdown'}
-                  className="text-muted-foreground size-3.5 shrink-0"
-                />
-              ))}
-            {/* The display name, which is what every other surface shows and
-                what a `[[reference]]` resolves by. The segment is the
-                fallback, not the label. */}
-            <span className="truncate">{node.canvas.name ?? node.name}</span>
-          </button>
+        {node.canvas === null ? (
+          <FolderRow name={node.name} />
         ) : (
-          <span className="text-muted-foreground flex items-center gap-1.5 px-1.5 py-0.5 text-sm">
-            <Folder className="size-3.5 shrink-0" />
-            <span className="truncate">{node.name}</span>
-          </span>
+          <DocumentRow
+            document={node.canvas}
+            name={node.name}
+            onOpen={onOpen}
+            onActivate={onActivate}
+            onDocumentContextMenu={onDocumentContextMenu}
+            renderIcon={renderIcon}
+            selectedPath={selectedPath}
+          />
         )}
       </div>
       {hasChildren && expanded && (
