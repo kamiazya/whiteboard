@@ -430,3 +430,49 @@ one that gets cited approvingly and applied nowhere.
 decision 2. They are both keys and both attenuate one-way, which is exactly
 what makes the conflation tempting; they fail differently, and a model that
 hides that overstates the weaker one.
+
+## Addendum (2026-09-20): decision 9's first application has no subject, and is withdrawn
+
+Decision 9 named two first applications and left their order open. The first
+of them — **what an agent holds** — rests on a premise that is not true of
+this codebase, found by tracing the agent paths rather than re-reading the
+ADR:
+
+> An agent reaching the daemon carries the daemon token, and there is no
+> narrower thing to give it.
+
+**No shipped agent path reaches the daemon at all.** `.mcp.json` runs
+`npx @kamiazya/whiteboard-mcp` over stdio, and `cli/dispatcher.ts`'s
+`dispatchMcp` runs `createMcpServer()` in-process against local stores. It
+opens the database directly and presents no credential to anything, so there
+is no token to narrow. The one process that does send the daemon token as a
+bearer to `/mcp` is `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs`
+— development tooling, on a loopback daemon, run by the same user who owns
+the data directory it is reaching.
+
+Narrowing that is not worth a minting route on the production daemon (user
+decision, 2026-09-20), so **the act plane stops at enforcement**: a macaroon
+presented to `/api/*`, the websocket and (since
+[#1653](https://github.com/kamiazya/whiteboard/pull/1653)) `/mcp` is verified
+and its scopes enforced, and nothing in production issues one. `mintMacaroon`
+and `attenuateMacaroon` stay as the tested core the moment a real holder
+exists.
+
+Two things this ADR's reasoning still carries, because they were checked and
+are independent of the withdrawn application:
+
+- **`runtime:admin` is not containment against a same-user agent.** It is a
+  real boundary against a caller that is not running as you; it is none at all
+  against one that is, because `whiteboard daemon stop` never calls
+  `/api/runtime/shutdown` — it reads the pid and signals the process. Decision
+  4's "the daemon cannot reach into a holder and take a token back" has a
+  sibling: the daemon cannot stop a holder that can signal it. Said plainly in
+  `docs/explanation/security-model.md`.
+- **The second application — the content-key tree, decision 3 over ADR-0042's
+  per-workspace key — is untouched by this.** It is on the stronger plane and
+  its subject is the browser replica, which exists.
+
+What would bring the first application back: a shipped agent path that reaches
+the daemon over HTTP with a credential — a remote or multi-user deployment, or
+a packaged client that proxies to the daemon rather than opening the store.
+Until then, an issued token would have no holder.
