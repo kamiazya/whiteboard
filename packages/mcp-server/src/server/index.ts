@@ -6,6 +6,7 @@ import { getDataDir } from './config.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
 import { startHttpServer } from './http-server.js'
 import { getLogger } from './log.js'
+import { resolveReplicaEnv } from './replica-env.js'
 import { resolveMcpProtectedResourceMetadataFromEnv } from './security/mcp-auth.js'
 import { parseOAuthClientRegistryEnv } from './security/oauth-authz-registry.js'
 import {
@@ -245,6 +246,10 @@ export async function main() {
     }
   }
 
+  // Read once here, after the startup-issue gate above already validated it
+  // — never re-read process.env inside a route.
+  const replicaEnv = resolveReplicaEnv(process.env)
+
   const running = await startHttpServer({
     port,
     host,
@@ -253,6 +258,8 @@ export async function main() {
     idleTimeoutMs,
     allowedWebOrigins,
     oauthClientRegistry: oauthRegistry.registry,
+    replicaTier: replicaEnv.tier,
+    replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
     onClose: daemonMode
       ? async () => {
           await deleteDaemonRecord(dataDir)

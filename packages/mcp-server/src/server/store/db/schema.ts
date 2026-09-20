@@ -15,6 +15,10 @@ interface WorkspacesTable {
   segment: string | null
   createdAt: Timestamp
   updatedAt: Timestamp
+  // The read plane's per-workspace tier override (ADR-0042 decisions 1/3/5).
+  // null means "use the process's WHITEBOARD_REPLICA_TIER default" — see
+  // migration 0029.
+  replicaTier: string | null
 }
 
 interface BranchesTable {
@@ -154,6 +158,16 @@ interface WorkspaceMembershipsTable {
   createdAt: Timestamp
 }
 
+// The read plane's per-workspace content key (ADR-0042 decisions 1/3/5,
+// ADR-0043 decision 3). One row per workspace, minted lazily; no epoch here
+// (a document's own epoch lives beside its ciphertext, not on this key).
+interface WorkspaceReplicaKeysTable {
+  workspaceId: string
+  key: Uint8Array
+  salt: Uint8Array
+  createdAt: Timestamp
+}
+
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
   branches: BranchesTable
@@ -167,4 +181,5 @@ export interface DatabaseSchema {
   memberProfiles: MemberProfilesTable
   profileCredentials: ProfileCredentialsTable
   workspaceMemberships: WorkspaceMembershipsTable
+  workspaceReplicaKeys: WorkspaceReplicaKeysTable
 }

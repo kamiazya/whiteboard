@@ -68,6 +68,10 @@ export const membershipRefusalSchema = z
       'unknown_workspace',
       'invalid_workspace_id',
       'requires_person_session',
+      // The replica-key route reuses this refusal shape rather than
+      // inventing a second one for a family this small — see
+      // api-contracts/replica-key.ts.
+      'replica_not_allowed',
     ]),
     message: z.string().min(1),
   })

@@ -810,7 +810,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // whose rows are pinned exactly is one whose history is prose, so a merge
   // of two histories costs lines rather than losing one of them.
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 976,
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1286,
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1313,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,

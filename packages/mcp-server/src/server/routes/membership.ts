@@ -47,7 +47,7 @@ function toSummary(profile: MemberProfile): MemberProfileSummary {
  *  not the uncaught ValidationError `workspaceExists` throws underneath —
  *  the same guard `files.ts`'s purge-dangling route applies before its own
  *  `workspaceExists` call. */
-function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
+export function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
   try {
     validateWorkspaceId(workspaceId)
     return null
@@ -58,7 +58,7 @@ function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
   }
 }
 
-function unknownWorkspaceRefusal(workspaceId: string): MembershipRefusal {
+export function unknownWorkspaceRefusal(workspaceId: string): MembershipRefusal {
   return {
     error: 'unknown_workspace',
     message: `no such workspace: ${workspaceId}`,

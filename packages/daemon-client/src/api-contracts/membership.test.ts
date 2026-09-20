@@ -169,6 +169,7 @@ describe('membershipRefusalSchema', () => {
     'unknown_workspace',
     'invalid_workspace_id',
     'requires_person_session',
+    'replica_not_allowed',
   ] as const
 
   it.each(codes)('roundtrips the %s refusal', (error) => {

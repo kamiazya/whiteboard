@@ -58,6 +58,9 @@ const AUTH_SURFACES = {
   'packages/mcp-server/src/server/routes/ws-ticket.ts':
     'resolver: POST /api/ws-ticket. Judged by KIND, and only `oauth-grant` mints: a ticket exists to bridge an OAuth grant onto the websocket, so it needs WHICH grant is asking, not merely that someone may act. The daemon token has never minted one.',
 
+  'packages/mcp-server/src/server/routes/replica-key.ts':
+    "resolver: POST /api/workspaces/:workspaceId/replica-key. `anonymous`/`daemon-token` bypass membership entirely (already full authority over the data this key decrypts); every other grant must carry a PASSKEY BINDING (`grant.passkey`), which only the `pairing` kind ever sets — the registry's `workspace:read` scope alone is not enough, an OAuth grant holding it is refused with no binding to check.",
+
   'packages/mcp-server/src/server/security/server-mode-middleware.ts':
     'own-strategy: server-mode validates a JWT against an external IdP, so there is no credential this daemon issued to resolve. Folding it into the resolver is a separate increment with its own review; what it shares today is the scope vocabulary and the route-scope registry.',
 } satisfies Record<string, SurfacePolicy>
@@ -105,8 +108,9 @@ describe('every auth surface answers for itself', () => {
 
   // The count IS the finding. Seven was a surprise to the person who had just
   // refactored all of them, so it is worth a reader having to change a number
-  // deliberately rather than watching one drift.
-  it('holds the surface count at seven', () => {
-    expect(scan().surfaces).toHaveLength(7)
+  // deliberately rather than watching one drift. Eight, since the read
+  // plane's replica-key route (ADR-0042 decisions 1/3/5) added a surface.
+  it('holds the surface count at eight', () => {
+    expect(scan().surfaces).toHaveLength(8)
   })
 })

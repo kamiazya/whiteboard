@@ -204,6 +204,17 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     decide: always('runtime:admin'),
   },
 
+  // The read plane's workspace content key (ADR-0042 decisions 1/3/5). The
+  // key confers READ, so workspace:read is the bar here rather than the
+  // catch-all's write-by-default answer below — a grant lacking the
+  // required passkey binding is refused by the handler itself regardless of
+  // scope.
+  {
+    name: 'workspace replica-key',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/replica-key$/, 'POST'),
+    decide: always('workspace:read'),
+  },
+
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
   //
   // The /api/v1 document surface (server-core's createServer, mounted when

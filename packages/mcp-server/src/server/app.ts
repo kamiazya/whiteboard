@@ -28,6 +28,7 @@ import { createMcpServer } from './mcp/index.js'
 import type { PairingUnavailableReason } from './mcp/pairing-link.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
+import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
@@ -41,6 +42,7 @@ import {
   OAUTH_AUTHZ_PATHS,
 } from './routes/oauth-authz.js'
 import { createPairingRouter } from './routes/pairing.js'
+import { createReplicaKeyRouter } from './routes/replica-key.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
@@ -454,6 +456,29 @@ export function createApp(options: AppOptions) {
       }),
     )
   }
+  // The read plane's workspace-key route (ADR-0042 decisions 1/3/5). Same
+  // mount condition as membership above, plus `replicaKeys` — a member's
+  // session is what this route hands the key to, so it needs the same
+  // membership lookup and workspace-existence check.
+  if (
+    options.authMode === 'local-daemon' &&
+    options.pairing !== undefined &&
+    options.members !== undefined &&
+    options.serverDeps !== undefined &&
+    options.replicaKeys !== undefined
+  ) {
+    const { members, serverDeps, replicaKeys } = options
+    app.route(
+      '/',
+      createReplicaKeyRouter({
+        keys: replicaKeys,
+        members,
+        leaseTtlMs: options.replicaLeaseTtlMs ?? DEFAULT_REPLICA_LEASE_TTL_MS,
+        workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
+        credentialResolver,
+      }),
+    )
+  }
 
   // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
@@ -474,6 +499,9 @@ export function createApp(options: AppOptions) {
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
+      ...(options.authMode === 'local-daemon' && options.replicaKeys !== undefined
+        ? { replicaTier: options.replicaKeys.effectiveTier.bind(options.replicaKeys) }
+        : {}),
     }),
   )
   // Shared versionStore so the files router can do version-aware purge

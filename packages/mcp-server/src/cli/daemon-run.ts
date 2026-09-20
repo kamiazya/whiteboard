@@ -18,13 +18,16 @@ import { purgeLegacyWebOriginTrustFile } from '../daemon/purge-legacy-trust-file
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
 import { getLogger } from '../server/log.js'
+import { resolveReplicaEnv } from '../server/replica-env.js'
 import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from '../server/security/web-origin-allowlist.js'
+import { collectStartupEnvIssues } from '../server/startup-env.js'
 import {
   type DaemonRunReadyResult,
   daemonRunReadyResultSchema,
 } from '../shared/api-contracts/daemon-run.js'
 import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
+import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 export type DaemonRunOutcome =
@@ -35,6 +38,7 @@ export type DaemonRunOutcome =
         | 'invalid_allowed_web_origins'
         | 'invalid_oauth_client_registry'
         | 'token_source_conflict'
+        | 'startup_env'
     }
   | { kind: 'refused'; message: string }
   | { kind: 'running'; result: DaemonRunReadyResult }
@@ -163,6 +167,25 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     }
   }
 
+  // Same fail-fast posture as the two guards above, for every remaining
+  // setting an operator can configure (WHITEBOARD_REPLICA_TIER, the storage
+  // family, WHITEBOARD_LOG_LEVEL — see startup-env.ts). This is the
+  // packaged `whiteboard daemon run` CLI command, a separate startup path
+  // from server/index.ts's dev entrypoint, and must apply the same gate or
+  // an invalid value is silently ignored rather than aborting.
+  const startupIssues = collectStartupEnvIssues(dataDir, options.env ?? process.env)
+  if (startupIssues.length > 0) {
+    getLogger('daemon-startup').error(
+      { issues: describeEnvIssues(startupIssues) },
+      'configured settings could not be understood; refusing to start',
+    )
+    return {
+      kind: 'input-error',
+      message: `Invalid configuration: ${startupIssues.map((issue) => issue.variable).join(', ')}. See the daemon log for details.`,
+      code: 'startup_env',
+    }
+  }
+
   // Fail fast on ambiguous token input: honouring one source silently would
   // let an operator's script think stdin (or the env var) took effect when
   // the other one actually did. Checked by presence only — never touches
@@ -205,12 +228,18 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   return await withDaemonStartupLock(dataDir, async () => {
     const port = options.port ?? (await findAvailablePort())
 
+    // Read once here, after the startup-issue gate above already validated
+    // it — never re-read process.env inside a route.
+    const replicaEnv = resolveReplicaEnv(options.env ?? process.env)
+
     const running = await startHttpServer({
       port,
       host,
       token,
       allowedWebOrigins,
       oauthClientRegistry: oauthRegistry.registry,
+      replicaTier: replicaEnv.tier,
+      replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
     })
 
     const startedAt = new Date().toISOString()

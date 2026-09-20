@@ -108,6 +108,38 @@ this screen from a shared machine, an unattended tab or someone looking over
 a shoulder; it is not encryption, and a process that later owns the origin
 still reads the storage directly.
 
+## Replica key (offline read plane)
+
+A member's session can ask the daemon for a workspace's read-plane content
+key (`POST /api/workspaces/:workspaceId/replica-key`), so a browser can keep
+an encrypted offline replica and read it while the daemon is unreachable. What
+this protects: a replica sitting on a device is ciphertext without the key,
+and a person removed from a workspace's membership is refused the key again
+the next time their session asks for one — even though nothing about their
+*existing* replica or its content changes at that moment.
+
+**The daemon holds the key in plaintext.** It mints and stores the key itself,
+so this is not end-to-end encryption from the daemon's point of view, and
+product copy about it must never say "cryptographically revoked" — a removed
+member's key is withheld going forward, not invalidated retroactively. A
+replica the browser already decrypted before removal keeps whatever it
+already read; the protection is against a *future* fetch, not against
+something already on disk.
+
+Three tiers. `workspaces.replicaTier` is a per-workspace override the daemon
+already reads (falling back to the `WHITEBOARD_REPLICA_TIER` default below
+when unset), but nothing yet writes it — no CLI flag or admin route sets a
+workspace's tier today, so every workspace runs on the process default until
+that write path ships (see
+[Configuration](../reference/configuration.md)):
+
+- `no-offline` — the daemon refuses to hand out a key for this workspace at
+  all (`replica_not_allowed`).
+- `offline` — the key is handed out with no expiry attached to the response.
+- `bounded` — the key comes with a `leaseExpiresAt` timestamp. The daemon
+  keeps no lease table server-side; honouring the lapse (discarding the key
+  once it passes) is the browser's own responsibility.
+
 ## Daemon impersonation (loopback port squatting, the other direction)
 
 The section above concerns a process inheriting a browser ORIGIN. The
