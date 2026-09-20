@@ -51,14 +51,6 @@ const profileCredentialRowSchema = z
   })
   .strict()
 
-const workspaceMembershipRowSchema = z
-  .object({
-    workspaceId: z.string().min(1),
-    profileId: z.string().min(1),
-    createdAt: z.number(),
-  })
-  .strict()
-
 const profileCredentialSchema = profileCredentialRowSchema.pick({
   origin: true,
   credentialId: true,
@@ -68,8 +60,8 @@ const memberProfileSchema = memberProfileRowSchema.extend({
   credentials: z.array(profileCredentialSchema),
 })
 
-export type MemberProfile = z.infer<typeof memberProfileSchema>
-export type MembershipStatus = 'member' | 'not-a-member'
+type MemberProfile = z.infer<typeof memberProfileSchema>
+type MembershipStatus = 'member' | 'not-a-member'
 
 export class CredentialClaimedError extends Error {
   constructor(
@@ -82,7 +74,7 @@ export class CredentialClaimedError extends Error {
   }
 }
 
-export interface EnsureProfileInput {
+interface EnsureProfileInput {
   origin: string
   credentialId: string
   displayName: string
@@ -107,25 +99,23 @@ export interface MemberProfileStore {
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
 }
 
-export function createMemberProfileStore(db: Database): MemberProfileStore {
-  async function loadProfile(profileId: string): Promise<MemberProfile | null> {
-    const row = await db
-      .selectFrom('memberProfiles')
-      .selectAll()
-      .where('id', '=', profileId)
-      .executeTakeFirst()
-    if (row === undefined) return null
-    const credentialRows = await db
-      .selectFrom('profileCredentials')
-      .select(['origin', 'credentialId'])
-      .where('profileId', '=', profileId)
-      .execute()
-    return memberProfileSchema.parse({
-      ...memberProfileRowSchema.parse(row),
-      credentials: credentialRows.map((r) => profileCredentialSchema.parse(r)),
-    })
-  }
+// `db` may be a transaction: Kysely's Transaction is a Kysely.
+async function loadProfile(db: Database, profileId: string): Promise<MemberProfile | null> {
+  const row = await db
+    .selectFrom('memberProfiles')
+    .selectAll()
+    .where('id', '=', profileId)
+    .executeTakeFirst()
+  if (row === undefined) return null
+  const credentials = await db
+    .selectFrom('profileCredentials')
+    .select(['origin', 'credentialId'])
+    .where('profileId', '=', profileId)
+    .execute()
+  return memberProfileSchema.parse({ ...row, credentials })
+}
 
+export function createMemberProfileStore(db: Database): MemberProfileStore {
   return {
     async profileForCredential(origin, credentialId) {
       const pin = await db
@@ -135,7 +125,7 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
         .where('credentialId', '=', credentialId)
         .executeTakeFirst()
       if (pin === undefined) return null
-      return loadProfile(pin.profileId)
+      return loadProfile(db, pin.profileId)
     },
 
     async ensureProfile({ origin, credentialId, displayName, profileId }) {
@@ -160,25 +150,13 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
             )
             throw new CredentialClaimedError(origin, credentialId, existing.profileId)
           }
-          const profileRow = await trx
-            .selectFrom('memberProfiles')
-            .selectAll()
-            .where('id', '=', existing.profileId)
-            .executeTakeFirst()
-          if (profileRow === undefined) {
+          const profile = await loadProfile(trx, existing.profileId)
+          if (profile === null) {
             throw new Error(
               `profileCredentials row points at a missing profile: ${existing.profileId}`,
             )
           }
-          const credentialRows = await trx
-            .selectFrom('profileCredentials')
-            .select(['origin', 'credentialId'])
-            .where('profileId', '=', existing.profileId)
-            .execute()
-          return memberProfileSchema.parse({
-            ...memberProfileRowSchema.parse(profileRow),
-            credentials: credentialRows.map((r) => profileCredentialSchema.parse(r)),
-          })
+          return profile
         }
 
         const now = Date.now()
@@ -206,19 +184,14 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
       const rows = await db
         .selectFrom('workspaceMemberships')
         .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
-        .select([
-          'memberProfiles.id',
-          'memberProfiles.displayName',
-          'memberProfiles.createdAt',
-          'memberProfiles.updatedAt',
-        ])
+        .select('memberProfiles.id')
         .where('workspaceMemberships.workspaceId', '=', workspaceId)
         .orderBy('memberProfiles.createdAt', 'asc')
         .orderBy('memberProfiles.id', 'asc')
         .execute()
       const profiles: MemberProfile[] = []
       for (const row of rows) {
-        const profile = await loadProfile(row.id)
+        const profile = await loadProfile(db, row.id)
         if (profile !== null) profiles.push(profile)
       }
       return profiles
@@ -233,23 +206,17 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
     },
 
     async revokeL1Membership(workspaceId, profileId) {
-      const credentialRows = await db
+      const credentials = await db
         .selectFrom('profileCredentials')
         .select(['origin', 'credentialId'])
         .where('profileId', '=', profileId)
         .execute()
-      const credentials = credentialRows.map((r) => profileCredentialSchema.parse(r))
-
       const deleted = await db
         .deleteFrom('workspaceMemberships')
         .where('workspaceId', '=', workspaceId)
         .where('profileId', '=', profileId)
-        .returningAll()
+        .returning('profileId')
         .execute()
-      // Parsed for shape, not read: proves what was actually deleted was a
-      // membership row rather than an artifact of `returningAll()`.
-      for (const row of deleted) workspaceMembershipRowSchema.parse(row)
-
       return { removed: deleted.length > 0, credentials }
     },
 

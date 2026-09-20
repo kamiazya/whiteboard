@@ -51,13 +51,7 @@
         // exported anyway: migration 0011 is recorded history and must stay
         // byte-identical (see its own doc comment), so the `export` keyword
         // cannot be dropped even though this file is now its only caller.
-        "src/server/store/db/migrations/0011-import-fs-blobs.ts": ["exports"],
-        // MemberProfile/MembershipStatus/EnsureProfileInput are this store's
-        // public contract (ADR-0041's S0-3). Unused today only because no
-        // route consumes it yet — S0-4's membership routes (list/add/remove)
-        // and S2's key-handout route are the named consumers; drop this entry
-        // once either lands.
-        "src/server/security/member-profile-store.ts": ["types"]
+        "src/server/store/db/migrations/0011-import-fs-blobs.ts": ["exports"]
       }
     },
     "packages/model": {
