@@ -329,6 +329,10 @@ const COMMAND_COVERAGE = {
     'not modelled: no gesture deletes ink; the Delete keypress against a selected line is line-ink.browser.test.tsx',
   'move-line':
     'not modelled: the model drives POINTER gestures and no pointer gesture moves ink — nudging a selected stroke is a keypress. Its canvas meaning is commands.test.ts (plus the additivity property beside it) and its keyboard path is ink-nudge.browser.test.tsx',
+  'set-line-ends':
+    'not modelled: the ink menu\u2019s Arrows row, a single-field write with no gesture or selection coupling — the same class as set-edge-ends beside it. Its canvas meaning is commands.test.ts and its row is ink-ends.browser.test.tsx',
+  'set-line-side':
+    'not modelled: the ink menu\u2019s From/To side rows, the same class as set-edge-side beside them. Its canvas meaning is commands.test.ts and its rows are ink-ends.browser.test.tsx',
   'set-line-facet':
     'not modelled: a facet write with no gesture or selection coupling — the same class as set-node-facet and set-edge-facet beside it. Its canvas meaning is commands.test.ts and its one surface is the ink menu\u2019s Group (freehand-ink.browser.test.tsx)',
   'set-line-label':

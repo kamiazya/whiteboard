@@ -285,20 +285,41 @@ Two things it measured:
   facets, and where the stroke sits — and the editor wrote NONE of them.
   Ink could be drawn, picked, banded, shift-added, ungrouped, locked and
   deleted, and after that it was fixed. Nothing was red about that.
-  Two were closed in the increment after (`move-line` on the arrow keys,
-  `set-line-color` on the ink menu's swatch row), which is the matrix
-  working in the direction it exists for: each fix had to come past the
-  `gap:` entry that named it, and the pinned count moved 7 -> 5 in the same
-  diff. The remaining five are the ends, the side, the bends and the facets,
-  and the DRAG is recorded beside the move as what a command's existence does
-  not buy — the gesture machine is keyed on a node id, so ink joins the
-  keyboard nudge and not yet the pointer.
+  All seven were closed in the increments after, and the pinned count moved
+  7 -> 5 -> 4 -> 3 -> 2 -> 0 one diff at a time. That is the matrix working
+  in the direction it exists for: each fix had to come past the `gap:` entry
+  that named it, and each entry had to stop being true before the suite went
+  green again.
+  Three things the burn-down measured, none of which a reading would have
+  found. **Most of the work was already done and pointed at one collection**
+  — the renderer draws a line's label (`composeEdgeLabel` takes a relation
+  or a line), the bend affordance reads only `{id, bends}`, and the double
+  press already armed the label editor; four reads of `canvas.edges` were
+  what made each look absent. **Building a verb is how its blocker is
+  found**: Group could never be offered because a right-click on ink
+  collapsed the selection to one id, where the node branch two lines above
+  had always promoted and kept it. And **the full browser run found what the
+  increment's own tests could not** — the ink drag replaced the marquee
+  branch, which was also where a press on ink took focus and where its
+  double press opened the label editor, and the event it replaced was also
+  what dropped the node selection. Each is about what happens AFTER a
+  release that writes nothing, so a test of the new behaviour passes over
+  all three.
 - **A family that issues no verb of its own is invisible to a verb matrix.**
   Copy, cut, paste and duplicate build a batch of `create-node`/`create-edge`,
   so every cell reads `command` for them and the family looks answered; what
   actually decides which kinds survive a copy is `clipboardFragmentSchema`'s
-  shape. That needed its own four-cell table, read off the schema's own keys.
-  Before reaching for a matrix, ask what the axis CANNOT see.
+  shape. That needed its own four-cell table, read off the schema's own keys,
+  and closing it turned up a defect of the same family: the effect that lifts
+  a pending cut looked a held id up in `canvas.nodes` alone, so a held stroke
+  read as DELETED and a cut stroke pasted as a copy. Before reaching for a
+  matrix, ask what the axis CANNOT see.
+  A fourth answer came out of the burn-down and is worth copying. A cell is
+  (verb, collection), so the moment ANY command exists for the pair it flips
+  to `command` — and whatever that command does not reach goes quiet again.
+  `command, gap: <reason>` is how a partly-closed cell keeps saying so; the
+  ink drag carried one for exactly as long as the pointer could not do what
+  the arrow keys already did.
 
 It is NOT a coverage ledger, and the difference decides where each belongs:
 a ledger tallies what a run PRODUCED over one declared surface, and a matrix

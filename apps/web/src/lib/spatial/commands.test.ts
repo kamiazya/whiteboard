@@ -1542,6 +1542,51 @@ describe('lines in the editor', () => {
     expect(() => spatialCanvasSchema.parse(cleared)).not.toThrow()
   })
 
+  it('draws arrowheads on a stroke, both ends at once', () => {
+    const next = applyCommand(lineCanvas(), {
+      kind: 'set-line-ends',
+      id: 'l1',
+      fromEnd: 'arrow',
+      toEnd: 'none',
+    })
+    expect(next.lines?.[0]?.from.end).toBe('arrow')
+    expect(next.lines?.[0]?.to.end).toBe('none')
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
+  it('pins the side a stroke leaves a box from, and unpins it', () => {
+    const pinned = applyCommand(lineCanvas(), {
+      kind: 'set-line-side',
+      id: 'l1',
+      endpoint: 'from',
+      side: 'left',
+    })
+    expect(pinned.lines?.[0]?.from).toEqual({ kind: 'node', node: 'a', side: 'left' })
+    const loose = applyCommand(pinned, {
+      kind: 'set-line-side',
+      id: 'l1',
+      endpoint: 'from',
+      side: undefined,
+    })
+    // Absent, so the router decides again — the same canonicalisation the
+    // relation's side write makes.
+    expect(loose.lines?.[0]?.from).toEqual({ kind: 'node', node: 'a' })
+  })
+
+  it('leaves a FREE end alone, because it meets no box to have a side of', () => {
+    // A `point` end has no `side` field at all, so writing one would put a
+    // key on an arm the schema does not give it.
+    const canvas = lineCanvas()
+    const next = applyCommand(canvas, {
+      kind: 'set-line-side',
+      id: 'l1',
+      endpoint: 'to',
+      side: 'top',
+    })
+    expect(next.lines?.[0]?.to).toEqual({ kind: 'point', point: { x: 400, y: 400 } })
+    expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
+  })
+
   it('writes one facet on a stroke, and removes it by naming no payload', () => {
     // Facet-GENERIC, exactly as its node and edge twins are: the key comes
     // from the caller, so this module never names a domain.

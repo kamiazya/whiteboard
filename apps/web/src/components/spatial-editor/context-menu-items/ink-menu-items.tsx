@@ -19,6 +19,7 @@ import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import { colorRow } from './color-row.js'
+import { arrowRow, endMeetsNode, sideRow } from './end-rows.js'
 
 export interface InkMenuItemsInput {
   readonly line: CanvasLine
@@ -95,8 +96,25 @@ export function inkMenuItems({
         (entry) => ({ kind: 'set-line-color', id: entry.id, color }) as const,
       ),
     })
+  const write = (command: EditorCommand) =>
+    applyResult({ state: { kind: 'idle' }, commands: [command] })
   return [
     colorRow(palette, line.color, recolour),
+    // A stroke's ends carry an arrowhead and a side exactly as a relation's
+    // do, and the rows are the relation menu's own — shared rather than
+    // copied, so the two cannot grow apart. The SIDE row is offered per end
+    // and only where that end meets a box: a free end has no side to pin,
+    // and five choices that write nothing is worse than an absent row.
+    arrowRow(line, (ends) => write({ kind: 'set-line-ends', id: line.id, ...ends })),
+    ...(['from', 'to'] as const).flatMap((endpoint) =>
+      endMeetsNode(line, endpoint)
+        ? [
+            sideRow(line, endpoint, (side) =>
+              write({ kind: 'set-line-side', id: line.id, endpoint, side }),
+            ),
+          ]
+        : [],
+    ),
     { kind: 'separator' as const },
     ...(joinable.length > 1
       ? [

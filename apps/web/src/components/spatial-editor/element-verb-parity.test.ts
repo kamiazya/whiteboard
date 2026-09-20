@@ -119,6 +119,8 @@ const COMMAND_FACTS = {
   'set-line-bends': { verb: 'set-bends', target: 'lines' },
   'set-line-label': { verb: 'set-label', target: 'lines' },
   'set-line-facet': { verb: 'set-facet', target: 'lines' },
+  'set-line-ends': { verb: 'set-ends', target: 'lines' },
+  'set-line-side': { verb: 'set-side', target: 'lines' },
   'set-line-color': { verb: 'set-color', target: 'lines' },
   'ungroup-ink': { verb: 'ungroup', target: 'lines' },
 
@@ -224,16 +226,14 @@ const VERB_PARITY = {
   'set-ends': {
     nodes: 'n/a: an end is a property of the thing drawn BETWEEN nodes, not of a node',
     edges: 'command',
-    lines:
-      'gap: a line end is a node or a free point (`lineEndSchema`) and nothing re-attaches one, so a stroke drawn to a point can never be hung on a box afterwards',
+    lines: 'command',
     comments:
       'n/a: a thread is anchored rather than attached at two ends, and its anchor moves with move-comment',
   },
   'set-side': {
     nodes: 'n/a: a side belongs to the end that meets the box, not to the box',
     edges: 'command',
-    lines:
-      "gap: a line's node end carries `side` exactly as an edge's does, and nothing writes it — so a stroke hung on a box cannot be asked to leave from its left",
+    lines: 'command',
     comments: 'n/a: a pin meets nothing at a side',
   },
   'set-bends': {
@@ -339,7 +339,7 @@ describe('every command kind says which verb it is and what it acts on', () => {
     // `.claude/rules/coverage-ledger.md` asks for one: the type check proves
     // the table matches the union, and nothing else here would notice the
     // union having quietly become five entries.
-    expect(commandFacts).toHaveLength(43)
+    expect(commandFacts).toHaveLength(45)
     expect(elementCommands.length).toBeGreaterThan(30)
   })
 
@@ -439,7 +439,7 @@ describe('what each kind of element can have done to it', () => {
     // whole stroke sits — and the editor writes NONE of them. Ink can be
     // drawn, picked, banded, shift-added, ungrouped, locked and deleted, and
     // after that it is fixed. Nothing was red about that before this line.
-    expect(Object.fromEntries(byCollection)).toEqual({ lines: 2 })
+    expect(Object.fromEntries(byCollection)).toEqual({})
   })
 })
 

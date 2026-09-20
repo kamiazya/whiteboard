@@ -171,11 +171,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // (what a stroke occupies, with three readers now), `shiftLine` (the one
   // producer both the move and the paste offset go through), and the
   // fragment insert reading both collections for its bounds.
-  // Raised 1338 -> 1445 as ink gained the rest of its verbs: `set-line-bends`,
-  // `set-line-label` and the generic `set-line-facet`, plus `bendInkCommand`
-  // and `labelInkCommand` joining the id-picking family. Every one of them is
-  // a cell `element-verb-parity.test.ts` reported on its first reading.
-  'apps/web/src/lib/spatial/commands.ts': 1445,
+  // Raised 1338 -> 1498 as ink gained the rest of its verbs: `set-line-bends`,
+  // `set-line-label`, the generic `set-line-facet`, `set-line-ends` and
+  // `set-line-side`, plus `bendInkCommand` and `labelInkCommand` joining the
+  // id-picking family. Every one of them is a cell
+  // `element-verb-parity.test.ts` reported on its first reading, and with
+  // them its `lines` column is empty.
+  'apps/web/src/lib/spatial/commands.ts': 1498,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -729,7 +731,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2708 -> 2712 for the two ink command kinds' ledger entries, which
   // the model does not drive: it reduces POINTER gestures and both verbs are
   // a keypress and a menu row.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2720,
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2724,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1666,
   'apps/web/src/lib/document-sync-session.test.ts': 2768,
@@ -738,7 +740,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
   // ink, the offset on every point a stroke owns, and the anchor bounds that
   // used to read Infinity over nodes alone.
-  'apps/web/src/lib/spatial/commands.test.ts': 1763,
+  'apps/web/src/lib/spatial/commands.test.ts': 1808,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,
@@ -763,11 +765,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its own entry, and it counts ITSELF: the number is what the file is
   // after the entry is in it, which is why this one is 10 past the reading
   // that first flagged it.
-  // 858 -> 890 for the raises the two ink writes needed, each with the
+  // 858 -> 892 for the raises the two ink writes needed, each with the
   // reason beside it. That is the entry doing its job rather than growing:
   // a raise costs a sentence, so a change that widens a file pays for it in
   // the diff a reviewer reads.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 890,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 892,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

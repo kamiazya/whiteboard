@@ -31,6 +31,7 @@ import {
   type CommentThreadStatus,
   canvasCommentFromThread,
   type EdgeRoutingStyle,
+  type EdgeSide,
   endIn,
   endNode,
   isFrame,
@@ -121,6 +122,24 @@ export type EditorLeafCommand =
    */
   | { readonly kind: 'move-line'; readonly id: string; readonly dx: number; readonly dy: number }
   | { readonly kind: 'set-line-label'; readonly id: string; readonly label: string }
+  | {
+      /** The arrowheads a stroke is drawn with — `set-edge-ends`'s twin. */
+      readonly kind: 'set-line-ends'
+      readonly id: string
+      readonly fromEnd: 'none' | 'arrow'
+      readonly toEnd: 'none' | 'arrow'
+    }
+  | {
+      /**
+       * Which side of the box an end leaves from, when that end is ON one.
+       * `undefined` unpins it and the router decides again. A POINT end is a
+       * no-op: it meets no box, so there is no side to pin.
+       */
+      readonly kind: 'set-line-side'
+      readonly id: string
+      readonly endpoint: 'from' | 'to'
+      readonly side: EdgeSide | undefined
+    }
   | {
       /**
        * One STROKE's own facets bucket, generic in the key for the reason
@@ -680,6 +699,36 @@ function shiftLine(line: CanvasLine, dx: number, dy: number): CanvasLine {
   }
 }
 
+function setLineEnds(
+  canvas: SpatialCanvas,
+  id: string,
+  fromEnd: 'none' | 'arrow',
+  toEnd: 'none' | 'arrow',
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => ({
+    ...line,
+    from: { ...line.from, end: fromEnd },
+    to: { ...line.to, end: toEnd },
+  }))
+}
+
+function setLineSide(
+  canvas: SpatialCanvas,
+  id: string,
+  endpoint: 'from' | 'to',
+  side: EdgeSide | undefined,
+): SpatialCanvas {
+  return updateLine(canvas, id, (line) => {
+    const end = endpoint === 'from' ? line.from : line.to
+    // A free end meets no box, so there is no side to pin — and writing one
+    // would make a `point` end carry a field its arm does not have.
+    if (end.kind !== 'node') return line
+    const { side: _previous, ...rest } = end
+    const next = side === undefined ? rest : { ...rest, side }
+    return endpoint === 'from' ? { ...line, from: next } : { ...line, to: next }
+  })
+}
+
 function setLineFacet(
   canvas: SpatialCanvas,
   id: string,
@@ -1156,6 +1205,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setLineLabel(canvas, command.id, command.label)
     case 'set-line-facet':
       return setLineFacet(canvas, command.id, command.key, command.payload)
+    case 'set-line-ends':
+      return setLineEnds(canvas, command.id, command.fromEnd, command.toEnd)
+    case 'set-line-side':
+      return setLineSide(canvas, command.id, command.endpoint, command.side)
     case 'set-edge-label':
       return setEdgeLabel(canvas, command.id, command.label)
     case 'set-edge-ends':
