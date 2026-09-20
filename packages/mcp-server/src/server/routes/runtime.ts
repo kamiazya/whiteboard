@@ -11,7 +11,6 @@ import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
-import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 import { readLatestCompactedAt } from '../store/document-store.js'
 import { computeStorageReport } from './runtime-storage.js'
@@ -23,7 +22,6 @@ const VERIFY_RATE_LIMIT = 60
 const VERIFY_RATE_WINDOW_MS = 60_000
 
 export interface RuntimeRouterOptions {
-  mcpAuth?: McpHttpAuthStrategy
   instanceId: string
   identity: DaemonIdentity
   touch: () => void

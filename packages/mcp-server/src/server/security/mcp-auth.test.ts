@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createCredentialResolver } from './credential-resolver.js'
 import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
@@ -22,7 +23,7 @@ describe('MCP auth strategy', () => {
 
   it('returns protected resource metadata when authorization server discovery is configured', () => {
     const strategy = createLocalTokenMcpHttpAuthStrategy({
-      token: 'secret',
+      resolver: createCredentialResolver({ daemonToken: 'secret' }),
       protectedResourceMetadata: {
         authorizationServers: ['https://auth.example.com'],
         scopesSupported: ['canvas:read', 'canvas:write'],
@@ -36,15 +37,15 @@ describe('MCP auth strategy', () => {
     })
   })
 
-  it('builds a bearer challenge with resource metadata for unauthorized requests', () => {
+  it('builds a bearer challenge with resource metadata for unauthorized requests', async () => {
     const strategy = createLocalTokenMcpHttpAuthStrategy({
-      token: 'secret',
+      resolver: createCredentialResolver({ daemonToken: 'secret' }),
       protectedResourceMetadata: {
         authorizationServers: ['https://auth.example.com'],
       },
     })
 
-    const decision = strategy.authorize({
+    const decision = await strategy.authorize({
       method: 'POST',
       authorizationHeader: undefined,
       requestUrl: 'https://mcp.example.com/mcp',

@@ -1,4 +1,5 @@
-import { isAuthorized } from './bearer-token.js'
+import { parseBearerAuthorizationHeader } from './bearer-token.js'
+import type { CredentialResolver } from './credential-resolver.js'
 import { requiresMcpHttpAuth } from './mcp-http.js'
 
 export interface McpProtectedResourceMetadataConfig {
@@ -24,7 +25,7 @@ type McpAuthDecision =
 
 export interface McpHttpAuthStrategy {
   readonly protectedResourceMetadata?: McpProtectedResourceMetadataConfig
-  authorize(context: McpAuthRequestContext): McpAuthDecision
+  authorize(context: McpAuthRequestContext): Promise<McpAuthDecision>
 }
 
 function normalizeCsv(value: string | undefined): string[] | undefined {
@@ -117,18 +118,39 @@ export function buildMcpProtectedResourceMetadata(
   }
 }
 
+/**
+ * `/mcp` in local-daemon mode.
+ *
+ * The credential is resolved by `credential-resolver.ts` like every other
+ * surface's; what is decided here is which GRANTS this surface admits, and
+ * today that is only full authority.
+ *
+ * **That is a preserved absence, not a new restriction.** A pairing token, an
+ * OAuth grant and a macaroon all reach `/api/*` and the websocket and none of
+ * them has ever reached `/mcp` — each is where a diff stopped rather than a
+ * decision anyone took. Admitting them is Task #34, and a narrow credential
+ * would then have to carry `mcp:call`, which is the scope server-mode already
+ * enforces on this route. Widening it here in passing would have made the
+ * refactor a behaviour change disguised as one.
+ */
 export function createLocalTokenMcpHttpAuthStrategy(options: {
-  token?: string
+  resolver: CredentialResolver
   protectedResourceMetadata?: McpProtectedResourceMetadataConfig
 }): McpHttpAuthStrategy {
   return {
     protectedResourceMetadata: options.protectedResourceMetadata,
-    authorize(context) {
-      if (!options.token || !requiresMcpHttpAuth(context.method)) {
+    async authorize(context) {
+      if (!requiresMcpHttpAuth(context.method)) {
         return { ok: true }
       }
 
-      if (isAuthorized(context.authorizationHeader, options.token)) {
+      const grant = await options.resolver.resolve({
+        secret: parseBearerAuthorizationHeader(context.authorizationHeader),
+        carrier: 'bearer',
+      })
+      // `anonymous` is a daemon with no token configured, which this route has
+      // always let through.
+      if (grant?.kind === 'daemon-token' || grant?.kind === 'anonymous') {
         return { ok: true }
       }
 

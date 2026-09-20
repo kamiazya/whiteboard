@@ -9,6 +9,7 @@ import {
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from './routes/_test-helpers.js'
+import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 
 const tmp = withTempDataDir('whiteboard-app-test-')
 
@@ -35,19 +36,18 @@ vi.mock('../daemon/ensure-daemon.js', () => ({
 }))
 
 const { createApp } = await import('./app.js')
-const { createLocalTokenMcpHttpAuthStrategy } = await import('./security/mcp-auth.js')
 const { clearCache } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 function createRuntimeOptions(
   token?: string,
-  options?: Parameters<typeof createLocalTokenMcpHttpAuthStrategy>[0],
+  options?: { protectedResourceMetadata?: McpProtectedResourceMetadataConfig },
 ) {
   return {
     authMode: 'local-daemon' as const,
     token,
-    mcpAuth: options ? createLocalTokenMcpHttpAuthStrategy({ token, ...options }) : undefined,
+    mcpProtectedResourceMetadata: options?.protectedResourceMetadata,
     touch: vi.fn(),
     shutdown: vi.fn(async () => undefined),
     getStatus: () => ({

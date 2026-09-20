@@ -125,10 +125,6 @@ export function createApp(options: AppOptions) {
   // /api/runtime/verify, and pairing-token response signatures.
   const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
   const token = options.authMode === 'local-daemon' ? options.token : undefined
-  const mcpAuth =
-    options.authMode === 'local-daemon'
-      ? (options.mcpAuth ?? createLocalTokenMcpHttpAuthStrategy({ token: options.token }))
-      : undefined
 
   let serverModeGetStatus: (() => RuntimeStatusResponse) | undefined
   if (options.authMode === 'server-mode') {
@@ -185,6 +181,15 @@ export function createApp(options: AppOptions) {
     macaroonRootKey: localDaemon?.macaroonRootKey,
     redeemTicket: localDaemon?.wsTicketStore?.redeemTicket,
   })
+  // Built AFTER the resolver, over it. `/mcp`'s own policy (which grants it
+  // admits) lives in the strategy; the credential check does not.
+  const mcpAuth =
+    localDaemon !== undefined
+      ? createLocalTokenMcpHttpAuthStrategy({
+          resolver: credentialResolver,
+          protectedResourceMetadata: localDaemon.mcpProtectedResourceMetadata,
+        })
+      : undefined
 
   if (options.authMode === 'server-mode') {
     app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
@@ -480,7 +485,6 @@ export function createApp(options: AppOptions) {
   app.route(
     '/',
     createRuntimeRouter({
-      mcpAuth: mcpAuth ?? undefined,
       instanceId,
       identity,
       touch: options.touch,

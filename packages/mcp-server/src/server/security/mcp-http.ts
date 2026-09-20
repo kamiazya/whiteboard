@@ -97,7 +97,7 @@ export function createMcpHttpOriginMiddleware(
 
 export function createMcpHttpAuthMiddleware(strategy: McpHttpAuthStrategy): MiddlewareHandler {
   return async (c, next) => {
-    const decision = strategy.authorize({
+    const decision = await strategy.authorize({
       method: c.req.method,
       authorizationHeader: c.req.header('authorization'),
       requestUrl: c.req.url,
