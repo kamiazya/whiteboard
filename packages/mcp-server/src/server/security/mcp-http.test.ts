@@ -1,6 +1,13 @@
+import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 
-import { isAllowedMcpHttpOrigin, requiresMcpHttpAuth } from './mcp-http.js'
+import { createCredentialResolver } from './credential-resolver.js'
+import { createLocalTokenMcpHttpAuthStrategy } from './mcp-auth.js'
+import {
+  createMcpHttpAuthMiddleware,
+  isAllowedMcpHttpOrigin,
+  requiresMcpHttpAuth,
+} from './mcp-http.js'
 
 describe('MCP HTTP security', () => {
   describe('isAllowedMcpHttpOrigin', () => {
@@ -81,5 +88,54 @@ describe('MCP HTTP security', () => {
       expect(requiresMcpHttpAuth('DELETE')).toBe(true)
       expect(requiresMcpHttpAuth('OPTIONS')).toBe(false)
     })
+  })
+})
+
+/**
+ * The middleware's job is carrying the REQUEST into the strategy. The
+ * strategy's own tests build the context by hand, so they cannot see a field
+ * this layer forgets to pass — measured: removing `origin` here left all
+ * eleven of them green.
+ */
+describe('createMcpHttpAuthMiddleware carries the request into the strategy', () => {
+  const pairedApp = () => {
+    const app = new Hono()
+    app.use(
+      '/mcp',
+      createMcpHttpAuthMiddleware(
+        createLocalTokenMcpHttpAuthStrategy({
+          resolver: createCredentialResolver({
+            daemonToken: 'secret',
+            pairingTokens: {
+              validate: (token, origin) =>
+                token === 'paired' && origin === 'https://app.example.com',
+            },
+          }),
+        }),
+      ),
+    )
+    app.post('/mcp', (c) => c.json({ reached: true }))
+    return app
+  }
+
+  it('passes Origin through, so an origin-bound credential is identified rather than unknown', async () => {
+    const res = await pairedApp().request('/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer paired', origin: 'https://app.example.com' },
+    })
+
+    // 403 is the tell that the pairing token was IDENTIFIED and then refused
+    // by policy. Without the Origin header it resolves to nothing and answers
+    // 401 instead — the same refusal for an entirely different reason.
+    expect(res.status).toBe(403)
+  })
+
+  it('answers 401 for the same credential when no Origin accompanies it', async () => {
+    const res = await pairedApp().request('/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer paired' },
+    })
+
+    expect(res.status).toBe(401)
   })
 })

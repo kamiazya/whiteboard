@@ -50,7 +50,7 @@ const AUTH_SURFACES = {
     'resolver: the websocket upgrade. NO scope policy here by design — `routes/ws.ts` enforces per operation against `ws-scope-registry.ts`, so the handshake only establishes the grant and hands its scopes along. Two lanes: a single-use ticket, and everything else on the daemon-token subprotocol carrier.',
 
   'packages/mcp-server/src/server/security/mcp-auth.ts':
-    'resolver: /mcp in local-daemon mode. Admits full authority only. The pairing token, an OAuth grant and a macaroon all reach other surfaces and have never reached this one; each absence is where a diff stopped rather than a decision (Task #34), and a narrow credential would have to carry `mcp:call`.',
+    'resolver: /mcp in local-daemon mode. Full authority passes; an OAuth grant or a macaroon passes iff it carries `mcp:call`, the same scope server-mode enforces on this route. A pairing token is refused as a DECISION rather than on scopes (it holds them all today) — a paired browser origin speaks `/api/*`, not MCP. A verified credential this surface will not admit gets 403 without a challenge.',
 
   'packages/mcp-server/src/server/routes/debug.ts':
     'resolver: /api/debug, mounted only when the debug endpoint is enabled. Judged by KIND — a dump of live document state is not something a narrow credential gets, however wide its scope set.',
