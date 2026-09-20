@@ -20,7 +20,7 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 // it belongs in the collection phase, which no per-test timeout bounds.
 import { createApp } from '../app.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
-import { resolveApiRouteScope } from './route-scope-registry.js'
+import { API_ROUTE_RULE_NAMES, resolveApiRouteScope, ruleClaiming } from './route-scope-registry.js'
 
 let tempDir: string
 
@@ -298,5 +298,63 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       kind: 'scoped',
       scopes: ['versions:write'],
     })
+  })
+})
+
+// The table is ordered and FIRST MATCH WINS, so a rule placed under a broader
+// one is dead policy — and dead in the direction that matters: it is the
+// NARROWER rule that gets shadowed, so the route it was written to protect
+// silently falls back to whatever the broader rule grants. Nothing above
+// catches that. The walk at the top of this file asks only that a route
+// resolves to SOMETHING, and every mounted route still would.
+//
+// Each rule therefore owes one request it must claim FIRST. A rule with no
+// entry fails, an entry naming no rule fails, and a reorder that shadows a
+// rule fails on that rule's own entry.
+const CLAIMED_BY = {
+  'runtime/ping': ['GET', '/api/runtime/ping'],
+  'runtime/verify': ['POST', '/api/runtime/verify'],
+  'document file': ['GET', '/api/w/ws1/document/a/b/file/f1'],
+  'workspace-document/promote': ['POST', '/api/w/ws1/workspace-document/promote'],
+  'workspace-document sync': ['POST', '/api/w/ws1/workspace-document/update'],
+  'document update/export': ['POST', '/api/w/ws1/document/d1/update'],
+  'document (rest)': ['GET', '/api/w/ws1/document/d1'],
+  'sync transport': ['POST', '/api/sync/stream'],
+  'document versions/compact': ['GET', '/api/workspaces/ws1/documents/d1/versions'],
+  'document branches': ['GET', '/api/workspaces/ws1/documents/d1/branches'],
+  'workspace checkpoints': ['POST', '/api/workspaces/ws1/checkpoints'],
+  'versions/prune-sandwiched': ['POST', '/api/workspaces/ws1/versions/prune-sandwiched'],
+  'files/purge-dangling': ['POST', '/api/workspaces/ws1/files/purge-dangling'],
+  'documents/optimize-all': ['POST', '/api/workspaces/ws1/documents/optimize-all'],
+  'workspace members': ['GET', '/api/workspaces/ws1/members'],
+  'workspaces (rest)': ['GET', '/api/workspaces/ws1'],
+  'runtime state': ['POST', '/api/runtime/touch'],
+  'runtime (rest)': ['GET', '/api/runtime/status'],
+  debug: ['GET', '/api/debug'],
+  fonts: ['GET', '/api/fonts'],
+  'ws-ticket': ['POST', '/api/ws-ticket'],
+  'pairing/token': ['POST', '/api/pairing/token'],
+  'pairing grants and credentials': ['GET', '/api/pairing/grants'],
+  'pairing/session-assert': ['POST', '/api/pairing/session-assert'],
+} satisfies Record<string, readonly [string, string]>
+
+describe('no rule in the table is shadowed by an earlier one', () => {
+  it('asks about every rule the table declares, and no other', () => {
+    expect([...API_ROUTE_RULE_NAMES].sort()).toEqual(Object.keys(CLAIMED_BY).sort())
+  })
+
+  it('gives each rule a request that reaches it first', () => {
+    const wrong = Object.entries(CLAIMED_BY)
+      .map(([name, [method, path]]) => ({
+        name,
+        claimed: ruleClaiming(method, path),
+        method,
+        path,
+      }))
+      .filter((r) => r.claimed !== r.name)
+    expect(
+      wrong,
+      `shadowed: ${wrong.map((r) => `${r.method} ${r.path} -> ${r.claimed}`).join(', ')}`,
+    ).toEqual([])
   })
 })
