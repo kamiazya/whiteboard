@@ -144,6 +144,127 @@ function parseGroup(svg: string): Element {
   return element
 }
 
+/**
+ * Root envelope: attribute maps are compared, not order — DOM attribute order
+ * is not semantically meaningful, and setAttribute keeps the existing position
+ * on value changes.
+ */
+function patchRootAttrs(
+  root: Element,
+  prevAttrs: Readonly<Record<string, string>>,
+  nextAttrs: Readonly<Record<string, string>>,
+): void {
+  for (const [name, value] of Object.entries(nextAttrs)) {
+    if (prevAttrs[name] !== value) root.setAttribute(name, value)
+  }
+  for (const name of Object.keys(prevAttrs)) {
+    if (!(name in nextAttrs)) root.removeAttribute(name)
+  }
+}
+
+/**
+ * FLIP first-rects: a REPLACED key (same key, changed bytes) is the one
+ * continuity break worth animating — the element is swapped, so the move would
+ * otherwise be a hard jump. Insertions deliberately never animate: during a
+ * drag the static backdrop excludes the dragged node, so its drop commit
+ * arrives as an insertion, and animating that would double-move a node the
+ * user just placed.
+ *
+ * The rect read here is the OLD element's, and the constraint on when it may
+ * be read is narrower than it looks: not "before the reconciliation", which
+ * only reorders siblings, but BEFORE THE STALE ELEMENT IS REMOVED. An SVG
+ * group is placed by its own coordinates rather than by document flow, so
+ * `insertBefore` moving it down the child list does not move it on screen.
+ *
+ * Measured both ways rather than reasoned: moving this call after the
+ * reconciliation leaves all six FLIP tests green, and moving it after the
+ * cleanup that removes stale elements fails all six. The comment it replaces
+ * named the reconciliation, which is the step that happens to come first and
+ * not the one that matters.
+ */
+function captureFirstRects(
+  next: KeyedSvgRender,
+  elements: ReadonlyMap<string, Element>,
+  prevSvgByKey: ReadonlyMap<string, string>,
+): Map<string, DOMRect> {
+  const firstRects = new Map<string, DOMRect>()
+  for (const group of next.groups) {
+    const existing = elements.get(group.key)
+    if (existing !== undefined && prevSvgByKey.get(group.key) !== group.svg) {
+      firstRects.set(group.key, existing.getBoundingClientRect())
+    }
+  }
+  return firstRects
+}
+
+/**
+ * Which annotation groups ramp in, and which elements ramp out.
+ *
+ * The annotation layer (canvas-render's `annotation` mark, never this layer's
+ * own reading of a key) is the one set whose groups arrive and leave as a
+ * unit, so it is the one set worth ramping. Everything else keeps cutting: a
+ * document group replaced in place is a keystroke inside a node, and
+ * cross-fading those ghosts while somebody types.
+ *
+ * A REPLACED annotation group is on BOTH lists: the pair of ramps is what
+ * makes the `showResolved` case a cross-fade rather than a swap of two nearly
+ * identical shapes.
+ */
+function planRamp(
+  prev: KeyedSvgRender,
+  next: KeyedSvgRender,
+  elements: ReadonlyMap<string, Element>,
+  prevSvgByKey: ReadonlyMap<string, string>,
+): { arriving: Set<string>; departing: Element[] } {
+  const nextKeys = new Set(next.groups.map((group) => group.key))
+  const arriving = new Set<string>()
+  const departing: Element[] = []
+  for (const group of next.groups) {
+    if (group.annotation !== true) continue
+    const existing = elements.get(group.key)
+    if (existing === undefined) {
+      arriving.add(group.key)
+    } else if (prevSvgByKey.get(group.key) !== group.svg) {
+      arriving.add(group.key)
+      departing.push(existing)
+    }
+  }
+  for (const group of prev.groups) {
+    if (group.annotation !== true || nextKeys.has(group.key)) continue
+    const gone = elements.get(group.key)
+    if (gone !== undefined) departing.push(gone)
+  }
+  return { arriving, departing }
+}
+
+/**
+ * Puts `next`'s groups into `root` in order, reusing the element behind a key
+ * whose bytes did not change.
+ *
+ * Anchor by position: insertBefore both inserts new elements and moves reused
+ * ones; a replaced key's stale element drifts toward the tail and is dropped
+ * by the caller's cleanup.
+ */
+function reconcileGroups(
+  root: Element,
+  next: KeyedSvgRender,
+  elements: ReadonlyMap<string, Element>,
+  prevSvgByKey: ReadonlyMap<string, string>,
+): Map<string, Element> {
+  const nextElements = new Map<string, Element>()
+  next.groups.forEach((group, index) => {
+    const existing = elements.get(group.key)
+    const element =
+      existing !== undefined && prevSvgByKey.get(group.key) === group.svg
+        ? existing
+        : parseGroup(group.svg)
+    nextElements.set(group.key, element)
+    const anchor = root.children[index] ?? null
+    if (anchor !== element) root.insertBefore(element, anchor)
+  })
+  return nextElements
+}
+
 export function mountKeyedSvg(
   container: Element,
   initial: KeyedSvgRender,
@@ -188,79 +309,21 @@ export function mountKeyedSvg(
   })
 
   const update = (next: KeyedSvgRender, updateOptions?: KeyedSvgUpdateOptions): void => {
-    // Root envelope: attribute maps are compared, not order — DOM
-    // attribute order is not semantically meaningful, and setAttribute
-    // keeps the existing position on value changes.
-    for (const [name, value] of Object.entries(next.rootAttrs)) {
-      if (prev.rootAttrs[name] !== value) root.setAttribute(name, value)
-    }
-    for (const name of Object.keys(prev.rootAttrs)) {
-      if (!(name in next.rootAttrs)) root.removeAttribute(name)
-    }
+    patchRootAttrs(root, prev.rootAttrs, next.rootAttrs)
 
     const prevSvgByKey = new Map(prev.groups.map((group) => [group.key, group.svg]))
-    const nextElements = new Map<string, Element>()
-    // FLIP first-rects: a REPLACED key (same key, changed bytes) is the one
-    // continuity break worth animating — the element is swapped, so the
-    // move would otherwise be a hard jump. Insertions deliberately never
-    // animate: during a drag the static backdrop excludes the dragged
-    // node, so its drop commit arrives as an insertion, and animating that
-    // would double-move a node the user just placed. Rects are captured
-    // BEFORE the reconciliation loop displaces anything.
     const animate =
       options?.motion !== false && updateOptions?.animate !== false && !prefersReducedMotion()
-    const firstRects = animate ? new Map<string, DOMRect>() : undefined
-    if (firstRects !== undefined) {
-      for (const group of next.groups) {
-        const existing = elements.get(group.key)
-        if (existing !== undefined && prevSvgByKey.get(group.key) !== group.svg) {
-          firstRects.set(group.key, existing.getBoundingClientRect())
-        }
-      }
-    }
-    // The annotation layer (canvas-render's `annotation` mark, never this
-    // layer's own reading of a key) is the one set whose groups arrive and
-    // leave as a unit, so it is the one set worth ramping. Everything else
-    // keeps cutting: a document group replaced in place is a keystroke
-    // inside a node, and cross-fading those ghosts while somebody types.
-    const nextKeys = new Set(next.groups.map((group) => group.key))
-    // A REPLACED annotation group is on both lists: the pair of ramps is
-    // what makes the `showResolved` case a cross-fade rather than a swap of
-    // two nearly identical shapes.
-    const arriving = new Set<string>()
-    const departing: Element[] = []
-    if (animate) {
-      for (const group of next.groups) {
-        if (group.annotation !== true) continue
-        const existing = elements.get(group.key)
-        if (existing === undefined) {
-          arriving.add(group.key)
-        } else if (prevSvgByKey.get(group.key) !== group.svg) {
-          arriving.add(group.key)
-          departing.push(existing)
-        }
-      }
-      for (const group of prev.groups) {
-        if (group.annotation !== true || nextKeys.has(group.key)) continue
-        const gone = elements.get(group.key)
-        if (gone !== undefined) departing.push(gone)
-      }
-    }
+    // Before the cleanup below removes the stale elements these rects are
+    // read from — see captureFirstRects for why that, and not the
+    // reconciliation, is the boundary.
+    const firstRects = animate ? captureFirstRects(next, elements, prevSvgByKey) : undefined
+    const { arriving, departing } = animate
+      ? planRamp(prev, next, elements, prevSvgByKey)
+      : { arriving: new Set<string>(), departing: [] as Element[] }
     const leaving = new Set(departing)
 
-    next.groups.forEach((group, index) => {
-      const existing = elements.get(group.key)
-      const element =
-        existing !== undefined && prevSvgByKey.get(group.key) === group.svg
-          ? existing
-          : parseGroup(group.svg)
-      nextElements.set(group.key, element)
-      // Anchor by position: insertBefore both inserts new elements and
-      // moves reused ones; a replaced key's stale element drifts toward
-      // the tail and is dropped by the cleanup below.
-      const anchor = root.children[index] ?? null
-      if (anchor !== element) root.insertBefore(element, anchor)
-    })
+    const nextElements = reconcileGroups(root, next, elements, prevSvgByKey)
 
     // A replaced key that also MOVED belongs to FLIP, not to the ramp: the
     // incoming element is already flying from where its predecessor sat, and
