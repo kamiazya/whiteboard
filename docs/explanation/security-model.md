@@ -164,6 +164,29 @@ recorded to seal it retroactively — the next IndexedDB open (`DB_VERSION`
 20) discards that record outright, chunks included, and the next daemon
 resolve re-pulls it sealed.
 
+**The offline read page shows one of four states**, decided from what the
+daemon's renewal answered and what the in-memory key holder knows, never
+from a raw network error read directly:
+
+- **Needs a connection** — nothing is kept on this device yet.
+- **Readable, daemon unreachable** — the key is held in memory (a session
+  that began online); edits keep accumulating and ship to the daemon once
+  it returns.
+- **Locked, reconnect to unlock** — a copy is on this device but the key is
+  not held (a cold start, or a `bounded` lease that lapsed); a Reconnect
+  action re-asks the daemon and, if it answers, unlocks the same page
+  without losing the person's place.
+- **Removed** — the daemon was reached and refused, either because the
+  pairing grant itself was revoked or because the replica-key request came
+  back a membership refusal. The person is told plainly ("You were removed
+  from this workspace; changes made since then were not sent") and offered
+  no export and no retry that would send anything — discard-and-tell is
+  the ban.
+
+A reason the daemon never answered (an unreachable network, an expired
+lease) never renders as the fourth state: only a request the daemon
+actually reached and refused does.
+
 ## Daemon impersonation (loopback port squatting, the other direction)
 
 The section above concerns a process inheriting a browser ORIGIN. The

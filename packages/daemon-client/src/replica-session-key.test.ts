@@ -6,6 +6,7 @@ import {
   type ReplicaSource,
   replicaKeyProviderFor,
   sessionKey,
+  sessionKeyStatus,
 } from './replica-session-key.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
@@ -285,6 +286,61 @@ describe('replica-session-key: bounded lease lapse', () => {
     await expect(openBytes(second.key, envelope, context)).rejects.toMatchObject({
       name: 'OperationError',
     })
+  })
+})
+
+describe('replica-session-key: sessionKeyStatus', () => {
+  afterEach(() => {
+    forgetAll()
+    vi.useRealTimers()
+  })
+
+  it('answers undefined before any ask, and issues no request', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(keyResponse()))
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toBeUndefined()
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('answers held+tier after a key, withheld+reason after a refusal, and undefined after forget', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(keyResponse({ tier: 'offline' })))
+    await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({ kind: 'held', tier: 'offline' })
+
+    const refusalFetch = vi.fn(async () =>
+      jsonResponse({ error: 'not_a_member', message: 'x' }, 403),
+    )
+    await sessionKey(DAEMON, 'ws-2', sourceWith(refusalFetch))
+    expect(sessionKeyStatus(DAEMON, 'ws-2')).toEqual({ kind: 'withheld', reason: 'not_a_member' })
+
+    forget(DAEMON, WORKSPACE)
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toBeUndefined()
+    // A status read never triggers a network request of its own.
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(refusalFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports lapsed for a bounded lease past its own expiry, agreeing with sessionKey on the same clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const leaseExpiresAt = new Date('2026-01-01T01:00:00.000Z').toISOString()
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(keyResponse({ tier: 'bounded', leaseExpiresAt })),
+    )
+    await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({
+      kind: 'held',
+      tier: 'bounded',
+      leaseExpiresAt: Date.parse(leaseExpiresAt),
+    })
+
+    vi.setSystemTime(new Date('2026-01-01T01:00:01.000Z'))
+    // A status read is side-effect-free: checking twice answers the same
+    // both times, rather than the first purging the cache out from under
+    // the second (which is what `sessionKey`'s own lapse check does).
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({ kind: 'withheld', reason: 'lapsed' })
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({ kind: 'withheld', reason: 'lapsed' })
+    const afterViaSessionKey = await sessionKey(DAEMON, WORKSPACE)
+    expect(afterViaSessionKey).toEqual({ kind: 'withheld', reason: 'lapsed' })
   })
 })
 
