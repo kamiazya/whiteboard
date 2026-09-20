@@ -1,7 +1,5 @@
 import { readProposals, writeProposal } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  type CanvasEdge,
-  type CanvasLine,
   edgePatchFieldsSchema,
   linePatchFieldsSchema,
   nodePatchFieldsSchema,
@@ -9,7 +7,6 @@ import {
   type Proposal,
   type ProposedChange,
   type SpatialCanvas,
-  type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
@@ -131,110 +128,106 @@ function changeIdFor(kind: 'node' | 'edge' | 'line', elementId: string): string 
 }
 
 /**
+ * `Omit` over a union does NOT distribute — it collapses to the keys the
+ * arms share, which here would mean a builder could return `node.remove`
+ * carrying an `edgeId` and still typecheck. Distributing keeps each op
+ * checked against its OWN arm, which is what the `satisfies SpatialNode`
+ * this replaces was doing by hand. Verified: a wrong key is 1 type error.
+ */
+type ChangeBody = ProposedChange extends infer C
+  ? C extends unknown
+    ? Omit<C, 'id' | 'status'>
+    : never
+  : never
+
+/**
+ * One collection's worth of diff: what the batch ADDED, what it CHANGED
+ * about something already there, and what it REMOVED.
+ *
+ * Generic over the collection because nodes, edges and lines were three
+ * near-identical walks, and only ONE of the three was covered — dropping
+ * the node removals, or the line removals, left every test green while a
+ * proposal that deleted a box produced no change at all. One walk means
+ * one set of tests reaches all three.
+ *
+ * The op SHAPES stay per-collection and typed (`node`/`nodeId`,
+ * `edge`/`edgeId`, `line`/`lineId` are different keys in the schema), so
+ * what is shared is the algorithm, not the payload.
+ */
+function diffCollection<T extends { id: string }>(options: {
+  readonly before: readonly T[]
+  readonly after: readonly T[]
+  readonly patchFields: readonly string[]
+  readonly added: (item: T) => ChangeBody
+  readonly patched: (id: string, patch: Fields, assumed: Fields) => ChangeBody
+  readonly removed: (item: T) => ChangeBody
+  readonly changeId: (id: string) => string
+}): ProposedChange[] {
+  const { before, after, patchFields, added, patched, removed, changeId } = options
+  const changes: ProposedChange[] = []
+  const priorById = new Map(before.map((item) => [item.id, item]))
+  const nextById = new Map(after.map((item) => [item.id, item]))
+
+  for (const [id, item] of nextById) {
+    const prior = priorById.get(id)
+    if (prior === undefined) {
+      changes.push({ id: changeId(id), status: 'open', ...added(item) } as ProposedChange)
+      continue
+    }
+    const result = patchBetween(prior as Fields, item as Fields, patchFields, id)
+    if (result !== undefined) {
+      changes.push({
+        id: changeId(id),
+        status: 'open',
+        ...patched(id, result.patch, result.assumed),
+      } as ProposedChange)
+    }
+  }
+
+  for (const [id, item] of priorById) {
+    if (nextById.has(id)) continue
+    changes.push({ id: changeId(id), status: 'open', ...removed(item) } as ProposedChange)
+  }
+
+  return changes
+}
+
+/**
  * Every change between the board and what the batch would have made of it,
  * in element-id order so two runs of the same batch store the same list.
  */
 function proposedChangesFromDiff(before: SpatialCanvas, after: SpatialCanvas): ProposedChange[] {
-  const changes: ProposedChange[] = []
-  const nodesBefore = new Map(before.nodes.map((node) => [node.id, node]))
-  const nodesAfter = new Map(after.nodes.map((node) => [node.id, node]))
-  for (const [id, node] of nodesAfter) {
-    const prior = nodesBefore.get(id)
-    if (prior === undefined) {
-      changes.push({ id: changeIdFor('node', id), status: 'open', op: 'node.add', node })
-      continue
-    }
-    const patched = patchBetween(prior as Fields, node as Fields, NODE_PATCH_FIELDS, id)
-    if (patched !== undefined) {
-      changes.push({
-        id: changeIdFor('node', id),
-        status: 'open',
-        op: 'node.patch',
-        nodeId: id,
-        patch: patched.patch,
-        assumed: patched.assumed,
-      })
-    }
-  }
-  for (const [id, node] of nodesBefore) {
-    if (nodesAfter.has(id)) continue
-    changes.push({
-      id: changeIdFor('node', id),
-      status: 'open',
-      op: 'node.remove',
-      nodeId: id,
-      assumed: node satisfies SpatialNode,
-    })
-  }
-
-  const edgesBefore = new Map(before.edges.map((edge) => [edge.id, edge]))
-  const edgesAfter = new Map(after.edges.map((edge) => [edge.id, edge]))
-  for (const [id, edge] of edgesAfter) {
-    const prior = edgesBefore.get(id)
-    if (prior === undefined) {
-      changes.push({ id: changeIdFor('edge', id), status: 'open', op: 'edge.add', edge })
-      continue
-    }
-    const patched = patchBetween(prior as Fields, edge as Fields, EDGE_PATCH_FIELDS, id)
-    if (patched !== undefined) {
-      changes.push({
-        id: changeIdFor('edge', id),
-        status: 'open',
-        op: 'edge.patch',
-        edgeId: id,
-        patch: patched.patch,
-        assumed: patched.assumed,
-      })
-    }
-  }
-  for (const [id, edge] of edgesBefore) {
-    if (edgesAfter.has(id)) continue
-    changes.push({
-      id: changeIdFor('edge', id),
-      status: 'open',
-      op: 'edge.remove',
-      edgeId: id,
-      assumed: edge satisfies CanvasEdge,
-    })
-  }
-
-  // Ink, diffed the same way (ADR-0038 decision 2). A line is content, so a
-  // batch that draws one is PROPOSED like any other content change rather
-  // than applied — the alternative would have been to put ink in the company
-  // of locks and tidy, which bypass the proposal precisely because they are
-  // not content.
-  const linesBefore = new Map((before.lines ?? []).map((line) => [line.id, line]))
-  const linesAfter = new Map((after.lines ?? []).map((line) => [line.id, line]))
-  for (const [id, line] of linesAfter) {
-    const prior = linesBefore.get(id)
-    if (prior === undefined) {
-      changes.push({ id: changeIdFor('line', id), status: 'open', op: 'line.add', line })
-      continue
-    }
-    const patched = patchBetween(prior as Fields, line as Fields, LINE_PATCH_FIELDS, id)
-    if (patched !== undefined) {
-      changes.push({
-        id: changeIdFor('line', id),
-        status: 'open',
-        op: 'line.patch',
-        lineId: id,
-        patch: patched.patch,
-        assumed: patched.assumed,
-      })
-    }
-  }
-  for (const [id, line] of linesBefore) {
-    if (linesAfter.has(id)) continue
-    changes.push({
-      id: changeIdFor('line', id),
-      status: 'open',
-      op: 'line.remove',
-      lineId: id,
-      assumed: line satisfies CanvasLine,
-    })
-  }
-
-  return changes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  return [
+    ...diffCollection({
+      before: before.nodes,
+      after: after.nodes,
+      patchFields: NODE_PATCH_FIELDS,
+      changeId: (id) => changeIdFor('node', id),
+      added: (node) => ({ op: 'node.add', node }),
+      patched: (nodeId, patch, assumed) => ({ op: 'node.patch', nodeId, patch, assumed }),
+      removed: (node) => ({ op: 'node.remove', nodeId: node.id, assumed: node }),
+    }),
+    ...diffCollection({
+      before: before.edges,
+      after: after.edges,
+      patchFields: EDGE_PATCH_FIELDS,
+      changeId: (id) => changeIdFor('edge', id),
+      added: (edge) => ({ op: 'edge.add', edge }),
+      patched: (edgeId, patch, assumed) => ({ op: 'edge.patch', edgeId, patch, assumed }),
+      removed: (edge) => ({ op: 'edge.remove', edgeId: edge.id, assumed: edge }),
+    }),
+    // Ink, not relations (ADR-0038): a line may end nowhere, and a canvas
+    // that has none omits the key entirely.
+    ...diffCollection({
+      before: before.lines ?? [],
+      after: after.lines ?? [],
+      patchFields: LINE_PATCH_FIELDS,
+      changeId: (id) => changeIdFor('line', id),
+      added: (line) => ({ op: 'line.add', line }),
+      patched: (lineId, patch, assumed) => ({ op: 'line.patch', lineId, patch, assumed }),
+      removed: (line) => ({ op: 'line.remove', lineId: line.id, assumed: line }),
+    }),
+  ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
 /** The first `p<n>` no proposal on this document already holds. */
