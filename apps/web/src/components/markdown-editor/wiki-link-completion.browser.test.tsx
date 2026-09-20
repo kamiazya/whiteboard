@@ -373,11 +373,11 @@ describe('wiki link completion (real browser)', () => {
     })
     expect(optionLabelled('Retro notes')).toBeUndefined()
 
-    // Give the deferred commit's queued microtask a turn, then confirm it
-    // committed nothing — neither the vanished "Retro notes" option nor an
-    // accidental commit of whatever is now selected. The document is
-    // exactly what was typed.
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // The deferred commit, if it fired, was queued as a microtask by the
+    // update that re-enabled the list; `vi.waitFor` polls on a macrotask, so
+    // by the time it resolved that microtask had already run. Nothing was
+    // committed — neither the vanished "Retro notes" option nor an accidental
+    // commit of whatever is now selected. The document is exactly what was typed.
     expect(value).toBe('see [[Rel')
   })
 
