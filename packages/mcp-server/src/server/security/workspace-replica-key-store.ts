@@ -44,6 +44,15 @@ export interface WorkspaceReplicaKeyStore {
    *  process default via `effectiveTier`). */
   tierFor(workspaceId: string): Promise<ReplicaTier | null>
   effectiveTier(workspaceId: string): Promise<ReplicaTier>
+  /** Sets or clears (`null`) the workspace's own override. This is a
+   *  security-posture write, so callers gate it at `runtime:admin`
+   *  (route-scope-registry.ts) rather than the membership-scoped
+   *  `workspace:write` the rest of a workspace's fields sit behind — see
+   *  routes/replica-key.ts. Answers whether a `workspaces` row existed to
+   *  update: `workspaces` rows are minted lazily off document writes
+   *  (upsert-workspace.ts), so a workspace nobody has written to yet has
+   *  none, and a bare UPDATE against it would otherwise read as success. */
+  setTier(workspaceId: string, tier: ReplicaTier | null): Promise<boolean>
 }
 
 export function createWorkspaceReplicaKeyStore(
@@ -93,6 +102,18 @@ export function createWorkspaceReplicaKeyStore(
     tierFor,
     async effectiveTier(workspaceId) {
       return (await tierFor(workspaceId)) ?? defaultTier
+    },
+    async setTier(workspaceId, tier) {
+      // The column is untyped text (migration 0029 added no CHECK), so a
+      // bad value would otherwise only surface as a throw from `tierFor` on
+      // the NEXT read, far from the write that caused it.
+      const validated = replicaTierSchema.nullable().parse(tier)
+      const result = await db
+        .updateTable('workspaces')
+        .set({ replicaTier: validated })
+        .where('id', '=', workspaceId)
+        .executeTakeFirst()
+      return Number(result.numUpdatedRows ?? 0) > 0
     },
   }
 }

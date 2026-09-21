@@ -5,6 +5,12 @@
  * taken effect. Wired through the real `createDaemonAuthMiddleware` chain —
  * the same pattern `membership.test.ts` uses — so the route-scope-registry
  * rule is exercised rather than only pinned in isolation.
+ *
+ * PUT /api/workspaces/:workspaceId/replica-tier (ADR-0042 decision 1
+ * addendum): sets or clears that tier itself, at the `runtime:admin` bar —
+ * narrower than the POST route above, and enforced the same way, through
+ * the real middleware rather than only `route-scope-registry.test.ts`'s
+ * direct classification.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -15,7 +21,10 @@ import {
   pairingTokenResponseSchema,
   sessionAssertChallengeResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
-import { replicaKeyResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import {
+  replicaKeyResponseSchema,
+  setReplicaTierResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -117,6 +126,31 @@ async function post(
   headers: Record<string, string> = {},
 ) {
   return app.request(path, { method: 'POST', headers })
+}
+
+async function put(
+  app: Awaited<ReturnType<typeof makeApp>>['app'],
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
+  return app.request(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  })
+}
+
+/** `keys.setTier` UPDATEs an existing `workspaces` row (see its own header:
+ *  rows are minted lazily off document writes). This fixture's
+ *  `workspaceExists` is a plain array check decoupled from that table —
+ *  unlike production, where the same table backs both — so a test that
+ *  writes a tier through the route has to seed the row itself. */
+async function seedWorkspaceRow(fixture: Awaited<ReturnType<typeof makeApp>>, id = WS) {
+  await fixture.db
+    .insertInto('workspaces')
+    .values({ id, displayName: null, segment: null, createdAt: 0, updatedAt: 0, replicaTier: null })
+    .execute()
 }
 
 /** Full pairing-token -> passkey-bound-session chain, reused across tests
@@ -468,5 +502,238 @@ describe('POST /api/workspaces/:workspaceId/replica-key', () => {
       Authorization: `Bearer ${underScoped}`,
     })
     expect(res.status).toBe(401)
+  })
+})
+
+describe('PUT /api/workspaces/:workspaceId/replica-tier', () => {
+  it('400s a malformed workspaceId', async () => {
+    const { app } = await makeApp()
+    const res = await put(
+      app,
+      '/api/workspaces/not*safe/replica-tier',
+      { tier: 'offline' },
+      {
+        Authorization: `Bearer ${DAEMON_TOKEN}`,
+      },
+    )
+    expect(res.status).toBe(400)
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'invalid_workspace_id' })
+  })
+
+  it('404s an unknown workspace', async () => {
+    const { app } = await makeApp({ known: [] })
+    const res = await put(
+      app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'offline' },
+      {
+        Authorization: `Bearer ${DAEMON_TOKEN}`,
+      },
+    )
+    expect(res.status).toBe(404)
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'unknown_workspace' })
+  })
+
+  it('400s a body that is not valid JSON', async () => {
+    const fixture = await makeApp()
+    const res = await fixture.app.request(`/api/workspaces/${WS}/replica-tier`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DAEMON_TOKEN}` },
+      body: '{not json',
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'invalid_body' })
+  })
+
+  it('400s an unknown tier value', async () => {
+    const fixture = await makeApp()
+    const res = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'full-offline' },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('400s a body carrying an undeclared field (.strict())', async () => {
+    const fixture = await makeApp()
+    const res = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'bounded', leaseExpiresAt: '2026-09-28T00:00:00.000Z' },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('sets the tier and echoes it back with the resolved effectiveTier', async () => {
+    const fixture = await makeApp()
+    await seedWorkspaceRow(fixture)
+    const res = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'no-offline' },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    expect(res.status).toBe(200)
+    expect(setReplicaTierResponseSchema.parse(await res.json())).toEqual({
+      tier: 'no-offline',
+      effectiveTier: 'no-offline',
+    })
+  })
+
+  it('logs a durable audit record naming the workspace and resulting effective tier on every successful change', async () => {
+    const capture = captureLogsForTests('warning')
+    try {
+      const fixture = await makeApp()
+      await seedWorkspaceRow(fixture)
+      const res = await put(
+        fixture.app,
+        `/api/workspaces/${WS}/replica-tier`,
+        { tier: 'no-offline' },
+        { Authorization: `Bearer ${DAEMON_TOKEN}` },
+      )
+      expect(res.status).toBe(200)
+      const record = capture.records.find(
+        (r) => r.msg === 'replica-tier changed' && r.scope === 'replica-key',
+      )
+      expect(record?.data).toMatchObject({
+        workspaceId: WS,
+        tier: 'no-offline',
+        effectiveTier: 'no-offline',
+      })
+    } finally {
+      capture.restore()
+    }
+  })
+
+  it('clearing (tier: null) falls back to the constructor default', async () => {
+    const fixture = await makeApp({ defaultTier: 'offline' })
+    await seedWorkspaceRow(fixture)
+    await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'no-offline' },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    const res = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: null },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    expect(res.status).toBe(200)
+    expect(setReplicaTierResponseSchema.parse(await res.json())).toEqual({
+      tier: null,
+      effectiveTier: 'offline',
+    })
+  })
+
+  // The whole point: the write reaches the SAME reader `POST .../replica-key`
+  // already consults, not merely the `workspaces` column. No prior POST is
+  // made here, so a passing refusal-with-no-row-minted is not merely "no
+  // NEW row" hiding one an earlier fetch already created.
+  it('setting no-offline turns a replica-key request into a 403 with no key minted, and clearing restores it', async () => {
+    const fixture = await makeApp()
+    await seedWorkspaceRow(fixture)
+
+    const setRes = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'no-offline' },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    expect(setRes.status).toBe(200)
+
+    const after = await post(fixture.app, `/api/workspaces/${WS}/replica-key`, {
+      Authorization: `Bearer ${DAEMON_TOKEN}`,
+    })
+    expect(after.status).toBe(403)
+    expect((await after.json()) as { error: string }).toMatchObject({
+      error: 'replica_not_allowed',
+    })
+    expect(
+      await fixture.db
+        .selectFrom('workspaceReplicaKeys')
+        .selectAll()
+        .where('workspaceId', '=', WS)
+        .execute(),
+    ).toEqual([])
+
+    const clearRes = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: null },
+      { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    )
+    expect(clearRes.status).toBe(200)
+
+    const restored = await post(fixture.app, `/api/workspaces/${WS}/replica-key`, {
+      Authorization: `Bearer ${DAEMON_TOKEN}`,
+    })
+    expect(restored.status).toBe(200)
+    expect(
+      await fixture.db
+        .selectFrom('workspaceReplicaKeys')
+        .selectAll()
+        .where('workspaceId', '=', WS)
+        .execute(),
+    ).toHaveLength(1)
+  })
+
+  // The whole point of the `runtime:admin` bar over `workspace:write`: a
+  // macaroon caveated to exactly the scope the broader fallback rule would
+  // have granted must still be refused here. Flipping the registry rule's
+  // `decide` to `always('workspace:write')` must make this fail — the
+  // mutation check for the bar itself.
+  it('refuses a macaroon caveated to workspace:write, not the runtime:admin this route actually needs', async () => {
+    const fixture = await makeApp()
+    const scoped = await mintMacaroon({
+      rootKey: MACAROON_ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['workspace:write'] }],
+    })
+    const res = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'offline' },
+      { Authorization: `Bearer ${scoped}` },
+    )
+    expect(res.status).toBe(401)
+  })
+
+  it('admits a macaroon caveated with runtime:admin, through the real middleware', async () => {
+    const fixture = await makeApp()
+    await seedWorkspaceRow(fixture)
+    const scoped = await mintMacaroon({
+      rootKey: MACAROON_ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['runtime:admin'] }],
+    })
+    const res = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'offline' },
+      { Authorization: `Bearer ${scoped}` },
+    )
+    expect(res.status).toBe(200)
+  })
+
+  // The bar is `runtime:admin`, not member-scoped — a passkey-bound member
+  // session (ALL_AUTH_SCOPES under the accepted v1 posture) still reaches
+  // it, which is a narrower point than the macaroon test above and is noted
+  // rather than asserted as a refusal: see routes/membership.ts's header.
+  it('a passkey-bound member session (ALL_AUTH_SCOPES) also clears the bar, per the accepted v1 posture', async () => {
+    const fixture = await makeApp()
+    await seedWorkspaceRow(fixture)
+    const { token } = await bindSession(fixture)
+    const res = await put(
+      fixture.app,
+      `/api/workspaces/${WS}/replica-tier`,
+      { tier: 'offline' },
+      { Authorization: `Bearer ${token}`, Origin: HOSTED },
+    )
+    expect(res.status).toBe(200)
   })
 })
