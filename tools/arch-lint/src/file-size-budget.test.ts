@@ -16,14 +16,21 @@ import { describe, expect, it } from 'vitest'
 //
 // The checklist's companion "functions stay under 50 lines" clause needs an
 // AST to find function boundaries, which is a different instrument than
-// counting a file's newlines. It is `tools/arch-lint/src/
-// function-size-budget.test.ts` now, on this same shrink-only contract —
-// there rather than here because the AST comes from
-// `@typescript/typescript6`, which only that package depends on. The two are
-// not interchangeable: a file budget is satisfied by MOVING mass, which is
-// how 834 lines of pointer handling left `SpatialEditor.tsx` for a file of
-// their own while remaining one function.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
+// counting a file's newlines. It is `function-size-budget.test.ts`, beside
+// this file, on this same shrink-only contract. The two are not
+// interchangeable: a file budget is satisfied by MOVING mass, which is how
+// 834 lines of pointer handling left `SpatialEditor.tsx` for a file of their
+// own while remaining one function.
+//
+// It lived in `packages/mcp-server/src/server/` until it moved here, and the
+// move is worth one line because it deleted things rather than relocating
+// them: a dedicated `file-size-budget:` pre-push command (the whole
+// `arch-lint-node` project already runs at push), the self-assertion that
+// named that command, and the paragraphs in three documents explaining why a
+// scan of `apps/web/src` was filed under the daemon. It is an arch-lint scan
+// by every criterion that package states — it reads other packages' source,
+// runs no product code, opens no port and asserts on no clock.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 
 const LINE_BUDGET = 800
 
@@ -100,7 +107,7 @@ function isScannedTestFile(absolutePath: string): boolean {
  * the reasons stacked up as archaeology ("FIVE branches", then "SIX") until
  * the comment said more about merging than about sizes.
  */
-const LEDGER_PATH = 'packages/mcp-server/src/server/file-size-budget.test.ts'
+const LEDGER_PATH = 'tools/arch-lint/src/file-size-budget.test.ts'
 
 function scanTestFiles(): string[] {
   return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
@@ -963,49 +970,5 @@ describe('file-size budget: test files, same 800-line budget, same shrink-only c
       (path) => path in FILE_SIZE_GRANDFATHER,
     )
     expect(shared).toEqual([])
-  })
-})
-
-/**
- * This guard scans `apps/web/src` (and every `packages/*` and `tools/*`) while
- * living in mcp-server, so the natural local run for a web change — the
- * `web-jsdom` / `web-browser` projects — does not include it. Twice in one
- * session that produced the same push: green locally, red in CI on a file
- * this guard had been watching all along.
- *
- * `.claude/rules/app-web.md` had already said to run it by hand alongside the
- * web guards. That is a prose rung, and being written down is what it can do —
- * it cannot notice being forgotten. So pre-push runs it, and it costs the gate
- * nothing: across two real `lefthook run pre-push` runs this took 10.71s and
- * 7.74s, and each run's total equalled the `pnpm -r typecheck` beside it to the
- * centisecond. The equality is the claim worth keeping — the reading itself
- * swings ~40% with contention. That is why a guard whose failure CI would catch
- * anyway is still worth a local rung.
- *
- * Asserted here rather than in a test about lefthook, because this is the file
- * that knows WHY the entry has to exist — and the path is derived from
- * `import.meta.url` so moving this file fails loudly instead of leaving the
- * lefthook line pointing at nothing.
- */
-describe('the budget guard is reachable before a push, not only in CI', () => {
-  function prePushCommands(): string[] {
-    const text = readFileSync(join(REPO_ROOT, 'lefthook.yml'), 'utf8')
-    const start = text.indexOf('\npre-push:')
-    if (start === -1) throw new Error('lefthook.yml has no `pre-push:` block')
-    const rest = text.slice(start + 1)
-    const nextTopLevel = rest.slice('pre-push:'.length).search(/\n(?=[A-Za-z_-]+:)/)
-    const block = nextTopLevel === -1 ? rest : rest.slice(0, 'pre-push:'.length + nextTopLevel)
-    return [...block.matchAll(/^ {6}run: (.+)$/gm)].map((match) => match[1].trim())
-  }
-
-  // A scan that stops matching reports its subject as satisfied — the same
-  // shape as a passing run. Checked before anything is concluded from it.
-  it('reads the pre-push block', () => {
-    expect(prePushCommands().length).toBeGreaterThanOrEqual(5)
-  })
-
-  it('is run by a pre-push command', () => {
-    const self = relativeToRepo(fileURLToPath(import.meta.url))
-    expect(prePushCommands().filter((command) => command.includes(self))).toHaveLength(1)
   })
 })

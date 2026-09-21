@@ -12,11 +12,14 @@
  * notice being forgotten — it was forgotten twice on one branch, by the person
  * who had written it down, each time costing a push that CI rejected.
  *
- * Asserted here rather than in a test about lefthook, for the reason
- * `file-size-budget.test.ts` gives for the same shape: this is the package that
- * knows WHY the entry has to exist. What it pins is the entry AND the claim
- * underneath it, because an entry justified by a reason nobody checks is the
- * next thing to go stale.
+ * Asserted here rather than in a test about lefthook, because this is the
+ * package that knows WHY the entry has to exist. What it pins is the entry AND
+ * the claim underneath it, because an entry justified by a reason nobody checks
+ * is the next thing to go stale.
+ *
+ * It covers `file-size-budget.test.ts` too, which used to carry a copy of this
+ * block pinned to a command of its own. That command named one file in a
+ * project that runs whole, so the copy went when the guard moved here.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
