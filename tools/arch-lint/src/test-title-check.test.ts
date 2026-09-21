@@ -47,7 +47,7 @@ export function duplicateTitles(source: string): Array<{ line: number; path: str
 describe('duplicate test titles', () => {
   it('scans a real population', () => {
     const all = TEST_SCAN_DIRS.flatMap((dir) => listTestFiles(join(REPO_ROOT, dir)))
-    expect(all.length).toBeGreaterThan(900)
+    expect(all.length).toBeGreaterThan(1500)
   })
 
   it('keys on the full describe path, so the same title under two describes is distinct (self-test)', () => {
