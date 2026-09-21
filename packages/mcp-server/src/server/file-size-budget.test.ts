@@ -277,7 +277,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3-5): the renewal effect became a re-runnable `attemptRenewal`
   // callback (Reconnect re-runs it) and `ReplicaReadPage` gained
   // `daemonBaseUrl`/`renewal`/`onReconnect` props.
-  'apps/web/src/App.tsx': 1045,
+  'apps/web/src/App.tsx': 917,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
