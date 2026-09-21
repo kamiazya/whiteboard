@@ -9,7 +9,8 @@
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WorkspaceMenu, type WorkspaceRow, type WorkspaceSwitcherSource } from './WorkspaceMenu.js'
+import type { WorkspaceRow, WorkspaceSwitcherSource } from '../../lib/workspace-switcher-source.js'
+import { WorkspaceMenu } from './WorkspaceMenu.js'
 
 const DESIGN = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const NOTES = '01BX5ZZKBKACTAV9WEVGEMMVRZ'

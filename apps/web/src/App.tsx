@@ -1,5 +1,4 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-daemon-client/api-client'
-import type { RenameWorkspaceInput } from '@kamiazya/whiteboard-ports'
 import {
   lazy,
   Suspense,
@@ -11,7 +10,6 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { AppShellWorkspaces } from './components/AppShell.js'
 import { AppShellLazy } from './components/AppShellLazy.js'
 
 // Lazy: the not-found page renders on rare, dead-end navigations only —
@@ -53,6 +51,7 @@ const SettingsPage = lazy(() =>
   import('./pages/SettingsPage.js').then((m) => ({ default: m.SettingsPage })),
 )
 
+import { useShellWorkspaces } from './hooks/use-shell-workspaces.js'
 import { useWorkspaceAddressSync } from './hooks/use-workspace-address-sync.js'
 import {
   documentPath,
@@ -60,7 +59,6 @@ import {
   parseSettingsRoute,
   parseWorkspaceRoute,
   type WorkspaceRoute,
-  workspacePath,
 } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-auth-fetch.js'
 import { passkeySupported } from './lib/passkey-attestation.js'
@@ -421,102 +419,11 @@ export function App({ providerState }: AppProps) {
 
   useDaemonThemeFonts(daemonShellTarget)
 
-  // The daemon keeper's switcher source, built from whichever daemon this
-  // branch is talking to. Dynamic import for the same reason the browser's
-  // is: the shell is lazy, App is not.
-  //
-  // Creation and renaming are offered here now that the daemon publishes a
-  // write surface for workspaces. DESIGN.md's standing rule is what decided
-  // that both ways round: they were ABSENT — not disabled — while the keeper
-  // could not honour them, and they appear the moment it can.
-  //
-  // Switching is an in-app navigation, unlike the browser's: this keeper has
-  // no synchronous singleton to re-point, so setting the view is enough. The
-  // address follows from it, and the index page follows the address.
-  const daemonWorkspaces = useMemo(
-    (): AppShellWorkspaces | undefined =>
-      daemonShellTarget === undefined
-        ? undefined
-        : {
-            source: {
-              list: () =>
-                import('./lib/daemon-api-client.js').then((m) =>
-                  m
-                    .listWorkspaces(
-                      m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
-                      daemonShellTarget.baseUrl,
-                    )
-                    .then((res) => res.workspaces),
-                ),
-              // Both halves are present now that the daemon publishes a write
-              // surface. They take the same arguments as the browser's, which
-              // is the point: the switcher asks its source, and the source is
-              // the only thing that knows which keeper answered.
-              create: (displayName: string) =>
-                import('./lib/daemon-api-client.js').then((m) =>
-                  m.createWorkspace(
-                    m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
-                    daemonShellTarget.baseUrl,
-                    displayName,
-                  ),
-                ),
-              rename: (workspaceId: string, input: Omit<RenameWorkspaceInput, 'workspaceId'>) =>
-                import('./lib/daemon-api-client.js').then((m) =>
-                  m.renameWorkspace(
-                    m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
-                    daemonShellTarget.baseUrl,
-                    workspaceId,
-                    input,
-                  ),
-                ),
-            },
-            onSwitch: (workspace: string) => setDaemonView({ kind: 'index', workspace }),
-          },
-    [daemonShellTarget],
-  )
-
-  // The browser keeper's switcher source. Both halves reach their module
-  // through a dynamic import so the workspace registry — and the create path
-  // behind it — stay off the critical path; the shell is lazy, but App is
-  // not, and a static import here would put IndexedDB index code in the
-  // entry chunk for a control most sessions never open.
-  //
-  // A switch is a document LOAD, not an in-app navigation. This keeper
-  // resolves its active workspace once, into a synchronous accessor whose
-  // whole rationale is that some twenty call sites read it inline; re-pointing
-  // it in place would mean re-reading it at every one of them. A load also
-  // settles the outgoing workspace's writes for free, which is the invariant
-  // a switch has to keep.
-  const browserWorkspaces = useMemo(
-    () => ({
-      source: {
-        list: () => import('./lib/browser-workspaces.js').then((m) => m.listBrowserWorkspaces()),
-        // A SEPARATE module from the three below, and the separation is the
-        // point: this is the only one that reads the workspace tree, so it is
-        // the only one that pulls loro-crdt's WASM. The switcher asks for it
-        // when its popover opens, never on the shell's render path.
-        counts: () =>
-          import('./lib/browser-document-counts.js').then((m) => m.browserDocumentCounts()),
-        create: (displayName: string) =>
-          import('./lib/browser-workspaces.js').then((m) =>
-            m.createBrowserWorkspaceNamed(displayName),
-          ),
-        rename: (workspaceId: string, input: Omit<RenameWorkspaceInput, 'workspaceId'>) =>
-          import('./lib/browser-workspaces.js').then((m) =>
-            m.renameBrowserWorkspace(workspaceId, input),
-          ),
-      },
-      // An in-SPA route change (ADR-0019), not a document load. The address
-      // moves first and the identity follows it, which is the same direction
-      // everything else in this app reads: the effect below re-points the
-      // active workspace to whatever the address names, and rewrites the
-      // address only when it names nothing this browser holds.
-      onSwitch: (handle: string) => {
-        navigate(workspacePath(handle))
-      },
-    }),
-    [navigate],
-  )
+  const { daemonWorkspaces, browserWorkspaces } = useShellWorkspaces({
+    daemonShellTarget,
+    navigate,
+    setDaemonRoute: setDaemonView,
+  })
 
   // Persists ONLY the reconnect target (baseUrl/workspaceId/path), never the
   // bootstrapToken — the token stays in-memory via readDaemonTokenOnce's

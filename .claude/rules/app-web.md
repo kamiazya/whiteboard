@@ -65,6 +65,22 @@ same shapes will recur, and each was cheaper than it looked:
    `lib/`. A worker importing from `components/` was the clearest sign
    those were never components.
 
+**A contract filed under its first RENDERER cannot be reached by the thing
+that produces it.** `WorkspaceSwitcherSource` (what a keeper can answer about
+its workspaces) lived in `components/shell/WorkspaceMenu.tsx` and its wrapper
+`AppShellWorkspaces` in `components/AppShell.tsx`, while both implementations
+— the browser's over IndexedDB, the daemon's over HTTP — were built inline in
+`App.tsx`, 88 lines apart. Not because that was the right place: `App.tsx` is
+the ROOT, the only layer allowed to import `components/` at all, so it was the
+only place the type could be named. Measured by trying: a `hooks/` module
+importing it fails `layer-order` with
+`hooks/use-shell-workspaces.ts -> components/shell/WorkspaceMenu.tsx (type)`.
+The contract is `lib/workspace-switcher-source.ts` now (`KeeperWorkspaces`,
+dropping the render site from its name) and both keepers are built side by
+side in `hooks/use-shell-workspaces.ts`. So when an extraction out of `App.tsx`
+looks blocked, check whether what blocks it is a type filed one layer too high
+— the type moves first, and the move is usually the point.
+
 Three things a mechanical move does not see, and what catches each now:
 
 - A `vi.mock('./x.js', …)` specifier is a string, not an import, so it keeps
