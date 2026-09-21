@@ -967,6 +967,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     // The summary is what a human reads in a toast, so it has to say
     // something — an empty string would render as a blank notification.
     expect(activities[0].summary).toMatch(/\S/)
+    expect(activities[0].summary).toBe('added 2')
 
     expect(viewports).toHaveLength(1)
     expect(viewports[0]).toMatchObject({
@@ -974,6 +975,38 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
       mode: 'fit',
       elementIds: ['a', 'b'],
     })
+  })
+
+  test('the summary names every tally the batch moved, in one fixed order', async () => {
+    // `toMatch(/\S/)` above only asks that SOMETHING was said. This pins the
+    // wording and the order, which is what a person actually reads — and what
+    // a table of op-to-tally can silently get wrong while every other
+    // assertion in this file still passes.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const { activities, notifier } = makeNotifier()
+    const tool = createCanvasEditTool({ ...makeDeps(store), clientNotifier: notifier })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
+        { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
+        { op: 'node.add', node: { id: 'c', type: 'text', text: 'C' } },
+        { op: 'node.patch', id: 'a', patch: { text: 'A2' } },
+        { op: 'node.remove', id: 'c' },
+        { op: 'node.lock', id: 'a', locked: true },
+        { op: 'node.lock', id: 'b', locked: false },
+        { op: 'tidy' },
+      ],
+    })
+
+    expect(activities).toHaveLength(1)
+    expect(activities[0].summary).toBe(
+      'added 3, changed 1, removed 1, locked 1, unlocked 1, tidied the layout',
+    )
   })
 
   test('says nothing at all when the batch was rejected', async () => {

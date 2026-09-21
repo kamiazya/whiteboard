@@ -5,9 +5,11 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
+import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
+import type { ContentFacts } from '../references/extract.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
 import { fuseByRank } from '../search/rrf.js'
@@ -117,6 +119,59 @@ export type DocumentSearchOutput = z.infer<typeof documentSearchOutputSchema>
  * With `deps.embedder` supplied it also searches by MEANING, fusing the two
  * rankings; without one it is lexical search and nothing else.
  */
+type SearchCandidate = SearchableDocument & {
+  kind?: 'markdown' | 'spatial'
+  /** The nodes and edges a tag filter matched, named for the excerpt. */
+  named: readonly string[]
+}
+
+/**
+ * Which documents are candidates, and what a tag filter matched on each.
+ *
+ * The filters are applied here rather than by the ranker because they decide
+ * MEMBERSHIP, not order: a document a tag filter excludes is not a low-ranked
+ * result, it is not a result. ONE bearer has to carry every listed tag
+ * (ADR-0040 decision 3) — a note by its frontmatter, a board by its own tags,
+ * or one node or edge — which is why this cannot be a flat tag-set test.
+ */
+function collectSearchable(
+  entries: readonly DocumentEntry[],
+  content: ReadonlyMap<string, ContentFacts>,
+  parsed: DocumentSearchInput,
+): SearchCandidate[] {
+  const searchable: SearchCandidate[] = []
+  for (const entry of entries) {
+    const facts = content.get(entry.documentId)
+    // Narrowing for `Map.get`, not a branch: `factsFor` sets an entry
+    // for EVERY entry it is given — `EMPTY_FACTS` when the document
+    // cannot be read — so this cannot fire for a listing it was handed.
+    // Deleting it leaves every test green, which reads like an untested
+    // branch and is not one.
+    if (facts === undefined) continue
+    if (parsed.kind !== undefined && entry.kind !== parsed.kind) continue
+    // ONE bearer carries every listed tag (ADR-0040 decision 3): a note
+    // by its frontmatter, a board by its own tags, or one node or edge.
+    let named: string[] = []
+    if (parsed.tags !== undefined) {
+      const wanted = parsed.tags
+      const carrying = facts.bearers.filter((bearer) =>
+        wanted.every((tag) => bearer.tags.includes(tag)),
+      )
+      if (carrying.length === 0) continue
+      named = carrying.filter((bearer) => bearer.text.length > 0).map((bearer) => bearer.text)
+    }
+    searchable.push({
+      documentId: entry.documentId,
+      path: entry.path,
+      ...(entry.name === undefined ? {} : { name: entry.name }),
+      ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+      texts: [...facts.texts],
+      named,
+    })
+  }
+  return searchable
+}
+
 export function createDocumentSearchTool(
   deps: ServerDeps,
   cache: ContentFactsCache = new ContentFactsCache(),
@@ -135,40 +190,7 @@ export function createDocumentSearchTool(
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
       const content = await cache.factsFor(deps, parsed.workspaceId, entries)
 
-      const searchable: (SearchableDocument & {
-        kind?: 'markdown' | 'spatial'
-        /** The nodes and edges a tag filter matched, named for the excerpt. */
-        named: readonly string[]
-      })[] = []
-      for (const entry of entries) {
-        const facts = content.get(entry.documentId)
-        // Narrowing for `Map.get`, not a branch: `factsFor` sets an entry
-        // for EVERY entry it is given — `EMPTY_FACTS` when the document
-        // cannot be read — so this cannot fire for a listing it was handed.
-        // Deleting it leaves every test green, which reads like an untested
-        // branch and is not one.
-        if (facts === undefined) continue
-        if (parsed.kind !== undefined && entry.kind !== parsed.kind) continue
-        // ONE bearer carries every listed tag (ADR-0040 decision 3): a note
-        // by its frontmatter, a board by its own tags, or one node or edge.
-        let named: string[] = []
-        if (parsed.tags !== undefined) {
-          const wanted = parsed.tags
-          const carrying = facts.bearers.filter((bearer) =>
-            wanted.every((tag) => bearer.tags.includes(tag)),
-          )
-          if (carrying.length === 0) continue
-          named = carrying.filter((bearer) => bearer.text.length > 0).map((bearer) => bearer.text)
-        }
-        searchable.push({
-          documentId: entry.documentId,
-          path: entry.path,
-          ...(entry.name === undefined ? {} : { name: entry.name }),
-          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-          texts: [...facts.texts],
-          named,
-        })
-      }
+      const searchable = collectSearchable(entries, content, parsed)
 
       const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
       /** documentId -> 1-based position, for whichever rankings exist. */

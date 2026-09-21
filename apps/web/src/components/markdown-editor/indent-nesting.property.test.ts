@@ -20,32 +20,6 @@ import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { changeIndent } from './line-prefix.js'
 
-/** The leading-space count of a 1-based line. */
-function depthOf(doc: string, lineNumber: number): number {
-  const line = doc.split('\n')[lineNumber - 1] ?? ''
-  return line.length - line.trimStart().length
-}
-
-/**
- * True when the first shallower line above `lineNumber` is not the one the
- * indent nested it under — the shape the property excludes above.
- */
-function nearestShallowerIsNotTheParent(
-  doc: string,
-  lineNumber: number,
-  originalDepth: number,
-): boolean {
-  const lines = doc.split('\n')
-  const depth = depthOf(doc, lineNumber)
-  for (let n = lineNumber - 1; n >= 1; n--) {
-    const text = lines[n - 1] ?? ''
-    if (text.trim() === '') continue
-    const above = depthOf(doc, n)
-    if (above < depth) return above !== originalDepth
-  }
-  return false
-}
-
 const indent = changeIndent(1)
 const outdent = changeIndent(-1)
 
@@ -103,16 +77,12 @@ describe('indent and outdent compose', () => {
       // Refused: no sibling above to nest under. Nothing to compose.
       if (indented === null || indented === doc) return
 
-      // EXCLUDED, and it is a real asymmetry rather than a generator
-      // artefact. Indent walks PAST a line deeper than the target to find
-      // the sibling it nests under; outdent stops at the nearest shallower
-      // line, whichever that is. When a skipped line sits strictly between
-      // the old and new indents — reachable by hand-typed ragged
-      // indentation, e.g. depths 4, 6, 4 — outdent lands on it instead of
-      // back at the parent. Filed rather than fixed here: correcting it
-      // means changing what outdent MEANS, which is a decision with its own
-      // thirty example tests, not a by-product of a complexity refactor.
-      if (nearestShallowerIsNotTheParent(indented, lineNumber, depthOf(doc, lineNumber))) return
+      // No exclusion: this property used to skip the shape where the
+      // nearest shallower line above is not the one indent nested under
+      // (hand-typed ragged indentation, depths 4, 6, 4), because outdent
+      // landed on that line instead of on the parent. Outdent asks the
+      // same question indent does now, so the statement holds over every
+      // shape the generator draws and nothing is carved out of it.
 
       // The caret rides the line, which grew by the indent it gained.
       const grew =

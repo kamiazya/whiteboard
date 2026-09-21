@@ -1,4 +1,5 @@
 import {
+  type LoadedReference,
   referenceTargets,
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
@@ -116,6 +117,33 @@ export type CanvasViewOutput = z.infer<typeof canvasViewOutputSchema>
  * always wants the reference resolved, and it has no store of its own to
  * resolve them with.
  */
+/**
+ * One `[target, wire]` pair for a reference the graph actually resolved, or
+ * nothing.
+ *
+ * Every field is optional and omitted rather than sent as undefined, because
+ * the wire is read by a widget that distinguishes "no body" from "an empty
+ * one". A canvas crosses as JSON Canvas, which is the only projection a
+ * reader of this wire knows.
+ */
+function referenceWireEntry(
+  target: string,
+  loaded: LoadedReference | null | undefined,
+): [string, Record<string, unknown>][] {
+  if (loaded === undefined || loaded === null) return []
+  return [
+    [
+      target,
+      {
+        ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
+        ...(loaded.name !== undefined ? { name: loaded.name } : {}),
+        ...(loaded.body !== undefined ? { body: loaded.body } : {}),
+        ...(loaded.canvas !== undefined ? { canvas: toJsonCanvas(loaded.canvas) } : {}),
+      },
+    ],
+  ]
+}
+
 export function createCanvasViewTool(deps: ServerDeps) {
   return {
     name: 'canvas_view' as const,
@@ -155,21 +183,9 @@ export function createCanvasViewTool(deps: ServerDeps) {
         // `![[note]]` a bracket literal here while the same canvas resolved
         // it through `wb_scene_render`, which passes the whole bundle.
         references: Object.fromEntries(
-          referenceTargets({ canvases: [canvas] }).flatMap((target) => {
-            const loaded = graph.get(target)
-            if (loaded === undefined || loaded === null) return []
-            return [
-              [
-                target,
-                {
-                  ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
-                  ...(loaded.name !== undefined ? { name: loaded.name } : {}),
-                  ...(loaded.body !== undefined ? { body: loaded.body } : {}),
-                  ...(loaded.canvas !== undefined ? { canvas: toJsonCanvas(loaded.canvas) } : {}),
-                },
-              ],
-            ]
-          }),
+          referenceTargets({ canvases: [canvas] }).flatMap((target) =>
+            referenceWireEntry(target, graph.get(target)),
+          ),
         ),
       }
     },
