@@ -2128,6 +2128,54 @@ describe('the workspace names the page', () => {
     expect(attempts).toEqual(['beta'])
   })
 
+  // The re-offered dialog NAMES the lone survivor. `Delete "2 documents"?`
+  // would be the count of the ATTEMPT, not of what the dialog is now
+  // offering to do — and the code says so in a comment that, measured,
+  // nothing checked: replacing the row lookup with `undefined` left every
+  // index-page test green.
+  it('names the one document left after a partial delete, not the count it attempted', async () => {
+    let rows = [
+      { path: 'alpha', displayName: 'Alpha board', updatedAt: new Date().toISOString() },
+      { path: 'beta', displayName: 'Beta board', updatedAt: new Date().toISOString() },
+    ]
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        get 'ws-a'() {
+          return rows
+        },
+      },
+      onDeleteCanvas: (_ws, path) => {
+        if (path === 'beta') return jsonResponse({ title: 'nope' }, 500)
+        rows = rows.filter((r) => r.path !== path)
+        return undefined
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('Alpha board')
+
+    await enterSelectionOn('Alpha board')
+    await addToSelection('Beta board')
+    fireEvent.click(
+      within(await screen.findByTestId('selection-bar')).getByRole('button', { name: 'Delete' }),
+    )
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    )
+
+    const dialog = await screen.findByRole('alertdialog')
+    await waitFor(() =>
+      expect(within(dialog).getByText('1 of 2 could not be deleted.')).toBeTruthy(),
+    )
+    // NAMED, not counted. `only?.displayName ?? only?.path` is the fallback
+    // chain; what must never appear is the count form the un-narrowed branch
+    // produces.
+    expect(within(dialog).getByText(/Delete "beta"\?/)).toBeTruthy()
+    expect(within(dialog).queryByText(/1 documents/)).toBeNull()
+  })
+
   it('reports a 404 inside a bulk as a failure, the same as a single delete does', async () => {
     // NOT treated as "already gone". A single delete that 404s shows the
     // daemon's message (its own test above), and a bulk delete making the

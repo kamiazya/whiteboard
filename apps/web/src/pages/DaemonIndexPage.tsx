@@ -84,6 +84,98 @@ function sortRows(rows: DocumentRow[]): DocumentRow[] {
   })
 }
 
+/**
+ * What duplicating one row asks for: the source's own kind and name, and the
+ * names and paths already taken, so the copy can be given a free one.
+ *
+ * A row the list no longer holds falls back to a spatial document named after
+ * its path — the source may have been deleted between the click and the read,
+ * and refusing outright would be a worse answer than copying an empty board.
+ */
+function duplicateRequest(
+  daemonFetch: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  sourcePath: string,
+  rows: readonly DocumentRow[],
+) {
+  const sourceRow = rows.find((row) => row.path === sourcePath)
+  return {
+    fetch: daemonFetch,
+    daemonBaseUrl,
+    workspaceId,
+    sourcePath,
+    kind: sourceRow?.kind ?? ('spatial' as const),
+    displayName: sourceRow?.displayName ?? sourcePath,
+    existingPaths: rows.map((row) => row.path),
+    existingNames: rows.map((row) => row.displayName),
+  }
+}
+
+/**
+ * What the confirm dialog is asking about.
+ *
+ * A LIST, so one confirmation and one handler serve both the single delete
+ * and the selection's bulk delete. A single delete is a list of one, and
+ * keeps naming its document.
+ */
+interface PendingDelete {
+  readonly paths: readonly string[]
+  readonly displayName: string
+  readonly kind?: DocumentKind
+}
+
+/**
+ * Delete each path, recording rather than throwing on the ones the daemon
+ * refuses.
+ *
+ * Sequential and failure-tolerant: one path the daemon refuses must not
+ * abandon the rest, and the person has to be told how many did not go. The
+ * LAST error is kept because it is what the all-failed message reports —
+ * daemon-api-client errors are already sanitized, so it is safe to surface.
+ */
+async function deleteEach(
+  daemonFetch: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  paths: readonly string[],
+): Promise<{ failed: string[]; lastError: unknown }> {
+  const failed: string[] = []
+  let lastError: unknown = null
+  for (const path of paths) {
+    try {
+      await deleteDocument(daemonFetch, daemonBaseUrl, workspaceId, path)
+    } catch (err) {
+      failed.push(path)
+      lastError = err
+    }
+  }
+  return { failed, lastError }
+}
+
+/**
+ * What the confirm dialog offers after a partial delete: exactly the ones the
+ * daemon refused, so pressing Delete again retries those. Left un-narrowed, a
+ * retry re-sent DELETE for every path the first attempt had already removed.
+ *
+ * A lone survivor gets its NAME back — a dialog reading `Delete "2
+ * documents"?` would be the count of the ATTEMPT, not of what it now offers.
+ */
+function reofferFailures(failed: readonly string[], rows: readonly DocumentRow[]): PendingDelete {
+  const only = failed.length === 1 ? rows.find((row) => row.path === failed[0]) : undefined
+  return {
+    paths: [...failed],
+    displayName: only?.displayName ?? only?.path ?? `${failed.length} documents`,
+    ...(only?.kind === undefined ? {} : { kind: only.kind }),
+  }
+}
+
+/** All of them failing reports the daemon's own reason; some of them reports the count. */
+function partialDeleteMessage(failed: number, attempted: number, lastError: unknown): string {
+  if (failed < attempted) return `${failed} of ${attempted} could not be deleted.`
+  return lastError instanceof Error ? lastError.message : 'Failed to delete document.'
+}
+
 export function DaemonIndexPage({
   daemonBaseUrl,
   token,
@@ -459,7 +551,6 @@ export function DaemonIndexPage({
       if (!workspaceAtStart) return
       setDuplicatingPath(sourcePath)
       setDuplicateError(null)
-      const sourceRow = rows.find((r) => r.path === sourcePath)
       // The whole operation targets workspaceAtStart, not whatever the user
       // has switched the selector to by the time each await resolves — a
       // duplicate started in one workspace must finish in that SAME
@@ -467,16 +558,9 @@ export function DaemonIndexPage({
       // its completion (the rows refresh) to the page is gated separately,
       // below, on whether that workspace is still the one being viewed.
       try {
-        await duplicateDaemonDocument({
-          fetch: daemonFetch,
-          daemonBaseUrl,
-          workspaceId: workspaceAtStart,
-          sourcePath,
-          kind: sourceRow?.kind ?? 'spatial',
-          displayName: sourceRow?.displayName ?? sourcePath,
-          existingPaths: rows.map((r) => r.path),
-          existingNames: rows.map((r) => r.displayName),
-        })
+        await duplicateDaemonDocument(
+          duplicateRequest(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath, rows),
+        )
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (isStale()) return
         await loadWorkspace(workspaceAtStart, isStale)
@@ -490,14 +574,7 @@ export function DaemonIndexPage({
     [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingPath],
   )
 
-  const [pendingDelete, setPendingDelete] = useState<{
-    // A LIST, so one confirmation and one handler serve both the single
-    // delete and the selection's bulk delete. A single delete is a list of
-    // one, and keeps naming its document.
-    paths: readonly string[]
-    displayName: string
-    kind?: DocumentKind
-  } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -521,19 +598,12 @@ export function DaemonIndexPage({
     setDeleting(true)
     setDeleteError(null)
     try {
-      // Sequential, and each failure recorded rather than thrown: one path
-      // the daemon refuses must not abandon the rest, and the person has to
-      // be told how many did not go.
-      const failed: string[] = []
-      let lastError: unknown = null
-      for (const path of pendingDelete.paths) {
-        try {
-          await deleteDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, path)
-        } catch (err) {
-          failed.push(path)
-          lastError = err
-        }
-      }
+      const { failed, lastError } = await deleteEach(
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceAtStart,
+        pendingDelete.paths,
+      )
       if (failed.length > 0) {
         const attempted = pendingDelete.paths.length
         // Refreshed HERE rather than only in closeDeleteDialog, which this
@@ -545,22 +615,8 @@ export function DaemonIndexPage({
         // Narrowed to what actually failed, so pressing Delete again retries
         // exactly those. Left un-narrowed, a retry re-sent DELETE for every
         // path the first attempt had already removed.
-        const only = failed.length === 1 ? rows.find((row) => row.path === failed[0]) : undefined
-        setPendingDelete({
-          paths: failed,
-          // A lone survivor gets its NAME back: a dialog reading
-          // `Delete "2 documents"?` would be the count of the attempt, not of
-          // what it is now offering to do.
-          displayName: only?.displayName ?? only?.path ?? `${failed.length} documents`,
-          ...(only?.kind === undefined ? {} : { kind: only.kind }),
-        })
-        setDeleteError(
-          failed.length === attempted
-            ? lastError instanceof Error
-              ? lastError.message
-              : 'Failed to delete document.'
-            : `${failed.length} of ${attempted} could not be deleted.`,
-        )
+        setPendingDelete(reofferFailures(failed, rows))
+        setDeleteError(partialDeleteMessage(failed.length, attempted, lastError))
         return
       }
       closeDeleteDialog()
