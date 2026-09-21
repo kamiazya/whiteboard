@@ -74,7 +74,7 @@ describe('authorizeWsUpgrade', () => {
       },
       createCredentialResolver({}),
     )
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       accept: true,
       protocol: WHITEBOARD_WS_PROTOCOL,
       scopes: ALL_AUTH_SCOPES,
@@ -100,7 +100,7 @@ describe('authorizeWsUpgrade', () => {
       },
       createCredentialResolver({ daemonToken: 'secret' }),
     )
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       accept: true,
       protocol: WHITEBOARD_WS_PROTOCOL,
       scopes: ALL_AUTH_SCOPES,
@@ -296,7 +296,7 @@ describe('authorizeWsUpgrade', () => {
         }),
         [],
       )
-      expect(decision).toEqual({
+      expect(decision).toMatchObject({
         accept: true,
         protocol: WHITEBOARD_WS_PROTOCOL,
         scopes: ['canvas:read'],
@@ -336,7 +336,7 @@ describe('authorizeWsUpgrade', () => {
         createCredentialResolver({ daemonToken: 'secret', redeemTicket: () => null }),
         [],
       )
-      expect(decision).toEqual({
+      expect(decision).toMatchObject({
         accept: true,
         protocol: WHITEBOARD_WS_PROTOCOL,
         scopes: ALL_AUTH_SCOPES,
@@ -351,7 +351,7 @@ describe('authorizeWsUpgrade', () => {
         },
         createCredentialResolver({}),
       )
-      expect(decision).toEqual({
+      expect(decision).toMatchObject({
         accept: true,
         protocol: WHITEBOARD_WS_PROTOCOL,
         scopes: ALL_AUTH_SCOPES,
@@ -388,7 +388,7 @@ describe('authorizeWsUpgrade', () => {
         createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
         [],
       )
-      expect(first).toEqual({
+      expect(first).toMatchObject({
         accept: true,
         protocol: WHITEBOARD_WS_PROTOCOL,
         scopes: ['canvas:write'],
@@ -428,7 +428,7 @@ describe('authorizeWsUpgrade', () => {
         createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
         [],
       )
-      expect(retry).toEqual({
+      expect(retry).toMatchObject({
         accept: true,
         protocol: WHITEBOARD_WS_PROTOCOL,
         scopes: ['canvas:write'],

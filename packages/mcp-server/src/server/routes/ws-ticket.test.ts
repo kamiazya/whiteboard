@@ -117,7 +117,7 @@ describe('POST /api/ws-ticket', () => {
       createCredentialResolver({ redeemTicket: ticketStore.redeemTicket }),
       [],
     )
-    expect(decision).toEqual({
+    expect(decision).toMatchObject({
       accept: true,
       protocol: WHITEBOARD_WS_PROTOCOL,
       scopes: ['canvas:read'],

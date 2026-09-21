@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { requiresDaemonAuth } from './auth.js'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Hono } from 'hono'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createMemberProfileStore } from '../security/member-profile-store.js'
+import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
+import { membershipAdmit, requiresDaemonAuth } from './auth.js'
 
 describe('requiresDaemonAuth', () => {
   it('default-requires bearer auth for every /api method, not just mutations', () => {
@@ -30,5 +36,44 @@ describe('requiresDaemonAuth', () => {
   it('leaves non-/api paths alone', () => {
     expect(requiresDaemonAuth('/document/session-1/demo')).toBe(false)
     expect(requiresDaemonAuth('/')).toBe(false)
+  })
+})
+
+describe('membershipAdmit', () => {
+  let dir: string | undefined
+  let dbHandle: IsolatedDbHandle | undefined
+
+  afterEach(async () => {
+    await dbHandle?.dispose()
+    dbHandle = undefined
+    if (dir !== undefined) rmSync(dir, { recursive: true, force: true })
+    dir = undefined
+  })
+
+  it('refuses a request whose grant was never memoized (no auth middleware in front of it)', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'auth-membership-admit-'))
+    dbHandle = await createIsolatedDb({ dataDir: dir })
+    const members = createMemberProfileStore(dbHandle.db)
+    // A gating member, so a member-less workspace's origin-trust fallback
+    // cannot make this pass for the wrong reason.
+    const profile = await members.ensureProfile({
+      origin: 'https://example.test',
+      credentialId: 'gating-member-cred',
+      displayName: 'Gating Member',
+    })
+    await members.addMember('ws1', profile.id)
+
+    const admit = membershipAdmit(members)
+    // No `createDaemonAuthMiddleware` mounted ahead of this route, so
+    // `grantMemo` was never populated for this request — exactly the
+    // "composition that omits the middleware" case `WorkspaceAdmit`'s doc
+    // comment names as the fail-closed path.
+    const app = new Hono()
+    app.get('/probe', async (c) => c.json({ decision: await admit(c, 'ws1') }))
+
+    const res = await app.request('/probe')
+    const body = (await res.json()) as { decision: string }
+    expect(body.decision).toBe('requires_person_session')
+    expect(body.decision).not.toBe('admitted')
   })
 })

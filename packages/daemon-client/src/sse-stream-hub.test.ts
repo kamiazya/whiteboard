@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import { canvasSnapshotUrl, documentUpdateUrl, SseStreamHub } from './sse-stream-hub.js'
+import {
+  canvasSnapshotUrl,
+  documentUpdateUrl,
+  SseStreamHub,
+  workspaceIdOfDocKey,
+} from './sse-stream-hub.js'
 
 function createFake() {
   const calls: { url: string; body?: string }[] = []
@@ -315,5 +320,21 @@ describe('doc-key URL mapping', () => {
     expect(documentUpdateUrl('http://d', 'ws-1/nested/path')).toBe(
       'http://d/api/w/ws-1/document/nested/path/update',
     )
+  })
+})
+
+describe('workspaceIdOfDocKey', () => {
+  it('reads the workspace id straight off a workspace-scope key', () => {
+    expect(workspaceIdOfDocKey('workspace:ws-1')).toBe('ws-1')
+  })
+
+  it('reads the workspace id off the first slash of a per-document key', () => {
+    expect(workspaceIdOfDocKey('ws-1/nested/path')).toBe('ws-1')
+  })
+
+  it('refuses a malformed key', () => {
+    expect(workspaceIdOfDocKey('workspace:')).toBeNull()
+    expect(workspaceIdOfDocKey('no-slash-here')).toBeNull()
+    expect(workspaceIdOfDocKey('/leading-slash')).toBeNull()
   })
 })

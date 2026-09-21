@@ -447,10 +447,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/server-support-bundle.ts#runServerSupportBundle': 105,
   'packages/mcp-server/src/daemon/ensure-daemon.ts#ensureDaemon': 84,
   'packages/mcp-server/src/di/container.ts#resolveServerDeps': 94,
-  'packages/mcp-server/src/server/app.ts#createApp': 424,
+  // 424 -> 433 (ADR-0041 S8 slice 2): the membership gate argument and the admit wiring threaded from membershipWiring().
+  'packages/mcp-server/src/server/app.ts#createApp': 433,
   'packages/mcp-server/src/server/canvas-client-notifier.ts#createCanvasClientNotifier': 88,
   'packages/mcp-server/src/server/export/headless-renderer.ts#buildExporter': 70,
-  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 431,
+  // 431 -> 435 (ADR-0041 S8 slice 2): the WS upgrade's membership refusal call and the target binding it reads.
+  'packages/mcp-server/src/server/http-server.ts#startHttpServer': 435,
   'packages/mcp-server/src/server/index.ts#main': 182,
   'packages/mcp-server/src/server/mcp/codex-config.distribution-impl.ts#runCodexConfigSmoke': 74,
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 305,
@@ -466,7 +468,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/tool-support.ts#registerToolWithAnnotations': 102,
   'packages/mcp-server/src/server/observability/http-tracing.ts#tracingMiddleware': 51,
   'packages/mcp-server/src/server/observability/tracing.ts#initTracing': 85,
-  'packages/mcp-server/src/server/routes/document.ts#createDocumentRouter': 80,
+  // 80 -> 81 (ADR-0041 S8 slice 2): threads the membership admit to the workspaces router.
+  'packages/mcp-server/src/server/routes/document.ts#createDocumentRouter': 81,
   'packages/mcp-server/src/server/routes/document/export-svg.ts#createDocumentSvgExportRouter': 112,
   'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 101,
@@ -475,7 +478,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 82,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 132,
   'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 178,
-  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 406,
+  // 406 -> 412 (ADR-0041 S8 slice 2): the workspace list filters rows the caller is not admitted to.
+  'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 412,
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 117,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 142,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
@@ -485,9 +489,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/pairing.ts#createPairingRouter': 283,
   'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 59,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 146,
-  'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 109,
+  // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
+  'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 115,
   'packages/mcp-server/src/server/routes/viewport.ts#createViewportRouter': 71,
-  'packages/mcp-server/src/server/routes/ws-auth.ts#authorizeWsUpgrade': 75,
+  // 75 -> 76 (ADR-0041 S8 slice 2): every accepted decision carries the resolved grant for the upgrade's membership check.
+  'packages/mcp-server/src/server/routes/ws-auth.ts#authorizeWsUpgrade': 76,
   'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 291,
   'packages/mcp-server/src/server/security/credential-resolver.ts#createCredentialResolver': 92,
   'packages/mcp-server/src/server/security/credential-resolver.ts#createCredentialResolver.resolve': 88,

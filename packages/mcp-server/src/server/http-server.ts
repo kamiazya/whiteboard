@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
 import type { Socket } from 'node:net'
 import { join } from 'node:path'
+import type { Duplex } from 'node:stream'
 import { serve } from '@hono/node-server'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
@@ -33,13 +34,16 @@ import {
 } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
+import type { ResolvedGrant } from './security/credential-resolver.js'
 import { createMacaroonRootKey } from './security/macaroon-root-key.js'
 import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
+import type { MemberProfileStore } from './security/member-profile-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
+import { membershipRefusal, workspaceAccess } from './security/workspace-access.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
@@ -54,6 +58,7 @@ import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
+import { resolveWorkspaceHandleToId } from './workspace-handle.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
 
@@ -124,6 +129,34 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
 // idle-timeout-triggered close() could make the daemon appear to hang
 // instead of shutting down promptly.
 const FILE_GC_STOP_TIMEOUT_MS = 5_000
+
+/**
+ * The membership decision the HTTP middleware gates individual routes with,
+ * run on the upgrade path because a WS upgrade never passes through that
+ * middleware. `grant` is present on every accepted decision (ws-auth.ts).
+ * Answers true after writing the 403 and destroying the socket.
+ */
+async function refuseWsUpgradeUnlessMember(
+  grant: ResolvedGrant | undefined,
+  workspaceHandle: string,
+  members: MemberProfileStore,
+  socket: Duplex,
+): Promise<boolean> {
+  if (grant === undefined) return false
+  const workspaceId = await resolveWorkspaceHandleToId(workspaceHandle)
+  const access = await workspaceAccess(grant, workspaceId, members)
+  if (access === 'admitted') return false
+  getLogger('http-server').warning(
+    { workspaceId, reason: access },
+    'websocket upgrade refused: membership',
+  )
+  const body = JSON.stringify(membershipRefusal(access))
+  socket.write(
+    `HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+  )
+  socket.destroy()
+  return true
+}
 
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
   const host = normalizeBindHost(options.host ?? '127.0.0.1')
@@ -524,8 +557,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         socket.destroy()
         return
       }
+      let target: { workspaceId: string; path: string }
       try {
-        parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
+        target = parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
       } catch (error) {
         const issue = validationErrorBody(error)
         const body = issue ? JSON.stringify(issue) : ''
@@ -533,6 +567,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           `HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
         )
         socket.destroy()
+        return
+      }
+      if (await refuseWsUpgradeUnlessMember(decision.grant, target.workspaceId, members, socket)) {
         return
       }
       touch()

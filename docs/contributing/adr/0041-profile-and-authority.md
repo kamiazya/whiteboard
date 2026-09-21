@@ -204,3 +204,47 @@ setting above them both would force one policy onto work that has two owners.
 
 **Automatic identity join on a shared credential.** Rejected in decision 7 —
 convenient, and it makes a silent merge whose unwind is ambiguous.
+
+## Addendum (2026-09-21): membership gates ONLINE access, not just the replica
+
+S8 slice 1 landed the one decision (`workspaceAccess`) but wired it into a
+single route — the replica key. That left an L1 revoke able to kill a
+removed person's OFFLINE key while their still-valid pairing token kept
+reading and writing every other route live. Slice 2 closes that: every
+document, sync and workspace-listing route in local-daemon mode now runs
+the same decision, gated on whether the target workspace has any members
+at all.
+
+**The reading confirmed**: this is a **pairing-lane** decision, not a
+membership-everywhere one. Every operator-issued credential kind
+(`anonymous`, `daemon-token`, `oauth-grant`, `macaroon`, `ws-ticket`) stays
+exempt, because none of them can name a PERSON — decision 4's own point,
+restated for the online surface. A member-less workspace — no member ever
+added — keeps origin trust unconditionally, so the ordinary single-daemon,
+single-user setup this project ships by default is unaffected.
+
+**Options considered and not chosen:**
+
+- **Person-required everywhere, even for operator-issued credentials.**
+  Would make the daemon token, an open daemon, and a macaroon all subject
+  to a passkey check they have no way to satisfy — a permanent lockout the
+  moment any workspace on the daemon gains a member, including for the
+  operator who runs it. Rejected for the same reason decision 4 exempts
+  them from L1 in the first place.
+- **Revoking the origin's pairing grant on L1 removal**, rather than only
+  ending bound sessions and refusing future membership-gated requests. This
+  would cut the removed person's browser off from the DAEMON, not just
+  from the workspace they were removed from — collateral damage to every
+  OTHER workspace that origin can still legitimately reach (including a
+  member-less one). Rejected: L1 is per-workspace, and the blast radius of
+  its enforcement should be too.
+- **Offline-only enforcement** (the pre-slice-2 state, kept deliberately
+  minimal for slice 1 while the online story was designed). Rejected as
+  the end state once the online gap above was named: a revoke that bites
+  only the copy stored for offline use, while the same removed person
+  reads and writes live through every other route, is not the revocation
+  ADR-0042 decision 3 describes.
+
+What is still deferred: the dedicated "you were removed" page for the
+online routes (today the generic daemon-page load error carries the
+refusal's message) is its own follow-up slice, not this one.
