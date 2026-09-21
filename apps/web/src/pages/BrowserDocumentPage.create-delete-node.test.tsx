@@ -159,13 +159,12 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
     //
     // Dispatched only while the create has NOT landed, and that guard is the
     // whole difference between this test being deterministic and failing
-    // 3 runs in 10. `onCanvasChange` debounces 300ms before committing, so a
-    // dispatch on the iteration that PASSES leaves a commit armed — it lands
-    // after the undo below, where it re-adds the node to the document, tells
-    // no listener, and discards the redo stack, leaving Redo with nothing to
-    // restore. That divergence is a product defect and has its own issue
-    // (`issues/undo-then-pending-commit-diverges-screen-from-document`);
-    // what this guard removes is the test manufacturing it.
+    // 3 runs in 10: `onCanvasChange` debounces 300ms, so a dispatch on the
+    // iteration that PASSES leaves a write armed over a document the undo
+    // below is about to move. The session takes such a write back now rather
+    // than committing it blind (`dropQueuedWrite`), so what the extra
+    // dispatch costs today is an undo that takes back the RETRY instead of
+    // the create — one press short of the step this test is about.
     const undoButton = screen.getByRole('button', { name: 'Undo' })
     await waitFor(
       () => {

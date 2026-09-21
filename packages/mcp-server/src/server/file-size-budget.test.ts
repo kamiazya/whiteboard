@@ -85,10 +85,28 @@ function isScannedTestFile(absolutePath: string): boolean {
   return !EXCLUDED_DIR_SEGMENTS.some((segment) => normalized.includes(segment))
 }
 
+/**
+ * This file, which the ledger deliberately does not hold.
+ *
+ * Its length is a function of how many entries the list below has, so its
+ * ceiling records the SIZE OF THE DEBT LIST and nothing about this file —
+ * and every entry already has to carry a reason, so the deliberateness the
+ * ceiling would add is already spent one line above it.
+ *
+ * What it cost instead: the number changes on every branch that records a
+ * raise, so two branches that both record one conflict HERE, on a line
+ * neither of them is about. Measured on one PR in one session: three
+ * conflicts, each resolved by re-counting the merged file's own lines, and
+ * the reasons stacked up as archaeology ("FIVE branches", then "SIX") until
+ * the comment said more about merging than about sizes.
+ */
+const LEDGER_PATH = 'packages/mcp-server/src/server/file-size-budget.test.ts'
+
 function scanTestFiles(): string[] {
   return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
     .filter(isScannedTestFile)
     .map((absolutePath) => relativeToRepo(absolutePath))
+    .filter((path) => path !== LEDGER_PATH)
     .sort()
 }
 
@@ -340,7 +358,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // no canvas value, so a page reading only the canvas cannot see one. One
   // session serves both document pages, which is what keeps the two keepers
   // from drifting on it — and most of the eighteen lines say that.
-  'apps/web/src/lib/document-sync-session.ts': 1493,
+  // Raised 1493 -> 1535: an undo now takes back a write still inside its
+  // debounce window, and what costs the lines is the WHY — committing that
+  // write after an undo wrote the pre-undo canvas back over a document the
+  // screen had already left, publishing nothing and discarding the redo
+  // stack.
+  'apps/web/src/lib/document-sync-session.ts': 1535,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -792,7 +815,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `pointerdown-end` that arms them, all unreachable from this model for
   // the reason every other overlay gesture is — it generates node
   // interactions and never renders the handle the press starts on.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2730,
+  // Raised 2730 -> 2743: the census prints on a green run now, and the lines
+  // are the reason — a floor is a claim about a distribution, and a number
+  // printed only on failure is one draw from its left tail.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2743,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // Raised 1666 -> 1863 for the v19 -> v20 upgrade block (S4b's plaintext
   // replica discard): the seed fixture, the chunk-range no-op case, and the
@@ -800,7 +826,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1863 -> 1892: the v20 idempotency case now seeds a post-v20
   // sealed replica row so the version guard has something it would delete.
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
-  'apps/web/src/lib/document-sync-session.test.ts': 2768,
+  // Raised 2768 -> 2855 for the three cases pinning that undo: the document
+  // agreeing with the screen after an undo and after a redo, and a taken-back
+  // write settling as saved rather than reading as pending forever.
+  'apps/web/src/lib/document-sync-session.test.ts': 2855,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
   // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
@@ -850,42 +879,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/loro-adapter/src/loro-bridge.test.ts': 1308,
   'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
   'packages/mcp-server/src/server/app.test.ts': 1339,
-  // Its own entry, and it counts ITSELF: the number is what the file is
-  // after the entry is in it, which is why this one is 10 past the reading
-  // that first flagged it.
-  // 858 -> 892 for the raises the two ink writes needed, each with the
-  // reason beside it. That is the entry doing its job rather than growing:
-  // a raise costs a sentence, so a change that widens a file pays for it in
-  // the diff a reviewer reads.
-  // 892 -> 909 for completing two of those sentences. A review found both
-  // annotations stopping short of the ceiling they sit on — 2712 written
-  // against 2724, 1675 against 1808 — which is the failure mode this entry
-  // is the antidote to, one level up: an annotation that covers part of a
-  // raise reads exactly like one that covers all of it.
-  // 909 -> 917: this entry is self-referential, so every raise recorded
-  // above costs this file the lines that record it — including these.
-  // 917 -> 919 for the App.tsx raise above (ADR-0041 S0-5's Members card).
-  // 919 -> 926 for the App.test.tsx raise above, the same increment's two
-  // new assertions.
-  // +5 for the two entries the pointer-surface move needs: this list
-  // GREW by an over-budget file, which is the one thing that can only be
-  // recorded by raising this number. Then the four S4b raises and their
-  // sentences.
-  // 951 -> 959 for the two S5 raises above (App.tsx, App.test.tsx) and
-  // this entry's own two-line sentence — this file always grows by its
-  // own edit too.
-  // 973 -> 979: this ledger is on its own list, so the three-line reason a
-  // raise is REQUIRED to carry overflows it. Raising both is the mechanism
-  // working, not a loophole — the alternative is a raise with no reason.
-  // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. FIVE branches have now
-  // raised it for that reason independently; the number is the resolved
-  // file's own, re-measured at each merge rather than carried from a side.
-  // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. SIX branches have now
-  // raised it for that reason independently; the number is the resolved
-  // file's own, re-measured at each merge rather than carried from a side.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 1015,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
