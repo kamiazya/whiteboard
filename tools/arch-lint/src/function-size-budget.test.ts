@@ -346,7 +346,13 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 331,
   // Raised 697 -> 702 for Duplicate: the hook call, the ref the async
   // handler reads the current document from, and the menu row it contributes.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 702,
+  // Raised 702 -> 727 for Delete: the hook call, two menu rows and the
+  // dialog element. Its screen state and its dialog each moved into their
+  // own module beside the page, so what is here is wiring — the hook
+  // is still the audit's slice-4 subject
+  // (`issues/audit-2026-09-21-backlog`, item 6) and splitting it is that
+  // lane's work, not this feature's.
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 727,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
@@ -369,7 +375,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // into lib/duplicate-daemon-document.ts, shared with the index page; what
   // is here is the list refresh and the path move, the same two steps
   // `createDocument` ends with.
-  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 182,
+  // 182 -> 194 for `deleteDocument`: the delete call plus the same list
+  // refresh and path move its two siblings end with.
+  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 194,
+  // The document-menu bundle: two hooks, two rows, the dialog and the alert
+  // row. It is over the budget because it RETURNS JSX — the rows and the
+  // dialog are 40 of its lines and splitting them out would be a component
+  // per row, which is the shape this bundle exists to avoid.
+  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 64,
   'apps/web/src/pages/use-markdown-document.ts#useMarkdownDocument': 378,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
