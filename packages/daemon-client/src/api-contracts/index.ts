@@ -17,15 +17,16 @@
 // package it is not allowed to depend on directly (see
 // .claude/rules/architecture-map.md).
 //
-// These six come from the ROOT. They are off apps/web's critical path today,
-// which is a property of who imports them rather than a guarantee — see the
-// block below for what the root costs when that stops being true.
+// These seven come from the ROOT. They are off apps/web's critical path
+// today, which is a property of who imports them rather than a guarantee —
+// see the block below for what the root costs when that stops being true.
 export {
   backlinksOutputSchema as documentBacklinksResponseSchema,
   documentSearchOutputSchema as documentSearchResponseSchema,
   documentTagsOutputSchema as workspaceDocumentTagsResponseSchema,
   exportOkfOutputSchema as documentOkfV1ResponseSchema,
   linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
+  wbDocumentCreateOutputSchema as createDocumentV1ResponseSchema,
   wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 // The error contract moved DOWN to server-core to join them — `/api/v1` is

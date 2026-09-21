@@ -67,7 +67,7 @@ function installFetchMock(
         jsonResponse({ markdown: OKF_DOC, frontmatter: { type: 'note', title: 'Design' } }),
       )
     }
-    if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+    if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
       return Promise.resolve(jsonResponse(listResponse.body, listResponse.status))
     }
     return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
@@ -244,7 +244,7 @@ describe('DaemonIndexPage tree view', () => {
         )
         return Promise.resolve(jsonResponse({ path: to }))
       }
-      if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+      if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
         return Promise.resolve(jsonResponse({ documents: docs }))
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
@@ -336,7 +336,7 @@ describe('DaemonIndexPage tree view', () => {
         if (url.endsWith('/api/workspaces')) {
           return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
           const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
           created.push(body.path)
           docs = [
@@ -348,9 +348,14 @@ describe('DaemonIndexPage tree view', () => {
               kind: 'markdown',
             },
           ]
-          return Promise.resolve(jsonResponse({ path: body.path }))
+          return Promise.resolve(
+            jsonResponse(
+              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
+              201,
+            ),
+          )
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
           return Promise.resolve(jsonResponse({ documents: docs }))
         }
         return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
@@ -397,7 +402,7 @@ describe('DaemonIndexPage tree view', () => {
           docs = docs.filter((d) => !url.endsWith(encodeURI(d.path)) || d.path !== 'notes/design')
           return Promise.resolve(jsonResponse({ ok: true }))
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
           return Promise.resolve(jsonResponse({ documents: docs }))
         }
         return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
@@ -443,14 +448,19 @@ describe('DaemonIndexPage tree view', () => {
         if (url.endsWith('/api/workspaces')) {
           return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
           if (failNext) {
             failNext = false
             return Promise.resolve(jsonResponse({ title: 'nope' }, 500))
           }
-          return Promise.resolve(jsonResponse({ path: 'untitled' }))
+          return Promise.resolve(
+            jsonResponse(
+              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
+              201,
+            ),
+          )
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
           // One seeded row: an empty workspace shows the onboarding state
           // instead of the panel, and this test needs the panel's buttons.
           return Promise.resolve(
@@ -496,12 +506,17 @@ describe('DaemonIndexPage tree view', () => {
         if (url.endsWith('/api/workspaces')) {
           return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
           const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
           kinds.push(body.kind)
-          return Promise.resolve(jsonResponse({ path: body.path }))
+          return Promise.resolve(
+            jsonResponse(
+              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
+              201,
+            ),
+          )
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
           return Promise.resolve(
             jsonResponse({
               documents: [
@@ -547,7 +562,7 @@ describe('DaemonIndexPage tree view', () => {
         if (url.endsWith('/api/workspaces')) {
           return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url) && init?.method === 'POST') {
           const body = JSON.parse(String(init.body)) as { path: string }
           posted.push(body.path)
           docs = [
@@ -559,9 +574,14 @@ describe('DaemonIndexPage tree view', () => {
               kind: 'markdown',
             },
           ]
-          return Promise.resolve(jsonResponse({ path: body.path }))
+          return Promise.resolve(
+            jsonResponse(
+              { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
+              201,
+            ),
+          )
         }
-        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+        if (/\/api\/(?:v1\/)?workspaces\/[^/]+\/documents$/.test(url)) {
           return Promise.resolve(jsonResponse({ documents: docs }))
         }
         // Duplicate reads the source's bytes before it creates anything, so
