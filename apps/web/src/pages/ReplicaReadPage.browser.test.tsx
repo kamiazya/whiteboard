@@ -161,6 +161,20 @@ describe('ReplicaReadPage', () => {
     expect(await screen.findAllByText(/Hello from the cache/)).toHaveLength(2)
   })
 
+  it('the offline banner omits the synced clause when syncedAt is absent', async () => {
+    await seedReplica()
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        daemonBaseUrl={DAEMON}
+        renewal="unreachable"
+        onReconnect={noopReconnect}
+      />,
+    )
+    const banner = await screen.findByTestId('replica-offline-banner')
+    expect(banner.textContent).not.toMatch(/synced/i)
+  })
+
   it('a spatial edit persists as a visible diff — the unknown record survives', async () => {
     // Decision 3's spatial half. The unknown-version record is the sharp
     // edge: a whole-canvas resync would delete it, and on a replica that

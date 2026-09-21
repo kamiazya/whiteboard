@@ -33,10 +33,12 @@ export function membershipRefusal(err: unknown): MembershipRefusalAction | null 
 /**
  * Runs `load()`; on a `requires_person_session` refusal it binds the passkey
  * ONCE (via `bind`, guarded by the caller-owned `guard`) and retries `load()`
- * exactly once more. Any other outcome — a second refusal, a failed bind, an
- * already-attempted guard, or a non-refusal error — rethrows the ORIGINAL
- * error unchanged, so a caller branching on it still sees the refusal it
- * asked about rather than a bind-failure wrapper.
+ * exactly once more. A failed bind, an already-attempted guard, or a
+ * non-refusal error rethrows the ORIGINAL error unchanged, so a caller
+ * branching on it still sees the refusal it asked about rather than a
+ * bind-failure wrapper. A second refusal on the retry propagates as its OWN
+ * (distinct) error from that second `load()` call — never wrapped or
+ * swallowed, so a caller can still classify it with `membershipRefusal`.
  */
 export async function withOnePasskeyBind<T>(
   load: () => Promise<T>,
