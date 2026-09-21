@@ -25,9 +25,15 @@ describe('api-contracts barrel scope', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
     // '@kamiazya/whiteboard-server-core' is a deliberate widening: the
-    // /api/v1 document contracts (canvas list + OKF read) are consumed by
-    // apps/web through this barrel so it never imports the shared-layer
-    // package directly (architecture-map.md).
+    // /api/v1 document contracts (canvas list + OKF read) AND the api error
+    // body contract are consumed by apps/web through this barrel so it never
+    // imports the shared-layer package directly (architecture-map.md).
+    //
+    // `./errors.js` left this list when that contract moved DOWN to
+    // server-core: `/api/v1` is served from there, so a contract declared in
+    // the CLIENT was above half the routes it describes and nine of them
+    // answered with a raw `issues` array because the constructor was out of
+    // reach.
     expect(specifiers).toEqual([
       '@kamiazya/whiteboard-server-core',
       './document.js',
@@ -38,7 +44,6 @@ describe('api-contracts barrel scope', () => {
       // errors: the ONE daemon error-body contract (title | error+message),
       // exported so every client error surface reads through the same
       // parser instead of hand-rolled per-file field checks.
-      './errors.js',
       // fonts: the installable-font catalogue, exported so the settings
       // picker sends an id the daemon gave it. Publishing the contract is
       // what keeps a URL out of the request (ADR-0012).

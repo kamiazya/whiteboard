@@ -2,7 +2,17 @@ import { z } from 'zod'
 
 /**
  * The ONE shape a daemon HTTP error body may take, as a union of the two
- * families the routes actually emit. Only the second is STRICT: that family
+ * families the routes actually emit.
+ *
+ * It lives HERE, below every producer, rather than in `daemon-client` where
+ * it started. `/api/v1` is served from this package and `daemon-client`
+ * depends on it, so a contract filed with the browser CLIENT was out of
+ * reach of half the routes it describes — `create-server.ts` answered nine
+ * refusals with a raw `issues` array because the constructor was one layer
+ * above it. `daemon-client`'s barrel re-exports it, the way it already
+ * re-exports six `/api/v1` schemas from here for exactly this reason.
+ *
+ * Only the second arm is STRICT: that family
  * is this project's own, so a key outside it is a reason written where no
  * reader looks, while the first is a standard whose extensions belong to it.
  *
@@ -82,4 +92,20 @@ export function apiErrorReason(body: unknown): string | undefined {
  */
 export function errorBody(code: string, message?: string): ApiErrorBody {
   return message === undefined ? { error: code } : { error: code, message }
+}
+
+/**
+ * A schema validation failure as this contract's reason.
+ *
+ * The routes used to answer `{ error: 'invalid input', issues }`, putting the
+ * only description of what was wrong in a field the contract does not admit
+ * — so `apiErrorReason` discarded the whole body and every caller showed a
+ * generic banner. The issues say the same thing in the slot a reader reads.
+ */
+export function invalidRequestBody(error: z.ZodError): ApiErrorBody {
+  const said = error.issues.map((issue) => {
+    const at = issue.path.join('.')
+    return at === '' ? issue.message : `${at}: ${issue.message}`
+  })
+  return errorBody('invalid_request', said.join('; '))
 }

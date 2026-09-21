@@ -12,9 +12,8 @@ import type {
   ListTrashResponse,
   RestoreTrashResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
 import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'

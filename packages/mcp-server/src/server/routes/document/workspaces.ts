@@ -11,7 +11,6 @@ import {
   renameWorkspaceRequestSchema,
   type WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import {
   deriveWorkspaceSegment,
@@ -27,6 +26,7 @@ import {
   isWorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
   followReferencesAfterRename,
   type ServerDeps,

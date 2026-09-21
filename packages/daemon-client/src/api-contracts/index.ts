@@ -10,21 +10,29 @@
 // from its single definition instead of a hand-written mirror that can
 // silently drift from the server's shape.
 
-// The /api/v1 document list contract, re-exported from server-core so
-// apps/web keeps consuming every daemon HTTP contract through this one
-// barrel instead of importing a shared-layer package it is not allowed to
-// depend on directly (see .claude/rules/architecture-map.md).
+// The /api/v1 document list contract AND the api error body contract,
+// re-exported from server-core so apps/web keeps consuming every daemon
+// HTTP contract through this one barrel instead of importing a shared-layer
+// package it is not allowed to depend on directly (see
+// .claude/rules/architecture-map.md). The error contract moved DOWN to join
+// them: `/api/v1` is served from server-core, so a contract filed here was
+// above half the routes it describes.
+export type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 export {
+  apiErrorBodySchema,
+  apiErrorCodeSchema,
+  apiErrorReason,
   backlinksOutputSchema as documentBacklinksResponseSchema,
   documentSearchOutputSchema as documentSearchResponseSchema,
   documentTagsOutputSchema as workspaceDocumentTagsResponseSchema,
+  errorBody,
   exportOkfOutputSchema as documentOkfV1ResponseSchema,
+  invalidRequestBody,
   linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
   wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 export * from './document.js'
 export * from './document-url.js'
-export * from './errors.js'
 export * from './fonts.js'
 export type {
   CreateGrantResponse,

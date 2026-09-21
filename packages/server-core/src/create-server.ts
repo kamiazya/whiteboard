@@ -5,6 +5,7 @@ import {
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
+import { errorBody, invalidRequestBody } from './api-errors.js'
 import { ContentFactsCache } from './references/content-facts-cache.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
@@ -87,7 +88,7 @@ export function createServer(deps: ServerDeps) {
       ...body,
     })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       const result = await wbDocumentCreate(deps, parsed.data)
@@ -100,7 +101,7 @@ export function createServer(deps: ServerDeps) {
   app.get('/api/v1/workspaces/:workspaceId/documents', async (c) => {
     const parsed = wbDocumentListInputSchema.safeParse({ workspaceId: c.get('workspaceId') })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       const result = await wbDocumentList(deps, parsed.data)
@@ -116,7 +117,7 @@ export function createServer(deps: ServerDeps) {
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       const result = await wbDocumentResolve(deps, parsed.data)
@@ -132,7 +133,7 @@ export function createServer(deps: ServerDeps) {
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       const result = await wbDocumentDelete(deps, parsed.data)
@@ -157,7 +158,7 @@ export function createServer(deps: ServerDeps) {
       ...(c.req.query('limit') === undefined ? {} : { limit: Number(c.req.query('limit')) }),
     })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       return c.json(await tools.documentSearch.execute(parsed.data))
@@ -169,7 +170,7 @@ export function createServer(deps: ServerDeps) {
   app.get('/api/v1/workspaces/:workspaceId/document-tags', async (c) => {
     const parsed = documentTagsInputSchema.safeParse({ workspaceId: c.get('workspaceId') })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       return c.json(await computeDocumentTags(deps, parsed.data, factsCache))
@@ -186,13 +187,13 @@ export function createServer(deps: ServerDeps) {
       ...body,
     })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       return c.json(await linkifyMentions(deps, parsed.data))
     } catch (err) {
       if (err instanceof NamelessLinkifyTargetError) {
-        return c.json({ error: err.message }, 400)
+        return c.json(errorBody('nameless_link_target', err.message), 400)
       }
       return mapDocumentError(c, err)
     }
@@ -204,7 +205,7 @@ export function createServer(deps: ServerDeps) {
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       return c.json(await computeBacklinks(deps, parsed.data, factsCache))
@@ -219,7 +220,7 @@ export function createServer(deps: ServerDeps) {
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     try {
       const result = await exportOkf(deps, parsed.data)
@@ -230,7 +231,7 @@ export function createServer(deps: ServerDeps) {
       // `mapDocumentError` only knows document-crud's index-level errors, so
       // the store-level miss is answered here.
       if (err instanceof SnapshotNotFoundError) {
-        return c.json({ error: err.message }, 404)
+        return c.json(errorBody('document_not_found', err.message), 404)
       }
       return mapDocumentError(c, err)
     }
@@ -280,19 +281,19 @@ export function createServer(deps: ServerDeps) {
 
 function mapDocumentError(c: Context, err: unknown) {
   if (err instanceof WorkspaceDocumentNotFoundError) {
-    return c.json({ error: err.message }, 404)
+    return c.json(errorBody('document_not_found', err.message), 404)
   }
   if (err instanceof WorkspaceNotFoundError) {
-    return c.json({ error: err.message }, 404)
+    return c.json(errorBody('workspace_not_found', err.message), 404)
   }
   // The index's own spelling of the same condition: tools that call
   // `documentIndex.listDocuments` directly (backlinks, document-tags) let it
   // escape untranslated, and a typo'd workspaceId must read as 404, not 500.
   if (err instanceof PortWorkspaceNotFoundError) {
-    return c.json({ error: err.message }, 404)
+    return c.json(errorBody('workspace_not_found', err.message), 404)
   }
   if (err instanceof DocumentPathTakenError) {
-    return c.json({ error: err.message }, 409)
+    return c.json(errorBody('document_path_taken', err.message), 409)
   }
   // The caller asked to create a workspace under a handle that cannot be a
   // segment (ADR-0019). 400, not 500: the request is well-formed and the
@@ -301,23 +302,23 @@ function mapDocumentError(c: Context, err: unknown) {
   // Same reason: a search naming neither words nor a filter is a request
   // the schema admits and the tool has nothing to do with.
   if (err instanceof SearchNeedsQueryOrFilterError) {
-    return c.json({ error: err.message }, 400)
+    return c.json(errorBody('search_needs_query_or_filter', err.message), 400)
   }
   if (err instanceof WorkspaceSegmentUnusableError) {
-    return c.json({ error: err.message }, 400)
+    return c.json(errorBody('workspace_segment_unusable', err.message), 400)
   }
   // A markdown body the schema admits (any string) that OKF cannot parse:
   // the reason names the stage, and only the caller can supply a body that
   // reaches the next one.
   if (err instanceof OkfParseError) {
-    return c.json({ error: err.message }, 400)
+    return c.json(errorBody('okf_parse_failed', err.message), 400)
   }
   // A tag the workspace's own library does not admit (ADR-0040 decision 5).
   // 400 for the same reason: the request is well-formed and the server is
   // fine — only the caller can send a value the declaration admits, and the
   // message names the ones it does.
   if (err instanceof TagLibraryError) {
-    return c.json({ error: err.message }, 400)
+    return c.json(errorBody('tag_not_in_library', err.message), 400)
   }
   throw err
 }

@@ -6,7 +6,6 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apiErrorReason } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   type AddMemberRequest,
   listMembersResponseSchema,
@@ -19,6 +18,7 @@ import {
   sessionAssertChallengeResponseSchema,
   sessionAssertResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
+import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
 import {

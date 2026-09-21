@@ -3,7 +3,7 @@ import {
   documentPathForFile,
   parseDocumentApiPath,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
-import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'

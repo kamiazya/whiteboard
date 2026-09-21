@@ -29,18 +29,30 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { apiErrorBodySchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
 
-const ROUTES = join(__dirname)
+const REPO_ROOT = join(__dirname, '../../../../..')
 
-function routeSources(dir: string): { file: string; source: string }[] {
+/**
+ * Every place a daemon HTTP refusal is written: this package's routers, and
+ * server-core's `/api/v1`.
+ *
+ * server-core was outside the first version of this scan and had the same
+ * defect untouched — all 19 of its refusal literals were out of contract,
+ * nine carrying a raw `issues` array and ten putting an EXCEPTION's message
+ * in the code slot. A guard scoped to one package reported the other as
+ * satisfied by never looking.
+ */
+const SCAN_ROOTS = [__dirname, join(REPO_ROOT, 'packages/server-core/src')]
+
+function routeSources(dir: string, root: string): { file: string; source: string }[] {
   const out: { file: string; source: string }[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
-    if (entry.isDirectory()) out.push(...routeSources(full))
+    if (entry.isDirectory()) out.push(...routeSources(full, root))
     else if (entry.name.endsWith('.ts') && !entry.name.includes('.test.')) {
-      out.push({ file: full.slice(ROUTES.length + 1), source: readFileSync(full, 'utf8') })
+      out.push({ file: full.slice(root.length + 1), source: readFileSync(full, 'utf8') })
     }
   }
   return out
@@ -106,7 +118,9 @@ function isLiteral(body: string): boolean {
   return body.startsWith('{') && body.endsWith('}') && !body.slice(1, -1).includes('{')
 }
 
-const REFUSALS = routeSources(ROUTES).flatMap(({ file, source }) => refusalCalls(file, source))
+const REFUSALS = SCAN_ROOTS.flatMap((root) =>
+  routeSources(root, root).flatMap(({ file, source }) => refusalCalls(file, source)),
+)
 const LITERALS = REFUSALS.filter((r) => isLiteral(r.body))
 
 describe('every refusal literal a route writes is in the api error contract', () => {
