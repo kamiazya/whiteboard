@@ -52,6 +52,17 @@ export const removeMemberResponseSchema = z
   .strict()
 export type RemoveMemberResponse = z.infer<typeof removeMemberResponseSchema>
 
+export const reopenOriginTrustResponseSchema = z
+  .object({
+    // What the marker was BEFORE this call, so an operator asking twice can
+    // tell "I just reopened it" from "it was already open". A bare
+    // `{ok: true}` cannot, and that difference is the whole reason someone
+    // calls this route at all.
+    wasMembersOnly: z.boolean(),
+  })
+  .strict()
+export type ReopenOriginTrustResponse = z.infer<typeof reopenOriginTrustResponseSchema>
+
 /**
  * The typed refusal every membership route answers. A strict narrowing of
  * `apiErrorBodySchema`'s `{ error, message }` arm, so the existing client

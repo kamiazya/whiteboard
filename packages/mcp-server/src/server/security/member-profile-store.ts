@@ -17,6 +17,13 @@
  * not fall back to origin trust. See the 0030 migration for why it is its
  * own table rather than a column on `workspaces`.
  *
+ * `reopenToOriginTrust` is its ONLY exit, and it is deliberately not
+ * reachable from a revoke: a gate that reopened whenever the last member
+ * left would be no gate at all. It is barred to the daemon token alone
+ * (`route-scope-registry.ts`'s `daemon-token-only`), so the party who can
+ * reopen a workspace is whoever owns the data directory — never an origin
+ * that has been taken over, and never a paired browser.
+ *
  * FAIL-CLOSED HERE MEANS SCOPE OF CONSULTATION, NOT A PERMISSIVE DEFAULT: a
  * caller never consults `isWorkspaceMember` for an `anonymous` or
  * `daemon-token` grant — those bypass membership entirely, mirroring
@@ -84,6 +91,27 @@ export interface MemberProfileStore {
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
   /** True once this workspace has ever had a member — never reverts on revoke. */
   membersOnly(workspaceId: string): Promise<boolean>
+  /**
+   * Returns a workspace to ORIGIN TRUST by clearing the `membersOnly`
+   * marker, and answers whether there was one to clear.
+   *
+   * The one operation that undoes what a revoke deliberately leaves
+   * standing (user decision 2026-09-21, ADR-0042 decision 3's escape). It
+   * exists because the gate has no other exit: an operator who removed the
+   * last membership — possibly their own — is otherwise locked out of their
+   * own workspace with no route back but editing the database by hand.
+   *
+   * It does NOT touch `workspaceMemberships`. Reopening widens who may
+   * read; it does not remove the people who already could, and folding
+   * those together would make one call two decisions with the second one
+   * silent.
+   *
+   * A workspace re-closes on its next `addMember`, since the ordinary
+   * membership path re-inserts the marker — so this is a one-shot rather
+   * than a mode a workspace sits in. Nothing records that it happened,
+   * which is the honest limit: there is no audit log here to write to.
+   */
+  reopenToOriginTrust(workspaceId: string): Promise<boolean>
 }
 
 // Inserts the membership row and, on a workspace's FIRST membership ever,
@@ -228,6 +256,15 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
         .where('profileId', '=', profileId)
         .executeTakeFirst()
       return row === undefined ? 'not-a-member' : 'member'
+    },
+
+    async reopenToOriginTrust(workspaceId) {
+      const deleted = await db
+        .deleteFrom('workspaceMembersOnly')
+        .where('workspaceId', '=', workspaceId)
+        .returning('workspaceId')
+        .execute()
+      return deleted.length > 0
     },
 
     async membersOnly(workspaceId) {

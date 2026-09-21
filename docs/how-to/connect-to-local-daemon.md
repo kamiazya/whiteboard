@@ -299,7 +299,27 @@ the rest of the session and is never asked again mid-session.
 
 Removing everyone does not return the workspace to origin trust; it stays
 member-gated, and nobody is admitted until a member is added again. There
-is no button in this app to reopen it to origin trust.
+is no button in this app to reopen it, and there is not meant to be: that
+would let a browser reopen the gate that protects the workspace from
+browsers.
+
+**If you have locked yourself out**, which happens if you remove the last
+member and that member was you, the way back is from the machine running
+the daemon, using its token:
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer $WHITEBOARD_DAEMON_TOKEN" \
+  http://127.0.0.1:3099/api/workspaces/<workspaceId>/members-only
+```
+
+It answers `{"wasMembersOnly":true}` if the workspace was gated and
+`false` if it already trusted paired origins, so running it twice tells you
+which happened. The people who were members stay members; the workspace
+simply also trusts paired origins again, until you add a member to it. Only
+the daemon's own token works here — a paired browser's credentials are
+refused however broad they are, which is what makes this a way back rather
+than a way in.
 
 ## See what this device keeps of a daemon-kept workspace
 

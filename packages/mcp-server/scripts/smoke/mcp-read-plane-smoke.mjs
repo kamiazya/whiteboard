@@ -43,6 +43,13 @@
 //    revoked). That refusal is what mounts `replica-state-removed`
 //    (S5's page, the same `not_a_member` branch #1734 wired) — nothing is
 //    sent once the key is withheld (ADR-0042 decision 4).
+// 4b. The gate REOPENED to origin trust with the daemon token, cold
+//    reload: the renewal check 4 saw refused now pairs and the daemon page
+//    mounts, with no membership refusal left in the log. Asking twice
+//    reports `wasMembersOnly:false` the second time. The refusal side of
+//    that bar is not observable here (no non-daemon caller exists in this
+//    smoke) and is covered by `membership.test.ts` through the real
+//    middleware.
 // 5. The origin grant revoked (member re-added first): `replica-state-
 //    unpaired`, never `removed` — ADR-0042 decision 5's distinction
 //    between a pairing refusal and a membership refusal.
@@ -697,8 +704,80 @@ try {
   )
 
   // ==================================================================
+  // Check 4b — the gate REOPENED to origin trust with the daemon token,
+  // cold reload: the same origin-only renewal that check 4 just saw
+  // refused now pairs, and the daemon page mounts. This exists because
+  // check 4 is what found the original gap; the exit it asked for has to
+  // be observed reversing it against the same running daemon, not only in
+  // a unit test where the store is the only thing watching.
+  //
+  // `operator()` carries the daemon token, which is the only credential
+  // this route accepts (`daemon-token-only`, judged by grant KIND — a
+  // paired browser's grant carries every scope and is still refused).
+  // Nothing here can prove the refusal side: this smoke has no non-daemon
+  // caller to try it with, and `membership.test.ts` covers that through
+  // the real middleware instead.
+  // ==================================================================
+  const reopened = await operator(`/api/workspaces/${workspaceId}/members-only`, {
+    method: 'DELETE',
+  })
+  check(
+    reopened.status === 200 && reopened.body?.wasMembersOnly === true,
+    'the gate reopens and reports that it had been closed',
+    redact(reopened),
+  )
+
+  mark = daemonResponses.length
+  await page.goto(docUrl, { waitUntil: 'load' })
+
+  const reopenedPageGone = await page
+    .getByTestId('replica-read-page')
+    .waitFor({ state: 'detached', timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false)
+  check(
+    reopenedPageGone,
+    'the reopened workspace mounts the daemon page, not a replica state',
+    redact(daemonResponses.slice(mark)),
+  )
+
+  const markerAfterReopen = await page
+    .getByText(MARKER)
+    .first()
+    .waitFor({ state: 'visible', timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false)
+  check(markerAfterReopen, 'the reopened workspace shows its content again')
+
+  await settleResponses()
+  const check4bLog = daemonResponses.slice(mark)
+  // The discriminator against "it worked for some other reason": the
+  // refusal check 4 saw on this exact renewal is GONE, rather than merely
+  // followed by something that succeeded.
+  const stillRefused = check4bLog.filter(
+    (e) =>
+      e.status === 403 && (e.error === 'not_a_member' || e.error === 'requires_person_session'),
+  )
+  check(
+    stillRefused.length === 0,
+    'no membership refusal remains on the reopened workspace',
+    redact(stillRefused),
+  )
+
+  const secondReopen = await operator(`/api/workspaces/${workspaceId}/members-only`, {
+    method: 'DELETE',
+  })
+  check(
+    secondReopen.status === 200 && secondReopen.body?.wasMembersOnly === false,
+    'asking twice says the second time there was nothing to clear',
+    redact(secondReopen),
+  )
+
+  // ==================================================================
   // Check 5 — member re-added, origin grant revoked, cold reload:
-  // replica-state-unpaired, never removed (ADR-0042 decision 5).
+  // replica-state-unpaired, never removed (ADR-0042 decision 5). Re-adding
+  // the member also RE-CLOSES the gate check 4b just opened, which is the
+  // one-shot property stated in the store: a reopen is not a mode.
   // ==================================================================
   const readded = await operator(`/api/workspaces/${workspaceId}/members`, {
     method: 'POST',
