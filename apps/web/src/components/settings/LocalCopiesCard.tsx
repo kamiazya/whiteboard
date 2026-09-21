@@ -24,6 +24,7 @@
  * them is worse than no list.
  */
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { getAppLogger } from '../../lib/app-logger.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { forgetReplicaEntry, listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
@@ -38,6 +39,8 @@ import {
 } from '../ui/alert-dialog.js'
 import { Button } from '../ui/button.js'
 import { formatRelative } from '../workspace-files/format-relative.js'
+
+const log = getAppLogger('local-copies')
 
 /** What a row needs, whichever set it came from. */
 interface CopyRow {
@@ -125,24 +128,39 @@ export function LocalCopiesCard({
 }) {
   const headingId = useId()
   const [rows, setRows] = useState<CopyRow[] | null>(null)
+  const [keptReadable, setKeptReadable] = useState(true)
   const [pending, setPending] = useState<CopyRow | null>(null)
   const [deleting, setDeleting] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
 
   const load = useCallback(async () => {
+    // The claims come from the settings blob in localStorage and need no
+    // database, so they are read first and survive the registry being
+    // unreadable below.
     const replicas = listReplicas(settingsStore.load()).map(replicaRow)
-    // Dynamic: the browser registry drags IndexedDB and the document index,
-    // which a Settings visit should not pay for until this card mounts.
-    const { listBrowserWorkspaces } = await import('../../lib/browser-workspaces.js')
-    const kept = await listBrowserWorkspaces()
-    setRows([
-      ...kept.map((entry) => ({
+    let kept: CopyRow[] = []
+    let keptReadable = true
+    try {
+      // Dynamic: the browser registry drags IndexedDB and the document index,
+      // which a Settings visit should not pay for until this card mounts.
+      const { listBrowserWorkspaces } = await import('../../lib/browser-workspaces.js')
+      kept = (await listBrowserWorkspaces()).map((entry) => ({
         workspaceId: entry.workspaceId,
         label: entry.displayName ?? entry.segment ?? entry.workspaceId,
         keeper: 'browser' as const,
-      })),
-      ...replicas,
-    ])
+      }))
+    } catch (error) {
+      // A browser can refuse IndexedDB outright — a private window, blocked
+      // site data — and then this half of the inventory cannot be read at
+      // all. The claims still can, so the card degrades to what it knows and
+      // says the rest is unknown rather than implying this device keeps
+      // nothing of its own. `info`, not a failure: the environment said no,
+      // nothing broke.
+      keptReadable = false
+      log.info('the browser workspace registry could not be read', error)
+    }
+    setRows([...kept, ...replicas])
+    setKeptReadable(keptReadable)
   }, [settingsStore])
 
   useEffect(() => {
@@ -177,6 +195,12 @@ export function LocalCopiesCard({
       <h3 id={headingId} className="font-medium text-sm">
         Copies on this device
       </h3>
+      {!keptReadable && (
+        <p className="text-muted-foreground text-xs">
+          This browser would not open its own storage, so any workspace it keeps itself is not
+          listed here.
+        </p>
+      )}
       {rows === null ? (
         <p className="text-muted-foreground text-xs">Looking for copies…</p>
       ) : rows.length === 0 ? (

@@ -15,10 +15,12 @@ import { LocalCopiesCard } from './LocalCopiesCard.js'
 
 const deleteDoc = vi.fn(async () => {})
 
+const listBrowserWorkspaces = vi.fn(async () => [
+  { workspaceId: 'ws-browser', segment: 'mine', displayName: 'My own board' },
+])
+
 vi.mock('../../lib/browser-workspaces.js', () => ({
-  listBrowserWorkspaces: async () => [
-    { workspaceId: 'ws-browser', segment: 'mine', displayName: 'My own board' },
-  ],
+  listBrowserWorkspaces: () => listBrowserWorkspaces(),
 }))
 
 vi.mock('../../lib/replica-store.js', () => ({
@@ -48,6 +50,7 @@ function seedReplicas() {
 beforeEach(() => {
   createUserSettingsStore().reset()
   deleteDoc.mockClear()
+  listBrowserWorkspaces.mockClear()
 })
 
 afterEach(() => {
@@ -124,4 +127,20 @@ it('keeps both the claim and the record when the confirm is cancelled', async ()
 
   expect(deleteDoc).not.toHaveBeenCalled()
   expect(store.load().storage.replicas?.['ws-cached']).toBeDefined()
+})
+
+it('still lists the cached copies when this browser will not open its own storage', async () => {
+  // The real condition, not a contrivance: a private window or blocked site
+  // data refuses IndexedDB outright, and jsdom has none at all — which is
+  // how this reached CI as fifteen unhandled rejections from SettingsPage's
+  // own suite, where the card mounts and nothing had mocked the registry.
+  listBrowserWorkspaces.mockRejectedValueOnce(new ReferenceError('indexedDB is not defined'))
+
+  render(<LocalCopiesCard settingsStore={seedReplicas()} />)
+
+  expect(await screen.findByText('Cached board')).toBeTruthy()
+  expect(screen.getByText(/would not open its own storage/)).toBeTruthy()
+  // And it says the half it could not read is missing rather than implying
+  // this device keeps nothing of its own.
+  expect(screen.queryByText('My own board')).toBeNull()
 })

@@ -191,8 +191,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 522): the rows, the shared confirm dialog and the two-step delete are
   // one screen's worth of state, and the row already IS extracted
   // (`CopyRowItem`). Splitting further would separate the dialog from the
-  // `pending`/`deleting` state that decides whether it may close.
-  'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 126,
+  // `pending`/`deleting` state that decides whether it may close. 126 -> 147
+  // when the registry read learned to degrade: a browser that refuses
+  // IndexedDB has to leave the card listing what it CAN read rather than
+  // rejecting, and that branch is where the explanation lives.
+  'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 147,
   'apps/web/src/components/settings/MembersCard.tsx#MembersCard': 334,
   'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 522,
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 163,
