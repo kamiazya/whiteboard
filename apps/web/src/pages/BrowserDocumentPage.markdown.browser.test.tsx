@@ -708,12 +708,20 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
 
     // The preview loads the target body asynchronously and lays it out
     // inline through the render pipeline's embed seam.
-    await waitFor(
+    //
+    // `waitForOrSayWhen` for the same reason its canvas-group sibling below
+    // takes it, and because the two failures are one subject: this wait has
+    // ALSO expired on CI from branches that cannot reach `apps/web`, with the
+    // breadcrumb drawn (it comes from the page's own name table) and the
+    // content absent — which is the signature of a load still in flight AND
+    // the signature of a load that answered nothing, and the message could
+    // not tell them apart. Whichever of the two fails next now says which.
+    await waitForOrSayWhen(
       () => {
         const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
         expect(preview?.textContent).toContain('unmistakable embedded body text')
       },
-      { timeout: 10_000 },
+      { budgetMs: 10_000, subject: "the block ![[embed]]'s body" },
     )
   })
 
@@ -796,7 +804,9 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // `waitForOrSayWhen` rather than a plain wait: this one has failed twice
     // on CI from branches that cannot reach `apps/web`, and the message it
     // gave could not say whether the embed was still loading or had loaded
-    // and drawn nothing — which are opposite bugs.
+    // and drawn nothing — which are opposite bugs. Its sibling above takes
+    // the same instrument: four occurrences across the two of them, and they
+    // share nothing but the embed seam and the prefetch cache.
     await waitForOrSayWhen(
       () => {
         const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
