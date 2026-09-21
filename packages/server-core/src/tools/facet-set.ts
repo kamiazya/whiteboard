@@ -9,6 +9,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  type DocumentKind,
   documentIdSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
@@ -256,109 +257,10 @@ export function createFacetSetTool(deps: ServerDeps) {
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
-      if (input.tags === undefined && input.facets === undefined) {
-        throw new FacetSetNeedsPayloadError()
-      }
-      const element = input.nodeId ?? input.edgeId
-      if (input.nodeId !== undefined && input.edgeId !== undefined) {
-        throw new NodeAndEdgeTargetError()
-      }
-      if (element !== undefined && input.documentIds.length !== 1) {
-        throw new NodeTargetNeedsOneDocumentError(input.documentIds.length)
-      }
-      if (element !== undefined && input.target === 'canvas') {
-        throw new NodeAndCanvasTargetError()
-      }
-
-      // Write-side validation (ADR-0013 decision 6): a REGISTERED facet's
-      // payload must satisfy its schema, its key must be the current
-      // version, and its declared targets must include what this write
-      // targets — 'node' when nodeId is given, 'document' otherwise.
-      // Unregistered facets pass through unvalidated (round-trip safety).
-      // Registered payloads are stored as the schema's PARSED value. A null
-      // payload deletes the key — deletion needs no target or schema check.
-      //
-      // Done ONCE for the whole batch, before any document is opened: the
-      // payload is shared, so a rejected facet is rejected for every
-      // document and there is nothing to be gained by discovering it on the
-      // third one after the first two were already written.
-      // The workspace's registry, not only the deployment's: a stencil its
-      // own library defines must be writable HERE too, or the two paths that
-      // dress a box disagree — `wb_canvas_edit` applying an id this tool
-      // refuses is the shape a single composer exists to prevent.
-      //
-      // Resolved only when this batch writes a facet that TAKES a stencil.
-      // A library can add nothing but stencil assets, so every other write —
-      // a tag, a deletion, a shape — gets an identical answer from the
-      // deployment's registry and must not pay a document listing for it.
-      // Asked of the registry rather than against a hardcoded
-      // `visual.stencil/v0`: which facets take a stencil is a plugin's
-      // declaration, and a server spelling one plugin's key is a server no
-      // other plugin extends.
-      const deploymentRegistry = deps.facetRegistry ?? bundledFacetRegistry
-      const writesAStencilRef = Object.entries(input.facets ?? {}).some(
-        ([key, payload]) =>
-          payload !== null &&
-          Object.values(deploymentRegistry.assetRefsOf(key) ?? {}).includes('stencils'),
-      )
-      const registry = writesAStencilRef
-        ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
-        : deploymentRegistry
-      const requiredTarget: FacetTarget =
-        input.nodeId !== undefined
-          ? 'node'
-          : input.edgeId !== undefined
-            ? 'edge'
-            : (input.target ?? 'document')
-      const sets: Record<string, unknown> = {}
-      const deletions: string[] = []
-      for (const [key, payload] of Object.entries(input.facets ?? {})) {
-        if (payload === null) {
-          deletions.push(key)
-          continue
-        }
-        const targets = registry.targetsOf(key)
-        if (targets !== undefined && !targets.includes(requiredTarget)) {
-          throw new FacetWriteRejectedError(
-            key,
-            `its targets are [${targets.join(', ')}], and this write targets ${article(requiredTarget)} ${requiredTarget}`,
-          )
-        }
-        const result = registry.validateFacetWrite(key, payload)
-        if (!result.ok) {
-          throw new FacetWriteRejectedError(key, result.message)
-        }
-        sets[key] = result.value
-      }
-
-      // Every document is confirmed to be in the workspace before any of
-      // them is written. Each document is its own Loro doc with its own
-      // snapshot and there is no transaction across them, so writing as we
-      // go would leave a prefix of the batch tagged behind a thrown error —
-      // and the caller reading that error has no way to learn it happened.
-      for (const documentId of input.documentIds) {
-        await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
-      }
-
-      // What the workspace's tag library forbids is refused BEFORE any
-      // document is written, for the reason the check above runs first:
-      // the third document's refusal must not leave the first two tagged.
-      // The library is read once per batch (a listing plus a read), and
-      // only for a batch that writes tags — a facets-only write gets the
-      // same answer either way and must not pay for it. With no library
-      // the pre-pass costs nothing further: every set passes, so no
-      // document is loaded twice.
-      if (input.tags !== undefined) {
-        const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
-        if (Object.keys(library).length > 0) {
-          for (const documentId of input.documentIds) {
-            const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
-            for (const { what, tags } of tagSetsAfter(doc, input, documentId)) {
-              refuseAgainstLibrary(library, tags, what)
-            }
-          }
-        }
-      }
+      refuseIncoherentRequest(input)
+      const registry = await resolveWriteRegistry(deps, input)
+      const { sets, deletions } = partitionFacetWrites(registry, input, requiredTargetOf(input))
+      await refuseBeforeAnyWrite(deps, input)
 
       const updated: FacetSetOutput['updated'] = []
       for (const documentId of input.documentIds) {
@@ -366,6 +268,172 @@ export function createFacetSetTool(deps: ServerDeps) {
       }
       return { updated }
     },
+  }
+}
+
+/**
+ * This tool refuses in PHASES, and the order is the contract: everything that
+ * can refuse the batch runs before the first document is written.
+ *
+ * Each document is its own Loro doc with its own snapshot and there is no
+ * transaction across them, so a refusal discovered while writing leaves a
+ * PREFIX of the batch applied — and the caller reading that error has no way
+ * to learn which documents it got. The phases below are each a refusal, and
+ * `execute` is the sequence; a new check belongs in one of them rather than
+ * beside the write loop.
+ *
+ * `facet-set.test.ts` pins it: deleting the document-existence pre-pass fails
+ * two cases that assert nothing was written.
+ */
+
+/**
+ * Which SITE a write targets: an element on the board, the board's own
+ * envelope, or the document's frontmatter.
+ *
+ * One answer, read by both the write (`setOne`) and its dry run
+ * (`tagSetsAfter`). They used to derive it separately — the same
+ * `input.target === 'canvas' || kind === 'spatial'` written twice, with the
+ * element check written twice above it — and the dry run decides what the
+ * batch REFUSES while the write decides what it stores. Two copies of that
+ * decision is a sync obligation nothing enforces, which is the objection this
+ * file already records against the node/edge branches it merged earlier.
+ *
+ * It answers the site alone. What a MISMATCH costs differs by caller and
+ * stays with each: the write throws `DocumentKindMismatchError` with a message
+ * naming the way out, the dry run has nothing to refuse and returns nothing.
+ */
+type FacetWriteSite = 'node' | 'edge' | 'canvas' | 'document'
+
+function writeSiteOf(input: FacetSetInput, kind: DocumentKind | undefined): FacetWriteSite {
+  if (input.nodeId !== undefined) return 'node'
+  if (input.edgeId !== undefined) return 'edge'
+  if (input.target === 'canvas' || kind === 'spatial') return 'canvas'
+  return 'document'
+}
+
+/** Refuse a request whose own shape is incoherent, before anything is read. */
+function refuseIncoherentRequest(input: FacetSetInput): void {
+  if (input.tags === undefined && input.facets === undefined) {
+    throw new FacetSetNeedsPayloadError()
+  }
+  if (input.nodeId !== undefined && input.edgeId !== undefined) {
+    throw new NodeAndEdgeTargetError()
+  }
+  const element = input.nodeId ?? input.edgeId
+  if (element === undefined) return
+  if (input.documentIds.length !== 1) {
+    throw new NodeTargetNeedsOneDocumentError(input.documentIds.length)
+  }
+  if (input.target === 'canvas') {
+    throw new NodeAndCanvasTargetError()
+  }
+}
+
+/** What this write targets, which decides whether a facet may be written at all. */
+function requiredTargetOf(input: FacetSetInput): FacetTarget {
+  if (input.nodeId !== undefined) return 'node'
+  if (input.edgeId !== undefined) return 'edge'
+  return input.target ?? 'document'
+}
+
+/**
+ * The registry this batch is validated against.
+ *
+ * The WORKSPACE's, not only the deployment's, when the batch writes a facet
+ * that takes a stencil: a stencil its own library defines must be writable
+ * here too, or the two paths that dress a box disagree — `wb_canvas_edit`
+ * applying an id this tool refuses is the shape a single composer exists to
+ * prevent.
+ *
+ * Resolved only for such a write. A library can add nothing but stencil
+ * assets, so every other write — a tag, a deletion, a shape — gets an
+ * identical answer from the deployment's registry and must not pay a document
+ * listing for it. Which facets take a stencil is asked OF the registry rather
+ * than hardcoded as `visual.stencil/v0`: that is a plugin's declaration, and a
+ * server spelling one plugin's key is a server no other plugin extends.
+ */
+async function resolveWriteRegistry(deps: ServerDeps, input: FacetSetInput) {
+  const deploymentRegistry = deps.facetRegistry ?? bundledFacetRegistry
+  const writesAStencilRef = Object.entries(input.facets ?? {}).some(
+    ([key, payload]) =>
+      payload !== null &&
+      Object.values(deploymentRegistry.assetRefsOf(key) ?? {}).includes('stencils'),
+  )
+  return writesAStencilRef
+    ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
+    : deploymentRegistry
+}
+
+/**
+ * Split the batch's facets into validated SETS and DELETIONS, refusing any
+ * payload the registry rejects (ADR-0013 decision 6).
+ *
+ * A registered facet's payload must satisfy its schema, its key must be the
+ * current version, and its declared targets must include what this write
+ * targets. Unregistered facets pass through unvalidated, for round-trip
+ * safety. A registered payload is stored as the schema's PARSED value, and a
+ * null payload deletes the key — deletion needs no target or schema check.
+ *
+ * Done once for the whole batch, before any document is opened: the payload is
+ * shared, so a rejected facet is rejected for every document and there is
+ * nothing to be gained by discovering it on the third one after two were
+ * written.
+ */
+function partitionFacetWrites(
+  registry: {
+    targetsOf: (key: string) => readonly FacetTarget[] | undefined
+    validateFacetWrite: (
+      key: string,
+      payload: unknown,
+    ) => { ok: true; value: unknown } | { ok: false; message: string }
+  },
+  input: FacetSetInput,
+  requiredTarget: FacetTarget,
+): { sets: Record<string, unknown>; deletions: string[] } {
+  const sets: Record<string, unknown> = {}
+  const deletions: string[] = []
+  for (const [key, payload] of Object.entries(input.facets ?? {})) {
+    if (payload === null) {
+      deletions.push(key)
+      continue
+    }
+    const targets = registry.targetsOf(key)
+    if (targets !== undefined && !targets.includes(requiredTarget)) {
+      throw new FacetWriteRejectedError(
+        key,
+        `its targets are [${targets.join(', ')}], and this write targets ${article(requiredTarget)} ${requiredTarget}`,
+      )
+    }
+    const result = registry.validateFacetWrite(key, payload)
+    if (!result.ok) {
+      throw new FacetWriteRejectedError(key, result.message)
+    }
+    sets[key] = result.value
+  }
+  return { sets, deletions }
+}
+
+/**
+ * The refusals that need the WORKSPACE read: every document is confirmed to be
+ * in it, and then what its tag library forbids is refused.
+ *
+ * The library is read once per batch (a listing plus a read), and only for a
+ * batch that writes tags — a facets-only write gets the same answer either way
+ * and must not pay for it. With no library the pre-pass costs nothing further:
+ * every set passes, so no document is loaded twice.
+ */
+async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Promise<void> {
+  for (const documentId of input.documentIds) {
+    await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
+  }
+  if (input.tags === undefined) return
+  const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
+  if (Object.keys(library).length === 0) return
+  for (const documentId of input.documentIds) {
+    const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
+    for (const { what, tags } of tagSetsAfter(doc, input, documentId)) {
+      refuseAgainstLibrary(library, tags, what)
+    }
   }
 }
 
@@ -454,10 +522,9 @@ async function setOne(
   const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
   const kind = readDocumentKind(doc)
 
-  const element =
-    input.nodeId !== undefined ? 'node' : input.edgeId !== undefined ? 'edge' : undefined
-  if (element !== undefined) {
-    return await setElementFacets(deps, input, documentId, doc, kind, sets, deletions, element)
+  const site = writeSiteOf(input, kind)
+  if (site === 'node' || site === 'edge') {
+    return await setElementFacets(deps, input, documentId, doc, kind, sets, deletions, site)
   }
 
   // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
@@ -470,6 +537,9 @@ async function setOne(
   // A document with no kind is allowed through and NOT declared: unlike
   // an OKF content write this replaces nothing, so it has neither
   // something to lose nor any evidence to offer about the format.
+  // Stated as the KIND rather than the site, which is what it is about: a
+  // JSON Canvas document has no frontmatter. (`site === 'canvas'` here would
+  // reduce to the same set, and would not narrow `kind` for the error below.)
   if (kind === 'spatial' && input.target !== 'canvas' && input.facets !== undefined) {
     throw new DocumentKindMismatchError(
       documentId,
@@ -477,46 +547,77 @@ async function setOne(
       "Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass target: 'canvas' for canvas-target facets (a theme, edge routing), nodeId for node-target facets, set them on the markdown document this one refers to, or write its content with `wb_workspace_edit`'s `document.set` op.",
     )
   }
-
-  if (input.target === 'canvas' || kind === 'spatial') {
-    // A markdown document has no canvas envelope; a document with no kind
-    // is allowed through and NOT declared, for the reason the document
-    // branch below gives — this replaces nothing, so it has neither
-    // something to lose nor any evidence to offer about the format.
-    if (kind === 'markdown') {
-      throw new DocumentKindMismatchError(
-        documentId,
-        kind,
-        "Canvas-target facets live on a spatial document's canvas envelope. Omit target to set facets on a markdown document.",
-      )
-    }
-    const canvas = readSpatialCanvas(doc)
-    const merged: ExtensionFacets = { ...canvas.facets, ...sets }
-    for (const key of deletions) delete merged[key]
-    const tags = input.tags === undefined ? undefined : applyTagChange(canvas.tags, input.tags)
-    // A rename reaches every node and edge too: it is vocabulary
-    // maintenance over the document, not a write to the board alone.
-    const renames = input.tags?.rename ?? []
-    const renamed = <T extends { readonly tags?: readonly string[] }>(element: T): T => {
-      if (renames.length === 0 || element.tags === undefined) return element
-      const { tags: _before, ...rest } = element
-      return { ...rest, ...withTags(applyTagChange(element.tags, { rename: renames })) } as T
-    }
-    // The same canonical emptiness the web editor's `withCanvasFacet` keeps:
-    // an empty bucket disappears, so a reverted canvas never carries a
-    // redundant field forever. The comments beside it are untouched.
-    const { facets: _replaced, tags: _tags, ...canvasRest } = canvas
-    writeSpatialCanvas(doc, {
-      ...canvasRest,
-      nodes: canvas.nodes.map((node) => renamed(node)),
-      edges: canvas.edges.map((edge) => renamed(edge)),
-      ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
-      ...withTags(tags ?? canvas.tags),
-    })
-    await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
-    return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
+  if (site === 'canvas') {
+    return await setCanvasFacets(deps, input, documentId, doc, kind, sets, deletions)
   }
+  return await setDocumentFacets(deps, input, documentId, doc, sets, deletions)
+}
 
+/**
+ * Write to the board's own envelope.
+ *
+ * One writer per SITE, which is what `setElementFacets` beside it already was
+ * — the dispatch in `setOne` is now the whole of `setOne`, and each site's
+ * rules (what a markdown document cannot hold, how a rename reaches every node
+ * and edge, the canonical emptiness a reverted bucket keeps) live with the
+ * write they govern rather than in one body that does all three.
+ */
+async function setCanvasFacets(
+  deps: ServerDeps,
+  input: FacetSetInput,
+  documentId: string,
+  doc: LoroDoc,
+  kind: ReturnType<typeof readDocumentKind>,
+  sets: Record<string, unknown>,
+  deletions: readonly string[],
+): Promise<FacetSetOutput['updated'][number]> {
+  // A markdown document has no canvas envelope; a document with no kind
+  // is allowed through and NOT declared, for the reason the document
+  // branch below gives — this replaces nothing, so it has neither
+  // something to lose nor any evidence to offer about the format.
+  if (kind === 'markdown') {
+    throw new DocumentKindMismatchError(
+      documentId,
+      kind,
+      "Canvas-target facets live on a spatial document's canvas envelope. Omit target to set facets on a markdown document.",
+    )
+  }
+  const canvas = readSpatialCanvas(doc)
+  const merged: ExtensionFacets = { ...canvas.facets, ...sets }
+  for (const key of deletions) delete merged[key]
+  const tags = input.tags === undefined ? undefined : applyTagChange(canvas.tags, input.tags)
+  // A rename reaches every node and edge too: it is vocabulary
+  // maintenance over the document, not a write to the board alone.
+  const renames = input.tags?.rename ?? []
+  const renamed = <T extends { readonly tags?: readonly string[] }>(element: T): T => {
+    if (renames.length === 0 || element.tags === undefined) return element
+    const { tags: _before, ...rest } = element
+    return { ...rest, ...withTags(applyTagChange(element.tags, { rename: renames })) } as T
+  }
+  // The same canonical emptiness the web editor's `withCanvasFacet` keeps:
+  // an empty bucket disappears, so a reverted canvas never carries a
+  // redundant field forever. The comments beside it are untouched.
+  const { facets: _replaced, tags: _tags, ...canvasRest } = canvas
+  writeSpatialCanvas(doc, {
+    ...canvasRest,
+    nodes: canvas.nodes.map((node) => renamed(node)),
+    edges: canvas.edges.map((edge) => renamed(edge)),
+    ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
+    ...withTags(tags ?? canvas.tags),
+  })
+  await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+  return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
+}
+
+/** Write to the document's OKF frontmatter. */
+async function setDocumentFacets(
+  deps: ServerDeps,
+  input: FacetSetInput,
+  documentId: string,
+  doc: LoroDoc,
+  sets: Record<string, unknown>,
+  deletions: readonly string[],
+): Promise<FacetSetOutput['updated'][number]> {
   const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...sets }
   for (const key of deletions) delete mergedFacets[key]
   if (input.facets !== undefined) writeFacets(doc, mergedFacets)
@@ -544,43 +645,74 @@ async function setOne(
  * cannot reach (no such node, the wrong kind) answers nothing here and
  * leaves `setOne` to refuse it by name.
  */
-function tagSetsAfter(
-  doc: LoroDoc,
-  input: FacetSetInput,
-  documentId: string,
-): { what: string; tags: string[] }[] {
+type TagSet = { what: string; tags: string[] }
+
+function tagSetsAfter(doc: LoroDoc, input: FacetSetInput, documentId: string): TagSet[] {
   const change = input.tags
   if (change === undefined) return []
   const kind = readDocumentKind(doc)
-  if (input.nodeId !== undefined || input.edgeId !== undefined) {
-    if (kind !== 'spatial') return []
-    const canvas = readSpatialCanvas(doc)
-    const element =
-      input.nodeId !== undefined
-        ? canvas.nodes.find((node) => node.id === input.nodeId)
-        : canvas.edges.find((edge) => edge.id === input.edgeId)
-    if (element === undefined) return []
-    const what = input.nodeId !== undefined ? `node ${input.nodeId}` : `edge ${input.edgeId}`
-    return [{ what, tags: applyTagChange(element.tags, change) }]
+  switch (writeSiteOf(input, kind)) {
+    case 'node':
+    case 'edge':
+      return kind === 'spatial' ? tagSetsAtElement(readSpatialCanvas(doc), input, change) : []
+    case 'canvas':
+      return kind === 'markdown' ? [] : tagSetsAtCanvas(readSpatialCanvas(doc), change)
+    case 'document':
+      return tagSetsAtDocument(doc, documentId, change)
   }
-  if (input.target === 'canvas' || kind === 'spatial') {
-    if (kind === 'markdown') return []
-    const canvas = readSpatialCanvas(doc)
-    const sets = [{ what: 'the board', tags: applyTagChange(canvas.tags, change) }]
-    const renames = change.rename ?? []
-    if (renames.length === 0) return sets
-    for (const node of canvas.nodes) {
-      if (node.tags !== undefined) {
-        sets.push({ what: `node ${node.id}`, tags: applyTagChange(node.tags, { rename: renames }) })
-      }
+}
+
+/**
+ * The dry run for an element write. One function per SITE, mirroring the
+ * writers: the two used to derive the site separately and each carried its own
+ * three-way branch, so a change to what a write REACHES had to be made twice
+ * or the refusal pass would refuse a different set than the write produced.
+ */
+function tagSetsAtElement(
+  canvas: SpatialCanvas,
+  input: FacetSetInput,
+  change: NonNullable<FacetSetInput['tags']>,
+): TagSet[] {
+  const element =
+    input.nodeId !== undefined
+      ? canvas.nodes.find((node) => node.id === input.nodeId)
+      : canvas.edges.find((edge) => edge.id === input.edgeId)
+  if (element === undefined) return []
+  const what = input.nodeId !== undefined ? `node ${input.nodeId}` : `edge ${input.edgeId}`
+  return [{ what, tags: applyTagChange(element.tags, change) }]
+}
+
+/**
+ * The dry run for a board write. A rename reaches every node and edge too —
+ * vocabulary maintenance over the document, not a write to the board alone —
+ * which is what `setCanvasFacets` does and therefore what this must refuse for.
+ */
+function tagSetsAtCanvas(
+  canvas: SpatialCanvas,
+  change: NonNullable<FacetSetInput['tags']>,
+): TagSet[] {
+  const sets: TagSet[] = [{ what: 'the board', tags: applyTagChange(canvas.tags, change) }]
+  const rename = change.rename ?? []
+  if (rename.length === 0) return sets
+  for (const node of canvas.nodes) {
+    if (node.tags !== undefined) {
+      sets.push({ what: `node ${node.id}`, tags: applyTagChange(node.tags, { rename }) })
     }
-    for (const edge of canvas.edges) {
-      if (edge.tags !== undefined) {
-        sets.push({ what: `edge ${edge.id}`, tags: applyTagChange(edge.tags, { rename: renames }) })
-      }
-    }
-    return sets
   }
+  for (const edge of canvas.edges) {
+    if (edge.tags !== undefined) {
+      sets.push({ what: `edge ${edge.id}`, tags: applyTagChange(edge.tags, { rename }) })
+    }
+  }
+  return sets
+}
+
+/** The dry run for a frontmatter write. */
+function tagSetsAtDocument(
+  doc: LoroDoc,
+  documentId: string,
+  change: NonNullable<FacetSetInput['tags']>,
+): TagSet[] {
   const core = readCoreFacets(doc)
   if (core === undefined) return []
   return [{ what: `document ${documentId}`, tags: applyTagChange(core.tags, change) }]
