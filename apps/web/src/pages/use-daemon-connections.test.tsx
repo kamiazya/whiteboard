@@ -53,6 +53,43 @@ describe('useDaemonConnections', () => {
     expect(result.current.connections).toBeNull()
   })
 
+  it('a response in flight when the path changes does not refill the panel it just cleared', async () => {
+    // The SCOPE RESET clears on the path, and the fetch effect is keyed on the
+    // document ID — so a switch while the id still LAGS runs no cleanup, leaves
+    // `cancelled` false, and the in-flight response lands AFTER the reset. The
+    // departed document's backlinks are then shown under the arrived one, which
+    // is the exact state the reset exists to prevent, arriving one step later.
+    let releaseFirst: ((response: Response) => void) | undefined
+    const fetchFn = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          releaseFirst = resolve
+        }),
+    ) as unknown as typeof globalThis.fetch
+
+    const { result, rerender } = renderHook(
+      (props: { path: string }) =>
+        useDaemonConnections({
+          daemonFetch: fetchFn,
+          daemonBaseUrl: 'http://d',
+          workspaceId: 'ws-a',
+          documentId: BACKLINK.documentId,
+          path: props.path,
+        }),
+      { initialProps: { path: 'a' } },
+    )
+
+    // The switch lands while the request is still open and the id still lags.
+    rerender({ path: 'b' })
+    expect(result.current.connections).toBeNull()
+
+    await act(async () => {
+      releaseFirst?.(jsonResponse({ backlinks: [BACKLINK], unlinkedMentions: [] }))
+    })
+
+    expect(result.current.connections).toBeNull()
+  })
+
   it('blanks the panel while a NEW document id is loading, rather than showing the old one’s', async () => {
     // The other direction of the same hazard: the list catches up and names a
     // different id for what is on screen. The path may not have changed (a

@@ -11,7 +11,7 @@
  * refreshing — so without the reset the departed document's connections are
  * listed under the arrived one until it does.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { getDocumentBacklinks } from '../lib/daemon-api-client.js'
 
@@ -49,19 +49,31 @@ export function useDaemonConnections({
 }: UseDaemonConnectionsOptions): UseDaemonConnectionsResult {
   const [connections, setConnections] = useState<DaemonConnections | null>(null)
   const [connectionsRefresh, setConnectionsRefresh] = useState(0)
+  // Which SCOPE a request was made in. `cancelled` below cannot carry this:
+  // it is set by the fetch effect's own cleanup, which runs only when that
+  // effect's deps change — and the path is not one of them, deliberately (see
+  // the fetch effect). So a switch while the id still lags runs no cleanup,
+  // and the in-flight response would land AFTER the reset and refill the
+  // panel it just cleared.
+  const pathScope = useRef(0)
 
   // SCOPE RESET — see scoped-screen-state.test.ts.
   useEffect(() => {
+    pathScope.current += 1
     setConnections(null)
   }, [path])
 
   useEffect(() => {
     setConnections(null)
     if (documentId === undefined || workspaceId === null) return
+    // NOT keyed on the path: after a switch the id lags, so re-running here
+    // would re-fetch the DEPARTED document and show it under the arrived one.
+    // The scope is checked at apply time instead.
+    const requestedIn = pathScope.current
     let cancelled = false
     getDocumentBacklinks(daemonFetch, daemonBaseUrl, workspaceId, documentId)
       .then((response) => {
-        if (!cancelled) setConnections(response)
+        if (!cancelled && pathScope.current === requestedIn) setConnections(response)
       })
       .catch(() => {
         // The chip simply stays disabled; connections are never worth an
