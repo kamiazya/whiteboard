@@ -129,6 +129,15 @@ function holdChosenPosition(
   group: SpatialNode,
   node: SpatialNode,
 ): void {
+  // PRESENCE, not settledness — which is the whole difference between a group
+  // the CURSOR placed and one the caller positioned. A cursor-placed group has
+  // no top-left anybody chose: its box is derived from its members, so a later
+  // member before that box grows it rather than being refused, and it keeps
+  // doing so for the second member and the tenth. `placeAround` asks the
+  // settled question itself, one level down, and uses it for the only thing it
+  // decides here: whether to JOIN the box the group already has instead of
+  // replacing it. `region.set`'s `unsettled` reads the same flag for a
+  // different question — whether the group holds anything yet.
   const unplaced = ctx.s.placedByCursor.get(group.id)
   if (unplaced !== undefined) {
     ctx.s.placeAround(index, op, group, [node], unplaced)
