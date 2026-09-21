@@ -41,6 +41,7 @@ import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
+import type { WorkspaceAdmit } from '../auth.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -121,6 +122,11 @@ export interface WorkspacesRouterOptions {
    *  this from `options.replicaKeys?.effectiveTier` only when a replica-key
    *  store was supplied. */
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
+  /** S8 slice 2: the membership gate GET /api/workspaces filters the listing
+   *  through, rather than refusing the whole request — a name is a leak to a
+   *  non-member the way its content is. Absent means no filtering (server-
+   *  mode, and any composition that has not wired members). */
+  admit?: WorkspaceAdmit
 }
 
 // GET /api/workspaces
@@ -156,6 +162,12 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // something that polls.
       const counted = []
       for (const { workspaceId, segment, displayName } of workspaces) {
+        // ponytail: N x listMembers per list — a count query is the upgrade
+        // path if this shows up in a profile. Checked before the per-row
+        // documentCount read, so a filtered-out row costs no tree open.
+        if (options.admit !== undefined && (await options.admit(c, workspaceId)) !== 'admitted') {
+          continue
+        }
         counted.push({
           workspaceId,
           ...(segment === undefined ? {} : { segment }),

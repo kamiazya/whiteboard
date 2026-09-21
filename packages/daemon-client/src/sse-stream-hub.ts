@@ -183,6 +183,24 @@ export function workspaceDocKey(workspaceId: string): string {
 }
 
 /**
+ * The workspace a doc key addresses, for a caller that needs the id rather
+ * than the route — the daemon's membership gate, in particular, decides once
+ * per workspace rather than per document key. Same split as `canvasDocUrl`:
+ * a `workspace:` key names it directly, a per-document key is
+ * `${workspaceId}/${path}` split on the first slash. `null` for a
+ * malformed key (matching `canvasDocUrl`'s own refusal shape).
+ */
+export function workspaceIdOfDocKey(doc: string): string | null {
+  if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) {
+    const workspaceId = doc.slice(WORKSPACE_DOC_KEY_PREFIX.length)
+    return workspaceId.length === 0 ? null : workspaceId
+  }
+  const slash = doc.indexOf('/')
+  if (slash <= 0 || slash === doc.length - 1) return null
+  return doc.slice(0, slash)
+}
+
+/**
  * The daemon's update route for a doc key.
  *
  * A per-document key IS `${workspaceId}/${path}`, which is the only reason

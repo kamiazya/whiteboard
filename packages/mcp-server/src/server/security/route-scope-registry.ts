@@ -59,6 +59,14 @@ interface RouteScopeRule {
   readonly name: string
   readonly claims: (path: string, method: string) => boolean
   readonly decide: (isWrite: boolean) => RouteScopeDecision
+  /**
+   * S8: which WORKSPACE this route reaches, for the membership gate
+   * (`workspace-access.ts`). Absent means origin-trusted — the route is not
+   * gated on membership at all (pairing/runtime/debug/etc, and the two
+   * surfaces — `workspace members`, `workspace replica-key` — that already
+   * decide membership themselves at a finer grain than this table can see).
+   */
+  readonly workspace?: (path: string) => string | undefined
 }
 
 const exactly =
@@ -73,6 +81,29 @@ const under =
   (...prefixes: readonly string[]) =>
   (path: string): boolean =>
     prefixes.some((prefix) => path.startsWith(prefix))
+
+function decodeHandle(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return undefined
+  }
+}
+
+// The /api/w/:handle/... family (document file, workspace-document,
+// document update/export, document (rest)).
+const wHandlePattern = /^\/api\/w\/([^/]+)\//
+const wHandle = (path: string): string | undefined => decodeHandle(wHandlePattern.exec(path)?.[1])
+
+// The /api/(v1/)?workspaces/:handle(/...|$) family. Also yields the handle
+// for /api/workspaces/:id itself (summary/rename/delete) — a non-member
+// renaming or deleting a member-gated workspace is a write, so it is gated
+// too; only the bare collection GET|POST /api/workspaces is exempt (no
+// capturing group matches there).
+const workspacesHandlePattern = /^\/api\/(?:v1\/)?workspaces\/([^/]+)(?:\/|$)/
+const workspacesHandle = (path: string): string | undefined =>
+  decodeHandle(workspacesHandlePattern.exec(path)?.[1])
 
 const always =
   (...scopes: readonly AuthScope[]) =>
@@ -100,6 +131,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'document file',
     claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/file\/[^/]+$/),
     decide: byAccess('files:write', 'files:read'),
+    workspace: wHandle,
   },
 
   // The workspace-document sync surface: one snapshot/update pair for the
@@ -112,11 +144,13 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'workspace-document/promote',
     claims: matching(/^\/api\/w\/[^/]+\/workspace-document\/promote$/, 'POST'),
     decide: always('canvas:write', 'versions:write'),
+    workspace: wHandle,
   },
   {
     name: 'workspace-document sync',
     claims: matching(/^\/api\/w\/[^/]+\/workspace-document\/(snapshot|update)$/),
     decide: byAccess('canvas:write', 'canvas:read'),
+    workspace: wHandle,
   },
 
   // Canvas write operations that arrive as POST but mutate state.
@@ -124,6 +158,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'document update/export',
     claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/(update|export)$/, 'POST'),
     decide: always('canvas:write'),
+    workspace: wHandle,
   },
   // Remaining /api/w/:workspaceId/document/* routes: honor the write/read
   // split so a mutating POST (e.g. /viewport) isn't authorized by
@@ -133,6 +168,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'document (rest)',
     claims: matching(/^\/api\/w\/[^/]+\/document\//),
     decide: byAccess('canvas:write', 'canvas:read'),
+    workspace: wHandle,
   },
 
   // SSE sync transport. These are canvas:read even though two of them are
@@ -157,6 +193,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'document versions/compact',
     claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|compact)/),
     decide: byAccess('versions:write', 'versions:read'),
+    workspace: workspacesHandle,
   },
 
   // Branch and checkpoint routes — version-control operations at the
@@ -165,16 +202,19 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'document branches',
     claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/branches/),
     decide: byAccess('versions:write', 'versions:read'),
+    workspace: workspacesHandle,
   },
   {
     name: 'workspace checkpoints',
     claims: matching(/^\/api\/workspaces\/[^/]+\/checkpoints$/),
     decide: always('versions:write'),
+    workspace: workspacesHandle,
   },
   {
     name: 'versions/prune-sandwiched',
     claims: matching(/^\/api\/workspaces\/[^/]+\/versions\/prune-sandwiched$/),
     decide: always('versions:write'),
+    workspace: workspacesHandle,
   },
 
   // Destructive maintenance routes mounted under /api/workspaces need their
@@ -186,11 +226,13 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'files/purge-dangling',
     claims: matching(/^\/api\/workspaces\/[^/]+\/files\/purge-dangling$/, 'POST'),
     decide: always('files:write'),
+    workspace: workspacesHandle,
   },
   {
     name: 'documents/optimize-all',
     claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/optimize-all$/, 'POST'),
     decide: always('versions:write'),
+    workspace: workspacesHandle,
   },
 
   // Membership (ADR-0041/0042): who has L1 access to a workspace. Same bar
@@ -235,6 +277,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'workspaces (rest)',
     claims: under('/api/workspaces', '/api/v1/workspaces'),
     decide: byAccess('workspace:write', 'workspace:read'),
+    workspace: workspacesHandle,
   },
 
   // touch and logs-prune both mutate daemon-managed process state (the
@@ -313,10 +356,30 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
 /** The rules, for the walk that proves none of them is shadowed. */
 export const API_ROUTE_RULE_NAMES: readonly string[] = API_ROUTE_RULES.map((rule) => rule.name)
 
+/** The names of the rules declaring a `workspace` extractor — the S8
+ *  membership-gate partition's other half (`route-scope-registry.test.ts`
+ *  asserts this union with the origin-trusted list covers every rule name). */
+export const GATED_RULE_NAMES: readonly string[] = API_ROUTE_RULES.filter(
+  (rule) => rule.workspace !== undefined,
+).map((rule) => rule.name)
+
 /** Which rule claims this request, or `null` when none does. */
 export function ruleClaiming(method: string, path: string): string | null {
   if (!path.startsWith('/api/')) return null
   return API_ROUTE_RULES.find((rule) => rule.claims(path, method))?.name ?? null
+}
+
+/**
+ * The workspace HANDLE (segment or canonical id, unresolved) this request's
+ * route reaches, for the membership gate — the FIRST claiming rule's
+ * extractor, same first-match-wins order as `resolveApiRouteScope`. `null`
+ * when no rule claims the path, or the claiming rule is origin-trusted
+ * (declares no `workspace` extractor).
+ */
+export function gatedWorkspaceHandle(method: string, path: string): string | null {
+  if (!path.startsWith('/api/')) return null
+  const rule = API_ROUTE_RULES.find((r) => r.claims(path, method))
+  return rule?.workspace?.(path) ?? null
 }
 
 // Returns `null` when no rule above claims the path — the signal to fail

@@ -63,7 +63,7 @@ describe('authorizeWsUpgrade', () => {
         },
         createCredentialResolver({ daemonToken: 'secret' }),
       ),
-    ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
+    ).toMatchObject({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
   })
 
   it('keeps websocket auth disabled when daemon token is unset', async () => {
@@ -74,7 +74,7 @@ describe('authorizeWsUpgrade', () => {
         },
         createCredentialResolver({}),
       ),
-    ).toEqual({ accept: true, protocol: undefined, scopes: ALL_AUTH_SCOPES })
+    ).toMatchObject({ accept: true, protocol: undefined, scopes: ALL_AUTH_SCOPES })
   })
 
   it('admits cross-name loopback origins but rejects non-loopback ones', async () => {
@@ -90,7 +90,7 @@ describe('authorizeWsUpgrade', () => {
         },
         createCredentialResolver({ daemonToken: 'secret' }),
       ),
-    ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
+    ).toMatchObject({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
 
     expect(
       await authorizeWsUpgrade(

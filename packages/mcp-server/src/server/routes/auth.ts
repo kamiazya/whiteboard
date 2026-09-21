@@ -1,8 +1,23 @@
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
+import { getLogger } from '../log.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
-import { type RouteScopeDecision, resolveApiRouteScope } from '../security/route-scope-registry.js'
+import type { MemberProfileStore } from '../security/member-profile-store.js'
+import {
+  gatedWorkspaceHandle,
+  type RouteScopeDecision,
+  resolveApiRouteScope,
+  ruleClaiming,
+} from '../security/route-scope-registry.js'
+import {
+  membershipRefusal,
+  type WorkspaceAccessDecision,
+  workspaceAccess,
+} from '../security/workspace-access.js'
+import { workspaceIdFromHandle } from '../workspace-handle.js'
+
+const log = getLogger('daemon-auth')
 
 // Local-daemon mode requires the shared bearer token on every /api/* request,
 // read or write. `/api/runtime/ping` is the sole exception — it is the
@@ -62,7 +77,35 @@ export function grantCoversRoute(
   return hasRequiredScopes(grant.scopes, required.scopes)
 }
 
-export function createDaemonAuthMiddleware(resolver: CredentialResolver): MiddlewareHandler {
+/** The one per-request memo of "which grant authenticated this request",
+ *  read back by `resolvedGrantOf` — same idiom as `workspace-handle.ts`'s
+ *  memo, and for the same reason: `membershipAdmit` needs the grant a later
+ *  handler has no other way to reach (the daemon has no single `deps`
+ *  object handlers all read from). */
+const grantMemo = new WeakMap<Request, ResolvedGrant>()
+
+/** The grant this middleware resolved for the current request, or
+ *  `undefined` if the middleware never ran (a composition that forgot to
+ *  mount it). Used by `membershipAdmit`. */
+export function resolvedGrantOf(c: Context): ResolvedGrant | undefined {
+  return grantMemo.get(c.req.raw)
+}
+
+/** S8 slice 2: the membership gate this middleware applies to a gated route
+ *  before `next()`. Absent (server-mode) means no gate at all — server-mode
+ *  credentials are all operator-issued kinds, which `workspaceAccess` admits
+ *  unconditionally, so a gate there would be a no-op. */
+export interface DaemonAuthGate {
+  members: MemberProfileStore
+  /** Defaults to the shared per-request handle->id memo. Overridable so a
+   *  route test can resolve against a canonical id directly. */
+  workspaceIdOf?: (c: Context, handle: string) => Promise<string>
+}
+
+export function createDaemonAuthMiddleware(
+  resolver: CredentialResolver,
+  gate?: DaemonAuthGate,
+): MiddlewareHandler {
   return async (c, next) => {
     // The route-scope registry is the single source of truth for which routes
     // are public; consult it first so a route declared public there can never
@@ -81,20 +124,57 @@ export function createDaemonAuthMiddleware(resolver: CredentialResolver): Middle
       origin: c.req.header('origin'),
     })
 
-    if (grant !== null && grantCoversRoute(grant, resolveApiRouteScope(c.req.method, c.req.path))) {
-      return next()
+    if (
+      grant === null ||
+      !grantCoversRoute(grant, resolveApiRouteScope(c.req.method, c.req.path))
+    ) {
+      // One rejection for every way a request can fail: no credential, a wrong
+      // daemon token, a forged/expired/revoked access token, a valid access
+      // token whose grant does not cover this route, and a macaroon that is
+      // forged, expired, or caveated below what this route declares.
+      // Distinguishing them — even by status code — would tell an attacker which
+      // of the credentials they are close to holding, and would tell a hostile
+      // page whether a given bearer is a live grant at all. (The bodies match; a
+      // valid-but-out-of-scope token does run one extra O(1) hash lookup, a
+      // timing delta that only matters if this daemon is ever exposed beyond
+      // loopback — at which point the grant check needs a constant-time floor.)
+      return c.json({ error: 'unauthorized' }, 401)
     }
 
-    // One rejection for every way a request can fail: no credential, a wrong
-    // daemon token, a forged/expired/revoked access token, a valid access
-    // token whose grant does not cover this route, and a macaroon that is
-    // forged, expired, or caveated below what this route declares.
-    // Distinguishing them — even by status code — would tell an attacker which
-    // of the credentials they are close to holding, and would tell a hostile
-    // page whether a given bearer is a live grant at all. (The bodies match; a
-    // valid-but-out-of-scope token does run one extra O(1) hash lookup, a
-    // timing delta that only matters if this daemon is ever exposed beyond
-    // loopback — at which point the grant check needs a constant-time floor.)
-    return c.json({ error: 'unauthorized' }, 401)
+    grantMemo.set(c.req.raw, grant)
+
+    if (gate !== undefined) {
+      const handle = gatedWorkspaceHandle(c.req.method, c.req.path)
+      if (handle !== null) {
+        const resolveId = gate.workspaceIdOf ?? workspaceIdFromHandle
+        const workspaceId = await resolveId(c, handle)
+        const access = await workspaceAccess(grant, workspaceId, gate.members)
+        if (access !== 'admitted') {
+          log.warning(
+            { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: access },
+            'membership refused',
+          )
+          return c.json(membershipRefusal(access), 403)
+        }
+      }
+    }
+
+    return next()
   }
+}
+
+/**
+ * `WorkspacesRouterOptions`/`createSyncSseRouter`'s membership check, bound
+ * to the grant this request's `createDaemonAuthMiddleware` already resolved.
+ * A composition that omits the middleware (or a request that never reached
+ * it) has no resolved grant, and this answers `requires_person_session` for
+ * it — fail-closed, never "admit by default".
+ */
+export type WorkspaceAdmit = (c: Context, workspaceId: string) => Promise<WorkspaceAccessDecision>
+
+const NO_GRANT_RESOLVED: ResolvedGrant = { kind: 'pairing', scopes: [] }
+
+export function membershipAdmit(members: MemberProfileStore): WorkspaceAdmit {
+  return (c, workspaceId) =>
+    workspaceAccess(resolvedGrantOf(c) ?? NO_GRANT_RESOLVED, workspaceId, members)
 }

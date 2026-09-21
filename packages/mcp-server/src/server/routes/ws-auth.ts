@@ -10,7 +10,7 @@ import {
   normalizeHostHeader,
   normalizeOriginHostname,
 } from '../security/cors-loopback.js'
-import type { CredentialResolver } from '../security/credential-resolver.js'
+import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
 import {
   type AllowedWebOrigins,
   isAllowedWebOrigin,
@@ -68,6 +68,11 @@ export interface WsUpgradeDecision {
   // Which credentials can produce a NARROWER set than the full one is the
   // resolver's business, not this file's.
   scopes?: readonly AuthScope[]
+  /** S8 slice 2: the resolved grant, present on every accepted decision, so
+   *  the upgrade listener can run the same membership gate the HTTP
+   *  middleware runs — there is no per-request Hono `Context` on this path
+   *  to stash it in, unlike `routes/auth.ts`'s memo. */
+  grant?: ResolvedGrant
 }
 
 /**
@@ -124,7 +129,7 @@ export async function authorizeWsUpgrade(
     // Never the full set here: a ticket carries exactly the scopes its
     // originating OAuth grant held, which is the whole point of bridging
     // through a ticket rather than reusing the daemon token's path.
-    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: grant.scopes }
+    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: grant.scopes, grant }
   }
 
   const offeredToken = protocols.find((protocol) =>
@@ -147,6 +152,7 @@ export async function authorizeWsUpgrade(
       accept: true,
       protocol: offeredBaseProtocol ? WHITEBOARD_WS_PROTOCOL : undefined,
       scopes: grant.scopes,
+      grant,
     }
   }
   if (!offeredBaseProtocol || offeredToken === undefined) {
@@ -158,5 +164,5 @@ export async function authorizeWsUpgrade(
   // `routes/ws.ts` runs `hasRequiredScopes` on every text message and every
   // binary update, so a narrower array here really narrows what the socket can
   // do rather than being a value nobody reads.
-  return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: grant.scopes }
+  return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: grant.scopes, grant }
 }

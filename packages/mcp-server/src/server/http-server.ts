@@ -40,6 +40,7 @@ import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
+import { membershipRefusal, workspaceAccess } from './security/workspace-access.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
@@ -54,6 +55,7 @@ import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
+import { resolveWorkspaceHandleToId } from './workspace-handle.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
 
@@ -524,8 +526,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         socket.destroy()
         return
       }
+      let target: { workspaceId: string; path: string }
       try {
-        parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
+        target = parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
       } catch (error) {
         const issue = validationErrorBody(error)
         const body = issue ? JSON.stringify(issue) : ''
@@ -534,6 +537,26 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         )
         socket.destroy()
         return
+      }
+      // S8 slice 2: the same membership decision the HTTP middleware gates
+      // individual routes with, run here because a WS upgrade never passes
+      // through that middleware. `decision.grant` is present on every
+      // accepted decision (see ws-auth.ts).
+      if (decision.grant !== undefined) {
+        const workspaceId = await resolveWorkspaceHandleToId(target.workspaceId)
+        const access = await workspaceAccess(decision.grant, workspaceId, members)
+        if (access !== 'admitted') {
+          getLogger('http-server').warning(
+            { workspaceId, reason: access },
+            'websocket upgrade refused: membership',
+          )
+          const body = JSON.stringify(membershipRefusal(access))
+          socket.write(
+            `HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+          )
+          socket.destroy()
+          return
+        }
       }
       touch()
       wss.handleUpgrade(req, socket, head, (ws) => {
