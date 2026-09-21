@@ -477,7 +477,15 @@ try {
       if (typeof value === 'string') out.push(value)
       else if (value instanceof ArrayBuffer) out.push(new TextDecoder().decode(value))
       else if (ArrayBuffer.isView(value)) {
-        out.push(new TextDecoder().decode(value.buffer, value.byteOffset, value.byteLength))
+        // TextDecoder#decode takes exactly one argument (a BufferSource) —
+        // slicing the view's byte range to its own Uint8Array first, since
+        // decode(buffer, byteOffset, byteLength) is not its signature and
+        // throws a TypeError that reads as a real defect in what it wraps.
+        out.push(
+          new TextDecoder().decode(
+            new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
+          ),
+        )
       } else if (Array.isArray(value)) {
         for (const item of value) collectStrings(item, out)
       } else if (value && typeof value === 'object') {
