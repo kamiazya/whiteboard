@@ -137,7 +137,14 @@ function labelsFrom(source: string): string[] {
 }
 
 function menuLabels(keeper: Keeper): string[] {
-  return labelsFrom(sources[PAGES[keeper]] ?? '')
+  const source = sources[PAGES[keeper]]
+  // A renamed or moved page must FAIL rather than read as a keeper that
+  // contributes nothing: every entry below says a row is on the browser side
+  // and not on the daemon side, so an empty daemon source satisfies all of
+  // them at once. The same reason `purity-guard` and `file-size-budget` check
+  // that the paths they hold still exist.
+  if (source === undefined) throw new Error(`no such document page: ${PAGES[keeper]}`)
+  return labelsFrom(source)
 }
 
 /**
@@ -146,11 +153,15 @@ function menuLabels(keeper: Keeper): string[] {
  * measured against the real files the handling is code that cannot fail.
  */
 describe('a row is read from its label, whatever surrounds it', () => {
+  // `count > 1` as well as the arrow: a walk that stopped at any `>` is
+  // caught by either, but one that special-cased `=>` would pass on the arrow
+  // alone. A comparison inside braces is the shape that leaves no way to read
+  // the open tag except by counting braces.
   it('ignores a row that is only described in a comment, and reads one past an arrow handler', () => {
     const fixture = `
       {/* A commented row: <DropdownMenuItem>Ghost</DropdownMenuItem> */}
       // <DropdownMenuItem>Line comment</DropdownMenuItem>
-      <DropdownMenuItem disabled={busy} onSelect={() => void go()}>
+      <DropdownMenuItem disabled={count > 1} onSelect={() => void go()}>
         <Copy aria-hidden="true" className="size-3.5" />
         Duplicate
       </DropdownMenuItem>
