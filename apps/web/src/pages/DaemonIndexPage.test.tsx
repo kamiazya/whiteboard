@@ -981,6 +981,40 @@ describe('DaemonIndexPage', () => {
     expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
+  it('a duplicated MARKDOWN document is created as markdown, not as a canvas', async () => {
+    // The create is what sets the copy's INDEX row; the snapshot write after
+    // it is a plain re-save, which `document-store.ts` deliberately never
+    // lets touch a stored kind. The split that leaves is not cosmetic: the
+    // two readers take OPPOSITE precedence, so `resolve-file-references.ts`
+    // reads the markdown body while `references/extract.ts` runs
+    // `readSpatialCanvas` over the same note.
+    const created: Array<[string, string, string | undefined]> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        'ws-a': [
+          {
+            path: 'notes',
+            displayName: 'Notes',
+            kind: 'markdown',
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      },
+      namesByWorkspace: { 'ws-a': { documents: { notes: 'Notes' }, pinned: [] } },
+      snapshotByCanvas: { notes: new Uint8Array([1, 2, 3]) },
+      onCreateDocument: (workspaceId, path, kind) => created.push([workspaceId, path, kind]),
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await selectCard('Notes')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+
+    await waitFor(() => {
+      expect(created).toEqual([['ws-a', 'notes-copy', 'markdown']])
+    })
+  })
+
   it('a second Duplicate press while one is in flight starts no second copy', async () => {
     let resolveSnapshot: ((res: Response) => void) | undefined
     let snapshotCalls = 0
