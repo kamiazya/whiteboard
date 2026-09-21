@@ -21,6 +21,7 @@ import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiaz
 import { arbitraryForSchema, sameSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect } from 'vitest'
 import type { z } from 'zod'
+import { apiErrorBodySchema } from './api-errors.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import {
   MISSING_DOCUMENT_ID,
@@ -307,7 +308,17 @@ describe('every /api/v1 route answers or refuses with a reason, never a 5xx', ()
       // it understood (a target with no name to linkify), which is its
       // call to make.
       if (request.seeded && request.body?.kind === 'schema' && response.status === 400) {
-        expect(JSON.parse(text), detail).not.toMatchObject({ error: 'invalid input' })
+        expect(JSON.parse(text), detail).not.toMatchObject({ error: 'invalid_request' })
+      }
+      if (response.status >= 400) {
+        // What actually went out, parsed under the contract the web client
+        // reads it with — the runtime half of
+        // `mcp-server/src/server/routes/error-body-shape.test.ts`, whose
+        // scan sees object LITERALS and so cannot judge a body `errorBody`
+        // built (its `code` parameter is a plain `string`, and a sentence
+        // passed to it typechecks).
+        const refusal = apiErrorBodySchema.safeParse(JSON.parse(text))
+        expect(refusal.success, `${detail}\n${JSON.stringify(refusal.error?.issues)}`).toBe(true)
       }
     })
   }

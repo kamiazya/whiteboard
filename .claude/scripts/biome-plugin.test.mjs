@@ -52,6 +52,17 @@ const PLUGINS = [
     good: 'good-route-refusal.ts',
     probe: 'packages/mcp-server/src/server/routes/biome-plugin-scope-probe.ts',
   },
+  // The SECOND root of the same plugin. `/api/v1` is served from server-core,
+  // and a guard scoped to one package reports the other as satisfied by never
+  // looking — which is exactly how all 19 of server-core's refusal literals
+  // stayed out of contract while mcp-server's were fixed. One probe per
+  // declared root, or the widening is a claim rather than a fact.
+  {
+    plugin: 'tools/biome-plugins/route-refusal-shapes.grit',
+    bad: 'bad-route-refusal.ts',
+    good: 'good-route-refusal.ts',
+    probe: 'packages/server-core/src/biome-plugin-scope-probe.ts',
+  },
 ]
 
 function lint(file, plugin) {

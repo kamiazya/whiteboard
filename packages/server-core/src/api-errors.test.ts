@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apiErrorBodySchema, apiErrorReason } from './errors.js'
+import { apiErrorBodySchema, apiErrorReason } from './api-errors.js'
 
 describe('apiErrorBodySchema', () => {
   it.each([

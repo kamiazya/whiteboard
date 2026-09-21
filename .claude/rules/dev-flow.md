@@ -97,7 +97,8 @@ worked measurements live.** Load it before the work, not after:
 - **`diagnosis-evidence`** — before publishing ANY cause, "not a regression", mutation result, or
   fix you are calling verified by hand. A number arrives looking like evidence while saying
   nothing about what was actually exercised; the fix is to choose an observation that could
-  REFUTE the claim.
+  REFUTE the claim. Mutate through `.claude/scripts/mutate.mjs`, which exits 3 when the
+  substitution matched nothing.
 - **`visual-evidence`** — for a change that moves pixels: the same canvas through the real
   pipeline before and after, chosen by the metric the change targets rather than by eye. Two
   executable rungs back it, because this rule was prose alone for a long time and hollowed out —

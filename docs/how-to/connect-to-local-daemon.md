@@ -277,6 +277,11 @@ just in what they can read offline — their browser's live session ends
 right away, and its next request for anything in this workspace is
 refused rather than answered stale.
 
+The first time a browser opens a member-gated workspace in a given
+session, it asks once — confirming with the passkey registered for this
+daemon — before the workspace opens; after that it stays signed in for
+the rest of the session and is never asked again mid-session.
+
 ## See what this device keeps of a daemon-kept workspace
 
 Once a workspace is kept by a daemon, **Settings → Connections → This

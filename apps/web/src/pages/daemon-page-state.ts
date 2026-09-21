@@ -18,6 +18,7 @@
 //     as editing so a future direct-set path degrades to an idle editor
 //     rather than a wrong "missing" claim about no path at all.
 
+import type { MembershipRefusalState } from '../lib/membership-refusal.js'
 import type {
   DocumentMissingState,
   EditingState,
@@ -37,10 +38,22 @@ export interface DaemonPageStateInput {
    * path (the page's `workspaceSyncDocumentId !== undefined`).
    */
   documentAtPath: boolean
+  /** The daemon refused the resolve/document read on membership grounds
+   *  (ADR-0041/0042 S8) — read from `DaemonApiError.body` through
+   *  `membershipRefusal`, never from a controller-field guess. */
+  refusal: MembershipRefusalState | null
 }
+
+/**
+ * Daemon only: the resolve or document read was refused on membership
+ * grounds. Declared here rather than in the shared `document-page-state.ts`
+ * — the browser keeper has no membership.
+ */
+export type MembershipRefusedState = { kind: 'membership-refused' } & MembershipRefusalState
 
 export type DaemonPageState =
   | LoadingState
+  | MembershipRefusedState
   | LoadDegradedState
   | DocumentMissingState
   | WorkspaceEmptyState
@@ -49,6 +62,9 @@ export type DaemonPageState =
 export function deriveDaemonPageState(input: DaemonPageStateInput): DaemonPageState {
   if (input.loading) {
     return { kind: 'loading' }
+  }
+  if (input.refusal !== null) {
+    return { kind: 'membership-refused', ...input.refusal }
   }
   if (input.loadError !== null) {
     return { kind: 'load-degraded', message: input.loadError }

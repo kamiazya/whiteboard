@@ -1,7 +1,3 @@
-import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import type { z } from 'zod'
-
 export function shouldLogMcpHttpDebug(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.MCP_HTTP_DEBUG === '1'
 }
@@ -88,20 +84,4 @@ export function extractInitializeDebugPayload(parsedBody: unknown) {
     },
     capabilities,
   }
-}
-
-/**
- * A schema validation failure as the api error contract's reason.
- *
- * The routes used to answer `{ error: 'invalid input', issues }`, putting the
- * only description of what was wrong in a field the contract does not admit
- * — so `apiErrorReason` discarded the whole body and every caller showed a
- * generic banner. The issues say the same thing in the slot a reader reads.
- */
-export function invalidRequestBody(error: z.ZodError): ApiErrorBody {
-  const said = error.issues.map((issue) => {
-    const at = issue.path.join('.')
-    return at === '' ? issue.message : `${at}: ${issue.message}`
-  })
-  return errorBody('invalid_request', said.join('; '))
 }

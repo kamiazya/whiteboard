@@ -1,12 +1,11 @@
-import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   daemonPingResponseSchema,
   runtimeVerifyRequestSchema,
   runtimeVerifyResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
-import { invalidRequestBody } from '../app-helpers.js'
 import { getDataDir } from '../config.js'
 import type { RuntimeStatus } from '../http-server.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'

@@ -126,7 +126,11 @@
     },
     {
       "path": "./tools/biome-plugins/route-refusal-shapes.grit",
-      "includes": ["**/packages/mcp-server/src/server/routes/**/*.ts", "!**/*.test.ts"]
+      "includes": [
+        "**/packages/mcp-server/src/server/routes/**/*.ts",
+        "**/packages/server-core/src/**/*.ts",
+        "!**/*.test.ts"
+      ]
     }
   ]
 }

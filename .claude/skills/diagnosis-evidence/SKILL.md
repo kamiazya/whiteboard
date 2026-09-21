@@ -142,6 +142,34 @@ The sweeper case: the flake only appeared under parallel load, so on a quiet
 machine both the fixed and the mutated build passed. The mutation only became
 informative once the failure had been reproduced first.
 
+### The helper, and the case that made it one
+
+`node .claude/scripts/mutate.mjs <file> <old> <new> -- <command...>` is the
+block above with its premise enforced: it **exits 3 naming the file and the
+needle when the substitution matched nothing**, prints the occurrence count
+when it did, and restores from memory in a `finally` — which also covers an
+UNTRACKED file, where `git checkout --` restores nothing at all. The exit code
+is the command's, so an expected-RED run is read by the caller.
+
+It exists because the count assertion above is easy to leave out and the
+result is indistinguishable from success. Measured on one session's four
+mutation checks of a new guard: **two had never applied.** The probe spelled a
+ledger entry with double quotes; the formatter had rewritten the file to single
+after it was written. `replace` returned the input, the guard ran against
+untouched source, and both came back GREEN — read at the time as "those two
+directions are covered".
+
+Two of the four DID fire, which is what made it convincing. A mutation suite
+where some probes land and some silently do not is worse than none: the ones
+that work vouch for the ones that do not.
+
+The same shape appears one level up, in what a guard SCANS. A rule can compile,
+load and match nothing — `$...rest` in Biome's GritQL does exactly that — and a
+scan can be scoped to one package while the subject spans two. Neither is
+visible in a green run. Mutate REAL source inside each declared scope, not only
+a fixture: a fixture proves the pattern matches, and only a probe inside the
+scope proves the scope reaches.
+
 ## Assert the count, not the absence of failures
 
 Six runs reported `0 failures`. Six runs had executed zero tests: the command
