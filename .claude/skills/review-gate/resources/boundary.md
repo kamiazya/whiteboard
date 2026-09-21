@@ -39,3 +39,21 @@ Check:
 - Does code that runs against a worktree (`cwd`-aware scripts, daemon
   registry entries) consistently use the passed `cwd`/absolute path instead
   of assuming the process's own `process.cwd()`?
+
+### 6. A re-export from another package's ROOT barrel
+
+A barrel re-export is an import of that package's index, so it drags the
+index's whole module graph. No boundary test can see this — the edge is
+legal and the types are right — and only the bundle gate can, after a build.
+Measured: re-exporting `apiErrorReason` from `@kamiazya/whiteboard-server-core`
+put hono, loro-crdt, canvas-render and search into apps/web's entry chunk,
+421.4 KB gzip against a 152 KB budget, because one critical-path module read
+it. From `.../api-errors` instead: 148.8 KB.
+
+Check:
+- Does a new or moved re-export name a package ROOT? If any critical-path
+  module reaches it, it needs a subpath — and the subpath needs an `exports`
+  entry in the producing package.
+- Does the producing module import only what the consumer can afford? A
+  contract module that imports zod and nothing else is safe from any root; a
+  barrel is not.
