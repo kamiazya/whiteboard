@@ -1,3 +1,4 @@
+import type { z } from 'zod'
 import type { MembershipRefusalCode } from './api-contracts/membership.js'
 import { membershipRefusalSchema } from './api-contracts/membership.js'
 import type { ReplicaTier } from './api-contracts/replica-key.js'
@@ -21,12 +22,34 @@ import { fromBase64 } from './sse-stream-hub.js'
  */
 
 export type BindOutcome =
-  | { ok: true }
+  | {
+      ok: true
+      /**
+       * The key material the binding assertion carried, when the
+       * authenticator produced it (ADR-0042 decision 6). The SAME gesture
+       * that proves who is asking is the one that yields this, so a cold
+       * start costs no second prompt.
+       *
+       * Absent is ORDINARY: prf support is broad and not universal, and
+       * the session is bound either way — only the cold start is lost.
+       */
+      prfOutput?: Uint8Array<ArrayBuffer>
+    }
   | { ok: false; reason: 'no-passkey' | 'cancelled' | 'rejected' | 'unreachable' }
 
 export interface ReplicaSource {
   fetch: typeof fetch
   bindSession: () => Promise<BindOutcome>
+  /**
+   * Called with each response the daemon MINTS, so a caller can wrap and
+   * persist it for a cold start (ADR-0042 decision 6). The parsed response
+   * rather than the decoded bytes: a cold start rebuilds this holder's
+   * state through `adoptSessionKey`, which takes the same shape, so there
+   * is never a second hand-written idea of what a replica key is.
+   *
+   * Not called for a withheld answer — there is nothing to keep.
+   */
+  onKeyResponse?: (response: ReplicaKeyResponse) => void
 }
 
 export type SessionKeyResult =
@@ -64,9 +87,79 @@ function lapsed(entry: SessionKeyResult): boolean {
   )
 }
 
+/**
+ * How long a cached `'unreachable'` stands before the holder will ask again.
+ *
+ * `unreachable` is the ONE withheld reason that is not a decision — the
+ * daemon said nothing, so nothing about this browser's standing changed.
+ * Cached forever (which it was) a transient blip kept a replica locked until
+ * the person pressed Reconnect, long after the daemon came back. Not cached
+ * at all it would re-request on every read, which is the request-storm shape
+ * this repo has already paid for once.
+ *
+ * So: cached, and self-healing within this window. An authoritative refusal
+ * — `not_a_member`, `requires_person_session`, `lapsed` — keeps caching
+ * until something forgets it, because those ARE decisions.
+ */
+const UNREACHABLE_TTL_MS = 30_000
+
+/** When each cached `'unreachable'` was recorded, so it can go stale. */
+const unreachableAt = new Map<string, number>()
+
+/** True for a cached `'unreachable'` old enough to be worth re-asking — shared by `sessionKey` and `sessionKeyStatus` for the reason `lapsed` is. */
+function staleUnreachable(entry: SessionKeyResult, key: string): boolean {
+  if (entry.kind !== 'withheld' || entry.reason !== 'unreachable') return false
+  const recordedAt = unreachableAt.get(key)
+  return recordedAt === undefined || Date.now() - recordedAt >= UNREACHABLE_TTL_MS
+}
+
 // Unpadded, which `atob` accepts; the schema pins both lengths to 43/22 chars.
 function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   return fromBase64(value.replace(/-/g, '+').replace(/_/g, '/'))
+}
+
+/** What `/replica-key` answers, parsed — the shape a cold start wraps and adopts. */
+export type ReplicaKeyResponse = z.infer<typeof replicaKeyResponseSchema>
+
+/**
+ * The ONE conversion from a parsed response to what the holder keeps.
+ * `fetchSessionKey` and `adoptSessionKey` both go through it, so a replica
+ * restored from disk and one just fetched cannot be two different states.
+ */
+function heldFrom(response: ReplicaKeyResponse): Extract<SessionKeyResult, { kind: 'key' }> {
+  return {
+    kind: 'key',
+    workspaceKey: base64UrlToBytes(response.workspaceKey),
+    workspaceKeySalt: base64UrlToBytes(response.workspaceKeySalt),
+    tier: response.tier,
+    leaseExpiresAt:
+      response.leaseExpiresAt === undefined ? undefined : Date.parse(response.leaseExpiresAt),
+  }
+}
+
+/**
+ * Holds a key somebody else unwrapped, as if this session had fetched it.
+ *
+ * Answers whether it was taken. It is REFUSED in two cases, each because
+ * taking it would be worse than not having it: a lease that has already
+ * passed would hold bytes every read then rejects, and a pair this session
+ * already holds a key for outranks a blob from disk, which may be older
+ * than the live session that minted the held one.
+ */
+export function adoptSessionKey(
+  daemonBaseUrl: string,
+  workspaceId: string,
+  response: ReplicaKeyResponse,
+): boolean {
+  const key = cacheKey(daemonBaseUrl, workspaceId)
+  const held = heldFrom(response)
+  if (lapsed(held)) return false
+  const existing = cache.get(key)
+  if (existing !== undefined && existing.kind === 'key' && !lapsed(existing)) return false
+  cache.set(key, held)
+  unreachableAt.delete(key)
+  derivedKeyMemo.delete(key)
+  return true
 }
 
 async function fetchSessionKey(
@@ -91,16 +184,8 @@ async function fetchSessionKey(
     if (!parsed.success) {
       return { kind: 'withheld', reason: 'unreachable' }
     }
-    return {
-      kind: 'key',
-      workspaceKey: base64UrlToBytes(parsed.data.workspaceKey),
-      workspaceKeySalt: base64UrlToBytes(parsed.data.workspaceKeySalt),
-      tier: parsed.data.tier,
-      leaseExpiresAt:
-        parsed.data.leaseExpiresAt === undefined
-          ? undefined
-          : Date.parse(parsed.data.leaseExpiresAt),
-    }
+    source.onKeyResponse?.(parsed.data)
+    return heldFrom(parsed.data)
   }
 
   const refusal = membershipRefusalSchema.safeParse(body)
@@ -108,6 +193,31 @@ async function fetchSessionKey(
     return { kind: 'withheld', reason: 'unreachable' }
   }
   return { kind: 'withheld', reason: refusal.data.error }
+}
+
+/**
+ * What the cache can answer for `key` on its own, or null to go and ask.
+ *
+ * Both expiries PURGE rather than merely hiding, and each for its own
+ * reason. A lapsed lease's derived keys have to go with it, or a later
+ * re-mint with different bytes would still be answered from the memo. A
+ * stale `unreachable` is dropped so that a caller with no source falls
+ * through to a fresh `unreachable` rather than replaying an expired one.
+ */
+function readCache(key: string): SessionKeyResult | null {
+  const cached = cache.get(key)
+  if (cached === undefined) return null
+  if (lapsed(cached)) {
+    cache.delete(key)
+    derivedKeyMemo.delete(key)
+    return { kind: 'withheld', reason: 'lapsed' }
+  }
+  if (staleUnreachable(cached, key)) {
+    cache.delete(key)
+    unreachableAt.delete(key)
+    return null
+  }
+  return cached
 }
 
 async function requestSessionKey(
@@ -139,18 +249,8 @@ export async function sessionKey(
   source?: ReplicaSource,
 ): Promise<SessionKeyResult> {
   const key = cacheKey(daemonBaseUrl, workspaceId)
-  const cached = cache.get(key)
-  if (cached !== undefined) {
-    if (lapsed(cached)) {
-      // A lapsed lease's derived keys must go with it — otherwise a later
-      // re-mint (once key rotation ships, with different bytes) would still
-      // answer keyFor() from this memo, derived from the superseded key.
-      cache.delete(key)
-      derivedKeyMemo.delete(key)
-      return { kind: 'withheld', reason: 'lapsed' }
-    }
-    return cached
-  }
+  const cached = readCache(key)
+  if (cached !== null) return cached
 
   if (source === undefined) {
     return { kind: 'withheld', reason: 'unreachable' }
@@ -177,6 +277,11 @@ export async function sessionKey(
       if (inFlight.get(key) === promise) {
         inFlight.delete(key)
         cache.set(key, result)
+        if (result.kind === 'withheld' && result.reason === 'unreachable') {
+          unreachableAt.set(key, Date.now())
+        } else {
+          unreachableAt.delete(key)
+        }
       }
       return result
     },
@@ -206,9 +311,14 @@ export function sessionKeyStatus(
   daemonBaseUrl: string,
   workspaceId: string,
 ): SessionKeyStatus | undefined {
-  const cached = cache.get(cacheKey(daemonBaseUrl, workspaceId))
+  const key = cacheKey(daemonBaseUrl, workspaceId)
+  const cached = cache.get(key)
   if (cached === undefined) return undefined
   if (lapsed(cached)) return { kind: 'withheld', reason: 'lapsed' }
+  // A stale `unreachable` reads as "nothing asked yet" rather than as a
+  // standing refusal: the next `sessionKey` will ask, so a caller must not
+  // paint it as a settled state.
+  if (staleUnreachable(cached, key)) return undefined
   if (cached.kind === 'withheld') return cached
   return {
     kind: 'held',
@@ -223,6 +333,7 @@ export function forget(daemonBaseUrl: string, workspaceId: string): void {
   cache.delete(key)
   inFlight.delete(key)
   derivedKeyMemo.delete(key)
+  unreachableAt.delete(key)
 }
 
 /** Drops every held key — used on logout. */
@@ -230,6 +341,7 @@ export function forgetAll(): void {
   cache.clear()
   inFlight.clear()
   derivedKeyMemo.clear()
+  unreachableAt.clear()
 }
 
 export interface ReplicaKeyProvider {

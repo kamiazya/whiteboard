@@ -30,6 +30,7 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
 import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
 import { REPLICA_TIER_COPY } from '../lib/replica-tier-copy.js'
+import { rememberReplicaKey } from '../lib/replica-unlock.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -128,10 +129,44 @@ async function seedReplica(): Promise<void> {
   await new BrowserWorkspaceDocs().save(DAEMON_WS, record)
 }
 
+const PRF = new Uint8Array(32).fill(11)
+const SEALED_KEYS = 'whiteboard:replica-sealed-keys'
+const PASSKEYS = 'whiteboard:daemon-passkeys'
+const RAW_ID = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8])
+
+/**
+ * Leaves this device in the state a cold start finds: a sealed replica in
+ * IndexedDB, a wrapped key beside it, a registered passkey, and NOTHING
+ * held in memory — the holder forgotten and the daemon disconnected, which
+ * is what closing the tab does.
+ */
+async function forgetEverythingButTheBlob(): Promise<void> {
+  await rememberReplicaKey({
+    daemonBaseUrl: DAEMON,
+    workspaceId: DAEMON_WS,
+    response: {
+      workspaceKey: b64u(WORKSPACE_KEY),
+      workspaceKeySalt: b64u(WORKSPACE_SALT),
+      tier: 'offline',
+    },
+    prfOutput: PRF,
+  })
+  localStorage.setItem(
+    PASSKEYS,
+    JSON.stringify({
+      [DAEMON]: { credentialId: b64u(RAW_ID), registeredAt: '2026-09-21T00:00:00.000Z' },
+    }),
+  )
+  connectReplicaKeeper(null)
+  forgetAll()
+}
+
 beforeEach(clearWhiteboardDb)
 afterEach(() => {
   connectReplicaKeeper(null)
   forgetAll()
+  localStorage.removeItem(SEALED_KEYS)
+  localStorage.removeItem(PASSKEYS)
   cleanup()
 })
 
@@ -577,11 +612,11 @@ describe('ReplicaReadPage states', () => {
     const status = await screen.findByTestId('replica-live-status')
     expect(status.getAttribute('role')).toBe('status')
     await userEvent.click(await screen.findByRole('button', { name: 'Reconnect' }))
-    await screen.findByTestId('replica-reconnecting-line')
+    await screen.findByTestId('replica-locked-busy-line')
     expect(status.textContent).toBe('Reconnecting…')
     releaseReconnect()
     await vi.waitFor(() => {
-      expect(screen.queryByTestId('replica-reconnecting-line')).toBeNull()
+      expect(screen.queryByTestId('replica-locked-busy-line')).toBeNull()
       // 'locked' is itself a page-critical connectivity message, not
       // silence: a screen-reader user who was mid-'Reconnecting…' must
       // still hear why the page settled back where it did.
@@ -605,5 +640,90 @@ describe('ReplicaReadPage states', () => {
     expect((await screen.findByTestId('replica-live-status')).textContent).toBe(
       REPLICA_STATE_COPY['needs-connection'].body,
     )
+  })
+})
+
+describe('ReplicaReadPage: the cold start (ADR-0042 d6)', () => {
+  it('offers an unlock instead of a reconnect, and reads the cached body once the passkey answers', async () => {
+    await seedReplica()
+    await forgetEverythingButTheBlob()
+    // `navigator.credentials` in a real browser: the page performs the
+    // gesture through the platform, so the double goes there rather than
+    // into a prop only a test would pass.
+    const get = vi.spyOn(navigator.credentials, 'get').mockResolvedValue({
+      rawId: RAW_ID.buffer,
+      response: {
+        authenticatorData: new Uint8Array(37).fill(1).buffer,
+        clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer,
+        signature: new Uint8Array([7, 7, 7]).buffer,
+      },
+      getClientExtensionResults: () => ({ prf: { results: { first: PRF.buffer } } }),
+    } as unknown as Credential)
+
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        syncedAt={SYNCED}
+        daemonBaseUrl={DAEMON}
+        renewal="unreachable"
+        onReconnect={noopReconnect}
+      />,
+    )
+
+    const unlockable = await screen.findByTestId('replica-state-unlockable')
+    // The offer says what it costs: the passkey is the recovery path.
+    expect(unlockable.textContent).toMatch(/lose that passkey/i)
+    // Not the reconnect offer — an unreachable daemon is beside the point
+    // for a copy this device can open by itself.
+    expect(screen.queryByTestId('replica-state-locked')).toBeNull()
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: REPLICA_STATE_COPY.unlockable.action }),
+    )
+
+    await screen.findByTestId('replica-state-readable')
+    expect(get).toHaveBeenCalledTimes(1)
+    await userEvent.click(await screen.findByText('plan'))
+    expect(await screen.findAllByText(/Hello from the cache/)).toHaveLength(2)
+
+    get.mockRestore()
+  })
+
+  it('stops offering an unlock once the blob turns out to be unopenable', async () => {
+    await seedReplica()
+    await forgetEverythingButTheBlob()
+    // A different authenticator: the derived key is not the one that
+    // wrapped the blob, so nothing on this device can open it.
+    const get = vi.spyOn(navigator.credentials, 'get').mockResolvedValue({
+      rawId: RAW_ID.buffer,
+      response: {
+        authenticatorData: new Uint8Array(37).fill(1).buffer,
+        clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer,
+        signature: new Uint8Array([7, 7, 7]).buffer,
+      },
+      getClientExtensionResults: () => ({
+        prf: { results: { first: new Uint8Array(32).fill(99).buffer } },
+      }),
+    } as unknown as Credential)
+
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        syncedAt={SYNCED}
+        daemonBaseUrl={DAEMON}
+        renewal="unreachable"
+        onReconnect={noopReconnect}
+      />,
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: REPLICA_STATE_COPY.unlockable.action }),
+    )
+
+    // The offer is withdrawn rather than repeated: an unlock that cannot
+    // succeed must not keep asking someone to prove themselves.
+    await screen.findByTestId('replica-state-locked')
+    expect(localStorage.getItem(SEALED_KEYS)).not.toContain(DAEMON_WS)
+
+    get.mockRestore()
   })
 })

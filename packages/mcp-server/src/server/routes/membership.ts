@@ -14,6 +14,24 @@
 // Narrowing what a pairing session may do is its own future increment.
 // Person-level membership gates the read plane's KEY (a later slice), not
 // this admin surface.
+//
+// ONE route here is barred differently, and it is the exception that shows
+// what the posture above costs. `DELETE .../members-only` returns a
+// workspace to ORIGIN TRUST — the only exit from the gate a revoke
+// deliberately leaves standing (user decision 2026-09-21) — and its bar is
+// `daemon-token-only`, judged by the grant's KIND rather than its scopes.
+// That is forced rather than chosen: since a pairing grant carries every
+// scope, `runtime:admin` would let any paired browser reopen the very gate
+// that exists to stop an origin being trusted, so a scope-based bar here
+// would be no bar at all. With a kind-based one, the party who can reopen a
+// workspace is whoever holds the daemon token, which is whoever owns the
+// data directory; a taken-over origin cannot open the gate for itself.
+// `grantCoversRoute` (auth.ts) enforces it, and server mode refuses the
+// variant outright — which matches, this router being local-daemon-only.
+//
+// Why the exit has to exist: an operator who removes the last membership,
+// possibly their own, is otherwise locked out of their own workspace with
+// no route back but editing the database by hand.
 
 import {
   type AddMemberRequest,
@@ -24,7 +42,9 @@ import {
   type MembershipRefusal,
   memberProfileSummarySchema,
   type RemoveMemberResponse,
+  type ReopenOriginTrustResponse,
   removeMemberResponseSchema,
+  reopenOriginTrustResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
@@ -184,6 +204,30 @@ export function createMembershipRouter({
     const response: RemoveMemberResponse = removeMemberResponseSchema.parse({
       removed: true,
       sessionsEnded,
+    })
+    return c.json(response, 200)
+  })
+
+  // DELETE, because that is literally what it does: it removes the
+  // `workspaceMembersOnly` row `workspaceAccess` reads. The response says
+  // what the marker WAS, so an operator asking twice can tell "I just
+  // reopened it" from "it was already open" — the bar and the reason this
+  // route exists at all are in the file header.
+  app.delete('/api/workspaces/:workspaceId/members-only', async (c) => {
+    const workspaceId = c.req.param('workspaceId')
+    const invalidId = badWorkspaceIdBody(workspaceId)
+    if (invalidId) return c.json(invalidId, 400)
+    if (!(await workspaceExists(workspaceId))) {
+      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'membership refused')
+      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
+    }
+
+    const wasMembersOnly = await members.reopenToOriginTrust(workspaceId)
+    // `notice`, at the same level as an L1 revoke: this widens who may read
+    // a workspace, and nothing else records that it happened.
+    log.notice({ workspaceId, wasMembersOnly }, 'membership.reopened-to-origin-trust')
+    const response: ReopenOriginTrustResponse = reopenOriginTrustResponseSchema.parse({
+      wasMembersOnly,
     })
     return c.json(response, 200)
   })

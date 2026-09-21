@@ -10,7 +10,6 @@ import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
@@ -23,11 +22,7 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import {
-  createDaemonFetch,
-  getDocumentBacklinks,
-  linkifyDocumentMentions,
-} from '../lib/daemon-api-client.js'
+import { createDaemonFetch, linkifyDocumentMentions } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
@@ -51,6 +46,7 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
 const log = getAppLogger('daemon-document-page')
@@ -365,20 +361,13 @@ function useDaemonDocument(
   const documentKind: DocumentKind =
     controller.documents.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
 
-  // SCOPE RESET — see scoped-screen-state.test.ts. The history column, the
-  // save outcome and the comments rail clear themselves inside DocumentPage,
-  // keyed on the same document this effect watches.
-  useEffect(() => {
-    // The `?v=` view and its notice clear themselves inside DocumentPage,
-    // which owns them for both keepers and strips the param a switch leaves
-    // naming nothing.
-    //
-    // Backlinks OF this document. The fetch below nulls them itself, but only
-    // once it knows the arrived document's id — which comes from a list that
-    // may still be refreshing, so the departed document's connections would
-    // be listed under the arrived one until it does.
-    setConnections(null)
-  }, [controller.path])
+  // SCOPE RESET — see scoped-screen-state.test.ts. Nothing is reset HERE any
+  // more, and that is the state to keep: the history column, the save outcome
+  // and the comments rail clear themselves inside DocumentPage; the `?v=`
+  // view and its notice likewise, which also strips the param a switch leaves
+  // naming nothing; and the backlinks clear inside `useDaemonConnections`,
+  // which owns them. A new piece of screen-scoped state adds its reset to the
+  // hook that owns it, not to a second list here.
 
   // A markdown document's body lives in the doc's `body` text container —
   // the one place it is stored, and the shape `wb_document_set` writes. The
@@ -422,27 +411,13 @@ function useDaemonDocument(
   // an older daemon's id-less listing leaves it undefined and the chip
   // disabled rather than querying with a path the route would reject.
   const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.id
-  const [connections, setConnections] = useState<{
-    readonly backlinks: readonly ConnectionsBacklink[]
-    readonly unlinkedMentions: readonly ConnectionsBacklink[]
-  } | null>(null)
-  const [connectionsRefresh, setConnectionsRefresh] = useState(0)
-  useEffect(() => {
-    setConnections(null)
-    if (currentDocumentId === undefined || controller.workspaceId === null) return
-    let cancelled = false
-    getDocumentBacklinks(daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId)
-      .then((response) => {
-        if (!cancelled) setConnections(response)
-      })
-      .catch(() => {
-        // The chip simply stays disabled; connections are never worth an
-        // error surface of their own on a page that otherwise works.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId, connectionsRefresh])
+  const { connections, refresh: refreshConnections } = useDaemonConnections({
+    daemonFetch,
+    daemonBaseUrl,
+    workspaceId: controller.workspaceId,
+    documentId: currentDocumentId,
+    path: controller.path,
+  })
   const loadReference = useCallback<ReferenceLoader>(
     async (target, documentId) => {
       // The adapter resolves a legacy path reference itself, so the target
@@ -756,7 +731,7 @@ function useDaemonDocument(
                 mention.documentId,
                 currentDocumentId,
               )
-                .then(() => setConnectionsRefresh((n) => n + 1))
+                .then(() => refreshConnections())
                 .catch(() => {
                   // The panel simply keeps showing the mention; the
                   // next open retries.

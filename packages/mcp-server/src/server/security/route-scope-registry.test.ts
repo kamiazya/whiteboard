@@ -354,6 +354,10 @@ const CLAIMED_BY = {
   'files/purge-dangling': ['POST', '/api/workspaces/ws1/files/purge-dangling'],
   'documents/optimize-all': ['POST', '/api/workspaces/ws1/documents/optimize-all'],
   'workspace members': ['GET', '/api/workspaces/ws1/members'],
+  // DELETE specifically: the rule claims that verb alone, so a GET of the
+  // same path falls through to 'workspaces (rest)' and is a different
+  // decision entirely.
+  'workspace members-only reopen': ['DELETE', '/api/workspaces/ws1/members-only'],
   'workspace replica-key': ['POST', '/api/workspaces/ws1/replica-key'],
   'workspace replica-key rotate': ['POST', '/api/workspaces/ws1/replica-key/rotate'],
   'workspace replica-tier': ['PUT', '/api/workspaces/ws1/replica-tier'],
@@ -415,6 +419,13 @@ const ORIGIN_TRUSTED = [
   'runtime/verify',
   'sync transport',
   'workspace members',
+  // ORIGIN_TRUSTED, and NOT because it is unimportant: the membership gate
+  // is the thing this route turns off, so running it through the gate would
+  // make the escape unreachable in exactly the state it exists for. Its own
+  // bar is `daemon-token-only`, which is stricter than the gate rather than
+  // weaker — judged by grant KIND, so a pairing grant's full scope set does
+  // not reach it.
+  'workspace members-only reopen',
   'workspace replica-key',
   'workspace replica-key rotate',
   'workspace replica-tier',
