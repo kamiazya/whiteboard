@@ -214,7 +214,10 @@ run on every ONLINE route that reaches the workspace's content. A
 members configured never needs a passkey, and every existing single-user
 setup keeps working unchanged. Adding the first member is what flips a
 workspace from origin trust to membership — see
-[Connect to a local daemon](../how-to/connect-to-local-daemon.md).
+[Connect to a local daemon](../how-to/connect-to-local-daemon.md) — and it
+keeps origin trust only UNTIL its first member is added; removing every
+member does not reopen it. A workspace that has ever had a member stays
+person-gated, now admitting nobody until a member is added again.
 
 This applies to **local-daemon mode only**. Server-mode credentials are all
 operator-issued through the external Identity Provider, which is already

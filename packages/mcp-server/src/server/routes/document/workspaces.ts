@@ -162,9 +162,9 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // something that polls.
       const counted = []
       for (const { workspaceId, segment, displayName } of workspaces) {
-        // ponytail: N x listMembers per list — a count query is the upgrade
-        // path if this shows up in a profile. Checked before the per-row
-        // documentCount read, so a filtered-out row costs no tree open.
+        // ponytail: N x membersOnly (one PK lookup) per list — a batched
+        // query is the upgrade path if this shows up in a profile. Checked
+        // before the per-row documentCount read, so a filtered-out row costs no tree open.
         if (options.admit !== undefined && (await options.admit(c, workspaceId)) !== 'admitted') {
           continue
         }
