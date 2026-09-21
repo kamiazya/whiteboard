@@ -94,7 +94,19 @@ export interface BackupMarkerOptions {
   refreshEveryMs?: number
 }
 
-/** Run `body` with the marker in place, removing it however `body` ends. */
+/** Run `body` with the marker in place, removing it however `body` ends.  *
+ * The refresh chain is CHAINED rather than merely assigned, and the
+ * difference is what a straggler hides in: holding "the write that started
+ * last" is not holding the writes. A tick that fires while an earlier write
+ * is still going replaces the handle, and awaiting the new one says nothing
+ * about the old one — which then lands after the marker was removed and
+ * re-creates it, leaving `backupIsInProgress` true for the rest of the TTL.
+ * Found on a loaded CI runner (42 of 60) and never on a quiet machine (0 of
+ * 360); `backup-in-progress.overlap.test.ts` reproduces it by gating one
+ * write instead of hoping. Chaining also stops refreshes piling up on a
+ * filesystem slower than `refreshEveryMs`: at most one is ever in flight, so
+ * the tail IS every write.
+ */
 export async function withBackupMarker<T>(
   dataDir: string,
   body: () => Promise<T>,
@@ -141,7 +153,7 @@ export async function withBackupMarker<T>(
   // returned used to land after the `rm` below and recreate the marker.
   let inFlight: Promise<void> = Promise.resolve()
   const refresh = setInterval(() => {
-    inFlight = write()
+    inFlight = inFlight.then(write)
   }, refreshEveryMs)
   refresh.unref()
 
