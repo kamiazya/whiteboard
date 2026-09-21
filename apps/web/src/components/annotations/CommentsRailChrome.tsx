@@ -25,7 +25,7 @@ export function CommentsRailAside({
   /**
    * Whether the surface behind the rail is the LIVE document. Not while a
    * past version (or, on the daemon page, a variation preview) is on
-   * screen: the editor is replaced by DocumentPreview but this rail is not,
+   * screen: the editor is replaced by VersionPreview but this rail is not,
    * and a reply is a write to the live document — sent from a surface
    * showing something else entirely.
    */

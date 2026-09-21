@@ -11,7 +11,15 @@ import { PreviewPane } from './markdown-editor/PreviewPane.js'
 import { PREVIEW_CONTROL_PROPS, usePreviewViewport } from './use-preview-viewport.js'
 
 /**
- * A past state of a document, drawn read-only.
+ * A saved VERSION of a document, drawn read-only, in place of the editor.
+ *
+ * Named for what it shows rather than for where it shows it: the workspace
+ * file browser has a `DocumentPreview` of its own — the pane beside the
+ * list, showing the CURRENT state of whichever document is selected — and
+ * the two shared a name while meaning opposite things about time. `Version`
+ * is what the rest of this flow already says (`VersionPreviewSession`,
+ * `VersionTimeline`, `PastDocument`) and what `.claude/rules/vocabulary.md`
+ * fixes for a saved point in a document's history.
  *
  * Read-only by CONSTRUCTION rather than by a flag: this is the same
  * `CanvasViewer` the MCP Apps widget uses and the same `PreviewPane` the
@@ -28,7 +36,7 @@ import { PREVIEW_CONTROL_PROPS, usePreviewViewport } from './use-preview-viewpor
  * something anyone can read, and "look, then decide" is not a decision
  * anybody can take on a picture they cannot get closer to.
  */
-export function DocumentPreview({
+export function VersionPreview({
   past,
   theme = 'light',
   maxWidth = 720,
