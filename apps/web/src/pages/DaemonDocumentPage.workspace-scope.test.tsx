@@ -210,7 +210,11 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
     expect(sseConstructed).toHaveLength(0)
 
     // The affordance creates THAT path, not a generic untitled one.
-    mockCreateDocument.mockResolvedValue({ path: 'deleted-note' })
+    mockCreateDocument.mockResolvedValue({
+      workspaceId: 'ws1',
+      documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+      path: 'deleted-note',
+    })
     const button = screen.getByRole('button', { name: /create/i })
     await act(async () => {
       button.click()
@@ -220,6 +224,7 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
       'http://127.0.0.1:3099',
       'w1',
       'deleted-note',
+      'spatial',
     )
   })
 })

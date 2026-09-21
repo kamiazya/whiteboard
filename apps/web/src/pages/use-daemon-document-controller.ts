@@ -176,7 +176,14 @@ export function useDaemonDocumentController(
       if (workspaceId === null) return
       setCreateError(null)
       try {
-        const created = await createCanvasApi(daemonFetch, daemonBaseUrl, workspaceId, newPath)
+        // What the legacy route defaulted this to; the affordance says canvas.
+        const created = await createCanvasApi(
+          daemonFetch,
+          daemonBaseUrl,
+          workspaceId,
+          newPath,
+          'spatial',
+        )
         const { documents: refreshed } = await listDocuments(
           daemonFetch,
           daemonBaseUrl,
