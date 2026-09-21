@@ -229,6 +229,171 @@ test('no inspector, or one that throws, reports exactly what it did before', () 
   assert.doesNotMatch(bare, /touched this file|no longer exists/)
 })
 
+test('an unhandled error with no test name is keyed by its class and path, not dropped', () => {
+  // The tenth shape in integrator-flow.md: `EnvironmentTeardownError`
+  // reports every test as PASSED and exits 1, and its annotation title is
+  // the bare string "Unhandled error" — no project, no test file — so it
+  // used to land in `unattributedRuns` and be counted rather than keyed.
+  // It was hand-counted to three occurrences before anything could see it.
+  //
+  // The annotation does carry a PATH, and the message opens with the error
+  // class. Those two together are the surface, and two runs sharing them
+  // are the same flake by the same rule as any other.
+  //
+  // The title, path and message below are copied from a real annotation —
+  // run 35658804336, PR #1811's `test-jsdom (1)` — rather than invented,
+  // because what this parser has to match is a string GitHub produces.
+  const teardown = (runId, createdAt) => ({
+    runId,
+    createdAt,
+    annotations: [
+      {
+        title: 'Unhandled error',
+        path: 'apps/web/src/lib/replica-unlock.ts',
+        message:
+          "EnvironmentTeardownError: Cannot load '/@fs/.../replica-key-wrap.ts' imported from .../replica-unlock.ts after the environment was torn down.",
+      },
+      { title: '', path: '.github', message: 'Process completed with exit code 1.' },
+    ],
+  })
+  const { recurrences, unattributedRuns } = clusterFailures([
+    teardown('1', '2026-09-20T00:00:00Z'),
+    teardown('2', '2026-09-22T00:00:00Z'),
+  ])
+
+  assert.deepEqual(unattributedRuns, [])
+  assert.equal(recurrences.length, 1)
+  assert.match(recurrences[0].id, /EnvironmentTeardownError/)
+  assert.match(recurrences[0].id, /apps\/web\/src\/lib\/replica-unlock\.ts/)
+  assert.equal(recurrences[0].runIds.length, 2)
+})
+
+test('an unhandled error asks git about the file it NAMES, which is not a test file', () => {
+  const run = (runId, createdAt) => ({
+    runId,
+    createdAt,
+    annotations: [
+      {
+        title: 'Unhandled error',
+        path: 'apps/web/src/lib/replica-unlock.ts',
+        message: 'EnvironmentTeardownError: Cannot load ... after the environment was torn down.',
+      },
+    ],
+  })
+  let asked = null
+  const report = formatReport(clusterFailures([run('1', '2026-09-20T00:00:00Z'), run('2', '2026-09-22T00:00:00Z')]), 14, (path) => {
+    asked = path
+    return { state: 'unchanged' }
+  })
+
+  assert.equal(asked, 'apps/web/src/lib/replica-unlock.ts')
+  assert.match(report, /nothing has touched this file since/)
+})
+
+test('two unhandled errors of DIFFERENT classes at one path are two surfaces', () => {
+  const at = (runId, createdAt, message) => ({
+    runId,
+    createdAt,
+    annotations: [{ title: 'Unhandled error', path: 'src/a.ts', message }],
+  })
+  const { recurrences, singles } = clusterFailures([
+    at('1', '2026-09-20T00:00:00Z', 'EnvironmentTeardownError: torn down'),
+    at('2', '2026-09-21T00:00:00Z', 'TypeError: x is not a function'),
+  ])
+
+  assert.deepEqual(recurrences, [])
+  assert.equal(singles.length, 2)
+})
+
+test('a run whose annotations name a TEST is keyed by the test, unhandled errors beside it or not', () => {
+  // Precedence, so the shape a lane can act on wins: a real test failure is
+  // a better identity than the unhandled error it may also have produced.
+  const { recurrences, singles } = clusterFailures([
+    {
+      runId: '1',
+      createdAt: '2026-09-20T00:00:00Z',
+      annotations: [
+        { title: '[p] src/a.test.ts > x fails', path: 'src/a.test.ts', message: 'AssertionError' },
+        { title: 'Unhandled error', path: 'src/b.ts', message: 'TypeError: nope' },
+      ],
+    },
+  ])
+
+  assert.deepEqual(recurrences, [])
+  assert.deepEqual(singles.map((entry) => entry.id), ['[p] src/a.test.ts'])
+})
+
+test('a window that supplies bare titles still clusters, cache shape or no cache shape', () => {
+  // `titles` is the older caller shape and the one every fixture above uses.
+  // Keeping it is not politeness: the lib is what the tests replay the real
+  // 2026-08/09 window through, and that window is titles.
+  const { recurrences } = clusterFailures([
+    { runId: '1', createdAt: '2026-09-01T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
+    { runId: '2', createdAt: '2026-09-02T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
+  ])
+
+  assert.equal(recurrences.length, 1)
+  assert.equal(recurrences[0].id, '[p] src/a.test.ts')
+})
+
+test('an unattributed run is reported by the LEG it failed, and never as a recurrence', () => {
+  // Measured on the real 14-day window while this was written: all four
+  // unattributed runs carried nothing but the runner's own empty-title
+  // "Process completed with exit code 1." and ci-gate's own summary
+  // annotation, `[ci-gate] <leg>: failure`. That names WHICH leg died and
+  // nothing about why.
+  //
+  // So it is printed and NOT keyed. Two runs that both failed
+  // `test-unit (2)` are not the same flake, and this report's tail tells a
+  // session to spend a fix lane — the one thing worse than an uncountable
+  // failure is a false promotion signal, which this file's own history
+  // already cost once.
+  const legRun = (runId, createdAt, leg) => ({
+    runId,
+    createdAt,
+    annotations: [
+      { title: '', path: '.github', message: 'Process completed with exit code 1.' },
+      { title: '', path: '.github', message: `[ci-gate] ${leg}: failure` },
+    ],
+  })
+  const clustered = clusterFailures([
+    legRun('1', '2026-09-20T00:00:00Z', 'test-unit (2)'),
+    legRun('2', '2026-09-21T00:00:00Z', 'test-unit (2)'),
+    legRun('3', '2026-09-22T00:00:00Z', 'test-jsdom (1)'),
+  ])
+
+  assert.deepEqual(clustered.recurrences, [])
+  assert.equal(clustered.unattributedRuns.length, 3)
+
+  // A recurrence is needed for the report to print at all.
+  const report = formatReport(
+    clusterFailures([
+      { runId: 'a', createdAt: '2026-09-01T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
+      { runId: 'b', createdAt: '2026-09-02T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
+      ...[legRun('1', '2026-09-20T00:00:00Z', 'test-unit (2)'),
+          legRun('2', '2026-09-21T00:00:00Z', 'test-unit (2)'),
+          legRun('3', '2026-09-22T00:00:00Z', 'test-jsdom (1)')],
+    ]),
+    14,
+  )
+  assert.match(report, /2x test-unit \(2\)/)
+  assert.match(report, /1x test-jsdom \(1\)/)
+  assert.doesNotMatch(report, /2x test-unit \(2\)[\s\S]*promotion signal/)
+})
+
+test('a leg is read off an annotation with an EMPTY title, which is the only kind that has one', () => {
+  // The fetcher dropped every empty-title annotation, so the leg never
+  // reached the clusterer at all and the report printed nothing new. Unit
+  // tests could not see it: they supply annotations the fetcher never
+  // touched. Found by running the real window.
+  assert.equal(
+    failedLegFrom({ title: '', path: '.github', message: '[ci-gate] test-unit (2): failure' }),
+    'test-unit (2)',
+  )
+  assert.equal(failedLegFrom({ title: '', path: '.github', message: 'Process completed with exit code 1.' }), null)
+  assert.equal(failedLegFrom({}), null)
+})
+
 test('the report ends by telling the session what to DO, not only what happened', () => {
   const report = formatReport(
     clusterFailures([
@@ -241,4 +406,4 @@ test('the report ends by telling the session what to DO, not only what happened'
   assert.match(report, /root-cause fix lane/)
 })
 
-import { formatReport, pathFromTestId } from './flake-watch-lib.mjs'
+import { failedLegFrom, formatReport, pathFromTestId } from './flake-watch-lib.mjs'
