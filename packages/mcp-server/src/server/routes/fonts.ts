@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
-import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
 import {
   FONT_CATALOGUE,
   type InstallFontResponse,
   type ListFontsResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { FontInstallError, installFont } from '../export/install-font.js'
 import { installedFontFiles } from '../export/installed-fonts.js'

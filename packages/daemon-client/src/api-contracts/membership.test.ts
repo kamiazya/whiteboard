@@ -3,8 +3,9 @@
  * (ADR-0041). Each schema gets a valid-fixture roundtrip plus a refusal per
  * constraint the `.strict()` shape declares.
  */
+
+import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
-import { apiErrorBodySchema, apiErrorReason } from './errors.js'
 import {
   type AddMemberRequest,
   addMemberRequestSchema,

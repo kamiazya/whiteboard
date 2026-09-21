@@ -15,7 +15,6 @@
 // Person-level membership gates the read plane's KEY (a later slice), not
 // this admin surface.
 
-import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   type AddMemberRequest,
   addMemberRequestSchema,
@@ -27,8 +26,8 @@ import {
   type RemoveMemberResponse,
   removeMemberResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
+import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { invalidRequestBody } from '../app-helpers.js'
 import { getLogger } from '../log.js'
 import type { MemberProfile, MemberProfileStore } from '../security/member-profile-store.js'
 import type { PairingTokenStore } from '../security/pairing-session.js'

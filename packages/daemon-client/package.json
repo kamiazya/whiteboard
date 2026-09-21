@@ -22,10 +22,6 @@
       "types": "./src/api-contracts/document-url.ts",
       "import": "./src/api-contracts/document-url.ts"
     },
-    "./api-contracts/errors": {
-      "types": "./src/api-contracts/errors.ts",
-      "import": "./src/api-contracts/errors.ts"
-    },
     "./api-contracts/fonts": {
       "types": "./src/api-contracts/fonts.ts",
       "import": "./src/api-contracts/fonts.ts"

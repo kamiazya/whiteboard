@@ -10,10 +10,16 @@
 // from its single definition instead of a hand-written mirror that can
 // silently drift from the server's shape.
 
-// The /api/v1 document list contract, re-exported from server-core so
-// apps/web keeps consuming every daemon HTTP contract through this one
-// barrel instead of importing a shared-layer package it is not allowed to
-// depend on directly (see .claude/rules/architecture-map.md).
+// The /api/v1 schemas still come from the root. They are off the critical
+// path today, which is a property of who imports them rather than a
+// Re-exported from server-core so apps/web keeps consuming every daemon HTTP
+// contract through this one barrel instead of importing a shared-layer
+// package it is not allowed to depend on directly (see
+// .claude/rules/architecture-map.md).
+//
+// These six come from the ROOT. They are off apps/web's critical path today,
+// which is a property of who imports them rather than a guarantee — see the
+// block below for what the root costs when that stops being true.
 export {
   backlinksOutputSchema as documentBacklinksResponseSchema,
   documentSearchOutputSchema as documentSearchResponseSchema,
@@ -22,9 +28,26 @@ export {
   linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
   wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
+// The error contract moved DOWN to server-core to join them — `/api/v1` is
+// served from there, so a contract filed in this package was above half the
+// routes it describes — and it comes from the SUBPATH, never the root
+// barrel. The difference is 269 KB. `error-copy.ts` is on apps/web's critical path, so
+// taking `apiErrorReason` from '@kamiazya/whiteboard-server-core' put that
+// package's whole graph — hono, loro-crdt, canvas-render, search — in the
+// entry chunk: measured 421.4 KB gzip against a 152 KB budget. Nothing
+// earlier catches it, because no boundary test can see what a re-export
+// DRAGS; only `smoke:bundle-size` can, and only after a build.
+// `./api-errors` imports zod and nothing else.
+export type { ApiErrorBody } from '@kamiazya/whiteboard-server-core/api-errors'
+export {
+  apiErrorBodySchema,
+  apiErrorCodeSchema,
+  apiErrorReason,
+  errorBody,
+  invalidRequestBody,
+} from '@kamiazya/whiteboard-server-core/api-errors'
 export * from './document.js'
 export * from './document-url.js'
-export * from './errors.js'
 export * from './fonts.js'
 export type {
   CreateGrantResponse,
