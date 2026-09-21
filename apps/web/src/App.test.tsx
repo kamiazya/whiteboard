@@ -530,6 +530,56 @@ describe('silent renewal on a hosted origin', () => {
     await screen.findByTestId('browser-index-page')
     expect(renewPairingTokenMock).not.toHaveBeenCalled()
   })
+
+  it('does not rewrite a daemon deep link to the browser index while the stored connection is still renewing', async () => {
+    // App.tsx's own `awaitingDaemonRenewal` — not the extracted hook, which
+    // is fed the value directly by its own test. `renewPairingToken` is held
+    // open here (rather than resolved inside the same act flush, as every
+    // other case in this suite does) so there is a real window where the
+    // renewal is neither settled nor decided, which is exactly the window
+    // that field exists to cover.
+    const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA3'
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    let resolveRenewal: (result: import('./lib/pairing-grant.js').GrantConsumeResult) => void =
+      () => {}
+    renewPairingTokenMock.mockImplementationOnce(
+      () =>
+        new Promise<import('./lib/pairing-grant.js').GrantConsumeResult>((resolve) => {
+          resolveRenewal = resolve
+        }),
+    )
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      { initialEntries: [`/w/${workspaceId}/d/moved-note`] },
+    )
+    render(<RouterProvider router={router} />)
+
+    // Undecided, not foreign: the address must stay exactly where it was
+    // asked for while the renewal is still open — rewriting it to the
+    // browser's own index here would lose the link before the renewal ever
+    // got to prove it belongs to a paired daemon.
+    await screen.findByTestId('browser-index-page')
+    expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
+    expect(screen.queryByTestId('daemon-document-page')).toBeNull()
+
+    await act(async () => {
+      resolveRenewal({ status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' })
+    })
+
+    await screen.findByTestId('daemon-document-page')
+    expect(receivedDaemonPageProps).toMatchObject({ workspaceId, path: 'moved-note' })
+    // The link survived: once paired, it opens the document the address
+    // named all along rather than whatever the (now moot) rewrite chose.
+    expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
+  })
 })
 
 describe('grant exchange failure surfacing', () => {
