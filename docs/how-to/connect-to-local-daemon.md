@@ -251,6 +251,21 @@ not be confirmed (for example an image upload failed), the browser copy is
 kept unchanged and the result says so; moving again later is safe and
 simply re-merges.
 
+## See and remove the copies this device keeps
+
+**Settings > Connections > Copies on this device** lists every copy of a
+workspace this browser holds: the ones it keeps itself, and the cached
+replicas of daemon workspaces. A replica row says which daemon it came from
+and when it last synced, and offers **Delete copy**.
+
+Removing a cached copy is housekeeping rather than a change of access — the
+daemon still keeps the workspace, and this device can cache it again. What
+does not come back is anything in that copy which had not reached the daemon
+yet, so the confirmation says so before you commit to it. The copy the
+session is currently showing is not offered a delete, and neither is a
+workspace this browser keeps itself: that one is the only copy of its data
+anywhere, and the way to let go of it is to move it to a daemon first.
+
 ## Manage who can use a workspace
 
 Once a workspace is kept by a daemon, **Settings → Connections → Members**
