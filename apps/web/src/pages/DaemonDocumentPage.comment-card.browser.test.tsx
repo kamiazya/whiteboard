@@ -36,9 +36,12 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   }
 })
 
+// Each answers a CANCEL, which the page calls on unmount: a schedule that
+// outlives its page fires against a fetch and a workspace that have moved on,
+// and in a test run the warning lands on whichever case is executing by then.
 vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(),
-  scheduleReplicaPush: vi.fn(),
+  scheduleReplicaRefresh: vi.fn(() => () => {}),
+  scheduleReplicaPush: vi.fn(() => () => {}),
 }))
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')

@@ -37,9 +37,12 @@ function render(ui: ReactElement, options?: RenderOptions) {
 // refresh is not what any test here exercises — mocked the same way every
 // sibling DaemonDocumentPage test file already does, so it never fires a
 // real (404-doomed) snapshot request nobody asked for.
+// Each answers a CANCEL, which the page calls on unmount: a schedule that
+// outlives its page fires against a fetch and a workspace that have moved on,
+// and in a test run the warning lands on whichever case is executing by then.
 vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(),
-  scheduleReplicaPush: vi.fn(),
+  scheduleReplicaRefresh: vi.fn(() => () => {}),
+  scheduleReplicaPush: vi.fn(() => () => {}),
 }))
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {

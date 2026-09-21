@@ -30,9 +30,12 @@ function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(ui, { wrapper: MemoryRouterWrapper, ...options })
 }
 
+// Each answers a CANCEL, which the page calls on unmount: a schedule that
+// outlives its page fires against a fetch and a workspace that have moved on,
+// and in a test run the warning lands on whichever case is executing by then.
 vi.mock('../lib/replica-refresh.js', () => ({
-  scheduleReplicaRefresh: vi.fn(),
-  scheduleReplicaPush: vi.fn(),
+  scheduleReplicaRefresh: vi.fn(() => () => {}),
+  scheduleReplicaPush: vi.fn(() => () => {}),
 }))
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
@@ -140,6 +143,41 @@ describe('DaemonDocumentPage', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+  })
+
+  it('the page that armed a replica refresh cancels it when it goes', async () => {
+    // Both are scheduled onto an idle callback or a 1.5s timer. Left armed,
+    // they fire against a fetch and a workspace the page has already left —
+    // and in a test run the warning that follows is charged to whichever case
+    // happens to be executing by then, which is a failure attributed to the
+    // wrong change entirely (`issues/replica-refresh-warning-lands-on-a-later-test`).
+    const { scheduleReplicaRefresh, scheduleReplicaPush } = await import(
+      '../lib/replica-refresh.js'
+    )
+    const cancelRefresh = vi.fn()
+    const cancelPush = vi.fn()
+    vi.mocked(scheduleReplicaRefresh).mockReturnValueOnce(cancelRefresh)
+    vi.mocked(scheduleReplicaPush).mockReturnValueOnce(cancelPush)
+
+    let unmount!: () => void
+    await act(async () => {
+      ;({ unmount } = render(
+        <DaemonDocumentPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          createBackend={makeCreateBackend()}
+        />,
+        { container: document.body },
+      ))
+    })
+    await waitFor(() => expect(vi.mocked(scheduleReplicaRefresh)).toHaveBeenCalled())
+
+    await act(async () => {
+      unmount()
+    })
+
+    expect(cancelRefresh).toHaveBeenCalled()
+    expect(cancelPush).toHaveBeenCalled()
   })
 
   it('working on a daemon workspace schedules a replica refresh for it', async () => {
