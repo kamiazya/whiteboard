@@ -55,7 +55,7 @@ describe('useDocumentListRefresh', () => {
     await waitFor(() => expect(result.current.enumeratedRef.current).toBe(true))
   })
 
-  it('asks for nothing while no document is loaded', async () => {
+  it('asks for nothing while no document is loaded', () => {
     const listDocuments = vi.fn(async () => [])
     renderHook(() =>
       useDocumentListRefresh({ documentId: null, currentUpdatedAt: null, listDocuments }),
