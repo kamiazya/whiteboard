@@ -29,6 +29,7 @@ import { PasskeysCard } from '../components/PasskeysCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { AppVersionRow } from '../components/settings/AppVersionRow.js'
 import { GestureTraceRow } from '../components/settings/GestureTraceRow.js'
+import { LocalCopiesCard } from '../components/settings/LocalCopiesCard.js'
 import { MembersCard } from '../components/settings/MembersCard.js'
 import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspaceSection.js'
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
@@ -256,6 +257,10 @@ function ConnectionsSection({
         {/* Discoverable while disabled: the move exists before its
             precondition is met, so its condition can be read here. */}
         <PromoteWorkspaceSection settingsStore={settingsStore} />
+        {/* Rendered without a daemon too, and that is exactly when it matters
+            most: with none connected every copy here is browser-kept, so a
+            card hidden in this branch would hide the whole list. */}
+        <LocalCopiesCard settingsStore={settingsStore} />
       </div>
     )
   }
@@ -279,6 +284,7 @@ function ConnectionsSection({
           settingsStore={settingsStore}
           workspaceId={workspaceId}
         />
+        <LocalCopiesCard settingsStore={settingsStore} workspaceId={workspaceId} />
         {/* Hidden without a known workspace id: a cold load with a daemon
             merely detected names none yet, and the card would have nothing
             to manage. */}
