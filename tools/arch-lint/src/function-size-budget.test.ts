@@ -287,7 +287,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
   'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 69,
   'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
-  'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 196,
+  // 196 -> 199 (ADR-0042 S10): the awaitingDaemonRenewal guard — a daemon
+  // deep link is undecided, not foreign, while its silent renewal is outstanding.
+  'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 199,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 365,
   'apps/web/src/lib/browser-backend.ts#loadAndDeliver': 57,
@@ -317,7 +319,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/pairing-grant.ts#consumeGrantFragment': 97,
   'apps/web/src/lib/passkey-attestation.ts#registerPasskey': 86,
   'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 95,
-  'apps/web/src/lib/replica-refresh.ts#scheduleReplicaRefresh': 61,
+  // 61 -> 64 (ADR-0042 S10): a failed or empty pull now reports itself through
+  // reportRefreshFailure/reportNoPull instead of a silent catch.
+  'apps/web/src/lib/replica-refresh.ts#scheduleReplicaRefresh': 64,
   'apps/web/src/lib/spatial/commands.ts#applyCommand': 146,
   'apps/web/src/lib/spatial/commands.ts#buildFragmentInsertCommand': 84,
   'apps/web/src/lib/spatial/commands.ts#reorderNodes': 64,

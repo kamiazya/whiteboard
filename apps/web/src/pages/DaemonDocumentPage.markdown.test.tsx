@@ -32,6 +32,16 @@ function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
 }
 
+// This file's global `fetch` stub deliberately 404s every route but
+// `/names` (see stubNames' comment below), and the background replica
+// refresh is not what any test here exercises — mocked the same way every
+// sibling DaemonDocumentPage test file already does, so it never fires a
+// real (404-doomed) snapshot request nobody asked for.
+vi.mock('../lib/replica-refresh.js', () => ({
+  scheduleReplicaRefresh: vi.fn(),
+  scheduleReplicaPush: vi.fn(),
+}))
+
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
   return {

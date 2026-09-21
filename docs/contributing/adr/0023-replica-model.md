@@ -185,6 +185,18 @@ decisions 1–4 depends on it.
 > pays. The popover's replica notice now states the age ("Last synced …"),
 > because a reader deciding whether to trust the offline copy needs it in
 > the same breath as the claim.
+>
+> **A daemon deep link could lose its own renewal race, fixed 2026-09-21.**
+> `scheduleReplicaRefresh` never got a chance to run at all for a stored
+> daemon connection whose silent pairing renewal (a real network round
+> trip) was still outstanding: the browser-keeper address-rewrite effect
+> saw an address it did not yet recognise and rewrote the URL to the
+> browser's own index before the renewal could prove otherwise, so the
+> daemon document page — and its pull — never mounted; the deep link was
+> permanently lost to the browser gallery instead. `awaitingDaemonRenewal`
+> (`App.tsx`, `use-workspace-address-sync.ts`) holds the rewrite off for as
+> long as a renewal is outstanding, giving that address the same
+> "undecided, not foreign" standing already given to a known replica.
 
 ## Consequences
 
