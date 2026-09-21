@@ -141,12 +141,11 @@ port are exactly what has no answer.
 
 ### What this ADR does NOT decide
 
-- **Whether a Cloudflare Worker keeper is adopted.** The forcing case, not a
-  commitment.
+- ~~**Whether a Cloudflare Worker keeper is adopted.**~~ Decided after this
+  ADR was accepted — see the second 2026-09-22 addendum.
 - **Whether 128 MB is enough for a realistic workspace.** Measured after
-  this ADR was accepted — see the 2026-09-22 addendum: a few hundred
-  documents, not a few thousand. What that makes a Worker keeper worth is
-  still open.
+  this ADR was accepted — see the first 2026-09-22 addendum: a few hundred
+  documents, not a few thousand.
 - **The band's fraction**, per decision 3 — answered as a CRITERION rather
   than a number in the same addendum.
 - **Per-document limits.** This is about a workspace record, the unit a
@@ -223,3 +222,38 @@ workspace" — is *a few hundred documents, not a few thousand*, which is
 enough for a personal workspace and not for a shared one. Node's allocator
 is not workerd's and the Durable Object per-instance limit is undocumented,
 so the SHAPE transfers and the absolutes are this machine's.
+
+## Addendum 2026-09-22 (second) — the Worker keeper is adopted, as a PERSONAL-workspace keeper
+
+The forcing case became a commitment. With the measurement above in hand, the
+user decided (2026-09-22) to build a Cloudflare Worker keeper and to accept
+its ceiling rather than design around it: **a few hundred documents is enough
+for one person's workspace, and a shared or large workspace belongs on a
+daemon or a self-hosted keeper.**
+
+That is a scope decision, not a capacity one, and it is what makes this ADR's
+machinery load-bearing rather than precautionary:
+
+- **The hard limit is now a limit somebody will actually reach.** Decision 1
+  stops being about a hypothetical backend. A personal workspace that keeps
+  growing crosses the band, and the band is what gives it somewhere to go
+  before a write is refused.
+- **Decision 4's precondition is satisfied by an existing mechanism.** A
+  keeper may not declare a limit it can reach until a migration target and a
+  path exist — and the path is the cross-origin transfer
+  ([ADR-0023](0023-keeper-and-replica.md)'s promote, generalised to any
+  keeper by the direct-transfer decisions of the same day). So the capacity
+  story and the transfer story are one mechanism: the band tells a person to
+  move, and the transfer is how they move.
+- **The refusal has somewhere to say it.** A destination that cannot hold an
+  arriving record answers with a reason the sender shows as-is, so "this
+  workspace is too large for this keeper" is a sentence the receiving side
+  writes rather than a status the sending side has to interpret.
+
+What this still does NOT decide: whether a Worker keeper holds more than one
+TENANT, and where that boundary is enforced. The self-host tenant question was
+decided separately the same day — every tenant-scoped table carries the tenant
+and every query filters on it — and the enumeration and the enforcement seam
+are open. A `tenantId` column on the workspace table alone would scope
+nothing, because that table is not authoritative for every workspace id other
+tables can name.
