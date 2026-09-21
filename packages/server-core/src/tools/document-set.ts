@@ -12,6 +12,7 @@ import {
   writeTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, okfActorSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -154,6 +155,65 @@ function keepsDeclaredGenerated(
   return storedBody === nextBody
 }
 
+/**
+ * Claim an unkinded document as markdown, and refuse a spatial one.
+ *
+ * This writes OKF Markdown, which replaces the whole spatial canvas — on a
+ * spatial document that is a destruction rather than an edit. A document with
+ * NO kind predates them: the write is the only thing that can give it one, and
+ * refusing would leave it with no way back (ADR-0009 decision 4) — but only a
+ * document already in markdown's own shape has nothing to lose by being
+ * declared markdown. One holding a canvas gets its way back from the spatial
+ * side, which declares a kind without discarding anything.
+ */
+function claimMarkdownDocument(doc: LoroDoc, documentId: string): void {
+  const kind = readDocumentKind(doc)
+  if (kind === undefined) {
+    const existing = readSpatialCanvas(doc)
+    if (!isMarkdownShaped(existing)) {
+      throw new DocumentContentLossError(
+        documentId,
+        `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +
+          'Edit it through wb_canvas_edit, which records it as spatial and keeps them.',
+      )
+    }
+    writeDocumentKind(doc, 'markdown')
+    return
+  }
+  if (kind !== 'markdown') {
+    throw new DocumentKindMismatchError(
+      documentId,
+      kind,
+      'This writes OKF Markdown, which would replace its nodes and edges with a single text node. Edit a spatial document through wb_canvas_edit instead.',
+    )
+  }
+}
+
+/**
+ * An OKF `title` lands on the WORKSPACE, not in the document.
+ *
+ * OKF is an export format, not the storage model: the Loro side keeps its own
+ * OKF-compatible document and the workspace owns the name, so parsing projects
+ * INTO that model exactly as serialising projects back out (ADR-0009 decision
+ * 2). Absent is not cleared — an OKF with no title says nothing about the name
+ * — while a BLANK one clears it, because a blank title is not a name and the
+ * two are deliberately one state rather than a `''` a reader falls back from a
+ * second time.
+ */
+async function applyOkfTitle(
+  deps: ServerDeps,
+  input: DocumentSetInput,
+  title: string | undefined,
+): Promise<void> {
+  if (title === undefined) return
+  const trimmed = title.trim()
+  await deps.documentIndex.setDocumentName({
+    workspaceId: input.workspaceId,
+    documentId: input.documentId,
+    ...(trimmed === '' ? {} : { name: trimmed }),
+  })
+}
+
 export function createDocumentSetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_set' as const,
@@ -182,32 +242,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       const storedTrust = readTrustFacets(doc)
       const storedBody = readMarkdownBody(doc)
 
-      // The write below replaces the whole spatial canvas, so on a spatial
-      // document it is a destruction rather than an edit. A document with no
-      // kind predates them: the write is the only thing that can give it one,
-      // and refusing would leave it with no way back (ADR-0009 decision 4) —
-      // but only a document already in markdown's own shape has nothing to
-      // lose by being declared markdown. One holding a canvas gets its way
-      // back from the spatial side, which declares a kind without discarding
-      // anything.
-      const kind = readDocumentKind(doc)
-      if (kind === undefined) {
-        const existing = readSpatialCanvas(doc)
-        if (!isMarkdownShaped(existing)) {
-          throw new DocumentContentLossError(
-            input.documentId,
-            `It holds ${existing.nodes.length} node(s) and ${existing.edges.length} edge(s), which this write would replace with a single text node. ` +
-              'Edit it through wb_canvas_edit, which records it as spatial and keeps them.',
-          )
-        }
-        writeDocumentKind(doc, 'markdown')
-      } else if (kind !== 'markdown') {
-        throw new DocumentKindMismatchError(
-          input.documentId,
-          kind,
-          'This writes OKF Markdown, which would replace its nodes and edges with a single text node. Edit a spatial document through wb_canvas_edit instead.',
-        )
-      }
+      claimMarkdownDocument(doc, input.documentId)
 
       // OKF is an export format, not the storage model: the Loro side keeps
       // its own OKF-compatible document, and the workspace owns the name. So
@@ -218,17 +253,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // Absent is not cleared: an OKF with no `title` says nothing about the
       // name, so omitting it must not erase one.
       const { facets, title, generated, verified, ...coreFacets } = frontmatter
-      if (title !== undefined) {
-        // A blank title is not a name, and the two are deliberately one
-        // state — so writing one clears the name rather than storing '' for
-        // a reader to fall back from a second time.
-        const trimmed = title.trim()
-        await deps.documentIndex.setDocumentName({
-          workspaceId: input.workspaceId,
-          documentId: input.documentId,
-          ...(trimmed === '' ? {} : { name: trimmed }),
-        })
-      }
+      await applyOkfTitle(deps, input, title)
       writeCoreFacets(doc, coreFacets)
       if (facets) {
         writeFacets(doc, facets)

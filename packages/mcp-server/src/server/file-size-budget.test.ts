@@ -870,8 +870,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 973 -> 979: this ledger is on its own list, so the three-line reason a
   // raise is REQUIRED to carry overflows it. Raising both is the mechanism
   // working, not a loophole — the alternative is a raise with no reason.
-  // Raised 979 -> 983 for the entry above's own reason comment.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 994,
+  // This ledger grows when an entry gains the reason its ceiling moved, which
+  // is the deliberateness the guard exists to force. THREE branches have now
+  // raised it for that reason independently; the number is the resolved
+  // file's own, re-measured at each merge rather than carried from a side.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 1000,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
@@ -883,7 +886,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
   'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
-  'packages/server-core/src/tools/canvas-edit.test.ts': 3143,
+  // 3143 -> 3176: the agent-activity summary's only assertion was
+  // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
+  // pinning its wording and order.
+  'packages/server-core/src/tools/canvas-edit.test.ts': 3176,
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 
