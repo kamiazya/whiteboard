@@ -389,7 +389,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // row. It is over the budget because it RETURNS JSX — the rows and the
   // dialog are 40 of its lines and splitting them out would be a component
   // per row, which is the shape this bundle exists to avoid.
-  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 64,
+  // 64 -> 80 for the JSON Canvas row, which is the third of the three the
+  // daemon page was missing. Still JSX-shaped: the rows and the dialog are
+  // most of its lines, and splitting them out would be a component per row.
+  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 80,
   'apps/web/src/pages/use-markdown-document.ts#useMarkdownDocument': 378,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,

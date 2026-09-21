@@ -46,22 +46,13 @@ type MenuParity =
 
 type Keeper = 'browser' | 'daemon'
 
-const DOCUMENT_ACTIONS_FOLLOW_UP = 'issues/daemon-document-page-offers-no-document-actions'
-
 const MENU_PARITY: Record<string, MenuParity> = {
-  // Recorded as deliberate when this ledger landed, on the ground that the
-  // daemon keeper would have to decode a snapshot for this row alone. That
-  // reason is FALSE and the code says so: `DaemonDocumentPage` holds
-  // `canvasValue`, a decoded SpatialCanvas, at the very place it builds its
-  // slots. So the row is missing rather than declined — which is the whole
-  // reason a `one-keeper` answer owes a reason a reader can check.
-  'Copy as JSON Canvas': {
-    reach: 'gap',
-    keeper: 'browser',
-    missing:
-      "a daemon-kept spatial document cannot be copied to the clipboard as JSON Canvas from its own page, though the page already holds the decoded canvas the row would serialise — the same `serializeSpatial(canvas, 'extended')` the browser keeper writes",
-    followUp: DOCUMENT_ACTIONS_FOLLOW_UP,
-  },
+  // Was recorded as a deliberate `one-keeper` on a reason that was FALSE —
+  // that the daemon keeper would have to decode a snapshot for this row
+  // alone, when it holds `canvasValue` at the very place it builds its slots.
+  // Checking that reason against the page is what turned it into a `gap`, and
+  // closing the gap is what made THAT entry fail in turn.
+  'Copy as JSON Canvas': { reach: 'both' },
   // Was a `gap` when this ledger landed, and closing it is what made the
   // entry fail — which is the direction the file exists for.
   Duplicate: { reach: 'both' },
