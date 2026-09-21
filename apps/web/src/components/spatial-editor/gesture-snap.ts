@@ -52,6 +52,47 @@ export interface SnapGestureResult {
  * the box's own centre or far edge pull the handle, which reads as the
  * handle fighting the pointer.
  */
+/**
+ * Snapping a RESIZE, which snaps the travelling EDGES rather than the box.
+ *
+ * Only the node being resized is excluded from the targets — nothing else
+ * moves with a resize, so every other box stays legitimate. `sign` says what
+ * each axis does: 0 means anchored (an edge handle moves one axis only), -1
+ * that the leading edge travels, +1 the trailing one.
+ */
+function snapResize(
+  gestureState: Extract<GestureState, { kind: 'resizing' }>,
+  boxes: SnapGestureInputs['boxes'],
+  raw: Point,
+  options: { thresholdCanvasPx: number; gridSize: number },
+): SnapGestureResult {
+  // Only the node being resized is excluded — nothing else moves with a
+  // resize, so every other box stays a legitimate target.
+  const others = boxes.filter((entry) => entry.id !== gestureState.nodeId).map((entry) => entry.box)
+  const sign = HANDLE_SIGN[gestureState.handle]
+  const start = gestureState.startBox
+  const guides: { x: number[]; y: number[] } = { x: [], y: [] }
+  let point = raw
+
+  // sign 0 means that axis is anchored (an edge handle moves one axis
+  // only), -1 the leading edge travels, +1 the trailing one.
+  if (sign.x !== 0) {
+    const dx = raw.x - gestureState.startPoint.x
+    const edge = sign.x === -1 ? start.x + dx : start.x + start.width + dx
+    const snapped = snapEdge(edge, others, options, 'x')
+    point = { ...point, x: raw.x + (snapped.position - edge) }
+    if (snapped.guide !== undefined) guides.x.push(snapped.guide)
+  }
+  if (sign.y !== 0) {
+    const dy = raw.y - gestureState.startPoint.y
+    const edge = sign.y === -1 ? start.y + dy : start.y + start.height + dy
+    const snapped = snapEdge(edge, others, options, 'y')
+    point = { ...point, y: raw.y + (snapped.position - edge) }
+    if (snapped.guide !== undefined) guides.y.push(snapped.guide)
+  }
+  return { point, guides }
+}
+
 export function snapGesturePoint(
   raw: Point,
   suspended: boolean,
@@ -66,33 +107,7 @@ export function snapGesturePoint(
   }
 
   if (gestureState.kind === 'resizing') {
-    // Only the node being resized is excluded — nothing else moves with a
-    // resize, so every other box stays a legitimate target.
-    const others = boxes
-      .filter((entry) => entry.id !== gestureState.nodeId)
-      .map((entry) => entry.box)
-    const sign = HANDLE_SIGN[gestureState.handle]
-    const start = gestureState.startBox
-    const guides: { x: number[]; y: number[] } = { x: [], y: [] }
-    let point = raw
-
-    // sign 0 means that axis is anchored (an edge handle moves one axis
-    // only), -1 the leading edge travels, +1 the trailing one.
-    if (sign.x !== 0) {
-      const dx = raw.x - gestureState.startPoint.x
-      const edge = sign.x === -1 ? start.x + dx : start.x + start.width + dx
-      const snapped = snapEdge(edge, others, options, 'x')
-      point = { ...point, x: raw.x + (snapped.position - edge) }
-      if (snapped.guide !== undefined) guides.x.push(snapped.guide)
-    }
-    if (sign.y !== 0) {
-      const dy = raw.y - gestureState.startPoint.y
-      const edge = sign.y === -1 ? start.y + dy : start.y + start.height + dy
-      const snapped = snapEdge(edge, others, options, 'y')
-      point = { ...point, y: raw.y + (snapped.position - edge) }
-      if (snapped.guide !== undefined) guides.y.push(snapped.guide)
-    }
-    return { point, guides }
+    return snapResize(gestureState, boxes, raw, options)
   }
 
   if (gestureState.kind !== 'moving') return unchanged

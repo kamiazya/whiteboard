@@ -9,6 +9,7 @@
 // is the whole control flow of a release — stays visible where it is
 // decided.
 
+import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame, nodeFile, nodeSubpath, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import { hitTest } from '../../lib/spatial/geometry.js'
 import { strokeBounds } from '../../lib/spatial/stroke-group.js'
@@ -17,6 +18,7 @@ import { screenToCanvas } from '../../lib/spatial/viewport.js'
 import { bandProbes, pickContentWithin } from './element-pick.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { carriedByGesture } from './gesture-view.js'
+import type { GestureResult } from './gestures.js'
 import { reduceGesture } from './gestures.js'
 import { withGroupMates } from './ink-hit.js'
 import type { EditorPointerInputs } from './use-editor-pointer.js'
@@ -181,6 +183,63 @@ export function releaseDrawing(
  * press on a node that never moved opens its editor instead, and a move on
  * a multi-selection member carries the rest with it.
  */
+/**
+ * A double press on a node that never moved runs the object's PRIMARY action.
+ *
+ * Each arm asks what the node HOLDS rather than narrowing on the stored
+ * discriminant: text edits, a link or a followable file reference navigates,
+ * a frame edits its label — the frame's one own datum. An image reference is
+ * NOT followable, because navigating to an asset id is a dead end.
+ *
+ * Answers false for a node that is gone or holds none of those, so the caller
+ * falls through to the ordinary commit exactly as it always did.
+ */
+function runPrimaryAction(
+  node: SpatialNode | undefined,
+  result: GestureResult,
+  ctx: PointerReleaseContext,
+): boolean {
+  if (node === undefined) return false
+  const {
+    applyResult,
+    canvas,
+    isImageFileRef,
+    missingFileRef,
+    onOpenFileRef,
+    openLinkNode,
+    setGroupLabelEditId,
+  } = ctx
+  const text = nodeText(node)
+  if (text !== undefined) {
+    applyResult(
+      reduceGesture(result.state, canvas, { type: 'start-text-edit', nodeId: node.id, text }),
+    )
+    return true
+  }
+  if (nodeUrl(node) !== undefined) {
+    applyResult(result)
+    openLinkNode(node)
+    return true
+  }
+  if (isFrame(node)) {
+    applyResult(result)
+    setGroupLabelEditId(node.id)
+    return true
+  }
+  const file = nodeFile(node)
+  if (
+    file !== undefined &&
+    onOpenFileRef !== undefined &&
+    isImageFileRef?.(file) !== true &&
+    missingFileRef?.(file) !== true
+  ) {
+    applyResult(result)
+    onOpenFileRef(file, nodeSubpath(node))
+    return true
+  }
+  return false
+}
+
 export function commitRelease(
   e: React.PointerEvent<HTMLDivElement>,
   screenPoint: Point,
@@ -195,13 +254,8 @@ export function commitRelease(
     createId,
     extraIds,
     gestureState,
-    isImageFileRef,
     isLocked,
-    missingFileRef,
-    onOpenFileRef,
-    openLinkNode,
     selectableBoxes,
-    setGroupLabelEditId,
     viewport,
   } = ctx
   // Snapped with the same helper the preview used, so the box commits
@@ -232,53 +286,14 @@ export function commitRelease(
     armed !== null &&
     gestureState.kind === 'moving' &&
     armed.key === gestureState.nodeId &&
-    result.commands.length === 0
+    result.commands.length === 0 &&
+    runPrimaryAction(
+      canvasRef.current.nodes.find((n) => n.id === gestureState.nodeId),
+      result,
+      ctx,
+    )
   ) {
-    const node = canvasRef.current.nodes.find((n) => n.id === gestureState.nodeId)
-    // Each arm asks what the node HOLDS rather than narrowing on the
-    // stored discriminant. Resolved once, in a block rather than an early
-    // return: a press on a node that is gone still falls through to the
-    // `applyResult(result)` at the end of this handler, as it always did.
-    if (node !== undefined) {
-      const text = nodeText(node)
-      if (text !== undefined) {
-        applyResult(
-          reduceGesture(result.state, canvas, {
-            type: 'start-text-edit',
-            nodeId: node.id,
-            text,
-          }),
-        )
-        return
-      }
-      // A link node's double press follows the reference, mirroring the
-      // text node's double-press-edits rule: the object's primary action.
-      if (nodeUrl(node) !== undefined) {
-        applyResult(result)
-        openLinkNode(node)
-        return
-      }
-      // A group's double press edits its label — the frame's one own datum.
-      if (isFrame(node)) {
-        applyResult(result)
-        setGroupLabelEditId(node.id)
-        return
-      }
-      // A file node's double press follows the reference (navigate), the
-      // same primary-action rule as link nodes. Image references are not
-      // followable — navigating to an asset id is a dead end.
-      const file = nodeFile(node)
-      if (
-        file !== undefined &&
-        onOpenFileRef !== undefined &&
-        isImageFileRef?.(file) !== true &&
-        missingFileRef?.(file) !== true
-      ) {
-        applyResult(result)
-        onOpenFileRef(file, nodeSubpath(node))
-        return
-      }
-    }
+    return
   }
   const moved = result.commands.find((c) => c.kind === 'move-node')
   if (moved !== undefined && gestureState.kind === 'moving') {

@@ -13,6 +13,31 @@ import type { SpatialNode } from '@kamiazya/whiteboard-model'
 
 export type FieldSuggestions = Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>
 
+/**
+ * One facet payload's contribution to the running set.
+ *
+ * A key whose form has no text fields, or a payload that is not an object,
+ * contributes nothing — the suggestions are values a person TYPED, so only a
+ * declared text field can hold one, and an empty string is not a suggestion.
+ */
+function collectFrom(
+  seen: Map<string, Map<string, Set<string>>>,
+  key: string,
+  payload: unknown,
+  fields: readonly string[] | undefined,
+): void {
+  if (fields === undefined || typeof payload !== 'object' || payload === null) return
+  const byField = seen.get(key) ?? new Map<string, Set<string>>()
+  for (const name of fields) {
+    const value = (payload as Record<string, unknown>)[name]
+    if (typeof value !== 'string' || value === '') continue
+    const values = byField.get(name) ?? new Set<string>()
+    values.add(value)
+    byField.set(name, values)
+  }
+  if (byField.size > 0) seen.set(key, byField)
+}
+
 export function collectFieldSuggestions(
   nodes: readonly SpatialNode[],
   registry: FacetRegistry,
@@ -33,17 +58,7 @@ export function collectFieldSuggestions(
   }
   for (const node of nodes) {
     for (const [key, payload] of Object.entries(node.facets ?? {})) {
-      const fields = textFieldsOf(key)
-      if (fields === undefined || typeof payload !== 'object' || payload === null) continue
-      const byField = seen.get(key) ?? new Map<string, Set<string>>()
-      for (const name of fields) {
-        const value = (payload as Record<string, unknown>)[name]
-        if (typeof value !== 'string' || value === '') continue
-        const values = byField.get(name) ?? new Set<string>()
-        values.add(value)
-        byField.set(name, values)
-      }
-      if (byField.size > 0) seen.set(key, byField)
+      collectFrom(seen, key, payload, textFieldsOf(key))
     }
   }
   // Sorted, so the list reads the same however the board was written —
