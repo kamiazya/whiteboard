@@ -38,6 +38,26 @@ function coverBoth(a: BoundingBox, b: BoundingBox): BoundingBox {
   }
 }
 
+/**
+ * One scene node's contribution to a proposal's chrome: its BUBBLE if it is
+ * one, and its box folded into the proposal's total extent either way.
+ *
+ * A node that is not a proposal's chrome contributes nothing.
+ */
+function collectProposalChrome(
+  byProposal: Map<string, { bubble?: BoundingBox; extent: BoundingBox }>,
+  node: Scene['nodes'][number],
+): void {
+  if (node.kind !== 'shape' || node.proposalChrome === undefined) return
+  const { proposalId } = node.proposalChrome
+  const held = byProposal.get(proposalId)
+  const isBubble = node.id?.endsWith('/bubble') === true
+  byProposal.set(proposalId, {
+    ...(isBubble ? { bubble: node.bbox } : held?.bubble ? { bubble: held.bubble } : {}),
+    extent: held === undefined ? node.bbox : coverBoth(held.extent, node.bbox),
+  })
+}
+
 export function useSceneProjection({
   scene,
   bounds,
@@ -133,16 +153,7 @@ export function useSceneProjection({
    */
   const proposalChromeBoxes = useMemo(() => {
     const byProposal = new Map<string, { bubble?: BoundingBox; extent: BoundingBox }>()
-    for (const node of scene.nodes) {
-      if (node.kind !== 'shape' || node.proposalChrome === undefined) continue
-      const { proposalId } = node.proposalChrome
-      const held = byProposal.get(proposalId)
-      const isBubble = node.id?.endsWith('/bubble') === true
-      byProposal.set(proposalId, {
-        ...(isBubble ? { bubble: node.bbox } : held?.bubble ? { bubble: held.bubble } : {}),
-        extent: held === undefined ? node.bbox : coverBoth(held.extent, node.bbox),
-      })
-    }
+    for (const node of scene.nodes) collectProposalChrome(byProposal, node)
     // A proposal with no bubble has no affordance to open, so it is not in
     // the list at all — the same reading the bubbles-only filter had.
     return [...byProposal].flatMap(([proposalId, { bubble, extent }]) =>

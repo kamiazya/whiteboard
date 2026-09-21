@@ -1790,6 +1790,25 @@ because that is where `tidy.ts`'s own survivors had migrated once its
 scoreboard existed, so leaving it out would have shrunk the lane's reach while
 the report read the same.
 
+**An AXIS is a thing here** (`tidy-axis.ts`). Every rule in `tidy.ts` is
+stated once and run twice, and each one used to carry `axis === 'x' ? … : …`
+at every read of a position, every write of one, and every pick of an origin
+or a floor — 18 of them, each a branch a reader resolves before seeing what
+the rule says, and each the one place a rule can be written asymmetrically by
+accident. `Axis` is `near` / `size` / `at(fraction)` / `of(pair)` / `moved` /
+`shift`, plus `bandFractions` — the anchors a drawer sets on that axis, the
+far edge only on x. Its own module rather than filed beside the band pass it
+was introduced for, because four passes read it. `tidy-bands.ts` took that
+pass and `SnapGuard`, the two things a snap may not buy alignment with.
+
+Both are in the mutation lane for the reason `tidy-units.ts` is, and
+`tidy-axis.ts` twice over: a rule written asymmetrically on one axis is the
+defect the vocabulary exists to make impossible, and the lane is what checks
+that claim rather than restating it. Nothing about tidy's OUTPUT moved when
+this was done, and `tidy-quality.test.ts` is why that is checkable rather
+than asserted — its debt AND price columns are pinned exactly, so it is the
+instrument to re-run first when touching any of these three files.
+
 **Board-wide GUIDE LINES in tidy were implemented, measured and REJECTED
 — by the composition score, on its first use as a decision instrument.**
 The idea is sound and the mechanism worked: cluster every input anchor at

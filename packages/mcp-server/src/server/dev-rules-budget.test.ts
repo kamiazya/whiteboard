@@ -399,7 +399,15 @@ const ALWAYS_ON_TOTAL_BUDGET = 25
 // thing that builds them, and take the body typesetter as a seam because
 // importing it would close a cycle. A file list would go stale; the rule
 // that decides where the next overlay goes does not.
-const CANVAS_RENDER_BUDGET = 142
+//
+// 142 -> 143 (the tidy decomposition): `tidy.ts` gave up `tidy-axis.ts` and
+// `tidy-bands.ts`, and what a session here has to be told is again the
+// DIRECTION rather than the file list — an axis is a THING, four passes read
+// it, so it is its own module and not filed beside the band pass it was
+// introduced for. The measurements that justified the split are in the PR;
+// what stays is the rule, plus which instrument re-reads it
+// (`tidy-quality.test.ts`, whose columns are pinned exactly).
+const CANVAS_RENDER_BUDGET = 143
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

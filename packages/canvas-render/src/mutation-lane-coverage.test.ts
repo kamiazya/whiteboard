@@ -212,12 +212,18 @@ describe('the mutation lane covers what it says it covers', () => {
     // by hand at the three cases that moved — flattening preserveAspectRatio,
     // dropping the glyph baseline offset, and dropping the fragment's
     // presentation role each move the dump.
-    // 84 and 17 since `edge-ink.ts` came out of `edge-rules.ts` — the ink
-    // TERMS, split off when the axis decomposition carried that file past its
-    // recorded ceiling. IN the lane, for the reason `tidy-units.ts` is.
+    // 85 and 18 since `tidy-axis.ts` and `tidy-bands.ts` came out of
+    // `tidy.ts` — the axis vocabulary and the band pass, split off when
+    // decomposing that file for cognitive complexity carried it past the
+    // 800-line budget. Both are IN the lane, for the reason `tidy-units.ts`
+    // is: leaving a piece of the heuristic out would shrink what the lane
+    // sees while the report kept looking the same.
+    //
+    // 86 and 19 since `edge-ink.ts` came out of `edge-rules.ts` the same way
+    // — the ink TERMS — and is in the lane for the same reason.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 17,
-      production: 84,
+      mutated: 19,
+      production: 86,
     })
   })
 

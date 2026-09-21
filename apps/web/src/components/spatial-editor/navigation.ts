@@ -270,109 +270,162 @@ function isDoublePress(memory: HandPressMemory | null, at: number, point: Point)
   return Math.hypot(point.x - memory.point.x, point.y - memory.point.y) <= DOUBLE_PRESS_SLOP_PX
 }
 
+/**
+ * A second finger on a node EXTENDS the selection rather than starting a
+ * pinch — the one-handed way to build a multi-selection on a touch screen.
+ *
+ * Answers `undefined` when this press is not a gather, so the caller carries
+ * on to the pinch and one-finger rules. Gathering is a SELECTION act, not a
+ * drag: whatever the anchor had begun to move is abandoned, because carrying
+ * a half-applied delta into the new multi-selection would jump every node
+ * gathered afterwards by an offset the user never gave it.
+ */
+function tryGather(
+  state: NavigationState,
+  event: Extract<NavigationEvent, { type: 'pointerdown' }>,
+  effects: NavigationEffect[],
+): { next: NavigationState; result: NavigationResult | undefined } | undefined {
+  const { context } = event
+  const next = state
+  if (next.touches.size !== 2 && next.mode.kind !== 'gathering') return undefined
+  const gathered = context.anchorPrimaryId === null ? undefined : context.hitId
+  const anchorId =
+    next.mode.kind === 'gathering'
+      ? next.mode.anchorId
+      : ([...next.touches.keys()].find((id) => id !== event.pointerId) ?? null)
+  if (gathered !== undefined && anchorId !== null && context.anchorPrimaryId !== null) {
+    const beganNow = next.mode.kind !== 'gathering'
+    const memberIds = new Set(
+      next.mode.kind === 'gathering' ? next.mode.memberIds : new Set<number>(),
+    )
+    memberIds.add(event.pointerId)
+    // Gathering is a selection act, not a drag. Whatever the anchor had
+    // begun to move is abandoned: carrying a half-applied delta into the
+    // new multi-selection would jump every node gathered afterwards by
+    // an offset the user never gave it.
+    if (beganNow && context.manipulating) effects.push({ kind: 'cancel-manipulation' })
+    effects.push(
+      { kind: 'clear-marquee' },
+      { kind: 'clear-press-memory' },
+      { kind: 'clear-long-press' },
+    )
+    effects.push({
+      kind: 'gather',
+      anchorPrimaryId: context.anchorPrimaryId,
+      hitId: gathered,
+    })
+    const gathering: NavigationState = {
+      ...next,
+      mode: { kind: 'gathering', anchorId, memberIds },
+      touches: withoutTouch(next.touches, event.pointerId),
+      lastHandPress: null,
+    }
+    return { next: gathering, result: { state: gathering, effects, fallThrough: false } }
+  }
+  return undefined
+}
+
 function reducePointerDown(
   state: NavigationState,
   event: Extract<NavigationEvent, { type: 'pointerdown' }>,
 ): NavigationResult {
-  const { context } = event
   const effects: NavigationEffect[] = []
   let next: NavigationState = { ...state, down: withDown(state.down, event.pointerId, true) }
-
   if (event.pointerType === 'touch') {
-    // A touch pointer is `isPrimary` only while no other touch is active
-    // (Pointer Events 3, sec. 4.2), so this is the browser stating that
-    // nothing else is down. Anything still tracked belongs to a gesture
-    // whose release never reached us — a finger lifted over an element
-    // outside the editor, a cancel delivered somewhere else. Left in place
-    // it is not inert: the next one-finger press would make the map size 2
-    // and be read as the second finger of a pinch.
-    if (event.isPrimary) next = { ...toIdle(next), down: next.down }
+    const touch = reduceTouchPress(next, event, effects)
+    if (touch.result !== undefined) return touch.result
+    next = touch.next
+  }
+  return reducePanPress(next, event, effects)
+}
 
-    next = { ...next, touches: withTouch(next.touches, event.pointerId, event.point) }
+/**
+ * The touch half of a press: what a second finger MEANS, and what a single
+ * one arms.
+ *
+ * Answers a `result` when the touch owns the press outright — a pinch, a
+ * gather, or a finger arriving while one of those is already running — and
+ * otherwise the state a pan decision continues from. Separated from the pan
+ * half because the two share only the `down` bookkeeping: everything below is
+ * about buttons and modifier keys, which a finger does not have.
+ */
+function reduceTouchPress(
+  state: NavigationState,
+  event: Extract<NavigationEvent, { type: 'pointerdown' }>,
+  effects: NavigationEffect[],
+): { next: NavigationState; result: NavigationResult | undefined } {
+  const { context } = event
+  let next = state
+  // A touch pointer is `isPrimary` only while no other touch is active
+  // (Pointer Events 3, sec. 4.2), so this is the browser stating that
+  // nothing else is down. Anything still tracked belongs to a gesture
+  // whose release never reached us — a finger lifted over an element
+  // outside the editor, a cancel delivered somewhere else. Left in place
+  // it is not inert: the next one-finger press would make the map size 2
+  // and be read as the second finger of a pinch.
+  if (event.isPrimary) next = { ...toIdle(next), down: next.down }
 
-    // A pinch owns the viewport until every finger lifts; later fingers are
-    // tracked so their release is accounted for, and otherwise inert.
-    if (next.mode.kind === 'pinching') return { state: next, effects, fallThrough: false }
+  next = { ...next, touches: withTouch(next.touches, event.pointerId, event.point) }
 
-    if (next.mode.kind === 'gathering') {
-      // Already gathering: a further finger is another tap, never a pinch
-      // participant, so it must not sit among the pinch candidates.
-      next = { ...next, touches: withoutTouch(next.touches, event.pointerId) }
-    }
+  // A pinch owns the viewport until every finger lifts; later fingers are
+  // tracked so their release is accounted for, and otherwise inert.
+  if (next.mode.kind === 'pinching')
+    return { next, result: { state: next, effects, fallThrough: false } }
 
-    if (next.touches.size === 2 || next.mode.kind === 'gathering') {
-      const gathered = context.anchorPrimaryId === null ? undefined : context.hitId
-      const anchorId =
-        next.mode.kind === 'gathering'
-          ? next.mode.anchorId
-          : ([...next.touches.keys()].find((id) => id !== event.pointerId) ?? null)
-      if (gathered !== undefined && anchorId !== null && context.anchorPrimaryId !== null) {
-        const beganNow = next.mode.kind !== 'gathering'
-        const memberIds = new Set(
-          next.mode.kind === 'gathering' ? next.mode.memberIds : new Set<number>(),
-        )
-        memberIds.add(event.pointerId)
-        // Gathering is a selection act, not a drag. Whatever the anchor had
-        // begun to move is abandoned: carrying a half-applied delta into the
-        // new multi-selection would jump every node gathered afterwards by
-        // an offset the user never gave it.
-        if (beganNow && context.manipulating) effects.push({ kind: 'cancel-manipulation' })
-        effects.push(
-          { kind: 'clear-marquee' },
-          { kind: 'clear-press-memory' },
-          { kind: 'clear-long-press' },
-        )
-        effects.push({
-          kind: 'gather',
-          anchorPrimaryId: context.anchorPrimaryId,
-          hitId: gathered,
-        })
-        return {
-          state: {
-            ...next,
-            mode: { kind: 'gathering', anchorId, memberIds },
-            touches: withoutTouch(next.touches, event.pointerId),
-            lastHandPress: null,
-          },
-          effects,
-          fallThrough: false,
-        }
-      }
-    }
-
-    if (next.touches.size === 2) {
-      // The second finger converts whatever the first started — marquee,
-      // node move, double-press arming — into navigation.
-      if (context.manipulating) effects.push({ kind: 'cancel-manipulation' })
-      effects.push(
-        { kind: 'clear-marquee' },
-        { kind: 'clear-press-memory' },
-        { kind: 'clear-long-press' },
-      )
-      // Capture BOTH fingers, not only the one that arrived second: an
-      // uncaptured first finger crossing outside the root would stop
-      // delivering its move and up events, leaving a stale entry that would
-      // misread a later one-finger press as a pinch participant.
-      effects.push({ kind: 'capture', pointerIds: [...next.touches.keys()] })
-      return {
-        state: { ...next, mode: { kind: 'pinching' }, lastHandPress: null },
-        effects,
-        fallThrough: false,
-      }
-    }
-
-    // Armed under the hand tool too: its menu is the annotation layer's
-    // verbs, which a reader panning around a canvas has as much reason to
-    // reach as one selecting on it. The pan the press starts below is not
-    // stranded by the timer's teardown, because a finger that travels
-    // clears the timer first and a finger that does not has not panned.
-    if (next.touches.size === 1) {
-      effects.push({ kind: 'clear-long-press' })
-      effects.push({ kind: 'arm-long-press', pointerId: event.pointerId, screen: event.point })
-    }
+  if (next.mode.kind === 'gathering') {
+    // Already gathering: a further finger is another tap, never a pinch
+    // participant, so it must not sit among the pinch candidates.
+    next = { ...next, touches: withoutTouch(next.touches, event.pointerId) }
   }
 
-  // Middle button (or Space held) drags from ANYWHERE — a plain left drag on
+  const gathered = tryGather(next, event, effects)
+  if (gathered !== undefined) return gathered
+
+  if (next.touches.size === 2) {
+    // The second finger converts whatever the first started — marquee,
+    // node move, double-press arming — into navigation.
+    if (context.manipulating) effects.push({ kind: 'cancel-manipulation' })
+    effects.push(
+      { kind: 'clear-marquee' },
+      { kind: 'clear-press-memory' },
+      { kind: 'clear-long-press' },
+    )
+    // Capture BOTH fingers, not only the one that arrived second: an
+    // uncaptured first finger crossing outside the root would stop
+    // delivering its move and up events, leaving a stale entry that would
+    // misread a later one-finger press as a pinch participant.
+    effects.push({ kind: 'capture', pointerIds: [...next.touches.keys()] })
+    const pinching: NavigationState = {
+      ...next,
+      mode: { kind: 'pinching' },
+      lastHandPress: null,
+    }
+    return { next: pinching, result: { state: pinching, effects, fallThrough: false } }
+  }
+
+  // Armed under the hand tool too: its menu is the annotation layer's
+  // verbs, which a reader panning around a canvas has as much reason to
+  // reach as one selecting on it. The pan the press starts below is not
+  // stranded by the timer's teardown, because a finger that travels
+  // clears the timer first and a finger that does not has not panned.
+  if (next.touches.size === 1) {
+    effects.push({ kind: 'clear-long-press' })
+    effects.push({ kind: 'arm-long-press', pointerId: event.pointerId, screen: event.point })
+  }
+  return { next, result: undefined }
+}
+
+/**
+ * Whether this press pans, and what a double press under the hand tool does
+ * instead.
+ */
+function reducePanPress(
+  state: NavigationState,
+  event: Extract<NavigationEvent, { type: 'pointerdown' }>,
+  effects: NavigationEffect[],
+): NavigationResult {
+  const { context } = event
+  let next = state
   // empty space marquee-selects instead. The hand tool makes EVERY plain
   // press a pan, nodes included: it is the one-handed touch navigation mode,
   // where a second finger is not available to promote the gesture.
@@ -404,6 +457,46 @@ function reducePointerDown(
   }
 }
 
+/**
+ * A move by one of the two fingers driving a pinch.
+ *
+ * The PAIR is the two longest-lived fingers — a Map preserves insertion order
+ * — and later fingers are tracked so their release is accounted for, but are
+ * otherwise inert. Answers `undefined` when this move is not one of the
+ * pair's, so the caller falls through to the pan rules.
+ */
+function advancePinch(
+  state: NavigationState,
+  event: Extract<NavigationEvent, { type: 'pointermove' }>,
+): NavigationResult | undefined {
+  if (state.mode.kind !== 'pinching' || state.touches.size < 2) return undefined
+  const [idA, idB] = [...state.touches.keys()]
+  if (idA === undefined || idB === undefined) return undefined
+  if (event.pointerId !== idA && event.pointerId !== idB) return undefined
+  const a = state.touches.get(idA)
+  const b = state.touches.get(idB)
+  if (a === undefined || b === undefined) return undefined
+  const update = computePinchUpdate(
+    { a, b },
+    {
+      a: event.pointerId === idA ? event.point : a,
+      b: event.pointerId === idB ? event.point : b,
+    },
+  )
+  return {
+    state: { ...state, touches: withTouch(state.touches, event.pointerId, event.point) },
+    effects: [
+      {
+        kind: 'pinch',
+        panDeltaScreen: update.panDelta,
+        anchorScreen: update.anchor,
+        factor: update.zoomFactor,
+      },
+    ],
+    fallThrough: false,
+  }
+}
+
 function reducePointerMove(
   state: NavigationState,
   event: Extract<NavigationEvent, { type: 'pointermove' }>,
@@ -418,40 +511,8 @@ function reducePointerMove(
   }
 
   if (event.pointerType === 'touch' && state.touches.has(event.pointerId)) {
-    if (state.mode.kind === 'pinching' && state.touches.size >= 2) {
-      // The pair is the two longest-lived fingers (a Map preserves insertion
-      // order); later fingers are tracked but inert.
-      const [idA, idB] = [...state.touches.keys()]
-      if (
-        idA !== undefined &&
-        idB !== undefined &&
-        (event.pointerId === idA || event.pointerId === idB)
-      ) {
-        const a = state.touches.get(idA)
-        const b = state.touches.get(idB)
-        if (a !== undefined && b !== undefined) {
-          const update = computePinchUpdate(
-            { a, b },
-            {
-              a: event.pointerId === idA ? event.point : a,
-              b: event.pointerId === idB ? event.point : b,
-            },
-          )
-          return {
-            state: { ...state, touches: withTouch(state.touches, event.pointerId, event.point) },
-            effects: [
-              {
-                kind: 'pinch',
-                panDeltaScreen: update.panDelta,
-                anchorScreen: update.anchor,
-                factor: update.zoomFactor,
-              },
-            ],
-            fallThrough: false,
-          }
-        }
-      }
-    }
+    const pinch = advancePinch(state, event)
+    if (pinch !== undefined) return pinch
     const tracked = { ...state, touches: withTouch(state.touches, event.pointerId, event.point) }
     // A lone finger left behind by a pinch stays inert until it lifts.
     if (state.mode.kind === 'pinching') {
@@ -479,6 +540,66 @@ function reducePanMove(
   }
 }
 
+/**
+ * A finger lifting out of a GATHER.
+ *
+ * Gathering fingers act on the press, so their release carries no meaning —
+ * running the click/marquee logic would re-collapse the very selection the
+ * gesture just built. The anchor lifting ends the gather.
+ *
+ * The ANCHOR is checked first, and that ordering is load-bearing rather than
+ * incidental. Pointer ids are reused, so a gather that outlived a release
+ * this handler never saw can be joined by a new finger carrying the anchor's
+ * own id — at which point one id is both anchor and member, the member arm
+ * consumes its release, and the gather survives with an anchor that is no
+ * longer down. Ending on the anchor cannot leave that behind. In every
+ * ordinary gather the two sets are disjoint and the order does not matter.
+ *
+ * Answers `undefined` when this release is not a gathering finger's.
+ */
+function releaseGatheringFinger(
+  state: NavigationState,
+  event: Extract<NavigationEvent, { type: 'pointerup' }>,
+  down: NavigationState['down'],
+  effects: NavigationEffect[],
+): NavigationResult | undefined {
+  if (state.mode.kind !== 'gathering') return undefined
+  // Gathering fingers act on the press, so their release carries no
+  // meaning — running the click/marquee logic here would re-collapse the
+  // very selection the gesture just built. The anchor lifting ends it.
+  //
+  // The ANCHOR is checked first, and that ordering is load-bearing rather
+  // than incidental. Pointer ids are reused, so a gather that outlived a
+  // release this handler never saw can be joined by a new finger carrying
+  // the anchor's own id — at which point one id is both anchor and member,
+  // the member arm consumes its release, and the gather survives with an
+  // anchor that is no longer down. Ending on the anchor cannot leave that
+  // behind. In every ordinary gather the two sets are disjoint and the
+  // order does not matter.
+  if (state.mode.anchorId === event.pointerId) {
+    return {
+      state: {
+        ...state,
+        down,
+        mode: { kind: 'idle' },
+        touches: withoutTouch(state.touches, event.pointerId),
+      },
+      effects,
+      fallThrough: false,
+    }
+  }
+  if (state.mode.memberIds.has(event.pointerId)) {
+    const memberIds = new Set(state.mode.memberIds)
+    memberIds.delete(event.pointerId)
+    return {
+      state: { ...state, down, mode: { ...state.mode, memberIds } },
+      effects,
+      fallThrough: false,
+    }
+  }
+  return undefined
+}
+
 function reducePointerUp(
   state: NavigationState,
   event: Extract<NavigationEvent, { type: 'pointerup' }>,
@@ -486,41 +607,8 @@ function reducePointerUp(
   const down = withDown(state.down, event.pointerId, false)
   const effects: NavigationEffect[] = [{ kind: 'clear-long-press' }]
 
-  if (state.mode.kind === 'gathering') {
-    // Gathering fingers act on the press, so their release carries no
-    // meaning — running the click/marquee logic here would re-collapse the
-    // very selection the gesture just built. The anchor lifting ends it.
-    //
-    // The ANCHOR is checked first, and that ordering is load-bearing rather
-    // than incidental. Pointer ids are reused, so a gather that outlived a
-    // release this handler never saw can be joined by a new finger carrying
-    // the anchor's own id — at which point one id is both anchor and member,
-    // the member arm consumes its release, and the gather survives with an
-    // anchor that is no longer down. Ending on the anchor cannot leave that
-    // behind. In every ordinary gather the two sets are disjoint and the
-    // order does not matter.
-    if (state.mode.anchorId === event.pointerId) {
-      return {
-        state: {
-          ...state,
-          down,
-          mode: { kind: 'idle' },
-          touches: withoutTouch(state.touches, event.pointerId),
-        },
-        effects,
-        fallThrough: false,
-      }
-    }
-    if (state.mode.memberIds.has(event.pointerId)) {
-      const memberIds = new Set(state.mode.memberIds)
-      memberIds.delete(event.pointerId)
-      return {
-        state: { ...state, down, mode: { ...state.mode, memberIds } },
-        effects,
-        fallThrough: false,
-      }
-    }
-  }
+  const gathered = releaseGatheringFinger(state, event, down, effects)
+  if (gathered !== undefined) return gathered
 
   if (event.pointerType === 'touch') {
     const touches = withoutTouch(state.touches, event.pointerId)
