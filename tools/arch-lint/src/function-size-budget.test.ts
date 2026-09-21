@@ -519,7 +519,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 101,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 88,
-  'packages/mcp-server/src/server/routes/document/restore.ts#createRestoreRouter': 107,
   'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 82,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 132,
   'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 178,
