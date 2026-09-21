@@ -86,16 +86,6 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 **Simplicity already has two executable rungs — reach for them before writing a prose rule.** `tools/arch-lint`'s allowed-third-party-dependency check fails the build on a dependency added outside a package's allowlist, and `pnpm knip` fails on the unused export a deleted feature left behind. Those are the "don't add a dependency" and "delete it" rungs made mechanical. What the `simplifier` agent and its `ponytail` ladder add on top is only the judgement-shaped rungs (does this need to exist, is this one line) — inherently prose, and the weakest rung by design.
 
-**A mutation check runs through `node .claude/scripts/mutate.mjs <file> <old> <new> -- <cmd>`.**
-It exits 3 when the substitution matched NOTHING, and restores the file in a `finally`. The
-failure it exists for is silent: `replace` with a needle that is not there returns the input, the
-command runs against untouched source, and the guard passes — indistinguishable from a guard that
-checked. Measured, two of four mutation checks in one session had never applied, because a
-formatter had rewritten the ledger to single quotes after the probe was written. Both came back
-green. A mutation result quoted without this, or without an assertion of its own that the
-substitution landed, is not evidence; `test-coverage.md`'s criterion 2b asks for it in review, and
-`diagnosis-evidence` is where the reasoning lives.
-
 **Four things you cannot see by reading a diff each have a skill, and the skill is where the
 worked measurements live.** Load it before the work, not after:
 
@@ -107,7 +97,8 @@ worked measurements live.** Load it before the work, not after:
 - **`diagnosis-evidence`** — before publishing ANY cause, "not a regression", mutation result, or
   fix you are calling verified by hand. A number arrives looking like evidence while saying
   nothing about what was actually exercised; the fix is to choose an observation that could
-  REFUTE the claim.
+  REFUTE the claim. Mutate through `.claude/scripts/mutate.mjs`, which exits 3 when the
+  substitution matched nothing.
 - **`visual-evidence`** — for a change that moves pixels: the same canvas through the real
   pipeline before and after, chosen by the metric the change targets rather than by eye. Two
   executable rungs back it, because this rule was prose alone for a long time and hollowed out —
