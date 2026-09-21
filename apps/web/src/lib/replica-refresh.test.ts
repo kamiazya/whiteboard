@@ -6,6 +6,22 @@
  * off the critical path, registry written only on a successful pull.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Spies on the module's logger so the swallowed-failure warning (see
+// scheduleReplicaRefresh's catch/kind!=='ok' branches) is directly
+// observable rather than inferred from console output.
+const appLoggerSpies = vi.hoisted(() => ({ warn: vi.fn() }))
+vi.mock('./app-logger.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./app-logger.js')>()
+  return {
+    ...actual,
+    getAppLogger: (name: string) => ({
+      ...actual.getAppLogger(name),
+      warn: appLoggerSpies.warn,
+    }),
+  }
+})
+
 import {
   resetReplicaRefreshForTests,
   scheduleReplicaPush,
@@ -40,6 +56,7 @@ function deps(over?: Partial<Parameters<typeof scheduleReplicaRefresh>[0]>) {
 beforeEach(() => {
   localStorage.clear()
   resetReplicaRefreshForTests()
+  appLoggerSpies.warn.mockClear()
   // The dedupe compares the registry stamp against now, so the clock is
   // pinned NEAR the stamps the stubs record — otherwise every entry reads
   // as ancient and the dedupe never holds.
@@ -159,6 +176,36 @@ describe('scheduleReplicaRefresh', () => {
     scheduleReplicaRefresh(deps({ cache }))
     await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
     expect(createUserSettingsStore().load().storage.replicas?.[WS]).toBeUndefined()
+  })
+
+  it('a non-ok pull result is logged at warning with fields, never thrown', async () => {
+    const cache = vi.fn().mockResolvedValue({ kind: 'failed', reason: 'offline' })
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
+    const [message, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
+    expect(message).toMatch(/did not pull/)
+    expect(fields).toMatchObject({
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      kind: 'failed',
+      reason: 'offline',
+    })
+  })
+
+  it('a pull that throws is logged at warning with the error, and the throw never escapes', async () => {
+    const fetchThatThrows = (async () => {
+      throw new Error('network down')
+    }) as unknown as typeof globalThis.fetch
+    scheduleReplicaRefresh(deps({ fetch: fetchThatThrows }))
+    await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
+    const [message, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
+    expect(message).toMatch(/failed/)
+    expect(fields).toMatchObject({
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      name: 'Error',
+      message: 'network down',
+    })
   })
 
   // The production `schedule` default (no `deps.schedule` override) is what
