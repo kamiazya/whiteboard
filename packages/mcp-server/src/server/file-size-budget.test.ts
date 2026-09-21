@@ -85,10 +85,28 @@ function isScannedTestFile(absolutePath: string): boolean {
   return !EXCLUDED_DIR_SEGMENTS.some((segment) => normalized.includes(segment))
 }
 
+/**
+ * This file, which the ledger deliberately does not hold.
+ *
+ * Its length is a function of how many entries the list below has, so its
+ * ceiling records the SIZE OF THE DEBT LIST and nothing about this file —
+ * and every entry already has to carry a reason, so the deliberateness the
+ * ceiling would add is already spent one line above it.
+ *
+ * What it cost instead: the number changes on every branch that records a
+ * raise, so two branches that both record one conflict HERE, on a line
+ * neither of them is about. Measured on one PR in one session: three
+ * conflicts, each resolved by re-counting the merged file's own lines, and
+ * the reasons stacked up as archaeology ("FIVE branches", then "SIX") until
+ * the comment said more about merging than about sizes.
+ */
+const LEDGER_PATH = 'packages/mcp-server/src/server/file-size-budget.test.ts'
+
 function scanTestFiles(): string[] {
   return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
     .filter(isScannedTestFile)
     .map((absolutePath) => relativeToRepo(absolutePath))
+    .filter((path) => path !== LEDGER_PATH)
     .sort()
 }
 
@@ -848,42 +866,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/loro-adapter/src/loro-bridge.test.ts': 1308,
   'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
   'packages/mcp-server/src/server/app.test.ts': 1339,
-  // Its own entry, and it counts ITSELF: the number is what the file is
-  // after the entry is in it, which is why this one is 10 past the reading
-  // that first flagged it.
-  // 858 -> 892 for the raises the two ink writes needed, each with the
-  // reason beside it. That is the entry doing its job rather than growing:
-  // a raise costs a sentence, so a change that widens a file pays for it in
-  // the diff a reviewer reads.
-  // 892 -> 909 for completing two of those sentences. A review found both
-  // annotations stopping short of the ceiling they sit on — 2712 written
-  // against 2724, 1675 against 1808 — which is the failure mode this entry
-  // is the antidote to, one level up: an annotation that covers part of a
-  // raise reads exactly like one that covers all of it.
-  // 909 -> 917: this entry is self-referential, so every raise recorded
-  // above costs this file the lines that record it — including these.
-  // 917 -> 919 for the App.tsx raise above (ADR-0041 S0-5's Members card).
-  // 919 -> 926 for the App.test.tsx raise above, the same increment's two
-  // new assertions.
-  // +5 for the two entries the pointer-surface move needs: this list
-  // GREW by an over-budget file, which is the one thing that can only be
-  // recorded by raising this number. Then the four S4b raises and their
-  // sentences.
-  // 951 -> 959 for the two S5 raises above (App.tsx, App.test.tsx) and
-  // this entry's own two-line sentence — this file always grows by its
-  // own edit too.
-  // 973 -> 979: this ledger is on its own list, so the three-line reason a
-  // raise is REQUIRED to carry overflows it. Raising both is the mechanism
-  // working, not a loophole — the alternative is a raise with no reason.
-  // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. FIVE branches have now
-  // raised it for that reason independently; the number is the resolved
-  // file's own, re-measured at each merge rather than carried from a side.
-  // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. SIX branches have now
-  // raised it for that reason independently; the number is the resolved
-  // file's own, re-measured at each merge rather than carried from a side.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 1013,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
