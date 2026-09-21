@@ -194,3 +194,25 @@ content, and the export would reopen what the revocation closed.
 **Accepting a revoked actor's offline edits up to the revocation time.**
 Rejected: Loro operations carry no keeper-trusted clock, so "up to" cannot be
 established and would be a guess presented as a rule.
+
+## Addendum (2026-09-21): the write path for decision 1's tier, and its bar
+
+Decision 1 named the per-workspace `replicaTier` override; nothing wrote it
+until now — `PUT /api/workspaces/:workspaceId/replica-tier` does, with
+`{ tier: null }` as the explicit clear back to the process default.
+
+The bar is `runtime:admin`, not the `workspace:write` the rest of a
+workspace's fields sit behind. A tier is a security-posture change about
+whether a copy of a workspace may leave the daemon at all — an operator's
+call, not something any member of a workspace may relax for everyone.
+`route-scope-registry.ts`'s `workspace replica-tier` rule places it beside
+membership and grant management, ahead of the broader `workspaces (rest)`
+fallback so a caller scoped only to `workspace:write` cannot reach it.
+
+Said plainly, matching the same caveat membership and grant management
+already carry (`routes/membership.ts`'s header): under the accepted v1
+posture a pairing grant carries every scope, so a paired browser session
+clears this bar today too, not only the daemon token or an operator-issued
+macaroon/OAuth grant. Narrowing what a pairing session may do is a future
+increment shared with those two surfaces, not something this route does on
+its own.

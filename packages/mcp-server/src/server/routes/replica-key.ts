@@ -1,3 +1,7 @@
+// This router serves a workspace's read-plane REPLICA POSTURE: the content
+// key (POST .../replica-key) and, below, the per-workspace tier override
+// that decides whether a key is handed out at all (PUT .../replica-tier).
+//
 // POST /api/workspaces/:workspaceId/replica-key (ADR-0042 decisions 1/3/5,
 // ADR-0043 decision 3): hands a member's session the workspace's read-plane
 // content key, per tier, and withholds it once L1 removal has taken effect.
@@ -15,11 +19,25 @@
 // (ADR-0043 decision 2: act-plane copy must never claim "cryptographically
 // revoked"), so a lease is a courtesy to the browser, not a server-side
 // enforcement mechanism.
+//
+// PUT /api/workspaces/:workspaceId/replica-tier (ADR-0042 decision 1
+// addendum, 2026-09-21): sets or clears the tier itself. Gated at
+// `runtime:admin` (route-scope-registry.ts's `workspace replica-tier` rule)
+// rather than the `workspace:write` the rest of a workspace's fields sit
+// behind — a tier is a security-posture change about whether a copy may
+// leave the daemon at all, an operator decision rather than something any
+// member may relax for everyone. Unlike the key route above, the handler
+// does not re-resolve the grant or check a passkey binding: the registry
+// bar is the whole gate.
 import type { MembershipRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   type ReplicaKeyResponse,
   replicaKeyResponseSchema,
+  type SetReplicaTierResponse,
+  setReplicaTierRequestSchema,
+  setReplicaTierResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
@@ -96,6 +114,35 @@ export function createReplicaKeyRouter({
       ...(tier === 'bounded'
         ? { leaseExpiresAt: new Date(Date.now() + leaseTtlMs).toISOString() }
         : {}),
+    })
+    return c.json(response, 200)
+  })
+
+  app.put('/api/workspaces/:workspaceId/replica-tier', async (c) => {
+    const workspaceId = c.req.param('workspaceId')
+    const invalidId = badWorkspaceIdBody(workspaceId)
+    if (invalidId) return c.json(invalidId, 400)
+
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
+    }
+    const parsed = setReplicaTierRequestSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json(invalidRequestBody(parsed.error), 400)
+    }
+
+    if (!(await workspaceExists(workspaceId))) {
+      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'replica-tier refused')
+      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
+    }
+
+    await keys.setTier(workspaceId, parsed.data.tier)
+    const response: SetReplicaTierResponse = setReplicaTierResponseSchema.parse({
+      tier: parsed.data.tier,
+      effectiveTier: await keys.effectiveTier(workspaceId),
     })
     return c.json(response, 200)
   })
