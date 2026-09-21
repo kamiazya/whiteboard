@@ -74,10 +74,10 @@ describe('sceneDigest', () => {
     // this file lets the digest assign `n0`, `n1`, …, which is all lowercase
     // and cannot tell them apart.
     //
-    // This matters beyond tidiness: `sceneDigest` is the AI-facing payload of
-    // `/document/{id}/layout` and the `canvas_layout` tool, and this file's
-    // own header says a locale-dependent sort makes it "differ between two
-    // machines holding identical input".
+    // This matters beyond tidiness: the digest is spread into
+    // `canvasSnapshotSchema`, the `wb_canvas_snapshot` MCP tool's output, and
+    // scene-digest.ts's own header says a locale-dependent sort makes it
+    // "differ between two machines holding identical input".
     const shaped = (id: string, x: number): Scene['nodes'][number] =>
       ({ kind: 'shape', id, bbox: { x, y: 0, w: 10, h: 10 } }) as Scene['nodes'][number]
 

@@ -71,7 +71,7 @@ paths:
   proved by the plugin that ships with the engine.
 
   `visual.text/v0` is the stronger proof, and the shape to copy for a new
-  node property: it was added to `visual.ts` alone, and reached the
+  node property: it was added to plugin-visual's `data.ts` alone, and reached the
   context menu — row, segmented control, write path, clear — with zero
   lines changed in `apps/web`. If a new facet needs a vessel edit to be
   usable, the editor spec is the thing to extend, not the vessel.
