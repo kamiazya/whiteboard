@@ -1,11 +1,23 @@
 /**
  * The read plane's per-workspace content key (ADR-0042 decisions 1/3/5,
  * ADR-0043 decision 3): a random 32-byte AES key plus a 16-byte HKDF salt,
- * minted lazily on first read and never rotated by this store — a rotation
- * is a (not yet built) explicit route, not a side effect of a read. The
- * browser derives each document's own key from this one via daemon-client's
- * `deriveDocumentKey`, folding in that document's own epoch (which lives
- * beside its ciphertext, not here).
+ * minted lazily on first read. `rotateKey` REPLACES the pair outright
+ * (Reading A of the 2026-09-21 addendum) — every document key derived from
+ * the old pair stops opening anything the moment rotation lands, which is
+ * the whole point: a suspected-compromised key must deny the holder of the
+ * OLD pair, not merely start issuing a new one alongside it. The per-
+ * document `epoch` (daemon-client's `deriveDocumentKey`) plays no part in
+ * rotation and is not bumped here — a per-document number cannot express a
+ * per-workspace key replacement, and re-deriving under the SAME workspace
+ * pair at a higher epoch would still be openable by whoever held that pair.
+ * See the ADR-0042 addendum for what this denies and what it does not (a
+ * session already holding the key in memory keeps reading until it next
+ * asks, and every existing browser replica becomes unreadable and must be
+ * re-pulled).
+ *
+ * The browser derives each document's own key from this one via
+ * daemon-client's `deriveDocumentKey`, folding in that document's own epoch
+ * (which lives beside its ciphertext, not here).
  *
  * The key is a daemon-held secret AT REST, not a secret from the daemon
  * itself — this store never claims otherwise. The data directory is
@@ -14,7 +26,7 @@
  * document's plaintext, so this row adds no new secret-surface class beyond
  * what a backup of the database already exposes.
  */
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import {
   type ReplicaTier,
   replicaTierSchema,
@@ -25,9 +37,25 @@ import { cloneBytes } from '../store/inmemory/clone-bytes.js'
 const KEY_BYTES = 32
 const SALT_BYTES = 16
 
-interface WorkspaceReplicaKey {
+export interface WorkspaceReplicaKey {
   readonly key: Uint8Array<ArrayBuffer>
   readonly salt: Uint8Array<ArrayBuffer>
+  /** A pure function of (key, salt) — never stored, so it cannot drift from
+   *  the bytes it names. Lets a reader (the route, and eventually the
+   *  browser's cached replica) tell "the workspace key changed" from "the
+   *  bytes I already have" without comparing raw key material. */
+  readonly keyId: string
+}
+
+/** `sha256("wb-workspace-key-id-v1" ‖ key ‖ salt)`, truncated to 16 bytes and
+ *  base64url-encoded (22 chars, no padding) — the same encoding
+ *  `workspaceKeySalt` already uses in the wire contract. */
+function deriveKeyId(key: Uint8Array, salt: Uint8Array): string {
+  const hash = createHash('sha256')
+  hash.update('wb-workspace-key-id-v1')
+  hash.update(key)
+  hash.update(salt)
+  return hash.digest().subarray(0, 16).toString('base64url')
 }
 
 export interface WorkspaceReplicaKeyStoreOptions {
@@ -53,6 +81,14 @@ export interface WorkspaceReplicaKeyStore {
    *  (upsert-workspace.ts), so a workspace nobody has written to yet has
    *  none, and a bare UPDATE against it would otherwise read as success. */
   setTier(workspaceId: string, tier: ReplicaTier | null): Promise<boolean>
+  /** Replaces the workspace's key+salt outright with a fresh random pair —
+   *  see this module's header for why REPLACE rather than an epoch bump.
+   *  One upsert statement: an insert for a workspace with no row yet, or an
+   *  overwrite of the existing row otherwise, so a concurrent `keyFor` sees
+   *  either wholly the old pair or wholly the new one, never a mix. Gate
+   *  callers at `runtime:admin` (routes/replica-key.ts), the same bar as
+   *  `setTier` — rotation is at least as consequential as a tier change. */
+  rotateKey(workspaceId: string): Promise<WorkspaceReplicaKey>
 }
 
 export function createWorkspaceReplicaKeyStore(
@@ -76,7 +112,9 @@ export function createWorkspaceReplicaKeyStore(
         .where('workspaceId', '=', workspaceId)
         .executeTakeFirst()
       if (existing !== undefined) {
-        return { key: cloneBytes(existing.key), salt: cloneBytes(existing.salt) }
+        const key = cloneBytes(existing.key)
+        const salt = cloneBytes(existing.salt)
+        return { key, salt, keyId: deriveKeyId(key, salt) }
       }
       // Insert-then-reselect, not insert-then-return-what-was-generated: a
       // concurrent mint may have already won the PK conflict below, and every
@@ -97,7 +135,9 @@ export function createWorkspaceReplicaKeyStore(
         .select(['key', 'salt'])
         .where('workspaceId', '=', workspaceId)
         .executeTakeFirstOrThrow()
-      return { key: cloneBytes(row.key), salt: cloneBytes(row.salt) }
+      const key = cloneBytes(row.key)
+      const salt = cloneBytes(row.salt)
+      return { key, salt, keyId: deriveKeyId(key, salt) }
     },
     tierFor,
     async effectiveTier(workspaceId) {
@@ -114,6 +154,22 @@ export function createWorkspaceReplicaKeyStore(
         .where('id', '=', workspaceId)
         .executeTakeFirst()
       return Number(result.numUpdatedRows ?? 0) > 0
+    },
+    async rotateKey(workspaceId) {
+      const key = randomBytes(KEY_BYTES)
+      const salt = randomBytes(SALT_BYTES)
+      const createdAt = Date.now()
+      // ONE upsert: a concurrent keyFor reading mid-statement sees SQLite's
+      // row-level atomicity, so it observes either the pre-rotation row or
+      // this one in full, never a torn mix of old key + new salt (or vice
+      // versa) — which would derive a document key that opens nothing, and
+      // fail silently rather than loudly.
+      await db
+        .insertInto('workspaceReplicaKeys')
+        .values({ workspaceId, key, salt, createdAt })
+        .onConflict((oc) => oc.column('workspaceId').doUpdateSet({ key, salt, createdAt }))
+        .execute()
+      return { key: cloneBytes(key), salt: cloneBytes(salt), keyId: deriveKeyId(key, salt) }
     },
   }
 }

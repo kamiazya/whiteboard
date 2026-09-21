@@ -260,6 +260,13 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
+  it('the replica-key rotate route sits at runtime:admin, not workspace:read (the plain key route) or the workspace:write fallback', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/replica-key/rotate')).toEqual({
+      kind: 'scoped',
+      scopes: ['runtime:admin'],
+    })
+  })
+
   it('session assertion routes are scoped (the handler itself checks for a bound session)', () => {
     for (const path of [
       '/api/pairing/session-assert/challenge',
@@ -348,6 +355,7 @@ const CLAIMED_BY = {
   'documents/optimize-all': ['POST', '/api/workspaces/ws1/documents/optimize-all'],
   'workspace members': ['GET', '/api/workspaces/ws1/members'],
   'workspace replica-key': ['POST', '/api/workspaces/ws1/replica-key'],
+  'workspace replica-key rotate': ['POST', '/api/workspaces/ws1/replica-key/rotate'],
   'workspace replica-tier': ['PUT', '/api/workspaces/ws1/replica-tier'],
   'workspaces (rest)': ['GET', '/api/workspaces/ws1'],
   'runtime/logs/prune': ['POST', '/api/runtime/logs/prune'],
@@ -408,6 +416,7 @@ const ORIGIN_TRUSTED = [
   'sync transport',
   'workspace members',
   'workspace replica-key',
+  'workspace replica-key rotate',
   'workspace replica-tier',
   'runtime/logs/prune',
   'runtime (rest)',
