@@ -17,34 +17,14 @@ Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "
 
 ## The merge gate shows the comments before you decide
 
-`pre-merge-show-comments.mjs` blocks the first `gh pr merge` on a head that
-has inline review comments and prints their bodies; the second attempt on the
-same head goes through, and a new commit re-arms it.
+`pre-merge-show-comments.mjs` blocks the first `gh pr merge` on a head with
+inline review comments and prints their bodies; the second attempt on the same
+head goes through, and a new commit re-arms it. The prose rule did not hold
+because the comment count and the merge kept landing in the SAME shell call,
+so the number printed after the merge had been sent.
 
-It exists because the discipline in prose did not hold. Two PRs merged past
-unread findings in one session, and the cause was mechanical rather than
-careless: the comment count and the `gh pr merge` were in the SAME shell call,
-so the number printed after the merge had already been sent. A rule saying
-"enumerate the authors first" cannot fix a command whose two halves run
-together.
-
-Measured over the 25 most recently merged PRs here: 9 carried inline review
-comments and 7 merged with them unresolved, so the gate fires on roughly one
-merge in three, once each. It deliberately does NOT block on top-level issue
-comments — a Cloudflare preview link, a CodeRabbit summary and a DeepSource
-summary are on essentially every PR, so blocking on those would fire every
-time and be ignored within a day. Their authors are printed instead, because
-enumerating from the FEED rather than from a remembered reviewer list is the
-part that a CodeQL finding once slipped past.
-
-Blocking on UNRESOLVED threads was the other candidate and is worse: only 3 of
-those 9 PRs ever had a thread resolved, so it would demand a new habit, and a
-gate that demands a habit gets bypassed. What went wrong is narrower than
-resolution — the bodies were never read.
-
-Its first real run made the case for it: PR #1746, merged earlier the same
-day, held 11 DeepSource findings nobody had read, including a forbidden
-non-null assertion.
+Why it blocks on inline comments alone, why not on unresolved threads, and the
+rate it fires at are measured in `.claude/scripts/pre-merge-comments-lib.mjs`.
 
 ## After a merge, prune without a refspec
 
