@@ -4,7 +4,10 @@
  * 800-line ceiling) rather than a describe block added there.
  */
 import { request } from 'node:http'
-import { pairingTokenResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
+import {
+  pairingTokenResponseSchema,
+  sessionAssertChallengeResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
 import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
@@ -15,10 +18,19 @@ import {
   claimIsolatedDataDir,
   releaseIsolatedDataDir,
 } from '../shared/test-utils/isolated-data-dir.js'
+import {
+  buildAssertion,
+  registrationFor,
+  WEBAUTHN_FLAG_BE,
+  WEBAUTHN_FLAG_UP,
+  WEBAUTHN_FLAG_UV,
+} from '../shared/test-utils/webauthn-fixtures.js'
 import { type RunningServer, startHttpServer } from './http-server.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { getDb } from './store/db/index.js'
+
+const FLAGS = WEBAUTHN_FLAG_UP | WEBAUTHN_FLAG_UV | WEBAUTHN_FLAG_BE
 
 // A base distinct from http-server.test.ts (4100) and
 // http-server.macaroon.test.ts (4700) — see http-server.test.ts's own
@@ -131,6 +143,112 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
     const admitted = await attemptWsUpgradeWithBody(
       port,
       `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${DAEMON_TOKEN}`,
+      HOSTED,
+    )
+    expect(admitted.status).toBe(101)
+  })
+
+  /** Pins a passkey and binds a fresh pairing-token session to it over the
+   *  real running server — the fetch-based twin of
+   *  `auth.membership-gate.test.ts`'s `bindSession`, needed here because
+   *  this file drives a real socket rather than a Hono app in-process. */
+  async function bindSession(port: number, origin: string) {
+    const reg = registrationFor(new URL(origin).hostname)
+    const { keypair, ...registration } = reg
+    const credentialId = registration.credentialId
+
+    const tokenRes = await fetch(`http://127.0.0.1:${port}/api/pairing/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: origin },
+      body: JSON.stringify({ grantType: 'origin' }),
+    })
+    const { token } = pairingTokenResponseSchema.parse(await tokenRes.json())
+
+    const pinRes = await fetch(`http://127.0.0.1:${port}/api/pairing/credentials`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        Origin: origin,
+      },
+      body: JSON.stringify(registration),
+    })
+    expect(pinRes.status).toBe(201)
+
+    const challengeRes = await fetch(
+      `http://127.0.0.1:${port}/api/pairing/session-assert/challenge`,
+      { method: 'POST', headers: { Authorization: `Bearer ${token}`, Origin: origin } },
+    )
+    const { challenge } = sessionAssertChallengeResponseSchema.parse(await challengeRes.json())
+    const assertion = buildAssertion({
+      privateKey: keypair.privateKey,
+      rpId: new URL(origin).hostname,
+      origin,
+      challenge: Buffer.from(challenge, 'base64url'),
+      flags: FLAGS,
+      signCount: 1,
+    })
+    const assertRes = await fetch(`http://127.0.0.1:${port}/api/pairing/session-assert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        Origin: origin,
+      },
+      body: JSON.stringify({
+        credentialId,
+        authenticatorData: assertion.authenticatorData.toString('base64url'),
+        clientDataJSON: assertion.clientDataJSON.toString('base64url'),
+        signature: assertion.signature.toString('base64url'),
+      }),
+    })
+    expect(assertRes.status).toBe(200)
+    return { token, credentialId }
+  }
+
+  it('refuses a bound session that is not a member of a member-gated workspace (not_a_member)', async () => {
+    createPairingGrantStore(dir).addGrant(HOSTED)
+    const port = await acquirePort()
+    running = await startHttpServer({ port, host: '127.0.0.1', token: DAEMON_TOKEN })
+
+    const members = createMemberProfileStore(await getDb(dir))
+    // A gating member distinct from the bound session below, so the
+    // workspace stays member-gated rather than reverting to origin trust.
+    const gatingProfile = await members.ensureProfile({
+      origin: HOSTED,
+      credentialId: 'gating-member-cred',
+      displayName: 'Gating Member',
+    })
+    await members.addMember('ws-member-gated', gatingProfile.id)
+
+    const session = await bindSession(port, HOSTED)
+
+    const refused = await attemptWsUpgradeWithBody(
+      port,
+      `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${session.token}`,
+      HOSTED,
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body).toMatchObject({ error: 'not_a_member' })
+  })
+
+  it('completes the real WS upgrade for a bound session that IS an admitted member', async () => {
+    createPairingGrantStore(dir).addGrant(HOSTED)
+    const port = await acquirePort()
+    running = await startHttpServer({ port, host: '127.0.0.1', token: DAEMON_TOKEN })
+
+    const members = createMemberProfileStore(await getDb(dir))
+    const session = await bindSession(port, HOSTED)
+    const profile = await members.ensureProfile({
+      origin: HOSTED,
+      credentialId: session.credentialId,
+      displayName: 'Ada',
+    })
+    await members.addMember('ws-member-gated', profile.id)
+
+    const admitted = await attemptWsUpgradeWithBody(
+      port,
+      `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${session.token}`,
       HOSTED,
     )
     expect(admitted.status).toBe(101)
