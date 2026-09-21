@@ -46,7 +46,7 @@ type MenuParity =
 
 type Keeper = 'browser' | 'daemon'
 
-const DUPLICATE_FOLLOW_UP = 'issues/daemon-document-page-offers-no-document-actions'
+const DOCUMENT_ACTIONS_FOLLOW_UP = 'issues/daemon-document-page-offers-no-document-actions'
 
 const MENU_PARITY: Record<string, MenuParity> = {
   'Copy as JSON Canvas': {
@@ -54,19 +54,15 @@ const MENU_PARITY: Record<string, MenuParity> = {
     keeper: 'browser',
     why: 'hands the exact canvas to the clipboard from the decoded document the browser keeper already holds in memory; the daemon keeper holds a snapshot it would have to decode for this alone, and the row is a debugging affordance rather than a document verb — so it is deliberately not mirrored',
   },
-  Duplicate: {
-    reach: 'gap',
-    keeper: 'browser',
-    missing:
-      'a daemon-kept document cannot be duplicated from its own page, though the daemon INDEX row menu does exactly that (read snapshot, create, write snapshot, rename) — so the flow exists and only this surface is unwired',
-    followUp: DUPLICATE_FOLLOW_UP,
-  },
+  // Was a `gap` when this ledger landed, and closing it is what made the
+  // entry fail — which is the direction the file exists for.
+  Duplicate: { reach: 'both' },
   Delete: {
     reach: 'gap',
     keeper: 'browser',
     missing:
       'a daemon-kept document cannot be deleted from its own page; the daemon index offers it per row, so the verb exists and the document page simply contributes no row for it',
-    followUp: DUPLICATE_FOLLOW_UP,
+    followUp: DOCUMENT_ACTIONS_FOLLOW_UP,
   },
 }
 
