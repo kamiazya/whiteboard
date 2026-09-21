@@ -266,22 +266,20 @@ Chromium (via Playwright) against a real daemon and the real built web app
 (`dist/web-app`), so `pnpm build` (from the repo root, so `apps/web`'s
 postbuild copy runs) must have already produced it. Run directly with
 `node --import tsx/esm scripts/smoke/mcp-*.mjs` or through the `pnpm smoke:*`
-alias. The first two run in CI's `verify` job; `smoke:read-plane` is run by
-hand until every check is reliable. Its check 1 (the replica pull) used to
-fail to fire in 2 of 6 local runs — a race between a daemon deep link's
-silent pairing renewal and the browser-keeper address rewrite, fixed by
-`awaitingDaemonRenewal` in `use-workspace-address-sync.ts` — and now passes
-ten consecutive runs on a fresh build. Check 4 now fails on every run for a
-different reason: it asserts the landing a removed member got BEFORE
-membership gated the online routes (#1731), which that change inverted on
-purpose; the check is rewritten with the web slice that lands the removed
-page, and the smoke joins `verify` then.
+alias. All three run in CI's `verify` job. `smoke:read-plane` joined last: its
+check 1 (the replica pull) used to fail to fire in 2 of 6 local runs — a race
+between a daemon deep link's silent pairing renewal and the browser-keeper
+address rewrite, fixed by `awaitingDaemonRenewal` in
+`use-workspace-address-sync.ts` — and its check 4 (a removed member) only
+became assertable once the web app answered the daemon's `not_a_member`
+refusal with the removed page and a workspace that once had members stopped
+reopening to origin trust on its last removal.
 
 | Script | What it crosses for real |
 |---|---|
 | `pnpm smoke:daemon-origin` | The daemon serves only `/pair` and 302s every other UI path — a real redirect, not a mocked route |
 | `pnpm smoke:passkey-promote` | Chromium's virtual authenticator against the daemon's real WebAuthn verifier, through the pairing bearer under a browser-enforced Origin (ADR-0039) |
-| `pnpm smoke:read-plane` | A sealed replica in real IndexedDB, real 403s from the real membership store, and the real locked/unpaired page landings a cold start and a revoked grant produce (ADR-0042/0043) |
+| `pnpm smoke:read-plane` | A sealed replica in real IndexedDB, real 403s from the real membership store, and the real locked / unpaired / removed page landings a cold start, a revoked grant and a removed member produce (ADR-0042/0043) |
 
 Every one of these fakes something in the Vitest browser-mode suites — the
 daemon at `fetch`, the browser's own routing, or the authenticator — so this

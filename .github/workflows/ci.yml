@@ -542,6 +542,14 @@ jobs:
       - name: Passkey promote real-browser smoke (ADR-0039)
         run: pnpm --filter @kamiazya/whiteboard-mcp smoke:passkey-promote
 
+      # The read plane (ADR-0042/0043) crossed for real: a sealed replica in
+      # real IndexedDB, real 403s from the real membership store, and the
+      # locked / unpaired / removed page landings a cold start, a revoked
+      # grant and a removed member produce. The browser-mode tests answer the
+      # daemon at `fetch`; this is where the built web app meets the daemon.
+      - name: Read-plane real-browser smoke (ADR-0042/0043)
+        run: pnpm --filter @kamiazya/whiteboard-mcp smoke:read-plane
+
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
 
