@@ -373,6 +373,10 @@ function useDaemonDocument(
   const documentActions = useDocumentActions({
     documentId: currentDocumentId,
     documentKind,
+    // Spatial only: `canvasValue` falls back to an empty document on a
+    // markdown note, so the row would hand back a well-formed file whose
+    // content is not the note's — under a verb saying it is.
+    canvas: documentKind === 'spatial' ? canvasValue : null,
     duplicateDocument: controller.duplicateDocument,
     deleteDocument: controller.deleteDocument,
     deleteCopyId: 'delete-document-daemon',

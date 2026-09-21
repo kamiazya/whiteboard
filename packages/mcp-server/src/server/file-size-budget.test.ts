@@ -876,14 +876,18 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // is the deliberateness the guard exists to force. FOUR branches have now
   // raised it for that reason independently; the number is the resolved
   // file's own, re-measured at each merge rather than carried from a side.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 1002,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 1006,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
   // whose rows are pinned exactly is one whose history is prose, so a merge
   // of two histories costs lines rather than losing one of them.
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 976,
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1313,
+  // 1313 -> 1317: the not-JSON refusal's assertion gained the reason it is
+  // strict. A mutation showed the loose form (`typeof title === 'string'`)
+  // stays green with the refusal DELETED, so without the note the next
+  // reader loosens it again.
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1317,
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
