@@ -104,6 +104,15 @@ const fail = (msg) => {
   failed = true
 }
 const check = (ok, msg, detail) => (ok ? pass(msg) : fail(detail ? `${msg} — ${detail}` : msg))
+// Runs IN the page (serialised by Playwright), so it may close over nothing.
+const replicaRegistered = (ws) => {
+  try {
+    const raw = window.localStorage.getItem('whiteboard:user-settings:v3')
+    return raw !== null && JSON.parse(raw)?.storage?.replicas?.[ws] !== undefined
+  } catch {
+    return false
+  }
+}
 
 /** Stringifies a detail for a failure message, throwing if it would leak the
  *  daemon token or a minted pairing token — this smoke never prints either. */
@@ -444,20 +453,7 @@ try {
   check(markerVisible, 'the daemon page shows the seeded marker body (negative control)')
 
   const registryWritten = await page
-    .waitForFunction(
-      (ws) => {
-        try {
-          const raw = window.localStorage.getItem('whiteboard:user-settings:v3')
-          if (!raw) return false
-          const parsed = JSON.parse(raw)
-          return parsed?.storage?.replicas?.[ws] !== undefined
-        } catch {
-          return false
-        }
-      },
-      workspaceId,
-      { timeout: 20_000 },
-    )
+    .waitForFunction(replicaRegistered, workspaceId, { timeout: 20_000 })
     .then(() => true)
     .catch(() => false)
   check(registryWritten, 'the replica registry entry is written after the pull')
@@ -540,16 +536,7 @@ try {
   mark = daemonResponses.length
   await page.goto(docUrl, { waitUntil: 'load' }).catch(() => {})
 
-  const registrySurvivedReload = await page.evaluate((ws) => {
-    try {
-      const raw = window.localStorage.getItem('whiteboard:user-settings:v3')
-      if (!raw) return false
-      const parsed = JSON.parse(raw)
-      return parsed?.storage?.replicas?.[ws] !== undefined
-    } catch {
-      return false
-    }
-  }, workspaceId)
+  const registrySurvivedReload = await page.evaluate(replicaRegistered, workspaceId)
   check(
     registrySurvivedReload,
     'the registry entry survives the cold reload',
