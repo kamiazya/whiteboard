@@ -14,12 +14,9 @@ import { getShellConnection, subscribeShellStatus } from '../lib/shell-status-st
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
+import type { KeeperWorkspaces, WorkspaceRow } from '../lib/workspace-switcher-source.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
-import {
-  WorkspaceMenu,
-  type WorkspaceRow,
-  type WorkspaceSwitcherSource,
-} from './shell/WorkspaceMenu.js'
+import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
 import { formatRelative } from './workspace-files/format-relative.js'
 
 // React.lazy for the same reason the browser page had it: the banner
@@ -119,13 +116,7 @@ export interface AppShellProps {
    * the browser's IndexedDB index and the daemon's HTTP client into every
    * page's chrome.
    */
-  readonly workspaces?: AppShellWorkspaces
-}
-
-/** The keeper's half of the switcher, named so a composition root can hold one. */
-export interface AppShellWorkspaces {
-  readonly source: WorkspaceSwitcherSource
-  readonly onSwitch: (handle: string) => void
+  readonly workspaces?: KeeperWorkspaces
 }
 
 /**
