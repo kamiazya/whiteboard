@@ -42,6 +42,18 @@ export interface WorkspaceAddressInputs {
   readonly daemonView: WorkspaceRoute
   readonly setDaemonView: Dispatch<SetStateAction<WorkspaceRoute>>
   readonly userSettingsStore: ReturnType<typeof createUserSettingsStore>
+  /**
+   * A stored daemon connection's silent renewal (App's `attemptRenewal`) is
+   * a real network round trip, and `daemonKept` can only turn true once it
+   * lands — so for as long as this is true, an address that does not (yet)
+   * match the browser's OWN workspace is UNDECIDED, not foreign. Without
+   * this, the browser-keeper rewrite below ran first, concluded a daemon
+   * deep link belonged to nobody it knew, and rewrote it to the browser's
+   * index before the renewal ever got to prove otherwise — losing the
+   * link for good, since the URL -> state effect then read the rewritten
+   * address back into `daemonView`.
+   */
+  readonly awaitingDaemonRenewal: boolean
 }
 
 export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
@@ -54,6 +66,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     daemonView,
     setDaemonView,
     userSettingsStore,
+    awaitingDaemonRenewal,
   } = inputs
 
   // The browser-keeper rewrite effect (below) reads this INSIDE an async
@@ -166,6 +179,8 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   useEffect(() => {
     if (isPairRoute) return
     if (daemonKept) return
+    // Undecided, not foreign — see the field's comment.
+    if (awaitingDaemonRenewal) return
     if (browserHandle === null) return
     if (parseSettingsRoute(location.pathname) !== null) return
     if (!isKnownAppPath(location.pathname)) return
@@ -210,7 +225,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
     return () => {
       cancelled = true
     }
-  }, [location.pathname, browserHandle, daemonKept, isPairRoute, navigate])
+  }, [location.pathname, browserHandle, daemonKept, isPairRoute, navigate, awaitingDaemonRenewal])
 
   // URL -> state: handles the browser back/forward buttons (and, in
   // principle, any other code path that changes the route without going
