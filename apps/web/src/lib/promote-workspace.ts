@@ -62,10 +62,23 @@ export interface PromoteWorkspaceOptions {
   onProgress?: (phase: 'record' | 'blobs') => void
   /**
    * The person's evidence for THIS record (ADR-0039): asked once the bytes
-   * to sign exist and before they leave. Absent, or answering `null`, means
-   * no passkey is registered for this KEEPER and the move is recorded
-   * without evidence; a cancelled prompt aborts the move, since a person
-   * who declined the question did not confirm the crossing.
+   * to sign exist and before they leave. REQUIRED, and required in two
+   * senses — the option has no default, so a caller cannot forget to ask,
+   * and `null` (no passkey registered for this destination) refuses the
+   * move rather than recording it unconfirmed. A cancelled prompt refuses
+   * it too: a person who declined the question did not confirm the
+   * crossing.
+   *
+   * This reverses ADR-0039 decision 5's "absence means not asked" for the
+   * transfer path alone (user decision, 2026-09-22), because the
+   * DESTINATION generalised. While the only destination was the daemon on
+   * this machine there was nothing to defend against (ADR-0035), so
+   * recording the move unconfirmed cost nothing; a browser now transfers
+   * straight to a SaaS or a self-hosted server, where the keeper is one
+   * the user does not own. The rule is one rule rather than per
+   * destination: a requirement that varies by where you are sending is a
+   * requirement nobody can see at the moment they need it. What it costs is
+   * stated rather than hidden — a browser with no passkey cannot transfer.
    *
    * A passkey is registered per keeper because WebAuthn binds a credential
    * to an origin, which is a property rather than an inconvenience: a
@@ -74,7 +87,7 @@ export interface PromoteWorkspaceOptions {
    * a crossing to a keeper the user does not own is what a real domain can
    * give and a loopback one cannot.
    */
-  attest?: (snapshot: Uint8Array) => Promise<AttestOutcome | null>
+  attest: (snapshot: Uint8Array) => Promise<AttestOutcome | null>
 }
 
 /**
@@ -184,8 +197,15 @@ async function promoteWorkspaceUnsafe(
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
 
   const snapshot = new Uint8Array(record.export({ mode: 'snapshot' }))
-  const attested = options.attest === undefined ? null : await options.attest(snapshot)
-  if (attested !== null && !attested.ok) {
+  const attested = await options.attest(snapshot)
+  if (attested === null) {
+    return {
+      kind: 'failed',
+      reason:
+        'Register a passkey for the destination first: a move to another keeper is confirmed with one.',
+    }
+  }
+  if (!attested.ok) {
     return {
       kind: 'failed',
       reason:
@@ -207,7 +227,7 @@ async function promoteWorkspaceUnsafe(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         snapshot: bytesToBase64Url(snapshot),
-        ...(attested === null ? {} : { attestation: attested.attestation }),
+        attestation: attested.attestation,
       }),
     },
   )

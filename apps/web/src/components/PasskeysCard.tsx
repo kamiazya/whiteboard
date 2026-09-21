@@ -159,8 +159,8 @@ export function PasskeysCard({
         <>
           {state.passkeys.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No passkey is registered on this daemon yet. Without one, a move here is recorded
-              without proof that a person made it.
+              No passkey is registered on this daemon yet. Register one to move a workspace here
+              — a move to another keeper is confirmed with a passkey.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -203,7 +203,7 @@ export function PasskeysCard({
             </button>
           ) : (
             <p className="mt-3 text-xs text-muted-foreground">
-              This browser cannot use passkeys, so a move from here is recorded without one.
+              This browser cannot use passkeys, so it cannot move a workspace here.
             </p>
           )}
         </>
