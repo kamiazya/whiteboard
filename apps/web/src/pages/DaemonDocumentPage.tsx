@@ -2,10 +2,7 @@ import {
   documentsApiUrl,
   saveVersionResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
-import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
@@ -26,14 +23,12 @@ import { createDaemonFetch, linkifyDocumentMentions } from '../lib/daemon-api-cl
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
-import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
-import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
@@ -46,6 +41,7 @@ import type {
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
+import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 import { useDocumentActions } from './use-document-actions.js'
 
@@ -100,17 +96,6 @@ function useDaemonDocument(
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
   // web app paired to a loopback daemon must not open the socket against its
   // own page origin.
-  // The injected factory is held in a ref rather than carried in the backend
-  // memo's dependencies: it customises HOW a connection is built, it does not
-  // say WHICH connection this is. A parent writing the natural
-  // `createBackend={(w, s) => …}` hands this page a new function identity on
-  // every one of its own renders, and anything the backend memo depends on
-  // becomes the session's lifetime — so that alone would tear down the
-  // socket, re-hydrate, and drop the undo history for a canvas the user
-  // never left. Only values that define the connection belong in those deps.
-  const createBackendRef = useRef(createBackend)
-  createBackendRef.current = createBackend
-
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
   // ADR-0023's replica reconciliation, both directions, at the moment this
@@ -154,7 +139,6 @@ function useDaemonDocument(
       ? { workspaceId: controller.workspaceId, path: controller.path }
       : null
 
-  const [authError, setAuthError] = useState(false)
   // Disables the empty-state "Create a canvas" control while a create is in
   // flight. `disabled` is the whole mechanism: an in-handler
   // `if (creating) return` reads the render closure, so it is stale in exactly
@@ -164,107 +148,16 @@ function useDaemonDocument(
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
   const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
-  // Every listed document is tree-served and syncs at workspace-document
-  // granularity; the id is what binds this session's content inside the
-  // workspace record. Derived as a plain string so a summary refresh that
-  // changes only updatedAt cannot flip the backend identity. Undefined only
-  // while the path is absent from the list (a stale URL).
-  const workspaceSyncDocumentId = useMemo(() => {
-    const entry = controller.documents.find((d) => d.path === controller.path)
-    return entry?.id
-  }, [controller.documents, controller.path])
-
-  // Backend identity is keyed on (workspaceId, path, daemonFetch, sync
-  // granularity) — a change to any of these tears down the old connection and
-  // opens a new one via useDocumentSync's own effect cleanup (see
-  // BrowserDocumentPage for the same ownership split: this hook only decides
-  // WHEN to swap identity, not how disconnect/connect ordering happens).
-  // `contentDocumentId` travels WITH the backend because they only make sense
-  // together: an injected backend (tests, embedders) keeps the per-document
-  // contract, so scoping the session against its snapshot would misread it.
-  const backendState = useMemo((): {
-    backend: DocumentBackend
-    contentDocumentId: string | undefined
-  } | null => {
-    if (controller.workspaceId === null || controller.path === null) return null
-    // No backend until the initial documents list is in: the page renders a
-    // skeleton anyway, and the list is what decides the sync granularity —
-    // connecting before it loads would open a per-document socket only to
-    // tear it down and reconnect at workspace scope a moment later.
-    if (controller.loading) return null
-    const injected = createBackendRef.current?.(
-      controller.workspaceId,
-      controller.path,
-      daemonFetch,
-    )
-    if (injected) return { backend: injected, contentDocumentId: undefined }
-    // Nothing is at this path (a stale URL — the document was deleted or
-    // never existed): no connection. The per-document contract used to catch
-    // this with a lazily created empty doc, which silently minted a blank
-    // canvas at the old path on the first edit; creating a document is an
-    // explicit act now (see the not-found state below).
-    if (workspaceSyncDocumentId === undefined) return null
-    // A secure page cannot open a ws:// socket to an http daemon at all, so
-    // the transport is decided up front rather than attempted and retried.
-    //
-    // The override in front is development-only and compiles away entirely
-    // in a production build. It exists because the rule below is correct AND
-    // makes the SSE path — and the SharedWorker behind it — unreachable from
-    // `pnpm dev`, which serves plain http.
-    const transport =
-      devTransportOverride() ??
-      selectDocumentTransport({
-        pageOrigin: window.location.origin,
-        daemonBaseUrl,
-      })
-    if (transport !== 'sse') {
-      // wsToken carries the pairing session token into the WS upgrade —
-      // without it a pairing-grant session authenticates HTTP but opens
-      // the socket credential-less and is rejected 401 (edits then stay
-      // browser-only while the page looks connected).
-      return {
-        backend: new DaemonBackend(controller.workspaceId, controller.path, daemonBaseUrl, {
-          fetch: daemonFetch,
-          wsToken: () => token,
-        }),
-        contentDocumentId: workspaceSyncDocumentId,
-      }
-    }
-    // Null where SharedWorker is unavailable; SseBackend then opens its own
-    // stream, which is correct but not shared across tabs. Same granularity
-    // as the WebSocket branch: every document syncs at workspace-document
-    // granularity.
-    const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
-    return {
-      backend: new SseBackend(
-        controller.workspaceId,
-        controller.path,
-        daemonBaseUrl,
-        { fetch: daemonFetch },
-        shared,
-      ),
-      contentDocumentId: workspaceSyncDocumentId,
-    }
-  }, [
-    controller.workspaceId,
-    controller.path,
-    controller.loading,
-    daemonFetch,
+  const { backend, contentDocumentId, authError, reportAuthError } = useDaemonDocumentBackend({
     daemonBaseUrl,
     token,
-    workspaceSyncDocumentId,
-  ])
-  const backend = backendState?.backend ?? null
-
-  // A rejected session belongs to one backend identity — switching to a new
-  // canvas opens a fresh connection, so a stale banner must not outlive the
-  // backend that produced it. Only resets on a genuine new (non-null)
-  // connection: dropping to no backend at all (e.g. switching into a
-  // workspace with zero documents) leaves authError as-is, because live sync
-  // is still off either way and the persistent indicator should stay lit.
-  useEffect(() => {
-    if (backend) setAuthError(false)
-  }, [backend])
+    daemonFetch,
+    createBackend,
+    workspaceId: controller.workspaceId,
+    path: controller.path,
+    loading: controller.loading,
+    documents: controller.documents,
+  })
 
   // Holds the mounted SpatialEditor's imperative handle so a daemon-driven
   // viewport_request (see onViewportRequest below) can reach it without
@@ -275,10 +168,8 @@ function useDaemonDocument(
   const { state: agentActivity, report: reportAgentActivity } = useAgentActivity()
 
   const sync = useDocumentSync(backend, {
-    ...(backendState?.contentDocumentId === undefined
-      ? {}
-      : { contentDocumentId: backendState.contentDocumentId }),
-    onAuthError: () => setAuthError(true),
+    ...(contentDocumentId === undefined ? {} : { contentDocumentId }),
+    onAuthError: reportAuthError,
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     // Any version_created broadcast — this page's own save, MCP tool saves,
     // other peers — re-reads the page's history column.
@@ -456,7 +347,7 @@ function useDaemonDocument(
   )
   useDocumentFavicon({
     settingsStore,
-    documentId: backendState?.contentDocumentId ?? null,
+    documentId: contentDocumentId ?? null,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
@@ -519,7 +410,10 @@ function useDaemonDocument(
     loadError: controller.loadError,
     canvas,
     documentCount: controller.documents.length,
-    documentAtPath: workspaceSyncDocumentId !== undefined,
+    // The path is LISTED, which is a different question from whether this
+    // connection syncs its content — an injected backend keeps the
+    // per-document contract and carries no content id at all.
+    documentAtPath: controller.documents.some((entry) => entry.path === controller.path),
     refusal: controller.refusal,
   })
 
