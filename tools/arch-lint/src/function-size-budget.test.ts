@@ -286,6 +286,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 131,
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
   'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 69,
+  'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 196,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 365,
