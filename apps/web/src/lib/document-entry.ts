@@ -92,3 +92,15 @@ export function compareDocumentEntries(
   }
   return left.path.localeCompare(right.path)
 }
+
+/**
+ * One optional field, present only when it has a value.
+ *
+ * A listing row is eight of these, and written out each carries its own
+ * `=== undefined ? {} : { … }` — which is eight branches saying one thing.
+ * `exactOptionalPropertyTypes` is why the key cannot simply be assigned
+ * `undefined`.
+ */
+export function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V }
+}

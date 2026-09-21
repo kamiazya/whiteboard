@@ -329,8 +329,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
   'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 363,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource.listDocuments': 65,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource.searchDocuments': 59,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
   'apps/web/src/lib/pairing-grant.ts#consumeGrantFragment': 97,
   // 86 -> 87: the credential now negotiates the `prf` extension at CREATE
