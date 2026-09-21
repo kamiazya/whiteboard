@@ -1,13 +1,11 @@
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
-import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-codec'
+import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   readCoreFacets,
   readFacets,
   readMarkdownBody,
   readTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
-import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
@@ -23,23 +21,14 @@ import { loadDocument } from './document-io.js'
  * field is accepted for API symmetry with the workspace-scoped tools and as a
  * future authorization-scoping hook, not passed to the store.
  */
-export const exportOkfInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
-  .strict()
-export type ExportOkfInput = z.infer<typeof exportOkfInputSchema>
+import type { ExportOkfInput, ExportOkfOutput } from './export-okf.schemas.js'
 
-/**
- * `body` repeats bytes `markdown` already carries, and that is the point:
- * the two answer different questions. `markdown` is the OKF projection —
- * what a file of this document would contain. `body` is what a renderer
- * draws, and every caller that wants it either re-parses the serialization
- * this function built from a body it had in hand, or forgets to and draws
- * the frontmatter block as prose.
- */
-export const exportOkfOutputSchema = z
-  .object({ markdown: z.string(), body: z.string(), frontmatter: okfMarkdownFrontmatterSchema })
-  .strict()
-export type ExportOkfOutput = z.infer<typeof exportOkfOutputSchema>
+export {
+  type ExportOkfInput,
+  type ExportOkfOutput,
+  exportOkfInputSchema,
+  exportOkfOutputSchema,
+} from './export-okf.schemas.js'
 
 /**
  * `coreFacetsSchema.type` is required, but a spatial (JSON Canvas) doc has

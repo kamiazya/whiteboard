@@ -8,29 +8,20 @@ import {
   nodeText,
   spatialCanvasSchema,
   withNodeText,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
-import { z } from 'zod'
 import { unlinkedNameSpans } from '../references/reference-aggregate.js'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { loadDocument, saveDocumentBodySnapshot, saveDocumentSnapshot } from './document-io.js'
 
-export const linkifyMentionsInputSchema = z
-  .object({
-    workspaceId: workspaceIdSchema,
-    /** The SOURCE — the document whose prose gets rewritten. */
-    documentId: documentIdSchema,
-    /** The document the mentions name. */
-    targetDocumentId: documentIdSchema,
-  })
-  .strict()
-export type LinkifyMentionsInput = z.infer<typeof linkifyMentionsInputSchema>
+import type { LinkifyMentionsInput, LinkifyMentionsOutput } from './linkify-mentions.schemas.js'
 
-export const linkifyMentionsOutputSchema = z
-  .object({ linked: z.number().int().nonnegative() })
-  .strict()
-export type LinkifyMentionsOutput = z.infer<typeof linkifyMentionsOutputSchema>
+export {
+  type LinkifyMentionsInput,
+  type LinkifyMentionsOutput,
+  linkifyMentionsInputSchema,
+  linkifyMentionsOutputSchema,
+} from './linkify-mentions.schemas.js'
 
 /** The target carries no display name, so there is no prose to find. */
 export class NamelessLinkifyTargetError extends Error {
