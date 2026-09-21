@@ -1,21 +1,8 @@
 /**
- * S10 root cause: on a cold load of a daemon-workspace deep link
- * (`/w/<daemon-ws>/d/<path>`) served from a hosted 'browser' provider, the
- * silent daemon renewal (App's `attemptRenewal`, a real network round trip)
- * has not resolved yet when this hook's browser-keeper effect first runs.
- * `daemonKept` is still false at that point — it can only become true once
- * the renewal lands — so the effect concludes the address names a workspace
- * this (browser) keeper does not hold and rewrites the URL to the browser's
- * own index, via `switchBrowserWorkspace`/`rewrite()`. That clobbers
- * `daemonView` (through the URL -> state effect) before the renewal ever
- * gets a chance to prove the address WAS the daemon's — so the page that
- * finally mounts is the gallery, not the document, and the replica pull
- * this ticket is about never has a page to run from at all.
- *
- * `awaitingDaemonRenewal` closes the race: while a renewal for a stored
- * daemon connection is still outstanding, an address that does not (yet)
- * match this browser's own workspace is UNDECIDED, not foreign — the same
- * standing the effect already gives a known replica address, one guard up.
+ * Cold load of a daemon deep link (`/w/<daemon-ws>/d/<path>`) under a
+ * 'browser' provider: the browser-keeper rewrite effect must not claim the
+ * address while the daemon renewal it is racing is still in flight — see
+ * `WorkspaceAddressInputs.awaitingDaemonRenewal`.
  */
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'

@@ -179,10 +179,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   useEffect(() => {
     if (isPairRoute) return
     if (daemonKept) return
-    // A stored daemon connection's silent renewal has not settled — see
-    // this field's own comment. Until it does, this address is undecided,
-    // not foreign: deciding now is exactly the race that used to rewrite a
-    // daemon deep link out from under the renewal that would have claimed it.
+    // Undecided, not foreign — see the field's comment.
     if (awaitingDaemonRenewal) return
     if (browserHandle === null) return
     if (parseSettingsRoute(location.pathname) !== null) return

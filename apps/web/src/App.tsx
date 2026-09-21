@@ -377,7 +377,7 @@ export function App({ providerState }: AppProps) {
     daemonConnection.status === 'none' &&
     grantConnection === null &&
     daemonRenewal === null &&
-    (providerState ?? defaultProviderState).kind === 'browser' &&
+    state.kind === 'browser' &&
     userSettingsStore.load().storage.daemonBaseUrl !== undefined
   useWorkspaceAddressSync({
     location,
