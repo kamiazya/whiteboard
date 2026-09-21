@@ -12,7 +12,12 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { collectStaleIssues, isCheckableResource } from './stale-issues-lib.mjs'
+import {
+  collectStaleIssues,
+  isCheckableResource,
+  issueDocumentsFrom,
+  unwrapToolResult,
+} from './stale-issues-lib.mjs'
 
 const AUG_23 = '2026-08-23T00:00:00.000Z'
 
@@ -196,4 +201,104 @@ test('a bundle-relative source is checked against the repo root, without its lea
     },
   )
   assert.deepEqual(seen, ['docs/thing.md'])
+})
+
+// --- What the daemon answers, and the two ways this check went blind to it.
+//
+// Both fixtures below are REAL payloads, captured from the dev daemon on
+// 2026-09-22 while the hook was reporting "nothing to report — 0 of 0" over a
+// workspace holding 57 documents. Neither is invented, because the point of
+// each is a shape nobody would think to invent.
+
+test('a tool-level error is raised, not returned as an empty result', () => {
+  // `wb_document_get` became a BATCH read; the hook kept sending the singular
+  // `documentId`. The transport succeeds and the FAILURE rides in the result,
+  // so a reader that only checks `payload.error` sees `structuredContent`
+  // missing and calls it an empty document. Every document then fails the
+  // `type === 'issue'` test, and the check reports a clean backlog.
+  const captured = {
+    jsonrpc: '2.0',
+    id: 2,
+    result: {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: 'Input validation error: Invalid arguments for tool wb_document_get: documentIds: Invalid input: expected array, received undefined, Unrecognized key: "documentId"',
+        },
+      ],
+    },
+  }
+  assert.throws(() => unwrapToolResult('wb_document_get', captured), /documentIds/)
+  // And the JSON-RPC-level error it already handled keeps working.
+  assert.throws(
+    () => unwrapToolResult('wb_document_list', { error: { message: 'no such tool' } }),
+    /no such tool/,
+  )
+  assert.deepEqual(unwrapToolResult('ok', { result: { structuredContent: { documents: [] } } }), {
+    documents: [],
+  })
+})
+
+test('the batch read is matched back to its listing, and what it could not read is counted', () => {
+  const listed = [
+    { documentId: 'A', path: 'issues/a', name: 'A' },
+    { documentId: 'B', path: 'notes/b', name: 'B' },
+    { documentId: 'C', path: 'issues/c', name: 'C' },
+    { documentId: 'D', path: 'issues/d', name: 'D' },
+    { documentId: 'E', path: 'issues/e', name: 'E' },
+  ]
+  const fetched = {
+    documents: [
+      {
+        documentId: 'A',
+        frontmatter: {
+          type: 'issue',
+          generated: { at: AUG_23, by: 'process:whiteboard-server' },
+          facetsRaw: { sources: [{ resource: 'apps/web/src/main.tsx' }] },
+        },
+      },
+      // A note is not an issue and is simply not carried.
+      { documentId: 'B', frontmatter: { type: 'note' } },
+      // Sources written as bare strings rather than OKF `{ resource }`
+      // entries. Half this backlog is written that way and it names the same
+      // path, so it is READ — silently skipping it is how a declaration that
+      // was made gets judged as absent.
+      {
+        documentId: 'C',
+        frontmatter: {
+          type: 'issue',
+          generated: { at: AUG_23 },
+          facetsRaw: { sources: ['apps/web/src/main.tsx'] },
+        },
+      },
+      // This one really is unreadable: an entry naming no resource at all.
+      {
+        documentId: 'E',
+        frontmatter: {
+          type: 'issue',
+          generated: { at: AUG_23 },
+          facetsRaw: { sources: [{ note: 'a conversation' }] },
+        },
+      },
+    ],
+    failed: [{ documentId: 'D', reason: 'unreadable' }],
+  }
+
+  const read = issueDocumentsFrom(listed, fetched)
+  assert.deepEqual(
+    read.documents.map((d) => d.documentId),
+    ['A', 'C', 'E'],
+  )
+  assert.deepEqual(read.documents[0].sources, [{ resource: 'apps/web/src/main.tsx' }])
+  assert.equal(read.documents[0].generatedBy, 'process:whiteboard-server')
+  assert.deepEqual(read.unreadableSources, ['issues/e'])
+  // And a bare string is judged like any other source.
+  assert.deepEqual(
+    collectStaleIssues(read.documents, (path) =>
+      path === 'apps/web/src/main.tsx' ? 'changed' : 'unchanged',
+    ).map((f) => f.documentId),
+    ['A', 'C'],
+  )
+  assert.deepEqual(read.failed, [{ documentId: 'D', reason: 'unreadable' }])
 })

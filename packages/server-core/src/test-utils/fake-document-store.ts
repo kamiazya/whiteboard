@@ -16,11 +16,9 @@ import type {
   SaveCompactedSnapshotResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
-import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
-
-const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 function docRefKey(docRef: DocRef): string {
   return docRef.kind === 'document'
@@ -103,7 +101,7 @@ export async function seedDoc(
   configure(doc)
   const { manifest, chunks } = chunkSnapshot(
     doc.export({ mode: 'snapshot' }),
-    SNAPSHOT_MAX_CHUNK_BYTES,
+    DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await store.saveSnapshot({
     // The stored key is derived from the documentId alone (see ports'

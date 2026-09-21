@@ -202,8 +202,9 @@ describe('useDaemonConnections', () => {
   })
 
   it('asks for nothing while the list has named no id, and leaves the chip empty', async () => {
-    // An older daemon's id-less listing: querying with a path is a request
-    // the route would reject, so the hook does not make one.
+    // The list holds no row for this path yet (a refresh in flight, or a
+    // document just created). Querying with a path is a request the route
+    // would reject, so the hook does not make one.
     const fetchFn = vi.fn() as unknown as typeof globalThis.fetch
 
     const { result } = renderHook(() =>

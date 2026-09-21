@@ -19,6 +19,7 @@
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
 import {
   chunkSnapshot,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   isStoredDocumentUnreadableError,
   reassembleSnapshot,
   shouldCompact,
@@ -57,18 +58,6 @@ export type LoroLoadResult =
    * unreadable and offered to delete it.
    */
   | { kind: 'read-unavailable' }
-
-/**
- * Where a browser-kept snapshot is split for storage.
- *
- * Not the daemon's `SNAPSHOT_MAX_CHUNK_BYTES`, and not `COMPACT_DELTA_BYTES`
- * either: this is the size a stored value is broken at, which is a different
- * question from where a log stops being worth keeping. IndexedDB has no
- * message cap to respect, so this is generous — a single-chunk snapshot is
- * the normal case and the chunking exists to satisfy the contract, not to
- * work around a limit.
- */
-const MAX_CHUNK_BYTES = 1_000_000
 
 const EMPTY_FRONTIER = new Uint8Array()
 
@@ -257,7 +246,7 @@ export class LoroStore {
 
   async save(documentId: string, snapshot: Uint8Array): Promise<void> {
     return this.#serialise(documentId, async () => {
-      const { manifest, chunks } = chunkSnapshot(snapshot, MAX_CHUNK_BYTES)
+      const { manifest, chunks } = chunkSnapshot(snapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
       await this.#store.saveSnapshot({
         docRef: refOf(documentId),
         manifest,
@@ -325,7 +314,7 @@ export class LoroStore {
           deltaBatch: { updates: [new Uint8Array(delta)], newFrontier: EMPTY_FRONTIER },
         })
       } else {
-        const { manifest, chunks } = chunkSnapshot(folded, MAX_CHUNK_BYTES)
+        const { manifest, chunks } = chunkSnapshot(folded, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
         // One operation, not save-then-clear: the port has it precisely so
         // this cannot drop an append that lands between the two halves.
         const written = await this.#store.saveCompactedSnapshot({

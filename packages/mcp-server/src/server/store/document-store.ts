@@ -18,6 +18,7 @@ import {
   type CreateWorkspaceInput,
   chunkSnapshot,
   createWorkspaceInputSchema,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   DocumentPathTakenError,
   type RenameWorkspaceInput,
   renameWorkspaceInputSchema,
@@ -49,12 +50,6 @@ import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
-// Chunk size shared with the MCP tool write path (server-core's
-// document-io.ts) and migration 0011's FS-blob importer: an arbitrary
-// value, but it must match across every writer of these rows so a snapshot
-// chunked by one path reassembles identically when read by another.
-const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
-
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
 export class ConflictError extends Error {
   constructor(message: string) {
@@ -63,8 +58,20 @@ export class ConflictError extends Error {
   }
 }
 
-// Soft cap for snapshot size. Do not block saves when exceeded because preserving user
-// data is more important; emit one warning per threshold breach and suggest compactDocument().
+// A soft cap for snapshot size was designed here and removed; the constant
+// and the warning it describes are both gone. The comment is kept, pointed
+// at what replaced its policy, because for a long time it was the ONLY
+// written statement of a capacity policy anywhere in this repository — and
+// it says the opposite of what was later decided.
+//
+// Its own reasoning stands for a cap the PRODUCT chooses: exceeding one
+// costs tidiness, and blocking it costs a person their work, so warn rather
+// than block. ADR-0044 decides the other case. An infrastructure ceiling is
+// not a choice — past it the write fails whatever this file does, and the
+// process may not survive to report why — so there the write is refused,
+// with a promotion band below it offering migration before the limit is
+// reached. Neither is built yet; `docs/contributing/adr/0044-workspace-capacity.md`
+// is where the decision lives until it is.
 
 async function dbReady() {
   await prepareDataDir(getDataDir())
@@ -853,7 +860,7 @@ export async function compactDocument(
     }
     const { manifest: fresh, chunks } = chunkSnapshot(
       new Uint8Array(shallow),
-      SNAPSHOT_MAX_CHUNK_BYTES,
+      DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
     )
     const folded = await documentStore.saveCompactedSnapshot({
       docRef,

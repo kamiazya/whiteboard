@@ -1,16 +1,12 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import {
+  chunkSnapshot,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+  reassembleSnapshot,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
-
-/**
- * A single chunk always fits Loro's snapshot output for the geometry/text
- * mutations these patch tools perform; this cap only matters once a
- * store/sync implementation enforces its own message-size limit, which is
- * out of this shared layer's scope.
- */
-const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 /**
  * Thrown when a document has no saved snapshot. Not a Zod schema — only
@@ -93,7 +89,7 @@ export async function saveDocumentSnapshot(
 ): Promise<void> {
   const { manifest, chunks } = chunkSnapshot(
     doc.export({ mode: 'snapshot' }),
-    SNAPSHOT_MAX_CHUNK_BYTES,
+    DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await deps.documentStore.saveSnapshot({
     docRef: { kind: 'document', workspaceId, documentId },
