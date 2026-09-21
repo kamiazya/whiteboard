@@ -150,6 +150,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'both-keepers',
     browser: 'src/pages/use-browser-document-controller.ts',
   },
+  'src/pages/use-daemon-document-backend.ts': {
+    reach: 'both-keepers',
+    browser: BROWSER_PAGE,
+    note: 'both pages decide which backend to sync through; the browser half is one inline memo over `BrowserBackend` keyed on the document id, because a browser-kept document has no transport to choose, no token to carry and no session to be refused — which is most of what this module is',
+  },
   'src/lib/replica-store.ts': {
     reach: 'both-keepers',
     browser: 'src/lib/idb-document-store.ts',
