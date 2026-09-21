@@ -365,6 +365,18 @@ export function App({ providerState }: AppProps) {
     (!forcedBrowser &&
       (daemonConnection.status === 'paired' || grantConnection?.status === 'paired')) ||
     effectiveState.kind === 'daemon'
+  // Mirrors `attemptRenewal`'s own gates (above): true for exactly the
+  // window where a stored daemon connection's silent renewal has been
+  // attempted but has not yet produced an outcome — `daemonKept` cannot
+  // turn true before then, so the browser-keeper address rewrite must not
+  // draw a conclusion yet either (see the field's own comment).
+  const awaitingDaemonRenewal =
+    !isPairRoute &&
+    daemonConnection.status === 'none' &&
+    grantConnection === null &&
+    daemonRenewal === null &&
+    state.kind === 'browser' &&
+    userSettingsStore.load().storage.daemonBaseUrl !== undefined
   useWorkspaceAddressSync({
     location,
     navigate,
@@ -374,6 +386,7 @@ export function App({ providerState }: AppProps) {
     daemonView,
     setDaemonView,
     userSettingsStore,
+    awaitingDaemonRenewal,
   })
 
   // ADR-0023's offline read: the addressed workspace is daemon-kept, the

@@ -754,7 +754,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3-5): renewal/reconnect prop assertions plus the removed-state test.
   // Raised 1819 -> 1859 for S9's document-route/canonical-id replica case
   // (the read-plane smoke's exact registry shape — no segment).
-  'apps/web/src/App.test.tsx': 1859,
+  // Raised 1859 -> 1956 for S10's awaitingDaemonRenewal derivation cases (the
+  // renewal-outstanding gate is App's own, so its success and failure paths are
+  // pinned here, not only in the hook's test).
+  'apps/web/src/App.test.tsx': 1956,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
@@ -847,7 +850,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 951 -> 959 for the two S5 raises above (App.tsx, App.test.tsx) and
   // this entry's own two-line sentence — this file always grows by its
   // own edit too.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 970,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 973,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
