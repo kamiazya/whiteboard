@@ -490,6 +490,12 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: mirrors the WORKSPACE’s document list, reassigned every render — a document switch does not change which documents exist',
   canvasValueRef:
     'no subject: mirrors the current canvas value, reassigned every render — it is how a write sends the CURRENT canvas rather than the one its closure captured',
+  // Both are the duplicate hook's, and it resets them on a switch itself —
+  // same rule, same wording as the browser page's entries for them.
+  duplicateError: 'cleared on switch',
+  isDuplicating: 'cleared on switch',
+  currentDocumentIdRef:
+    'no subject: mirrors the document on screen, reassigned every render — it exists so a duplicate that started under one document can tell, after its awaits, whether it is still the one being looked at. Clearing it on a switch would remove the only thing that knows a switch happened',
 }
 
 const CASES = [
@@ -542,7 +548,14 @@ const CASES = [
     // The connections hook is part of this screen's scan surface, not a
     // separate one: its state moved THERE rather than away, so the ledger
     // below still has to account for it.
-    files: [DAEMON_DOCUMENT_PAGE, './pages/use-daemon-connections.ts'],
+    files: [
+      DAEMON_DOCUMENT_PAGE,
+      './pages/use-daemon-connections.ts',
+      // The duplicate hook is BOTH keepers' now, so it is part of this
+      // screen's scan surface as well as the browser page's — a screen that
+      // holds the state has to account for it, whoever else also does.
+      DUPLICATE_DOCUMENT_HOOK,
+    ],
     ledger: DAEMON_DOCUMENT_PAGE_STATE,
     label: 'DaemonDocumentPage',
     scanRefs: true,
