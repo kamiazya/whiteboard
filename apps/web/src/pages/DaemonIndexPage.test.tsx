@@ -982,17 +982,12 @@ describe('DaemonIndexPage', () => {
   })
 
   it('a duplicated MARKDOWN document is created as markdown, not as a canvas', async () => {
-    // The copy is made through existing endpoints — create, then write the
-    // source's bytes over it — and the create is what sets the INDEX row's
-    // kind. A plain re-save never touches that value afterwards
-    // (`document-store.ts`: "a plain re-save omits it and must never touch
-    // the value"), so a create that says `spatial` leaves the row saying
-    // spatial over a document whose own bytes say markdown.
-    //
-    // That split is not cosmetic: the two readers of a document's kind take
-    // OPPOSITE precedence. `render/resolve-file-references.ts` asks the
-    // document first and reads the markdown body; `references/extract.ts`
-    // asks the entry first and runs `readSpatialCanvas` over a note.
+    // The create is what sets the copy's INDEX row; the snapshot write after
+    // it is a plain re-save, which `document-store.ts` deliberately never
+    // lets touch a stored kind. The split that leaves is not cosmetic: the
+    // two readers take OPPOSITE precedence, so `resolve-file-references.ts`
+    // reads the markdown body while `references/extract.ts` runs
+    // `readSpatialCanvas` over the same note.
     const created: Array<[string, string, string | undefined]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
