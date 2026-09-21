@@ -112,13 +112,17 @@ function preflight() {
   let ballast = Buffer.alloc(64 * MB, 7)
   const held = externalMb()
   const grew = held - before
+  // Read a byte back before dropping it: the allocation has to be live
+  // across the reading above, and an allocation nothing ever touches is
+  // one a runtime is entitled to elide.
+  const witness = ballast[0]
   ballast = null
   const after = externalMb()
   const recovered = held - after
   console.log(
     `preflight  64MB allocation -> external +${grew.toFixed(1)}MB, released ${recovered.toFixed(1)}MB`,
   )
-  if (grew < 60 || recovered < 60) {
+  if (witness !== 7 || grew < 60 || recovered < 60) {
     console.error('FAIL: the instrument cannot see a 64MB allocation; every table below would lie')
     process.exit(1)
   }
@@ -200,7 +204,7 @@ async function main() {
       `mean ${(corpusBytes / corpus.length / 1024).toFixed(1)}KB`,
   )
   console.log(`resolution differences under ${RESOLUTION_MB}MB are WASM page noise, not readings`)
-  console.log('each row is its OWN process, so its high-water mark is that count\'s footprint')
+  console.log("each row is its OWN process, so its high-water mark is that count's footprint")
   console.log('')
   console.log('  docs   bodies   snapshot   live WASM   +export   peak   per doc   headroom')
   console.log('  ----   ------   --------   ---------   -------   ----   -------   --------')
