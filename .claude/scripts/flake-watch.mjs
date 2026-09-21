@@ -45,6 +45,42 @@ function cached(runId, fetch) {
   }
 }
 
+/**
+ * Has the test's own file moved since that entry's newest failure? The
+ * annotation title carries a PROJECT-relative path (`src/…`), so the file is
+ * located with `ls-files` rather than assumed — and a path that locates
+ * nothing is `missing`, which is itself an answer worth printing.
+ *
+ * The range is filtered on the COMMIT date (`%cI`) in JS rather than handed
+ * to `--since`, for the reason `stale-issues.mjs` gives: a rebase or an
+ * imported patch can leave the author date older than when the commit
+ * actually landed here, and "has anything happened since it failed" is a
+ * question about landing.
+ */
+function gitInspector() {
+  const git = (args) =>
+    execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout: 30_000 })
+  const base = (() => {
+    try {
+      git(['rev-parse', '--verify', '--quiet', 'origin/main'])
+      return 'origin/main'
+    } catch {
+      return 'HEAD'
+    }
+  })()
+  return (path, sinceIso) => {
+    const files = git(['ls-files', `*${path}`]).split('\n').filter(Boolean)
+    if (files.length === 0) return { state: 'missing' }
+    const commits = git(['log', base, '--format=%cI\t%s', '--', ...files])
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.split('\t'))
+      .filter(([committedAt]) => committedAt > sinceIso)
+    if (commits.length === 0) return { state: 'unchanged' }
+    return { state: 'changed', commits: commits.length, newest: commits[0][1] }
+  }
+}
+
 function main() {
   const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString()
   const runs = gh([
@@ -68,7 +104,7 @@ function main() {
     }),
   }))
 
-  const report = formatReport(clusterFailures(window), WINDOW_DAYS)
+  const report = formatReport(clusterFailures(window), WINDOW_DAYS, gitInspector())
   if (report !== '') process.stdout.write(`${report}\n`)
   else if (!QUIET) {
     process.stdout.write(

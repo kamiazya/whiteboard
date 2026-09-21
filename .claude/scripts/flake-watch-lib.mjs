@@ -61,8 +61,55 @@ export function clusterFailures(window) {
   return { recurrences, singles, unattributedRuns }
 }
 
+/** `[project] path/to/x.test.ts` -> `path/to/x.test.ts`. */
+export function pathFromTestId(id) {
+  const match = /^\[[^\]]+\] (.+)$/.exec(id)
+  return match === null ? null : match[1]
+}
+
+/**
+ * The window is a trailing one, so it keeps holding a flake for days after
+ * somebody fixed it — and the report below tells a session to spend a fix
+ * lane. Measured 2026-09-21: two 09-12/09-13 failures of a touch-tap test
+ * were still being reported as a promotion signal on 09-21, by which point
+ * the root cause had been found and fixed across seven commits. Nothing in
+ * the report said so, and a session nearly spent the lane.
+ *
+ * git already knows. `inspect(path, sinceIso)` answers whether the test's
+ * own file has moved since that entry's newest failure, in the same three
+ * states `stale-issues.mjs` uses for the same question about an issue's
+ * sources. It reports "what this is about moved", never "this is fixed" —
+ * a fix that landed in a file the test never names is invisible to it, and
+ * so is a flake that survived every one of those commits.
+ *
+ * Optional and fail-soft on purpose: without an inspector, or when one
+ * throws, the report is exactly what it was before. A wrong "nothing has
+ * touched this file since" is worse than no line at all, because it reads
+ * as evidence.
+ */
+function fileStatusLine(entry, inspect) {
+  if (typeof inspect !== 'function') return []
+  const path = pathFromTestId(entry.id)
+  if (path === null) return []
+  let status
+  try {
+    status = inspect(path, entry.latest)
+  } catch {
+    return []
+  }
+  if (status?.state === 'missing') return ['      this file no longer exists']
+  if (status?.state === 'unchanged') return ['      nothing has touched this file since']
+  if (status?.state === 'changed') {
+    return [
+      `      ${status.commits} commit(s) have touched this file since, newest: ${status.newest}`,
+      '      -> verify the flake still reproduces before spending a lane',
+    ]
+  }
+  return []
+}
+
 /** One line per recurrence; silence when there is none is the caller's job. */
-export function formatReport({ recurrences, singles, unattributedRuns }, windowDays) {
+export function formatReport({ recurrences, singles, unattributedRuns }, windowDays, inspect) {
   if (recurrences.length === 0) return ''
   const lines = [
     `[flake-watch] ${recurrences.length} test(s) failed main CI more than once in ${windowDays} days — the second occurrence is the promotion signal (integrator-flow.md):`,
@@ -70,7 +117,8 @@ export function formatReport({ recurrences, singles, unattributedRuns }, windowD
   ]
   for (const entry of recurrences) {
     lines.push(`  ${entry.runIds.length}x ${entry.id}`)
-    lines.push(`      runs: ${entry.runIds.join(', ')}`)
+    lines.push(`      runs: ${entry.runIds.join(', ')} (newest ${entry.latest.slice(0, 10)})`)
+    lines.push(...fileStatusLine(entry, inspect))
   }
   lines.push('')
   lines.push(
@@ -78,7 +126,7 @@ export function formatReport({ recurrences, singles, unattributedRuns }, windowD
   )
   lines.push('')
   lines.push(
-    '  Act on the >=2x entries NOW: launch a root-cause fix lane each (own worktree + dev-loop) — re-running is how a defect gets waved through.',
+    '  Act on the >=2x entries NOW: launch a root-cause fix lane each (own worktree + dev-loop) — re-running is how a defect gets waved through. An entry marked above has MOVED since it last failed: re-check that one, and search the issue store for its file, before spending the lane.',
   )
   return lines.join('\n')
 }
