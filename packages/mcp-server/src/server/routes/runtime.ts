@@ -1,12 +1,11 @@
-import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   daemonPingResponseSchema,
   runtimeVerifyRequestSchema,
   runtimeVerifyResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
-import { invalidRequestBody } from '../app-helpers.js'
 import { getDataDir } from '../config.js'
 import type { RuntimeStatus } from '../http-server.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
@@ -137,11 +136,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   app.get('/api/runtime/status', (c) => {
     options.touch()
     return c.json(options.getStatus())
-  })
-
-  app.post('/api/runtime/touch', (c) => {
-    options.touch()
-    return c.json({ ok: true })
   })
 
   // Storage usage report. Cheap stat()-only walk of getDataDir(); nothing is cached.

@@ -1,5 +1,6 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
+import { apiErrorReason } from './api-errors.js'
 import { createServer } from './create-server.js'
 import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
@@ -123,9 +124,13 @@ describe('canvas CRUD routes', () => {
     })
     expect(res.status).toBe(400)
     // The stage is the reason; a message that dropped it would still say OKF.
-    expect(await res.json()).toMatchObject({
-      error: expect.stringContaining('OKF parse failed at frontmatter-schema:'),
-    })
+    // Read through the contract's own reader rather than off a field: the
+    // code says WHICH refusal and the reason says why, and this case used to
+    // assert a substring of the code slot because that is where the reason
+    // was.
+    const malformed = await res.json()
+    expect(malformed).toMatchObject({ error: 'okf_parse_failed' })
+    expect(apiErrorReason(malformed)).toContain('OKF parse failed at frontmatter-schema:')
   })
 
   it('POST a markdown document whose tag the workspace library forbids returns 400, not 500', async () => {
@@ -169,9 +174,9 @@ describe('canvas CRUD routes', () => {
     // A well-formed request the workspace's own declaration refuses: only
     // the caller can pick an admitted value, so it is theirs to fix.
     expect(res.status).toBe(400)
-    expect(await res.json()).toMatchObject({
-      error: expect.stringContaining('health:unknown'),
-    })
+    const refused = await res.json()
+    expect(refused).toMatchObject({ error: 'tag_not_in_library' })
+    expect(apiErrorReason(refused)).toContain('health:unknown')
   })
 
   it('GET list returns 200 with an array', async () => {

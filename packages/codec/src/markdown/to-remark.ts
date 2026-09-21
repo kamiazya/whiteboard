@@ -15,7 +15,7 @@ import type {
  * `embed` are converted to their bracket literal text form here — this
  * package renders them as plain markdown text rather than teaching
  * mdast-util-to-markdown a new node kind, since resolution happens at the
- * `references.ts` layer, before stringification.
+ * `references/` layer, before stringification.
  *
  * `RemarkNode` is a deliberately narrow local type, not the transitive
  * `mdast`/`@types/mdast` package types: this package does not depend on

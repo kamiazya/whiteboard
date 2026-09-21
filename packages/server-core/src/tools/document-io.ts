@@ -120,11 +120,14 @@ export async function saveDocumentSnapshot(
  * present in the doc but absent from `canvas`, so passing a lone patched
  * node/edge would silently drop every other element.
  *
- * This is a read-modify-write with no optimistic-concurrency check, same
- * as `workspace-tree-io.ts`'s `saveWorkspaceTree`: two concurrent patches
- * against the same canvas race, and the later `saveSnapshot` call wins
- * outright — the earlier patch is silently lost rather than merged. This
- * is an accepted limitation for now, not an oversight.
+ * This is a read-modify-write with no optimistic-concurrency check: two
+ * concurrent patches against the same canvas race, and the later
+ * `saveSnapshot` call wins outright — the earlier patch is silently lost
+ * rather than merged. An accepted limitation, not an oversight.
+ *
+ * ponytail: last-write-wins on the whole canvas; a per-element compare-and-set
+ * if concurrent patching turns out to be a real pattern rather than a race
+ * two agents hit occasionally.
  */
 export async function saveDocumentBodySnapshot(
   deps: ServerDeps,

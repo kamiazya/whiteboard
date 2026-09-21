@@ -46,7 +46,6 @@ import {
   workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { listFontsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
-import { apiErrorBodySchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
   daemonPingResponseSchema,
@@ -56,6 +55,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
+import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import type { z } from 'zod'
@@ -354,7 +354,6 @@ const RULES: Record<string, Rule> = {
     response: runtimeVerifyResponseSchema,
   },
   'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
-  'POST /api/runtime/touch': { answers: 'json' },
   'GET /api/runtime/storage': { answers: 'json' },
   'POST /api/runtime/logs/prune': { answers: 'json' },
   'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },

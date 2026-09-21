@@ -39,7 +39,6 @@
 //   token; `profileId` in the response is the MemberProfile that credential
 //   maps to (routes/membership.ts), or null when it has none yet.
 import { createHash } from 'node:crypto'
-import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   type CreateGrantResponse,
   createGrantRequestSchema,
@@ -59,8 +58,8 @@ import {
   sessionAssertRequestSchema,
   sessionAssertResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
+import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { invalidRequestBody } from '../app-helpers.js'
 import { getLogger } from '../log.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'

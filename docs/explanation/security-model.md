@@ -14,7 +14,7 @@ This page describes the **local daemon** in detail first, then server mode.
 ## Local daemon: trust boundary
 
 - The daemon binds to `127.0.0.1` (not `localhost`) by default, restricting access to the loopback interface.
-- HTTP routes under `/api/*` apply auth in two layers. First, a global middleware protects all mutation methods (`POST`, `PUT`, `PATCH`, `DELETE`) under `/api/*` except `/api/runtime/*`, which has its own per-router middleware. Second, `/api/runtime/*` routes are gated per the route-scope registry: `/api/runtime/ping` (liveness probe) and `/api/runtime/verify` (identity challenge) are public; read-only endpoints such as `GET /api/runtime/status` and `GET /api/runtime/storage` accept the daemon token, a scope-checked OAuth grant covering `runtime:read`, or an origin-bound pairing session token; the admin endpoints (`POST /api/runtime/touch`, `POST /api/runtime/logs/prune`) accept the daemon token only — a paired web origin can inspect the daemon but never delete its logs. There is no HTTP route that stops the daemon. Canvas and workspace `GET` routes outside `/api/runtime/` are unauthenticated in local-daemon mode and serve canvas metadata to the local browser without requiring credentials.
+- HTTP routes under `/api/*` apply auth in two layers. First, a global middleware protects all mutation methods (`POST`, `PUT`, `PATCH`, `DELETE`) under `/api/*` except `/api/runtime/*`, which has its own per-router middleware. Second, `/api/runtime/*` routes are gated per the route-scope registry: `/api/runtime/ping` (liveness probe) and `/api/runtime/verify` (identity challenge) are public; read-only endpoints such as `GET /api/runtime/status` and `GET /api/runtime/storage` accept the daemon token, a scope-checked OAuth grant covering `runtime:read`, or an origin-bound pairing session token; the admin endpoint (`POST /api/runtime/logs/prune`) accepts the daemon token only — a paired web origin can inspect the daemon but never delete its logs. There is no HTTP route that stops the daemon. Canvas and workspace `GET` routes outside `/api/runtime/` are unauthenticated in local-daemon mode and serve canvas metadata to the local browser without requiring credentials.
 - The `/mcp` HTTP transport applies token checks and restricts the `Origin` header to loopback addresses (`127.0.0.1`, `::1`, or `localhost`).
 - The packaged `stdio` MCP path does not use OAuth. Trust comes from the local process that launches the server.
 
@@ -214,7 +214,10 @@ run on every ONLINE route that reaches the workspace's content. A
 members configured never needs a passkey, and every existing single-user
 setup keeps working unchanged. Adding the first member is what flips a
 workspace from origin trust to membership — see
-[Connect to a local daemon](../how-to/connect-to-local-daemon.md).
+[Connect to a local daemon](../how-to/connect-to-local-daemon.md) — and it
+keeps origin trust only UNTIL its first member is added; removing every
+member does not reopen it. A workspace that has ever had a member stays
+person-gated, now admitting nobody until a member is added again.
 
 This applies to **local-daemon mode only**. Server-mode credentials are all
 operator-issued through the external Identity Provider, which is already

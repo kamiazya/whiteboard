@@ -187,7 +187,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // guard they share, and `endInkCommand` joining the id-picking family. It
   // is the first verb the matrix reported missing from BOTH collections
   // rather than from one, which is why one increment adds two writes.
-  'apps/web/src/lib/spatial/commands.ts': 1636,
+  'apps/web/src/lib/spatial/commands.ts': 1597,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -804,7 +804,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // not hold), a stroke end dropped in empty space and one dropped on a box,
   // and the collection-picking sibling that answers nothing for a relation
   // aimed at empty space.
-  'apps/web/src/lib/spatial/commands.test.ts': 1951,
+  'apps/web/src/lib/spatial/commands.test.ts': 2042,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   'apps/web/src/pages/DaemonDocumentPage.test.tsx': 866,

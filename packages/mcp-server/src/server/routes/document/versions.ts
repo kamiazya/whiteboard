@@ -4,13 +4,13 @@ import {
   saveVersionRequestSchema,
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   readDocumentKind,
   readMarkdownBody,
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { RequestOperator } from '@kamiazya/whiteboard-server-core'
+import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getDoc } from '../../store/document-store.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'

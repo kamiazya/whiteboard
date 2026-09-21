@@ -21,6 +21,24 @@ Check:
   or PR body) that the fix was mutation-checked — revert the production fix,
   confirm the guard fails, restore?
 
+### 2b. The mutation actually applied, and reached the guard's real scope
+
+A mutation result is evidence only if the mutation happened. A substitution
+that silently matched nothing comes back GREEN, which is indistinguishable
+from a guard that checked — measured twice in one session, where a probe
+used double quotes against a ledger the formatter had rewritten to single,
+and both "checks" passed over an unmodified file.
+
+Check:
+- Does the stated probe assert its own substitution landed (`assert old in
+  source`, a diff, a printed count) rather than trusting `replace`?
+- For a SCAN or lint rule, was the mutation applied to REAL source under each
+  declared root — not only to a fixture? A fixture proves the pattern
+  matches; only a probe inside the scope proves the scope reaches.
+- Does the guard's declared scope name every package that PRODUCES the
+  subject? A guard scoped to one package reports the others as satisfied by
+  never looking at them.
+
 ### 3. No test files silently omitted from the diff
 
 Check:

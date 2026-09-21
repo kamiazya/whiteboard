@@ -2,7 +2,8 @@
  * The subtree arithmetic behind moving and deleting a document path.
  *
  * Two stores write the daemon's `documents` table — `document-store.ts` for
- * the HTTP surface and `sqlite-document-index.ts` for the MCP one — and they
+ * the HTTP surface and workspace-index's `loro-workspace-document-index.ts`
+ * for the MCP one — and they
  * are deliberately kept from importing each other. That is what let them grow
  * two different answers to the same question: the index moved a whole
  * subtree while the HTTP path renamed one row and stranded its children,

@@ -282,6 +282,10 @@ session, it asks once — confirming with the passkey registered for this
 daemon — before the workspace opens; after that it stays signed in for
 the rest of the session and is never asked again mid-session.
 
+Removing everyone does not return the workspace to origin trust; it stays
+member-gated, and nobody is admitted until a member is added again. There
+is no button in this app to reopen it to origin trust.
+
 ## See what this device keeps of a daemon-kept workspace
 
 Once a workspace is kept by a daemon, **Settings → Connections → This

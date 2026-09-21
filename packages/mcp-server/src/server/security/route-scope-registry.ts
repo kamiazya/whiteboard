@@ -294,14 +294,13 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: workspacesHandle,
   },
 
-  // touch and logs-prune both mutate daemon-managed process state (the
-  // liveness timer, the on-disk log files) and require the admin tier even
-  // though the HTTP verb for prune is POST like any other write route.
-  // Stopping the process is deliberately NOT here: it is a signal, not a
-  // route.
+  // Deleting the daemon's own log files mutates state no other runtime route
+  // touches, so it requires the admin tier even though its HTTP verb is POST
+  // like any other write route. Stopping the process is deliberately NOT here:
+  // it is a signal, not a route.
   {
-    name: 'runtime state',
-    claims: exactly('/api/runtime/touch', '/api/runtime/logs/prune'),
+    name: 'runtime/logs/prune',
+    claims: exactly('/api/runtime/logs/prune'),
     decide: always('runtime:admin'),
   },
   { name: 'runtime (rest)', claims: under('/api/runtime/'), decide: always('runtime:read') },

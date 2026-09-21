@@ -33,25 +33,25 @@
 // 3. The daemon restarted on the same port/data dir, Reconnect clicked: the
 //    renewal pairs, and the replica page unmounts for the daemon page
 //    (App.tsx only mounts ReplicaReadPage on a FAILED renewal).
-// 4. The member removed while the daemon stays up, cold reload: the
-//    renewal still pairs (member removal revokes SESSION tokens, not the
-//    file-backed origin GRANT — routes/membership.ts), so the daemon page
-//    mounts rather than ReplicaReadPage. What this check pins is ADR-0042
-//    decision 4's real invariant — nothing is sent once the key is
-//    withheld — against the real 403 `not_a_member` the replica-key route
-//    now answers. It does NOT assert `replica-state-removed`: App only
-//    mounts that page on a renewal refusal, and a member removal alone is
-//    not one. That gap between the documented 'Removed' page
-//    (docs/explanation/security-model.md) and what a member removal alone
-//    can reach is filed as a whiteboard issue rather than patched here.
+// 4. The workspace's SOLE member removed while the daemon stays up, cold
+//    reload: a workspace that has ever had a member stays person-gated
+//    even with none left (ADR-0041 S8 slice 4, user decision 2026-09-21),
+//    so the origin-only renewal no longer pairs — it is refused
+//    `requires_person_session`, the removed member's still-pinned passkey
+//    binds again (session-assert 200), and the bound retry is refused
+//    `not_a_member` (their L1 membership, not their passkey pin, was
+//    revoked). That refusal is what mounts `replica-state-removed`
+//    (S5's page, the same `not_a_member` branch #1734 wired) — nothing is
+//    sent once the key is withheld (ADR-0042 decision 4).
 // 5. The origin grant revoked (member re-added first): `replica-state-
 //    unpaired`, never `removed` — ADR-0042 decision 5's distinction
 //    between a pairing refusal and a membership refusal.
 // 6. Skipped: `no-offline` cannot render `replica-state-needs-connection`
-//    in the composed app either, for the same reason as (4) — a daemon
-//    that is UP always pairs the renewal and mounts the daemon page first.
-//    The observable (a `replica_not_allowed` 403, no registry entry) is
-//    already pinned by replica-key.test.ts.
+//    in this composed app either — every check here keeps the daemon UP,
+//    so the renewal always reaches it and mounts either the daemon page or
+//    a membership-refusal replica state, never the "no daemon reachable"
+//    one. The observable (a `replica_not_allowed` 403, no registry entry)
+//    is already pinned by replica-key.test.ts.
 //
 // Direct invocation requires tsx:
 //   node --import tsx/esm scripts/smoke/mcp-read-plane-smoke.mjs
@@ -629,9 +629,10 @@ try {
   )
 
   // ==================================================================
-  // Check 4 — member removed while the daemon stays up, cold reload: the
-  // daemon page mounts (a member removal does not revoke the origin
-  // grant), and the replica-key ask is refused for real — nothing is sent.
+  // Check 4 — the workspace's SOLE member removed while the daemon stays
+  // up, cold reload: the workspace stays person-gated (S12), the removed
+  // member's still-pinned passkey binds again, the bound retry is refused
+  // `not_a_member`, and that refusal lands on `replica-state-removed`.
   // ==================================================================
   const removed = await operator(`/api/workspaces/${workspaceId}/members/${profileId}`, {
     method: 'DELETE',
@@ -645,28 +646,24 @@ try {
   mark = daemonResponses.length
   await page.goto(docUrl, { waitUntil: 'load' })
 
-  const daemonPageMounted = await waitUntil(
-    () =>
-      page
-        .getByText(MARKER)
-        .first()
-        .isVisible()
-        .catch(() => false),
-    20_000,
-  )
+  const removedPageVisible = await page
+    .getByTestId('replica-state-removed')
+    .waitFor({ state: 'visible', timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false)
+  check(removedPageVisible, 'the sole member removed lands on replica-state-removed')
+  const replicaStateCount = await page.locator('[data-testid^="replica-state-"]').count()
   check(
-    daemonPageMounted,
-    'a removed member still lands on the daemon page (the grant is untouched)',
+    replicaStateCount === 1,
+    `exactly one replica-state-* element renders (got ${replicaStateCount})`,
   )
-  const noReplicaStateElement =
-    (await page.locator('[data-testid^="replica-state-"]').count()) === 0
-  check(noReplicaStateElement, 'no replica-state-* element renders — this is not the removed page')
+  const removedBody = await page.getByTestId('replica-state-removed').textContent()
+  check(
+    (removedBody ?? '').includes('changes made since then were not sent'),
+    'the removed page says the local changes were not sent',
+    redact(removedBody ?? ''),
+  )
 
-  await waitUntil(
-    () =>
-      daemonResponses.slice(mark).some((e) => e.path.endsWith('/replica-key') && e.status === 403),
-    15_000,
-  )
   await settleResponses()
   const check4Log = daemonResponses.slice(mark)
   const sessionAssertIdx = check4Log.findIndex(
@@ -674,21 +671,30 @@ try {
   )
   check(
     sessionAssertIdx !== -1,
-    'the new session binds again (session-assert 200)',
+    'the removed member’s passkey binds again (session-assert 200)',
     redact(check4Log),
   )
-  const refusalAfterBind = check4Log
-    .slice(sessionAssertIdx + 1)
-    .find((e) => e.path.endsWith('/replica-key'))
+  const refusalAfterBind = check4Log.slice(sessionAssertIdx + 1).find((e) => e.status === 403)
   check(
-    refusalAfterBind?.status === 403 && refusalAfterBind?.error === 'not_a_member',
-    'the bound session is refused the key as `not_a_member`',
+    refusalAfterBind?.error === 'not_a_member',
+    'the bound retry is refused `not_a_member`',
     redact(check4Log),
   )
-  const noPushAfterRemoval = check4Log.filter((e) =>
-    e.path.endsWith('/workspace-document/update'),
-  ).length
-  check(noPushAfterRemoval === 0, 'nothing is sent once the key is withheld (ADR-0042 decision 4)')
+  const refusalIdx = refusalAfterBind === undefined ? -1 : check4Log.indexOf(refusalAfterBind)
+  // Nothing document-bearing follows the refusal: no push, no sync
+  // subscribe, no replica-key ask, no re-fetch of the documents list.
+  const CONTENT_ROUTE = /\/(workspace-document|api\/sync|replica-key|documents)(\/|$|\?)/
+  const sentAfterRefusal =
+    refusalIdx === -1
+      ? []
+      : check4Log
+          .slice(refusalIdx + 1)
+          .filter((e) => ['POST', 'PUT', 'PATCH'].includes(e.method) && CONTENT_ROUTE.test(e.path))
+  check(
+    sentAfterRefusal.length === 0,
+    'nothing is sent once the key is withheld (ADR-0042 decision 4)',
+    redact(sentAfterRefusal),
+  )
 
   // ==================================================================
   // Check 5 — member re-added, origin grant revoked, cold reload:
