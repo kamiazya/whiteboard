@@ -24,6 +24,7 @@ import {
   type PasskeyCredentials,
   type StorageLike,
 } from './passkey-attestation.js'
+import { prfInputForDaemon } from './passkey-prf.js'
 
 const rejected = { ok: false, outcome: { ok: false, reason: 'rejected' } } as const
 
@@ -83,9 +84,14 @@ export async function bindPasskeySession({
   )
   if (!challengeResult.ok) return challengeResult.outcome
 
+  // The prf input rides on the assertion this bind already performs — one
+  // gesture for both jobs (ADR-0042 decision 6 + ADR-0039 decision 6). An
+  // authenticator that ignores the extension still binds the session; only
+  // the cold start is lost, which is why nothing below branches on it.
   const attestOutcome = await assertWithRegisteredPasskey({
     daemonBaseUrl,
     challenge: base64UrlToBytes(challengeResult.data.challenge),
+    prfInput: await prfInputForDaemon(daemonBaseUrl),
     credentials,
     storage,
   })
@@ -102,5 +108,8 @@ export async function bindPasskeySession({
     assertBody,
   )
   if (!assertResult.ok) return assertResult.outcome
-  return { ok: true }
+  return {
+    ok: true,
+    ...(attestOutcome.prfOutput === undefined ? {} : { prfOutput: attestOutcome.prfOutput }),
+  }
 }

@@ -22,7 +22,19 @@ import { fromBase64 } from './sse-stream-hub.js'
  */
 
 export type BindOutcome =
-  | { ok: true }
+  | {
+      ok: true
+      /**
+       * The key material the binding assertion carried, when the
+       * authenticator produced it (ADR-0042 decision 6). The SAME gesture
+       * that proves who is asking is the one that yields this, so a cold
+       * start costs no second prompt.
+       *
+       * Absent is ORDINARY: prf support is broad and not universal, and
+       * the session is bound either way — only the cold start is lost.
+       */
+      prfOutput?: Uint8Array<ArrayBuffer>
+    }
   | { ok: false; reason: 'no-passkey' | 'cancelled' | 'rejected' | 'unreachable' }
 
 export interface ReplicaSource {
