@@ -259,6 +259,25 @@ Not included in `pnpm test`. Requires `dist/server/mcp/index.js` to exist. `test
 | `pnpm smoke:codex-config` | Plugin manifest + published MCP config valid; packaged entry starts | No |
 | `pnpm test:distribution` | All three above, after `pnpm build` | Yes |
 
+### Real-browser smokes — opt-in, require `pnpm build` + Chromium
+
+Not included in `pnpm test` or `test:distribution`. Each launches a real
+Chromium (via Playwright) against a real daemon and the real built web app
+(`dist/web-app`), so `pnpm build` (from the repo root, so `apps/web`'s
+postbuild copy runs) must have already produced it. Run directly with
+`node --import tsx/esm scripts/smoke/mcp-*.mjs` or through the `pnpm smoke:*`
+alias; CI runs them in the `verify` job.
+
+| Script | What it crosses for real |
+|---|---|
+| `pnpm smoke:daemon-origin` | The daemon serves only `/pair` and 302s every other UI path — a real redirect, not a mocked route |
+| `pnpm smoke:passkey-promote` | Chromium's virtual authenticator against the daemon's real WebAuthn verifier, through the pairing bearer under a browser-enforced Origin (ADR-0039) |
+| `pnpm smoke:read-plane` | A sealed replica in real IndexedDB, real 403s from the real membership store, and the real locked/unpaired page landings a cold start and a revoked grant produce (ADR-0042/0043) |
+
+Every one of these fakes something in the Vitest browser-mode suites — the
+daemon at `fetch`, the browser's own routing, or the authenticator — so this
+is the one place each side meets what the other actually produces.
+
 ### External CLI smokes — not Vitest, require external tooling
 
 These scripts require a running Claude or Codex CLI and consume API quota. Not included in `pnpm test` or `test:distribution`.

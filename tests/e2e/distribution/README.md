@@ -6,7 +6,7 @@ artifacts — npm tarball and Docker image — against real process boundaries.
 ## test:e2e:distribution
 
 The `test:e2e:distribution` root script runs the full distribution verification chain.
-The chain has sixteen steps after the initial build prerequisite:
+The chain has seventeen steps after the initial build prerequisite:
 
 1. `pnpm smoke:e2e` — full stdio MCP round-trip against the source entry point (canvas create → checkpoint → restore → export)
 2. `pnpm smoke:tarball` — validates the packed `.tgz` is installable and functional
@@ -16,14 +16,15 @@ The chain has sixteen steps after the initial build prerequisite:
 6. `pnpm smoke:codex` — end-to-end Codex CLI integration smoke
 7. `pnpm smoke:daemon-origin` — real-browser proof the daemon origin serves a connected apps/web app (seeded canvas, no pairing CTA, token-gated mutation)
 8. `pnpm smoke:passkey-promote` — real-browser proof of the passkey attestation seam (ADR-0039): a Chromium virtual authenticator on a paired origin registers, promotes with an assertion the daemon verifies, is refused on tamper/replay/wrong workspace, and the History row carries the evidence
-9. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
-10. packaged daemon backup/restore smoke
-11. packaged daemon logs smoke
-12. packaged daemon support-bundle smoke
-13. packaged daemon token smoke
-14. packaged server-mode app smoke
-15. packaged server-mode CLI smoke
-16. packaged server-mode entrypoint smoke
+9. `pnpm smoke:read-plane` — real-browser proof of the read plane (ADR-0042/0043): a sealed replica in real IndexedDB, real 403s from the real membership store, and the real locked/unpaired page landings a cold start and a revoked grant produce
+10. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
+11. packaged daemon backup/restore smoke
+12. packaged daemon logs smoke
+13. packaged daemon support-bundle smoke
+14. packaged daemon token smoke
+15. packaged server-mode app smoke
+16. packaged server-mode CLI smoke
+17. packaged server-mode entrypoint smoke
 
 ## Vitest-backed vs Node-script smokes
 

@@ -253,11 +253,17 @@ const replicaKeyBodies = new Map()
 try {
   const context = await browser.newContext()
   // Seeds the daemon connection BEFORE the very first navigation — exactly
-  // what a returning browser's persisted settings look like — and runs on
-  // every subsequent navigation too (context-scoped), so it is written once.
+  // what a returning browser's persisted settings look like. `addInitScript`
+  // runs before EVERY navigation in this context (it is context-scoped, not
+  // one-shot), so it must seed only when the key is ABSENT: check 1's pull
+  // writes a `storage.replicas` entry this build reads on every later cold
+  // reload, and an unconditional write here clobbered it on each navigation,
+  // erasing the registry before the smoke ever asked for the locked state.
   await context.addInitScript((base) => {
+    const KEY = 'whiteboard:user-settings:v3'
+    if (window.localStorage.getItem(KEY) !== null) return
     window.localStorage.setItem(
-      'whiteboard:user-settings:v3',
+      KEY,
       JSON.stringify({
         version: 3,
         storage: { daemonBaseUrl: base },
@@ -534,6 +540,22 @@ try {
   mark = daemonResponses.length
   await page.goto(docUrl, { waitUntil: 'load' }).catch(() => {})
 
+  const registrySurvivedReload = await page.evaluate((ws) => {
+    try {
+      const raw = window.localStorage.getItem('whiteboard:user-settings:v3')
+      if (!raw) return false
+      const parsed = JSON.parse(raw)
+      return parsed?.storage?.replicas?.[ws] !== undefined
+    } catch {
+      return false
+    }
+  }, workspaceId)
+  check(
+    registrySurvivedReload,
+    'the registry entry survives the cold reload',
+    'a fresh navigation must never re-seed localStorage over an existing replica registry',
+  )
+
   const lockedVisible = await page
     .getByTestId('replica-state-locked')
     .waitFor({ state: 'visible', timeout: 20_000 })
@@ -675,7 +697,11 @@ try {
   check(unpairedVisible, 'a revoked origin grant lands on replica-state-unpaired')
   const removedAbsent = (await page.getByTestId('replica-state-removed').count()) === 0
   check(removedAbsent, 'replica-state-removed never renders for a revoked grant')
-  const noButton = (await page.getByRole('button').count()) === 0
+  // Scoped to the replica page itself, not the whole page: AppShell's own
+  // chrome (the connection-status marker, fullscreen, settings) renders
+  // real buttons regardless of replica state, so counting page-wide finds
+  // those instead of asking anything about ReplicaReadPage.
+  const noButton = (await page.getByTestId('replica-read-page').getByRole('button').count()) === 0
   check(noButton, 'the unpaired state offers no action button')
 
   await context.close()
