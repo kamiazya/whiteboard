@@ -16,25 +16,32 @@
  * after `navigate()`, recreates the storm without failing any other test —
  * so this pins the source positions directly rather than the runtime
  * behaviour nothing here can reproduce.
+ *
+ * It reads `use-workspace-address-sync.ts`, where both effects now live.
+ * They were in `App`'s body when this was written; the invariant did not
+ * change, and having them in one file rather than three hundred lines apart
+ * is what makes it readable at all. A custom hook registers its effects in
+ * the caller's commit, in the order written here, so "declared after" still
+ * means "runs after".
  */
 import { describe, expect, it } from 'vitest'
-import appSource from './App.tsx?raw'
+import hookSource from './use-workspace-address-sync.ts?raw'
 
 describe('the same-commit route-sync ordering the ping-pong fix depends on', () => {
   it('hoists the shared ref, stamps before navigating, and declares the reader after the writer', () => {
-    const refDecl = appSource.indexOf('const lastRouteSyncPathRef = useRef(location.pathname)')
+    const refDecl = hookSource.indexOf('const lastRouteSyncPathRef = useRef(location.pathname)')
     expect(refDecl).toBeGreaterThan(-1)
 
-    const stamp = appSource.indexOf('lastRouteSyncPathRef.current = location.pathname', refDecl)
+    const stamp = hookSource.indexOf('lastRouteSyncPathRef.current = location.pathname', refDecl)
     expect(stamp).toBeGreaterThan(-1)
 
-    const stateToUrlNavigate = appSource.indexOf(
+    const stateToUrlNavigate = hookSource.indexOf(
       'navigate(path, { replace: isFirstSync || namingTheSameIndex })',
       refDecl,
     )
     expect(stateToUrlNavigate).toBeGreaterThan(-1)
 
-    const urlToStateSkip = appSource.indexOf(
+    const urlToStateSkip = hookSource.indexOf(
       'if (lastRouteSyncPathRef.current === location.pathname) return',
       stateToUrlNavigate,
     )
