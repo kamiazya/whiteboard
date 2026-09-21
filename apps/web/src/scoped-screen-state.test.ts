@@ -55,6 +55,7 @@ const sources = import.meta.glob(
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
     './pages/use-auto-checkpoint.ts',
+    './pages/use-document-list-refresh.ts',
     './pages/use-duplicate-document.ts',
     './pages/DaemonDocumentPage.tsx',
     './pages/DocumentPage.tsx',
@@ -110,6 +111,10 @@ const AUTO_CHECKPOINT_HOOK = './pages/use-auto-checkpoint.ts'
 // reset that clears both. Same SCREEN by the same rule as the panel's hooks
 // and the checkpoint one above — its state moved there, not away.
 const DUPLICATE_DOCUMENT_HOOK = './pages/use-duplicate-document.ts'
+// The workspace's document list and whether it has answered once. Same
+// SCREEN by the same rule — its state moved there, not away — and it is the
+// one piece here that names no document, so it carries no scope reset.
+const DOCUMENT_LIST_HOOK = './pages/use-document-list-refresh.ts'
 const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
 // The shared page both keepers render through (ADR-0004 decision 1). The
 // history column, the armed bookmark and the version being looked at moved
@@ -443,13 +448,15 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
   branchRefreshSignal:
     'no subject: a monotonic tick, not a name — the chip and banner act only on a value that CHANGES after their own mount, so a leftover count is inert, and a switch re-bumps it anyway because `sync.loaded` goes false and back to true for the arriving document',
-  listGenerationRef:
+  // Renamed with the move into use-document-list-refresh.ts, where the file
+  // supplies the "list" the old prefixes carried.
+  generationRef:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
   currentDocumentIdRef:
     'no subject: mirrors the scope itself, reassigned every render — it is what an async handler outliving its document asks to find out whether its report still belongs on screen',
   isFirstCanvasUrlSyncRef:
     'no subject: whether this MOUNT has synced the URL once, which picks replace over push — resetting it per document would make every switch a replace and flatten the history it exists to keep',
-  documentsEnumeratedRef:
+  enumeratedRef:
     'no subject: whether listDocuments has answered at all, which is about the page’s lifetime rather than one document',
   lastKnownCanvasIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
@@ -518,7 +525,12 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [BROWSER_DOCUMENT_PAGE, AUTO_CHECKPOINT_HOOK, DUPLICATE_DOCUMENT_HOOK],
+    files: [
+      BROWSER_DOCUMENT_PAGE,
+      AUTO_CHECKPOINT_HOOK,
+      DUPLICATE_DOCUMENT_HOOK,
+      DOCUMENT_LIST_HOOK,
+    ],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,
