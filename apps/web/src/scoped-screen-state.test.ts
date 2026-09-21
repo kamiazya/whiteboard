@@ -55,6 +55,7 @@ const sources = import.meta.glob(
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
     './pages/use-auto-checkpoint.ts',
+    './pages/use-duplicate-document.ts',
     './pages/DaemonDocumentPage.tsx',
     './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
@@ -105,6 +106,10 @@ const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 // The page's automatic-checkpoint wiring, extracted when its file-size budget
 // said so; same SCREEN by the same rule the panel's hooks are.
 const AUTO_CHECKPOINT_HOOK = './pages/use-auto-checkpoint.ts'
+// Duplicate-this-document's in-flight guard and its refusal, with the scope
+// reset that clears both. Same SCREEN by the same rule as the panel's hooks
+// and the checkpoint one above — its state moved there, not away.
+const DUPLICATE_DOCUMENT_HOOK = './pages/use-duplicate-document.ts'
 const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
 // The shared page both keepers render through (ADR-0004 decision 1). The
 // history column, the armed bookmark and the version being looked at moved
@@ -513,7 +518,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [BROWSER_DOCUMENT_PAGE, AUTO_CHECKPOINT_HOOK],
+    files: [BROWSER_DOCUMENT_PAGE, AUTO_CHECKPOINT_HOOK, DUPLICATE_DOCUMENT_HOOK],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,
