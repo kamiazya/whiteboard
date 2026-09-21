@@ -62,4 +62,25 @@ describe('daemonDoctorResultSchema', () => {
       }),
     ).toThrow()
   })
+
+  it('refuses a CHECK widened past the contract, where the raw text has not been redacted — the class tsc cannot see', () => {
+    // A result assembled with a SPREAD compiles clean however wide it is:
+    // TypeScript's excess-property check does not apply to spread
+    // properties. `.strict()` is the only thing between that and stdout.
+    expect(() =>
+      daemonDoctorResultSchema.parse({
+        schemaVersion: 1,
+        ok: true,
+        status: 'ok',
+        checks: [
+          {
+            id: 'c',
+            status: 'ok',
+            summary: 's',
+            rawError: 'https://issuer.example/.well-known/jwks.json',
+          },
+        ],
+      }),
+    ).toThrow(/rawError/)
+  })
 })

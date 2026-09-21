@@ -11,33 +11,13 @@
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
+import {
+  type ServerStatusResult,
+  serverStatusResultSchema,
+} from '../shared/api-contracts/server-status.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STATUS_SCHEMA_VERSION = 1 as const
-
-type ServerStatusState = 'running' | 'missing' | 'stale' | 'malformed' | 'unverifiable'
-
-interface ServerStatusRunningResult {
-  schemaVersion: typeof SERVER_STATUS_SCHEMA_VERSION
-  ok: true
-  state: 'running'
-  pid: number
-  host: string
-  port: number
-  publicBaseUrl: string
-  authStrategy: 'oauth-jwt'
-  startedAt: string
-  recordFresh: true
-}
-
-interface ServerStatusNotRunningResult {
-  schemaVersion: typeof SERVER_STATUS_SCHEMA_VERSION
-  ok: false
-  state: Exclude<ServerStatusState, 'running'>
-  recordFresh: false
-}
-
-type ServerStatusResult = ServerStatusRunningResult | ServerStatusNotRunningResult
 
 export interface RunServerStatusOptions {
   dataDir?: string
@@ -77,24 +57,24 @@ export async function runServerStatus(
 
   if (readResult.kind === 'missing') {
     return {
-      result: {
+      result: serverStatusResultSchema.parse({
         schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
         ok: false,
         state: 'missing',
         recordFresh: false,
-      },
+      }),
       exitCode: 1,
     }
   }
 
   if (readResult.kind === 'malformed') {
     return {
-      result: {
+      result: serverStatusResultSchema.parse({
         schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
         ok: false,
         state: 'malformed',
         recordFresh: false,
-      },
+      }),
       exitCode: 1,
     }
   }
@@ -102,12 +82,12 @@ export async function runServerStatus(
   const { record } = readResult
   if (!isPidAlive(record.pid)) {
     return {
-      result: {
+      result: serverStatusResultSchema.parse({
         schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
         ok: false,
         state: 'stale',
         recordFresh: false,
-      },
+      }),
       exitCode: 1,
     }
   }
@@ -115,21 +95,21 @@ export async function runServerStatus(
   const rightProcess = await verifyIdentity(record)
   if (!rightProcess) {
     return {
-      result: {
+      result: serverStatusResultSchema.parse({
         schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
         ok: false,
         // A record without instanceId (legacy daemon build) can never be
         // confirmed — report 'unverifiable' rather than a false 'stale'.
         state: record.instanceId ? 'stale' : 'unverifiable',
         recordFresh: false,
-      },
+      }),
       exitCode: 1,
     }
   }
 
   // Allow-list construction: only the fields the caller needs.
   return {
-    result: {
+    result: serverStatusResultSchema.parse({
       schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
       ok: true,
       state: 'running',
@@ -140,7 +120,7 @@ export async function runServerStatus(
       authStrategy: record.authStrategy,
       startedAt: record.startedAt,
       recordFresh: true,
-    },
+    }),
     exitCode: 0,
   }
 }

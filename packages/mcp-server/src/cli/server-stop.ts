@@ -17,33 +17,13 @@ import {
   getServerModeRecordPath,
   readServerModeRecord,
 } from '../server/security/server-mode-record.js'
+import {
+  type ServerStopResult,
+  serverStopResultSchema,
+} from '../shared/api-contracts/server-stop.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STOP_SCHEMA_VERSION = 1 as const
-
-type ServerStopAction = 'stopped' | 'not-running' | 'refused'
-
-type ServerStopReason =
-  | null
-  | 'server-record-not-found'
-  | 'server-record-malformed'
-  | 'server-process-not-running'
-  | 'server-stop-signal-failed'
-  | 'server-stop-timeout'
-  // Record predates instanceId (written by an older daemon build). Identity
-  // cannot be confirmed, so the safe choice is to refuse to kill rather than
-  // risk terminating an unrelated process that reused the recorded pid.
-  | 'server-instance-unverifiable'
-
-interface ServerStopResult {
-  schemaVersion: typeof SERVER_STOP_SCHEMA_VERSION
-  ok: boolean
-  action: ServerStopAction
-  reason: ServerStopReason
-  recordFound: boolean
-  recordFresh: boolean
-  pid?: number
-}
 
 export interface RunServerStopOptions {
   dataDir?: string
@@ -78,7 +58,11 @@ function outcome(
   result: Omit<ServerStopResult, 'schemaVersion' | 'ok'>,
 ): RunServerStopOutcome {
   return {
-    result: { schemaVersion: SERVER_STOP_SCHEMA_VERSION, ok: exitCode === 0, ...result },
+    result: serverStopResultSchema.parse({
+      schemaVersion: SERVER_STOP_SCHEMA_VERSION,
+      ok: exitCode === 0,
+      ...result,
+    }),
     exitCode,
   }
 }
