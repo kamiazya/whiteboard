@@ -266,7 +266,10 @@ Chromium (via Playwright) against a real daemon and the real built web app
 (`dist/web-app`), so `pnpm build` (from the repo root, so `apps/web`'s
 postbuild copy runs) must have already produced it. Run directly with
 `node --import tsx/esm scripts/smoke/mcp-*.mjs` or through the `pnpm smoke:*`
-alias; CI runs them in the `verify` job.
+alias. The first two run in CI's `verify` job; `smoke:read-plane` is run by
+hand until its first check is reliable — its replica pull failed to fire in 2
+of 6 local runs (tracked on the read-plane ticket), and a one-in-three flake
+must not become a required gate.
 
 | Script | What it crosses for real |
 |---|---|
