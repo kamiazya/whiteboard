@@ -4,6 +4,7 @@ import {
   saveVersionRequestSchema,
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   readDocumentKind,
   readMarkdownBody,
@@ -73,13 +74,21 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
         // alone would read another document's history through this path — the
         // refusal `restoreVersion` makes for the same reason.
         const owned = (await versionStore.list(workspaceId, path)).some((v) => v.id === id)
-        if (!owned) return c.json({ error: 'version not found' }, 404)
+        if (!owned)
+          return c.json(
+            errorBody('version_not_found', 'no version with that id belongs to this document'),
+            404,
+          )
 
         // Already the past DOCUMENT: `load` checks the frontier out against
         // the stored workspace and projects it, which is the shape restore
         // reconciles from too.
         const past = await versionStore.load(workspaceId, id)
-        if (past === null) return c.json({ error: 'version not found' }, 404)
+        if (past === null)
+          return c.json(
+            errorBody('version_not_found', 'no version with that id belongs to this document'),
+            404,
+          )
 
         const response: VersionDocumentResponse =
           readDocumentKind(past) === 'markdown'

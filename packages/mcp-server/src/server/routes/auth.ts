@@ -1,8 +1,23 @@
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
+import { getLogger } from '../log.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver, ResolvedGrant } from '../security/credential-resolver.js'
-import { type RouteScopeDecision, resolveApiRouteScope } from '../security/route-scope-registry.js'
+import type { MemberProfileStore } from '../security/member-profile-store.js'
+import {
+  gatedWorkspaceHandle,
+  type RouteScopeDecision,
+  resolveApiRouteScope,
+  ruleClaiming,
+} from '../security/route-scope-registry.js'
+import {
+  membershipRefusal,
+  type WorkspaceAccessDecision,
+  workspaceAccess,
+} from '../security/workspace-access.js'
+import { workspaceIdFromHandle } from '../workspace-handle.js'
+
+const log = getLogger('daemon-auth')
 
 // Local-daemon mode requires the shared bearer token on every /api/* request,
 // read or write. `/api/runtime/ping` is the sole exception — it is the
@@ -62,7 +77,55 @@ export function grantCoversRoute(
   return hasRequiredScopes(grant.scopes, required.scopes)
 }
 
-export function createDaemonAuthMiddleware(resolver: CredentialResolver): MiddlewareHandler {
+/** The one per-request memo of "which grant authenticated this request",
+ *  read back by `membershipAdmit` — same idiom as `workspace-handle.ts`'s
+ *  memo, and for the same reason: a later handler has no other way to reach
+ *  the grant (the daemon has no single `deps` object handlers all read from). */
+const grantMemo = new WeakMap<Request, ResolvedGrant>()
+
+/** S8 slice 2: the membership gate this middleware applies to a gated route
+ *  before `next()`. Absent (server-mode) means no gate at all — server-mode
+ *  credentials are all operator-issued kinds, which `workspaceAccess` admits
+ *  unconditionally, so a gate there would be a no-op. */
+export interface DaemonAuthGate {
+  members: MemberProfileStore
+}
+
+/**
+ * The membership step of the middleware, for a route the registry marks as
+ * workspace-addressed: answers the 403 to send, or `undefined` to admit.
+ * An undecodable handle fails CLOSED — the route is gated and carries a
+ * handle segment, so treating it like an origin-trusted route with nothing
+ * to gate would be the wrong default.
+ */
+async function membershipRefusalFor(
+  c: Context,
+  grant: ResolvedGrant,
+  gate: DaemonAuthGate,
+): Promise<Response | undefined> {
+  const gated = gatedWorkspaceHandle(c.req.method, c.req.path)
+  if (gated.kind === 'undecodable') {
+    log.warning(
+      { rule: ruleClaiming(c.req.method, c.req.path) },
+      'membership refused: undecodable workspace handle',
+    )
+    return c.json(membershipRefusal('not_a_member'), 403)
+  }
+  if (gated.kind !== 'handle') return undefined
+  const workspaceId = await workspaceIdFromHandle(c, gated.handle)
+  const access = await workspaceAccess(grant, workspaceId, gate.members)
+  if (access === 'admitted') return undefined
+  log.warning(
+    { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: access },
+    'membership refused',
+  )
+  return c.json(membershipRefusal(access), 403)
+}
+
+export function createDaemonAuthMiddleware(
+  resolver: CredentialResolver,
+  gate?: DaemonAuthGate,
+): MiddlewareHandler {
   return async (c, next) => {
     // The route-scope registry is the single source of truth for which routes
     // are public; consult it first so a route declared public there can never
@@ -81,20 +144,46 @@ export function createDaemonAuthMiddleware(resolver: CredentialResolver): Middle
       origin: c.req.header('origin'),
     })
 
-    if (grant !== null && grantCoversRoute(grant, resolveApiRouteScope(c.req.method, c.req.path))) {
-      return next()
+    if (
+      grant === null ||
+      !grantCoversRoute(grant, resolveApiRouteScope(c.req.method, c.req.path))
+    ) {
+      // One rejection for every way a request can fail: no credential, a wrong
+      // daemon token, a forged/expired/revoked access token, a valid access
+      // token whose grant does not cover this route, and a macaroon that is
+      // forged, expired, or caveated below what this route declares.
+      // Distinguishing them — even by status code — would tell an attacker which
+      // of the credentials they are close to holding, and would tell a hostile
+      // page whether a given bearer is a live grant at all. (The bodies match; a
+      // valid-but-out-of-scope token does run one extra O(1) hash lookup, a
+      // timing delta that only matters if this daemon is ever exposed beyond
+      // loopback — at which point the grant check needs a constant-time floor.)
+      return c.json({ error: 'unauthorized' }, 401)
     }
 
-    // One rejection for every way a request can fail: no credential, a wrong
-    // daemon token, a forged/expired/revoked access token, a valid access
-    // token whose grant does not cover this route, and a macaroon that is
-    // forged, expired, or caveated below what this route declares.
-    // Distinguishing them — even by status code — would tell an attacker which
-    // of the credentials they are close to holding, and would tell a hostile
-    // page whether a given bearer is a live grant at all. (The bodies match; a
-    // valid-but-out-of-scope token does run one extra O(1) hash lookup, a
-    // timing delta that only matters if this daemon is ever exposed beyond
-    // loopback — at which point the grant check needs a constant-time floor.)
-    return c.json({ error: 'unauthorized' }, 401)
+    grantMemo.set(c.req.raw, grant)
+
+    if (gate !== undefined) {
+      const refused = await membershipRefusalFor(c, grant, gate)
+      if (refused !== undefined) return refused
+    }
+
+    return next()
   }
+}
+
+/**
+ * `WorkspacesRouterOptions`/`createSyncSseRouter`'s membership check, bound
+ * to the grant this request's `createDaemonAuthMiddleware` already resolved.
+ * A composition that omits the middleware (or a request that never reached
+ * it) has no resolved grant, and this answers `requires_person_session` for
+ * it — fail-closed, never "admit by default".
+ */
+export type WorkspaceAdmit = (c: Context, workspaceId: string) => Promise<WorkspaceAccessDecision>
+
+const NO_GRANT_RESOLVED: ResolvedGrant = { kind: 'pairing', scopes: [] }
+
+export function membershipAdmit(members: MemberProfileStore): WorkspaceAdmit {
+  return (c, workspaceId) =>
+    workspaceAccess(grantMemo.get(c.req.raw) ?? NO_GRANT_RESOLVED, workspaceId, members)
 }

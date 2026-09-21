@@ -14,6 +14,8 @@
 // Narrowing what a pairing session may do is its own future increment.
 // Person-level membership gates the read plane's KEY (a later slice), not
 // this admin surface.
+
+import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   type AddMemberRequest,
   addMemberRequestSchema,
@@ -26,6 +28,7 @@ import {
   removeMemberResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import { Hono } from 'hono'
+import { invalidRequestBody } from '../app-helpers.js'
 import { getLogger } from '../log.js'
 import type { MemberProfile, MemberProfileStore } from '../security/member-profile-store.js'
 import type { PairingTokenStore } from '../security/pairing-session.js'
@@ -108,11 +111,11 @@ export function createMembershipRouter({
     try {
       body = await c.req.json()
     } catch {
-      return c.json({ error: 'invalid JSON body' }, 400)
+      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
     }
     const parsed = addMemberRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     const request: AddMemberRequest = parsed.data
 
@@ -125,7 +128,7 @@ export function createMembershipRouter({
     try {
       origin = new URL(request.origin).origin
     } catch {
-      return c.json({ error: 'malformed origin' }, 400)
+      return c.json(errorBody('invalid_origin', 'origin must be a valid http(s) URL'), 400)
     }
 
     const pin = credentials.find(origin, request.credentialId)

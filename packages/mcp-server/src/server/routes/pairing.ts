@@ -39,6 +39,7 @@
 //   token; `profileId` in the response is the MemberProfile that credential
 //   maps to (routes/membership.ts), or null when it has none yet.
 import { createHash } from 'node:crypto'
+import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   type CreateGrantResponse,
   createGrantRequestSchema,
@@ -59,6 +60,7 @@ import {
   sessionAssertResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
 import { Hono } from 'hono'
+import { invalidRequestBody } from '../app-helpers.js'
 import { getLogger } from '../log.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
@@ -129,17 +131,17 @@ export function createPairingRouter({
     try {
       body = await c.req.json()
     } catch {
-      return c.json({ error: 'invalid JSON body' }, 400)
+      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
     }
     const parsed = createGrantRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     let grant: ReturnType<PairingGrantStore['addGrant']>
     try {
       grant = grants.addGrant(parsed.data.origin)
     } catch {
-      return c.json({ error: 'origin must be a valid http(s) URL' }, 400)
+      return c.json(errorBody('invalid_origin', 'origin must be a valid http(s) URL'), 400)
     }
     const code = codes.mint({ origin: grant.origin, codeChallenge: parsed.data.codeChallenge })
     const response: CreateGrantResponse = { grantId: grant.grantId, origin: grant.origin, code }
@@ -162,7 +164,7 @@ export function createPairingRouter({
     const grantId = c.req.param('grantId')
     const revoked = grants.list().find((grant) => grant.grantId === grantId)
     if (revoked === undefined || !grants.revoke(grantId)) {
-      return c.json({ error: 'unknown grant' }, 404)
+      return c.json(errorBody('unknown_grant', 'no pairing grant has that id'), 404)
     }
     tokens.revokeOrigin(revoked.origin)
     return c.json({ revoked: true }, 200)
@@ -177,26 +179,29 @@ export function createPairingRouter({
   app.post('/api/pairing/credentials', async (c) => {
     const originHeader = c.req.header('origin')
     if (!originHeader) {
-      return c.json({ error: 'credential registration requires an Origin header' }, 403)
+      return c.json(
+        errorBody('origin_required', 'credential registration requires an Origin header'),
+        403,
+      )
     }
     let origin: URL
     try {
       origin = new URL(originHeader)
     } catch {
-      return c.json({ error: 'malformed Origin header' }, 403)
+      return c.json(errorBody('malformed_origin', 'the Origin header is not a valid origin'), 403)
     }
     if (!grants.origins().includes(origin.origin)) {
-      return c.json({ error: 'origin has no pairing grant' }, 403)
+      return c.json(errorBody('no_pairing_grant', 'this origin has no pairing grant'), 403)
     }
     let body: unknown
     try {
       body = await c.req.json()
     } catch {
-      return c.json({ error: 'invalid JSON body' }, 400)
+      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
     }
     const parsed = registerCredentialRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     const verdict = verifyWebAuthnRegistration(parsed.data, { rpId: origin.hostname })
     if (!verdict.ok) {
@@ -229,7 +234,11 @@ export function createPairingRouter({
   app.delete('/api/pairing/credentials/:credentialId', (c) => {
     const credentialId = c.req.param('credentialId')
     const matching = credentials.list().filter((pin) => pin.credentialId === credentialId)
-    if (matching.length === 0) return c.json({ error: 'unknown credential' }, 404)
+    if (matching.length === 0)
+      return c.json(
+        errorBody('unknown_credential', 'no passkey is pinned with that credential id'),
+        404,
+      )
     for (const pin of matching) credentials.revoke(pin.origin, pin.credentialId)
     tokens.revokeBoundTo(
       matching.map((pin) => ({ origin: pin.origin, credentialId: pin.credentialId })),
@@ -242,17 +251,17 @@ export function createPairingRouter({
     try {
       body = await c.req.json()
     } catch {
-      return c.json({ error: 'invalid JSON body' }, 400)
+      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
     }
     const parsed = pairingTokenRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
 
     if (parsed.data.grantType === 'code') {
       const redeemed = await codes.redeem(parsed.data.code, parsed.data.codeVerifier)
       if (redeemed === null) {
-        return c.json({ error: 'invalid or expired code' }, 403)
+        return c.json(errorBody('invalid_code', 'the pairing code is invalid or has expired'), 403)
       }
       const minted = tokens.mint(redeemed.origin)
       const response = pairingTokenResponseSchema.parse({
@@ -268,16 +277,16 @@ export function createPairingRouter({
     // Renewal: Origin-header authentication against a persisted grant.
     const originHeader = c.req.header('origin')
     if (!originHeader) {
-      return c.json({ error: 'renewal requires an Origin header' }, 403)
+      return c.json(errorBody('origin_required', 'renewal requires an Origin header'), 403)
     }
     let origin: string
     try {
       origin = new URL(originHeader).origin
     } catch {
-      return c.json({ error: 'malformed Origin header' }, 403)
+      return c.json(errorBody('malformed_origin', 'the Origin header is not a valid origin'), 403)
     }
     if (!grants.origins().includes(origin)) {
-      return c.json({ error: 'origin has no pairing grant' }, 403)
+      return c.json(errorBody('no_pairing_grant', 'this origin has no pairing grant'), 403)
     }
     const minted = tokens.mint(origin)
     const response = pairingTokenResponseSchema.parse({
@@ -333,11 +342,11 @@ export function createPairingRouter({
     try {
       body = await c.req.json()
     } catch {
-      return c.json({ error: 'invalid JSON body' }, 400)
+      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
     }
     const parsed = sessionAssertRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     const { credentialId } = parsed.data
 

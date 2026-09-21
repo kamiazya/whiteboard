@@ -199,10 +199,55 @@ from a raw network error read directly:
 
 A reason the daemon never answered (an unreachable network, an expired
 lease) never renders as removed or unpaired: only a request the daemon
-actually reached and refused does. And only the replica-key route, which
-checks membership, can say "removed" — the pairing route's refusal answers
-the same way for a revoked grant and for a lost grant store, so it is never
+actually reached and refused does. Every membership-gated route (below)
+answers a removal the same way — the pairing route's refusal answers the
+same way for a revoked grant and for a lost grant store, so neither is ever
 read as a claim about the person.
+
+## Membership gates online access
+
+A workspace that has one or more members (ADR-0041 L1) admits its
+document, sync and workspace-list routes only to a session bound to a
+member's passkey — the same decision the replica key already checked, now
+run on every ONLINE route that reaches the workspace's content. A
+**member-less** workspace keeps origin trust: a personal daemon with no
+members configured never needs a passkey, and every existing single-user
+setup keeps working unchanged. Adding the first member is what flips a
+workspace from origin trust to membership — see
+[Connect to a local daemon](../how-to/connect-to-local-daemon.md).
+
+This applies to **local-daemon mode only**. Server-mode credentials are all
+operator-issued through the external Identity Provider, which is already
+trusted with everything; there is no separate person-vs-pairing distinction
+to gate there.
+
+**Exempt from the gate: operator-issued credentials.** The daemon token, an
+open daemon's `anonymous` grant, an OAuth grant minted through the hosted
+consent page, a macaroon minted from the daemon root key, and a
+`ws-ticket` bridged from one of those — none of these can name a PERSON
+(ADR-0041's subject), so gating them would be a permanent lockout the
+moment a workspace gains its first member. Each already required the
+operator's consent to mint.
+
+**Also not gated**, on purpose, at a different bar than membership:
+managing members, pairing grants and credential pins (any paired browser
+session may do these — the accepted v1 admin posture, unrelated to who may
+*read or write documents*), and the runtime/liveness surface (which carries
+no workspace content).
+
+**`GET /api/workspaces` filters rather than refuses.** Answering a full
+list to a non-member and hiding only the documents inside it would still
+leak every OTHER member's workspace name; the list a non-member sees
+simply omits a workspace they are not a member of, the same way a search
+result omits what you cannot read rather than showing a "forbidden" row
+for it. The operator-issued daemon token sees every workspace, same as
+today.
+
+**What a removed person sees today**: the daemon page's generic load error,
+carrying the refusal's message ("this session is not signed in as a
+member" / "no such member in this workspace"). A dedicated "You were
+removed" page — the one the replica-key route's own removed state already
+has — is a follow-up increment, not yet shipped for the online routes.
 
 ## Daemon impersonation (loopback port squatting, the other direction)
 

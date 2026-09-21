@@ -5,6 +5,7 @@ import { getLogger } from '../log.js'
 import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
+import type { WorkspaceAdmit } from './auth.js'
 import {
   type AutoVersionTrigger,
   createAutoVersionTrigger,
@@ -58,6 +59,8 @@ export interface DocumentRouterOptions {
    *  echo per row (ADR-0042 decisions 1/3/5). Absent means the listing omits
    *  `tier` entirely — see `WorkspacesRouterOptions`. */
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
+  /** S8 slice 2: threaded to `createWorkspacesRouter` — see its own doc. */
+  admit?: WorkspaceAdmit
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -100,6 +103,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
     createWorkspacesRouter({
       serverDeps: options.serverDeps,
       ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
+      ...(options.admit === undefined ? {} : { admit: options.admit }),
     }),
   )
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))

@@ -8,8 +8,9 @@ import {
 import { resetInstallPromptForTests } from '../lib/install-prompt-store.js'
 import { resetShellStatusForTests, setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 import { resetSwStatusForTests } from '../pwa/sw-status-store.js'
-import { AppShell, type AppShellWorkspaces } from './AppShell.js'
+import { AppShell } from './AppShell.js'
 
 beforeEach(() => {
   localStorage.clear()
@@ -43,7 +44,7 @@ function renderShell(
   daemonConnected: boolean,
   at = '/w/default/d/c1',
   onWorkInBrowser?: () => void,
-  workspaces?: AppShellWorkspaces,
+  workspaces?: KeeperWorkspaces,
 ) {
   const router = createMemoryRouter(
     [

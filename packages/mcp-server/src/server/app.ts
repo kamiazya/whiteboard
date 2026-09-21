@@ -22,7 +22,7 @@ import type { PairingUnavailableReason } from './mcp/pairing-link.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
-import { createDaemonAuthMiddleware } from './routes/auth.js'
+import { createDaemonAuthMiddleware, membershipAdmit } from './routes/auth.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
@@ -52,6 +52,7 @@ import {
   createLocalTokenMcpHttpAuthStrategy,
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
+import type { MemberProfileStore } from './security/member-profile-store.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
@@ -84,7 +85,30 @@ if (shouldLogMcpHttpDebug()) {
 
 setResolveViewportFn(resolveViewportRequest)
 
+/**
+ * S8 slice 2's membership wiring, decided once: the `/api/*` middleware
+ * gates registry rows over the `workspace` extractor, and the two surfaces
+ * that decide membership themselves (the SSE transport per doc key; the
+ * workspace list, which filters rather than refuses) reuse the grant the
+ * middleware stashed. Both are undefined outside local-daemon mode — server
+ * mode authorizes through its own `AsyncAuthStrategy`, whose credentials
+ * are all operator-issued kinds `workspaceAccess` admits, so a gate there
+ * would be a no-op — and for a caller that wired no member-profile store
+ * (an ad-hoc/test app), which gets no gate rather than one that always
+ * refuses.
+ */
+function membershipWiring(options: AppOptions): {
+  gate: { members: MemberProfileStore } | undefined
+  admit: ReturnType<typeof membershipAdmit> | undefined
+} {
+  if (options.authMode !== 'local-daemon' || options.members === undefined) {
+    return { gate: undefined, admit: undefined }
+  }
+  return { gate: { members: options.members }, admit: membershipAdmit(options.members) }
+}
+
 export function createApp(options: AppOptions) {
+  const membership = membershipWiring(options)
   if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
     throw new Error('local-daemon mode must not receive authStrategy')
   }
@@ -189,6 +213,11 @@ export function createApp(options: AppOptions) {
       : undefined
 
   if (options.authMode === 'server-mode') {
+    // No membership gate here (S8 slice 2 is local-daemon only): this branch
+    // authorizes through its own `AsyncAuthStrategy` (external-IdP
+    // oauth-jwt), not `credential-resolver.ts`'s `ResolvedGrant` — the type
+    // `workspaceAccess` and its ADR-0041 L1/pairing membership model apply
+    // to. There is no person-vs-pairing distinction to gate here.
     app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
     app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
   } else {
@@ -207,7 +236,7 @@ export function createApp(options: AppOptions) {
     // resolver is a required argument — see `security/credential-resolver.ts`
     // for why that is load-bearing rather than tidy. What stays here is the
     // route-scope policy and the refusal shape, which are this surface's.
-    app.use('/api/*', createDaemonAuthMiddleware(credentialResolver))
+    app.use('/api/*', createDaemonAuthMiddleware(credentialResolver, membership.gate))
   }
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
@@ -373,6 +402,8 @@ export function createApp(options: AppOptions) {
     app.route('/', createDocumentServer(options.serverDeps).app)
   }
 
+  const admit = membership.admit
+
   app.route(
     '/',
     createDocumentRouter({
@@ -388,6 +419,7 @@ export function createApp(options: AppOptions) {
       ...(options.authMode === 'local-daemon' && options.replicaKeys !== undefined
         ? { replicaTier: options.replicaKeys.effectiveTier.bind(options.replicaKeys) }
         : {}),
+      ...(admit === undefined ? {} : { admit }),
     }),
   )
   // Shared versionStore so the files router can do version-aware purge
@@ -398,7 +430,7 @@ export function createApp(options: AppOptions) {
   app.route('/', createExportRouter())
   app.route('/', createFontsRouter())
   app.route('/', createViewportRouter())
-  app.route('/', createSyncSseRouter())
+  app.route('/', createSyncSseRouter(admit === undefined ? {} : { admit }))
   app.route('/', createDebugRouter({ credentialResolver }))
   app.route('/', createStatusRouter())
   // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
