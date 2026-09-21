@@ -634,10 +634,21 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `lib/spatial/element-id.ts`, so one import line became two.
   // -886 when the pointer surface left for the entry below, the second of
   // this component's two event surfaces to go.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2309,
+  // 2309 -> 2341: `applySelectionFrom`, `growToFitText` and `writeReachesIds`,
+  // the last two at module scope.
+  // gestures.ts crossed 800 when `reduceGesture` (53) gave its five biggest
+  // arms and its nested pointerup switch their own reducers, each carrying
+  // the reason that used to sit inside the arm. The file's own eight
+  // `reduce*` siblings were the precedent; this finishes that shape.
+  'apps/web/src/components/spatial-editor/gestures.ts': 845,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2341,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1052,
+  // 1052 -> 1240: the press and release paths became claimant chains and the
+  // reasons moved onto the claimants. A press-side module beside the
+  // `pointer-release.ts` that already exists is the named follow-up that
+  // brings this back down — moving mass is what a FILE budget asks for.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1240,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -860,7 +871,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // raise is REQUIRED to carry overflows it. Raising both is the mechanism
   // working, not a loophole — the alternative is a raise with no reason.
   // Raised 979 -> 983 for the entry above's own reason comment.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 983,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 994,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
