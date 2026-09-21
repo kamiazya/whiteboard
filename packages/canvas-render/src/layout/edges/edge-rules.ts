@@ -14,6 +14,11 @@
  * compose over it to build the cost tuple `optimizeSideChoices` compares.
  */
 import { diagonalInkThrough } from './diagonal-ink.js'
+import { COST_QUANTUM, inkAlongRects, quantize, selfRetracedInk, tunnelledInk } from './edge-ink.js'
+
+// Re-exported because the cost SPACE is where ink is measured, and every
+// caller that needs the quantum reaches for this module's rules.
+export { COST_QUANTUM }
 
 export type Side = 'top' | 'right' | 'bottom' | 'left'
 export type Point = { readonly x: number; readonly y: number }
@@ -403,12 +408,6 @@ export function shouldAdoptCandidate<T>(
   return lessCost(candidateCost, incumbentCost)
 }
 
-/** Quarter-pixel quantization: every PENALTY_RULES term is integral, so
- * candidate comparison is exact integer arithmetic — no float tie can
- * differ between platforms (see edge-crossing-sweep.ts's matching
- * COST_QUANTUM, which the narrow phase quantizes with independently). */
-export const COST_QUANTUM = 4
-
 /** Direction changes along a polyline, ignoring repeated/collinear points. */
 export function bendCount(path: readonly Point[]): number {
   let bends = 0
@@ -474,53 +473,6 @@ export function fullyContains(outer: Rect, inner: Rect): boolean {
 }
 
 /**
- * The one COST_QUANTUM rounding every ink term measures in. Sub-quantum
- * differences are rounding wobble, not geometry: anchors land on fractions
- * (a slid anchor can sit at 233.333...px), so terms that compare or subtract
- * coordinates must agree on where the grid is.
- */
-function quantize(n: number): number {
-  return Math.round(n * COST_QUANTUM)
-}
-
-/**
- * Quantized length of an axis-aligned path's ink lying along `rects`, in the
- * COST_QUANTUM-quantized integer space every ink-length term is measured in
- * (so the term is integral by construction). `qualifies` is the ONE thing
- * ink-length rules differ by: given a segment's fixed coordinate and the
- * rect's two borders on that axis, whether the segment counts —
- * border-tracing passes "on either border", endpoint-body-ink "strictly
- * between them". Both take the single per-axis condition rather than two
- * independent checks, which is what stops a zero-extent rect (near === far)
- * from being charged twice for the same segment.
- */
-function inkAlongRects(
-  path: readonly Point[],
-  rects: readonly Rect[],
-  qualifies: (fixed: number, near: number, far: number) => boolean,
-): number {
-  const q = quantize
-  let total = 0
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1] as Point
-    const b = path[i] as Point
-    const horizontal = a.y === b.y
-    if (!horizontal && a.x !== b.x) continue
-    for (const r of rects) {
-      const near = horizontal ? r.y : r.x
-      const far = horizontal ? r.y + r.h : r.x + r.w
-      if (!qualifies(q(horizontal ? a.y : a.x), q(near), q(far))) continue
-      const p1 = horizontal ? a.x : a.y
-      const p2 = horizontal ? b.x : b.y
-      const lo = Math.max(q(Math.min(p1, p2)), q(horizontal ? r.x : r.y))
-      const hi = Math.min(q(Math.max(p1, p2)), q(horizontal ? r.x + r.w : r.y + r.h))
-      if (hi > lo) total += hi - lo
-    }
-  }
-  return total
-}
-
-/**
  * overlap-and-intrusion: collinear axis-aligned overlap (a parallel overlap
  * has no crossing point, so a line jump cannot express it) plus, from a
  * single path's own geometry, retracing its own ink (the doubled-line
@@ -534,70 +486,15 @@ const overlapAndIntrusion: PenaltyRule = {
   name: 'overlap-and-intrusion',
   tier: 0,
   pairTerm: (triple) => triple[0],
-  selfTerm: (path, foreignBodies, _nodeBorders, endpointRects) => {
-    // The straight style's retrace: a diagonal back through the edge's
-    // own box, which no legitimate straight route has any of (diagonal-ink.ts).
-    let overlap = quantize(diagonalInkThrough(path, endpointRects))
-    // Quantized once per POINT rather than per comparison: the retrace loop
-    // below is quadratic in the segment count and re-derived the same six
-    // values for every pair. `quantize` is pure, so the sums are unchanged.
-    const qx: number[] = []
-    const qy: number[] = []
-    for (const p of path) {
-      qx.push(quantize(p.x))
-      qy.push(quantize(p.y))
-    }
-    for (let i = 1; i < path.length; i++) {
-      const a = path[i - 1] as Point
-      const b = path[i] as Point
-      // Only an axis-aligned segment can tunnel, and only through a body
-      // whose OTHER axis strictly contains it — the same reject the router
-      // and the grid search already apply. A diagonal or zero-length
-      // segment scores nothing against any body, so it skips the loop
-      // entirely rather than computing four bounds per obstacle to find
-      // that out. Boundary grazing stays excluded: an anchor ON a
-      // neighbour's border or a segment riding the margin band is
-      // bestCandidate's business, not a tunnel.
-      const horizontal = a.y === b.y && a.x !== b.x
-      const vertical = a.x === b.x && a.y !== b.y
-      if (!horizontal && !vertical) continue
-      for (const r of foreignBodies) {
-        if (horizontal) {
-          if (a.y <= r.y || a.y >= r.y + r.h) continue
-          const minX = Math.max(Math.min(a.x, b.x), r.x)
-          const maxX = Math.min(Math.max(a.x, b.x), r.x + r.w)
-          if (maxX > minX) overlap += quantize(maxX - minX)
-        } else {
-          if (a.x <= r.x || a.x >= r.x + r.w) continue
-          const minY = Math.max(Math.min(a.y, b.y), r.y)
-          const maxY = Math.min(Math.max(a.y, b.y), r.y + r.h)
-          if (maxY > minY) overlap += quantize(maxY - minY)
-        }
-      }
-    }
-    for (let i = 1; i < path.length; i++) {
-      for (let j = i + 1; j < path.length; j++) {
-        const ax1 = qx[i - 1] as number
-        const ay1 = qy[i - 1] as number
-        const ax2 = qx[i] as number
-        const ay2 = qy[i] as number
-        const bx1 = qx[j - 1] as number
-        const by1 = qy[j - 1] as number
-        const bx2 = qx[j] as number
-        const by2 = qy[j] as number
-        if (ax1 === ax2 && bx1 === bx2 && ax1 === bx1) {
-          const lo = Math.max(Math.min(ay1, ay2), Math.min(by1, by2))
-          const hi = Math.min(Math.max(ay1, ay2), Math.max(by1, by2))
-          if (hi > lo) overlap += hi - lo
-        } else if (ay1 === ay2 && by1 === by2 && ay1 === by1) {
-          const lo = Math.max(Math.min(ax1, ax2), Math.min(bx1, bx2))
-          const hi = Math.min(Math.max(ax1, ax2), Math.max(bx1, bx2))
-          if (hi > lo) overlap += hi - lo
-        }
-      }
-    }
-    return overlap
-  },
+  selfTerm: (path, foreignBodies, _nodeBorders, endpointRects) =>
+    // Three measurements, not one number computed three ways: the straight
+    // style's diagonal back through the edge's own box, an axis-aligned
+    // segment tunnelling a bystander's body, and the path retracing its own
+    // ink. They share a tier because each is the same defect — ink where the
+    // drawing says something it does not mean — and nothing else.
+    quantize(diagonalInkThrough(path, endpointRects)) +
+    tunnelledInk(path, foreignBodies) +
+    selfRetracedInk(path),
 }
 
 /** illegibility: a transversal crossing too close to a segment end to
