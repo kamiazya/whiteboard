@@ -39,9 +39,10 @@ function displayPath(path: string): string {
 // covers so a stale allowlist entry is easy to spot in review.
 const SNAKE_CASE_ALLOWLIST: ReadonlySet<string> = new Set([])
 
-// Each pattern retires one confirmed piece of dead surface from the pre-rewrite
-// skills (Excalidraw-era tool names, the removed /api/debug audit endpoint,
-// and the PNG/raster export claims the SVG-only wb_scene_render replaced).
+// Each pattern retires one piece of surface the pre-rewrite skills taught and
+// a skill must not teach now: Excalidraw-era tool names, the dev-only
+// /api/debug dump, and the PNG/raster export claims the SVG-only
+// wb_scene_render replaced.
 // A legitimate future negative mention (explaining why raster export is
 // absent, say) earns a reason-commented allowlist entry here, never a
 // weakened pattern — see skills-rewrite design risk #2.
@@ -53,11 +54,12 @@ const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
   {
     pattern: /\/api\/debug/,
     reason:
-      'the /api/debug audit endpoint was removed; audits use wb_document_list + wb_scene_digest',
+      '/api/debug is a dev-only dump (routes/debug.ts): off unless WHITEBOARD_DEBUG=1, daemon-token-only when on, and never part of the surface a skill may tell a model to use; audits use wb_document_list + wb_scene_digest',
   },
   {
     pattern: /hasActivePort/,
-    reason: 'hasActivePort was a field on the removed /api/debug response shape',
+    reason:
+      'hasActivePort is no longer a field of the /api/debug response, which answers { workspaces, cache }',
   },
   {
     pattern: /\bPNG\b/i,
