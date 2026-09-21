@@ -52,6 +52,7 @@ import {
   createLocalTokenMcpHttpAuthStrategy,
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
+import type { MemberProfileStore } from './security/member-profile-store.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
@@ -84,7 +85,30 @@ if (shouldLogMcpHttpDebug()) {
 
 setResolveViewportFn(resolveViewportRequest)
 
+/**
+ * S8 slice 2's membership wiring, decided once: the `/api/*` middleware
+ * gates registry rows over the `workspace` extractor, and the two surfaces
+ * that decide membership themselves (the SSE transport per doc key; the
+ * workspace list, which filters rather than refuses) reuse the grant the
+ * middleware stashed. Both are undefined outside local-daemon mode — server
+ * mode authorizes through its own `AsyncAuthStrategy`, whose credentials
+ * are all operator-issued kinds `workspaceAccess` admits, so a gate there
+ * would be a no-op — and for a caller that wired no member-profile store
+ * (an ad-hoc/test app), which gets no gate rather than one that always
+ * refuses.
+ */
+function membershipWiring(options: AppOptions): {
+  gate: { members: MemberProfileStore } | undefined
+  admit: ReturnType<typeof membershipAdmit> | undefined
+} {
+  if (options.authMode !== 'local-daemon' || options.members === undefined) {
+    return { gate: undefined, admit: undefined }
+  }
+  return { gate: { members: options.members }, admit: membershipAdmit(options.members) }
+}
+
 export function createApp(options: AppOptions) {
+  const membership = membershipWiring(options)
   if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
     throw new Error('local-daemon mode must not receive authStrategy')
   }
@@ -212,19 +236,7 @@ export function createApp(options: AppOptions) {
     // resolver is a required argument — see `security/credential-resolver.ts`
     // for why that is load-bearing rather than tidy. What stays here is the
     // route-scope policy and the refusal shape, which are this surface's.
-    //
-    // S8 slice 2: the membership gate rides the same middleware, over the
-    // route-scope registry's `workspace` extractor. `options.members` is
-    // undefined only for a caller that has not wired the member-profile
-    // store at all (an ad-hoc/test app), which gets no gate rather than one
-    // that always refuses.
-    app.use(
-      '/api/*',
-      createDaemonAuthMiddleware(
-        credentialResolver,
-        options.members === undefined ? undefined : { members: options.members },
-      ),
-    )
+    app.use('/api/*', createDaemonAuthMiddleware(credentialResolver, membership.gate))
   }
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
@@ -390,16 +402,7 @@ export function createApp(options: AppOptions) {
     app.route('/', createDocumentServer(options.serverDeps).app)
   }
 
-  // S8 slice 2: the same membership decision the /api/* middleware gates
-  // individual routes with, bound to the resolved grant it stashed — for the
-  // two surfaces that decide membership themselves rather than through the
-  // registry (the SSE transport decides per doc key; the workspace list
-  // filters rather than refuses). Undefined outside local-daemon mode or
-  // without a member-profile store, matching the middleware's own gate.
-  const admit =
-    options.authMode === 'local-daemon' && options.members !== undefined
-      ? membershipAdmit(options.members)
-      : undefined
+  const admit = membership.admit
 
   app.route(
     '/',

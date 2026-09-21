@@ -112,6 +112,48 @@ async function mintUnboundToken(fixture: Fixture): Promise<string> {
   return token
 }
 
+/** One session-assert round trip for an already-pinned passkey. */
+function assertPasskeySession(
+  fixture: Fixture,
+  input: {
+    keypair: ReturnType<typeof registrationFor>['keypair']
+    credentialId: string
+    token: string
+    signCount: number
+  },
+): Promise<Response> {
+  return fixture.app
+    .request('/api/pairing/session-assert/challenge', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${input.token}`, Origin: HOSTED },
+    })
+    .then(async (challengeRes) => {
+      const { challenge } = sessionAssertChallengeResponseSchema.parse(await challengeRes.json())
+      const assertion = buildAssertion({
+        privateKey: input.keypair.privateKey,
+        rpId: HOST,
+        origin: HOSTED,
+        challenge: Buffer.from(challenge, 'base64url'),
+        flags: FLAGS,
+        signCount: input.signCount,
+      })
+      return fixture.app.request('/api/pairing/session-assert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${input.token}`,
+          Origin: HOSTED,
+        },
+        body: JSON.stringify({
+          credentialId: input.credentialId,
+          authenticatorData: assertion.authenticatorData.toString('base64url'),
+          clientDataJSON: assertion.clientDataJSON.toString('base64url'),
+          signature: assertion.signature.toString('base64url'),
+        }),
+      })
+    })
+}
+
 async function bindSession(fixture: Fixture) {
   fixture.grants.addGrant(HOSTED)
   const reg = registrationFor(HOST)
@@ -137,36 +179,13 @@ async function bindSession(fixture: Fixture) {
   expect(pinRes.status).toBe(201)
 
   let signCount = 0
-  async function assertSession(assertToken: string) {
-    signCount += 1
-    const challengeRes = await fixture.app.request('/api/pairing/session-assert/challenge', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${assertToken}`, Origin: HOSTED },
+  const assertSession = (assertToken: string) =>
+    assertPasskeySession(fixture, {
+      keypair,
+      credentialId,
+      token: assertToken,
+      signCount: ++signCount,
     })
-    const { challenge } = sessionAssertChallengeResponseSchema.parse(await challengeRes.json())
-    const assertion = buildAssertion({
-      privateKey: keypair.privateKey,
-      rpId: HOST,
-      origin: HOSTED,
-      challenge: Buffer.from(challenge, 'base64url'),
-      flags: FLAGS,
-      signCount,
-    })
-    return fixture.app.request('/api/pairing/session-assert', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${assertToken}`,
-        Origin: HOSTED,
-      },
-      body: JSON.stringify({
-        credentialId,
-        authenticatorData: assertion.authenticatorData.toString('base64url'),
-        clientDataJSON: assertion.clientDataJSON.toString('base64url'),
-        signature: assertion.signature.toString('base64url'),
-      }),
-    })
-  }
 
   const bound = await assertSession(token)
   expect(bound.status).toBe(200)

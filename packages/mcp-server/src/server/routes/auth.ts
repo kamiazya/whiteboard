@@ -91,6 +91,37 @@ export interface DaemonAuthGate {
   members: MemberProfileStore
 }
 
+/**
+ * The membership step of the middleware, for a route the registry marks as
+ * workspace-addressed: answers the 403 to send, or `undefined` to admit.
+ * An undecodable handle fails CLOSED — the route is gated and carries a
+ * handle segment, so treating it like an origin-trusted route with nothing
+ * to gate would be the wrong default.
+ */
+async function membershipRefusalFor(
+  c: Context,
+  grant: ResolvedGrant,
+  gate: DaemonAuthGate,
+): Promise<Response | undefined> {
+  const gated = gatedWorkspaceHandle(c.req.method, c.req.path)
+  if (gated.kind === 'undecodable') {
+    log.warning(
+      { rule: ruleClaiming(c.req.method, c.req.path) },
+      'membership refused: undecodable workspace handle',
+    )
+    return c.json(membershipRefusal('not_a_member'), 403)
+  }
+  if (gated.kind !== 'handle') return undefined
+  const workspaceId = await workspaceIdFromHandle(c, gated.handle)
+  const access = await workspaceAccess(grant, workspaceId, gate.members)
+  if (access === 'admitted') return undefined
+  log.warning(
+    { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: access },
+    'membership refused',
+  )
+  return c.json(membershipRefusal(access), 403)
+}
+
 export function createDaemonAuthMiddleware(
   resolver: CredentialResolver,
   gate?: DaemonAuthGate,
@@ -133,28 +164,8 @@ export function createDaemonAuthMiddleware(
     grantMemo.set(c.req.raw, grant)
 
     if (gate !== undefined) {
-      const gated = gatedWorkspaceHandle(c.req.method, c.req.path)
-      if (gated.kind === 'undecodable') {
-        // The route IS membership-gated and carries a handle segment, but it
-        // cannot be read — fail closed rather than treat this the same as
-        // an origin-trusted route with nothing to gate.
-        log.warning(
-          { rule: ruleClaiming(c.req.method, c.req.path) },
-          'membership refused: undecodable workspace handle',
-        )
-        return c.json(membershipRefusal('not_a_member'), 403)
-      }
-      if (gated.kind === 'handle') {
-        const workspaceId = await workspaceIdFromHandle(c, gated.handle)
-        const access = await workspaceAccess(grant, workspaceId, gate.members)
-        if (access !== 'admitted') {
-          log.warning(
-            { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: access },
-            'membership refused',
-          )
-          return c.json(membershipRefusal(access), 403)
-        }
-      }
+      const refused = await membershipRefusalFor(c, grant, gate)
+      if (refused !== undefined) return refused
     }
 
     return next()
