@@ -12,6 +12,7 @@ import type {
   KeyedSvgRender,
   MeasureText,
   Scene,
+  SceneNode,
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -86,6 +87,26 @@ export interface DragLayersInputs {
   boxes: readonly NodeBox[]
   selectableBoxes: readonly NodeBox[]
   livePoint: Point | null
+}
+
+/**
+ * The sides the optimizer chose for the CARRIED edges this frame, kept so the
+ * frames in between can reuse them.
+ *
+ * The optimizer's trial loop costs ~8-14ms and a side decision rarely changes
+ * within a few pixels, which is what makes the cache worth its own key.
+ */
+function carriedSidesOf(
+  nodes: readonly SceneNode[],
+  carriedEdgeIds: ReadonlySet<string>,
+): Map<string, EdgeSides> {
+  const sides = new Map<string, EdgeSides>()
+  for (const node of nodes) {
+    if (node.kind === 'edge' && carriedEdgeIds.has(node.id)) {
+      sides.set(node.id, { fromSide: node.fromSide, toSide: node.toSide })
+    }
+  }
+  return sides
 }
 
 export function useDragLayers({
@@ -383,17 +404,11 @@ export function useDragLayers({
       },
     )
     if (!reuse) {
-      const sides = new Map<string, EdgeSides>()
-      for (const node of nodes) {
-        if (node.kind === 'edge' && carriedEdgeIds.has(node.id)) {
-          sides.set(node.id, { fromSide: node.fromSide, toSide: node.toSide })
-        }
-      }
       carriedSideCacheRef.current = {
         key: cacheKey,
         anchorX: dragPreview.box.x,
         anchorY: dragPreview.box.y,
-        sides,
+        sides: carriedSidesOf(nodes, carriedEdgeIds),
       }
     }
     const liveBounds = sceneBounds({ nodes })
