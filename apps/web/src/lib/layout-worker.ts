@@ -52,6 +52,7 @@ import {
   type RegisterFaceRequest,
   type WorkerFailure,
 } from './layout-worker-protocol.js'
+import { decodeStoredReply, encodeStoredReply } from './layout-worker-stored-reply.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
@@ -115,8 +116,13 @@ async function servedFromStore(request: {
 }): Promise<boolean> {
   if (request.cacheKey === undefined) return false
   const stored = await readRenderEntry(request.cacheKey)
-  if (stored === null || typeof stored !== 'object') return false
-  self.postMessage({ ...(stored as Record<string, unknown>), id: request.id })
+  // PARSED, not cast: an entry is input — written by an older build, or by
+  // another tab — and an unparseable one is a miss, which is the answer the
+  // store already gives for every other failure. `decodeStoredReply` also
+  // rebuilds what JSON could not carry; see its module.
+  const reply = decodeStoredReply(stored)
+  if (reply === null) return false
+  self.postMessage({ ...reply, id: request.id })
   return true
 }
 
@@ -127,11 +133,10 @@ function remember(
   reply: { readonly type: string; readonly id: number },
 ): void {
   if (cacheKey === undefined || !worthStoring(elapsedMs)) return
-  const { id: _id, ...rest } = reply
   // Not awaited: the reply is already posted, and a caller must never wait on
   // a cache. A write that loses its race with page teardown costs one
   // re-render.
-  void writeRenderEntry(cacheKey, rest)
+  void writeRenderEntry(cacheKey, encodeStoredReply(reply))
 }
 
 /**
