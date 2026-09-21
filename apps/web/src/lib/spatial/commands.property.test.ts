@@ -100,7 +100,15 @@ const step = fc.integer({ min: -400, max: 400 })
  * property claims. The SHAPES the generator varies — which end is on a node,
  * whether there are bends — are what this is about, and they all survive.
  */
-const tame = (value: number): number => Math.round(Math.max(-1e4, Math.min(1e4, value)))
+// `+ 0` for the same reason `toPosition` has it, and this helper is why the
+// reason is worth stating twice: written to exclude the denormal class
+// above, it introduced the NEGATIVE-ZERO one — `Math.round` answers `-0` for
+// anything in [-0.5, 0). A bend at `-0` then breaks additivity, because the
+// summed move of (0, 0) takes `moveLine`'s no-op short circuit and keeps the
+// `-0` while two real moves normalise it. The generator has to draw from the
+// space the model can hold, and since `toPosition` normalises, `-0` is not
+// in it.
+const tame = (value: number): number => Math.round(Math.max(-1e4, Math.min(1e4, value))) + 0
 
 const tameEnd = (end: CanvasLine['from']): CanvasLine['from'] =>
   end.kind === 'point' ? { ...end, point: { x: tame(end.point.x), y: tame(end.point.y) } } : end
