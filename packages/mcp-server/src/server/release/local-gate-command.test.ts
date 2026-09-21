@@ -20,17 +20,6 @@ import { extractWorkflowJobs } from './workflow-jobs.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
 
-interface WorkflowStep {
-  name: string
-  run: string | null
-  if: string | null
-}
-interface WorkflowJob {
-  id: string
-  if: string | null
-  steps: WorkflowStep[]
-}
-
 // Setup, not a gate: restoring the workspace is what a developer's checkout
 // already is. Everything else in the job is something that can fail.
 const NOT_A_GATE = new Set(['pnpm install --frozen-lockfile'])

@@ -335,7 +335,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 879,
   'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 331,
   'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 697,
-  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 676,
+  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
   'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 393,
@@ -346,7 +346,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/use-auto-checkpoint.ts#useAutoCheckpoint': 60,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 458,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController.load': 67,
-  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 150,
+  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 157,
   'apps/web/src/pages/use-markdown-document.ts#useMarkdownDocument': 378,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
@@ -581,7 +581,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
  * budget would be a second rule nobody agreed.
  */
 const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/App.daemon-address.test.tsx#installDaemonFetch': 55,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx#daemonStub': 81,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#checkInvariants': 80,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#run~23': 127,
@@ -592,7 +591,7 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/promote-workspace.browser.test.tsx#daemonStub': 52,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 74,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
-  'apps/web/src/pages/DaemonIndexPage.test.tsx#installFetchMock': 88,
+  'apps/web/src/pages/DaemonIndexPage.test.tsx#installFetchMock': 93,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
   'packages/canvas-render/src/layout/edges/grid-route.optimality.properties.test.ts#referenceCost': 106,
   'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,

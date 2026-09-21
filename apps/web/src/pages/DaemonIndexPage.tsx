@@ -479,7 +479,15 @@ export function DaemonIndexPage({
         )
         const existingPaths = new Set(rows.map((r) => r.path))
         const newPath = deriveCopyPath(sourcePath, existingPaths)
-        const created = await createDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, newPath)
+        // What the legacy route defaulted this to. NOT necessarily the
+        // source's kind — issues/daemon-duplicate-copies-kind.
+        const created = await createDocument(
+          daemonFetch,
+          daemonBaseUrl,
+          workspaceAtStart,
+          newPath,
+          'spatial',
+        )
         await updateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
         const existingNames = new Set(rows.map((r) => r.displayName))
         const newName = deriveCopyName(sourceRow?.displayName ?? sourcePath, existingNames)

@@ -1,7 +1,6 @@
 import {
   apiErrorReason,
-  type CreateDocumentResponse,
-  createDocumentResponseSchema,
+  createDocumentV1ResponseSchema,
   createGrantResponseSchema,
   type DeleteDocumentResponse,
   type DocumentBacklinksResponse,
@@ -157,28 +156,36 @@ export function listDocuments(
   )
 }
 
+/**
+ * `/api/v1`, not the legacy arm. Same operation the `wb_document_create` MCP
+ * tool runs, through the same schema, so the daemon answers one create rather
+ * than two that drift — and the answer carries the id the server minted and
+ * the workspace it filed under, where the legacy body said only `path`.
+ *
+ * `kind` is REQUIRED here because v1's input is a discriminated union on it.
+ * It was optional before, and two callers relied on that: the legacy route's
+ * request schema carried `.default('spatial')`, so a body of `{ path }` alone
+ * created a canvas. Those callers now say `'spatial'` themselves, which is
+ * the same document and a default nobody has to go and look up.
+ */
 export function createDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
   path: string,
-  kind?: DocumentKind,
+  kind: DocumentKind,
   name?: string,
-): Promise<CreateDocumentResponse> {
+): Promise<z.infer<typeof createDocumentV1ResponseSchema>> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/documents`,
-    createDocumentResponseSchema,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents`,
+    createDocumentV1ResponseSchema,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Omitted fields stay omitted (not null) so an older daemon that
-      // rejects unknown fields never sees one it can't parse.
-      body: JSON.stringify({
-        path,
-        ...(kind === undefined ? {} : { kind }),
-        ...(name === undefined ? {} : { name }),
-      }),
+      // `name` stays omitted rather than null: v1's input is `.strict()` and
+      // the field is optional, so a null would be refused outright.
+      body: JSON.stringify({ path, kind, ...(name === undefined ? {} : { name }) }),
     },
   )
 }

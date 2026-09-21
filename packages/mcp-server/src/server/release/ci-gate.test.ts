@@ -17,12 +17,6 @@ import { extractWorkflowJobs } from './workflow-jobs.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
 
-interface WorkflowJob {
-  id: string
-  if: string | null
-  needs: string[]
-}
-
 interface RunJob {
   name: string
   status: string
