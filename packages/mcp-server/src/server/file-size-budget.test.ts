@@ -277,7 +277,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 3-5): the renewal effect became a re-runnable `attemptRenewal`
   // callback (Reconnect re-runs it) and `ReplicaReadPage` gained
   // `daemonBaseUrl`/`renewal`/`onReconnect` props.
-  'apps/web/src/App.tsx': 1045,
+  // Raised 1045 -> 1090: the daemon-page address ping-pong fix marks the
+  // pathname it supersedes and re-checks daemonKept live in the rewrite's
+  // async callback.
+  'apps/web/src/App.tsx': 917,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
@@ -837,7 +840,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 951 -> 959 for the two S5 raises above (App.tsx, App.test.tsx) and
   // this entry's own two-line sentence — this file always grows by its
   // own edit too.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 960,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 963,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
