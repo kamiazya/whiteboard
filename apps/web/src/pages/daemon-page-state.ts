@@ -18,6 +18,7 @@
 //     as editing so a future direct-set path degrades to an idle editor
 //     rather than a wrong "missing" claim about no path at all.
 
+import type { MembershipRefusal } from '../lib/membership-refusal.js'
 import type {
   DocumentMissingState,
   EditingState,
@@ -25,14 +26,6 @@ import type {
   LoadingState,
   WorkspaceEmptyState,
 } from './document-page-state.js'
-
-/** The daemon refused the resolve/document read on membership grounds
- *  (ADR-0041/0042 S8) — read from `DaemonApiError.body` through
- *  `membershipRefusal`, never from a controller-field guess. */
-export interface DaemonMembershipRefusal {
-  code: 'requires_person_session' | 'not_a_member'
-  workspaceId: string
-}
 
 export interface DaemonPageStateInput {
   loading: boolean
@@ -45,7 +38,10 @@ export interface DaemonPageStateInput {
    * path (the page's `workspaceSyncDocumentId !== undefined`).
    */
   documentAtPath: boolean
-  refusal: DaemonMembershipRefusal | null
+  /** The daemon refused the resolve/document read on membership grounds
+   *  (ADR-0041/0042 S8) — read from `DaemonApiError.body` through
+   *  `membershipRefusal`, never from a controller-field guess. */
+  refusal: MembershipRefusal | null
 }
 
 /**
@@ -53,11 +49,7 @@ export interface DaemonPageStateInput {
  * grounds. Declared here rather than in the shared `document-page-state.ts`
  * — the browser keeper has no membership.
  */
-export interface MembershipRefusedState {
-  kind: 'membership-refused'
-  code: DaemonMembershipRefusal['code']
-  workspaceId: string
-}
+export type MembershipRefusedState = { kind: 'membership-refused' } & MembershipRefusal
 
 export type DaemonPageState =
   | LoadingState
@@ -72,11 +64,7 @@ export function deriveDaemonPageState(input: DaemonPageStateInput): DaemonPageSt
     return { kind: 'loading' }
   }
   if (input.refusal !== null) {
-    return {
-      kind: 'membership-refused',
-      code: input.refusal.code,
-      workspaceId: input.refusal.workspaceId,
-    }
+    return { kind: 'membership-refused', ...input.refusal }
   }
   if (input.loadError !== null) {
     return { kind: 'load-degraded', message: input.loadError }

@@ -8,7 +8,11 @@ import {
   listDocuments,
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
-import { membershipRefusal, withOnePasskeyBind } from '../lib/membership-refusal.js'
+import {
+  type MembershipRefusal,
+  membershipRefusal,
+  withOnePasskeyBind,
+} from '../lib/membership-refusal.js'
 import { passkeySupported } from '../lib/passkey-attestation.js'
 import { bindPasskeySession } from '../lib/passkey-session.js'
 
@@ -19,14 +23,6 @@ export interface UseDaemonDocumentControllerOptions {
   workspaceId?: string
   path?: string
   daemonFetch: typeof fetch
-}
-
-/** A membership refusal the resolve encountered (ADR-0041/0042 S8), with the
- *  workspace it pertains to — known once listWorkspaces has resolved, even
- *  before `workspaceId` below is admitted. */
-export interface DaemonDocumentControllerRefusal {
-  code: 'requires_person_session' | 'not_a_member'
-  workspaceId: string
 }
 
 export interface DaemonDocumentController {
@@ -46,9 +42,10 @@ export interface DaemonDocumentController {
   switchDocument: (path: string) => void
   createDocument: (path: string) => Promise<void>
   createError: string | null
-  /** A membership refusal the resolve could not get past — `null` once
-   *  admitted. See `DaemonDocumentControllerRefusal`. */
-  refusal: DaemonDocumentControllerRefusal | null
+  /** A membership refusal the resolve could not get past (ADR-0041/0042 S8),
+   *  naming the workspace — known once listWorkspaces has resolved, even
+   *  before `workspaceId` above is admitted. `null` once admitted. */
+  refusal: MembershipRefusal | null
   /** Re-runs the resolve, resetting the once-only passkey-bind guard so it
    *  may bind exactly one more time. */
   retry: () => void
@@ -76,7 +73,7 @@ export function useDaemonDocumentController(
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [refusal, setRefusal] = useState<DaemonDocumentControllerRefusal | null>(null)
+  const [refusal, setRefusal] = useState<MembershipRefusal | null>(null)
 
   // Monotonic sequence over the mount resolution, so a slower earlier
   // resolution can never clobber a later, already-committed selection. It was

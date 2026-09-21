@@ -14,6 +14,13 @@ import { DaemonApiError } from './daemon-api-client.js'
  *  `loadError` path, unclassified. */
 export type MembershipRefusalAction = 'requires_person_session' | 'not_a_member'
 
+/** A refusal with the workspace it pertains to — the shape the controller
+ *  reports and the page state renders. */
+export interface MembershipRefusal {
+  code: MembershipRefusalAction
+  workspaceId: string
+}
+
 export function membershipRefusal(err: unknown): MembershipRefusalAction | null {
   if (!(err instanceof DaemonApiError)) return null
   const parsed = membershipRefusalSchema.safeParse(err.body)

@@ -69,13 +69,8 @@ export class DaemonApiError extends Error {
 }
 
 async function parseProblemDetails(res: Response): Promise<{ message: string; body: unknown }> {
-  try {
-    const body: unknown = await res.json()
-    const reason = apiErrorReason(body)
-    return { message: reason ?? `Request failed (${res.status}).`, body }
-  } catch {
-    return { message: `Request failed (${res.status}).`, body: undefined }
-  }
+  const body: unknown = await res.json().catch(() => undefined)
+  return { message: apiErrorReason(body) ?? `Request failed (${res.status}).`, body }
 }
 
 async function fetchAndParse<T>(
