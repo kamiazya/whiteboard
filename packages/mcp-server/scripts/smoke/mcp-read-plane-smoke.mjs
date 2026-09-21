@@ -283,45 +283,51 @@ try {
   }, daemonBaseUrl)
 
   const page = await context.newPage()
+  // Response METADATA is recorded synchronously, in arrival order, so a
+  // log slice taken between two marks is complete and never reordered by a
+  // slow body read; the body reads that fill in `error` and capture the key
+  // are tracked in `pendingBodies` and awaited by `settleResponses()` before
+  // every assertion that reads the log.
+  const pendingBodies = []
   page.on('response', (res) => {
-    void (async () => {
-      let url
-      try {
-        url = new URL(res.url())
-      } catch {
-        return
-      }
-      if (url.origin !== daemonBaseUrl) return
-      let errorField
-      let replicaKeyBody
-      const contentType = res.headers()['content-type'] ?? ''
-      if (contentType.includes('application/json')) {
-        try {
-          const json = await res.json()
-          errorField = typeof json?.error === 'string' ? json.error : undefined
+    let url
+    try {
+      url = new URL(res.url())
+    } catch {
+      return
+    }
+    if (url.origin !== daemonBaseUrl) return
+    const index = daemonResponses.length
+    const entry = {
+      method: res.request().method(),
+      path: url.pathname,
+      status: res.status(),
+      error: undefined,
+    }
+    daemonResponses.push(entry)
+    const contentType = res.headers()['content-type'] ?? ''
+    if (!contentType.includes('application/json')) return
+    pendingBodies.push(
+      res
+        .json()
+        .then((json) => {
+          entry.error = typeof json?.error === 'string' ? json.error : undefined
           // Captured so check 1's sealed-at-rest assertion can check the
           // storage dump against this run's ACTUAL key bytes rather than a
-          // fixture value — kept in the side-channel map below, never in
+          // fixture value — kept in the side-channel map, never in
           // `daemonResponses` itself, so a failure message that stringifies
           // a log slice can never print key bytes.
           if (url.pathname.endsWith('/replica-key') && res.status() === 200) {
-            replicaKeyBody = json
+            replicaKeyBodies.set(index, json)
           }
-        } catch {
+        })
+        .catch(() => {
           // Not a body worth reading (or the response already closed) — the
           // status code alone still tells every check below what happened.
-        }
-      }
-      const index = daemonResponses.length
-      daemonResponses.push({
-        method: res.request().method(),
-        path: url.pathname,
-        status: res.status(),
-        error: errorField,
-      })
-      if (replicaKeyBody !== undefined) replicaKeyBodies.set(index, replicaKeyBody)
-    })()
+        }),
+    )
   })
+  const settleResponses = () => Promise.all(pendingBodies.splice(0))
   page.on('console', (msg) => {
     // Every refusal below is asked for, and Chromium logs each 4xx as a
     // resource error; only anything else is worth a reader's attention.
@@ -458,6 +464,7 @@ try {
     .catch(() => false)
   check(registryWritten, 'the replica registry entry is written after the pull')
 
+  await settleResponses()
   const check1Log = daemonResponses.slice(mark)
   const sessionAssertOk = check1Log.some(
     (e) => e.path === '/api/pairing/session-assert' && e.status === 200,
@@ -474,13 +481,40 @@ try {
 
   // --- sealed-at-rest: dump IndexedDB + localStorage from the page and
   // assert neither the marker nor the real key bytes appear anywhere.
-  const sealedDump = await page.evaluate(async () => {
+  const replicaKeyBody = replicaKeyIndex === -1 ? undefined : replicaKeyBodies.get(replicaKeyIndex)
+  const realKey = replicaKeyBody?.workspaceKey
+  const realSalt = replicaKeyBody?.workspaceKeySalt
+  const b64uToBytes = (text) => Array.from(Buffer.from(text, 'base64url'))
+  const needles =
+    typeof realKey === 'string' && typeof realSalt === 'string'
+      ? [b64uToBytes(realKey), b64uToBytes(realSalt)]
+      : []
+  const sealedDump = await page.evaluate(async (needleBytes) => {
+    // Strings are searched as text; binary values are searched as BYTES
+    // (a persisted key would be the decoded 32 bytes, not its base64url
+    // spelling, and a UTF-8 decode of ciphertext can never contain it);
+    // a persisted CryptoKey is a leak on its own, whatever it holds.
+    const strings = []
+    let cryptoKeys = 0
+    let byteHits = 0
+    const hasSubsequence = (hay, needle) => {
+      outer: for (let i = 0; i + needle.length <= hay.length; i++) {
+        for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer
+        return true
+      }
+      return false
+    }
     function collectStrings(value, out) {
       if (typeof value === 'string') out.push(value)
-      // decode() takes one BufferSource; a view decodes its own byte range.
-      else if (value instanceof ArrayBuffer || ArrayBuffer.isView(value))
-        out.push(new TextDecoder().decode(value))
-      else if (Array.isArray(value)) {
+      else if (typeof CryptoKey !== 'undefined' && value instanceof CryptoKey) cryptoKeys += 1
+      else if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+        const bytes =
+          value instanceof ArrayBuffer
+            ? new Uint8Array(value)
+            : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+        for (const needle of needleBytes) if (hasSubsequence(bytes, needle)) byteHits += 1
+        out.push(new TextDecoder().decode(bytes))
+      } else if (Array.isArray(value)) {
         for (const item of value) collectStrings(item, out)
       } else if (value && typeof value === 'object') {
         for (const item of Object.values(value)) collectStrings(item, out)
@@ -492,7 +526,6 @@ try {
       req.onsuccess = () => resolveDb(req.result)
       req.onerror = () => rejectDb(req.error)
     })
-    const strings = []
     for (const storeName of Array.from(db.objectStoreNames)) {
       const records = await new Promise((resolveStore, rejectStore) => {
         const req = db.transaction([storeName], 'readonly').objectStore(storeName).getAll()
@@ -507,24 +540,22 @@ try {
       const key = window.localStorage.key(i)
       if (key) localStorageStrings.push(window.localStorage.getItem(key) ?? '')
     }
-    return { idb: strings, localStorage: localStorageStrings }
-  })
+    return { idb: strings, localStorage: localStorageStrings, cryptoKeys, byteHits }
+  }, needles)
   const markerLeaked =
     sealedDump.idb.some((s) => s.includes(MARKER)) ||
     sealedDump.localStorage.some((s) => s.includes(MARKER))
   check(!markerLeaked, 'IndexedDB and localStorage hold no plaintext marker')
 
-  const replicaKeyBody = replicaKeyIndex === -1 ? undefined : replicaKeyBodies.get(replicaKeyIndex)
-  const realKey = replicaKeyBody?.workspaceKey
-  const realSalt = replicaKeyBody?.workspaceKeySalt
   const keyLeaked =
-    typeof realKey === 'string' &&
-    typeof realSalt === 'string' &&
-    (sealedDump.idb.some((s) => s.includes(realKey) || s.includes(realSalt)) ||
-      sealedDump.localStorage.some((s) => s.includes(realKey) || s.includes(realSalt)))
+    sealedDump.byteHits > 0 ||
+    sealedDump.cryptoKeys > 0 ||
+    sealedDump.idb.some((s) => s.includes(realKey) || s.includes(realSalt)) ||
+    sealedDump.localStorage.some((s) => s.includes(realKey) || s.includes(realSalt))
   check(
-    typeof realKey === 'string' && typeof realSalt === 'string' && !keyLeaked,
-    "IndexedDB and localStorage hold no bytes of this run's real workspace key",
+    needles.length === 2 && !keyLeaked,
+    "IndexedDB and localStorage hold no bytes of this run's real workspace key (raw, base64url, or as a CryptoKey)",
+    `byteHits=${sealedDump.byteHits} cryptoKeys=${sealedDump.cryptoKeys} keyKnown=${needles.length === 2}`,
   )
 
   // ==================================================================
@@ -586,6 +617,7 @@ try {
     .catch(() => false)
   check(markerVisibleAgain, 'the daemon page shows the marker again after reconnecting')
 
+  await settleResponses()
   const check3Log = daemonResponses.slice(mark)
   const noPushAfterReconnect = check3Log.filter((e) =>
     e.path.endsWith('/workspace-document/update'),
@@ -635,6 +667,7 @@ try {
       daemonResponses.slice(mark).some((e) => e.path.endsWith('/replica-key') && e.status === 403),
     15_000,
   )
+  await settleResponses()
   const check4Log = daemonResponses.slice(mark)
   const sessionAssertIdx = check4Log.findIndex(
     (e) => e.path === '/api/pairing/session-assert' && e.status === 200,
@@ -712,8 +745,13 @@ async function waitUntil(fn, timeoutMs) {
   return await fn()
 }
 
-if (consoleErrors.length > 0) {
-  console.log(`  note  browser console errors observed:\n    ${consoleErrors.join('\n    ')}`)
+// Check 2 stops the daemon on purpose, so a refused connection is the one
+// console error the run expects; anything else is a page error nobody asked
+// for and fails the run rather than being noted.
+const unexpectedConsole = consoleErrors.filter((m) => !/ERR_CONNECTION_REFUSED/.test(m))
+if (unexpectedConsole.length > 0) {
+  console.error(`  FAIL  browser console errors observed:\n    ${unexpectedConsole.join('\n    ')}`)
+  failed = true
 }
 if (failed) {
   console.error(`${TAG} FAIL`)
