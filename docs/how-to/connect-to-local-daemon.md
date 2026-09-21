@@ -207,15 +207,17 @@ one step from **Settings → Connections → This workspace**:
    **Reload and continue from the daemon** to switch to working from the
    daemon, or keep working in the browser.
 
-The confirmation also shows whether a **passkey** is registered for this
-daemon. With one, the move asks you to confirm it with your passkey (Face ID,
-Touch ID, Windows Hello, or a security key), and the daemon records that a
-person made the move beside the checkpoint it saves for each document; the
-History panel then shows those points as *verified*. Without one, the move
-still works and is recorded as made without a passkey — you can register one
-right there in the dialog. A passkey belongs to the web app's origin and to
-that daemon: pairing another daemon, or using the app from another address,
-means registering another.
+Moving a workspace **requires a passkey**. The confirmation shows whether
+one is registered for this daemon; with one, the move asks you to confirm it
+with your passkey (Face ID, Touch ID, Windows Hello, or a security key), and
+the daemon records that a person made the move beside the checkpoint it saves
+for each document — the History panel then shows those points as *verified*.
+Without one, **Move workspace** stays disabled and you register a passkey
+right there in the dialog. A browser that cannot use passkeys at all cannot
+move a workspace; open the app in one that can, or export the documents you
+need. A passkey belongs to the web app's origin and to that daemon: pairing
+another daemon, or using the app from another address, means registering
+another.
 
 ## Manage this daemon's passkeys
 

@@ -32,6 +32,7 @@ import { getAppLogger } from '../../lib/app-logger.js'
 import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
 import type { ConnectedDaemon } from '../../lib/daemon-auth-fetch.js'
 import {
+  type AttestOutcome,
   attestPromotion,
   getRegisteredPasskey,
   type PasskeyCredentials,
@@ -80,8 +81,12 @@ export interface PromoteWorkspaceSectionProps {
 
 /**
  * The passkey a promotion is confirmed with (ADR-0039 decision 4: asked at
- * the trust boundary, and nowhere else). `none` is not a failure — the move
- * still lands, recorded without evidence and saying so.
+ * the trust boundary, and nowhere else). `none` BLOCKS the move now (user
+ * decision, 2026-09-22): the destination generalised from the daemon on
+ * this machine to a keeper the user does not own, so an unconfirmed
+ * crossing is no longer a thing to record and say so about. `unsupported`
+ * blocks it for the same reason and is the sharper cost — a browser without
+ * WebAuthn cannot transfer at all.
  */
 type PasskeyState =
   | { kind: 'unsupported' }
@@ -89,6 +94,25 @@ type PasskeyState =
   | { kind: 'registering' }
   | { kind: 'registered' }
   | { kind: 'error'; detail: string }
+
+/**
+ * The question `promoteWorkspace` always asks. It is ALWAYS passed, and
+ * answering `null` refuses the move — a credential registered then
+ * forgotten, or a browser that cannot hold one, is exactly the case a
+ * keeper the user does not own must not accept unconfirmed (ADR-0039's
+ * 2026-09-22 addendum). The button is disabled without a passkey, so the
+ * `undefined` arm is the race rather than the normal path.
+ */
+function signerFor(
+  daemonBaseUrl: string,
+  workspaceId: string,
+  credentials: PasskeyCredentials | undefined,
+): (snapshot: Uint8Array) => Promise<AttestOutcome | null> {
+  return (snapshot) =>
+    credentials === undefined
+      ? Promise.resolve(null)
+      : attestPromotion({ daemonBaseUrl, workspaceId, snapshot, credentials })
+}
 
 type PromoteFlow =
   | { step: 'idle' }
@@ -109,7 +133,9 @@ function describeResult(result: PromotionResultRecord): string {
     `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
   ]
   if (result.attested === true) parts.push('Your passkey confirmed this move')
-  else if (result.attested === false) parts.push('Recorded without a passkey')
+  // `false` is the DESTINATION reporting it did not verify what this side
+  // signed — not an unconfirmed move, which is refused before the POST.
+  else if (result.attested === false) parts.push('The destination did not record a confirmation')
   if (result.shadowedPaths.length > 0) {
     parts.push(
       `${result.shadowedPaths.length} path${result.shadowedPaths.length === 1 ? '' : 's'} already existed there — both versions are kept, the earlier one marked shadowed: ${result.shadowedPaths.join(', ')}`,
@@ -272,9 +298,12 @@ export function PromoteWorkspaceSection({
 
   const runPromotion = useCallback(
     async (targetId: string, target?: WorkspaceIdentity) => {
-      // A move confirmed mid-registration would be recorded without the
-      // evidence the person is in the middle of providing.
-      if (!daemon || passkey.kind === 'registering') return
+      // The button is disabled in every other passkey state, and this is
+      // the same rule written where the move actually happens: a transfer
+      // to another keeper is confirmed with a passkey, so one that is
+      // absent, unsupported, failed or still being registered is not a
+      // move to be attempted.
+      if (!daemon || passkey.kind !== 'registered') return
       setFlow({ step: 'running', phase: 'record' })
       let record: PromotionResultRecord
       try {
@@ -283,26 +312,13 @@ export function PromoteWorkspaceSection({
           import('../../lib/promote-workspace.js'),
           import('../../lib/browser-workspace-docs.js'),
         ])
-        const credentials = credentialsOf()
         const outcome = await promoteWorkspace({
           fetch: fetchImpl,
-          daemonBaseUrl: daemon.baseUrl,
+          keeperBaseUrl: daemon.baseUrl, // the new KEEPER; today, this daemon
           workspaceId: targetId,
           workspaceDocs: new BrowserWorkspaceDocs(),
           onProgress: (phase) => setFlow({ step: 'running', phase }),
-          // Asked only when a passkey is registered here; `null` from a
-          // registered-then-forgotten one falls back to an unattested move.
-          ...(passkey.kind === 'registered' && credentials !== undefined
-            ? {
-                attest: (snapshot: Uint8Array) =>
-                  attestPromotion({
-                    daemonBaseUrl: daemon.baseUrl,
-                    workspaceId: targetId,
-                    snapshot,
-                    credentials,
-                  }),
-              }
-            : {}),
+          attest: signerFor(daemon.baseUrl, targetId, credentialsOf()),
         })
         // The demote pull (ADR-0023 decision 2): cache the daemon's merged
         // record back into this browser's planes. Best-effort — the move
@@ -546,11 +562,12 @@ export function PromoteWorkspaceSection({
                 )}
               </div>
               {/* The passkey block: what the move will be confirmed with,
-                  and the one place a passkey is registered (ADR-0039). No
-                  settled state here blocks the move — a browser without one
-                  still moves, and the result says the move carries no
-                  evidence. Only a registration in flight holds it, so the
-                  move cannot be recorded without the proof being made. */}
+                  and the one place a passkey is registered (ADR-0039).
+                  Anything but `registered` BLOCKS the move (user decision,
+                  2026-09-22) — the destination is a keeper the user may not
+                  own, so there is no unconfirmed crossing to record. The
+                  block says which state it is in, because a disabled button
+                  with no reason beside it is the same as a broken one. */}
               <div
                 data-testid="promote-passkey"
                 className="flex flex-col gap-1.5 rounded-md border px-3 py-2 text-xs"
@@ -564,8 +581,8 @@ export function PromoteWorkspaceSection({
                 {passkey.kind === 'none' && (
                   <>
                     <p>
-                      No passkey for this daemon yet. Without one, the move is recorded without
-                      proof that a person made it.
+                      No passkey for this daemon yet. Register one to move the workspace — a move to
+                      another keeper is confirmed with a passkey.
                     </p>
                     <Button
                       type="button"
@@ -607,7 +624,10 @@ export function PromoteWorkspaceSection({
                   </>
                 )}
                 {passkey.kind === 'unsupported' && (
-                  <p>This browser cannot use passkeys, so the move will be recorded without one.</p>
+                  <p>
+                    This browser cannot use passkeys, so it cannot move the workspace. Open this
+                    page in a browser that can, or export the documents you need.
+                  </p>
                 )}
               </div>
               <DialogFooter>
@@ -617,7 +637,7 @@ export function PromoteWorkspaceSection({
                 <Button
                   type="button"
                   data-testid="promote-confirm"
-                  disabled={passkey.kind === 'registering'}
+                  disabled={passkey.kind !== 'registered'}
                   onClick={() =>
                     void runPromotion(
                       flow.targetId,
