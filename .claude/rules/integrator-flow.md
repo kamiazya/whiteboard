@@ -1,6 +1,6 @@
 # Integrator Flow (git / CI mechanics)
 
-Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, PreToolUse hooks block `gh pr create` while the branch is behind origin/main and when a diff a human can see ships with no figure in the body, and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause rather than working around it.
+Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, PreToolUse hooks block `gh pr create` while the branch is behind origin/main and when a diff a human can see ships with no figure in the body, block the FIRST `gh pr merge` on a head carrying inline review comments (printing their bodies, so the findings arrive before the decision), and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause rather than working around it.
 
 ## pnpm-lock.yaml conflict recipe
 
@@ -14,6 +14,17 @@ pnpm install --frozen-lockfile      # must pass before pushing
 ```
 
 Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "two copies of the same version" type-identity errors, the branch is usually stale — merge current main first before deeper archaeology.
+
+## The merge gate shows the comments before you decide
+
+`pre-merge-show-comments.mjs` blocks the first `gh pr merge` on a head with
+inline review comments and prints their bodies; the second attempt on the same
+head goes through, and a new commit re-arms it. The prose rule did not hold
+because the comment count and the merge kept landing in the SAME shell call,
+so the number printed after the merge had been sent.
+
+Why it blocks on inline comments alone, why not on unresolved threads, and the
+rate it fires at are measured in `.claude/scripts/pre-merge-comments-lib.mjs`.
 
 ## After a merge, prune without a refspec
 

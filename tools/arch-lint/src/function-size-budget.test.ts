@@ -187,6 +187,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/verb-catalog.tsx#verbCatalogItems': 64,
   'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner': 649,
   'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner.runProbe': 92,
+  // A Settings card of the same shape as its two neighbours below (334 and
+  // 522): the rows, the shared confirm dialog and the two-step delete are
+  // one screen's worth of state, and the row already IS extracted
+  // (`CopyRowItem`). Splitting further would separate the dialog from the
+  // `pending`/`deleting` state that decides whether it may close. 126 -> 147
+  // when the registry read learned to degrade: a browser that refuses
+  // IndexedDB has to leave the card listing what it CAN read rather than
+  // rejecting, and that branch is where the explanation lives.
+  'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 147,
   'apps/web/src/components/settings/MembersCard.tsx#MembersCard': 334,
   'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 522,
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 163,
@@ -339,7 +348,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
   'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 393,
-  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 89,
+  // 89 -> 94: the Copies-on-this-device card mounts in BOTH branches, and
+  // the disconnected one is where it matters most — with no daemon every
+  // copy is browser-kept, so a card hidden there would hide the whole list.
+  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 94,
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
   'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 66,

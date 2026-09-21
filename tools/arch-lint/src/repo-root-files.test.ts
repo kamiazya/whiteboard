@@ -25,11 +25,6 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
  * this test pass, the file probably belongs in a package instead.
  */
 const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
-  // DeepSource reads its configuration from the repository root and nowhere
-  // else, and it must be on the DEFAULT BRANCH or the analysis never
-  // activates. One analysis per monorepo, so it has no package to live in —
-  // sonar-project.properties' reason, for the same shape of tool.
-  '.deepsource.toml',
   '.dockerignore',
   '.env.server.example',
   '.gitignore',

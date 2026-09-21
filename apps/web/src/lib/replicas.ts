@@ -57,6 +57,38 @@ export interface ReplicaMatch {
   syncedFrontier?: string
 }
 
+/**
+ * Every copy this device keeps a registry claim for.
+ *
+ * The Settings list of local copies cannot be built from the byte store —
+ * `IdbDocumentStore` has no list method — so the inventory is this registry
+ * plus the browser workspace rows, which are disjoint: a replica never gets
+ * a `workspaces` row.
+ */
+export function listReplicas(settings: UserSettings): ReplicaMatch[] {
+  const replicas = settings.storage.replicas
+  if (replicas === undefined) return []
+  return Object.entries(replicas).map(([workspaceId, entry]) => ({ workspaceId, ...entry }))
+}
+
+/**
+ * Drops one workspace's registry claim. The FIRST of the two steps a delete
+ * takes, and never the whole delete: this record's own schema says a missing
+ * entry means "claim no cache", not "the bytes are gone", so the caller
+ * deletes the record too.
+ *
+ * Claim first, bytes second — the order `demoteBrowserWorkspace` takes, for
+ * its reason: a failure between the two leaves bytes nothing points at,
+ * which the next pull overwrites, whereas the reverse leaves a claim
+ * pointing at a record that is gone and every reader of it has to cope.
+ */
+export function forgetReplicaEntry(current: UserSettings, workspaceId: string): UserSettings {
+  const replicas = current.storage.replicas
+  if (replicas?.[workspaceId] === undefined) return current
+  const { [workspaceId]: _dropped, ...rest } = replicas
+  return { ...current, storage: { ...current.storage, replicas: rest } }
+}
+
 export function findReplicaForHandle(settings: UserSettings, handle: string): ReplicaMatch | null {
   const replicas = settings.storage.replicas
   if (replicas === undefined) return null

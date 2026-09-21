@@ -170,6 +170,28 @@ describe('theme fonts', () => {
     expect(mod.themeFacesKey()).toBe('Yomogi')
   })
 
+  it('sorts the key by code unit, so arrival order and the machine do not reach it', async () => {
+    // The case above holds ONE face, so the sort it is named for cannot
+    // fail there: a single-element list is already sorted, whatever the
+    // comparator. Three faces, arriving in an order that is neither the
+    // code-unit order nor the locale one, is what distinguishes them.
+    //
+    // `Noto Sans JP` and `Noto Sans Japanese` are both real Google families
+    // and they are the pair that separates the two comparators: code units
+    // put `JP` first (`P` = 0x50 < `a` = 0x61), while `localeCompare` folds
+    // case and answers `Japanese` first. A key that disagrees between two
+    // machines is a key that answers one realm's ask with another's picture.
+    const mod = await import('./theme-fonts.js')
+    const families = ['Noto Sans Japanese', 'Zen Maru Gothic', 'Noto Sans JP']
+    const { fetchFn } = daemonFetch(
+      families.map((family) => ({ id: family.toLowerCase().replaceAll(' ', '-'), family })),
+    )
+
+    await mod.loadThemeFonts({ fetchFn, daemonBaseUrl: 'http://d', families })
+
+    expect(mod.themeFacesKey()).toBe('Noto Sans JP,Noto Sans Japanese,Zen Maru Gothic')
+  })
+
   it('names the held faces an SVG actually declares, for the PNG export to embed', async () => {
     const mod = await import('./theme-fonts.js')
     const { fetchFn } = daemonFetch([{ id: 'yomogi', family: 'Yomogi' }])
