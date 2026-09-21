@@ -36,6 +36,7 @@ import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/mea
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import { outlineFromSpatial } from './document-outline.js'
+import { unhandledKind } from './exhaustive.js'
 import { resolveRectColor } from './favicon.js'
 import { createContentCacheStore } from './layout-content-caches.js'
 import {
@@ -49,6 +50,7 @@ import {
   type OutlineRequest,
   type OutlineResponse,
   type RegisterFaceRequest,
+  type WorkerFailure,
 } from './layout-worker-protocol.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
@@ -132,182 +134,138 @@ function remember(
   void writeRenderEntry(cacheKey, rest)
 }
 
-self.onmessage = async (
-  event: MessageEvent<
-    | LayoutRequest
-    | MarkdownRailRequest
-    | MarkdownRenderRequest
-    | OutlineRequest
-    | RegisterFaceRequest
-  >,
-) => {
-  const request = event.data
-  if (request.type === 'register-face') {
-    // Chained, and awaited by every later message below: an async handler
-    // returns at its first await, so the next message would otherwise run
-    // while `face.load()` is still pending and measure with the bundled
-    // family — `registerFontBytes` records the family only once the face
-    // is usable.
-    facesReady = facesReady.then(() => registerFontBytes(request.family, request.bytes))
-    await facesReady
-    return
+/**
+ * Posts the one failure reply every request here answers with.
+ *
+ * `cause` is either a refusal reason this worker chose or whatever was
+ * thrown; `String` reads both the same way, so there is one shape and one
+ * call rather than a font gate and a catch block written out per arm.
+ */
+function fail(id: number, cause: unknown): void {
+  const failed: WorkerFailure = {
+    type: 'failed',
+    id,
+    reason: cause instanceof Error ? cause.message : String(cause),
   }
-  await facesReady
-  // Before the font gate and before any work: a stored answer is the answer,
-  // and the gate exists to stop a render being MEASURED with the wrong face
-  // rather than to re-check one already drawn with the right one.
-  if (request.type !== 'markdown-rail' && (await servedFromStore(request))) return
-  if (request.type === 'outline') {
-    try {
-      if (request.body !== undefined) {
-        // The only arm that lays anything out, so the only one the font gate
-        // applies to: an outline measured with a system face puts its blocks
-        // where an export of the same body would not.
-        if ((await fontReady) !== 'loaded') {
-          const failed: OutlineResponse = {
-            type: 'failed',
-            id: request.id,
-            reason: FONT_DEGRADED,
-          }
-          self.postMessage(failed)
-          return
-        }
-        const startedAt = performance.now()
-        const { blocks } = layoutMarkdownOutline(request.body, {
-          measure,
-          maxWidth: request.maxWidth,
-        })
-        const elapsed = performance.now() - startedAt
-        const done: OutlineResponse = {
-          type: 'outlined',
-          id: request.id,
-          // A scene block carries no colour of its own; resolving it here is
-          // what makes a markdown outline the same TYPE as a spatial one to
-          // every consumer, rather than one each consumer has to default.
-          rects: blocks.map((block) => ({ ...block, color: resolveRectColor(undefined) })),
-        }
-        self.postMessage(done)
-        remember(request.cacheKey, elapsed, done)
-        return
-      }
-      // A corrupt snapshot throws here and lands in the catch below as a
-      // `failed` reply — the row keeps its kind icon and the tab its static
-      // one. It must not take the worker down: every request queued behind it
-      // belongs to a different document.
-      const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+  self.postMessage(failed)
+}
+
+/**
+ * Whether this realm can measure with the face the answer must be measured
+ * with — refusing on the caller's behalf when it cannot.
+ *
+ * Verified present in Chromium, WebKit and Firefox, but Playwright's WebKit
+ * is not Safari, and a browser that lacks a worker `FontFaceSet` would
+ * measure with a system font and produce a picture that disagrees with an
+ * export of the same document. Refusing is the only safe answer: the caller
+ * does the work on the main thread, where the face is known to be loaded.
+ */
+async function measurable(id: number): Promise<boolean> {
+  if ((await fontReady) === 'loaded') return true
+  fail(id, FONT_DEGRADED)
+  return false
+}
+
+async function handleOutline(request: OutlineRequest): Promise<void> {
+  try {
+    if (request.body !== undefined) {
+      // The only arm that lays anything out, so the only one the font gate
+      // applies to: an outline measured with a system face puts its blocks
+      // where an export of the same body would not.
+      if (!(await measurable(request.id))) return
       const startedAt = performance.now()
-      // Read here rather than on the asking thread: this is the one place
-      // the canvas is already decoded, and decoding it again to read one
-      // facet is exactly the cost the snapshot travels here to avoid.
-      const symbol = resolveCanvasSymbol(canvas)
-      const done: OutlineResponse = {
-        type: 'outlined',
-        id: request.id,
-        rects: outlineFromSpatial(canvas),
-        ...(symbol === undefined ? {} : { symbol }),
-      }
-      self.postMessage(done)
-      remember(request.cacheKey, performance.now() - startedAt, done)
-    } catch (error) {
-      const failed: OutlineResponse = {
-        type: 'failed',
-        id: request.id,
-        reason: error instanceof Error ? error.message : String(error),
-      }
-      self.postMessage(failed)
-    }
-    return
-  }
-  if (request.type === 'markdown-render') {
-    try {
-      // Same font gate as the other two: a thumbnail measured with a system
-      // face wraps its lines elsewhere and stops being a picture of the
-      // document it labels.
-      if ((await fontReady) !== 'loaded') {
-        const failed: MarkdownRenderResponse = {
-          type: 'failed',
-          id: request.id,
-          reason: FONT_DEGRADED,
-        }
-        self.postMessage(failed)
-        return
-      }
-      const startedAt = performance.now()
-      const { keyed, blocks } = renderMarkdownPreview(request.body, {
+      const { blocks } = layoutMarkdownOutline(request.body, {
         measure,
         maxWidth: request.maxWidth,
       })
       const elapsed = performance.now() - startedAt
-      // The preview's SVG carries its own viewBox; the caller needs the
-      // extent to scale it, and the blocks already describe it.
-      const right = Math.max(0, ...blocks.map((b) => b.x + b.w))
-      const bottom = Math.max(0, ...blocks.map((b) => b.y + b.h))
-      const done: MarkdownRenderResponse = {
-        type: 'markdown-render-done',
+      const done: OutlineResponse = {
+        type: 'outlined',
         id: request.id,
-        svg: keyed.svg,
-        bounds: { x: 0, y: 0, w: right, h: bottom },
+        // A scene block carries no colour of its own; resolving it here is
+        // what makes a markdown outline the same TYPE as a spatial one to
+        // every consumer, rather than one each consumer has to default.
+        rects: blocks.map((block) => ({ ...block, color: resolveRectColor(undefined) })),
       }
       self.postMessage(done)
       remember(request.cacheKey, elapsed, done)
-    } catch (error) {
-      const failed: MarkdownRenderResponse = {
-        type: 'failed',
-        id: request.id,
-        reason: error instanceof Error ? error.message : String(error),
-      }
-      self.postMessage(failed)
-    }
-    return
-  }
-  if (request.type === 'markdown-rail') {
-    try {
-      // Same font gate as layout: measuring with a system face would put
-      // every wrapped line somewhere else, and the rail's whole content is
-      // where the lines land.
-      if ((await fontReady) !== 'loaded') {
-        const failed: MarkdownRailResponse = {
-          type: 'failed',
-          id: request.id,
-          reason: FONT_DEGRADED,
-        }
-        self.postMessage(failed)
-        return
-      }
-      const { blocks, anchors } = layoutMarkdownOutline(request.body, {
-        measure,
-        maxWidth: request.maxWidth,
-      })
-      const done: MarkdownRailResponse = {
-        type: 'markdown-rail-done',
-        id: request.id,
-        blocks,
-        anchors,
-      }
-      self.postMessage(done)
-    } catch (error) {
-      const failed: MarkdownRailResponse = {
-        type: 'failed',
-        id: request.id,
-        reason: error instanceof Error ? error.message : String(error),
-      }
-      self.postMessage(failed)
-    }
-    return
-  }
-  if (request.type !== 'layout') return
-  try {
-    // Verified present in Chromium, WebKit and Firefox — but Playwright's
-    // WebKit is not Safari, and a browser version that lacks a worker
-    // `FontFaceSet` would measure with a system font and produce a scene that
-    // disagrees with an export of the same canvas. Refusing is the only safe
-    // answer: the caller lays it out on the main thread, where the face is
-    // known to be loaded.
-    if ((await fontReady) !== 'loaded') {
-      const response: LayoutResponse = { type: 'failed', id: request.id, reason: FONT_DEGRADED }
-      self.postMessage(response)
       return
     }
+    // A corrupt snapshot throws here and lands in the catch below as a
+    // `failed` reply — the row keeps its kind icon and the tab its static
+    // one. It must not take the worker down: every request queued behind it
+    // belongs to a different document.
+    const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+    const startedAt = performance.now()
+    // Read here rather than on the asking thread: this is the one place
+    // the canvas is already decoded, and decoding it again to read one
+    // facet is exactly the cost the snapshot travels here to avoid.
+    const symbol = resolveCanvasSymbol(canvas)
+    const done: OutlineResponse = {
+      type: 'outlined',
+      id: request.id,
+      rects: outlineFromSpatial(canvas),
+      ...(symbol === undefined ? {} : { symbol }),
+    }
+    self.postMessage(done)
+    remember(request.cacheKey, performance.now() - startedAt, done)
+  } catch (error) {
+    fail(request.id, error)
+  }
+}
+
+async function handleMarkdownRender(request: MarkdownRenderRequest): Promise<void> {
+  try {
+    // A thumbnail measured with a system face wraps its lines elsewhere and
+    // stops being a picture of the document it labels.
+    if (!(await measurable(request.id))) return
+    const startedAt = performance.now()
+    const { keyed, blocks } = renderMarkdownPreview(request.body, {
+      measure,
+      maxWidth: request.maxWidth,
+    })
+    const elapsed = performance.now() - startedAt
+    // The preview's SVG carries its own viewBox; the caller needs the
+    // extent to scale it, and the blocks already describe it.
+    const right = Math.max(0, ...blocks.map((b) => b.x + b.w))
+    const bottom = Math.max(0, ...blocks.map((b) => b.y + b.h))
+    const done: MarkdownRenderResponse = {
+      type: 'markdown-render-done',
+      id: request.id,
+      svg: keyed.svg,
+      bounds: { x: 0, y: 0, w: right, h: bottom },
+    }
+    self.postMessage(done)
+    remember(request.cacheKey, elapsed, done)
+  } catch (error) {
+    fail(request.id, error)
+  }
+}
+
+async function handleMarkdownRail(request: MarkdownRailRequest): Promise<void> {
+  try {
+    // The rail's whole content is where the lines land, so a system face
+    // puts every wrapped one somewhere else.
+    if (!(await measurable(request.id))) return
+    const { blocks, anchors } = layoutMarkdownOutline(request.body, {
+      measure,
+      maxWidth: request.maxWidth,
+    })
+    const done: MarkdownRailResponse = {
+      type: 'markdown-rail-done',
+      id: request.id,
+      blocks,
+      anchors,
+    }
+    self.postMessage(done)
+  } catch (error) {
+    fail(request.id, error)
+  }
+}
+
+async function handleLayout(request: LayoutRequest): Promise<void> {
+  try {
+    if (!(await measurable(request.id))) return
     const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
     const missingRefs = new Set(request.missingFileRefs ?? [])
     // A corrupt snapshot throws here and lands in the catch below as a
@@ -369,11 +327,44 @@ self.onmessage = async (
     // person is editing.
     remember(request.cacheKey, performance.now() - startedAt, response)
   } catch (error) {
-    const response: LayoutResponse = {
-      type: 'failed',
-      id: request.id,
-      reason: error instanceof Error ? error.message : String(error),
-    }
-    self.postMessage(response)
+    fail(request.id, error)
+  }
+}
+
+/** Every request that asks for WORK, as opposed to changing what a later one measures with. */
+type WorkRequest = LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest | OutlineRequest
+
+self.onmessage = async (event: MessageEvent<WorkRequest | RegisterFaceRequest>) => {
+  const request = event.data
+  if (request.type === 'register-face') {
+    // Chained, and awaited by every later message below: an async handler
+    // returns at its first await, so the next message would otherwise run
+    // while `face.load()` is still pending and measure with the bundled
+    // family — `registerFontBytes` records the family only once the face
+    // is usable.
+    facesReady = facesReady.then(() => registerFontBytes(request.family, request.bytes))
+    await facesReady
+    return
+  }
+  await facesReady
+  // Before the font gate and before any work: a stored answer is the answer,
+  // and the gate exists to stop a render being MEASURED with the wrong face
+  // rather than to re-check one already drawn with the right one.
+  if (request.type !== 'markdown-rail' && (await servedFromStore(request))) return
+  // A switch with an exhaustive default rather than a chain of ifs. A chain
+  // ends in a bare return, so a request type added to the protocol and never
+  // handled here is dropped in silence with nothing anywhere going red;
+  // `unhandledKind` makes it a compile error at the place that has to decide.
+  switch (request.type) {
+    case 'outline':
+      return handleOutline(request)
+    case 'markdown-render':
+      return handleMarkdownRender(request)
+    case 'markdown-rail':
+      return handleMarkdownRail(request)
+    case 'layout':
+      return handleLayout(request)
+    default:
+      return unhandledKind(request, 'layout-worker')
   }
 }
