@@ -5,11 +5,14 @@
 // The grant is re-resolved here rather than read off the request context —
 // the same shape ws-ticket.ts, runtime.ts and debug.ts already use — because
 // only a PASSKEY-BOUND grant may hold this key, and the surrounding /api/*
-// auth middleware only checks SCOPE, not the passkey binding. `anonymous`
-// and `daemon-token` bypass membership entirely (member-profile-store.ts's
-// "scope of consultation", not a permissive default): an operator holding
-// the daemon token, or an open daemon, already has full authority over the
-// data this key decrypts.
+// auth middleware only checks SCOPE, not the passkey binding. The decision
+// itself is `workspace-access.ts`'s `workspaceAccess` (S8, user decision
+// 2026-09-21): operator-issued grants (anonymous/daemon-token/oauth-grant/
+// macaroon/ws-ticket) bypass membership entirely — none of them can name a
+// PERSON, and each is already operator-consented at mint time — and a
+// member-less workspace keeps origin trust (a personal daemon never needs a
+// passkey). Only a `pairing` grant on a workspace that HAS a member is
+// judged against the passkey binding.
 //
 // This route issues a `bounded`-tier LEASE (a timestamp, nothing more) —
 // there is deliberately no server-side lease table. The browser is what
@@ -27,6 +30,7 @@ import { getLogger } from '../log.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
+import { membershipRefusal, workspaceAccess } from '../security/workspace-access.js'
 import type { WorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
 import { badWorkspaceIdBody, unknownWorkspaceRefusal } from './membership.js'
 
@@ -71,38 +75,13 @@ export function createReplicaKeyRouter({
       return c.json({ error: 'unauthorized' }, 401)
     }
 
-    // `anonymous`/`daemon-token` bypass membership entirely — see the module
-    // header. Every other grant must be a passkey-bound session.
-    if (grant.kind !== 'anonymous' && grant.kind !== 'daemon-token') {
-      if (grant.passkey === undefined) {
-        log.warning({ workspaceId, reason: 'requires_person_session' }, 'replica-key refused')
-        return c.json(
-          {
-            error: 'requires_person_session',
-            message: 'this session is not signed in as a member',
-          } satisfies MembershipRefusal,
-          403,
-        )
-      }
-      const profile = await members.profileForCredential(
-        grant.passkey.origin,
-        grant.passkey.credentialId,
-      )
-      const membership =
-        profile === null ? 'not-a-member' : await members.isWorkspaceMember(workspaceId, profile.id)
-      if (membership === 'not-a-member') {
-        log.warning(
-          { workspaceId, profileId: profile?.id, reason: 'not_a_member' },
-          'replica-key refused',
-        )
-        return c.json(
-          {
-            error: 'not_a_member',
-            message: 'no such member in this workspace',
-          } satisfies MembershipRefusal,
-          403,
-        )
-      }
+    // See workspace-access.ts's module header: operator-issued kinds
+    // (anonymous/daemon-token/oauth-grant/macaroon/ws-ticket) bypass
+    // membership entirely, and a member-less workspace keeps origin trust.
+    const access = await workspaceAccess(grant, workspaceId, members)
+    if (access !== 'admitted') {
+      log.warning({ workspaceId, reason: access }, 'replica-key refused')
+      return c.json(membershipRefusal(access), 403)
     }
 
     const tier = await keys.effectiveTier(workspaceId)
