@@ -25,9 +25,11 @@ export interface UseDaemonConnectionsOptions {
   readonly daemonBaseUrl: string
   readonly workspaceId: string | null
   /**
-   * Undefined while the list has not named an id for the current path — an
-   * older daemon's id-less listing leaves the chip disabled rather than
-   * querying with a path the route would reject.
+   * Undefined while the list holds no row for the current path — a refresh in
+   * flight, or a document just created. NOT an id-less row: `id` is required
+   * by `documentSummarySchema`, so a summary without one does not parse and
+   * never reaches here. The chip stays disabled rather than querying with a
+   * path the route would reject.
    */
   readonly documentId: string | undefined
   /** The screen's scope: a change clears what is shown before the fetch runs. */

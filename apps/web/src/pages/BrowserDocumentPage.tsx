@@ -1,6 +1,5 @@
-import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -23,6 +22,7 @@ import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
+import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
@@ -50,7 +50,6 @@ import {
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
-import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { loroTextSync } from '../lib/loro-codemirror-sync.js'
@@ -250,12 +249,6 @@ function useBrowserDocument(
   // known too — a legacy path ref names a live document, same rule as the
   // daemon page. Image refs live in the file store, not this list; undefined
   // while the list has not loaded keeps everything ordinary.
-  const missingFileRef = useMemo(() => {
-    if (documents.length === 0) return undefined
-    const known = new Set(documents.flatMap((entry) => [entry.documentId, entry.path]))
-    return (ref: string) => !isImageRef(ref) && !known.has(ref)
-  }, [documents])
-
   // [[path]] resolution for the markdown preview goes through the same
   // link-entries table the daemon page reads; a stored row says
   // `documentId`/`name`, so the projection onto LinkableDocument is
@@ -270,11 +263,6 @@ function useBrowserDocument(
       })),
     [documents],
   )
-  const resolveAlias = useMemo(
-    () => createUniqueNameResolver(linkEntries(linkableDocuments)),
-    [linkableDocuments],
-  )
-  const resolveTitle = useMemo(() => linkTitles(linkableDocuments), [linkableDocuments])
   // The list read races the save a rename queues, so this canvas's live
   // truth is its own snapshot and the list is only the copy for the OTHER
   // documents. Both the switcher and the link picker read THIS, or the
@@ -314,22 +302,25 @@ function useBrowserDocument(
     [pathOfDocument, navigate],
   )
 
-  // From switcherOptions rather than the raw list: the open document's row
-  // is overlaid with its live snapshot, so the picker never offers a stale
-  // name for the document being edited.
-  const pickerTargets = useMemo(
+  // The picker reads switcherOptions rather than the raw list: the open
+  // document's row is overlaid with its live snapshot, so it never offers a
+  // stale name for the document being edited. The other three resolutions
+  // read the raw list, which is why the hook takes both.
+  const pickerDocuments = useMemo(
     () =>
-      linkTargets(
-        switcherOptions.map((entry) => ({
-          id: entry.documentId,
-          path: entry.path,
-          displayName: entry.name,
-          kind: entry.kind,
-        })),
-        { excludeDocumentId: documentId ?? undefined },
-      ),
-    [switcherOptions, documentId],
+      switcherOptions.map((entry) => ({
+        id: entry.documentId,
+        path: entry.path,
+        displayName: entry.name,
+        kind: entry.kind,
+      })),
+    [switcherOptions],
   )
+  const { resolveAlias, resolveTitle, missingFileRef, pickerTargets } = useLinkResolution({
+    documents: linkableDocuments,
+    pickerDocuments,
+    ...(documentId === null ? {} : { excludeDocumentId: documentId }),
+  })
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
