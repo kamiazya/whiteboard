@@ -1,7 +1,10 @@
 # ADR-0041: A profile is a per-keeper claim, and authority reaches resources but not identity
 
-**Status:** Accepted — human gate 2026-09-19. Design of record; nothing
-implemented. Completes [ADR-0039](0039-passkey-attestation.md) decision 9's
+**Status:** Accepted — human gate 2026-09-19. S8 slices 1-3 are implemented
+(see the 2026-09-21 addendum below for what each closed): the `workspaceAccess`
+gate now reaches the replica-key route and every other online route in
+local-daemon mode, with a dedicated page for both a removed member and a
+session that has not yet bound its passkey. Completes [ADR-0039](0039-passkey-attestation.md) decision 9's
 profile and settles the direction its 2026-09-17 revision recorded. Stands on
 [ADR-0035](0035-device-keys-and-keeper.md) decision 4 (a keeper is not an
 issuer) and rides [ADR-0023](0023-replica-model.md)'s keeper model rather than
@@ -245,6 +248,12 @@ single-user setup this project ships by default is unaffected.
   reads and writes live through every other route, is not the revocation
   ADR-0042 decision 3 describes.
 
-What is still deferred: the dedicated "you were removed" page for the
-online routes (today the generic daemon-page load error carries the
-refusal's message) is its own follow-up slice, not this one.
+**Slice 3 (same day) closed the deferred item above.** The daemon page now
+reads the refusal by CODE (never by matching its message) and answers the
+two it acts on differently: `not_a_member` lands on the same "you were
+removed" page ADR-0042 decision 4 describes — reached now from the online
+routes too, not only from an offline replica — while
+`requires_person_session` (a session that has simply never bound its
+passkey yet) gets a once-only retry prompt instead of either error page.
+Every other refusal code still falls through to the generic daemon-page
+load error, unclassified.
