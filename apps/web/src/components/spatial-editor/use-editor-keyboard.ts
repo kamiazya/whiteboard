@@ -107,6 +107,22 @@ export function useEditorKeyboard({
    * this reports through the callback and never touches the canvas
    * value — a lock is not an edit to the document.
    */
+  /**
+   * What the lock shortcut can reach, per collection.
+   *
+   * Each is empty when its own half is switched off — a keeper that cannot
+   * lock a relation, or a composition with no node-lock handler — so the
+   * caller's "nothing to do" test is one length check rather than the three
+   * conditions it used to carry inline.
+   */
+  const lockableSelection = (): { paths: readonly string[]; nodes: readonly string[] } => ({
+    paths: edgeLockEnabled ? selectedInkIds : [],
+    nodes:
+      lockEnabled && onToggleNodeLock !== undefined && selection !== undefined
+        ? [selection.id, ...extraIds]
+        : [],
+  })
+
   const toggleSelectionLock = (): boolean => {
     // A MERGE, not a dispatch. It dispatched — edges first, else nodes —
     // while an edge selection was exclusive with a node one, so there was
@@ -114,11 +130,7 @@ export function useEditorKeyboard({
     // decision, 2026-09-19), and a dispatch would have locked the one
     // relation and silently left every selected node and every other
     // selected edge alone.
-    const paths = edgeLockEnabled ? selectedInkIds : []
-    const nodes =
-      lockEnabled && onToggleNodeLock !== undefined && selection !== undefined
-        ? [selection.id, ...extraIds]
-        : []
+    const { paths, nodes } = lockableSelection()
     if (paths.length === 0 && nodes.length === 0) return false
     // ONE direction for the whole selection, taken from the primary — the
     // same rule the node half already had, so a mixed selection lands on
@@ -175,77 +187,90 @@ export function useEditorKeyboard({
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // Declarative shortcuts first — see shortcuts.ts, the single catalog.
-    const shortcut = findShortcut(e.nativeEvent, tool)
-    if (shortcut !== undefined && runShortcut(shortcut.id)) {
+  /**
+   * Whether the key originated in a text-entry surface, where Delete and
+   * Backspace belong to the TEXT rather than to the board — Backspace while
+   * typing would delete the node instead of a character.
+   *
+   * The reducer's own editing-text guard is the second, machine-checkable
+   * layer of that same policy (`gestures.ts`'s delete-selection arm).
+   */
+  const typingInText = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    const target = e.target as HTMLElement | null
+    const tag = target?.tagName
+    return tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable === true
+  }
+
+  /**
+   * What Escape cancels, in the order it cancels it.
+   *
+   * With a gesture idle it lifts only the pending cut's HOLD — the envelope
+   * stays, so the clipboard keeps working as a plain copy, matching what the
+   * OS side already holds and no Escape of ours could clear. Mid-gesture it is
+   * the PERSON's cancel rather than the platform's: it routes to
+   * `cancel-text-edit`, whose empty-note branch keeps a freshly placed box,
+   * where `pointercancel` is reserved for genuine teardown and treats the
+   * half-made node as debris. For every non-editing gesture the two behave
+   * identically.
+   */
+  const cancelWithEscape = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    if (e.key !== 'Escape') return false
+    if (gestureState.kind === 'idle') {
+      if (pendingCut === null) return false
       e.preventDefault()
-      return
-    }
-    // Keyboard equivalent of pointercancel: discards an in-flight
-    // resize/move/connect gesture without committing it.
-    if (e.key === 'Escape' && selectedInkIds.length > 0) {
-      e.preventDefault()
-      setSelectedInkIds([])
-      return
-    }
-    if (
-      (e.key === 'Delete' || e.key === 'Backspace') &&
-      selectedInkIds.length > 0 &&
-      gestureState.kind !== 'editing-text'
-    ) {
-      const target = e.target as HTMLElement | null
-      const tag = target?.tagName
-      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !target?.isContentEditable) {
-        e.preventDefault()
-        // Each selected id may be an EDGE or a LINE — the scene hands both
-        // out as `kind: 'edge'` nodes, so the selection never knew which.
-        // `deleteInkCommand` is the one place that looks.
-        const removals = selectedInkIds
-          .map((id) => deleteInkCommand(canvas, id))
-          .filter((command) => command !== undefined)
-        // Nodes the same band caught go in the SAME press. A marquee is one
-        // gesture and reads as one selection, so a Delete that took the
-        // strokes and left the notes standing — or needed a second press for
-        // them — would be answering a question nobody asked.
-        const nodeIds = selection === undefined ? [] : [selection.id, ...extraIds]
-        applyResult({
-          state: { kind: 'idle' },
-          commands: [...removals, ...nodeIds.map((id) => ({ kind: 'delete-node' as const, id }))],
-          ...(nodeIds.length > 0 ? { selectedId: null } : {}),
-        })
-        setSelectedInkIds([])
-        return
-      }
-    }
-    if (e.key === 'Escape' && gestureState.kind === 'idle' && pendingCut !== null) {
-      e.preventDefault()
-      // Escape lifts only the HOLD. The envelope stays: the clipboard
-      // keeps working as a plain copy, matching what the OS side already
-      // holds (which no Escape of ours could clear).
       setPendingCut(null)
-      return
+      return true
     }
-    if (e.key === 'Escape' && gestureState.kind !== 'idle') {
-      e.preventDefault()
-      // Escape is the PERSON's cancel, not the platform's: it routes to
-      // cancel-text-edit, whose empty-note branch keeps a freshly placed
-      // box. pointercancel is reserved for genuine gesture teardown (see
-      // the lost-capture handling), where the half-made node is debris.
-      // For every non-editing gesture the two arms behave identically.
-      applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
-      return
-    }
-    // Delete/Backspace deletes the current selection — but never while the
-    // event's own target is a text-entry surface (the open TextNodeEditor's
-    // textarea, or any other input this root might contain), or Backspace
-    // while typing would delete the node instead of a character. The
-    // reducer's own editing-text guard is the second, machine-checkable
-    // layer of that same policy (see gestures.ts's delete-selection arm).
-    // Arrow keys nudge the SELECTED node (standard canvas-tool parity);
-    // Shift multiplies the step. A focused resize handle handles arrows
-    // itself and stops propagation there, so an arrow reaching THIS
-    // handler is never a resize.
+    e.preventDefault()
+    applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
+    return true
+  }
+
+  /**
+   * Escape with a stroke selected drops that selection and nothing else — the
+   * keyboard equivalent of pointercancel for ink.
+   */
+  const clearInkSelection = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    if (e.key !== 'Escape' || selectedInkIds.length === 0) return false
+    e.preventDefault()
+    setSelectedInkIds([])
+    return true
+  }
+
+  /**
+   * Delete with strokes selected takes the NODES the same band caught too.
+   *
+   * A marquee is one gesture and reads as one selection, so a Delete that took
+   * the strokes and left the notes standing — or needed a second press for
+   * them — would be answering a question nobody asked.
+   */
+  const deleteInkSelection = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return false
+    if (selectedInkIds.length === 0 || gestureState.kind === 'editing-text') return false
+    if (typingInText(e)) return false
+    e.preventDefault()
+    // Each selected id may be an EDGE or a LINE — the scene hands both
+    // out as `kind: 'edge'` nodes, so the selection never knew which.
+    // `deleteInkCommand` is the one place that looks.
+    const removals = selectedInkIds
+      .map((id) => deleteInkCommand(canvas, id))
+      .filter((command) => command !== undefined)
+    // Nodes the same band caught go in the SAME press. A marquee is one
+    // gesture and reads as one selection, so a Delete that took the
+    // strokes and left the notes standing — or needed a second press for
+    // them — would be answering a question nobody asked.
+    const nodeIds = selection === undefined ? [] : [selection.id, ...extraIds]
+    applyResult({
+      state: { kind: 'idle' },
+      commands: [...removals, ...nodeIds.map((id) => ({ kind: 'delete-node' as const, id }))],
+      ...(nodeIds.length > 0 ? { selectedId: null } : {}),
+    })
+    setSelectedInkIds([])
+    return true
+  }
+
+  /** Held Space turns the next left-drag into a pan (Excalidraw semantics). */
+  const armSpacePan = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     if (e.key === ' ' && gestureState.kind === 'idle') {
       // Held Space turns the next left-drag into a pan (Excalidraw
       // semantics). preventDefault stops the page scrolling on Space —
@@ -259,8 +284,16 @@ export function useEditorKeyboard({
         e.preventDefault()
         spaceDownRef.current = true
       }
-      return
+      return true
     }
+    return false
+  }
+
+  /**
+   * Arrow keys nudge the WHOLE selection, ink included — not just the primary,
+   * which is a multi-selection that tore apart under the arrow keys.
+   */
+  const nudgeSelection = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     const nudge = ARROW_KEY_DELTA[e.key]
     if (
       nudge !== undefined &&
@@ -300,13 +333,18 @@ export function useEditorKeyboard({
           return command === undefined ? [] : [command]
         }),
       )
-      if (moves.length === 0) return
+      if (moves.length === 0) return true
       // ONE batch, not N commands: a multi-node nudge is one user action
       // and must undo as one step (N separate commits would only group by
       // the UndoManager's merge-timing heuristic).
       applyResult({ state: gestureState, commands: [{ kind: 'batch', commands: moves }] })
-      return
+      return true
     }
+    return false
+  }
+
+  /** Delete on a multi-selection takes every member. */
+  const deleteMultiSelection = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     if (
       (e.key === 'Delete' || e.key === 'Backspace') &&
       selection !== undefined &&
@@ -320,8 +358,13 @@ export function useEditorKeyboard({
         commands: ids.map((id) => ({ kind: 'delete-node' as const, id })),
         selectedId: null,
       })
-      return
+      return true
     }
+    return false
+  }
+
+  /** Delete on a single selection, through the reducer's own guard. */
+  const deleteSingleSelection = (e: React.KeyboardEvent<HTMLDivElement>): void => {
     if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
       const target = e.target as HTMLElement | null
       const tag = target?.tagName
@@ -331,6 +374,32 @@ export function useEditorKeyboard({
         reduceGesture(gestureState, canvas, { type: 'delete-selection', nodeId: selection.id }),
       )
     }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Declarative shortcuts first — see shortcuts.ts, the single catalog.
+    const shortcut = findShortcut(e.nativeEvent, tool)
+    if (shortcut !== undefined && runShortcut(shortcut.id)) {
+      e.preventDefault()
+      return
+    }
+    if (clearInkSelection(e)) return
+    if (deleteInkSelection(e)) return
+    if (cancelWithEscape(e)) return
+    // Delete/Backspace deletes the current selection — but never while the
+    // event's own target is a text-entry surface (the open TextNodeEditor's
+    // textarea, or any other input this root might contain), or Backspace
+    // while typing would delete the node instead of a character. The
+    // reducer's own editing-text guard is the second, machine-checkable
+    // layer of that same policy (see gestures.ts's delete-selection arm).
+    // Arrow keys nudge the SELECTED node (standard canvas-tool parity);
+    // Shift multiplies the step. A focused resize handle handles arrows
+    // itself and stops propagation there, so an arrow reaching THIS
+    // handler is never a resize.
+    if (armSpacePan(e)) return
+    if (nudgeSelection(e)) return
+    if (deleteMultiSelection(e)) return
+    deleteSingleSelection(e)
   }
 
   const handleResizeHandleKeyDown = (
