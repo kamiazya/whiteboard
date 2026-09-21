@@ -86,7 +86,6 @@
     "daemon:dev": "tsx watch src/server/daemon-entry.ts --daemon",
     "build:server": "tsdown && node scripts/prepend-cli-shebang.mjs && chmod +x dist/cli/index.js",
     "build": "pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs",
-    "dev": "tsx watch src/server/daemon-entry.ts",
     "test": "vitest run",
     "test:all": "vitest run",
     "test:coverage": "vitest run --coverage --project mcp-node",
