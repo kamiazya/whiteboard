@@ -329,8 +329,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
   'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 363,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource.listDocuments': 65,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource.searchDocuments': 59,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
   'apps/web/src/lib/pairing-grant.ts#consumeGrantFragment': 97,
   // 86 -> 87: the credential now negotiates the `prf` extension at CREATE
@@ -389,7 +387,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // row. It is over the budget because it RETURNS JSX — the rows and the
   // dialog are 40 of its lines and splitting them out would be a component
   // per row, which is the shape this bundle exists to avoid.
-  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 64,
+  // 64 -> 80 for the JSON Canvas row, which is the third of the three the
+  // daemon page was missing. Still JSX-shaped: the rows and the dialog are
+  // most of its lines, and splitting them out would be a component per row.
+  'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 80,
   'apps/web/src/pages/use-markdown-document.ts#useMarkdownDocument': 378,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
@@ -516,7 +517,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/live-doc.ts#createLiveDocRouter': 74,
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 101,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 88,
-  'packages/mcp-server/src/server/routes/document/restore.ts#createRestoreRouter': 107,
   'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 82,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 132,
   'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 178,

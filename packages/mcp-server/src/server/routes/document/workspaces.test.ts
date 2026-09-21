@@ -305,7 +305,13 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     expect(typeof json.title).toBe('string')
   })
 
-  it('returns 400 with Problem Details title when body is not JSON', async () => {
+  // The TITLE, not merely that one is present: a body that is not JSON at
+  // all and a body that is JSON of the wrong shape are different mistakes,
+  // and a caller can only act on the difference if the route says which.
+  // Asserting `typeof title === 'string'` alone cannot tell them apart —
+  // deleting the not-JSON refusal outright leaves that assertion green,
+  // because the shape check then refuses the `null` a failed parse yields.
+  it('returns 400 saying the body must be JSON when it is not JSON at all', async () => {
     const app = createDocumentRouter()
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
@@ -313,9 +319,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
       body: 'not-json',
     })
     expect(res.status).toBe(400)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
+    expect(await res.json()).toEqual({ title: 'JSON body required' })
   })
 
   it('returns 400 with Problem Details title when body has no path field', async () => {

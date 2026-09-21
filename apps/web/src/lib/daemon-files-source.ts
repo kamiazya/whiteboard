@@ -14,7 +14,7 @@ import {
   setDocumentDisplayName,
   setDocumentPinned,
 } from './daemon-api-client.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
   type LoadedMarkdown,
   type WorkspaceFilesSource,
@@ -78,16 +78,14 @@ export function createDaemonFilesSource(
         return res.documents.map((entry) => ({
           documentId: entry.id,
           path: entry.path,
-          ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
           kind: entry.kind,
-          ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
-          ...(entry.contentDigest === undefined ? {} : { contentDigest: entry.contentDigest }),
-          ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
-          ...(tagsById.has(entry.id) ? { tags: tagsById.get(entry.id) as readonly string[] } : {}),
-          ...(carriedById.has(entry.id)
-            ? { carriedTags: carriedById.get(entry.id) as readonly string[] }
-            : {}),
-          ...(pinIndex.has(entry.path) ? { pinOrder: pinIndex.get(entry.path) as number } : {}),
+          ...optional('name', entry.displayName),
+          ...optional('updatedAt', entry.updatedAt),
+          ...optional('contentDigest', entry.contentDigest),
+          ...optional('shadowed', entry.shadowed),
+          ...optional('tags', tagsById.get(entry.id)),
+          ...optional('carriedTags', carriedById.get(entry.id)),
+          ...optional('pinOrder', pinIndex.get(entry.path)),
         }))
       } catch (err) {
         if (err instanceof DaemonApiError && err.status === 404) {

@@ -13,7 +13,12 @@ import {
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { type DocumentKind, type TagBearerKind, tagsInUse } from '@kamiazya/whiteboard-model'
+import {
+  type DocumentKind,
+  type SpatialCanvas,
+  type TagBearerKind,
+  tagsInUse,
+} from '@kamiazya/whiteboard-model'
 import { readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import {
@@ -23,7 +28,7 @@ import {
 } from '@kamiazya/whiteboard-search'
 import { Loro } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
   type LoadedMarkdown,
   type WorkspaceFilesSource,
@@ -37,6 +42,72 @@ import {
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
 import { loadWorkspaceDocumentProjection } from './workspace-content.js'
+
+/**
+ * One document read from the store, discriminated by kind — a board carries
+ * its parsed canvas because every caller that wants a board wants that.
+ */
+type LoadedDocument =
+  | { documentId: string; kind: 'markdown'; doc: Loro }
+  | { documentId: string; kind: 'spatial'; doc: Loro; canvas: SpatialCanvas }
+
+/**
+ * Rewrite one document's references in place, answering whether anything
+ * changed. The caller saves; this only edits the in-memory doc.
+ *
+ * A board takes TARGETED writes, never a whole-canvas resync:
+ * `readSpatialCanvas` drops records this build cannot parse, so writing the
+ * whole canvas back would DELETE them.
+ */
+function rewriteReferencesIn(
+  read: LoadedDocument,
+  plan: ReturnType<typeof planReferenceRewrite>,
+): boolean {
+  if (read.kind === 'spatial') {
+    const result = rewriteCanvasReferences(read.canvas, plan)
+    if (!result.changed) return false
+    for (const node of result.changedNodes) writeSpatialNode(read.doc, node)
+    return true
+  }
+  const body = readMarkdownBody(read.doc)
+  const next = rewriteReferenceTargets(body, plan)
+  if (next === body) return false
+  writeMarkdownBody(read.doc, next)
+  return true
+}
+
+/** What a document contributes to the workspace's tag vocabulary. */
+function tagBearersOf(read: LoadedDocument): { what: TagBearerKind; tags: readonly string[] }[] {
+  if (read.kind === 'markdown') {
+    return [{ what: 'document', tags: readCoreFacets(read.doc)?.tags ?? [] }]
+  }
+  const { canvas } = read
+  return [
+    { what: 'board' as const, tags: canvas.tags ?? [] },
+    ...canvas.nodes.map((node) => ({ what: 'node' as const, tags: node.tags ?? [] })),
+    ...canvas.edges.map((edge) => ({ what: 'edge' as const, tags: edge.tags ?? [] })),
+  ]
+}
+
+/**
+ * The tags a LISTING shows for one document: the document's own, and — for a
+ * board — what its boxes and edges carry, deduplicated beside them.
+ *
+ * A board's own tags are the document's (ADR-0040 decision 2); the carried
+ * set is what makes the `#tag` filter find the board (decision 3), and is the
+ * browser spelling of the daemon's `/document-tags` `contents`.
+ */
+function listedTagsOf(read: LoadedDocument): {
+  own: readonly string[]
+  carried: readonly string[]
+} {
+  if (read.kind === 'markdown') return { own: readCoreFacets(read.doc)?.tags ?? [], carried: [] }
+  const { canvas } = read
+  const carried = new Set<string>()
+  for (const node of canvas.nodes) for (const tag of node.tags ?? []) carried.add(tag)
+  for (const edge of canvas.edges) for (const tag of edge.tags ?? []) carried.add(tag)
+  return { own: canvas.tags ?? [], carried: [...carried] }
+}
 
 /**
  * `WorkspaceFilesSource` over the browser stores — the adapter that
@@ -109,27 +180,14 @@ export function createLocalFilesSource(
     })
     if (plan.size === 0) return
     const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
-    for (const entry of entries) {
+    for await (const read of readableDocuments(entries)) {
+      if (!rewriteReferencesIn(read, plan)) continue
       try {
-        const doc = await loadCurrentDoc(entry)
-        if (entry.kind === 'spatial') {
-          const result = rewriteCanvasReferences(readSpatialCanvas(doc), plan)
-          if (!result.changed) continue
-          // Targeted writes, never a whole-canvas resync: readSpatialCanvas
-          // drops records this build cannot parse, and writing the whole
-          // canvas back would DELETE them.
-          for (const node of result.changedNodes) writeSpatialNode(doc, node)
-        } else {
-          const body = readMarkdownBody(doc)
-          const next = rewriteReferenceTargets(body, plan)
-          if (next === body) continue
-          writeMarkdownBody(doc, next)
-        }
-        await loro.save(entry.documentId, doc.export({ mode: 'snapshot' }))
+        await loro.save(read.documentId, read.doc.export({ mode: 'snapshot' }))
         // The content moved, so the search corpus entry for it is stale.
-        corpus.delete(entry.documentId)
+        corpus.delete(read.documentId)
       } catch {
-        // Unreadable or unsaveable: leave it; the reference stays as written.
+        // Unsaveable: leave it; the reference stays as written.
       }
     }
   }
@@ -152,6 +210,71 @@ export function createLocalFilesSource(
     return doc
   }
 
+  /**
+   * Every document's content, read and its KIND resolved, skipping what this
+   * build cannot read.
+   *
+   * Four methods here each wrote this walk out — list, load, skip the kinds
+   * that carry no content, branch on markdown vs spatial — and the branch is
+   * the one place the two stop being interchangeable. Skipping rather than
+   * failing is the rule everywhere it appears, and for one reason: a rename
+   * that repairs nine references of ten beats one that repairs none, and a
+   * panel that lists a tagless row beats one that does not open.
+   */
+  async function* readableDocuments(
+    entries: readonly { documentId: string; path: string; kind?: string }[],
+  ): AsyncGenerator<LoadedDocument> {
+    for (const entry of entries) {
+      if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
+      let doc: Loro
+      try {
+        doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
+      } catch {
+        continue
+      }
+      if (entry.kind === 'markdown') {
+        yield { documentId: entry.documentId, kind: 'markdown', doc }
+        continue
+      }
+      try {
+        yield { documentId: entry.documentId, kind: 'spatial', doc, canvas: readSpatialCanvas(doc) }
+      } catch {
+        // A canvas this build cannot parse is the same miss as an unreadable
+        // document: it carries nothing anyone here can read.
+      }
+    }
+  }
+
+  /**
+   * One document's searchable text, from the corpus cache when the content
+   * has not moved.
+   *
+   * Only the TEXT is cached, and only against the content stamp: path and
+   * name are PLACEMENT, which a rename moves without touching the content,
+   * so caching them here would keep matching a name the workspace has
+   * stopped using.
+   *
+   * An unreadable document is searched as its name and path alone rather
+   * than dropping out of results entirely, and that miss is NOT cached —
+   * the next search should try the document again.
+   */
+  async function searchableTextsFor(entry: WorkspaceDocumentEntry): Promise<string[]> {
+    const stamp = entry.updatedAt ?? ''
+    const cached = corpus.get(entry.documentId)
+    if (cached !== undefined && cached.stamp === stamp) return cached.texts
+    try {
+      const doc = await loadCurrentDoc(entry)
+      const texts =
+        entry.kind === 'spatial'
+          ? searchableTexts({ kind: 'spatial', canvas: readSpatialCanvas(doc) })
+          : searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
+      corpus.set(entry.documentId, { stamp, texts })
+      return texts
+    } catch {
+      return []
+    }
+  }
+
   return {
     async readTagLibrary() {
       // One well-known path, the daemon's convention (`TAG_LIBRARY_PATH`):
@@ -169,22 +292,7 @@ export function createLocalFilesSource(
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       const bearers: { what: TagBearerKind; tags: readonly string[] }[] = []
-      for (const entry of entries) {
-        if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
-        try {
-          const doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
-          if (entry.kind === 'markdown') {
-            bearers.push({ what: 'document', tags: readCoreFacets(doc)?.tags ?? [] })
-            continue
-          }
-          const canvas = readSpatialCanvas(doc)
-          bearers.push({ what: 'board', tags: canvas.tags ?? [] })
-          for (const node of canvas.nodes) bearers.push({ what: 'node', tags: node.tags ?? [] })
-          for (const edge of canvas.edges) bearers.push({ what: 'edge', tags: edge.tags ?? [] })
-        } catch {
-          // unreadable or never written: carries nothing
-        }
-      }
+      for await (const read of readableDocuments(entries)) bearers.push(...tagBearersOf(read))
       return tagsInUse(bearers)
     },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
@@ -209,47 +317,21 @@ export function createLocalFilesSource(
       // measured workspace makes the panel open slowly.
       const tagsById = new Map<string, readonly string[]>()
       const carriedById = new Map<string, readonly string[]>()
-      for (const entry of entries) {
-        if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
-        try {
-          const doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
-          if (entry.kind === 'markdown') {
-            const tags = readCoreFacets(doc)?.tags
-            if (tags !== undefined && tags.length > 0) tagsById.set(entry.documentId, tags)
-            continue
-          }
-          // A board's own tags are the document's (ADR-0040 decision 2);
-          // what its boxes and edges carry rides beside them, deduplicated,
-          // so the `#tag` filter finds the board (decision 3) — the browser
-          // spelling of the daemon's `/document-tags` `contents`.
-          const canvas = readSpatialCanvas(doc)
-          if (canvas.tags !== undefined && canvas.tags.length > 0) {
-            tagsById.set(entry.documentId, canvas.tags)
-          }
-          const carried = new Set<string>()
-          for (const node of canvas.nodes) for (const tag of node.tags ?? []) carried.add(tag)
-          for (const edge of canvas.edges) for (const tag of edge.tags ?? []) carried.add(tag)
-          if (carried.size > 0) carriedById.set(entry.documentId, [...carried])
-        } catch {
-          // unreadable or never written: no tags to show
-        }
+      for await (const read of readableDocuments(entries)) {
+        const { own, carried } = listedTagsOf(read)
+        if (own.length > 0) tagsById.set(read.documentId, own)
+        if (carried.length > 0) carriedById.set(read.documentId, carried)
       }
       return entries.map((entry) => ({
         documentId: entry.documentId,
         path: entry.path,
-        ...(entry.name === undefined ? {} : { name: entry.name }),
-        ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-        ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
-        ...(tagsById.has(entry.documentId)
-          ? { tags: tagsById.get(entry.documentId) as readonly string[] }
-          : {}),
-        ...(carriedById.has(entry.documentId)
-          ? { carriedTags: carriedById.get(entry.documentId) as readonly string[] }
-          : {}),
-        ...(stamps.has(entry.documentId)
-          ? { updatedAt: stamps.get(entry.documentId) as string }
-          : {}),
-        ...(entry.contentDigest === undefined ? {} : { contentDigest: entry.contentDigest }),
+        ...optional('name', entry.name),
+        ...optional('kind', entry.kind),
+        ...optional('shadowed', entry.shadowed),
+        ...optional('tags', tagsById.get(entry.documentId)),
+        ...optional('carriedTags', carriedById.get(entry.documentId)),
+        ...optional('updatedAt', stamps.get(entry.documentId)),
+        ...optional('contentDigest', entry.contentDigest),
       }))
     },
 
@@ -297,35 +379,11 @@ export function createLocalFilesSource(
       const entries = await this.listDocuments()
       const searchable: SearchableDocument[] = []
       for (const entry of entries) {
-        // Only the TEXT is cached, and only against the content stamp. Path
-        // and name are placement, which a rename moves without touching the
-        // content — caching them here would keep matching a name the
-        // workspace has stopped using.
-        const stamp = entry.updatedAt ?? ''
-        const cached = corpus.get(entry.documentId)
-        let texts: string[]
-        if (cached !== undefined && cached.stamp === stamp) {
-          texts = cached.texts
-        } else {
-          try {
-            const doc = await loadCurrentDoc(entry)
-            texts =
-              entry.kind === 'spatial'
-                ? searchableTexts({ kind: 'spatial', canvas: readSpatialCanvas(doc) })
-                : searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
-            corpus.set(entry.documentId, { stamp, texts })
-          } catch {
-            // Unreadable documents are searched as their name and path alone
-            // rather than dropping out of results entirely. Not cached: the
-            // next search should try the document again.
-            texts = []
-          }
-        }
         searchable.push({
           documentId: entry.documentId,
           path: entry.path,
-          ...(entry.name === undefined ? {} : { name: entry.name }),
-          texts,
+          ...optional('name', entry.name),
+          texts: await searchableTextsFor(entry),
         })
       }
       const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
