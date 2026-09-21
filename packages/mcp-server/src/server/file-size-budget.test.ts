@@ -818,7 +818,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and the collection-picking sibling that answers nothing for a relation
   // aimed at empty space.
   'apps/web/src/lib/spatial/commands.test.ts': 2042,
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
+  // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
+  // which needs a line saying why a wait here reports more than "it expired"
+  // — this test has failed twice on CI from branches that cannot reach it.
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1068,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   // Raised 876 -> 914 for the cancel case: the page's effect cleanup has to
   // stop the replica refresh and the push it armed, and both schedulers'
@@ -873,10 +876,14 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // raise is REQUIRED to carry overflows it. Raising both is the mechanism
   // working, not a loophole — the alternative is a raise with no reason.
   // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. FOUR branches have now
+  // is the deliberateness the guard exists to force. FIVE branches have now
   // raised it for that reason independently; the number is the resolved
   // file's own, re-measured at each merge rather than carried from a side.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 1006,
+  // This ledger grows when an entry gains the reason its ceiling moved, which
+  // is the deliberateness the guard exists to force. SIX branches have now
+  // raised it for that reason independently; the number is the resolved
+  // file's own, re-measured at each merge rather than carried from a side.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 1013,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
