@@ -1,4 +1,9 @@
-import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasLine,
+  ClipboardFragment,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject } from 'react'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
@@ -68,6 +73,56 @@ export interface ClipboardActionsInputs {
  * through `onChange`; every selection write goes through `selectNodes`.
  * Plain per-render closures, exactly as they were inside the editor body.
  */
+/** One batch that moves every held element, so the whole cut undoes as one step. */
+function moveHeldCommand(
+  held: readonly SpatialNode[],
+  heldInk: readonly CanvasLine[],
+  { dx, dy }: { dx: number; dy: number },
+): EditorCommand {
+  return {
+    kind: 'batch',
+    commands: [
+      ...held.map((node) => ({
+        kind: 'move-node' as const,
+        id: node.id,
+        x: node.x + dx,
+        y: node.y + dy,
+      })),
+      ...heldInk.map((line) => ({ kind: 'move-line' as const, id: line.id, dx, dy })),
+    ],
+  }
+}
+
+/**
+ * How far the held elements travel: onto the point asked for, or the plain
+ * duplicate offset when none was.
+ *
+ * Boxes AND strokes, for the reason the paste bounds read both: a cut of pure
+ * ink answers `Infinity` over nodes alone.
+ */
+function heldOffset(
+  held: readonly SpatialNode[],
+  heldInk: readonly CanvasLine[],
+  at: Point | undefined,
+): { dx: number; dy: number } {
+  if (at === undefined) return { dx: DUPLICATE_OFFSET_PX, dy: DUPLICATE_OFFSET_PX }
+  const xs = [
+    ...held.flatMap((node) => [node.x, node.x + node.width]),
+    ...heldInk.flatMap((line) => ownedLinePoints(line).map((point) => point.x)),
+  ]
+  const ys = [
+    ...held.flatMap((node) => [node.y, node.y + node.height]),
+    ...heldInk.flatMap((line) => ownedLinePoints(line).map((point) => point.y)),
+  ]
+  if (xs.length === 0 || ys.length === 0) {
+    return { dx: DUPLICATE_OFFSET_PX, dy: DUPLICATE_OFFSET_PX }
+  }
+  return {
+    dx: Math.round(at.x - (Math.min(...xs) + Math.max(...xs)) / 2),
+    dy: Math.round(at.y - (Math.min(...ys) + Math.max(...ys)) / 2),
+  }
+}
+
 export function useClipboardActions({
   canvasRef,
   primaryId,
@@ -192,6 +247,28 @@ export function useClipboardActions({
    * fragment's bounding box centers on it; without one (Cmd+V) copies
    * land +16px from their source coordinates, cascading like duplicate.
    */
+  const pasteAsMove = (
+    fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines' | 'cut'>,
+    at: Point | undefined,
+  ): boolean | undefined => {
+    const current = canvasRef.current
+    if (fragment.cut === undefined || pendingCut?.cutId !== fragment.cut.id) return undefined
+    const held = current.nodes.filter((node) => pendingCut.snapshot.has(node.id))
+    // A cut stroke is held the same way and moves with the rest. It needs no
+    // remint and no reconnection: a move keeps every id, which is what makes
+    // this path simpler than the paste below rather than a copy of it.
+    const heldInk = (current.lines ?? []).filter((line) => pendingCut.snapshot.has(line.id))
+    if (held.length === 0 && heldInk.length === 0) return undefined
+    const moveCommand = moveHeldCommand(held, heldInk, heldOffset(held, heldInk, at))
+    setPendingCut(null)
+    const running = applyCommand(current, moveCommand)
+    if (running === current) return false
+    onChange(running, moveCommand)
+    if (held.length > 0) selectNodes(held.map((node) => node.id))
+    if (heldInk.length > 0) selectInk(heldInk.map((line) => line.id))
+    return true
+  }
+
   const pasteClipboard = (at?: Point): boolean => {
     const fragment = readClipboardFragment()
     if (fragment === null) return false
@@ -203,57 +280,26 @@ export function useClipboardActions({
     fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines' | 'cut'>,
     at?: Point,
   ): boolean => {
+    /**
+     * A paste that answers THIS canvas's pending cut is a MOVE.
+     *
+     * The held elements keep their ids and just change place, so every edge —
+     * internal or boundary — survives without any reconnection machinery, and
+     * one batch of moves is one undo step that only moves them back. That is
+     * what makes this path simpler than the paste below rather than a copy of
+     * it. Cut ink is held the same way and travels with the rest.
+     *
+     * Answers `undefined` when this paste is not that, so the caller carries on
+     * to the insert.
+     */
     const current = canvasRef.current
     // A paste that answers THIS canvas's pending cut is a MOVE: the held
     // nodes keep their ids and just change place, so every edge — internal
     // or boundary — survives without any reconnection machinery. One batch
     // of move-node commands = one undo step that only moves them back.
-    if (fragment.cut !== undefined && pendingCut?.cutId === fragment.cut.id) {
-      const held = current.nodes.filter((node) => pendingCut.snapshot.has(node.id))
-      // A cut stroke is held the same way and moves with the rest. It needs no
-      // remint and no reconnection: a move keeps every id, which is what makes
-      // this path simpler than the paste below rather than a copy of it.
-      const heldInk = (current.lines ?? []).filter((line) => pendingCut.snapshot.has(line.id))
-      if (held.length > 0 || heldInk.length > 0) {
-        let dx = DUPLICATE_OFFSET_PX
-        let dy = DUPLICATE_OFFSET_PX
-        if (at !== undefined) {
-          // Boxes AND strokes, for the reason the paste bounds read both: a
-          // cut of pure ink answers `Infinity` over nodes alone.
-          const xs = [
-            ...held.flatMap((node) => [node.x, node.x + node.width]),
-            ...heldInk.flatMap((line) => ownedLinePoints(line).map((point) => point.x)),
-          ]
-          const ys = [
-            ...held.flatMap((node) => [node.y, node.y + node.height]),
-            ...heldInk.flatMap((line) => ownedLinePoints(line).map((point) => point.y)),
-          ]
-          if (xs.length > 0 && ys.length > 0) {
-            dx = Math.round(at.x - (Math.min(...xs) + Math.max(...xs)) / 2)
-            dy = Math.round(at.y - (Math.min(...ys) + Math.max(...ys)) / 2)
-          }
-        }
-        const moveCommand: EditorCommand = {
-          kind: 'batch',
-          commands: [
-            ...held.map((node) => ({
-              kind: 'move-node' as const,
-              id: node.id,
-              x: node.x + dx,
-              y: node.y + dy,
-            })),
-            ...heldInk.map((line) => ({ kind: 'move-line' as const, id: line.id, dx, dy })),
-          ],
-        }
-        setPendingCut(null)
-        const running = applyCommand(current, moveCommand)
-        if (running === current) return false
-        onChange(running, moveCommand)
-        if (held.length > 0) selectNodes(held.map((node) => node.id))
-        if (heldInk.length > 0) selectInk(heldInk.map((line) => line.id))
-        return true
-      }
-    }
+    const moved = pasteAsMove(fragment, at)
+    if (moved !== undefined) return moved
+
     // The cut surface reconnects while the document shows no trace of a
     // previous reconnection: as long as any edge a prior paste of this cut
     // created is still on THIS canvas, the fragment behaves as a plain
