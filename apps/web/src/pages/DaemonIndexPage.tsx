@@ -479,14 +479,17 @@ export function DaemonIndexPage({
         )
         const existingPaths = new Set(rows.map((r) => r.path))
         const newPath = deriveCopyPath(sourcePath, existingPaths)
-        // What the legacy route defaulted this to. NOT necessarily the
-        // source's kind — issues/daemon-duplicate-copies-kind.
+        // The SOURCE's kind, because this create is what sets the copy's
+        // index row and nothing later corrects it: the snapshot write below
+        // is a plain re-save, which `document-store.ts` deliberately never
+        // lets touch a stored kind. `spatial` is the fallback the daemon's
+        // own route defaults to for a row that records none.
         const created = await createDocument(
           daemonFetch,
           daemonBaseUrl,
           workspaceAtStart,
           newPath,
-          'spatial',
+          sourceRow?.kind ?? 'spatial',
         )
         await updateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
         const existingNames = new Set(rows.map((r) => r.displayName))

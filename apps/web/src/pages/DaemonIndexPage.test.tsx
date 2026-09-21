@@ -981,6 +981,45 @@ describe('DaemonIndexPage', () => {
     expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
+  it('a duplicated MARKDOWN document is created as markdown, not as a canvas', async () => {
+    // The copy is made through existing endpoints — create, then write the
+    // source's bytes over it — and the create is what sets the INDEX row's
+    // kind. A plain re-save never touches that value afterwards
+    // (`document-store.ts`: "a plain re-save omits it and must never touch
+    // the value"), so a create that says `spatial` leaves the row saying
+    // spatial over a document whose own bytes say markdown.
+    //
+    // That split is not cosmetic: the two readers of a document's kind take
+    // OPPOSITE precedence. `render/resolve-file-references.ts` asks the
+    // document first and reads the markdown body; `references/extract.ts`
+    // asks the entry first and runs `readSpatialCanvas` over a note.
+    const created: Array<[string, string, string | undefined]> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        'ws-a': [
+          {
+            path: 'notes',
+            displayName: 'Notes',
+            kind: 'markdown',
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      },
+      namesByWorkspace: { 'ws-a': { documents: { notes: 'Notes' }, pinned: [] } },
+      snapshotByCanvas: { notes: new Uint8Array([1, 2, 3]) },
+      onCreateDocument: (workspaceId, path, kind) => created.push([workspaceId, path, kind]),
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await selectCard('Notes')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+
+    await waitFor(() => {
+      expect(created).toEqual([['ws-a', 'notes-copy', 'markdown']])
+    })
+  })
+
   it('a second Duplicate press while one is in flight starts no second copy', async () => {
     let resolveSnapshot: ((res: Response) => void) | undefined
     let snapshotCalls = 0
