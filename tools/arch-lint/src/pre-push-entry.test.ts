@@ -68,13 +68,13 @@ describe('the architecture scans run before a push', () => {
    * other packages. A floor rather than an exact count, so adding a package
    * does not fail this — only the rationale genuinely collapsing does.
    *
-   * `packages/mcp-server/src` is named because that is where both defects
-   * that earned the pre-push entry landed. If it ever leaves this list, the
+   * `packages/mcp-server` is named because that is where both defects that
+   * earned the pre-push entry landed. If it ever leaves this list, the
    * entry's justification leaves with it and should be re-argued.
    */
   it('governs packages other than its own', () => {
     const elsewhere = TEST_SCAN_DIRS.filter((dir) => !dir.startsWith('tools/'))
     expect(elsewhere.length).toBeGreaterThan(1)
-    expect(elsewhere).toContain('packages/mcp-server/src')
+    expect(elsewhere).toContain('packages/mcp-server')
   })
 })

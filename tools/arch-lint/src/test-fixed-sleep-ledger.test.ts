@@ -136,7 +136,7 @@ describe('fixed-duration sleeps in test files', () => {
     // A walker that stopped matching would report an empty tree as "no
     // sleeps anywhere", which is exactly what a clean tree looks like.
     const all = TEST_SCAN_DIRS.flatMap((dir) => listTestFiles(join(REPO_ROOT, dir)))
-    expect(all.length).toBeGreaterThan(900)
+    expect(all.length).toBeGreaterThan(1500)
     expect(Object.keys(LEDGER).length).toBeGreaterThan(0)
   })
 })
