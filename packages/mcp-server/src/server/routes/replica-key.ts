@@ -140,9 +140,15 @@ export function createReplicaKeyRouter({
     }
 
     await keys.setTier(workspaceId, parsed.data.tier)
+    const effectiveTier = await keys.effectiveTier(workspaceId)
+    // A `warning`-level record, not `notice`: the default WHITEBOARD_LOG_LEVEL
+    // is `warning`, and this is the durable audit trail an operator searches
+    // for after the fact to learn a read-plane protection was lifted and by
+    // when — a `notice` record would be silent under the default level.
+    log.warning({ workspaceId, tier: parsed.data.tier, effectiveTier }, 'replica-tier changed')
     const response: SetReplicaTierResponse = setReplicaTierResponseSchema.parse({
       tier: parsed.data.tier,
-      effectiveTier: await keys.effectiveTier(workspaceId),
+      effectiveTier,
     })
     return c.json(response, 200)
   })

@@ -583,6 +583,31 @@ describe('PUT /api/workspaces/:workspaceId/replica-tier', () => {
     })
   })
 
+  it('logs a durable audit record naming the workspace and resulting effective tier on every successful change', async () => {
+    const capture = captureLogsForTests('warning')
+    try {
+      const fixture = await makeApp()
+      await seedWorkspaceRow(fixture)
+      const res = await put(
+        fixture.app,
+        `/api/workspaces/${WS}/replica-tier`,
+        { tier: 'no-offline' },
+        { Authorization: `Bearer ${DAEMON_TOKEN}` },
+      )
+      expect(res.status).toBe(200)
+      const record = capture.records.find(
+        (r) => r.msg === 'replica-tier changed' && r.scope === 'replica-key',
+      )
+      expect(record?.data).toMatchObject({
+        workspaceId: WS,
+        tier: 'no-offline',
+        effectiveTier: 'no-offline',
+      })
+    } finally {
+      capture.restore()
+    }
+  })
+
   it('clearing (tier: null) falls back to the constructor default', async () => {
     const fixture = await makeApp({ defaultTier: 'offline' })
     await seedWorkspaceRow(fixture)
