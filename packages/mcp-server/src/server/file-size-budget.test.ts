@@ -260,7 +260,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // resource (ADR-0038 decision 3) beside the tag write ADR-0040 added,
   // and the kind switch the resource replaced was the shorter of the two.
   'packages/loro-adapter/src/loro-bridge.ts': 1126,
-  'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
+  // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
+  // measured, separately from what the named rules charge for it.
+  'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -634,10 +636,21 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `lib/spatial/element-id.ts`, so one import line became two.
   // -886 when the pointer surface left for the entry below, the second of
   // this component's two event surfaces to go.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2309,
+  // 2309 -> 2341: `applySelectionFrom`, `growToFitText` and `writeReachesIds`,
+  // the last two at module scope.
+  // gestures.ts crossed 800 when `reduceGesture` (53) gave its five biggest
+  // arms and its nested pointerup switch their own reducers, each carrying
+  // the reason that used to sit inside the arm. The file's own eight
+  // `reduce*` siblings were the precedent; this finishes that shape.
+  'apps/web/src/components/spatial-editor/gestures.ts': 845,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2341,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
-  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1052,
+  // 1052 -> 1240: the press and release paths became claimant chains and the
+  // reasons moved onto the claimants. A press-side module beside the
+  // `pointer-release.ts` that already exists is the named follow-up that
+  // brings this back down — moving mass is what a FILE budget asks for.
+  'apps/web/src/components/spatial-editor/use-editor-pointer.ts': 1240,
 }
 
 describe('the path form both ledgers are keyed with', () => {
@@ -863,9 +876,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // raise is REQUIRED to carry overflows it. Raising both is the mechanism
   // working, not a loophole — the alternative is a raise with no reason.
   // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. Two branches raised it
-  // for that reason independently; the number is the resolved file's own.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 991,
+  // is the deliberateness the guard exists to force. FIVE branches have now
+  // raised it for that reason independently; the number is the resolved
+  // file's own, re-measured at each merge rather than carried from a side.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 1005,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

@@ -47,6 +47,7 @@ import type {
 import type { DocumentPageModel } from './document-page-model.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
+import { useDocumentActions } from './use-document-actions.js'
 
 const log = getAppLogger('daemon-document-page')
 
@@ -368,6 +369,14 @@ function useDaemonDocument(
   // page itself no longer chooses an editor.
   const documentKind: DocumentKind =
     controller.documents.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
+
+  const documentActions = useDocumentActions({
+    documentId: currentDocumentId,
+    documentKind,
+    duplicateDocument: controller.duplicateDocument,
+    deleteDocument: controller.deleteDocument,
+    deleteCopyId: 'delete-document-daemon',
+  })
 
   // SCOPE RESET — see scoped-screen-state.test.ts. Nothing is reset HERE any
   // more, and that is the state to keep: the history column, the save outcome
@@ -737,6 +746,7 @@ function useDaemonDocument(
       : {}),
     slots: {
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
+      ...documentActions,
     },
   }
 

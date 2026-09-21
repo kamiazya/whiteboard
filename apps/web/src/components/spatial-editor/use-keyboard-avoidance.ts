@@ -88,6 +88,27 @@ export interface KeyboardAvoidanceInputs {
   readonly setViewport: (updater: (viewport: Viewport) => Viewport) => void
 }
 
+/**
+ * The strips of the root a subject must be clear of.
+ *
+ * A phone's keyboard carries the formatting bar on top of it, so the bottom
+ * strip is the keyboard PLUS the bar — asked of the bar's own predicate,
+ * since a coarse pointer is not the same question (an edge label is edited in
+ * a textarea the bar does not attach to). The desktop strip sits under the
+ * header, over the canvas's own top edge: a subject opened beneath it is as
+ * hidden as one under a keyboard.
+ */
+function obscuredStrips(
+  rootBottom: number,
+  visual: VisualViewport | null,
+): { top: number; bottom: number } {
+  const occluded = visual === null ? 0 : keyboardOccludedBottomPx(rootBottom, visual)
+  return {
+    top: canvasVerbBarShown() ? DESKTOP_BAR_HEIGHT_PX : 0,
+    bottom: occluded + (touchFormattingBarShown() ? TOUCH_BAR_HEIGHT_PX : 0),
+  }
+}
+
 export function useKeyboardAvoidance({
   rootRef,
   containerSizeOf,
@@ -111,15 +132,7 @@ export function useKeyboardAvoidance({
       const containerSize = containerSizeOfRef.current(root)
       if (containerSize === null) return
       const rootRect = root.getBoundingClientRect()
-      const occluded = visual === null ? 0 : keyboardOccludedBottomPx(rootRect.bottom, visual)
-      // A phone's keyboard carries the formatting bar on top of it, so the
-      // strip to clear is the keyboard plus the bar — asked of the bar's own
-      // predicate, since a coarse pointer is not the same question (an edge
-      // label is edited in a textarea the bar does not attach to).
-      const bottom = occluded + (touchFormattingBarShown() ? TOUCH_BAR_HEIGHT_PX : 0)
-      // The desktop strip sits under the header, over the canvas's own top
-      // edge — a subject opened beneath it is as hidden as one under a keyboard.
-      const top = canvasVerbBarShown() ? DESKTOP_BAR_HEIGHT_PX : 0
+      const { top, bottom } = obscuredStrips(rootRect.bottom, visual)
       // No early return on zero occlusion and no bar. Under
       // `interactive-widget=resizes-content` (index.html) the keyboard
       // shrinks the LAYOUT viewport instead: it occludes nothing and reads

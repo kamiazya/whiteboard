@@ -46,41 +46,54 @@ type MenuParity =
 
 type Keeper = 'browser' | 'daemon'
 
-const DUPLICATE_FOLLOW_UP = 'issues/daemon-document-page-offers-no-document-actions'
+const DOCUMENT_ACTIONS_FOLLOW_UP = 'issues/daemon-document-page-offers-no-document-actions'
 
 const MENU_PARITY: Record<string, MenuParity> = {
+  // Recorded as deliberate when this ledger landed, on the ground that the
+  // daemon keeper would have to decode a snapshot for this row alone. That
+  // reason is FALSE and the code says so: `DaemonDocumentPage` holds
+  // `canvasValue`, a decoded SpatialCanvas, at the very place it builds its
+  // slots. So the row is missing rather than declined — which is the whole
+  // reason a `one-keeper` answer owes a reason a reader can check.
   'Copy as JSON Canvas': {
-    reach: 'one-keeper',
-    keeper: 'browser',
-    why: 'hands the exact canvas to the clipboard from the decoded document the browser keeper already holds in memory; the daemon keeper holds a snapshot it would have to decode for this alone, and the row is a debugging affordance rather than a document verb — so it is deliberately not mirrored',
-  },
-  Duplicate: {
     reach: 'gap',
     keeper: 'browser',
     missing:
-      'a daemon-kept document cannot be duplicated from its own page, though the daemon INDEX row menu does exactly that (read snapshot, create, write snapshot, rename) — so the flow exists and only this surface is unwired',
-    followUp: DUPLICATE_FOLLOW_UP,
+      "a daemon-kept spatial document cannot be copied to the clipboard as JSON Canvas from its own page, though the page already holds the decoded canvas the row would serialise — the same `serializeSpatial(canvas, 'extended')` the browser keeper writes",
+    followUp: DOCUMENT_ACTIONS_FOLLOW_UP,
   },
-  Delete: {
-    reach: 'gap',
-    keeper: 'browser',
-    missing:
-      'a daemon-kept document cannot be deleted from its own page; the daemon index offers it per row, so the verb exists and the document page simply contributes no row for it',
-    followUp: DUPLICATE_FOLLOW_UP,
-  },
+  // Was a `gap` when this ledger landed, and closing it is what made the
+  // entry fail — which is the direction the file exists for.
+  Duplicate: { reach: 'both' },
+  // Was a `gap` too; the same entry failing is what reported the closure.
+  Delete: { reach: 'both' },
 }
 
 // `?raw` rather than node:fs — apps/web is browser-only and must not import a
 // Node builtin (`web-app-boundary.test.ts` pins that).
-const sources = import.meta.glob('/src/pages/*DocumentPage.tsx', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>
+const sources = import.meta.glob(
+  ['/src/pages/*DocumentPage.tsx', '/src/pages/use-document-actions.tsx'],
+  {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  },
+) as Record<string, string>
 
-const PAGES: Record<Keeper, string> = {
-  browser: '/src/pages/BrowserDocumentPage.tsx',
-  daemon: '/src/pages/DaemonDocumentPage.tsx',
+/**
+ * What each keeper RENDERS: the page, plus whatever bundle supplies its rows
+ * — the same concatenation `scoped-screen-state.test.ts` reads, for the same
+ * reason. A row extracted out of a page is still that keeper's row, and a
+ * scan reading the page alone would report the extraction as the keeper
+ * LOSING the verb.
+ *
+ * When both pages take the same bundle, both lists hold it and every row in
+ * it is `both` by construction. That is the intended end state rather than a
+ * loophole: two keepers rendering one component cannot differ.
+ */
+const PAGES: Record<Keeper, readonly string[]> = {
+  browser: ['/src/pages/BrowserDocumentPage.tsx'],
+  daemon: ['/src/pages/DaemonDocumentPage.tsx', '/src/pages/use-document-actions.tsx'],
 }
 
 /**
@@ -137,14 +150,18 @@ function labelsFrom(source: string): string[] {
 }
 
 function menuLabels(keeper: Keeper): string[] {
-  const source = sources[PAGES[keeper]]
-  // A renamed or moved page must FAIL rather than read as a keeper that
-  // contributes nothing: every entry below says a row is on the browser side
-  // and not on the daemon side, so an empty daemon source satisfies all of
-  // them at once. The same reason `purity-guard` and `file-size-budget` check
-  // that the paths they hold still exist.
-  if (source === undefined) throw new Error(`no such document page: ${PAGES[keeper]}`)
-  return labelsFrom(source)
+  const labels = new Set<string>()
+  for (const path of PAGES[keeper]) {
+    const source = sources[path]
+    // A renamed or moved file must FAIL rather than read as a keeper that
+    // contributes nothing: every entry below says a row is on the browser
+    // side and not on the daemon side, so an empty daemon source satisfies
+    // all of them at once. The same reason `purity-guard` and
+    // `file-size-budget` check that the paths they hold still exist.
+    if (source === undefined) throw new Error(`no such source: ${path}`)
+    for (const label of labelsFrom(source)) labels.add(label)
+  }
+  return [...labels].sort()
 }
 
 /**

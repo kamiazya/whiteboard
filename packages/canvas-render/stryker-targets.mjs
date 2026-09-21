@@ -20,6 +20,11 @@
 export const MUTATED = [
   // The cost model and the searches the differential oracles cover.
   'src/layout/edges/edge-rules.ts',
+  // Split out of `edge-rules.ts` and covered for that reason: the ink TERMS
+  // were part of that file's lane, and leaving them out would have SHRUNK
+  // what the lane sees while the report kept looking the same — the failure
+  // this list's pinned counts exist to stop.
+  'src/layout/edges/edge-ink.ts',
   // The diagonal clip the intrusion tier reads: a sampled oracle and two
   // invariants, so a survivor here would be a chord read wrong.
   'src/layout/edges/diagonal-ink.ts',
@@ -49,6 +54,15 @@ export const MUTATED = [
   // would have SHRUNK what the lane sees while the report kept looking the
   // same, which is the failure this list's pinned counts exist to stop.
   'src/tidy-units.ts',
+  // Split out of `tidy.ts` with it: the axis vocabulary every pass reads,
+  // and the band pass it was introduced for. Both are in the lane for the
+  // reason `tidy-units.ts` is — this is where the heuristic lives, so this
+  // is where the residue goes. `tidy-axis.ts` earns it twice over: a rule
+  // written asymmetrically on one axis is exactly the defect the vocabulary
+  // exists to make impossible, and the lane is what checks that claim
+  // rather than restating it.
+  'src/tidy-axis.ts',
+  'src/tidy-bands.ts',
   // A four-candidate search whose property scores the candidates from the
   // definition of overlap, sharing nothing with the search.
   'src/layout/comment-placement.ts',
@@ -194,8 +208,11 @@ export const KNOWN_EQUIVALENT = {
   // the margin apart then answers differently, and the grouped tidy
   // scoreboard kills it. Each hand-verified; the reasoning is
   // `package-canvas-render.md`.
-  'src/tidy.ts': {
-    'ConditionalExpression: delta === 0 -> false': 1,
+  // The zero-delta entry moved here with `shift` when the axis vocabulary
+  // came out of `tidy.ts`, and became TWO: `shift` is written once per axis
+  // rather than once with a branch, which is the whole point of it.
+  'src/tidy-axis.ts': {
+    'ConditionalExpression: delta === 0 -> false': 2,
   },
   // `p` is a signed segment delta that the axis-aligned skip above the loop
   // keeps nonzero, so `<=` and `<` agree; a chord whose entry and exit
@@ -246,7 +263,7 @@ export const KNOWN_EQUIVALENT = {
     'ArithmeticOperator: s1.edge - s2.edge -> s1.edge + s2.edge': 1,
     'ArithmeticOperator: s1.maxX - s2.maxX -> s1.maxX + s2.maxX': 1,
     'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
-    'ConditionalExpression: active[i]!.maxX >= segment.minX -> true': 1,
+    'ConditionalExpression: active[i]!.maxX >= minX -> true': 1,
     'ConditionalExpression: denom === 0 -> false': 1,
     'ConditionalExpression: dx === 0 -> false': 1,
     'ConditionalExpression: dy === 0 -> false': 1,
@@ -255,7 +272,7 @@ export const KNOWN_EQUIVALENT = {
     'ConditionalExpression: other.maxY < segment.minY || other.minY > segment.maxY -> false': 1,
     'ConditionalExpression: other.minY > segment.maxY -> false': 1,
     'ConditionalExpression: overlap === 0 && illegible === 0 && crossings === 0 -> false': 1,
-    'EqualityOperator: active[i]!.maxX >= segment.minX -> active[i]!.maxX > segment.minX': 1,
+    'EqualityOperator: active[i]!.maxX >= minX -> active[i]!.maxX > minX': 1,
     'EqualityOperator: denom < 0 -> denom <= 0': 1,
     'EqualityOperator: hi > lo -> hi >= lo': 2,
     'EqualityOperator: illegible === 0 -> illegible !== 0': 1,

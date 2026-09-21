@@ -275,6 +275,37 @@ export function findShortcut(e: KeyEventLike, tool: EditorTool): ShortcutSpec | 
 }
 
 /** `findShortcut` over an explicit spec list — the testable pure core. */
+/**
+ * Whether one spec matches this key event.
+ *
+ * Every modifier is compared EXACTLY, not as "at least": a spec that does not
+ * declare `alt` must not fire while Alt is held, or two chords answer the
+ * same press. The key comparison is case-insensitive because a shifted
+ * command chord (Cmd+Shift+C) reports an uppercase key while the spec
+ * declares the plain character. A spec that names neither a code nor a key
+ * matches nothing at all.
+ */
+function matchesSpec(
+  spec: ShortcutSpec,
+  e: KeyEventLike,
+  tool: EditorTool,
+  hasMod: boolean,
+): boolean {
+  if (spec.handledInline === true) return false
+  if (spec.tools !== undefined && !spec.tools.includes(tool)) return false
+  if ((spec.mod === true) !== hasMod) return false
+  if ((spec.alt === true) !== e.altKey) return false
+  if (spec.shift !== undefined && spec.shift !== e.shiftKey) return false
+  if (spec.codes !== undefined && !spec.codes.includes(e.code)) return false
+  if (
+    spec.keys !== undefined &&
+    !spec.keys.some((key) => key.toLowerCase() === e.key.toLowerCase())
+  ) {
+    return false
+  }
+  return spec.codes !== undefined || spec.keys !== undefined
+}
+
 export function findShortcutIn(
   specs: readonly ShortcutSpec[],
   e: KeyEventLike,
@@ -282,21 +313,5 @@ export function findShortcutIn(
 ): ShortcutSpec | undefined {
   if (isTextEntryEvent(e)) return undefined
   const hasMod = e.metaKey || e.ctrlKey
-  return specs.find((spec) => {
-    if (spec.handledInline === true) return false
-    if (spec.tools !== undefined && !spec.tools.includes(tool)) return false
-    if ((spec.mod === true) !== hasMod) return false
-    if ((spec.alt === true) !== e.altKey) return false
-    if (spec.shift !== undefined && spec.shift !== e.shiftKey) return false
-    if (spec.codes !== undefined && !spec.codes.includes(e.code)) return false
-    // Case-insensitive on key: shifted command chords (Cmd+Shift+C) report
-    // an uppercase key while the spec declares the plain character.
-    if (
-      spec.keys !== undefined &&
-      !spec.keys.some((key) => key.toLowerCase() === e.key.toLowerCase())
-    ) {
-      return false
-    }
-    return spec.codes !== undefined || spec.keys !== undefined
-  })
+  return specs.find((spec) => matchesSpec(spec, e, tool, hasMod))
 }

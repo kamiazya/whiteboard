@@ -390,6 +390,52 @@ function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
   }
 }
 
+/**
+ * A committed body that lays out TALLER than its stored box gets a follow-up
+ * resize, so content never overflows the border.
+ *
+ * Grow-only: an authored roomy box, or a manual enlarge, is respected. Stored
+ * geometry stays truthful, so export — the same layout over the same canvas —
+ * renders exactly what the editor shows. Answers `undefined` when the box
+ * already fits.
+ */
+function growToFitText(
+  canvas: SpatialCanvas,
+  id: string,
+  measure: MeasureText,
+  theme: ResolvedTheme,
+) {
+  const node = canvas.nodes.find((n) => n.id === id)
+  if (node === undefined || nodeText(node) === undefined) return undefined
+  const required = Math.ceil(requiredTextNodeHeight(node, { measure, theme }))
+  if (required <= node.height) return undefined
+  return {
+    kind: 'resize-node',
+    id: node.id,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: required,
+  } as const
+}
+
+/**
+ * Which nodes a panel write reaches.
+ *
+ * A write to a MEMBER of the selection applies to the whole set — reshaping
+ * five selected nodes must not become five visits to the panel — while a
+ * write to a node outside it reaches that node alone.
+ */
+function writeReachesIds(
+  target: { id: string } | undefined,
+  selectedId: string | null,
+  extraIds: ReadonlySet<string>,
+): string[] {
+  if (target === undefined) return []
+  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
+  return members.has(target.id) ? [...members] : [target.id]
+}
+
 export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>(
   function SpatialEditor(
     {
@@ -753,6 +799,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * per mutation, matching this component's pre-existing one-call-per-
      * command contract for the (still common) single-command case.
      */
+    /**
+     * A gesture result's own selection, applied at the ONE place that does it.
+     *
+     * A node becoming primary means no edge is selected, enforced here rather
+     * than by remembering `setSelectedEdgeId(null)` beside every call — the
+     * omission this replaces let a double-click on empty space create and
+     * select a note while an edge stayed selected, and Delete answers the
+     * EDGE first.
+     *
+     * `null` is excluded deliberately: it means the gesture CLEARED the node
+     * selection, which is the same `pointerdown-empty` the edge hit-test uses
+     * to select an edge, so clearing here would undo that selection a line
+     * after it was made.
+     */
+    const applySelectionFrom = (result: ReturnType<typeof reduceGesture>) => {
+      if (result.selectedId === undefined) return
+      applySelection({ type: 'set-primary', id: result.selectedId })
+      if (result.selectedId !== null) setSelectedEdgeId(null)
+    }
+
     const applyResult = (result: ReturnType<typeof reduceGesture>) => {
       // Any gesture that leaves an in-flight state retires the preview: the
       // committed canvas is about to draw the real thing. Same predicate the
@@ -770,21 +836,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // which accumulates rather than recomputing from its start — and the
       // browser delivers `pointermove` faster than React commits.
       gestureStateRef.current = result.state
-      if (result.selectedId !== undefined) {
-        applySelection({ type: 'set-primary', id: result.selectedId })
-        // A node becoming primary means no edge is selected. Enforced HERE,
-        // at the one place a gesture result's selection is applied, rather
-        // than by remembering `setSelectedEdgeId(null)` beside every call —
-        // the omission this replaces let a double-click on empty space
-        // create and select a note while an edge stayed selected, and
-        // Delete answers the EDGE first.
-        //
-        // `null` is excluded deliberately: it means the gesture cleared the
-        // node selection, which is the same `pointerdown-empty` the edge
-        // hit-test uses to SELECT an edge. Clearing here would undo that
-        // selection a line after it was made.
-        if (result.selectedId !== null) setSelectedEdgeId(null)
-      }
+      applySelectionFrom(result)
       let running = canvasRef.current
       for (const command of result.commands) {
         running = applyCommand(running, command)
@@ -795,23 +847,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // is respected. Stored geometry stays truthful, so export (the same
         // layout over the same canvas) renders exactly what the editor shows.
         if (command.kind === 'set-text') {
-          const node = running.nodes.find((n) => n.id === command.id)
-          if (node !== undefined && nodeText(node) !== undefined) {
-            const required = Math.ceil(
-              requiredTextNodeHeight(node, { measure: resolvedMeasure, theme }),
-            )
-            if (required > node.height) {
-              const grow = {
-                kind: 'resize-node',
-                id: node.id,
-                x: node.x,
-                y: node.y,
-                width: node.width,
-                height: required,
-              } as const
-              running = applyCommand(running, grow)
-              onChange(running, grow)
-            }
+          const grow = growToFitText(running, command.id, resolvedMeasure, theme)
+          if (grow !== undefined) {
+            running = applyCommand(running, grow)
+            onChange(running, grow)
           }
         }
       }
@@ -2245,16 +2284,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     return
                   }
                   const before = target?.tags ?? []
-                  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
-                  const ids =
-                    target !== undefined && members.has(target.id)
-                      ? [...members]
-                      : target === undefined
-                        ? []
-                        : [target.id]
                   applyResult({
                     state: { kind: 'idle' },
-                    commands: ids.flatMap((id) => {
+                    commands: writeReachesIds(target, selectedId, extraIds).flatMap((id) => {
                       const node = canvasRef.current.nodes.find((entry) => entry.id === id)
                       return node === undefined
                         ? []

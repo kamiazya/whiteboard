@@ -96,139 +96,127 @@ export interface NodeMenuItemsInput {
   readonly setCommentCompose: CanvasCommands['setCommentCompose']
 }
 
-export function nodeMenuItems({
-  node,
-  canvas,
-  canvasRef,
-  palette,
-  gestureState,
-  isLocked,
-  lockEnabled,
-  isEdgeLocked,
-  extraIds,
-  selectedId,
-  isImageFileRef,
-  missingFileRef,
-  fileRefOptions,
-  facetRegistry,
-  selectedAlignableBoxes,
-  pendingBackgroundGroupIdRef,
-  imageInputRef,
-  applyResult,
-  applyBoxMoves,
-  copySelection,
-  cutSelection,
-  duplicateSelection,
-  reorderSelection,
-  groupSelection,
-  openLinkNode,
-  onOpenFileRef,
-  onAddImage,
-  onToggleNodeLock,
-  setGroupLabelEditId,
-  setLinkDialog,
-  setDocumentPicker,
-  setFacetPanelOpen,
-  setCommentCompose,
-}: NodeMenuItemsInput): ContextMenuItem[] {
-  // The catalog's band order, shared by both vessels (list and grid):
-  // 1. properties (state pickers — the menu stays open),
-  // 2. verbs (one-shot — the menu closes),
-  // 3. the destructive entry, alone at the bottom.
-  const properties: ContextMenuItem[] = []
-  const verbs: ContextMenuItem[] = []
-  const commentOnThis = commentOnNodeItem(node, setCommentCompose)
-  if (isFrame(node)) {
+/**
+ * A FRAME's own bands: what a group can be given and what can be done to it.
+ *
+ * Separated because it is the one node kind with a whole vocabulary of its
+ * own — a background, a label, and the members it holds — and it was the
+ * largest of the five contributions this builder makes.
+ */
+function pushFrameBands(
+  properties: ContextMenuItem[],
+  verbs: ContextMenuItem[],
+  input: NodeMenuItemsInput,
+): void {
+  const {
+    node,
+    pendingBackgroundGroupIdRef,
+    imageInputRef,
+    applyResult,
+    onAddImage,
+    setGroupLabelEditId,
+  } = input
+  verbs.push({
+    label: 'Edit label',
+    icon: <Tag />,
+    onSelect: () => setGroupLabelEditId(node.id),
+  })
+  if (onAddImage !== undefined) {
     verbs.push({
-      label: 'Edit label',
-      icon: <Tag />,
-      onSelect: () => setGroupLabelEditId(node.id),
+      label: 'Set background image',
+      icon: <ImageIcon />,
+      onSelect: () => {
+        pendingBackgroundGroupIdRef.current = node.id
+        imageInputRef.current?.click()
+      },
     })
-    if (onAddImage !== undefined) {
-      verbs.push({
-        label: 'Set background image',
-        icon: <ImageIcon />,
-        onSelect: () => {
-          pendingBackgroundGroupIdRef.current = node.id
-          imageInputRef.current?.click()
-        },
+  }
+  const ownBackground = frameBackground(node)
+  if (ownBackground !== undefined) {
+    const background = ownBackground
+    const backgroundStyle = frameBackgroundStyle(node)
+    const applyStyle = (backgroundStyle: 'cover' | 'ratio') =>
+      applyResult({
+        state: { kind: 'idle' },
+        commands: [{ kind: 'set-group-background', id: node.id, background, backgroundStyle }],
       })
-    }
-    const ownBackground = frameBackground(node)
-    if (ownBackground !== undefined) {
-      const background = ownBackground
-      const backgroundStyle = frameBackgroundStyle(node)
-      const applyStyle = (backgroundStyle: 'cover' | 'ratio') =>
+    properties.push({
+      kind: 'options',
+      label: 'Background',
+      options: [
+        {
+          label: 'Cover',
+          ariaLabel: 'Cover',
+          selected: backgroundStyle !== 'ratio',
+          onSelect: () => applyStyle('cover'),
+        },
+        {
+          label: 'Fit',
+          ariaLabel: 'Fit',
+          selected: backgroundStyle === 'ratio',
+          onSelect: () => applyStyle('ratio'),
+        },
+      ],
+    })
+    verbs.push({
+      label: 'Remove background',
+      icon: <ImageOff />,
+      onSelect: () =>
         applyResult({
           state: { kind: 'idle' },
-          commands: [{ kind: 'set-group-background', id: node.id, background, backgroundStyle }],
-        })
-      properties.push({
-        kind: 'options',
-        label: 'Background',
-        options: [
-          {
-            label: 'Cover',
-            ariaLabel: 'Cover',
-            selected: backgroundStyle !== 'ratio',
-            onSelect: () => applyStyle('cover'),
-          },
-          {
-            label: 'Fit',
-            ariaLabel: 'Fit',
-            selected: backgroundStyle === 'ratio',
-            onSelect: () => applyStyle('ratio'),
-          },
-        ],
-      })
-      verbs.push({
-        label: 'Remove background',
-        icon: <ImageOff />,
-        onSelect: () =>
-          applyResult({
-            state: { kind: 'idle' },
-            commands: [{ kind: 'set-group-background', id: node.id }],
-          }),
-      })
-    }
-  }
-  // Framing an existing multi-selection is reached from any of
-  // its members — the frame encloses every selected node,
-  // including group frames: nesting is geometric in JSON Canvas,
-  // and containment moves already handle nested frames.
-  if (extraIds.size > 0) {
-    verbs.push({
-      label: 'Group selection',
-      icon: <Frame />,
-      onSelect: () => groupSelection([node.id, ...extraIds]),
-    })
-    // A conversation about the SELECTION, not one member: the spatial arm
-    // naming every member, with the box they occupy stored as the place
-    // the thread is drawn from once they are gone. The bubble opens at the
-    // box's top-right corner, where the layer will pin it.
-    const nodeIds = [node.id, ...extraIds]
-    const members = canvas.nodes.filter((entry) => nodeIds.includes(entry.id))
-    const left = Math.min(...members.map((entry) => entry.x))
-    const top = Math.min(...members.map((entry) => entry.y))
-    const right = Math.max(...members.map((entry) => entry.x + entry.width))
-    const bottom = Math.max(...members.map((entry) => entry.y + entry.height))
-    verbs.push({
-      label: 'Comment on selection',
-      icon: <MessageSquarePlus />,
-      onSelect: () =>
-        setCommentCompose({
-          point: { x: right, y: top },
-          threadAnchor: {
-            kind: 'spatial',
-            nodeIds,
-            x: Math.round(left),
-            y: Math.round(top),
-            width: Math.round(right - left),
-            height: Math.round(bottom - top),
-          },
+          commands: [{ kind: 'set-group-background', id: node.id }],
         }),
     })
   }
+}
+
+/**
+ * What a MULTI-selection offers: verbs that act on the whole set rather
+ * than on the node the menu was opened over.
+ */
+function pushMultiSelectionBands(verbs: ContextMenuItem[], input: NodeMenuItemsInput): void {
+  const { node, canvas, extraIds, groupSelection, setCommentCompose } = input
+  verbs.push({
+    label: 'Group selection',
+    icon: <Frame />,
+    onSelect: () => groupSelection([node.id, ...extraIds]),
+  })
+  // A conversation about the SELECTION, not one member: the spatial arm
+  // naming every member, with the box they occupy stored as the place
+  // the thread is drawn from once they are gone. The bubble opens at the
+  // box's top-right corner, where the layer will pin it.
+  const nodeIds = [node.id, ...extraIds]
+  const members = canvas.nodes.filter((entry) => nodeIds.includes(entry.id))
+  const left = Math.min(...members.map((entry) => entry.x))
+  const top = Math.min(...members.map((entry) => entry.y))
+  const right = Math.max(...members.map((entry) => entry.x + entry.width))
+  const bottom = Math.max(...members.map((entry) => entry.y + entry.height))
+  verbs.push({
+    label: 'Comment on selection',
+    icon: <MessageSquarePlus />,
+    onSelect: () =>
+      setCommentCompose({
+        point: { x: right, y: top },
+        threadAnchor: {
+          kind: 'spatial',
+          nodeIds,
+          x: Math.round(left),
+          y: Math.round(top),
+          width: Math.round(right - left),
+          height: Math.round(bottom - top),
+        },
+      }),
+  })
+}
+
+/**
+ * A node that REFERS to something — a file this app can open — offers the
+ * verb that follows it. An image reference does not: navigating to an asset
+ * id is a dead end.
+ */
+function pushReferenceBands(verbs: ContextMenuItem[], input: NodeMenuItemsInput): void {
+  const { node, isImageFileRef, missingFileRef, fileRefOptions, onOpenFileRef, setDocumentPicker } =
+    input
   const fileRef = nodeFile(node)
   if (fileRef !== undefined && isImageFileRef?.(fileRef) !== true) {
     // A missing target makes Open a dead end (worse: the daemon's
@@ -250,6 +238,52 @@ export function nodeMenuItems({
       })
     }
   }
+}
+
+export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
+  const {
+    node,
+    canvas,
+    canvasRef,
+    palette,
+    gestureState,
+    isLocked,
+    lockEnabled,
+    isEdgeLocked,
+    extraIds,
+    selectedId,
+    facetRegistry,
+    selectedAlignableBoxes,
+    applyResult,
+    applyBoxMoves,
+    copySelection,
+    cutSelection,
+    duplicateSelection,
+    reorderSelection,
+    openLinkNode,
+    onToggleNodeLock,
+    setLinkDialog,
+    setFacetPanelOpen,
+    setCommentCompose,
+  } = input
+  // The catalog's band order, shared by both vessels (list and grid):
+  // 1. properties (state pickers — the menu stays open),
+  // 2. verbs (one-shot — the menu closes),
+  // 3. the destructive entry, alone at the bottom.
+  const properties: ContextMenuItem[] = []
+  const verbs: ContextMenuItem[] = []
+  const commentOnThis = commentOnNodeItem(node, setCommentCompose)
+  if (isFrame(node)) {
+    pushFrameBands(properties, verbs, input)
+  }
+  // Framing an existing multi-selection is reached from any of
+  // its members — the frame encloses every selected node,
+  // including group frames: nesting is geometric in JSON Canvas,
+  // and containment moves already handle nested frames.
+  if (extraIds.size > 0) {
+    pushMultiSelectionBands(verbs, input)
+  }
+  pushReferenceBands(verbs, input)
   if (nodeUrl(node) !== undefined) {
     verbs.push({
       label: 'Open link',

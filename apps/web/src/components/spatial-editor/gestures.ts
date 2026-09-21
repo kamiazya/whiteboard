@@ -530,6 +530,242 @@ export interface ReduceGestureOptions {
   readonly createId?: () => string
 }
 
+/**
+ * The platform tore the gesture down mid-flight, so a node created for the
+ * edit it interrupted is debris rather than a decision.
+ *
+ * Distinct from the explicit cancel below on purpose — the lost-capture
+ * handling relies on a real pointercancel staying a discard.
+ */
+function reducePointerCancel(state: GestureState): GestureResult {
+  if (state.kind === 'editing-text' && state.createdForEdit === true) {
+    return {
+      state: { kind: 'idle' },
+      commands: [{ kind: 'delete-node', id: state.nodeId }],
+      selectedId: null,
+    }
+  }
+  return idle
+}
+
+/**
+ * Escape discards what was TYPED, and takes the node with it only when there
+ * is typed text to discard.
+ *
+ * With nothing typed, Escape just closes the editor: an empty note is a
+ * layout tool — the rectangle this product deliberately does not have a
+ * second kind for — and eating it punished exactly the person sketching
+ * boxes.
+ */
+function reduceCancelTextEdit(state: GestureState): GestureResult {
+  if (state.kind !== 'editing-text' || state.createdForEdit !== true) return idle
+  if (state.pendingText === '') {
+    return { state: { kind: 'idle' }, commands: [], selectedId: state.nodeId }
+  }
+  return {
+    state: { kind: 'idle' },
+    commands: [{ kind: 'delete-node', id: state.nodeId }],
+    selectedId: null,
+  }
+}
+
+/**
+ * Only STROKES travel.
+ *
+ * An id naming a RELATION is dropped here rather than at the release: an
+ * edge's path is routed from the boxes it joins, so there is nothing of its
+ * own to move, and a gesture armed over nothing would swallow the press that
+ * should have started a band.
+ */
+function reducePointerDownInk(
+  state: GestureState,
+  canvas: SpatialCanvas,
+  candidateIds: readonly string[],
+  point: Point,
+): GestureResult {
+  const ids = candidateIds.filter((id) => (canvas.lines ?? []).some((line) => line.id === id))
+  if (ids.length === 0) return idle
+  return withPendingTextCommit(state, {
+    state: { kind: 'moving-ink', ids, startPoint: point },
+    commands: [],
+    // The NODE selection goes, the same way `pointerdown-empty` drops it —
+    // which is the event this arm replaced for a press on ink. Without it a
+    // node selected a moment earlier stayed selected behind the stroke, and
+    // the next Delete took both. Found by the full browser run: the drag's
+    // own tests never selected a node first.
+    selectedId: null,
+  })
+}
+
+/**
+ * Opening an editor SOMEWHERE ELSE leaves the current one, so it commits like
+ * every other way out (see the policy at the top of this file).
+ *
+ * This arm reaches the reducer with no pointerdown in front of it — the
+ * context menu's "Edit text" verb dispatches it directly, and the right-click
+ * that opened the menu returned early from `handlePointerDown` — so nothing
+ * upstream has already committed.
+ *
+ * Re-opening the SAME node is a NO-OP, not a re-seed. There is nothing to
+ * commit (the edit never left) and `text` is the node's last COMMITTED text,
+ * so seeding from it would replace what the user has typed since — the same
+ * silent loss this arm exists to prevent, one carve-out further in.
+ */
+function reduceStartTextEdit(state: GestureState, nodeId: string, text: string): GestureResult {
+  if (state.kind === 'editing-text' && state.nodeId === nodeId) return stateOnly(state)
+  return withPendingTextCommit(
+    state,
+    stateOnly({ kind: 'editing-text', nodeId, pendingText: text }),
+  )
+}
+
+/**
+ * Pure state passthrough: this reducer never stores an intermediate point.
+ *
+ * The eventual commit is always recomputed from startPoint/current point at
+ * pointerup — for move, resize AND connect — so a live preview (drag outline,
+ * in-flight connect line) is a projection `SpatialEditor.tsx` derives from its
+ * own component-local pointer state (`computeDragPreview`). No visual state
+ * ever needs to round-trip through here.
+ *
+ * A STROKE is the exception, and not a relaxation of that rule so much as the
+ * case it cannot cover: the samples ARE the gesture, and there is nothing to
+ * recompute them from at the release. So the drawing arm accumulates, and the
+ * preview reads the same list the commit will — one path, rather than a
+ * component-local copy that can disagree with what is written.
+ */
+function reducePointerMove(state: GestureState, point: Point): GestureResult {
+  if (state.kind === 'drawing') {
+    return stateOnly({ ...state, points: [...state.points, point] })
+  }
+  return stateOnly(state)
+}
+
+/**
+ * Which release this is, dispatched on the STATE the gesture is in.
+ *
+ * Its arms sit beside it as `reducePointerUp*`, the convention this file
+ * already followed for move, resize, bend and ink — the two that stayed
+ * inline (`connecting`, `reattaching`) made the release a nested switch,
+ * which charges every branch inside it twice over.
+ */
+function reducePointerUp(
+  state: GestureState,
+  canvas: SpatialCanvas,
+  event: Extract<GestureEvent, { type: 'pointerup' }>,
+  createId: () => string,
+): GestureResult {
+  switch (state.kind) {
+    case 'moving':
+      return reducePointerUpMoving(state, event)
+    case 'resizing':
+      return reducePointerUpResizing(state, event)
+    case 'connecting': {
+      const release = connectRelease(
+        canvas,
+        state.fromNodeId,
+        event.point,
+        event.targetNodeId,
+        createId,
+      )
+      if (release.kind === 'stay-armed') return stateOnly(state)
+      if (release.kind === 'cancel') return idle
+      return { state: { kind: 'idle' }, commands: release.commands }
+    }
+    case 'bending':
+      return reducePointerUpBending(state, event, canvas)
+    case 'moving-ink':
+      return reducePointerUpMovingInk(state, event, canvas)
+    case 'reattaching': {
+      const commands = endCommands(canvas, state, event.point, event.targetNodeId)
+      return commands.length === 0 ? idle : { state: { kind: 'idle' }, commands }
+    }
+    case 'drawing': {
+      const line = freehandLine(createId(), [...state.points, event.point], state.zoom, state.group)
+      if (line === undefined) return idle
+      return { state: { kind: 'idle' }, commands: [{ kind: 'create-line', line }] }
+    }
+    case 'editing-text':
+      // A double-press opens the editor on the SECOND pointerdown; that
+      // press's own pointerup arrives afterwards and must not tear the
+      // editor down again.
+      return stateOnly(state)
+    default:
+      return idle
+  }
+}
+
+/** Delete acts on the board, never on an editor that is open. */
+function reduceDeleteSelection(state: GestureState, nodeId: string): GestureResult {
+  if (state.kind === 'editing-text') return stateOnly(state)
+  return {
+    state: { kind: 'idle' },
+    commands: [{ kind: 'delete-node', id: nodeId }],
+    selectedId: null,
+  }
+}
+
+/** A text commit only lands while an editor is the state. */
+function reduceCommitTextEdit(state: GestureState, text: string): GestureResult {
+  if (state.kind !== 'editing-text') return idle
+  return {
+    state: { kind: 'idle' },
+    commands: [{ kind: 'set-text', id: state.nodeId, text }],
+  }
+}
+
+/**
+ * The three bend verbs, which share one precondition: the waypoint has to
+ * still be there.
+ *
+ * An edge's bends are stored on the edge, so a verb naming an index the
+ * canvas no longer holds is stale — from an overlay that has not re-rendered,
+ * or from a remote edit that straightened the edge — and doing nothing is the
+ * only safe answer. Kept as one function because the check is the whole
+ * shared part; each verb's own action is two lines below it.
+ */
+function reduceBendArm(
+  state: GestureState,
+  canvas: SpatialCanvas,
+  event: Extract<GestureEvent, { type: 'pointerdown-bend' | 'move-bend' | 'remove-bend' }>,
+): GestureResult {
+  if (event.type === 'pointerdown-bend') {
+    if (!bendTargetExists(canvas, event.edgeId)) return idle
+    if (event.waypoints[event.index] === undefined) return idle
+    return withPendingTextCommit(
+      state,
+      stateOnly({
+        kind: 'bending',
+        edgeId: event.edgeId,
+        index: event.index,
+        startPoint: event.point,
+        waypoints: event.waypoints,
+      }),
+    )
+  }
+  const stored = storedWaypoints(canvas, event.edgeId)
+  if (stored[event.index] === undefined) return idle
+  if (event.type === 'remove-bend') {
+    return {
+      state: { kind: 'idle' },
+      commands: bendCommands(
+        canvas,
+        event.edgeId,
+        stored.filter((_point, at) => at !== event.index),
+      ),
+    }
+  }
+  if (event.dx === 0 && event.dy === 0) return idle
+  return {
+    state: { kind: 'idle' },
+    commands: bendCommands(
+      canvas,
+      event.edgeId,
+      movedWaypoints(stored, event.index, event.dx, event.dy),
+    ),
+  }
+}
+
 export function reduceGesture(
   state: GestureState,
   canvas: SpatialCanvas,
@@ -542,54 +778,11 @@ export function reduceGesture(
     case 'canvas-replaced':
       return reduceCanvasReplaced(state, event.canvas, event.origin ?? 'local')
     case 'pointercancel':
-      // The platform tore the gesture down mid-flight; a node created for
-      // the edit it interrupted is debris, not a decision. Distinct from the
-      // explicit cancel below on purpose — the lost-capture handling relies
-      // on a real pointercancel staying a discard.
-      if (state.kind === 'editing-text' && state.createdForEdit === true) {
-        return {
-          state: { kind: 'idle' },
-          commands: [{ kind: 'delete-node', id: state.nodeId }],
-          selectedId: null,
-        }
-      }
-      return idle
+      return reducePointerCancel(state)
     case 'cancel-text-edit':
-      if (state.kind === 'editing-text' && state.createdForEdit === true) {
-        // Escape discards what was TYPED, and takes the node with it only
-        // when there is typed text to discard. With nothing typed, Escape
-        // just closes the editor: an empty note is a layout tool (it is the
-        // rectangle this product deliberately does not have a second kind
-        // for), and eating it punished exactly the person sketching boxes.
-        if (state.pendingText === '') {
-          return { state: { kind: 'idle' }, commands: [], selectedId: state.nodeId }
-        }
-        return {
-          state: { kind: 'idle' },
-          commands: [{ kind: 'delete-node', id: state.nodeId }],
-          selectedId: null,
-        }
-      }
-      return idle
-    case 'pointerdown-ink': {
-      // Only strokes travel. An id naming a RELATION is dropped here rather
-      // than at the release: an edge's path is routed from the boxes it
-      // joins, so there is nothing of its own to move, and a gesture armed
-      // over nothing would swallow the press that should have started a
-      // band.
-      const ids = event.ids.filter((id) => (canvas.lines ?? []).some((line) => line.id === id))
-      if (ids.length === 0) return idle
-      return withPendingTextCommit(state, {
-        state: { kind: 'moving-ink', ids, startPoint: event.point },
-        commands: [],
-        // The NODE selection goes, the same way `pointerdown-empty` drops it
-        // — which is the event this arm replaced for a press on ink. Without
-        // it a node selected a moment earlier stayed selected behind the
-        // stroke, and the next Delete took both. Found by the full browser
-        // run: the drag's own tests never selected a node first.
-        selectedId: null,
-      })
-    }
+      return reduceCancelTextEdit(state)
+    case 'pointerdown-ink':
+      return reducePointerDownInk(state, canvas, event.ids, event.point)
     case 'pointerdown-empty':
       return withPendingTextCommit(state, {
         state: { kind: 'idle' },
@@ -599,12 +792,7 @@ export function reduceGesture(
     case 'dblclick-empty':
       return withPendingTextCommit(state, reduceCreateTextNodeAt(event.point, createId))
     case 'delete-selection':
-      if (state.kind === 'editing-text') return stateOnly(state)
-      return {
-        state: { kind: 'idle' },
-        commands: [{ kind: 'delete-node', id: event.nodeId }],
-        selectedId: null,
-      }
+      return reduceDeleteSelection(state, event.nodeId)
     case 'pointerdown-draw':
       return withPendingTextCommit(
         state,
@@ -635,136 +823,23 @@ export function reduceGesture(
             }),
           )
         : idle
-    case 'pointerdown-bend': {
-      if (!bendTargetExists(canvas, event.edgeId)) return idle
-      if (event.waypoints[event.index] === undefined) return idle
-      return withPendingTextCommit(
-        state,
-        stateOnly({
-          kind: 'bending',
-          edgeId: event.edgeId,
-          index: event.index,
-          startPoint: event.point,
-          waypoints: event.waypoints,
-        }),
-      )
-    }
-    case 'move-bend': {
-      const stored = storedWaypoints(canvas, event.edgeId)
-      const point = stored[event.index]
-      if (point === undefined || (event.dx === 0 && event.dy === 0)) return idle
-      return {
-        state: { kind: 'idle' },
-        commands: bendCommands(
-          canvas,
-          event.edgeId,
-          movedWaypoints(stored, event.index, event.dx, event.dy),
-        ),
-      }
-    }
-    case 'remove-bend': {
-      const stored = storedWaypoints(canvas, event.edgeId)
-      if (stored[event.index] === undefined) return idle
-      return {
-        state: { kind: 'idle' },
-        commands: bendCommands(
-          canvas,
-          event.edgeId,
-          stored.filter((_point, at) => at !== event.index),
-        ),
-      }
-    }
+    case 'pointerdown-bend':
+      return reduceBendArm(state, canvas, event)
+    case 'move-bend':
+      return reduceBendArm(state, canvas, event)
+    case 'remove-bend':
+      return reduceBendArm(state, canvas, event)
     case 'start-text-edit':
-      // Opening an editor SOMEWHERE ELSE leaves the current one, so it
-      // commits like every other way out (see the policy at the top of this
-      // file). This arm reaches the reducer with no pointerdown in front of
-      // it — the context menu's "Edit text" verb dispatches it directly, and
-      // the right-click that opened the menu returned early from
-      // `handlePointerDown` — so nothing upstream has already committed.
-      // Re-opening the SAME node is a NO-OP, not a re-seed. There is
-      // nothing to commit — the edit never left — and `event.text` is the
-      // node's last COMMITTED text, so seeding from it would replace what
-      // the user has typed since. That is the same silent loss this arm
-      // exists to prevent, one carve-out further in.
-      if (state.kind === 'editing-text' && state.nodeId === event.nodeId) {
-        return stateOnly(state)
-      }
-      return withPendingTextCommit(
-        state,
-        stateOnly({ kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text }),
-      )
+      return reduceStartTextEdit(state, event.nodeId, event.text)
     case 'update-text-edit':
-      if (state.kind !== 'editing-text') return stateOnly(state)
-      return stateOnly({ ...state, pendingText: event.text })
+      return state.kind === 'editing-text'
+        ? stateOnly({ ...state, pendingText: event.text })
+        : stateOnly(state)
     case 'commit-text-edit':
-      if (state.kind !== 'editing-text') return idle
-      return {
-        state: { kind: 'idle' },
-        commands: [{ kind: 'set-text', id: state.nodeId, text: event.text }],
-      }
+      return reduceCommitTextEdit(state, event.text)
     case 'pointermove':
-      // Pure state passthrough: this reducer never stores an intermediate
-      // point on the state — the eventual commit is always recomputed from
-      // startPoint/current point at pointerup, for move, resize, AND
-      // connect. A live preview (drag outline, in-flight connect line) is
-      // therefore always a projection SpatialEditor.tsx derives itself from
-      // its own component-local pointer state (see `computeDragPreview` in
-      // drag-preview.ts) — this reducer has no opinion on it one way or the
-      // other, and no visual state ever needs to round-trip through here.
-      //
-      // A STROKE is the exception, and it is not a relaxation of that rule
-      // so much as the case the rule cannot cover: the samples ARE the
-      // gesture, and there is nothing to recompute them from at the release.
-      // So the drawing arm accumulates, and the preview reads the same list
-      // the commit will — one path, rather than a component-local copy that
-      // can disagree with what is written.
-      if (state.kind === 'drawing') {
-        return stateOnly({ ...state, points: [...state.points, event.point] })
-      }
-      return stateOnly(state)
+      return reducePointerMove(state, event.point)
     case 'pointerup':
-      switch (state.kind) {
-        case 'moving':
-          return reducePointerUpMoving(state, event)
-        case 'resizing':
-          return reducePointerUpResizing(state, event)
-        case 'connecting': {
-          const release = connectRelease(
-            canvas,
-            state.fromNodeId,
-            event.point,
-            event.targetNodeId,
-            createId,
-          )
-          if (release.kind === 'stay-armed') return stateOnly(state)
-          if (release.kind === 'cancel') return idle
-          return { state: { kind: 'idle' }, commands: release.commands }
-        }
-        case 'bending':
-          return reducePointerUpBending(state, event, canvas)
-        case 'moving-ink':
-          return reducePointerUpMovingInk(state, event, canvas)
-        case 'reattaching': {
-          const commands = endCommands(canvas, state, event.point, event.targetNodeId)
-          return commands.length === 0 ? idle : { state: { kind: 'idle' }, commands }
-        }
-        case 'drawing': {
-          const line = freehandLine(
-            createId(),
-            [...state.points, event.point],
-            state.zoom,
-            state.group,
-          )
-          if (line === undefined) return idle
-          return { state: { kind: 'idle' }, commands: [{ kind: 'create-line', line }] }
-        }
-        case 'editing-text':
-          // A double-press opens the editor on the SECOND pointerdown; that
-          // press's own pointerup arrives afterwards and must not tear the
-          // editor down again.
-          return stateOnly(state)
-        default:
-          return idle
-      }
+      return reducePointerUp(state, canvas, event, createId)
   }
 }
