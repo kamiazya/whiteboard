@@ -102,8 +102,15 @@ jobs:
       #
       # `./bin` is gitignored — running this line locally drops a 16MB binary
       # in the working tree otherwise.
+      #
+      # --commit is not optional here. On `pull_request`, checkout builds a
+      # MERGE commit, and the CLI's git detection reports against that: the
+      # upload succeeds, the step goes green, and DeepSource discards it —
+      # "the merge commit doesn't exist upstream". Measured on this lane's
+      # first real run, which reported against d61b9449 and landed nowhere.
       - name: Report coverage to DeepSource
         run: |
           curl -fsSL https://cli.deepsource.com/install | BINDIR=./bin sh
           ./bin/deepsource report --analyzer test-coverage \
-            --key javascript --value-file tmp/coverage/lcov.info --use-oidc
+            --key javascript --value-file tmp/coverage/lcov.info --use-oidc \
+            --commit "${{ github.event.pull_request.head.sha || github.sha }}"
