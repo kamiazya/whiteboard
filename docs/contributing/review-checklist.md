@@ -25,7 +25,7 @@ Use this checklist when reviewing or self-reviewing a pull request in this repos
 
 - [ ] Server code uses `getLogger(...)` — no `console.*` calls in `src/server/**`.
 - [ ] Updates are immutable — no in-place mutation of inputs.
-- [ ] Files stay under 800 lines — source and test alike, each held by its own shrink-only grandfather list in `file-size-budget.test.ts`. Test files get the same budget rather than a higher one, because measured across this repo they run only 1.09-1.17x the size of source files at every percentile; the guard's own header carries the table. Functions stay under 50 lines.
+- [ ] Files stay under 800 lines — source and test alike, each held by its own shrink-only grandfather list in `file-size-budget.test.ts`. Test files get the same budget rather than a higher one, because measured across this repo they run only 1.09-1.17x the size of source files at every percentile; the guard's own header carries the table. Functions stay under 50 lines, held the same way by `tools/arch-lint/src/function-size-budget.test.ts` — a separate guard because a function's boundaries need an AST, and a separate CLASS of debt because a file budget is satisfied by moving mass between files while the long function survives whole.
 - [ ] Comments explain the enduring *why*, not the narrative of how the PR came about.
 
 ## Documentation
