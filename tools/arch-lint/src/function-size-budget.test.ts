@@ -500,7 +500,13 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 142,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
   'packages/mcp-server/src/server/routes/mcp.ts#createMcpRouter': 120,
-  'packages/mcp-server/src/server/routes/membership.ts#createMembershipRouter': 112,
+  // 112 -> 136: a FOURTH route in a four-route router (the members-only
+  // reopen, user decision 2026-09-21). Paid for partly first — the bar's
+  // rationale moved to the file header, where a statement about the
+  // router's authority model belongs and where the budget does not count
+  // it. What is left is the handler, and extracting one of four while the
+  // other three stay inline would trade a number for an inconsistency.
+  'packages/mcp-server/src/server/routes/membership.ts#createMembershipRouter': 136,
   'packages/mcp-server/src/server/routes/oauth-authz.ts#createOAuthAuthzRouter': 208,
   'packages/mcp-server/src/server/routes/pairing.ts#createPairingRouter': 283,
   // Renamed from replica-key.test.ts#bindSession (extracted to the shared
@@ -526,7 +532,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 291,
   'packages/mcp-server/src/server/security/credential-resolver.ts#createCredentialResolver': 92,
   'packages/mcp-server/src/server/security/credential-resolver.ts#createCredentialResolver.resolve': 88,
-  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 108,
+  // 108 -> 117: `reopenToOriginTrust`, the membership gate's only exit
+  // (user decision 2026-09-21). A factory gains a method; there is nothing
+  // to extract, and splitting the store by which table a method touches
+  // would put the `membersOnly` insert and its clear in different files.
+  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 117,
   'packages/mcp-server/src/server/security/oauth-authz-transactions.ts#createOAuthTransactionStore': 299,
   'packages/mcp-server/src/server/security/oauth-jwt-validator.ts#createOAuthJwtValidator': 88,
   'packages/mcp-server/src/server/security/oauth-jwt-validator.ts#createOAuthJwtValidator.validate': 63,

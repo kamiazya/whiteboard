@@ -12,6 +12,7 @@ import {
   memberProfileSummarySchema,
   membershipRefusalSchema,
   removeMemberResponseSchema,
+  reopenOriginTrustResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   pairingTokenResponseSchema,
@@ -115,8 +116,12 @@ async function post(
   })
 }
 
-async function del(app: Awaited<ReturnType<typeof makeApp>>['app'], path: string) {
-  return app.request(path, { method: 'DELETE' })
+async function del(
+  app: Awaited<ReturnType<typeof makeApp>>['app'],
+  path: string,
+  headers: Record<string, string> = {},
+) {
+  return app.request(path, { method: 'DELETE', headers })
 }
 
 /** Pins a passkey for HOSTED (keeping the private key) without pairing an
@@ -482,5 +487,112 @@ describe('membership routes enforce the runtime:admin scope through the real aut
       { Authorization: `Bearer ${DAEMON_TOKEN}` },
     )
     expect(res.status).toBe(201)
+  })
+})
+
+describe('reopening a member-gated workspace to origin trust', () => {
+  it('answers wasMembersOnly:false for a workspace no member ever joined', async () => {
+    const fixture = await makeApp()
+
+    const res = await del(fixture.app, `/api/workspaces/${WS}/members-only`)
+
+    // Not a 404: the workspace exists and the request is well formed, there
+    // was simply nothing to clear. An operator asking twice learns which.
+    expect(res.status).toBe(200)
+    expect(reopenOriginTrustResponseSchema.parse(await res.json())).toEqual({
+      wasMembersOnly: false,
+    })
+  })
+
+  it('clears the gate and says it was closed', async () => {
+    const fixture = await makeApp()
+    const pin = pinPasskey(fixture)
+    const added = await post(fixture.app, `/api/workspaces/${WS}/members`, {
+      credentialId: pin.credentialId,
+      origin: pin.origin,
+      displayName: 'Ada Lovelace',
+    } satisfies AddMemberRequest)
+    expect(added.status).toBe(201)
+    expect(await fixture.members.membersOnly(WS)).toBe(true)
+
+    const res = await del(fixture.app, `/api/workspaces/${WS}/members-only`)
+
+    expect(res.status).toBe(200)
+    expect(reopenOriginTrustResponseSchema.parse(await res.json())).toEqual({
+      wasMembersOnly: true,
+    })
+    expect(await fixture.members.membersOnly(WS)).toBe(false)
+  })
+
+  it('leaves the members in place, so the list still answers them', async () => {
+    const fixture = await makeApp()
+    const pin = pinPasskey(fixture)
+    await post(fixture.app, `/api/workspaces/${WS}/members`, {
+      credentialId: pin.credentialId,
+      origin: pin.origin,
+      displayName: 'Ada Lovelace',
+    } satisfies AddMemberRequest)
+
+    await del(fixture.app, `/api/workspaces/${WS}/members-only`)
+
+    // Reopening widens who may read; it does not remove who already could.
+    const list = await get(fixture.app, `/api/workspaces/${WS}/members`)
+    expect(listMembersResponseSchema.parse(await list.json()).members).toHaveLength(1)
+  })
+
+  it('refuses an unknown workspace rather than reporting a clear', async () => {
+    const fixture = await makeApp()
+
+    const res = await del(fixture.app, '/api/workspaces/01JNOSUCHWORKSPACE000000000/members-only')
+
+    expect(res.status).toBe(404)
+    expect(((await res.json()) as { error: string }).error).toBe('unknown_workspace')
+  })
+
+  it('refuses a malformed workspace id with a 400', async () => {
+    const fixture = await makeApp()
+
+    const res = await del(fixture.app, '/api/workspaces/..%2Fetc/members-only')
+
+    expect(res.status).toBe(400)
+  })
+})
+
+// The bar here is judged by the grant's KIND, not its scopes, which is the
+// one thing about this route worth proving through the real middleware: a
+// pairing grant carries EVERY scope (`credential-resolver.ts`), so a
+// scope-based bar would not separate an operator from a paired browser at
+// all. `daemon-token-only` does.
+describe('the reopen route is barred to the daemon token, by kind rather than scope', () => {
+  it('refuses a macaroon that HAS runtime:admin', async () => {
+    const { app } = await makeAuthedApp()
+    const scoped = await mintMacaroon({
+      rootKey: MACAROON_ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: ['runtime:admin'] }],
+    })
+
+    // The same token is ADMITTED on the member routes beside it (see the
+    // suite above), so this is the bar differing rather than the scope
+    // being absent — which is what makes it evidence.
+    const res = await del(app, `/api/workspaces/${WS}/members-only`, {
+      Authorization: `Bearer ${scoped}`,
+    })
+    expect(res.status).toBe(401)
+  })
+
+  it('admits the daemon token itself', async () => {
+    const { app } = await makeAuthedApp()
+
+    const res = await del(app, `/api/workspaces/${WS}/members-only`, {
+      Authorization: `Bearer ${DAEMON_TOKEN}`,
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses no Authorization header at all', async () => {
+    const { app } = await makeAuthedApp()
+
+    expect((await del(app, `/api/workspaces/${WS}/members-only`)).status).toBe(401)
   })
 })

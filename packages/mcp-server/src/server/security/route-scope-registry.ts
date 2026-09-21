@@ -251,6 +251,31 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: workspacesHandle,
   },
 
+  // Returning a workspace to ORIGIN TRUST (user decision 2026-09-21): the
+  // gate's only exit, and the FIRST live user of `daemon-token-only`.
+  //
+  // It sits ABOVE 'workspace members' because the two paths are one
+  // character apart and the ordering is the whole of this table's control
+  // flow. The regex below it requires `members` to be followed by `/` or
+  // the end, so `members-only` does not in fact match it today — declared
+  // above anyway, because relying on that is relying on a negative nobody
+  // will re-derive when either pattern is edited.
+  //
+  // The bar is by KIND rather than scope, which is the point rather than a
+  // detail: a pairing grant carries EVERY scope, so `runtime:admin` — the
+  // bar the member routes beside this one use — would not separate an
+  // operator from a paired browser session. Whoever holds the daemon token
+  // owns the data directory, and a taken-over origin cannot open the gate
+  // for itself. `grantCoversRoute` (routes/auth.ts) is what enforces it,
+  // and server mode refuses the variant outright since no daemon token
+  // exists there — which matches, the membership router being
+  // local-daemon-only already.
+  {
+    name: 'workspace members-only reopen',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/members-only$/, 'DELETE'),
+    decide: () => ({ kind: 'daemon-token-only' }) as const,
+  },
+
   // Membership (ADR-0041/0042): who has L1 access to a workspace. Same bar
   // as pairing-grant and credential-pin management — a paired browser
   // session that can manage grants and passkey pins can manage members too

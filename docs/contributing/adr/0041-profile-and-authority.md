@@ -289,6 +289,48 @@ migration backfills one row per workspace that already has a membership row
 when it runs, `since` the earliest of that workspace's memberships — a
 workspace whose members were ALL removed BEFORE 0030 ran has no membership
 row left to backfill from, and stays origin-trusted. That history is not
-recoverable. Reopening a member-gated workspace to origin trust (clearing
-the marker) is a later product decision; nothing in this slice builds a
-control for it.
+recoverable.
+
+**Slice 5 (2026-09-21): the gate gets its exit, and the exit is barred by
+grant KIND.** Slice 4 above closed by saying "reopening a member-gated
+workspace to origin trust is a later product decision; nothing in this
+slice builds a control for it". It is built now. `DELETE
+/api/workspaces/:workspaceId/members-only` clears the marker and answers
+what the marker WAS, so an operator asking twice can tell "I just reopened
+it" from "it was already open". Memberships are left in place: reopening
+widens who may read and does not remove who already could, and folding
+those together would make one call two decisions with the second one
+silent. A workspace re-closes on its next `addMember`, so this is a
+one-shot rather than a mode a workspace sits in.
+
+The user stated no preference between the candidate designs, so the
+recommendation stood: **a daemon-token-only operation, with no browser
+UI.** What makes that expressible is `route-scope-registry.ts`'s
+`daemon-token-only` decision, which until now no route produced — it was
+kept "as defense-in-depth for a future daemon-authority route", and this is
+that route.
+
+**The bar is by KIND rather than by scope, and that is forced rather than
+chosen.** A pairing grant carries every scope (`credential-resolver.ts`),
+which this ADR's slice-4 text above already records as the accepted v1
+posture. So `runtime:admin` — the bar the member routes beside this one use
+— would let any paired browser reopen the very gate that exists to stop an
+origin being trusted: a scope-based bar here would be no bar at all.
+`grantCoversRoute` refuses `daemon-token-only` for every kind but the
+daemon token and `anonymous`, pairing grants included, so the party who can
+reopen a workspace is whoever owns the data directory. Proved rather than
+asserted: `membership.test.ts` refuses a macaroon that HAS `runtime:admin`
+on this route while the suite beside it admits the same token on the member
+routes, and mutating the bar to `always('runtime:admin')` turns exactly
+that case red.
+
+Two honest limits. The route is **unreachable in server mode** by
+construction (no daemon token exists there), which matches — the membership
+router is local-daemon-only already. And **nothing records that a reopen
+happened** beyond a `notice` log line; there is no audit log in this
+codebase to write to, and inventing one in passing would make it the
+convention by accident.
+
+Also unchanged by this slice: the 0030 backfill limit above. A workspace
+whose members were all removed before 0030 ran is origin-trusted and needs
+no reopening.

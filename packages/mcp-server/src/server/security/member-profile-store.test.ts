@@ -155,6 +155,78 @@ describe('revokeL1Membership', () => {
   })
 })
 
+describe('reopenToOriginTrust', () => {
+  it('is false for a workspace that was never members-only', async () => {
+    // Nothing to clear is not an error: an operator asking twice, or asking
+    // about the wrong workspace, learns which without a failure to handle.
+    expect(await store.reopenToOriginTrust('ws-1')).toBe(false)
+  })
+
+  it('clears the gate a revoke deliberately leaves standing', async () => {
+    const profile = await store.ensureProfile({
+      origin: 'https://a.example',
+      credentialId: 'cred-1',
+      displayName: 'Ada',
+    })
+    await store.addMember('ws-1', profile.id)
+    await store.revokeL1Membership('ws-1', profile.id)
+    expect(await store.membersOnly('ws-1')).toBe(true)
+
+    // The whole point (ADR-0042 decision 3's escape): an operator who
+    // removed the last member — possibly their own — can return the
+    // workspace to origin trust.
+    expect(await store.reopenToOriginTrust('ws-1')).toBe(true)
+    expect(await store.membersOnly('ws-1')).toBe(false)
+  })
+
+  it('leaves the memberships themselves alone', async () => {
+    const profile = await store.ensureProfile({
+      origin: 'https://a.example',
+      credentialId: 'cred-1',
+      displayName: 'Ada',
+    })
+    await store.addMember('ws-1', profile.id)
+
+    await store.reopenToOriginTrust('ws-1')
+
+    // Reopening widens who may read; it does not remove the people who
+    // already could. Deleting memberships here would make one operation two
+    // decisions, and the second one silent.
+    expect(await store.isWorkspaceMember('ws-1', profile.id)).toBe('member')
+    expect((await store.listMembers('ws-1')).map((m) => m.id)).toEqual([profile.id])
+  })
+
+  it('re-closes on the next addMember, rather than staying open', async () => {
+    const profile = await store.ensureProfile({
+      origin: 'https://a.example',
+      credentialId: 'cred-1',
+      displayName: 'Ada',
+    })
+    await store.addMember('ws-1', profile.id)
+    await store.reopenToOriginTrust('ws-1')
+
+    // The marker is re-inserted by the ordinary membership path, so a
+    // reopen is a one-shot rather than a mode a workspace stays in.
+    await store.addMember('ws-1', profile.id)
+    expect(await store.membersOnly('ws-1')).toBe(true)
+  })
+
+  it('does not reopen an unrelated workspace', async () => {
+    const profile = await store.ensureProfile({
+      origin: 'https://a.example',
+      credentialId: 'cred-1',
+      displayName: 'Ada',
+    })
+    await store.addMember('ws-a', profile.id)
+    await store.addMember('ws-b', profile.id)
+
+    await store.reopenToOriginTrust('ws-a')
+
+    expect(await store.membersOnly('ws-a')).toBe(false)
+    expect(await store.membersOnly('ws-b')).toBe(true)
+  })
+})
+
 describe('membersOnly', () => {
   it('is false for a fresh store', async () => {
     expect(await store.membersOnly('ws-1')).toBe(false)
