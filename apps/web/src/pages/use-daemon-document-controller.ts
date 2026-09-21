@@ -5,6 +5,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createDocument as createCanvasApi,
+  deleteDocument as deleteDocumentApi,
   listDocuments,
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
@@ -51,6 +52,16 @@ export interface DaemonDocumentController {
    * keepers cannot word the same refusal differently.
    */
   duplicateDocument: () => Promise<void>
+  /**
+   * Delete the document on screen and move to what is left.
+   *
+   * Rejects rather than holding its own error, for the reason
+   * `duplicateDocument` does: the page owns the refusal surface. The list is
+   * refreshed either way by the caller's dialog, since after a FAILURE the
+   * daemon's state is unknown from here — the same reading the index page's
+   * `closeDeleteDialog` is built on.
+   */
+  deleteDocument: () => Promise<void>
   createError: string | null
   /** A membership refusal the resolve could not get past (ADR-0041/0042 S8),
    *  naming the workspace — known once listWorkspaces has resolved, even
@@ -238,6 +249,18 @@ export function useDaemonDocumentController(
     setPath(copy.path)
   }, [daemonFetch, daemonBaseUrl, workspaceId, path, documents])
 
+  const deleteDocument = useCallback(async (): Promise<void> => {
+    if (workspaceId === null || path === null) {
+      throw new Error('No document is open to delete.')
+    }
+    await deleteDocumentApi(daemonFetch, daemonBaseUrl, workspaceId, path)
+    const { documents: refreshed } = await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
+    setDocuments(refreshed)
+    // Whatever is left, or nothing — the page's empty state is what answers
+    // an emptied workspace, and it already does (`replaceEditor`).
+    setPath(refreshed[0]?.path ?? null)
+  }, [daemonFetch, daemonBaseUrl, workspaceId, path])
+
   return {
     loading,
     loadError,
@@ -248,6 +271,7 @@ export function useDaemonDocumentController(
     switchDocument,
     createDocument,
     duplicateDocument,
+    deleteDocument,
     createError,
     refusal,
     retry,

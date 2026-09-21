@@ -7,13 +7,11 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Copy } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
-import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
@@ -49,7 +47,7 @@ import type {
 import type { DocumentPageModel } from './document-page-model.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
-import { useDuplicateDocument } from './use-duplicate-document.js'
+import { useDocumentActions } from './use-document-actions.js'
 
 const log = getAppLogger('daemon-document-page')
 
@@ -372,18 +370,12 @@ function useDaemonDocument(
   const documentKind: DocumentKind =
     controller.documents.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
 
-  // The document on screen NOW, for an async handler that started under a
-  // different one: this page switches documents in place rather than
-  // remounting, so a closure can only answer with the render it was made in.
-  const currentDocumentIdRef = useRef<string | null>(null)
-  currentDocumentIdRef.current = currentDocumentId ?? null
-  // The same hook the browser keeper uses — one in-flight guard and one
-  // wording for the refusal, so the two keepers cannot drift apart on either.
-  const { isDuplicating, duplicateError, handleDuplicate } = useDuplicateDocument({
-    documentId: currentDocumentId ?? null,
-    currentDocumentIdRef,
+  const documentActions = useDocumentActions({
+    documentId: currentDocumentId,
     documentKind,
     duplicateDocument: controller.duplicateDocument,
+    deleteDocument: controller.deleteDocument,
+    deleteCopyId: 'delete-document-daemon',
   })
 
   // SCOPE RESET — see scoped-screen-state.test.ts. Nothing is reset HERE any
@@ -754,21 +746,7 @@ function useDaemonDocument(
       : {}),
     slots: {
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
-      ...(duplicateError === null
-        ? {}
-        : {
-            rowAlerts: (
-              <div role="alert" aria-live="assertive" className="text-destructive text-xs">
-                {duplicateError}
-              </div>
-            ),
-          }),
-      menuItems: (
-        <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
-          <Copy aria-hidden="true" className="size-3.5" />
-          Duplicate
-        </DropdownMenuItem>
-      ),
+      ...documentActions,
     },
   }
 
