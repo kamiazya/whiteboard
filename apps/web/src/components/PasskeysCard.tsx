@@ -159,8 +159,8 @@ export function PasskeysCard({
         <>
           {state.passkeys.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No passkey is registered on this daemon yet. Register one to move a workspace here
-              — a move to another keeper is confirmed with a passkey.
+              No passkey is registered on this daemon yet. Register one to move a workspace here — a
+              move to another keeper is confirmed with a passkey.
             </p>
           ) : (
             <ul className="space-y-2">

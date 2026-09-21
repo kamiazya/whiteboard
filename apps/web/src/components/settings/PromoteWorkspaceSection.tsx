@@ -32,6 +32,7 @@ import { getAppLogger } from '../../lib/app-logger.js'
 import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
 import type { ConnectedDaemon } from '../../lib/daemon-auth-fetch.js'
 import {
+  type AttestOutcome,
   attestPromotion,
   getRegisteredPasskey,
   type PasskeyCredentials,
@@ -93,6 +94,25 @@ type PasskeyState =
   | { kind: 'registering' }
   | { kind: 'registered' }
   | { kind: 'error'; detail: string }
+
+/**
+ * The question `promoteWorkspace` always asks. It is ALWAYS passed, and
+ * answering `null` refuses the move — a credential registered then
+ * forgotten, or a browser that cannot hold one, is exactly the case a
+ * keeper the user does not own must not accept unconfirmed (ADR-0039's
+ * 2026-09-22 addendum). The button is disabled without a passkey, so the
+ * `undefined` arm is the race rather than the normal path.
+ */
+function signerFor(
+  daemonBaseUrl: string,
+  workspaceId: string,
+  credentials: PasskeyCredentials | undefined,
+): (snapshot: Uint8Array) => Promise<AttestOutcome | null> {
+  return (snapshot) =>
+    credentials === undefined
+      ? Promise.resolve(null)
+      : attestPromotion({ daemonBaseUrl, workspaceId, snapshot, credentials })
+}
 
 type PromoteFlow =
   | { step: 'idle' }
@@ -292,27 +312,13 @@ export function PromoteWorkspaceSection({
           import('../../lib/promote-workspace.js'),
           import('../../lib/browser-workspace-docs.js'),
         ])
-        const credentials = credentialsOf()
         const outcome = await promoteWorkspace({
           fetch: fetchImpl,
           keeperBaseUrl: daemon.baseUrl, // the new KEEPER; today, this daemon
           workspaceId: targetId,
           workspaceDocs: new BrowserWorkspaceDocs(),
           onProgress: (phase) => setFlow({ step: 'running', phase }),
-          // ALWAYS asked, and answering `null` refuses the move — a
-          // credential registered then forgotten, or a browser that cannot
-          // hold one, is exactly the case a keeper the user does not own
-          // must not accept unconfirmed. The button is disabled without a
-          // passkey, so this arm is the race rather than the normal path.
-          attest: (snapshot: Uint8Array) =>
-            credentials === undefined
-              ? Promise.resolve(null)
-              : attestPromotion({
-                  daemonBaseUrl: daemon.baseUrl,
-                  workspaceId: targetId,
-                  snapshot,
-                  credentials,
-                }),
+          attest: signerFor(daemon.baseUrl, targetId, credentialsOf()),
         })
         // The demote pull (ADR-0023 decision 2): cache the daemon's merged
         // record back into this browser's planes. Best-effort — the move
@@ -575,8 +581,8 @@ export function PromoteWorkspaceSection({
                 {passkey.kind === 'none' && (
                   <>
                     <p>
-                      No passkey for this daemon yet. Register one to move the workspace — a move
-                      to another keeper is confirmed with a passkey.
+                      No passkey for this daemon yet. Register one to move the workspace — a move to
+                      another keeper is confirmed with a passkey.
                     </p>
                     <Button
                       type="button"

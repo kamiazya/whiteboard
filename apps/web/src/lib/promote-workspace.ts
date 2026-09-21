@@ -32,6 +32,7 @@
  */
 
 import {
+  type Attestation,
   apiErrorReason,
   documentFileApiUrl,
   promoteWorkspaceResponseSchema,
@@ -177,6 +178,30 @@ function collectImageRefs(
   return refs
 }
 
+/**
+ * The evidence to send, or why this transfer cannot go ahead. All three
+ * failing answers are refusals: a transfer to another keeper is confirmed
+ * with a passkey, so no passkey registered here is as much a stop as a
+ * declined prompt (ADR-0039's 2026-09-22 addendum).
+ */
+function evidenceFor(
+  attested: AttestOutcome | null,
+): { ok: true; attestation: Attestation } | { ok: false; reason: string } {
+  if (attested === null) {
+    return {
+      ok: false,
+      reason:
+        'Register a passkey for the destination first: a move to another keeper is confirmed with one.',
+    }
+  }
+  if (attested.ok) return { ok: true, attestation: attested.attestation }
+  if (attested.reason === 'cancelled') {
+    return { ok: false, reason: 'The passkey prompt was cancelled, so nothing was moved.' }
+  }
+  const detail = attested.detail ? ` (${attested.detail})` : ''
+  return { ok: false, reason: `The passkey could not sign this move${detail}; nothing was moved.` }
+}
+
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
@@ -197,23 +222,8 @@ async function promoteWorkspaceUnsafe(
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
 
   const snapshot = new Uint8Array(record.export({ mode: 'snapshot' }))
-  const attested = await options.attest(snapshot)
-  if (attested === null) {
-    return {
-      kind: 'failed',
-      reason:
-        'Register a passkey for the destination first: a move to another keeper is confirmed with one.',
-    }
-  }
-  if (!attested.ok) {
-    return {
-      kind: 'failed',
-      reason:
-        attested.reason === 'cancelled'
-          ? 'The passkey prompt was cancelled, so nothing was moved.'
-          : `The passkey could not sign this move${attested.detail ? ` (${attested.detail})` : ''}; nothing was moved.`,
-    }
-  }
+  const evidence = evidenceFor(await options.attest(snapshot))
+  if (!evidence.ok) return { kind: 'failed', reason: evidence.reason }
 
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
@@ -227,7 +237,7 @@ async function promoteWorkspaceUnsafe(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         snapshot: bytesToBase64Url(snapshot),
-        attestation: attested.attestation,
+        attestation: evidence.attestation,
       }),
     },
   )

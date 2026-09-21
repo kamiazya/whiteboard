@@ -777,7 +777,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
   // `connectReplicaKeeper` wiring every existing move/demote test now needs,
   // since the pull those flows drive is sealed.
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1053,
+  // Raised 1053 -> 1086: ADR-0039's 2026-09-22 addendum makes a registered
+  // passkey the precondition for moving, so all twenty renders arrange one.
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1086,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // Raised 2708 -> 2724, two lines for each of the eight ink entries the
   // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
@@ -883,7 +885,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // is the deliberateness the guard exists to force. SIX branches have now
   // raised it for that reason independently; the number is the resolved
   // file's own, re-measured at each merge rather than carried from a side.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 1013,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 1015,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
