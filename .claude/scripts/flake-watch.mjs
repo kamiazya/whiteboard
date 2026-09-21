@@ -20,7 +20,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { clusterFailures, formatReport } from './flake-watch-lib.mjs'
+import { clusterFailures, failedLegFrom, formatReport } from './flake-watch-lib.mjs'
 
 const QUIET = process.argv.includes('--quiet')
 const daysArg = process.argv.indexOf('--days')
@@ -33,8 +33,14 @@ function gh(args) {
   return JSON.parse(execFileSync('gh', args, { encoding: 'utf-8', timeout: 30_000 }))
 }
 
+// Bumped when the cached SHAPE changes, so an entry written by an older
+// version is refetched rather than read as the new one. A run's annotations
+// never change, so the old files simply go unread; `tmp/` is per-machine and
+// disposable, which is why this is a suffix rather than a migration.
+const CACHE_SHAPE = 'v3-annotations'
+
 function cached(runId, fetch) {
-  const file = join(CACHE_DIR, `${runId}.json`)
+  const file = join(CACHE_DIR, `${runId}.${CACHE_SHAPE}.json`)
   try {
     return JSON.parse(readFileSync(file, 'utf-8'))
   } catch {
@@ -91,16 +97,32 @@ function main() {
   const window = runs.map((run) => ({
     runId: String(run.databaseId),
     createdAt: run.createdAt,
-    titles: cached(String(run.databaseId), () => {
+    // title, path and message — the last two are what keys a failure that
+    // names no test (`Unhandled error`; see `unhandledIdFrom`). A run cached
+    // by an older version holds bare titles; `clusterFailures` accepts both,
+    // so a cache written before this change still reads.
+    annotations: cached(String(run.databaseId), () => {
       const jobs = gh(['api', `repos/{owner}/{repo}/actions/runs/${run.databaseId}/jobs`, '--jq', '[.jobs[] | select(.conclusion=="failure") | .id]'])
-      const titles = []
+      const annotations = []
       for (const jobId of jobs) {
         // A job IS a check run, so its annotations live at the same id.
         for (const annotation of gh(['api', `repos/{owner}/{repo}/check-runs/${jobId}/annotations`])) {
-          if (annotation.title) titles.push(annotation.title)
+          // An EMPTY title used to mean "drop it". It does not: `ci-gate`'s
+          // own summary carries the failed LEG under one
+          // (`[ci-gate] test-unit (2): failure`), and that is the only thing
+          // a run with no test annotation says about itself. Dropping it at
+          // fetch time made the leg invisible to everything downstream —
+          // found by running the real window, not by a unit test, because
+          // the fixtures supply annotations the fetcher never touched.
+          if (!annotation.title && failedLegFrom(annotation) === null) continue
+          annotations.push({
+            title: annotation.title,
+            path: annotation.path,
+            message: annotation.message,
+          })
         }
       }
-      return titles
+      return annotations
     }),
   }))
 
