@@ -15,6 +15,12 @@
 #
 # Configuration lives in sonar-project.properties, next to the exclusions it
 # has to stay in sync with.
+#
+# It also ships the SAME lcov to DeepSource (.deepsource.toml), the other
+# report-only lane, rather than paying for a second ~10-minute coverage run in
+# a workflow of its own. The name stays `SonarQube` because renaming a
+# workflow renames its checks; what it means is "the coverage-and-report-only
+# lane". Deleting this file therefore turns OFF DeepSource's coverage too.
 name: SonarQube
 
 on:
@@ -25,6 +31,9 @@ on:
 
 permissions:
   contents: read
+  # The DeepSource CLI exchanges a GitHub OIDC token for temporary access, so
+  # this lane needs no DEEPSOURCE_DSN secret at all.
+  id-token: write
 
 # A PR only cares about its latest push, so superseding an in-flight
 # analysis there is right. The DEFAULT BRANCH is the opposite: its analysis
@@ -75,3 +84,20 @@ jobs:
       - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # LAST on purpose: this step is allowed to fail the job (an upload that
+      # silently does nothing is worse than a red report-only lane), and
+      # failing here means Sonar's analysis has already been uploaded.
+      #
+      # Run from the repository root — the CLI resolves the lcov's file paths
+      # against the working directory.
+      #
+      # ponytail: the installer is fetched unpinned, which is what DeepSource
+      # documents. Pin a released CLI version and verify its checksum if this
+      # repo's supply-chain policy tightens; the official action is the other
+      # option and costs a DSN secret plus a Docker build.
+      - name: Report coverage to DeepSource
+        run: |
+          curl -fsSL https://cli.deepsource.com/install | BINDIR=./bin sh
+          ./bin/deepsource report --analyzer test-coverage \
+            --key javascript --value-file tmp/coverage/lcov.info --use-oidc

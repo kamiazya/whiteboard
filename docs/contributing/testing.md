@@ -407,7 +407,8 @@ pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 pnpm coverage       # every non-browser project with v8 coverage -> tmp/coverage/lcov.info
 ```
 
-`pnpm coverage` is what the SonarQube Cloud lane runs; locally it is a way to see which
+`pnpm coverage` is what the SonarQube Cloud lane runs — and the same lcov is reported to
+DeepSource from that one job, rather than paying for a second coverage run. Locally it is a way to see which
 modules have no test loading them at all. It is not a gate — no threshold fails it, and
 the browser projects are not measured (their v8 coverage is charged to a page rather than
 to the module graph). Coverage options are configured in the ROOT `vitest.config.ts` only:

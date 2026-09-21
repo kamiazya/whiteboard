@@ -1,0 +1,61 @@
+# DeepSource — REPORT-ONLY, for the same reason SonarQube Cloud is: nothing
+# here is in ci-gate's `needs`, so its PR check gates no merge until someone
+# adds it to branch protection deliberately.
+#
+# What it adds over the gates that already run: a rule set for bug risk and
+# anti-patterns that biome's lint does not carry, and secrets detection on the
+# diff rather than at pre-commit. Overlap with Sonar (duplication, coverage)
+# is accepted for now — see docs/contributing/testing.md.
+#
+# NO transformers are declared, and none should be. Biome owns formatting in
+# this repo and runs at pre-commit; a DeepSource transformer pushes its own
+# formatting commits and would fight it.
+version = 1
+
+# Mirrors sonar-project.properties' `sonar.exclusions`. Kept in sync by hand:
+# the two tools have different pattern dialects, so a shared source would cost
+# more than the drift does.
+exclude_patterns = [
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/tmp/**",
+  "**/coverage/**",
+  "**/*.d.ts",
+  "apps/web/public/**",
+  "packages/canvas-render/src/vendor/**",
+  "docs/**",
+]
+
+# Tests live BESIDE the sources they cover here, so the split is by filename
+# rather than by directory — the same reason sonar-project.properties uses
+# `sonar.test.inclusions`. The secrets analyzer also reads this: it only
+# reports hardcoded secrets in non-test files.
+test_patterns = [
+  "**/*.test.ts",
+  "**/*.test.tsx",
+  "**/*.test.mts",
+  "**/*.test.mjs",
+  "**/*.bench.ts",
+  "tests/**",
+]
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  plugins = ["react"]
+  # Defaults to ["nodejs", "browser"]; vitest globals are what this repo adds.
+  # `module_system` and `dialect` are left at their defaults (es-modules,
+  # typescript), which are already what this repo is.
+  environment = ["nodejs", "browser", "vitest"]
+
+[[analyzers]]
+name = "secrets"
+enabled = true
+
+# Fed by the coverage step in .github/workflows/sonarqube.yml, which already
+# produces one merged lcov for every non-browser vitest project.
+[[analyzers]]
+name = "test-coverage"
+enabled = true
