@@ -267,9 +267,14 @@ Chromium (via Playwright) against a real daemon and the real built web app
 postbuild copy runs) must have already produced it. Run directly with
 `node --import tsx/esm scripts/smoke/mcp-*.mjs` or through the `pnpm smoke:*`
 alias. The first two run in CI's `verify` job; `smoke:read-plane` is run by
-hand until its first check is reliable — its replica pull failed to fire in 2
-of 6 local runs (tracked on the read-plane ticket), and a one-in-three flake
-must not become a required gate.
+hand until every check is reliable. Its check 1 (the replica pull) used to
+fail to fire in 2 of 6 local runs — a race between a daemon deep link's
+silent pairing renewal and the browser-keeper address rewrite, fixed by
+`awaitingDaemonRenewal` in `use-workspace-address-sync.ts` — and now passes
+ten consecutive runs on a fresh build. Check 4 still fails on every run, a
+separate pre-existing defect unrelated to that fix (tracked on the
+read-plane ticket), so the smoke stays out of `verify` until it is resolved
+too.
 
 | Script | What it crosses for real |
 |---|---|
