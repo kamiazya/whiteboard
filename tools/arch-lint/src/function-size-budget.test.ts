@@ -344,7 +344,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract': 95,
   'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 879,
   'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 331,
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 697,
+  // Raised 697 -> 702 for Duplicate: the hook call, the ref the async
+  // handler reads the current document from, and the menu row it contributes.
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 702,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
@@ -363,7 +365,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/use-auto-checkpoint.ts#useAutoCheckpoint': 60,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 458,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController.load': 67,
-  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 157,
+  // Raised 157 -> 182 for `duplicateDocument`: the copy itself is one call
+  // into lib/duplicate-daemon-document.ts, shared with the index page; what
+  // is here is the list refresh and the path move, the same two steps
+  // `createDocument` ends with.
+  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 182,
   'apps/web/src/pages/use-markdown-document.ts#useMarkdownDocument': 378,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
