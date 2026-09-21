@@ -317,7 +317,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/local-files-source.ts#createLocalFilesSource.searchDocuments': 59,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
   'apps/web/src/lib/pairing-grant.ts#consumeGrantFragment': 97,
-  'apps/web/src/lib/passkey-attestation.ts#registerPasskey': 86,
+  // 86 -> 87: the credential now negotiates the `prf` extension at CREATE
+  // (ADR-0042 d6), which several authenticators decide there rather than at
+  // assertion time. One property on the options object; its reasoning is a
+  // named constant beside the function rather than a comment inside it.
+  'apps/web/src/lib/passkey-attestation.ts#registerPasskey': 87,
   'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 95,
   // 61 -> 64 (ADR-0042 S10): a failed or empty pull now reports itself through
   // reportRefreshFailure/reportNoPull instead of a silent catch.

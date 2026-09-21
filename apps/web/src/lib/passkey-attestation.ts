@@ -22,6 +22,7 @@ import {
   promotionChallengeInput,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
+import { prfOutputOf } from './passkey-prf.js'
 
 const PASSKEYS_KEY = 'whiteboard:daemon-passkeys'
 
@@ -50,6 +51,26 @@ export interface PasskeyCredentials {
 }
 
 const daemonKey = (daemonBaseUrl: string): string => daemonBaseUrl.replace(/\/+$/, '')
+
+/**
+ * ONE gesture (ADR-0042 d6 + ADR-0039 d6): the assertion that proves the
+ * person is the assertion that yields the key material, rather than two
+ * prompts for one intent. Absent an input the extension is not asked for at
+ * all, so the promote attestation and the session bind keep making exactly
+ * the call they always made.
+ */
+/**
+ * Negotiated at CREATE: several authenticators decide there, rather than at
+ * assertion time, whether a credential can ever produce a prf output — so a
+ * passkey minted without this could never unwrap a replica and nothing would
+ * say why.
+ */
+const PRF_AT_CREATE = { prf: {} }
+
+function prfExtension(prfInput: Uint8Array | undefined) {
+  if (prfInput === undefined) return {}
+  return { extensions: { prf: { eval: { first: prfInput as BufferSource } } } }
+}
 
 function loadPasskeys(storage: StorageLike): Record<string, RegisteredPasskey> {
   const raw = storage.getItem(PASSKEYS_KEY)
@@ -155,6 +176,7 @@ export async function registerPasskey({
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
         authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' },
         attestation: 'none',
+        extensions: PRF_AT_CREATE,
       },
     })
   } catch (err) {
@@ -230,7 +252,14 @@ export async function promotionChallenge(
 }
 
 export type AttestOutcome =
-  | { ok: true; attestation: Attestation }
+  | {
+      ok: true
+      attestation: Attestation
+      /** The `prf` output this assertion carried, when one was asked for and
+       *  the authenticator produced it. Absent is ORDINARY — the person was
+       *  still verified, and only the cold-start key material is missing. */
+      prfOutput?: Uint8Array<ArrayBuffer>
+    }
   | { ok: false; reason: 'cancelled' | 'rejected'; detail?: string }
 
 /**
@@ -243,11 +272,14 @@ export type AttestOutcome =
 export async function assertWithRegisteredPasskey({
   daemonBaseUrl,
   challenge,
+  prfInput,
   credentials = globalThis.navigator?.credentials,
   storage = globalThis.localStorage,
 }: {
   daemonBaseUrl: string
   challenge: Uint8Array
+  /** Ask this assertion for a `prf` output too (`passkey-prf.ts`). */
+  prfInput?: Uint8Array
   credentials?: PasskeyCredentials
   storage?: StorageLike
 }): Promise<AttestOutcome | null> {
@@ -262,6 +294,7 @@ export async function assertWithRegisteredPasskey({
           { type: 'public-key', id: base64UrlToBytes(registered.credentialId) as BufferSource },
         ],
         userVerification: 'required',
+        ...prfExtension(prfInput),
       },
     })
   } catch (err) {
@@ -271,6 +304,7 @@ export async function assertWithRegisteredPasskey({
   if (credential === null) return { ok: false, reason: 'cancelled' }
   const pk = credential as PublicKeyCredential
   const response = pk.response as AuthenticatorAssertionResponse
+  const prfOutput = prfInput === undefined ? null : prfOutputOf(pk)
   return {
     ok: true,
     attestation: {
@@ -280,6 +314,7 @@ export async function assertWithRegisteredPasskey({
       clientDataJSON: bytesToBase64Url(response.clientDataJSON),
       signature: bytesToBase64Url(response.signature),
     },
+    ...(prfOutput === null ? {} : { prfOutput }),
   }
 }
 
