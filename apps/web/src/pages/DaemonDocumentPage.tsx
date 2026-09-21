@@ -120,16 +120,25 @@ function useDaemonDocument(
   // Both modules dedupe internally, so the effect can fire on every resolve.
   useEffect(() => {
     if (controller.workspaceId === null) return
-    scheduleReplicaPush({
+    const cancelPush = scheduleReplicaPush({
       fetch: daemonFetch,
       daemonBaseUrl,
       workspaceId: controller.workspaceId,
     })
-    scheduleReplicaRefresh({
+    const cancelRefresh = scheduleReplicaRefresh({
       fetch: daemonFetch,
       daemonBaseUrl,
       workspaceId: controller.workspaceId,
     })
+    // Both are scheduled onto an idle callback or a 1.5s timer, so without
+    // this they outlive the page that asked — and fire against a fetch, a
+    // daemon address and a workspace that have all moved on. Cancelling is
+    // free where the run has already begun (it is left alone to finish) and
+    // releases the dedupe where it has not, so the next resolve tries again.
+    return () => {
+      cancelPush()
+      cancelRefresh()
+    }
   }, [daemonFetch, daemonBaseUrl, controller.workspaceId])
 
   // Stable across the page's lifetime — read fresh (not cached in state)

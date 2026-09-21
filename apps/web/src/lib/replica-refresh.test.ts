@@ -70,6 +70,42 @@ afterEach(() => {
 })
 
 describe('scheduleReplicaRefresh', () => {
+  it('a cancelled refresh never pulls, even once its slot comes up', async () => {
+    // Nothing cancelled this before, and the scheduler is a real
+    // `requestIdleCallback`/`setTimeout` — so a caller that unmounts keeps a
+    // 1.5s bomb armed. In a test run the fetch it eventually makes has no
+    // mock left to answer it, and the warning is charged to whichever test
+    // is running by then: `issues/replica-refresh-warning-lands-on-a-later-test`.
+    const cache = vi.fn().mockResolvedValue({ kind: 'ok', syncedAt: '2026-09-01T12:00:00.000Z' })
+    let slot: (() => void) | undefined
+    const cancel = scheduleReplicaRefresh(
+      deps({
+        cache,
+        schedule: (run: () => void) => {
+          slot = run
+        },
+      }),
+    )
+
+    cancel()
+    slot?.()
+    await Promise.resolve()
+
+    expect(cache).not.toHaveBeenCalled()
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+  })
+
+  it('a cancelled refresh leaves the next one free to try', async () => {
+    // Cancel is not "already done": the dedupe must not swallow the retry a
+    // remount is entitled to, or a page opened twice in a session caches once
+    // and never again.
+    const cache = vi.fn().mockResolvedValue({ kind: 'ok', syncedAt: '2026-09-01T12:00:00.000Z' })
+    scheduleReplicaRefresh(deps({ cache, schedule: () => {} }))()
+
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
+  })
+
   it('pulls once per daemon+workspace per session, and records the sync', async () => {
     const cache = vi
       .fn()
