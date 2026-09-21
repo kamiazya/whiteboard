@@ -140,6 +140,12 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: 'the Connections screen is where a daemon is found, paired and promoted to — its subject is the connection, so a browser keeper has nothing to mirror',
   },
+  'src/pages/use-daemon-connections.ts': {
+    reach: 'gap',
+    missing:
+      'the Connections chip has no browser half at all — BrowserDocumentPage matches neither `connections` nor `Backlink`, so a browser-kept document shows no backlinks and no unlinked mentions',
+    followUp: 'issues/browser-keeper-has-no-connections-panel',
+  },
   'src/pages/use-daemon-document-controller.ts': {
     reach: 'both-keepers',
     browser: 'src/pages/use-browser-document-controller.ts',
@@ -243,9 +249,18 @@ describe('each answer is checked, so none of them can be a word in front of an o
     // The rule dev-loop's `userReach` sentinel already applies to a
     // foundation-only slice: a follow-up too vague to file is the omission
     // with a word in front of it.
-    expect(entry.followUp, 'a gap must name the follow-up that closes it, as "task #N"').toMatch(
-      /#\d+/,
-    )
+    //
+    // Two forms, because the repo has two ticket stores and `#\d+` named only
+    // one: the native Task list is the LIVE board (`task #36: <what>`), and a
+    // whiteboard document is the DURABLE backlog, named by its PATH under
+    // `issues/`, which is where a follow-up nobody is working this session
+    // belongs. `dev-flow.md` names both and GitHub Issues neither. The path
+    // must carry at least two hyphenated words, so the widening does not
+    // admit `issues/x`.
+    expect(
+      entry.followUp,
+      'a gap must name the follow-up that closes it: a live "task #N: <what>", or a durable whiteboard document path under issues/',
+    ).toMatch(/#\d+|issues\/[a-z0-9]+(-[a-z0-9]+)+/)
     expect(entry.missing.split(/\s+/).length).toBeGreaterThan(8)
   })
 
