@@ -183,3 +183,9 @@ snapshot-post-reload.md
 
 # Personal Codex agmsg hook (machine/user-specific absolute paths; like .claude/settings.local.json)
 .codex/hooks.json
+
+# Where the DeepSource CLI installs itself — `BINDIR=./bin`, the path both the
+# SonarQube workflow and the docs use. A 16MB binary at the repo root, and
+# repo-root-files.test.ts cannot see it: that guard reads root-level files with
+# no slash in the name, so `bin/deepsource` is exactly the shape it misses.
+/bin/

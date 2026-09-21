@@ -92,10 +92,16 @@ jobs:
       # Run from the repository root — the CLI resolves the lcov's file paths
       # against the working directory.
       #
-      # ponytail: the installer is fetched unpinned, which is what DeepSource
-      # documents. Pin a released CLI version and verify its checksum if this
-      # repo's supply-chain policy tightens; the official action is the other
-      # option and costs a DSN secret plus a Docker build.
+      # The installer verifies the binary's checksum itself; what floats is
+      # the VERSION it resolves (v2.0.55 as of writing) and the install script
+      # fetched from that URL.
+      #
+      # ponytail: good enough for a report-only lane. Pin a released version if
+      # this repo's supply-chain policy tightens; the official action is the
+      # other option and costs a DSN secret plus a Docker build.
+      #
+      # `./bin` is gitignored — running this line locally drops a 16MB binary
+      # in the working tree otherwise.
       - name: Report coverage to DeepSource
         run: |
           curl -fsSL https://cli.deepsource.com/install | BINDIR=./bin sh
