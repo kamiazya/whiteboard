@@ -1,3 +1,4 @@
+import { errorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   daemonPingResponseSchema,
   runtimeVerifyRequestSchema,
@@ -5,6 +6,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { Hono } from 'hono'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
+import { invalidRequestBody } from '../app-helpers.js'
 import { getDataDir } from '../config.js'
 import type { RuntimeStatus } from '../http-server.js'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
@@ -67,18 +69,21 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     }
     verifyWindowCount += 1
     if (verifyWindowCount > VERIFY_RATE_LIMIT) {
-      return c.json({ error: 'rate limited' }, 429)
+      return c.json(
+        errorBody('rate_limited', 'too many verification attempts; try again shortly'),
+        429,
+      )
     }
 
     let body: unknown
     try {
       body = await c.req.json()
     } catch {
-      return c.json({ error: 'invalid JSON body' }, 400)
+      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
     }
     const parsed = runtimeVerifyRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+      return c.json(invalidRequestBody(parsed.error), 400)
     }
     // Binding the Origin header stops a relay from farming signatures that
     // verify for a different origin's challenge; a missing header binds "".
