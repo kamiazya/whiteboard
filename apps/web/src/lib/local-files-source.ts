@@ -13,7 +13,7 @@ import {
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, type TagBearerKind, tagsInUse } from '@kamiazya/whiteboard-model'
 import { readTagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import {
@@ -36,7 +36,6 @@ import {
   idbContentClock,
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
-import { countTagsInUse, type TagBearer } from './tags-in-use.js'
 import { loadWorkspaceDocumentProjection } from './workspace-content.js'
 
 /**
@@ -169,7 +168,7 @@ export function createLocalFilesSource(
     },
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
-      const bearers: TagBearer[] = []
+      const bearers: { what: TagBearerKind; tags: readonly string[] }[] = []
       for (const entry of entries) {
         if (entry.kind !== 'markdown' && entry.kind !== 'spatial') continue
         try {
@@ -186,7 +185,7 @@ export function createLocalFilesSource(
           // unreadable or never written: carries nothing
         }
       }
-      return countTagsInUse(bearers)
+      return tagsInUse(bearers)
     },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       let entries: Awaited<ReturnType<DocumentIndex['listDocuments']>>

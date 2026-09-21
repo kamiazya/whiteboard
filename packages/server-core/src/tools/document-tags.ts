@@ -1,33 +1,26 @@
-import { documentIdSchema, parseScopedTag, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  type TagInUse,
+  tagInUseSchema,
+  tagsInUse,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { tagLibrarySchema } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
-import type { TagBearer } from '../references/extract.js'
 import type { ServerDeps } from '../server-deps.js'
 import { workspaceTagLibrary } from './tag-library.js'
 
 export const documentTagsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
 export type DocumentTagsInput = z.infer<typeof documentTagsInputSchema>
 
-/**
- * One tag the workspace already uses, counted by what carries it
- * ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
- * decision 5's in-use layer). `key` and `value` are present for a scoped tag
- * and absent for a plain one, so a reader can group by key without parsing.
- */
-export const tagInUseSchema = z
-  .object({
-    tag: z.string().min(1),
-    key: z.string().optional(),
-    value: z.string().optional(),
-    documents: z.number().int().nonnegative(),
-    boards: z.number().int().nonnegative(),
-    nodes: z.number().int().nonnegative(),
-    edges: z.number().int().nonnegative(),
-  })
-  .strict()
-export type TagInUse = z.infer<typeof tagInUseSchema>
+// The row shape and the counting are `@kamiazya/whiteboard-model`'s
+// (ADR-0040 decision 5's in-use layer): a DECISION both keepers must take
+// identically, where only gathering the bearers is each keeper's own.
+// Re-exported because this module is where the tool's output schema is
+// assembled and its readers import the row from here.
+export { type TagInUse, tagInUseSchema }
 
 export const documentTagsOutputSchema = z
   .object({
@@ -98,34 +91,6 @@ export async function computeDocumentTags(
   const bearers = entries.flatMap((entry) => content.get(entry.documentId)?.bearers ?? [])
   const library = await workspaceTagLibrary(deps, input.workspaceId, 'refuse', entries)
   return { documents, contents, inUse: tagsInUse(bearers), library }
-}
-
-const COUNTED: Record<TagBearer['what'], keyof Omit<TagInUse, 'tag' | 'key' | 'value'>> = {
-  document: 'documents',
-  board: 'boards',
-  node: 'nodes',
-  edge: 'edges',
-}
-
-/** The vocabulary in use over a set of bearers, one row per tag, sorted by tag. */
-function tagsInUse(bearers: readonly TagBearer[]): TagInUse[] {
-  const rows = new Map<string, TagInUse>()
-  for (const bearer of bearers) {
-    for (const tag of new Set(bearer.tags)) {
-      const scoped = parseScopedTag(tag)
-      const row = rows.get(tag) ?? {
-        tag,
-        ...(scoped === undefined ? {} : { key: scoped.key, value: scoped.value }),
-        documents: 0,
-        boards: 0,
-        nodes: 0,
-        edges: 0,
-      }
-      rows.set(tag, { ...row, [COUNTED[bearer.what]]: row[COUNTED[bearer.what]] + 1 })
-    }
-  }
-  // Code-unit order, not locale order: the same answer on every machine.
-  return [...rows.values()].sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0))
 }
 
 /** The same listing from the store, over a listing the caller already holds. */

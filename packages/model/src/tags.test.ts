@@ -3,6 +3,7 @@ import {
   parseScopedTag,
   SCOPED_TAG_RULE,
   TAG_IDENTIFIER_PATTERN,
+  tagsInUse,
   tagsWriteSchema,
   tagWriteSchema,
 } from './tags.js'
@@ -91,5 +92,58 @@ describe('tagsWriteSchema — a tag set is a SET', () => {
     expect(tagsWriteSchema.safeParse(tags).success).toBe(true)
     if (tags.length === 0) return
     expect(tagsWriteSchema.safeParse([...tags, tags[0] as string]).success).toBe(false)
+  })
+})
+
+describe('tagsInUse', () => {
+  it('counts one row per tag, into the column its bearer names', () => {
+    expect(
+      tagsInUse([
+        { what: 'document', tags: ['a'] },
+        { what: 'board', tags: ['a'] },
+        { what: 'node', tags: ['a', 'b'] },
+        { what: 'edge', tags: ['b'] },
+      ]),
+    ).toEqual([
+      { tag: 'a', documents: 1, boards: 1, nodes: 1, edges: 0 },
+      { tag: 'b', documents: 0, boards: 0, nodes: 1, edges: 1 },
+    ])
+  })
+
+  it('counts a bearer ONCE however many times it repeats a tag', () => {
+    expect(tagsInUse([{ what: 'node', tags: ['a', 'a', 'a'] }])).toEqual([
+      { tag: 'a', documents: 0, boards: 0, nodes: 1, edges: 0 },
+    ])
+  })
+
+  it('carries a scoped tag key and value beside the row, and omits them for a plain tag', () => {
+    expect(tagsInUse([{ what: 'document', tags: ['health:failing', 'Machine Learning'] }])).toEqual(
+      [
+        { tag: 'Machine Learning', documents: 1, boards: 0, nodes: 0, edges: 0 },
+        {
+          tag: 'health:failing',
+          key: 'health',
+          value: 'failing',
+          documents: 1,
+          boards: 0,
+          nodes: 0,
+          edges: 0,
+        },
+      ],
+    )
+  })
+
+  it('answers nothing for no bearers', () => {
+    expect(tagsInUse([])).toEqual([])
+  })
+
+  it('sorts in CODE-UNIT order, so every machine answers the same list', () => {
+    // The divergence this pins is invisible in ASCII-lowercase fixtures:
+    // `localeCompare` puts 'a' before 'Z', code-unit order puts 'Z' first.
+    // Two keepers sorting differently answer different lists for one
+    // workspace, and only a test comparing them would ever notice.
+    expect(
+      tagsInUse([{ what: 'document', tags: ['b', 'Z', 'a', 'A'] }]).map((row) => row.tag),
+    ).toEqual(['A', 'Z', 'a', 'b'])
   })
 })
