@@ -56,13 +56,40 @@ export function runWireStep({ scriptPath, wtPath, spawn = spawnSync, log = (msg)
  * that exists without this is still a working worktree. The copy is a starting point, not a
  * substitute for building — anything editing mcp-server rebuilds anyway.
  *
+ * `dist/web-app` is the ONE subtree that argument does not cover, so it is never seeded. It is not
+ * tooling the worktree runs: it is the built web app that three browser smokes SERVE as the
+ * subject under test (`mcp-read-plane`, `mcp-passkey-promote`, `mcp-daemon-origin`). Seeded, a
+ * fresh worktree tests whatever bundle the main checkout last built — from another branch, any
+ * number of days old — and says nothing about the tree it is in.
+ *
+ * Measured: a worktree at pristine `origin/main` failed `smoke:read-plane` 9 of 18 checks, and the
+ * same worktree at the same commit passed 37 of 37 after `pnpm --filter @kamiazya/whiteboard-web
+ * build`, twice. That cost one investigation of the app (three refuted hypotheses about the
+ * membership gate) before anybody suspected the bundle. Each of those smokes already stops with
+ * "run `pnpm build`" when the directory is absent, so not seeding it turns a silent wrong answer
+ * into that instruction.
+ *
  * @returns {boolean} whether a dist was seeded
  */
+/**
+ * Whether one path inside the main checkout's `dist` is carried into a worktree.
+ *
+ * Exported for its test: the rule is one line and the reason it exists is the paragraph above
+ * `seedBuiltDist`, so what a test can hold is that the built web app is refused and the CLI the
+ * seed exists for is not.
+ */
+export function seedsThisPath(src) {
+  return !/(^|[\\/])web-app([\\/]|$)/.test(src)
+}
+
 export function seedBuiltDist({ mainRoot, worktreeRoot, existsSync: exists = existsSync, cpSync = nodeCpSync, log = (msg) => console.warn(msg) }) {
   const from = `${mainRoot}/packages/mcp-server/dist`
   if (!exists(from)) return false
   try {
-    cpSync(from, `${worktreeRoot}/packages/mcp-server/dist`, { recursive: true })
+    cpSync(from, `${worktreeRoot}/packages/mcp-server/dist`, {
+      recursive: true,
+      filter: seedsThisPath,
+    })
     return true
   } catch (err) {
     log(`[new-worktree] could not seed the built dist (${err.message}) — pnpm will warn about the unlinkable \`whiteboard\` bin; harmless.`)
