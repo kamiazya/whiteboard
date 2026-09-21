@@ -389,8 +389,8 @@ importers:
         specifier: ^9.6.1
         version: 9.6.1(patch_hash=7a172555a2985b80de07fe29bb243f7442f622ae933e1caa755e1a86ea72126a)(@stryker-mutator/core@9.6.1(@types/node@24.13.1))(vitest@5.0.0)
       fast-check:
-        specifier: ^4.7.0
-        version: 4.8.0
+        specifier: ^4.10.0
+        version: 4.10.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -531,8 +531,8 @@ importers:
         specifier: workspace:*
         version: link:../model
       fast-check:
-        specifier: ^4.7.0
-        version: 4.8.0
+        specifier: ^4.10.0
+        version: 4.10.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -584,8 +584,8 @@ importers:
         specifier: ^0.4.1
         version: 0.4.1(vitest@5.0.0)
       fast-check:
-        specifier: ^4.7.0
-        version: 4.8.0
+        specifier: ^4.10.0
+        version: 4.10.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -797,8 +797,8 @@ importers:
         specifier: ^0.4.1
         version: 0.4.1(vitest@5.0.0)
       fast-check:
-        specifier: ^4.7.0
-        version: 4.8.0
+        specifier: ^4.10.0
+        version: 4.10.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -5469,6 +5469,10 @@ packages:
     resolution: {integrity: sha512-CGnyrvbhPlWYMngksqrSSUT1BAVP49dZocrHuK0SvtR0D5TMs5wP0o3j7jexDJW01KSadjBp1M/71o/KR3nD1w==}
     engines: {node: '>=18'}
 
+  fast-check@4.10.0:
+    resolution: {integrity: sha512-hhqQL+IJllZi3aM4TKvmCj3bywLEcycNTTLZeLhA9ttMxBrCqM07q7Di4kl+j9EWSTXvJH1+EpIgsDbF/+8H5Q==}
+    engines: {node: '>=12.17.0'}
+
   fast-check@4.8.0:
     resolution: {integrity: sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg==}
     engines: {node: '>=12.17.0'}
@@ -6977,6 +6981,9 @@ packages:
 
   pure-rand@8.4.0:
     resolution: {integrity: sha512-IoM8YF/jY0hiugFo/wOWqfmarlE6J0wc6fDK1PhftMk7MGhVZl88sZimmqBBFomLOCSmcCCpsfj7wXASCpvK9A==}
+
+  pure-rand@8.4.2:
+    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
   qs@6.16.0:
     resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
@@ -12940,6 +12947,10 @@ snapshots:
 
   fake-indexeddb@6.2.5: {}
 
+  fast-check@4.10.0:
+    dependencies:
+      pure-rand: 8.4.2
+
   fast-check@4.8.0:
     dependencies:
       pure-rand: 8.4.0
@@ -14712,6 +14723,8 @@ snapshots:
   punycode@2.3.1: {}
 
   pure-rand@8.4.0: {}
+
+  pure-rand@8.4.2: {}
 
   qs@6.16.0:
     dependencies:
