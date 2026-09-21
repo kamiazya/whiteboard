@@ -78,6 +78,21 @@ export function sidePointAt(rect: Rect, side: Side, fraction: number): Point {
 }
 
 /**
+ * The two axes the slab test narrows against, so its one narrowing is
+ * written once rather than per axis.
+ *
+ * A near-duplicate of `edge-rules.ts`'s `SegmentAxis`, which carries this
+ * plus the along-axis half. It is not shared because that module takes its
+ * `Point`/`Rect` from this one, so importing back would close a source-level
+ * loop — the same misplaced-types increment `SegmentAxis`'s own comment
+ * names. When the types move down here, these two become one.
+ */
+const SLAB_AXES = [
+  { of: (p: Point) => p.x, near: (r: Rect) => r.x, far: (r: Rect) => r.x + r.w },
+  { of: (p: Point) => p.y, near: (r: Rect) => r.y, far: (r: Rect) => r.y + r.h },
+] as const
+
+/**
  * Whether a segment passes through a rect's INTERIOR. Touching a border does
  * not count: every edge starts and ends on a border by construction, and a
  * route that grazes a corner is not the failure this is looking for.
@@ -99,26 +114,29 @@ export function segmentCrossesRect(a: Point, b: Point, rect: Rect): boolean {
   ) {
     return false
   }
-  const dx = b.x - a.x
-  const dy = b.y - a.y
+  // Slab method: the same narrowing per axis, written once and run for
+  // both, with no per-call allocation — this is the innermost test of
+  // candidate routing.
   let enter = 0
   let exit = 1
-  // Slab method, one axis at a time, no per-call allocation.
-  if (dx === 0) {
-    // Parallel to this axis: no crossing unless it already lies within.
-    if (rect.x - a.x > 0 || right - a.x < 0) return false
-  } else {
-    const t0 = (rect.x - a.x) / dx
-    const t1 = (right - a.x) / dx
-    enter = Math.max(enter, Math.min(t0, t1))
-    exit = Math.min(exit, Math.max(t0, t1))
-    if (enter >= exit) return false
-  }
-  if (dy === 0) {
-    if (rect.y - a.y > 0 || bottom - a.y < 0) return false
-  } else {
-    const t0 = (rect.y - a.y) / dy
-    const t1 = (bottom - a.y) / dy
+  for (const ax of SLAB_AXES) {
+    const from = ax.of(a)
+    const d = ax.of(b) - from
+    const near = ax.near(rect) - from
+    const far = ax.far(rect) - from
+    if (d === 0) {
+      // Parallel to this axis: no crossing unless it already lies within.
+      // `far < 0` is unreachable while the bounding-box reject above stands
+      // — for a segment parallel to this axis both endpoints share the
+      // coordinate, so `min > far edge` has already returned false. Kept
+      // because the pair states the condition, and dropping it would couple
+      // this test to that one; measured as a surviving mutation, which is
+      // what a reader of a mutation report would otherwise have to re-derive.
+      if (near > 0 || far < 0) return false
+      continue
+    }
+    const t0 = near / d
+    const t1 = far / d
     enter = Math.max(enter, Math.min(t0, t1))
     exit = Math.min(exit, Math.max(t0, t1))
     if (enter >= exit) return false
