@@ -613,7 +613,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/facet-set.ts#setOne': 92,
   'packages/server-core/src/tools/linkify-mentions.ts#linkifyMentions': 56,
   'packages/server-core/src/tools/version-restore.ts#createVersionRestoreTool': 64,
-  'packages/workspace-index/src/document-store-workspace-docs.ts#save': 93,
+  // 93 -> 99: no new logic. The one exported chunk-size constant is 18
+  // characters longer than the local `MAX_CHUNK_BYTES` it replaced, so the
+  // call sites that used to fit on one line now wrap. Absorbed here rather
+  // than shortened away, because the name's length is what stops it reading
+  // as a cap on `chunkSnapshot` instead of a default its writers share.
+  'packages/workspace-index/src/document-store-workspace-docs.ts#save': 99,
   'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 53,
   'packages/workspace-index/src/loro-workspace-document-index.ts#moveDocument': 64,
   'tools/arch-lint/src/scanner.ts#collectModuleSpecifiers': 61,

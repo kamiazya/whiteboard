@@ -19,6 +19,7 @@ import type {
 } from '@kamiazya/whiteboard-ports'
 import {
   chunkSnapshot,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   reassembleSnapshot,
   StoredDocumentUnreadableError,
   shouldCompact,
@@ -26,7 +27,6 @@ import {
 import { LoroDoc, VersionVector } from 'loro-crdt'
 import type { CaughtUp, WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
 
-const MAX_CHUNK_BYTES = 1_000_000
 /** How many times `readRecord` will re-read past a fold that landed mid-read. */
 const READ_ATTEMPTS = 3
 
@@ -140,7 +140,10 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     const header = await this.store.readSnapshotManifest({ docRef })
     if (header === null) {
       const snapshot = doc.export({ mode: 'snapshot' })
-      const { manifest: fresh, chunks } = chunkSnapshot(new Uint8Array(snapshot), MAX_CHUNK_BYTES)
+      const { manifest: fresh, chunks } = chunkSnapshot(
+        new Uint8Array(snapshot),
+        DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+      )
       // The whole history as one update: what an empty peer needs, and also
       // what this call appends if it loses the race below.
       const update = new Uint8Array(doc.export({ mode: 'update' }))
@@ -199,7 +202,10 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       for (const stale of existing) merged.import(stale)
       merged.import(update)
       const snapshot = merged.export({ mode: 'snapshot' })
-      const { manifest: fresh, chunks } = chunkSnapshot(new Uint8Array(snapshot), MAX_CHUNK_BYTES)
+      const { manifest: fresh, chunks } = chunkSnapshot(
+        new Uint8Array(snapshot),
+        DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+      )
       const folded = await this.store.saveCompactedSnapshot({
         docRef,
         manifest: fresh,
