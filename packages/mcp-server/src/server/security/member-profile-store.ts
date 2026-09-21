@@ -90,15 +90,16 @@ export interface MemberProfileStore {
 // its `workspaceMembersOnly` marker — in one transaction so the two can
 // never disagree about whether a workspace has had a member.
 async function insertMembership(db: Database, workspaceId: string, profileId: string) {
+  const now = Date.now()
   await db.transaction().execute(async (trx) => {
     await trx
       .insertInto('workspaceMemberships')
-      .values({ workspaceId, profileId, createdAt: Date.now() })
+      .values({ workspaceId, profileId, createdAt: now })
       .onConflict((oc) => oc.columns(['workspaceId', 'profileId']).doNothing())
       .execute()
     await trx
       .insertInto('workspaceMembersOnly')
-      .values({ workspaceId, since: Date.now() })
+      .values({ workspaceId, since: now })
       .onConflict((oc) => oc.column('workspaceId').doNothing())
       .execute()
   })
