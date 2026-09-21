@@ -73,6 +73,7 @@ import {
   type LoroStoreLike,
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
+import { useDuplicateDocument } from './use-duplicate-document.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
 
 const log = getAppLogger('browser-document-page')
@@ -150,38 +151,8 @@ function useBrowserDocument(
   // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
-  // duplicateDocument() rejects on failure (see the controller hook) rather
-  // than carrying its own error/pending state, so this page owns both: a
-  // disable-while-in-flight guard (a second click during the async
-  // read-then-write must not start a second copy) and the error surface.
-  const [isDuplicating, setIsDuplicating] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const canvasOpsButtonRef = useRef<HTMLButtonElement | null>(null)
-  const [duplicateError, setDuplicateError] = useState<string | null>(null)
-  const handleDuplicate = async () => {
-    if (isDuplicating) return
-    // The document this run is about, fixed before the first await. The page
-    // stays mounted across a switch, so by the time the catch below runs the
-    // one on screen may be a different document — and reading `documentId`
-    // there would answer with this closure's own render either way.
-    const startedOn = documentId
-    setIsDuplicating(true)
-    setDuplicateError(null)
-    try {
-      await duplicateDocument()
-    } catch (err) {
-      // Resetting on the switch is not enough on its own: this runs AFTER the
-      // reset, so without the guard the failed duplicate of the document that
-      // left prints its error under a document that has nothing wrong with
-      // it. Same residual the save indicator had, same shape of fix.
-      if (currentDocumentIdRef.current !== startedOn) return
-      setDuplicateError(
-        err instanceof Error ? err.message : `Failed to duplicate ${kindNoun(documentKind)}.`,
-      )
-    } finally {
-      if (currentDocumentIdRef.current === startedOn) setIsDuplicating(false)
-    }
-  }
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
@@ -212,9 +183,10 @@ function useBrowserDocument(
   const currentDocumentIdRef = useRef(documentId)
   currentDocumentIdRef.current = documentId
 
-  // Everything above NAMES A DOCUMENT, and this page keeps its own document
-  // switching rather than remounting (App.tsx says so at the mount site), so
-  // none of it may outlive the document it is about.
+  // State that NAMES A DOCUMENT may not outlive it: this page keeps its own
+  // document switching rather than remounting (App.tsx says so at the mount
+  // site). Duplicate's half of that rule moved into use-duplicate-document.ts
+  // with the state it clears; what is left here is the delete dialog.
   //
   // `confirmDelete` is the one that bites: it is a bare boolean, and
   // `triggerCleanup()` acts on whatever document the controller currently
@@ -226,8 +198,6 @@ function useBrowserDocument(
   // keyed on the same documentId this effect watches.
   useEffect(() => {
     setConfirmDelete(false)
-    setDuplicateError(null)
-    setIsDuplicating(false)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -236,6 +206,15 @@ function useBrowserDocument(
   const documentPath = pageState.kind === 'editing' ? pageState.snapshot.path : null
   const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
+  // Called HERE rather than above with the rest of the state: its refusal is
+  // worded with `documentKind`, and the handler closed over three consts
+  // declared below it — legal only because the body runs later.
+  const { isDuplicating, duplicateError, handleDuplicate } = useDuplicateDocument({
+    documentId,
+    currentDocumentIdRef,
+    documentKind,
+    duplicateDocument,
+  })
   // Filled in below, once the checkpoint pair exists. A ref because the hook
   // runs before that point in this component and a callback identity is not
   // what the subscription should depend on — the same shape the hook uses for
