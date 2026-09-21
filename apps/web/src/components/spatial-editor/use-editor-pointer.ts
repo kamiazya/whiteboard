@@ -215,6 +215,29 @@ export interface EditorPointerInputs {
   readonly toggleSelectionMember: (primaryId: string | null, hitId: string) => void
 }
 
+/**
+ * What a press landed on, as the three answers every claimant asks for.
+ *
+ * `hitId` is `undefined` when INK won the pick, so a press on a stroke over
+ * empty board reads as exactly that. `hitPathId` merges edges and lines,
+ * because the selection state treats the two alike — `deleteInkCommand` is
+ * the one place that looks at which it is. `pressKey` is what the
+ * double-press pairing compares, and it distinguishes "double-click on an
+ * edge" (open its label editor) from "double-click on empty space" (create a
+ * node), which both have no `hitId`.
+ */
+function describePress(pick: ReturnType<typeof pickContentAt>): {
+  hitId: string | undefined
+  hitPathId: string | undefined
+  pressKey: string
+} {
+  const hitInkId = pick?.kind === 'lines' ? pick.id : undefined
+  const hitId = pick?.kind === 'nodes' ? pick.id : undefined
+  const hitPathId = hitInkId ?? (pick?.kind === 'edges' ? pick.id : undefined)
+  const pressKey = hitId ?? (hitPathId !== undefined ? `edge:${hitPathId}` : 'empty')
+  return { hitId, hitPathId, pressKey }
+}
+
 export function useEditorPointer(inputs: EditorPointerInputs) {
   const {
     createNodeAt,
@@ -280,69 +303,276 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     toggleSelectionMember,
   } = inputs
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isOverlayEvent(e)) {
-      // The one rejection that used to leave no trace at all: a press an
-      // overlay took never reaches the machine, so a dead zone made of
-      // chrome reads as nothing having happened. The recorder names what
-      // took it.
-      gestureTrace.recordOverlayRejected({
-        at: Math.round(e.timeStamp),
-        pointerId: e.pointerId,
-        pointerType: e.pointerType,
-        target: describeTarget(e.target),
-      })
-      return
-    }
-    const root = rootRef.current
-    if (root === null) return
-    const screenPoint = clientPointToRootLocal(e, root)
-    const point = screenToCanvas(screenPoint, viewport)
-    // WHICH KIND the press lands on, decided in one place for every kind
-    // the model holds (`element-pick.ts`). It used to be three hit-tests
-    // two hundred lines apart, so the priority between them was a property
-    // of where each had been written — and a kind nobody had written was
-    // simply never tested for. Each branch below reads the one answer.
-    const pick = pickContentAt(pressProbes(pickInputs), point)
-    // Answering `undefined` for the node when ink won makes every branch
-    // below treat the press as one on ink over empty board, which is what
-    // it is.
-    const hitInkId = pick?.kind === 'lines' ? pick.id : undefined
-    const hitId = pick?.kind === 'nodes' ? pick.id : undefined
-    // A press on the canvas surface shuts the open conversation, the way
-    // a pointerdown outside a menu shuts the menu. It is the one dismissal
-    // a phone has: there is no Escape, and the card covers the bubble
-    // whose second press would otherwise toggle it. A press on the open
-    // comment's own chrome (its pin, which the card leaves uncovered) is
-    // left to the release, which toggles it shut as before.
+  /**
+   * A press an overlay took. The one rejection that used to leave no trace
+   * at all — a dead zone made of chrome reads as nothing having happened —
+   * so the recorder names what took it.
+   */
+  const rejectedByOverlay = (e: React.PointerEvent<HTMLDivElement>): boolean => {
+    if (!isOverlayEvent(e)) return false
+    gestureTrace.recordOverlayRejected({
+      at: Math.round(e.timeStamp),
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      target: describeTarget(e.target),
+    })
+    return true
+  }
+
+  /**
+   * A press on the canvas surface shuts an open conversation or proposal
+   * card, the way a pointerdown outside a menu shuts the menu.
+   *
+   * It is the one dismissal a phone has: there is no Escape, and each card
+   * covers the bubble whose second press would otherwise toggle it. A press
+   * on the open comment's own chrome (its pin, which the card leaves
+   * uncovered) is left to the release, which toggles it shut as before.
+   *
+   * Not a claimant: it dismisses and lets the press carry on.
+   */
+  const dismissOpenCards = (point: Point): void => {
     if (openCommentId !== null && hitTestComment(point) !== openCommentId) {
       setOpenCommentId(null)
     }
-    // A press on a comment's chrome is remembered BEFORE navigation gets
-    // the press, because in hand mode navigation takes every plain press
-    // as a pan and never hands it back — and a comment is chrome, not
-    // content: a reader panning around a canvas has as much reason to
-    // open a conversation as one selecting on it. The release decides
-    // (see handlePointerUp): a press that never travelled opens the card
-    // under either tool; one that travelled was the pan (hand) or the
-    // pin drag (select) it became on the way.
-    // The proposal card is dismissed by a press off it, like the comment
-    // card above and for the same reason: the card covers its own bubble,
-    // so the second press that would toggle it shut lands on the card.
     if (openProposalId !== null && hitTestProposal(point) !== openProposalId) {
       setOpenProposalId(null)
     }
+  }
+
+  /**
+   * A press on a comment's chrome is remembered BEFORE navigation gets the
+   * press, because in hand mode navigation takes every plain press as a pan
+   * and never hands it back — and a comment is chrome, not content: a reader
+   * panning around a canvas has as much reason to open a conversation as one
+   * selecting on it.
+   *
+   * The release decides (see `handlePointerUp`): a press that never travelled
+   * opens the card under either tool; one that travelled was the pan (hand)
+   * or the pin drag (select) it became on the way.
+   */
+  const rememberPressedComment = (
+    e: React.PointerEvent<HTMLDivElement>,
+    point: Point,
+    screenPoint: Point,
+  ): void => {
     const hitCommentId = e.button === 0 ? hitTestComment(point) : undefined
-    if (hitCommentId !== undefined) {
-      const comment = commentById(hitCommentId)
-      if (comment !== undefined) {
-        pressedCommentRef.current = { comment, startScreen: screenPoint, startPoint: point }
-      }
+    if (hitCommentId === undefined) return
+    const comment = commentById(hitCommentId)
+    if (comment === undefined) return
+    pressedCommentRef.current = { comment, startScreen: screenPoint, startPoint: point }
+  }
+
+  /**
+   * A proposal's BUBBLE is chrome above the content, so a press on it opens
+   * the card at the release rather than selecting whatever is under it.
+   *
+   * Its change OUTLINES are deliberately not tested: they are drawn on the
+   * document at the place a change would land, and making them pressable
+   * would put a dead zone over the node they describe.
+   */
+  const claimProposalBubble = (point: Point, screenPoint: Point): boolean => {
+    const hitProposalId = hitTestProposal(point)
+    if (hitProposalId === undefined) return false
+    pressedProposalRef.current = { id: hitProposalId, startScreen: screenPoint }
+    return true
+  }
+
+  /**
+   * The draw tool makes the board a sheet of paper: a press starts a stroke,
+   * with no hit-test at all.
+   *
+   * It sits after the annotation layer's own chrome, which floats above the
+   * document and keeps its press. Capture is taken HERE rather than on the
+   * first move (the rule `captureOnFirstMove` states), or a stroke that
+   * leaves the root stops at its edge and the release is never seen.
+   */
+  const beginDrawStroke = (
+    e: React.PointerEvent<HTMLDivElement>,
+    root: HTMLElement,
+    point: Point,
+  ): boolean => {
+    if (tool !== 'draw') return false
+    capturePointer(root, e.pointerId)
+    // Which MARK this stroke belongs to, decided here because this is where
+    // the clock is: a stroke that goes down soon after the last one came up,
+    // near where it was drawn, is the next stroke of the same character
+    // rather than a new one (`stroke-group.ts`). The reducer's own default
+    // mints the id, so a test injecting `createId` gets deterministic groups.
+    const previous = lastStrokeRef.current ?? undefined
+    const group = continuesStroke(previous, e.timeStamp, point, viewport.zoom)
+      ? previous?.group
+      : (createId ?? defaultCreateId)()
+    applyResult(
+      reduceGesture(gestureState, canvas, {
+        type: 'pointerdown-draw',
+        point,
+        zoom: viewport.zoom,
+        ...(group === undefined ? {} : { group }),
+      }),
+    )
+    return true
+  }
+
+  /**
+   * Shift-click builds a multi-selection instead of starting a gesture.
+   *
+   * What it MEANS per kind is `element-pick.ts`'s: the two arms used to be
+   * written where each was first needed, which is how ink came to fall
+   * through the node arm entirely. A kind it answers `none` for falls
+   * through to the replacing paths below, carrying its reason.
+   */
+  const claimShiftPress = (
+    e: React.PointerEvent<HTMLDivElement>,
+    pick: ReturnType<typeof pickContentAt>,
+  ): boolean => {
+    if (!e.shiftKey) return false
+    const shift = shiftPress(pick, selectedInkIds, canvas.lines, withGroupMates)
+    if (shift.kind === 'nodes') {
+      toggleSelectionMember(selectedId, shift.id)
+      return true
     }
-    // Navigation answers first, and answers for its own state. Everything
-    // it owns — which finger is down, whether two of them are driving the
-    // viewport, whether this press continues a gather — lives in one value
-    // in `navigation.ts` rather than in the refs this used to read.
+    if (shift.kind === 'paths') {
+      setSelectedInkIds(shift.ids)
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Double-press detection is OURS, not the browser's `dblclick`.
+   *
+   * The first press selects the node, which re-renders the DOM under the
+   * pointer (selection overlay, gesture state), so the second click can land
+   * on a different element instance and Chromium then never synthesises a
+   * dblclick at all. Comparing node IDS within the OS-conventional window is
+   * stable against those re-renders.
+   */
+  const recordDoublePress = (pressKey: string, at: number, screenPoint: Point, point: Point) => {
+    const isDoublePress =
+      lastPressRef.current !== null &&
+      lastPressRef.current.key === pressKey &&
+      at - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
+    lastPressRef.current = isDoublePress ? null : { key: pressKey, at, point: screenPoint }
+    doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
+  }
+
+  /**
+   * A press that landed on no node: the marquee starts, and a stroke under
+   * the pointer is armed to travel with it.
+   *
+   * A press on a MEMBER keeps the whole set; anything else replaces it with
+   * the pressed stroke's MARK — a handwritten character is several strokes
+   * and a person pressing one means it. Same rule the node branch and the
+   * context menu follow. `pointerdown-ink` drops every id that is not a
+   * stroke, so a press on a RELATION arms nothing and falls through to the
+   * band: an edge's path is routed from the boxes it joins and has no
+   * geometry of its own to drag.
+   */
+  const pressOnEmptyBoard = (point: Point, hitPathId: string | undefined): void => {
+    setMarquee({ start: point, current: point })
+    applySelection({ type: 'collapse-extras' })
+    if (hitPathId === undefined) {
+      setSelectedEdgeId(null)
+      applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
+      return
+    }
+    const travelling = selectedInkIds.includes(hitPathId)
+      ? selectedInkIds
+      : withGroupMates([hitPathId], canvas.lines)
+    setSelectedInkIds(travelling)
+    const armed = reduceGesture(gestureState, canvas, {
+      type: 'pointerdown-ink',
+      ids: travelling,
+      point,
+    })
+    if (armed.state.kind === 'moving-ink') {
+      setMarquee(null)
+      applyResult(armed)
+      return
+    }
+    applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
+  }
+
+  /**
+   * A press on a NODE. A plain press on a NON-member collapses the
+   * multi-selection; a press on a member keeps the whole set and leads with
+   * the pressed node — the reducer owns both transitions.
+   *
+   * Connect tool: the FIRST node press arms the connect (the same reducer arm
+   * the keyboard/handle flows use). While 'connecting', a node press is
+   * swallowed — the connect completes on the POINTERUP over the target, so
+   * dispatching a plain pointerdown here would tear the in-flight connect
+   * down first.
+   */
+  const pressOnNode = (hitId: string, point: Point): void => {
+    applySelection({ type: 'press', id: hitId })
+    setSelectedEdgeId(null)
+    if (tool === 'connect') {
+      if (gestureState.kind !== 'connecting') {
+        applyResult(
+          reduceGesture(gestureState, canvas, { type: 'pointerdown-connect', nodeId: hitId }),
+        )
+      }
+      return
+    }
+    applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown', nodeId: hitId, point }))
+  }
+
+  /**
+   * What navigation needs to know about the board to judge a press.
+   *
+   * `anchorPrimaryId` is the anchor a gather would extend: mid-gather it is
+   * the standing selection, otherwise only a node this press could join to —
+   * which is why entering hand mode, which clears the selection, can never
+   * gather.
+   */
+  const pressNavigationContext = (hitId: string | undefined) => ({
+    handMode: tool === 'hand',
+    spaceDown: spaceDownRef.current,
+    hitId,
+    anchorPrimaryId:
+      navigationRef.current.mode.kind === 'gathering'
+        ? selectedId
+        : gestureState.kind === 'moving'
+          ? gestureState.nodeId
+          : null,
+    manipulating: gestureState.kind !== 'idle',
+  })
+
+  /**
+   * A press is offered to each claimant in PRIORITY ORDER, and the first that
+   * takes it stops the chain — the same shape `handlePointerMove` below
+   * already had, applied to the path that never got it.
+   *
+   * The order is the whole content of this function: chrome above the
+   * document claims before the document does, navigation answers before
+   * either, and what each position is FOR is on the claimant rather than in a
+   * comment beside a `return`.
+   */
+  /**
+   * Everything that floats ABOVE the document gets the press first.
+   *
+   * Navigation is in this half rather than the document's because in hand
+   * mode it takes every plain press as a pan and never hands it back — so
+   * anything a reader can still reach while panning (a comment's chrome) has
+   * to be remembered before it runs, and anything it owns has to be settled
+   * before the document sees anything.
+   *
+   * Answers true when the press is spoken for.
+   */
+  const chromeClaimsPress = (
+    e: React.PointerEvent<HTMLDivElement>,
+    root: HTMLElement,
+    point: Point,
+    screenPoint: Point,
+    hitId: string | undefined,
+  ): boolean => {
+    dismissOpenCards(point)
+    rememberPressedComment(e, point, screenPoint)
+    // Navigation answers for its own state. Everything it owns — which finger
+    // is down, whether two of them are driving the viewport, whether this
+    // press continues a gather — lives in one value in `navigation.ts` rather
+    // than in the refs this used to read.
     const navigation = runNavigation(
       root,
       {
@@ -353,181 +583,59 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
         button: e.button,
         point: screenPoint,
         timeStamp: e.timeStamp,
-        context: {
-          handMode: tool === 'hand',
-          spaceDown: spaceDownRef.current,
-          hitId,
-          // The anchor a gather would extend. Mid-gather it is the standing
-          // selection; otherwise only a node this press could join to, which
-          // is why entering hand mode — which clears the selection — can
-          // never gather.
-          anchorPrimaryId:
-            navigationRef.current.mode.kind === 'gathering'
-              ? selectedId
-              : gestureState.kind === 'moving'
-                ? gestureState.nodeId
-                : null,
-          manipulating: gestureState.kind !== 'idle',
-        },
+        context: pressNavigationContext(hitId),
       },
       e.timeStamp,
     )
     if (navigation.preventDefault === true) e.preventDefault()
-    if (!navigation.fallThrough) return
-    if (e.button !== 0) return
-    // A comment's chrome floats above content, so it was tested before
-    // the nodes under it (above). A press on it never falls through to
-    // node or marquee handling: a press that stays put OPENS the
-    // conversation at the release, and one that travels drags the pin of
-    // a point-anchored comment. A node-anchored comment's anchor IS its
-    // node's corner, so its pin does not drag — moving the node is how it
-    // moves (and the comment rides along).
-    //
-    // There is deliberately no double-press-to-edit here any more. A
-    // single press now opens the card, whose own top-right Edit is the
-    // successor: the second press of a pair would land on that card, which
-    // stops propagation, so the pairing could never complete.
-    if (pressedCommentRef.current !== null) return
-    // A proposal's BUBBLE is chrome above the content, so a press on it
-    // opens the card at the release rather than selecting whatever is
-    // under it. Its change OUTLINES are deliberately not tested: they are
-    // drawn on the document at the place a change would land, and making
-    // them pressable would put a dead zone over the node they describe.
-    const hitProposalId = hitTestProposal(point)
-    if (hitProposalId !== undefined) {
-      pressedProposalRef.current = { id: hitProposalId, startScreen: screenPoint }
-      return
-    }
-    // The draw tool makes the board a sheet of paper: a press starts a
-    // stroke, with no hit-test at all. It sits after the annotation
-    // layer's own chrome, which floats above the document and keeps its
-    // press. Capture is taken HERE rather than on the first move (the
-    // rule just below), or a stroke that leaves the root stops at its
-    // edge and the release is never seen.
-    if (tool === 'draw') {
-      capturePointer(root, e.pointerId)
-      // Which MARK this stroke belongs to, decided here because this is
-      // where the clock is: a stroke that goes down soon after the last
-      // one came up, near where it was drawn, is the next stroke of the
-      // same character rather than a new one (`stroke-group.ts`).
-      const previous = lastStrokeRef.current ?? undefined
-      // The reducer's own default, so a group id is minted exactly the way
-      // an element id is — and a test injecting `createId` gets
-      // deterministic groups too.
-      const group = continuesStroke(previous, e.timeStamp, point, viewport.zoom)
-        ? previous?.group
-        : (createId ?? defaultCreateId)()
-      applyResult(
-        reduceGesture(gestureState, canvas, {
-          type: 'pointerdown-draw',
-          point,
-          zoom: viewport.zoom,
-          ...(group === undefined ? {} : { group }),
-        }),
-      )
-      return
-    }
-    // Deliberately NO pointer capture here. Capturing on the press
-    // retargets the subsequent clicks to the capturing root, so a control
-    // the press bubbled from never receives its click. Capture is taken
-    // on the first real pointermove instead (see handlePointerMove): a
-    // press that turns into a drag still gets capture before it can
-    // escape the element. Overlay handle/connect gestures are the
-    // exception (beginOverlayGesture) — they want capture immediately.
+    if (!navigation.fallThrough) return true
+    if (e.button !== 0) return true
+    // A comment's chrome floats above content, so a press it took never falls
+    // through to node or marquee handling. There is deliberately no
+    // double-press-to-edit: a single press opens the card, whose own Edit is
+    // the successor, and the second press of a pair would land on that card.
+    if (pressedCommentRef.current !== null) return true
+    return claimProposalBubble(point, screenPoint)
+  }
 
-    // Double-press detection is OURS, not the browser's `dblclick`: the
-    // first press selects the node, which re-renders the DOM under the
-    // pointer (selection overlay, gesture state), so the second click can
-    // land on a different element instance and Chromium then never
-    // synthesises a dblclick at all. Detecting two presses on the same
-    // logical target within the OS-conventional window is stable against
-    // re-renders because it compares node ids, not DOM identity.
-    // Shift-click builds a multi-selection instead of starting a gesture.
-    // What it MEANS per kind is `element-pick.ts`'s: the two arms used to
-    // be written where each was first needed, which is how ink came to
-    // fall through the node arm entirely. A kind it answers `none` for
-    // falls through to the replacing paths below, carrying its reason.
-    if (e.shiftKey) {
-      const shift = shiftPress(pick, selectedInkIds, canvas.lines, withGroupMates)
-      if (shift.kind === 'nodes') {
-        toggleSelectionMember(selectedId, shift.id)
-        return
-      }
-      if (shift.kind === 'paths') {
-        setSelectedInkIds(shift.ids)
-        return
-      }
-    }
-    // The pick's answer for a path, which is an EDGE or a LINE: the press
-    // paths below treat the two alike, because the selection state does —
-    // `deleteInkCommand` is the one place that looks at which it is. It is
-    // read here rather than probed again so the double-press pairing can
-    // distinguish "double-click on an edge" (open its label editor) from
-    // "double-click on empty space" (create a node); both have
-    // hitId === undefined.
-    const hitPathId = hitInkId ?? (pick?.kind === 'edges' ? pick.id : undefined)
-    const pressKey = hitId ?? (hitPathId !== undefined ? `edge:${hitPathId}` : 'empty')
-    const now = e.timeStamp
-    const isDoublePress =
-      lastPressRef.current !== null &&
-      lastPressRef.current.key === pressKey &&
-      now - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
-    lastPressRef.current = isDoublePress ? null : { key: pressKey, at: now, point: screenPoint }
-    doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
+  /**
+   * A press is offered to each claimant in PRIORITY ORDER, and the first that
+   * takes it stops the chain — the same shape `handlePointerMove` below
+   * already had, applied to the path that never got it.
+   *
+   * The order is the whole content of this function: chrome above the
+   * document claims before the document does, and what each position is FOR
+   * is on the claimant rather than in a comment beside a `return`.
+   */
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (rejectedByOverlay(e)) return
+    const root = rootRef.current
+    if (root === null) return
+    const screenPoint = clientPointToRootLocal(e, root)
+    const point = screenToCanvas(screenPoint, viewport)
+    // WHICH KIND the press lands on, decided in one place for every kind the
+    // model holds (`element-pick.ts`). It used to be three hit-tests two
+    // hundred lines apart, so the priority between them was a property of
+    // where each had been written — and a kind nobody had written was simply
+    // never tested for.
+    const pick = pickContentAt(pressProbes(pickInputs), point)
+    const { hitId, hitPathId, pressKey } = describePress(pick)
 
+    if (chromeClaimsPress(e, root, point, screenPoint, hitId)) return
+    if (beginDrawStroke(e, root, point)) return
+    // Deliberately NO pointer capture below. Capturing on the press retargets
+    // the subsequent clicks to the capturing root, so a control the press
+    // bubbled from never receives its click. Capture is taken on the first
+    // real pointermove instead (`captureOnFirstMove`); overlay handle/connect
+    // gestures are the exception and want it immediately.
+    if (claimShiftPress(e, pick)) return
+
+    recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
     if (hitId === undefined) {
-      setMarquee({ start: point, current: point })
-      applySelection({ type: 'collapse-extras' })
-      if (hitPathId !== undefined) {
-        // A press on a MEMBER keeps the whole set; anything else replaces
-        // it with the pressed stroke's MARK — a handwritten character is
-        // several strokes and a person pressing one means it. Same rule
-        // the node branch and the context menu follow.
-        const travelling = selectedInkIds.includes(hitPathId)
-          ? selectedInkIds
-          : withGroupMates([hitPathId], canvas.lines)
-        setSelectedInkIds(travelling)
-        // Ink travels under the pointer now. `pointerdown-ink` drops every
-        // id that is not a stroke, so a press on a RELATION arms nothing
-        // and falls through to the band exactly as it did — an edge's path
-        // is routed from the boxes it joins and has no geometry of its own
-        // to drag.
-        const armed = reduceGesture(gestureState, canvas, {
-          type: 'pointerdown-ink',
-          ids: travelling,
-          point,
-        })
-        if (armed.state.kind === 'moving-ink') {
-          setMarquee(null)
-          applyResult(armed)
-          return
-        }
-        applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
-        return
-      }
-      setSelectedEdgeId(null)
-      applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
+      pressOnEmptyBoard(point, hitPathId)
       return
     }
-    // A plain press on a NON-member collapses the multi-selection; a press
-    // on a member keeps the whole set and leads with the pressed node —
-    // the reducer owns both transitions.
-    applySelection({ type: 'press', id: hitId })
-    setSelectedEdgeId(null)
-    // Connect tool: the FIRST node press arms the connect (the same
-    // reducer arm the keyboard/handle flows use). While 'connecting', a
-    // node press is swallowed — the connect completes on the POINTERUP
-    // over the target (the reducer's completion arm), so dispatching a
-    // plain pointerdown here would tear the in-flight connect down first.
-    if (tool === 'connect' && hitId !== undefined) {
-      if (gestureState.kind !== 'connecting') {
-        applyResult(
-          reduceGesture(gestureState, canvas, { type: 'pointerdown-connect', nodeId: hitId }),
-        )
-      }
-      return
-    }
-    applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown', nodeId: hitId, point }))
+    pressOnNode(hitId, point)
   }
 
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -560,45 +668,67 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     openContextMenuAt(clientPointToRootLocal(e, root))
   }
 
-  const openContextMenuAt = (screenPoint: Point) => {
-    const point = screenToCanvas(screenPoint, viewport)
-    // A comment under the pointer gets ITS menu — and leaves the node or
-    // edge selection alone, since the menu is about the comment.
+  /**
+   * A comment under the pointer gets ITS menu — and leaves the node or edge
+   * selection alone, since the menu is about the comment.
+   */
+  const openCommentMenuAt = (screenPoint: Point, point: Point): boolean => {
     const hitCommentId = hitTestComment(point)
-    if (hitCommentId !== undefined) {
-      setContextMenu({
-        x: screenPoint.x,
-        y: screenPoint.y,
-        nodeId: undefined,
-        edgeId: undefined,
-        commentId: hitCommentId,
-        point,
-      })
-      return
-    }
-    const menuPick = pickContentAt(pressProbes(menuPickInputs), point)
-    const hitId = menuPick?.kind === 'nodes' ? menuPick.id : undefined
-    // An edge and a line alike: the menu builder resolves which it is out
-    // of the canvas, the same way the selection does.
-    const hitPathId = menuPick !== undefined && menuPick.kind !== 'nodes' ? menuPick.id : undefined
-    // Hand mode keeps CONTENT out of reach — a press pans, nothing
-    // selects, nothing edits — but a conversation about what is on screen
-    // is not content, and a reader panning has as much reason to open one
-    // as a reader selecting. So the menu opens with the annotation verb
-    // for what is under the press and nothing else, and the press selects
-    // nothing along the way: an editing affordance surfacing mid-pan was
-    // the harm (user report 2026-08-08), and a comment verb is not one.
-    if (tool === 'hand') {
-      setContextMenu({
-        x: screenPoint.x,
-        y: screenPoint.y,
-        nodeId: hitId,
-        edgeId: hitPathId,
-        point,
-        verbs: 'annotation',
-      })
-      return
-    }
+    if (hitCommentId === undefined) return false
+    setContextMenu({
+      x: screenPoint.x,
+      y: screenPoint.y,
+      nodeId: undefined,
+      edgeId: undefined,
+      commentId: hitCommentId,
+      point,
+    })
+    return true
+  }
+
+  /**
+   * In hand mode the menu carries the ANNOTATION verbs and nothing else.
+   *
+   * Hand mode keeps CONTENT out of reach — a press pans, nothing selects,
+   * nothing edits — but a conversation about what is on screen is not
+   * content, and a reader panning has as much reason to open one as a reader
+   * selecting. The press selects nothing along the way: an editing affordance
+   * surfacing mid-pan was the harm (user report 2026-08-08), and a comment
+   * verb is not one.
+   */
+  const openHandModeMenuAt = (
+    screenPoint: Point,
+    point: Point,
+    hitId: string | undefined,
+    hitPathId: string | undefined,
+  ): boolean => {
+    if (tool !== 'hand') return false
+    setContextMenu({
+      x: screenPoint.x,
+      y: screenPoint.y,
+      nodeId: hitId,
+      edgeId: hitPathId,
+      point,
+      verbs: 'annotation',
+    })
+    return true
+  }
+
+  /**
+   * What a right-click selects before its menu opens.
+   *
+   * Node and edge selection stay mutually exclusive here, as on the press
+   * path: Delete acts on a selected edge FIRST, so leaving the other object
+   * type selected makes Delete remove the wrong thing.
+   *
+   * A press on a MEMBER keeps the whole set and leads with the pressed one; a
+   * press on anything else replaces it. Both collections follow that rule now
+   * — ink had the other one, where `setSelectedEdgeId` collapsed the
+   * selection to a single id, so right-clicking one stroke of a gathered
+   * scribble threw the rest away and every verb that acts on the SET could
+   * never be offered from the menu that is supposed to offer them.
+   */
+  const settleMenuSelection = (hitId: string | undefined, hitPathId: string | undefined): void => {
     // Node and edge selection stay mutually exclusive here too (see the
     // pointerdown path): Delete acts on a selected edge FIRST, so leaving
     // the other object type selected makes Delete remove the wrong thing.
@@ -631,6 +761,18 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       )
       applySelection({ type: 'clear' })
     }
+  }
+
+  const openContextMenuAt = (screenPoint: Point) => {
+    const point = screenToCanvas(screenPoint, viewport)
+    if (openCommentMenuAt(screenPoint, point)) return
+    const menuPick = pickContentAt(pressProbes(menuPickInputs), point)
+    const hitId = menuPick?.kind === 'nodes' ? menuPick.id : undefined
+    // An edge and a line alike: the menu builder resolves which it is out
+    // of the canvas, the same way the selection does.
+    const hitPathId = menuPick !== undefined && menuPick.kind !== 'nodes' ? menuPick.id : undefined
+    if (openHandModeMenuAt(screenPoint, point, hitId, hitPathId)) return
+    settleMenuSelection(hitId, hitPathId)
     setContextMenu({
       x: screenPoint.x,
       y: screenPoint.y,
@@ -860,6 +1002,142 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     viewport,
   }
 
+  /**
+   * A press on a comment's chrome, answered at the release.
+   *
+   * Consumed here whatever happens next, so a press on a comment can never
+   * open its card two gestures later. A press that never travelled opens the
+   * card under EITHER tool: in hand mode the press armed a pan that this
+   * release is ending, and the machine answers for that pan — but the pan
+   * moved nothing, and the comment's answer comes first. A travelled press
+   * was spent on the first move.
+   */
+  const releasePressedComment = (): boolean => {
+    const pressedComment = pressedCommentRef.current
+    pressedCommentRef.current = null
+    if (pressedComment === null || commentDrag !== null) return false
+    toggleCommentCard(pressedComment.comment.id)
+    return true
+  }
+
+  /**
+   * A press on a proposal's bubble, answered at the release.
+   *
+   * Consumed here whatever happens next, like the comment press above. A
+   * press that travelled was a pan and opens nothing; one that stayed put
+   * toggles the card, so pressing the bubble again is how it shuts.
+   */
+  const releasePressedProposal = (e: React.PointerEvent<HTMLDivElement>, root: HTMLElement) => {
+    const pressedProposal = pressedProposalRef.current
+    pressedProposalRef.current = null
+    if (pressedProposal === null) return false
+    const stayed =
+      travelled(clientPointToRootLocal(e, root), pressedProposal.startScreen) <
+      COMMENT_PRESS_SLOP_PX
+    if (!stayed) return false
+    setOpenProposalId((current) => (current === pressedProposal.id ? null : pressedProposal.id))
+    return true
+  }
+
+  /**
+   * The end of a comment-pin drag.
+   *
+   * A press that never travelled is a PRESS (the card toggle owns it), not a
+   * zero-distance move. The anchor is ROUNDED because the model requires an
+   * integer and a reader silently drops a comment that fails the schema — a
+   * fractional anchor from a zoomed viewport would survive this session and
+   * vanish on the next undo, reload or remote import. The preview parks
+   * exactly on the rounded anchor, so the committed copy takes over without a
+   * sub-pixel step.
+   */
+  const commitCommentDrag = (e: React.PointerEvent<HTMLDivElement>, root: HTMLElement): boolean => {
+    if (commentDrag === null) return false
+    if (commentDrag.dropped !== null) return true
+    const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
+    const dx = released.x - commentDrag.startPoint.x
+    const dy = released.y - commentDrag.startPoint.y
+    if (dx === 0 && dy === 0) {
+      setCommentDrag(null)
+      toggleCommentCard(commentDrag.comment.id)
+      return true
+    }
+    const dropped = {
+      x: Math.round(commentDrag.comment.x + dx),
+      y: Math.round(commentDrag.comment.y + dy),
+    }
+    setCommentDrag({
+      ...commentDrag,
+      live: {
+        x: commentDrag.startPoint.x + (dropped.x - commentDrag.comment.x),
+        y: commentDrag.startPoint.y + (dropped.y - commentDrag.comment.y),
+      },
+      dropped,
+    })
+    applyResult({
+      state: { kind: 'idle' },
+      commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
+    })
+    return true
+  }
+
+  /**
+   * The end of an ink drag.
+   *
+   * The ink drag replaced the marquee this press used to start, and two
+   * things the marquee branch did for a press ON ink had to come with it.
+   * Both were found by the full browser run rather than by reading: each is
+   * about what happens AFTER a release that wrote nothing, so the drag's own
+   * tests passed over them.
+   *
+   * Unsnapped, for the reason the stroke's own release is: ink is sub-pixel
+   * by nature, and a snapped release would quantise a whole scribble to a box
+   * grid it was never drawn on. Focus is taken at the RELEASE because ink has
+   * no focusable element of its own — a drawn path carries no tabIndex — so
+   * without it Delete and Escape land on `<body>`, and the browser's own
+   * mousedown focus handling would undo one taken at the press.
+   */
+  const releaseInkDrag = (
+    e: React.PointerEvent<HTMLDivElement>,
+    root: HTMLElement,
+    armed: { key: string; point: Point } | null,
+  ): boolean => {
+    if (gestureState.kind !== 'moving-ink') return false
+    const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
+    applyResult(reduceGesture(gestureState, canvas, { type: 'pointerup', point: released }))
+    // A double press on a stroke edits its label, exactly as on a relation —
+    // the press key is `edge:<id>` for both.
+    if (armed?.key.startsWith('edge:')) {
+      setEdgeLabelEditId(armed.key.slice('edge:'.length))
+    }
+    root.focus()
+    return true
+  }
+
+  /**
+   * The chrome half of the release chain, mirroring `chromeClaimsPress`.
+   *
+   * A release the machine answered was NAVIGATION — a finger leaving a gather
+   * or a pinch, or the end of a pan. None of them run the click and marquee
+   * semantics the document half holds: the sequence was never a gesture on
+   * the canvas, and treating its release as one would re-collapse the very
+   * selection the gather just built.
+   */
+  const chromeClaimsRelease = (
+    e: React.PointerEvent<HTMLDivElement>,
+    root: HTMLElement,
+    navigationFellThrough: boolean,
+  ): boolean => {
+    if (releasePressedComment()) return true
+    if (releasePressedProposal(e, root)) return true
+    if (!navigationFellThrough) return true
+    return commitCommentDrag(e, root)
+  }
+
+  /**
+   * A release is offered to each claimant in priority order, the mirror of
+   * `handlePointerDown`'s chain: chrome answers before the document, and what
+   * each position is FOR is on the claimant.
+   */
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const root = rootRef.current
     if (root === null) return
@@ -872,105 +1150,15 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       },
       e.timeStamp,
     )
-    // Consumed here whatever happens next, so a press on a comment can
-    // never open its card two gestures later. A press that never
-    // travelled opens the card under EITHER tool: in hand mode the press
-    // armed a pan that this release is ending, and the machine answers
-    // for that pan — but the pan moved nothing, and the comment's answer
-    // comes first. (A travelled press was spent on the first move.)
-    const pressedComment = pressedCommentRef.current
-    pressedCommentRef.current = null
-    if (pressedComment !== null && commentDrag === null) {
-      toggleCommentCard(pressedComment.comment.id)
-      return
-    }
-    // Consumed here whatever happens next, like the comment press above. A
-    // press that travelled was a pan and opens nothing; one that stayed put
-    // toggles the card, so pressing the bubble again is how it shuts.
-    const pressedProposal = pressedProposalRef.current
-    pressedProposalRef.current = null
-    if (
-      pressedProposal !== null &&
-      travelled(clientPointToRootLocal(e, root), pressedProposal.startScreen) <
-        COMMENT_PRESS_SLOP_PX
-    ) {
-      setOpenProposalId((current) => (current === pressedProposal.id ? null : pressedProposal.id))
-      return
-    }
-    // A release the machine answered was navigation — a finger leaving a
-    // gather or a pinch, or the end of a pan. None of them run the click
-    // and marquee semantics below: the sequence was never a gesture on the
-    // canvas, and treating its release as one would re-collapse the very
-    // selection the gather just built.
-    if (!navigation.fallThrough) return
-    if (commentDrag !== null) {
-      if (commentDrag.dropped !== null) return
-      const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
-      const dx = released.x - commentDrag.startPoint.x
-      const dy = released.y - commentDrag.startPoint.y
-      // A press that never travelled is a press (the double-press pairing
-      // above owns it), not a zero-distance move. The anchor is ROUNDED:
-      // the model requires an integer, and a reader silently drops a
-      // comment that fails the schema — a fractional anchor from a zoomed
-      // viewport would survive this session and vanish on the next undo,
-      // reload or remote import.
-      if (dx === 0 && dy === 0) {
-        setCommentDrag(null)
-        toggleCommentCard(commentDrag.comment.id)
-        return
-      }
-      const dropped = {
-        x: Math.round(commentDrag.comment.x + dx),
-        y: Math.round(commentDrag.comment.y + dy),
-      }
-      // The preview parks exactly on the rounded anchor, so the committed
-      // copy takes over without a sub-pixel step.
-      setCommentDrag({
-        ...commentDrag,
-        live: {
-          x: commentDrag.startPoint.x + (dropped.x - commentDrag.comment.x),
-          y: commentDrag.startPoint.y + (dropped.y - commentDrag.comment.y),
-        },
-        dropped,
-      })
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
-      })
-      return
-    }
+    if (chromeClaimsRelease(e, root, navigation.fallThrough)) return
+
     const armed = doublePressRef.current
     doublePressRef.current = null
-    if (gestureState.kind === 'moving-ink' && root !== null) {
-      // The ink drag replaced the marquee this press used to start, and
-      // two things the marquee branch did for a press ON ink had to come
-      // with it. Both were found by the full browser run rather than by
-      // reading: each is about what happens AFTER a release that wrote
-      // nothing, so the drag's own tests passed over them.
-      //
-      // Unsnapped, and the same reason the stroke's own release is: ink is
-      // sub-pixel by nature, and a snapped release would quantise a whole
-      // scribble to a box grid it was never drawn on.
-      const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
-      applyResult(reduceGesture(gestureState, canvas, { type: 'pointerup', point: released }))
-      // A double press on a stroke edits its label, exactly as on a
-      // relation — the press key is `edge:<id>` for both.
-      if (armed?.key.startsWith('edge:')) {
-        setEdgeLabelEditId(armed.key.slice('edge:'.length))
-      }
-      // Ink has no focusable element of its own (node shapes carry
-      // tabIndex; a drawn path does not), so without this the real
-      // keyboard's Delete and Escape land on <body> and never reach this
-      // root's onKeyDown. Taken at the RELEASE because the browser's own
-      // mousedown focus handling would undo one taken at the press.
-      root.focus()
-      return
-    }
+    if (releaseInkDrag(e, root, armed)) return
     if (marquee !== null) {
       releaseMarquee(e, root, armed, marquee, releaseContext)
       return
     }
-    if (root === null) return
     const screenPoint = clientPointToRootLocal(e, root)
     // Unsnapped like its samples: the ink ends where the hand stopped.
     const drawing = gestureStateRef.current
