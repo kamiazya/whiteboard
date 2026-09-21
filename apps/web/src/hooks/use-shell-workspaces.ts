@@ -86,12 +86,10 @@ export function useShellWorkspaces({
     [daemonShellTarget, setDaemonRoute],
   )
 
-  // A switch here is a document LOAD, not an in-app navigation. This keeper
-  // resolves its active workspace once, into a synchronous accessor whose
-  // whole rationale is that some twenty call sites read it inline;
-  // re-pointing it in place would mean re-reading it at every one of them. A
-  // load also settles the outgoing workspace's writes for free, which is the
-  // invariant a switch has to keep.
+  // Nothing here re-points the keeper, and that is the whole reason a switch
+  // goes through the address: this one resolves its active workspace once,
+  // into a synchronous accessor that some twenty call sites read inline, so
+  // re-pointing it in place would mean re-reading it at every one of them.
   const browserWorkspaces = useMemo(
     (): KeeperWorkspaces => ({
       source: {
