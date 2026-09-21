@@ -1,3 +1,4 @@
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
   renderSceneToSvg,
   type Scene,
@@ -11,7 +12,9 @@ import {
   readDocumentKind,
   readMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scene.js'
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
@@ -71,6 +74,73 @@ class FragmentNotFoundError extends Error {
   }
 }
 
+/**
+ * The scene a MARKDOWN document renders as, from its body.
+ *
+ * One function per kind, dispatched on the kind alone: the two differ in what
+ * they read (a body against a canvas), what a fragment SELECTS (a section
+ * against a region) and which composer they call, and nothing else. Written as
+ * two arms of one `if`, those three differences were interleaved with the
+ * setup shared around them.
+ */
+async function markdownScene(
+  deps: ServerDeps,
+  input: CanvasRenderSvgInput,
+  doc: LoroDoc,
+  measure: MeasureText,
+  fontAvailable: ReturnType<typeof fontAvailableOf>,
+): Promise<Scene> {
+  const body = readMarkdownBody(doc)
+  const references = input.embedReferences
+    ? (await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })).seams
+    : undefined
+  const whole = resolveReferences(parseMarkdownBody(body), references?.resolveAlias)
+  const root = input.fragment === undefined ? whole : selectMarkdownSection(whole, input.fragment)
+  if (root === undefined) {
+    throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
+  }
+  const scene = composeMarkdownScene(root, measure, {
+    references,
+    style: input.style,
+    fontAvailable,
+  })
+  return scene
+}
+
+/** The scene a SPATIAL document renders as, from its canvas. */
+async function canvasScene(
+  deps: ServerDeps,
+  input: CanvasRenderSvgInput,
+  doc: LoroDoc,
+  canvas: SpatialCanvas,
+  measure: MeasureText,
+  fontAvailable: ReturnType<typeof fontAvailableOf>,
+): Promise<Scene> {
+  const part = input.fragment === undefined ? canvas : selectCanvasFragment(canvas, input.fragment)
+  if (part === undefined) {
+    throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'spatial')
+  }
+  const references = input.embedReferences
+    ? (await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })).seams
+    : undefined
+  const scene = composeCanvasScene(part, measure, {
+    references,
+    style: input.style,
+    fontAvailable,
+    // Colour by intent (ADR-0040 decision 5). Read only for a board
+    // that carries a tag: finding a library is a listing plus a
+    // read, and an untagged board has nothing a library could colour.
+    ...(carriesATag(part)
+      ? { tagLibrary: await workspaceTagLibrary(deps, input.workspaceId, 'deployment') }
+      : {}),
+    // The export draws what the editor draws: a thread about a passage
+    // of a node's text is a highlight behind those words, a node set
+    // an outline around them.
+    threads: readAnnotations(doc),
+  })
+  return scene
+}
+
 export function createCanvasRenderSvgTool(deps: ServerDeps) {
   return {
     name: 'wb_scene_render' as const,
@@ -95,48 +165,11 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
           })
         )?.kind
 
-      let scene: Scene
-      if (kind === 'markdown') {
-        const body = readMarkdownBody(doc)
-        const references = input.embedReferences
-          ? (await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })).seams
-          : undefined
-        const whole = resolveReferences(parseMarkdownBody(body), references?.resolveAlias)
-        const root =
-          input.fragment === undefined ? whole : selectMarkdownSection(whole, input.fragment)
-        if (root === undefined) {
-          throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
-        }
-        scene = composeMarkdownScene(root, measure, {
-          references,
-          style: input.style,
-          fontAvailable,
-        })
-      } else {
-        const part =
-          input.fragment === undefined ? canvas : selectCanvasFragment(canvas, input.fragment)
-        if (part === undefined) {
-          throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'spatial')
-        }
-        const references = input.embedReferences
-          ? (await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })).seams
-          : undefined
-        scene = composeCanvasScene(part, measure, {
-          references,
-          style: input.style,
-          fontAvailable,
-          // Colour by intent (ADR-0040 decision 5). Read only for a board
-          // that carries a tag: finding a library is a listing plus a
-          // read, and an untagged board has nothing a library could colour.
-          ...(carriesATag(part)
-            ? { tagLibrary: await workspaceTagLibrary(deps, input.workspaceId, 'deployment') }
-            : {}),
-          // The export draws what the editor draws: a thread about a passage
-          // of a node's text is a highlight behind those words, a node set
-          // an outline around them.
-          threads: readAnnotations(doc),
-        })
-      }
+      const scene =
+        kind === 'markdown'
+          ? await markdownScene(deps, input, doc, measure, fontAvailable)
+          : await canvasScene(deps, input, doc, canvas, measure, fontAvailable)
+
       const envelope = sceneEnvelope(scene)
       return {
         svg: renderSceneToSvg(scene, { viewBox: envelope }),
