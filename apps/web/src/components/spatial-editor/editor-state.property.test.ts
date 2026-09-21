@@ -2475,6 +2475,19 @@ describe('editor composite state (command-based)', () => {
     const atLeast = (actual: number, floor: number, wentWrong: string) =>
       expect(actual, `${wentWrong}\ncensus: ${census()}`).toBeGreaterThan(floor)
 
+    // Printed on a run that PASSES too, which is the half the paragraph
+    // above cannot supply: a floor is a statement about a DISTRIBUTION, and
+    // a census printed only on failure shows one draw from its left tail
+    // with nothing to compare it against. Two floors have now been argued
+    // about from exactly that — a single failing column, and a distribution
+    // rebuilt afterwards from thirty fresh runs on one machine, which is the
+    // wrong machine and the wrong day. Every green CI run carries a line
+    // now, so the next argument is settled from runs that already happened.
+    // `process.stdout.write` rather than `console.log`, because the jsdom
+    // setup swallows the latter — measured, as two instrumented runs that
+    // printed nothing at all.
+    process.stdout.write(`[editor-state census] ${census()}\n`)
+
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
     // reject. Each sits at roughly a third of the minimum measured across
