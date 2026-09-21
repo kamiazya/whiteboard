@@ -58,6 +58,7 @@ const sources = import.meta.glob(
     './pages/use-document-list-refresh.ts',
     './pages/use-duplicate-document.ts',
     './pages/DaemonDocumentPage.tsx',
+    './pages/use-daemon-connections.ts',
     './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
@@ -536,7 +537,10 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [DAEMON_DOCUMENT_PAGE],
+    // The connections hook is part of this screen's scan surface, not a
+    // separate one: its state moved THERE rather than away, so the ledger
+    // below still has to account for it.
+    files: [DAEMON_DOCUMENT_PAGE, './pages/use-daemon-connections.ts'],
     ledger: DAEMON_DOCUMENT_PAGE_STATE,
     label: 'DaemonDocumentPage',
     scanRefs: true,
