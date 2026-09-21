@@ -70,6 +70,10 @@
       "types": "./src/read-plane.ts",
       "import": "./src/read-plane.ts"
     },
+    "./replica-key-wrap": {
+      "types": "./src/replica-key-wrap.ts",
+      "import": "./src/replica-key-wrap.ts"
+    },
     "./replica-session-key": {
       "types": "./src/replica-session-key.ts",
       "import": "./src/replica-session-key.ts"

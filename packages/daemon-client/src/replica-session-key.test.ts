@@ -593,3 +593,91 @@ describe('replica-session-key: property — TTL boundary and concurrent dedup', 
     },
   )
 })
+
+describe('replica-session-key: an unreachable daemon heals itself', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+  })
+  afterEach(() => {
+    forgetAll()
+    vi.useRealTimers()
+  })
+
+  it('re-asks once the cached unreachable is stale, and answers the key when the daemon is back', async () => {
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    let up = false
+    const fetchImpl = vi.fn(async () => {
+      if (!up) throw new Error('down')
+      return jsonResponse(keyResponse())
+    })
+    const source = sourceWith(fetchImpl)
+
+    expect(await sessionKey(DAEMON, WORKSPACE, source)).toEqual({
+      kind: 'withheld',
+      reason: 'unreachable',
+    })
+    up = true
+
+    vi.setSystemTime(new Date('2026-01-01T00:00:31.000Z'))
+    // The papercut this closes: cached forever, the replica stayed locked
+    // until the person pressed Reconnect, long after the daemon came back.
+    expect((await sessionKey(DAEMON, WORKSPACE, source)).kind).toBe('key')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not re-ask while the daemon is still known to be down', async () => {
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('down')
+    })
+    const source = sourceWith(fetchImpl)
+
+    await sessionKey(DAEMON, WORKSPACE, source)
+    vi.setSystemTime(new Date('2026-01-01T00:00:29.000Z'))
+    await sessionKey(DAEMON, WORKSPACE, source)
+    await sessionKey(DAEMON, WORKSPACE, source)
+
+    // Not caching at all would re-request on every read, which is the
+    // request-storm shape this repo has already paid for once.
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a stale unreachable as nothing-asked rather than as a settled refusal', async () => {
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const source = sourceWith(
+      vi.fn(async () => {
+        throw new Error('down')
+      }),
+    )
+    await sessionKey(DAEMON, WORKSPACE, source)
+
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({
+      kind: 'withheld',
+      reason: 'unreachable',
+    })
+    vi.setSystemTime(new Date('2026-01-01T00:00:31.000Z'))
+    // `undefined` is what a caller reads as "nothing has been asked yet",
+    // which is true again: the next sessionKey WILL ask.
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toBeUndefined()
+  })
+
+  it('keeps caching an authoritative refusal past the same window', async () => {
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const fetchImpl = vi.fn(async () => jsonResponse({ error: 'not_a_member', message: 'no' }, 403))
+    const source = sourceWith(fetchImpl)
+
+    expect(await sessionKey(DAEMON, WORKSPACE, source)).toEqual({
+      kind: 'withheld',
+      reason: 'not_a_member',
+    })
+
+    vi.setSystemTime(new Date('2026-01-01T00:05:00.000Z'))
+    // A removal is a DECISION the daemon took, not silence — re-asking
+    // would be asking a settled question every read.
+    expect(await sessionKey(DAEMON, WORKSPACE, source)).toEqual({
+      kind: 'withheld',
+      reason: 'not_a_member',
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+})

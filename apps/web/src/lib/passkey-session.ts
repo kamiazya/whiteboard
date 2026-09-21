@@ -11,6 +11,8 @@
  * matches on `['"\`]\/api\/` — this file's ledger entry stays live rather
  * than silently going stale the way a helper-hidden URL would.
  */
+
+import type { Attestation } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   sessionAssertChallengeResponseSchema,
   sessionAssertResponseSchema,
@@ -24,6 +26,7 @@ import {
   type PasskeyCredentials,
   type StorageLike,
 } from './passkey-attestation.js'
+import { prfInputForDaemon } from './passkey-prf.js'
 
 const rejected = { ok: false, outcome: { ok: false, reason: 'rejected' } } as const
 
@@ -51,9 +54,57 @@ async function postAndParse<T>(
 }
 
 /**
+ * Signs a base64url challenge with this daemon's registered passkey, and
+ * translates every way that can fail into the `BindOutcome` the caller
+ * answers with.
+ *
+ * Carries the `prf` input, so the ONE gesture does both jobs (ADR-0042
+ * decision 6 + ADR-0039 decision 6): it proves who is asking AND yields the
+ * material that wraps this daemon's replica keys for a cold start. An
+ * authenticator that ignores the extension still produces a whole
+ * attestation, which is why nothing branches on the output being absent —
+ * only the cold start is lost, and `prfOutput` says so by being optional.
+ */
+async function signChallenge({
+  daemonBaseUrl,
+  challenge,
+  credentials,
+  storage,
+}: {
+  daemonBaseUrl: string
+  challenge: string
+  credentials: PasskeyCredentials | undefined
+  storage: StorageLike
+}): Promise<
+  | { ok: true; attestation: Attestation; prfOutput?: Uint8Array<ArrayBuffer> }
+  | { ok: false; outcome: BindOutcome & { ok: false } }
+> {
+  const outcome = await assertWithRegisteredPasskey({
+    daemonBaseUrl,
+    challenge: base64UrlToBytes(challenge),
+    prfInput: await prfInputForDaemon(daemonBaseUrl),
+    credentials,
+    storage,
+  })
+  if (outcome === null) return { ok: false, outcome: { ok: false, reason: 'no-passkey' } }
+  if (!outcome.ok) {
+    return {
+      ok: false,
+      outcome: { ok: false, reason: outcome.reason === 'cancelled' ? 'cancelled' : 'rejected' },
+    }
+  }
+  return {
+    ok: true,
+    attestation: outcome.attestation,
+    ...(outcome.prfOutput === undefined ? {} : { prfOutput: outcome.prfOutput }),
+  }
+}
+
+/**
  * Mints a session-assert challenge, signs it with the passkey registered for
  * this daemon, and posts the assertion back — the daemon then binds this
- * pairing session to the person the passkey belongs to.
+ * pairing session to the person the passkey belongs to, and answers with the
+ * key material that assertion produced (see `signChallenge`).
  */
 export async function bindPasskeySession({
   daemonBaseUrl,
@@ -83,18 +134,15 @@ export async function bindPasskeySession({
   )
   if (!challengeResult.ok) return challengeResult.outcome
 
-  const attestOutcome = await assertWithRegisteredPasskey({
+  const signed = await signChallenge({
     daemonBaseUrl,
-    challenge: base64UrlToBytes(challengeResult.data.challenge),
+    challenge: challengeResult.data.challenge,
     credentials,
     storage,
   })
-  if (attestOutcome === null) return { ok: false, reason: 'no-passkey' }
-  if (!attestOutcome.ok) {
-    return { ok: false, reason: attestOutcome.reason === 'cancelled' ? 'cancelled' : 'rejected' }
-  }
+  if (!signed.ok) return signed.outcome
 
-  const { kind: _kind, ...assertBody } = attestOutcome.attestation
+  const { kind: _kind, ...assertBody } = signed.attestation
   const assertResult = await postAndParse(
     fetch,
     '/api/pairing/session-assert',
@@ -102,5 +150,8 @@ export async function bindPasskeySession({
     assertBody,
   )
   if (!assertResult.ok) return assertResult.outcome
-  return { ok: true }
+  return {
+    ok: true,
+    ...(signed.prfOutput === undefined ? {} : { prfOutput: signed.prfOutput }),
+  }
 }

@@ -13,8 +13,8 @@ Split out of [ADR-0041](0041-profile-and-authority.md), which decides
 profiles and authority. Constrains [ADR-0023](0023-replica-model.md)
 decision 2's offline-readable replica with an organisation policy, and makes
 the revocation cryptographic rather than advisory. Decision 6,
-cold-start-offline, is the one part still deferred — it shares a gesture with
-[ADR-0039](0039-passkey-attestation.md) decision 6.
+cold-start-offline, **shipped 2026-09-21** on the shared gesture it names —
+[ADR-0039](0039-passkey-attestation.md) decision 6's user-verification gate.
 
 ## Context
 
@@ -130,25 +130,53 @@ not sent.* That is honesty about what happened, not a copy of the content.
 
 All three are buildable. `no-offline` remains the only one whose guarantee
 holds without any assumption about the client, since there is nothing on the
-disk at all; `offline` and `bounded` rest on the key never being persisted.
+disk at all; `offline` and `bounded` rest on the key never being persisted
+**in the clear** — decision 6 persists it wrapped, under material that lives
+only inside an authenticator, which is what keeps the guarantee while making
+a cold start possible.
 
-### 6. Cold-start offline is deferred, and its gesture already has an owner
+### 6. Cold-start offline is the passkey's own gesture (shipped 2026-09-21)
 
 A key held in memory is gone when the tab closes, so reopening offline finds
 ciphertext and no key. Making that work means persisting the key **wrapped by
 something not stored beside it** — WebAuthn's `prf` extension, which ADR-0035
 names as a wrapping mechanism and which unwraps without a network.
 
-Deferred rather than decided, but the reason to wait is thinner than ADR-0035
-suggests: that ADR called `prf` support uneven, and ADR-0039's own measurement
-of 2026-09-13 found it **broadly available on platform authenticators**
-(Safari 18+ and macOS 15, Firefox 139+, Chrome 147 on Windows). The remaining
-cost is the one ADR-0035 names and this ADR does not solve: the passkey
-provider becomes the recovery path.
+Written as deferred, and then built, because the reason to wait turned out to
+be thinner than ADR-0035 suggests: that ADR called `prf` support uneven, and
+ADR-0039's own measurement of 2026-09-13 found it **broadly available on
+platform authenticators** (Safari 18+ and macOS 15, Firefox 139+, Chrome 147
+on Windows). The remaining cost is the one ADR-0035 names and this ADR does
+not solve, and it is accepted knowingly (user decision, 2026-09-21): **the
+passkey provider becomes the recovery path.** The UI says so on the screen
+that offers the unlock.
 
-When it lands, it should be the **same gesture** as ADR-0039 decision 6's
-user-verification gate: unlocking a workspace and obtaining its key are one
-action, not two prompts for the same intent.
+It IS the **same gesture** as ADR-0039 decision 6's user-verification gate:
+unlocking a workspace and obtaining its key are one action, not two prompts
+for the same intent. Concretely, the session-assert assertion that binds a
+pairing session to a person carries the `prf` input, and its output wraps
+each key the daemon mints.
+
+What that costs, and what it does not:
+
+- **Support is degraded, never branched on a user agent.** An authenticator
+  that ignores the extension answers an ordinary successful assertion with
+  nothing attached: the person is verified, the session is bound, and only
+  the cold start is missing. What a browser reports and what its
+  authenticator does are different questions.
+- **One output per daemon, not per workspace**, because one gesture yields
+  one output and asking per workspace would be the second prompt this
+  decision exists to avoid. The (daemon, workspace) pair rides as AES-GCM
+  additional data instead, so a blob copied between two workspaces on one
+  device opens nothing.
+- **A remembered copy never outranks a daemon decision.** The unlock is
+  offered only where the daemon has not spoken; a refused renewal or a
+  membership refusal is the daemon reaching this device, which is exactly
+  when decision 3's revocation takes effect.
+- **A blob that cannot be opened is deleted rather than retried.** Ciphertext
+  nothing on the device can read, and a `bounded` lease already spent, both
+  drop the stored blob — keeping either would keep offering an unlock that
+  cannot succeed.
 
 ## Consequences
 
@@ -163,9 +191,13 @@ action, not two prompts for the same intent.
 
 ### What is deferred, and what triggers it
 
-- **Cold-start offline** — decision 6. Trigger: ADR-0039 decision 6's gate
-  being built, since they are one gesture.
-- **How a policy is stated and distributed** — an increment.
+- **How a policy is stated and distributed** — an increment. Today the tier
+  is one process environment variable on one daemon; ADR-0042's
+  "organisation-wide default" has nothing above a daemon to inherit from
+  yet.
+
+Decision 6's cold start is no longer on this list: it shipped 2026-09-21,
+with ADR-0039 decision 6's gate, as one gesture.
 
 ### What gets harder
 
