@@ -157,25 +157,42 @@ function jsonResponse(body: unknown, status = 200): Response {
  */
 type Endpoint = 'workspaces' | 'documents' | 'names' | 'tags' | 'trash' | 'fonts' | 'other'
 
+/** Which endpoint a request is, by URL alone — so the fixture only counts. */
+function endpointOf(url: string, method: string): Endpoint {
+  if (url.endsWith('/api/workspaces') && method === 'GET') return 'workspaces'
+  if (/\/api\/workspaces\/[^/]+\/documents$/.test(url) && method === 'GET') return 'documents'
+  if (/\/api\/workspaces\/[^/]+\/names$/.test(url)) return 'names'
+  if (url.includes('/document-tags')) return 'tags'
+  if (/\/api\/workspaces\/[^/]+\/trash$/.test(url)) return 'trash'
+  if (url.endsWith('/api/fonts')) return 'fonts'
+  return 'other'
+}
+
+/**
+ * At the root of the workspace on purpose: a nested path draws its FOLDER in
+ * the column and the row only once it is opened, and these cases are about
+ * which workspace answered, not about the tree.
+ */
+const SEEDED_DOCUMENT = {
+  id: 'doc-1',
+  path: 'font-check',
+  kind: 'spatial',
+  displayName: 'Font check',
+  updatedAt: '2026-09-10T00:00:00.000Z',
+}
+
+function emptyCounts(): Record<Endpoint, number> {
+  return { workspaces: 0, documents: 0, names: 0, tags: 0, trash: 0, fonts: 0, other: 0 }
+}
+
 function installDaemonFetch() {
   const documentsAsked: string[] = []
-  const counts: Record<Endpoint, number> = {
-    workspaces: 0,
-    documents: 0,
-    names: 0,
-    tags: 0,
-    trash: 0,
-    fonts: 0,
-    other: 0,
-  }
-  const count = (endpoint: Endpoint) => {
-    counts[endpoint] += 1
-  }
+  const counts = emptyCounts()
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     const method = init?.method ?? 'GET'
+    counts[endpointOf(url, method)] += 1
     if (url.endsWith('/api/workspaces') && method === 'GET') {
-      count('workspaces')
       return Promise.resolve(
         jsonResponse({
           workspaces: [
@@ -191,49 +208,21 @@ function installDaemonFetch() {
       // segment and for the segment-less one is the raw canonical id — the
       // whole reason this arrangement makes the wrong answer visible.
       const handle = decodeURIComponent(documents[1] as string)
-      count('documents')
       documentsAsked.push(handle)
       if (handle !== 'default' && handle !== ADDRESSED_ID) {
         return Promise.resolve(jsonResponse({ documents: [] }))
       }
-      return Promise.resolve(
-        jsonResponse({
-          documents: [
-            {
-              id: 'doc-1',
-              // At the root of the workspace on purpose: a nested path draws
-              // its FOLDER in the column and the row only once it is opened,
-              // and this test is about which workspace answered, not about
-              // the tree.
-              path: 'font-check',
-              kind: 'spatial',
-              displayName: 'Font check',
-              updatedAt: '2026-09-10T00:00:00.000Z',
-            },
-          ],
-        }),
-      )
+      return Promise.resolve(jsonResponse({ documents: [SEEDED_DOCUMENT] }))
     }
     if (url.match(/\/api\/workspaces\/[^/]+\/trash$/)) {
-      count('trash')
       return Promise.resolve(jsonResponse({ entries: [] }))
-    }
-    if (url.match(/\/api\/workspaces\/[^/]+\/names$/)) {
-      count('names')
-      return Promise.resolve(jsonResponse({}, 404))
-    }
-    if (url.includes('/document-tags')) {
-      count('tags')
-      return Promise.resolve(jsonResponse({}, 404))
     }
     // Answered rather than 404'd: App asks the daemon for its installed faces
     // as soon as it has a target, and a refusal there is a REPORTED failure
     // the jsdom guard would fail this file for. Nothing here is about fonts.
-    if (url.endsWith('/api/fonts')) {
-      count('fonts')
-      return Promise.resolve(jsonResponse({ fonts: [] }))
-    }
-    count('other')
+    if (url.endsWith('/api/fonts')) return Promise.resolve(jsonResponse({ fonts: [] }))
+    // `names` and `document-tags` land here too: both answer 404 and always have
+    // (the page treats each as optional), and both are counted above.
     return Promise.resolve(jsonResponse({}, 404))
   })
   vi.stubGlobal('fetch', fetchMock)

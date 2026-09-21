@@ -574,7 +574,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
  * budget would be a second rule nobody agreed.
  */
 const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/App.daemon-address.test.tsx#installDaemonFetch': 55,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx#daemonStub': 81,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#checkInvariants': 80,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#run~23': 127,
