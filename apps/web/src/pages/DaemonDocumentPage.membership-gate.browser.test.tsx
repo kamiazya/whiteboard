@@ -248,12 +248,19 @@ describe('the daemon page answers a cancelled passkey prompt', () => {
       />,
     )
 
-    // The loading skeleton is ALSO role="status" (its label rides
-    // aria-label, not text), so it would satisfy a bare role query the
-    // instant the page mounts — findByText waits out that transient state
-    // for the real passkey-needed sentence instead.
-    const status = await screen.findByText(/This workspace only opens for its members/i)
-    expect(status.getAttribute('role')).toBe('status')
+    // The DaemonTerminalScreen status paragraph is mounted from FIRST paint
+    // (empty during the loading skeleton), captured here before the passkey
+    // prompt has even resolved — proves it is not a fresh node born with
+    // the message (polite-live-region.test.ts).
+    const liveStatus = screen.getByTestId('daemon-live-status')
+    expect(liveStatus.getAttribute('role')).toBe('status')
+    expect(liveStatus.textContent).toBe('')
+
+    await expect
+      .poll(() => liveStatus.textContent)
+      .toContain('This workspace only opens for its members')
+    // Same DOM node — its text changed in place, it was never remounted.
+    expect(screen.getByTestId('daemon-live-status')).toBe(liveStatus)
     const retry = await screen.findByRole('button', { name: 'Try again' })
 
     await page.screenshot({ path: '../../../../tmp/screenshots/s8c/passkey-needed.png' })

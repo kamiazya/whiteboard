@@ -9,7 +9,7 @@ import {
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
 import {
-  type MembershipRefusal,
+  type MembershipRefusalState,
   membershipRefusal,
   withOnePasskeyBind,
 } from '../lib/membership-refusal.js'
@@ -45,7 +45,7 @@ export interface DaemonDocumentController {
   /** A membership refusal the resolve could not get past (ADR-0041/0042 S8),
    *  naming the workspace — known once listWorkspaces has resolved, even
    *  before `workspaceId` above is admitted. `null` once admitted. */
-  refusal: MembershipRefusal | null
+  refusal: MembershipRefusalState | null
   /** Re-runs the resolve, resetting the once-only passkey-bind guard so it
    *  may bind exactly one more time. */
   retry: () => void
@@ -73,7 +73,7 @@ export function useDaemonDocumentController(
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [refusal, setRefusal] = useState<MembershipRefusal | null>(null)
+  const [refusal, setRefusal] = useState<MembershipRefusalState | null>(null)
 
   // Monotonic sequence over the mount resolution, so a slower earlier
   // resolution can never clobber a later, already-committed selection. It was

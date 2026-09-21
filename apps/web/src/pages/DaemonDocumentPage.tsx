@@ -37,6 +37,7 @@ import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
+import { PASSKEY_NEEDED_COPY } from '../lib/membership-refusal.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
@@ -55,6 +56,29 @@ import { ReplicaReadPage } from './ReplicaReadPage.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
 const log = getAppLogger('daemon-document-page')
+
+/**
+ * One `role="status"` region, mounted for the whole `loading` ->
+ * `membership-refused` (requires_person_session) span, so the DOM node a
+ * screen reader is already tracking just gets new text rather than being
+ * replaced by a fresh one that arrives already carrying its message
+ * (polite-live-region.test.ts). Empty during `loading` — the skeleton
+ * announces that state through its own `role="status"` — and only speaks
+ * once `MembershipGateView`'s copy is the thing to announce. Reused across
+ * renders because it is the SAME component reference at both call sites:
+ * that is what keeps React from tearing the paragraph down when the visible
+ * child underneath it swaps from the skeleton to the gate view.
+ */
+function DaemonTerminalScreen({ status, children }: { status: string; children: ReactNode }) {
+  return (
+    <>
+      <p role="status" aria-live="polite" data-testid="daemon-live-status" className="sr-only">
+        {status}
+      </p>
+      {children}
+    </>
+  )
+}
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
@@ -542,7 +566,14 @@ function useDaemonDocument(
   })
 
   if (pageState.kind === 'loading') {
-    return { kind: 'terminal', node: <DocumentPageSkeleton label="Connecting to daemon" /> }
+    return {
+      kind: 'terminal',
+      node: (
+        <DaemonTerminalScreen status="">
+          <DocumentPageSkeleton label="Connecting to daemon" />
+        </DaemonTerminalScreen>
+      ),
+    }
   }
 
   // A membership refusal is terminal: no backend is ever built for it (the
@@ -565,7 +596,14 @@ function useDaemonDocument(
         ),
       }
     }
-    return { kind: 'terminal', node: <MembershipGateView onRetry={controller.retry} /> }
+    return {
+      kind: 'terminal',
+      node: (
+        <DaemonTerminalScreen status={PASSKEY_NEEDED_COPY.body}>
+          <MembershipGateView onRetry={controller.retry} />
+        </DaemonTerminalScreen>
+      ),
+    }
   }
 
   if (pageState.kind === 'load-degraded') {

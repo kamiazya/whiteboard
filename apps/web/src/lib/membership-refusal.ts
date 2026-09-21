@@ -15,8 +15,12 @@ import { DaemonApiError } from './daemon-api-client.js'
 export type MembershipRefusalAction = 'requires_person_session' | 'not_a_member'
 
 /** A refusal with the workspace it pertains to — the shape the controller
- *  reports and the page state renders. */
-export interface MembershipRefusal {
+ *  reports and the page state renders. Named `*State` (rather than the bare
+ *  `MembershipRefusal`) because daemon-client's own
+ *  `api-contracts/membership.ts` already exports a `MembershipRefusal` for
+ *  the WIRE shape (`{error, message}`) — same name, unrelated shape, and a
+ *  future import of both under one local name would silently pick either. */
+export interface MembershipRefusalState {
   code: MembershipRefusalAction
   workspaceId: string
 }
