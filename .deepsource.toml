@@ -24,6 +24,14 @@ exclude_patterns = [
   "apps/web/public/**",
   "packages/canvas-render/src/vendor/**",
   "docs/**",
+  # The Workflow runtime runs these as a function BODY, so they use top-level
+  # `return` — which no standard parser accepts. Measured: `node --check`
+  # rejects all 11 of them ("Illegal return statement") while parsing the other
+  # 135 tracked .mjs files clean, and DeepSource's first main-branch run
+  # reported four of them as JS-0833 at line 1. They are excluded because they
+  # are unparseable by anything but their runtime, not because the finding is
+  # wrong.
+  ".claude/workflows/*.workflow.mjs",
 ]
 
 # Tests live BESIDE the sources they cover here, so the split is by filename
@@ -46,12 +54,29 @@ enabled = true
   [analyzers.meta]
   plugins = ["react"]
   # Defaults to ["nodejs", "browser"]; vitest globals are what this repo adds.
-  # `module_system` and `dialect` are left at their defaults (es-modules,
-  # typescript), which are already what this repo is.
   environment = ["nodejs", "browser", "vitest"]
+  # Stated rather than left to the documented default, because the first
+  # main-branch run reported JS-0833 "Syntax error" on 100 files (the CLI's
+  # per-rule cap, so a floor) — EVERY ONE a .mjs, each at its first `import` or
+  # `export` line, which is what a parser reading ESM as a script does. The
+  # root package.json is `"type": "module"` and `node --check` parses those
+  # files clean, so the files are valid and the parse was not.
+  #
+  # This is the cheap hypothesis, not a confirmed fix. Re-measure after this
+  # lands on main:
+  #   deepsource issues --default-branch --output json \
+  #     | python3 -c 'import json,sys; print(sum(i["issue_code"]=="JS-0833" for i in json.load(sys.stdin)))'
+  module_system = "es-modules"
+  # typescript is already the default; .mjs is what needed saying.
 
 [[analyzers]]
 name = "secrets"
+enabled = true
+
+# Enabled in the dashboard before this file existed, and a .deepsource.toml
+# REPLACES that configuration — omitting it here would silently turn it off.
+[[analyzers]]
+name = "docker"
 enabled = true
 
 # Fed by the coverage step in .github/workflows/sonarqube.yml, which already
