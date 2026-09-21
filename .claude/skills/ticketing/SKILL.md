@@ -59,12 +59,41 @@ reason rather than failing the call, so **check `failed`**: a caller that reads
 
 ### Updating an issue
 
-Re-import with updated OKF markdown (overwrites facets + body):
+**Amending the BODY — a measurement, a refutation, a status line — is
+`wb_body_edit`**, which replaces the passages you quote and leaves the rest
+of the document alone:
+
+```
+wb_body_edit → { workspaceId: "default", documentId, mode: "apply",
+  ops: [{ id: "<yours>", op: "body.replace",
+          anchor: { kind: "text", start, end, quote: { exact: "<the passage>" } },
+          assumed: "<what that passage said when you wrote this>",
+          text: "<what it becomes>" }] }
+```
+
+`mode: "apply"` because the backlog is not a surface anyone is watching — the
+`propose` default is for a document a person has open. `start`/`end` may be
+rough: the QUOTE is what finds the passage, and `assumed` is what refuses the
+edit BY NAME if that passage has changed since you read it, rather than
+overwriting somebody else's sentence.
+
+Why this rather than the re-import below: an issue accumulates, so the ones
+worth amending are the long ones. Re-importing a 20k-character backlog to add
+one paragraph re-sends every other paragraph too — expensive, and every
+passage retyped on the way is a passage that can come back subtly wrong.
+Measured 2026-09-22 on `issues/audit-2026-09-21-backlog`: two `body.replace`
+ops, offsets guessed to the nearest thousand characters, both applied.
+
+**Re-import the whole document** (`document.set`) when the change is to the
+FRONTMATTER — resolution, tags, sources — since that is what it replaces:
 
 ```
 wb_workspace_edit → { workspaceId: "default",
   ops: [{ op: "document.set", documentId, markdown: "<updated OKF>" }] }
 ```
+
+It overwrites facets AND body together, which is exactly the hazard the
+Resolving section below is about: read the document first.
 
 ### Updating facets only
 
