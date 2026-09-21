@@ -159,7 +159,7 @@ describe('promoteWorkspace', () => {
     const phases: string[] = []
     const result = await promoteWorkspace({
       fetch: daemonStub(target, putFiles),
-      daemonBaseUrl: BASE,
+      keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
       onProgress: (phase) => phases.push(phase),
@@ -201,7 +201,7 @@ describe('promoteWorkspace', () => {
     const signed: Uint8Array[] = []
     const result = await promoteWorkspace({
       fetch: daemonStub(targetDaemonRecord(), [], promotes),
-      daemonBaseUrl: BASE,
+      keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
       attest: async (snapshot) => {
@@ -238,7 +238,7 @@ describe('promoteWorkspace', () => {
     const promotes: Array<{ snapshot: string }> = []
     const result = await promoteWorkspace({
       fetch: daemonStub(targetDaemonRecord(), [], promotes),
-      daemonBaseUrl: BASE,
+      keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
       attest: async () => ({ ok: false, reason: 'cancelled' }),
@@ -260,7 +260,7 @@ describe('promoteWorkspace', () => {
     })
     const result = await promoteWorkspace({
       fetch: daemonStub(targetDaemonRecord()),
-      daemonBaseUrl: BASE,
+      keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
       attest: async () => null,
@@ -294,7 +294,7 @@ describe('promoteWorkspace', () => {
 
     const result = await promoteWorkspace({
       fetch: daemonStub(new LoroDoc()),
-      daemonBaseUrl: BASE,
+      keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
     })
@@ -319,7 +319,7 @@ describe('promoteWorkspace', () => {
 
     const result = await promoteWorkspace({
       fetch: fetch404,
-      daemonBaseUrl: BASE,
+      keeperBaseUrl: BASE,
       workspaceId: 'ws-gone',
       workspaceDocs: new BrowserWorkspaceDocs(),
     })
@@ -342,7 +342,7 @@ describe('promoteWorkspace', () => {
 
     const result = await promoteWorkspace({
       fetch: fetchDown,
-      daemonBaseUrl: BASE,
+      keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
     })

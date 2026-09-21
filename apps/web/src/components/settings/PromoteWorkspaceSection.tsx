@@ -286,7 +286,7 @@ export function PromoteWorkspaceSection({
         const credentials = credentialsOf()
         const outcome = await promoteWorkspace({
           fetch: fetchImpl,
-          daemonBaseUrl: daemon.baseUrl,
+          keeperBaseUrl: daemon.baseUrl, // the new KEEPER; today, this daemon
           workspaceId: targetId,
           workspaceDocs: new BrowserWorkspaceDocs(),
           onProgress: (phase) => setFlow({ step: 'running', phase }),
