@@ -16,9 +16,11 @@
 # Configuration lives in sonar-project.properties, next to the exclusions it
 # has to stay in sync with.
 #
-# It also ships the SAME lcov to DeepSource (.deepsource.toml), the other
-# report-only lane, rather than paying for a second ~10-minute coverage run in
-# a workflow of its own. The name stays `SonarQube` because renaming a
+# It also ships the SAME lcov to DeepSource, the other report-only lane,
+# rather than paying for a second ~10-minute coverage run in a workflow of its
+# own. DeepSource's analysis is configured in its own dashboard and nowhere in
+# this repo — a `.deepsource.toml` was tried and is NOT read by it; only this
+# step is ours. The name stays `SonarQube` because renaming a
 # workflow renames its checks; what it means is "the coverage-and-report-only
 # lane". Deleting this file therefore turns OFF DeepSource's coverage too.
 name: SonarQube
