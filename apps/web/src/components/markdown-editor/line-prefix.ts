@@ -211,8 +211,10 @@ function markerWidth(line: LinePrefix): number {
  * not a fixed unit (`1. ` is three wide, `- ` two). With no sibling above
  * — the line is its parent's first child, or the first item of all — there
  * is nothing to nest under, and a unit of indent would be whitespace the
- * parser ignores. Outdenting moves to the nearest shallower list line's
- * indent; at the top there is nowhere shallower to go.
+ * parser ignores. Outdenting is the same question asked downwards: it moves
+ * to the indent of the line this one is a child OF, so the two verbs are
+ * inverses over every shape either can produce. At the top there is nowhere
+ * shallower to go.
  */
 function nestingIndent(
   state: EditorState,
@@ -232,7 +234,15 @@ function nestingIndent(
       if (aboveDepth > depth) continue
       return aboveDepth === depth ? aboveDepth + markerWidth(above) : null
     }
-    if (aboveDepth < depth) return aboveDepth
+    // Outdent lands on the line this one is a CHILD of, which is the
+    // nearest line above whose content column its indent reaches — not
+    // merely the nearest shallower line. The two differ exactly when a line
+    // sits strictly between the child and its parent, and then the nearest
+    // shallower line is a sibling's child rather than an ancestor: outdent
+    // landed on it and Tab, Shift-Tab stopped being the identity it reads
+    // as. Reachable only by hand-typed ragged indentation (depths 4, 6, 4),
+    // since a well-formed child starts at its parent's content column.
+    if (aboveDepth + markerWidth(above) <= depth) return aboveDepth
   }
   // Outdenting a nested line with nothing shallower above it lands at the margin.
   return direction < 0 ? 0 : null
