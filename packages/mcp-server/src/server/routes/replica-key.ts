@@ -6,13 +6,8 @@
 // the same shape ws-ticket.ts, runtime.ts and debug.ts already use — because
 // only a PASSKEY-BOUND grant may hold this key, and the surrounding /api/*
 // auth middleware only checks SCOPE, not the passkey binding. The decision
-// itself is `workspace-access.ts`'s `workspaceAccess` (S8, user decision
-// 2026-09-21): operator-issued grants (anonymous/daemon-token/oauth-grant/
-// macaroon/ws-ticket) bypass membership entirely — none of them can name a
-// PERSON, and each is already operator-consented at mint time — and a
-// member-less workspace keeps origin trust (a personal daemon never needs a
-// passkey). Only a `pairing` grant on a workspace that HAS a member is
-// judged against the passkey binding.
+// itself — which grant kinds bypass membership, and why a member-less
+// workspace keeps origin trust — is `workspace-access.ts`.
 //
 // This route issues a `bounded`-tier LEASE (a timestamp, nothing more) —
 // there is deliberately no server-side lease table. The browser is what
@@ -75,9 +70,6 @@ export function createReplicaKeyRouter({
       return c.json({ error: 'unauthorized' }, 401)
     }
 
-    // See workspace-access.ts's module header: operator-issued kinds
-    // (anonymous/daemon-token/oauth-grant/macaroon/ws-ticket) bypass
-    // membership entirely, and a member-less workspace keeps origin trust.
     const access = await workspaceAccess(grant, workspaceId, members)
     if (access !== 'admitted') {
       log.warning({ workspaceId, reason: access }, 'replica-key refused')
