@@ -123,8 +123,6 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@fast-check/vitest": "^0.4.1",
-    "fast-check": "^4.7.0",
     "loro-crdt": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
