@@ -20,6 +20,11 @@
 export const MUTATED = [
   // The cost model and the searches the differential oracles cover.
   'src/layout/edges/edge-rules.ts',
+  // Split out of `edge-rules.ts` and covered for that reason: the ink TERMS
+  // were part of that file's lane, and leaving them out would have SHRUNK
+  // what the lane sees while the report kept looking the same — the failure
+  // this list's pinned counts exist to stop.
+  'src/layout/edges/edge-ink.ts',
   // The diagonal clip the intrusion tier reads: a sampled oracle and two
   // invariants, so a survivor here would be a chord read wrong.
   'src/layout/edges/diagonal-ink.ts',

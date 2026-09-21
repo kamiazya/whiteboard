@@ -260,7 +260,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // resource (ADR-0038 decision 3) beside the tag write ADR-0040 added,
   // and the kind switch the resource replaced was the shorter of the two.
   'packages/loro-adapter/src/loro-bridge.ts': 1126,
-  'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
+  // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
+  // measured, separately from what the named rules charge for it.
+  'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
@@ -862,7 +864,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // This ledger grows when an entry gains the reason its ceiling moved, which
   // is the deliberateness the guard exists to force. Two branches raised it
   // for that reason independently; the number is the resolved file's own.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 988,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 990,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

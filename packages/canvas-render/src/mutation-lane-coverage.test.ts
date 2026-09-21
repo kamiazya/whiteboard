@@ -212,9 +212,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // by hand at the three cases that moved — flattening preserveAspectRatio,
     // dropping the glyph baseline offset, and dropping the fragment's
     // presentation role each move the dump.
+    // 84 and 17 since `edge-ink.ts` came out of `edge-rules.ts` — the ink
+    // TERMS, split off when the axis decomposition carried that file past its
+    // recorded ceiling. IN the lane, for the reason `tidy-units.ts` is.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 16,
-      production: 83,
+      mutated: 17,
+      production: 84,
     })
   })
 
