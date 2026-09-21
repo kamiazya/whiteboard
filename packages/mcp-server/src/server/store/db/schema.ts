@@ -168,6 +168,15 @@ interface WorkspaceReplicaKeysTable {
   createdAt: Timestamp
 }
 
+// Whether a workspace has ever had a member — set once by `addMember`'s
+// first insert, never cleared by `revokeL1Membership` (user decision
+// 2026-09-21: removing the sole member does not revert a workspace to
+// origin trust). Outside `workspaces` on purpose; see the 0030 migration.
+interface WorkspaceMembersOnlyTable {
+  workspaceId: string
+  since: Timestamp
+}
+
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
   branches: BranchesTable
@@ -182,4 +191,5 @@ export interface DatabaseSchema {
   profileCredentials: ProfileCredentialsTable
   workspaceMemberships: WorkspaceMembershipsTable
   workspaceReplicaKeys: WorkspaceReplicaKeysTable
+  workspaceMembersOnly: WorkspaceMembersOnlyTable
 }

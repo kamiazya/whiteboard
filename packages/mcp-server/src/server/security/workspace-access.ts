@@ -1,9 +1,13 @@
 /**
  * The ONE membership decision (ADR-0041 L1, ADR-0042 d3-d4): a workspace
- * that has one or more members admits its document/sync routes only to a
- * session bound to a passkey whose MemberProfile is a member of THAT
- * workspace. A workspace with zero members keeps origin trust — a personal
- * daemon never needs a passkey.
+ * that has EVER had a member admits its document/sync routes only to a
+ * session bound to a passkey whose MemberProfile is a CURRENT member of
+ * THAT workspace. A workspace that has never had a member keeps origin
+ * trust — a personal daemon never needs a passkey. Removing a workspace's
+ * last member does NOT revert it to origin trust (user decision
+ * 2026-09-21): it stays person-gated, now admitting nobody until a member
+ * is added again — see `MemberProfileStore.membersOnly` and the 0030
+ * migration.
  *
  * Every membership-gated surface (replica-key today; the route-scope-
  * registry gate, SSE and the WS upgrade later) calls this rather than
@@ -45,9 +49,7 @@ export async function workspaceAccess(
 ): Promise<WorkspaceAccessDecision> {
   if ((OPERATOR_ISSUED_KINDS as readonly string[]).includes(grant.kind)) return 'admitted'
 
-  // ponytail: one listMembers (1+N rows) per gated request — a count query
-  // is the upgrade path if this shows up in a profile.
-  if ((await members.listMembers(workspaceId)).length === 0) return 'admitted'
+  if (!(await members.membersOnly(workspaceId))) return 'admitted'
 
   if (grant.passkey === undefined) return 'requires_person_session'
 

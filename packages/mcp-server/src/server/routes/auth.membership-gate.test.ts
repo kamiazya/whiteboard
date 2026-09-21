@@ -390,7 +390,7 @@ describe('SSE transport membership gate', () => {
       displayName: 'Ada',
     })
     await fixture.members.addMember(WS, profile.id)
-    const listMembers = vi.spyOn(fixture.members, 'listMembers')
+    const membersOnly = vi.spyOn(fixture.members, 'membersOnly')
 
     const res = await fixture.app.request('/api/sync/subscribe', {
       method: 'POST',
@@ -401,7 +401,7 @@ describe('SSE transport membership gate', () => {
       }),
     })
     expect(res.status).toBe(404) // reaches the real stream lookup: gate passed
-    expect(listMembers).toHaveBeenCalledTimes(1)
+    expect(membersOnly).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -495,5 +495,34 @@ describe('the online revoke: L1 removal refuses the next live request (smoke che
     })
     expect(reassertedAsked.status).toBe(403)
     expect(await reassertedAsked.json()).toMatchObject({ error: 'not_a_member' })
+  })
+})
+
+describe('removing a workspace’s SOLE member stays person-gated (S12, user decision 2026-09-21)', () => {
+  it('an origin-only session is refused after the last member is removed, and the workspace is absent from the list', async () => {
+    const fixture = await makeApp()
+    const profile = await fixture.members.ensureProfile({
+      origin: HOSTED,
+      credentialId: 'sole-member-cred',
+      displayName: 'Ada',
+    })
+    await fixture.members.addMember(WS, profile.id)
+
+    const removeRes = await fixture.app.request(`/api/workspaces/${WS}/members/${profile.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${DAEMON_TOKEN}` },
+    })
+    expect(removeRes.status).toBe(200)
+
+    const originToken = await mintUnboundToken(fixture)
+    const documentsRes = await fixture.app.request(`/api/workspaces/${WS}/documents`, {
+      headers: bearer(originToken),
+    })
+    expect(documentsRes.status).toBe(403)
+    expect(await documentsRes.json()).toMatchObject({ error: 'requires_person_session' })
+
+    const listRes = await fixture.app.request('/api/workspaces', { headers: bearer(originToken) })
+    const body = (await listRes.json()) as { workspaces: { workspaceId: string }[] }
+    expect(body.workspaces.map((w) => w.workspaceId)).not.toContain(WS)
   })
 })

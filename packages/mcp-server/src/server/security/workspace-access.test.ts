@@ -125,8 +125,8 @@ describe('workspaceAccess — a member-gated workspace', () => {
   })
 })
 
-describe('workspaceAccess — membership monotonicity', () => {
-  it('revoking the LAST member reverts the workspace to origin trust', async () => {
+describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)', () => {
+  it('revoking the LAST member keeps the workspace person-gated for an unbound pairing grant', async () => {
     const profile = await members.ensureProfile({
       origin: ORIGIN,
       credentialId: 'cred-1',
@@ -136,7 +136,24 @@ describe('workspaceAccess — membership monotonicity', () => {
     expect(await workspaceAccess(UNBOUND_PAIRING, WS, members)).toBe('requires_person_session')
 
     await members.revokeL1Membership(WS, profile.id)
-    expect(await workspaceAccess(UNBOUND_PAIRING, WS, members)).toBe('admitted')
+    expect(await workspaceAccess(UNBOUND_PAIRING, WS, members)).toBe('requires_person_session')
+  })
+
+  it('revoking the last member refuses that former member’s own passkey as not_a_member', async () => {
+    const profile = await members.ensureProfile({
+      origin: ORIGIN,
+      credentialId: 'cred-1',
+      displayName: 'Ada',
+    })
+    await members.addMember(WS, profile.id)
+    await members.revokeL1Membership(WS, profile.id)
+
+    const grant = grantOf('pairing', { origin: ORIGIN, credentialId: 'cred-1' })
+    expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
+  })
+
+  it('a workspace that never had a member keeps origin trust', async () => {
+    expect(await workspaceAccess(UNBOUND_PAIRING, 'ws-never-had-one', members)).toBe('admitted')
   })
 
   it('revoking one member does not change another bound member’s answer', async () => {

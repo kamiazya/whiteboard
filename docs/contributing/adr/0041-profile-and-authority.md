@@ -1,6 +1,6 @@
 # ADR-0041: A profile is a per-keeper claim, and authority reaches resources but not identity
 
-**Status:** Accepted — human gate 2026-09-19. S8 slices 1-3 are implemented
+**Status:** Accepted — human gate 2026-09-19. S8 slices 1-4 are implemented
 (see the 2026-09-21 addendum below for what each closed): the `workspaceAccess`
 gate now reaches the replica-key route and every other online route in
 local-daemon mode, with a dedicated page for both a removed member and a
@@ -257,3 +257,38 @@ routes too, not only from an offline replica — while
 passkey yet) gets a once-only retry prompt instead of either error page.
 Every other refusal code still falls through to the generic daemon-page
 load error, unclassified.
+
+**Slice 4 (2026-09-21): a workspace that once had members stays
+person-gated.** `workspaceAccess`'s member-less arm read
+`listMembers(workspaceId).length === 0`, so removing a workspace's SOLE
+member returned it to origin trust — the just-removed origin's own pairing
+grant got every online route back (`scripts/smoke/mcp-read-plane-smoke.mjs`
+check 4, run against a real daemon, found documents/snapshot/replica-key
+all answering 200 after the removal). The user chose **"a workspace that
+once had members stays person-gated"**: a `workspaceMembersOnly` marker,
+outside the CRDT-synced record beside the membership rows (migration
+`0030-workspace-members-only`), set once by `addMember`'s first insert and
+never cleared by `revokeL1Membership`. `workspaceAccess` now reads the
+marker instead of counting members; removing every member leaves the
+workspace admitting NOBODY until a member is added again.
+
+Two alternatives were considered and rejected in favour of the marker:
+
+- **Refuse removing the last member.** Rejected — an admin locked out of
+  their own passkey would have no way to reopen a workspace at all, and
+  "you may not remove the last member" is a surprising rule to hit only
+  once, on the person's way out.
+- **Accept the reversion and fix the smoke to expect it.** Rejected — the
+  smoke was reporting a real gap, not a wrong assertion; patching the test
+  to match the gap would have re-opened exactly the S8-slice-2 mistake this
+  ADR's own addendum above describes (a revocation that bites one surface
+  and waves the same person through every other).
+
+The marker's own honesty has a limit, stated rather than hidden: the 0030
+migration backfills one row per workspace that already has a membership row
+when it runs, `since` the earliest of that workspace's memberships — a
+workspace whose members were ALL removed BEFORE 0030 ran has no membership
+row left to backfill from, and stays origin-trusted. That history is not
+recoverable. Reopening a member-gated workspace to origin trust (clearing
+the marker) is a later product decision; nothing in this slice builds a
+control for it.

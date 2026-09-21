@@ -11,6 +11,12 @@
  * DELETE — no tombstone — because reversing one costs nothing (ADR-0042
  * decision 3).
  *
+ * `workspaceMembersOnly` is the one row a revoke NEVER touches (user
+ * decision 2026-09-21): once a workspace has had a member, `membersOnly`
+ * stays true even after the last one is removed, so `workspaceAccess` does
+ * not fall back to origin trust. See the 0030 migration for why it is its
+ * own table rather than a column on `workspaces`.
+ *
  * FAIL-CLOSED HERE MEANS SCOPE OF CONSULTATION, NOT A PERMISSIVE DEFAULT: a
  * caller never consults `isWorkspaceMember` for an `anonymous` or
  * `daemon-token` grant — those bypass membership entirely, mirroring
@@ -76,6 +82,37 @@ export interface MemberProfileStore {
     profileId: string,
   ): Promise<{ removed: boolean; credentials: { origin: string; credentialId: string }[] }>
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
+  /** True once this workspace has ever had a member — never reverts on revoke. */
+  membersOnly(workspaceId: string): Promise<boolean>
+}
+
+// Inserts the membership row and, on a workspace's FIRST membership ever,
+// its `workspaceMembersOnly` marker — in one transaction so the two can
+// never disagree about whether a workspace has had a member.
+async function insertMembership(db: Database, workspaceId: string, profileId: string) {
+  await db.transaction().execute(async (trx) => {
+    await trx
+      .insertInto('workspaceMemberships')
+      .values({ workspaceId, profileId, createdAt: Date.now() })
+      .onConflict((oc) => oc.columns(['workspaceId', 'profileId']).doNothing())
+      .execute()
+    await trx
+      .insertInto('workspaceMembersOnly')
+      .values({ workspaceId, since: Date.now() })
+      .onConflict((oc) => oc.column('workspaceId').doNothing())
+      .execute()
+  })
+}
+
+// Deletes the membership row only — `workspaceMembersOnly` is never cleared
+// here (see the file header).
+async function deleteMembership(db: Database, workspaceId: string, profileId: string) {
+  return db
+    .deleteFrom('workspaceMemberships')
+    .where('workspaceId', '=', workspaceId)
+    .where('profileId', '=', profileId)
+    .returning('profileId')
+    .execute()
 }
 
 // `db` may be a transaction: Kysely's Transaction is a Kysely.
@@ -169,11 +206,7 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
     },
 
     async addMember(workspaceId, profileId) {
-      await db
-        .insertInto('workspaceMemberships')
-        .values({ workspaceId, profileId, createdAt: Date.now() })
-        .onConflict((oc) => oc.columns(['workspaceId', 'profileId']).doNothing())
-        .execute()
+      await insertMembership(db, workspaceId, profileId)
     },
 
     async revokeL1Membership(workspaceId, profileId) {
@@ -182,12 +215,7 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
         .select(['origin', 'credentialId'])
         .where('profileId', '=', profileId)
         .execute()
-      const deleted = await db
-        .deleteFrom('workspaceMemberships')
-        .where('workspaceId', '=', workspaceId)
-        .where('profileId', '=', profileId)
-        .returning('profileId')
-        .execute()
+      const deleted = await deleteMembership(db, workspaceId, profileId)
       return { removed: deleted.length > 0, credentials }
     },
 
@@ -199,6 +227,15 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
         .where('profileId', '=', profileId)
         .executeTakeFirst()
       return row === undefined ? 'not-a-member' : 'member'
+    },
+
+    async membersOnly(workspaceId) {
+      const row = await db
+        .selectFrom('workspaceMembersOnly')
+        .select('workspaceId')
+        .where('workspaceId', '=', workspaceId)
+        .executeTakeFirst()
+      return row !== undefined
     },
   }
 }
