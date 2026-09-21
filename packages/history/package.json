@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "A document's history as pure mechanics over the workspace record: branch (variation) operations, merge planning, the checkpoint scheduler and version retention. Shared by both keepers, because what differs between them is where the rows live, never what a branch or a checkpoint is.",
+  "description": "A document's history as pure mechanics over the workspace record: the checkpoint scheduler, version retention and frontier encoding. Shared by both keepers, because what differs between them is where the rows live, never what a checkpoint is.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
