@@ -153,6 +153,82 @@ test('an empty window reports nothing, not an empty-shaped something', () => {
   assert.deepEqual(unattributedRuns, [])
 })
 
+test('pathFromTestId strips the project, which is what git has to be asked about', () => {
+  assert.equal(
+    pathFromTestId('[web-browser (chromium)] src/x/a.browser.test.tsx'),
+    'src/x/a.browser.test.tsx',
+  )
+  assert.equal(pathFromTestId('no project prefix'), null)
+})
+
+test('an entry whose file has MOVED since its newest failure is marked, not acted on blind', () => {
+  // The case this exists for, as it really happened (2026-09-21): the window
+  // still held two 09-12/09-13 failures of a touch-tap test whose root cause
+  // had been found and fixed in seven commits on 09-21. The report said "Act
+  // NOW" over a defect that no longer existed, and a session very nearly
+  // spent a whole fix lane on it. git already knew.
+  const window = [
+    {
+      runId: '34689951606',
+      createdAt: '2026-09-12T11:01:24Z',
+      titles: ['[web-browser (chromium)] src/x/wiki-link-completion.browser.test.tsx > a real touch tap'],
+    },
+    {
+      runId: '34731509463',
+      createdAt: '2026-09-13T01:50:05Z',
+      titles: ['[web-browser (chromium)] src/x/wiki-link-completion.browser.test.tsx > a real touch tap'],
+    },
+  ]
+  const inspect = (path, sinceIso) => {
+    assert.equal(path, 'src/x/wiki-link-completion.browser.test.tsx')
+    assert.equal(sinceIso, '2026-09-13T01:50:05Z')
+    return {
+      state: 'changed',
+      commits: 7,
+      newest: 'fix(web): a touch tap on a completion option is no longer dropped (#1692)',
+    }
+  }
+  const report = formatReport(clusterFailures(window), 14, inspect)
+  assert.match(report, /7 commit\(s\) have touched this file since/)
+  // The newest subject is the whole point: it is what says "already fixed"
+  // in one line, where a bare count only says "something happened".
+  assert.match(report, /no longer dropped \(#1692\)/)
+  assert.match(report, /verify the flake still reproduces/i)
+})
+
+test('a file nothing has touched since says so, and a deleted one says that', () => {
+  const twice = (file) => [
+    { runId: '1', createdAt: '2026-09-01T00:00:00Z', titles: [`[p] ${file} > x`] },
+    { runId: '2', createdAt: '2026-09-02T00:00:00Z', titles: [`[p] ${file} > x`] },
+  ]
+  const still = formatReport(clusterFailures(twice('src/a.test.ts')), 14, () => ({
+    state: 'unchanged',
+  }))
+  assert.match(still, /nothing has touched this file since/)
+  assert.doesNotMatch(still, /verify the flake still reproduces/i)
+
+  const gone = formatReport(clusterFailures(twice('src/b.test.ts')), 14, () => ({
+    state: 'missing',
+  }))
+  assert.match(gone, /this file no longer exists/)
+})
+
+test('no inspector, or one that throws, reports exactly what it did before', () => {
+  // Fail-open, like the script around it: a machine without git history, a
+  // shallow clone, or a path the resolver cannot place must not turn a
+  // session start into an error or a false "nothing has changed".
+  const window = [
+    { runId: '1', createdAt: '2026-09-01T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
+    { runId: '2', createdAt: '2026-09-02T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
+  ]
+  const bare = formatReport(clusterFailures(window), 14)
+  const threw = formatReport(clusterFailures(window), 14, () => {
+    throw new Error('not a git repository')
+  })
+  assert.equal(threw, bare)
+  assert.doesNotMatch(bare, /touched this file|no longer exists/)
+})
+
 test('the report ends by telling the session what to DO, not only what happened', () => {
   const report = formatReport(
     clusterFailures([
@@ -165,4 +241,4 @@ test('the report ends by telling the session what to DO, not only what happened'
   assert.match(report, /root-cause fix lane/)
 })
 
-import { formatReport } from './flake-watch-lib.mjs'
+import { formatReport, pathFromTestId } from './flake-watch-lib.mjs'
