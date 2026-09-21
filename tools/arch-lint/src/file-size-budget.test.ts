@@ -16,14 +16,21 @@ import { describe, expect, it } from 'vitest'
 //
 // The checklist's companion "functions stay under 50 lines" clause needs an
 // AST to find function boundaries, which is a different instrument than
-// counting a file's newlines. It is `tools/arch-lint/src/
-// function-size-budget.test.ts` now, on this same shrink-only contract —
-// there rather than here because the AST comes from
-// `@typescript/typescript6`, which only that package depends on. The two are
-// not interchangeable: a file budget is satisfied by MOVING mass, which is
-// how 834 lines of pointer handling left `SpatialEditor.tsx` for a file of
-// their own while remaining one function.
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
+// counting a file's newlines. It is `function-size-budget.test.ts`, beside
+// this file, on this same shrink-only contract. The two are not
+// interchangeable: a file budget is satisfied by MOVING mass, which is how
+// 834 lines of pointer handling left `SpatialEditor.tsx` for a file of their
+// own while remaining one function.
+//
+// It lived in `packages/mcp-server/src/server/` until it moved here, and the
+// move is worth one line because it deleted things rather than relocating
+// them: a dedicated `file-size-budget:` pre-push command (the whole
+// `arch-lint-node` project already runs at push), the self-assertion that
+// named that command, and the paragraphs in three documents explaining why a
+// scan of `apps/web/src` was filed under the daemon. It is an arch-lint scan
+// by every criterion that package states — it reads other packages' source,
+// runs no product code, opens no port and asserts on no clock.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 
 const LINE_BUDGET = 800
 
@@ -85,10 +92,28 @@ function isScannedTestFile(absolutePath: string): boolean {
   return !EXCLUDED_DIR_SEGMENTS.some((segment) => normalized.includes(segment))
 }
 
+/**
+ * This file, which the ledger deliberately does not hold.
+ *
+ * Its length is a function of how many entries the list below has, so its
+ * ceiling records the SIZE OF THE DEBT LIST and nothing about this file —
+ * and every entry already has to carry a reason, so the deliberateness the
+ * ceiling would add is already spent one line above it.
+ *
+ * What it cost instead: the number changes on every branch that records a
+ * raise, so two branches that both record one conflict HERE, on a line
+ * neither of them is about. Measured on one PR in one session: three
+ * conflicts, each resolved by re-counting the merged file's own lines, and
+ * the reasons stacked up as archaeology ("FIVE branches", then "SIX") until
+ * the comment said more about merging than about sizes.
+ */
+const LEDGER_PATH = 'tools/arch-lint/src/file-size-budget.test.ts'
+
 function scanTestFiles(): string[] {
   return SCAN_ROOTS.flatMap((relRoot) => walk(join(REPO_ROOT, relRoot)))
     .filter(isScannedTestFile)
     .map((absolutePath) => relativeToRepo(absolutePath))
+    .filter((path) => path !== LEDGER_PATH)
     .sort()
 }
 
@@ -340,7 +365,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // no canvas value, so a page reading only the canvas cannot see one. One
   // session serves both document pages, which is what keeps the two keepers
   // from drifting on it — and most of the eighteen lines say that.
-  'apps/web/src/lib/document-sync-session.ts': 1493,
+  // Raised 1493 -> 1535: an undo now takes back a write still inside its
+  // debounce window, and what costs the lines is the WHY — committing that
+  // write after an undo wrote the pre-undo canvas back over a document the
+  // screen had already left, publishing nothing and discarding the redo
+  // stack.
+  'apps/web/src/lib/document-sync-session.ts': 1535,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -777,7 +807,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 968 -> 1053 for S4b: the `/replica-key` route and the
   // `connectReplicaKeeper` wiring every existing move/demote test now needs,
   // since the pull those flows drive is sealed.
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1053,
+  // Raised 1053 -> 1086: ADR-0039's 2026-09-22 addendum makes a registered
+  // passkey the precondition for moving, so all twenty renders arrange one.
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 1086,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // Raised 2708 -> 2724, two lines for each of the eight ink entries the
   // ledger gained: `move-line`, `delete-line`'s sibling verbs (`set-line-`
@@ -790,7 +822,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `pointerdown-end` that arms them, all unreachable from this model for
   // the reason every other overlay gesture is — it generates node
   // interactions and never renders the handle the press starts on.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2730,
+  // Raised 2730 -> 2743: the census prints on a green run now, and the lines
+  // are the reason — a floor is a claim about a distribution, and a number
+  // printed only on failure is one draw from its left tail.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2743,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // Raised 1666 -> 1863 for the v19 -> v20 upgrade block (S4b's plaintext
   // replica discard): the seed fixture, the chunk-range no-op case, and the
@@ -798,7 +833,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1863 -> 1892: the v20 idempotency case now seeds a post-v20
   // sealed replica row so the version guard has something it would delete.
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
-  'apps/web/src/lib/document-sync-session.test.ts': 2768,
+  // Raised 2768 -> 2855 for the three cases pinning that undo: the document
+  // agreeing with the screen after an undo and after a redo, and a taken-back
+  // write settling as saved rather than reading as pending forever.
+  'apps/web/src/lib/document-sync-session.test.ts': 2855,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
   // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
@@ -821,7 +859,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1068,
+  // 1068 -> 1078: its SIBLING, the note-body embed, has failed the same way
+  // twice more, so it takes the same instrument and the note says the two
+  // are one subject.
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1078,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   // Raised 876 -> 914 for the cancel case: the page's effect cleanup has to
   // stop the replica refresh and the push it armed, and both schedulers'
@@ -852,42 +893,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/loro-adapter/src/loro-bridge.test.ts': 1308,
   'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
   'packages/mcp-server/src/server/app.test.ts': 1339,
-  // Its own entry, and it counts ITSELF: the number is what the file is
-  // after the entry is in it, which is why this one is 10 past the reading
-  // that first flagged it.
-  // 858 -> 892 for the raises the two ink writes needed, each with the
-  // reason beside it. That is the entry doing its job rather than growing:
-  // a raise costs a sentence, so a change that widens a file pays for it in
-  // the diff a reviewer reads.
-  // 892 -> 909 for completing two of those sentences. A review found both
-  // annotations stopping short of the ceiling they sit on — 2712 written
-  // against 2724, 1675 against 1808 — which is the failure mode this entry
-  // is the antidote to, one level up: an annotation that covers part of a
-  // raise reads exactly like one that covers all of it.
-  // 909 -> 917: this entry is self-referential, so every raise recorded
-  // above costs this file the lines that record it — including these.
-  // 917 -> 919 for the App.tsx raise above (ADR-0041 S0-5's Members card).
-  // 919 -> 926 for the App.test.tsx raise above, the same increment's two
-  // new assertions.
-  // +5 for the two entries the pointer-surface move needs: this list
-  // GREW by an over-budget file, which is the one thing that can only be
-  // recorded by raising this number. Then the four S4b raises and their
-  // sentences.
-  // 951 -> 959 for the two S5 raises above (App.tsx, App.test.tsx) and
-  // this entry's own two-line sentence — this file always grows by its
-  // own edit too.
-  // 973 -> 979: this ledger is on its own list, so the three-line reason a
-  // raise is REQUIRED to carry overflows it. Raising both is the mechanism
-  // working, not a loophole — the alternative is a raise with no reason.
-  // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. FIVE branches have now
-  // raised it for that reason independently; the number is the resolved
-  // file's own, re-measured at each merge rather than carried from a side.
-  // This ledger grows when an entry gains the reason its ceiling moved, which
-  // is the deliberateness the guard exists to force. SEVEN branches have now
-  // raised it for that reason independently; the number is the resolved
-  // file's own, re-measured at each merge rather than carried from a side.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 1017,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
@@ -969,49 +974,5 @@ describe('file-size budget: test files, same 800-line budget, same shrink-only c
       (path) => path in FILE_SIZE_GRANDFATHER,
     )
     expect(shared).toEqual([])
-  })
-})
-
-/**
- * This guard scans `apps/web/src` (and every `packages/*` and `tools/*`) while
- * living in mcp-server, so the natural local run for a web change — the
- * `web-jsdom` / `web-browser` projects — does not include it. Twice in one
- * session that produced the same push: green locally, red in CI on a file
- * this guard had been watching all along.
- *
- * `.claude/rules/app-web.md` had already said to run it by hand alongside the
- * web guards. That is a prose rung, and being written down is what it can do —
- * it cannot notice being forgotten. So pre-push runs it, and it costs the gate
- * nothing: across two real `lefthook run pre-push` runs this took 10.71s and
- * 7.74s, and each run's total equalled the `pnpm -r typecheck` beside it to the
- * centisecond. The equality is the claim worth keeping — the reading itself
- * swings ~40% with contention. That is why a guard whose failure CI would catch
- * anyway is still worth a local rung.
- *
- * Asserted here rather than in a test about lefthook, because this is the file
- * that knows WHY the entry has to exist — and the path is derived from
- * `import.meta.url` so moving this file fails loudly instead of leaving the
- * lefthook line pointing at nothing.
- */
-describe('the budget guard is reachable before a push, not only in CI', () => {
-  function prePushCommands(): string[] {
-    const text = readFileSync(join(REPO_ROOT, 'lefthook.yml'), 'utf8')
-    const start = text.indexOf('\npre-push:')
-    if (start === -1) throw new Error('lefthook.yml has no `pre-push:` block')
-    const rest = text.slice(start + 1)
-    const nextTopLevel = rest.slice('pre-push:'.length).search(/\n(?=[A-Za-z_-]+:)/)
-    const block = nextTopLevel === -1 ? rest : rest.slice(0, 'pre-push:'.length + nextTopLevel)
-    return [...block.matchAll(/^ {6}run: (.+)$/gm)].map((match) => match[1].trim())
-  }
-
-  // A scan that stops matching reports its subject as satisfied — the same
-  // shape as a passing run. Checked before anything is concluded from it.
-  it('reads the pre-push block', () => {
-    expect(prePushCommands().length).toBeGreaterThanOrEqual(5)
-  })
-
-  it('is run by a pre-push command', () => {
-    const self = relativeToRepo(fileURLToPath(import.meta.url))
-    expect(prePushCommands().filter((command) => command.includes(self))).toHaveLength(1)
   })
 })

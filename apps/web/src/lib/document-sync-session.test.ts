@@ -38,6 +38,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import type { EditorCommand } from './spatial/commands.js'
 import { applyCommand } from './spatial/commands.js'
 
@@ -1827,6 +1828,92 @@ describe('createDocumentSyncSession', () => {
     expect(session.getCanvas()).toEqual(twoNodeCanvas())
     expect(listener).toHaveBeenCalledWith(twoNodeCanvas(), 'external')
     unsubscribe()
+  })
+
+  it('an undo taken while a newer edit is still inside the debounce window leaves the document holding what the screen shows', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const afterFirst = applyCommand(twoNodeCanvas(), first)
+    session.onChange(afterFirst, first)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // A second edit, still inside its debounce window — on screen, not yet in
+    // the document. Undo is offered (the first edit committed), and the most
+    // recent thing the person did is this one.
+    const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 30, y: 40 }
+    session.onChange(applyCommand(afterFirst, second), second)
+
+    session.undo()
+    // The window the queued write was waiting out.
+    await vi.advanceTimersByTimeAsync(300)
+    await flushMicrotasks()
+
+    const stored = new LoroDoc()
+    stored.import(session.exportSnapshot() as Uint8Array)
+    expect(
+      readSpatialCanvas(stored),
+      'the document kept the edit the undo took off the screen',
+    ).toEqual(session.getCanvas())
+    expect(session.getCanvas()).toEqual(afterFirst)
+  })
+
+  it('a redo taken while a newer edit is still inside the debounce window is not written over by it', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const afterFirst = applyCommand(twoNodeCanvas(), first)
+    session.onChange(afterFirst, first)
+    await vi.advanceTimersByTimeAsync(300)
+    session.undo()
+
+    // A new edit inside its window — it has not committed, so the redo stack
+    // it would normally discard is still there and Redo is still offered.
+    const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 30, y: 40 }
+    session.onChange(applyCommand(twoNodeCanvas(), second), second)
+
+    expect(session.redo()).toBe(true)
+    await vi.advanceTimersByTimeAsync(300)
+    await flushMicrotasks()
+
+    const stored = new LoroDoc()
+    stored.import(session.exportSnapshot() as Uint8Array)
+    expect(readSpatialCanvas(stored), 'the queued write landed on top of the redo').toEqual(
+      session.getCanvas(),
+    )
+    expect(session.getCanvas()).toEqual(afterFirst)
+  })
+
+  it('an undo that takes back a queued write leaves the document saved, not pending forever', async () => {
+    const backend = makeFakeBackend()
+    const onPersistenceChange = vi.fn()
+    const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    session.onChange(applyCommand(twoNodeCanvas(), first), first)
+    await vi.advanceTimersByTimeAsync(300)
+    await flushMicrotasks()
+
+    const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 30, y: 40 }
+    session.onChange(applyCommand(twoNodeCanvas(), second), second)
+    session.undo()
+    await flushMicrotasks()
+
+    // Nothing is left to land — no timer, no commit, no push — and only
+    // something settling clears `unsaved`, so without a settle here the
+    // document reads as pending for the rest of the session.
+    const reported = onPersistenceChange.mock.calls.map(
+      (call) => (call[0] as BrowserPersistenceState).kind,
+    )
+    expect(reported.at(-1)).toBe('saved')
   })
 
   it('redo() re-applies an undone edit and notifies subscribers with the "external" origin', async () => {

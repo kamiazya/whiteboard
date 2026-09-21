@@ -92,6 +92,37 @@ describe('wb_canvas_edit in propose mode', () => {
     expect(result.proposed?.id).toBe(proposal?.id)
   })
 
+  // The most ordinary edit an agent makes, and the one the diff could not
+  // express: a text node's body is a `resource` since ADR-0038, while the
+  // patch vocabulary still says `text`, so a raw property comparison saw
+  // `text` unchanged on both sides and `resource` changed into a key no
+  // change can carry.
+  test('proposes a text change on a text node, carrying the body it assumed', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+
+    const result = await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      ops: [{ op: 'node.patch', id: 'a', patch: { text: 'A, revised', height: 300 } }],
+    })
+
+    expect(result.applied).toBe(0)
+    const [proposal] = await storedProposals(deps)
+    expect(proposal?.changes).toEqual([
+      {
+        id: 'node:a',
+        status: 'open',
+        op: 'node.patch',
+        nodeId: 'a',
+        patch: { height: 300, text: 'A, revised' },
+        assumed: { height: 40, text: 'A' },
+      },
+    ])
+  })
+
   // The whole reason a proposed node is stored resolved: the placement the
   // tool would have chosen is what a reader has to be shown, and an id-less,
   // geometry-less draft has no box to draw.

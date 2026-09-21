@@ -12,11 +12,14 @@
  * notice being forgotten — it was forgotten twice on one branch, by the person
  * who had written it down, each time costing a push that CI rejected.
  *
- * Asserted here rather than in a test about lefthook, for the reason
- * `file-size-budget.test.ts` gives for the same shape: this is the package that
- * knows WHY the entry has to exist. What it pins is the entry AND the claim
- * underneath it, because an entry justified by a reason nobody checks is the
- * next thing to go stale.
+ * Asserted here rather than in a test about lefthook, because this is the
+ * package that knows WHY the entry has to exist. What it pins is the entry AND
+ * the claim underneath it, because an entry justified by a reason nobody checks
+ * is the next thing to go stale.
+ *
+ * It covers `file-size-budget.test.ts` too, which used to carry a copy of this
+ * block pinned to a command of its own. That command named one file in a
+ * project that runs whole, so the copy went when the guard moved here.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -68,13 +71,13 @@ describe('the architecture scans run before a push', () => {
    * other packages. A floor rather than an exact count, so adding a package
    * does not fail this — only the rationale genuinely collapsing does.
    *
-   * `packages/mcp-server/src` is named because that is where both defects
-   * that earned the pre-push entry landed. If it ever leaves this list, the
+   * `packages/mcp-server` is named because that is where both defects that
+   * earned the pre-push entry landed. If it ever leaves this list, the
    * entry's justification leaves with it and should be re-argued.
    */
   it('governs packages other than its own', () => {
     const elsewhere = TEST_SCAN_DIRS.filter((dir) => !dir.startsWith('tools/'))
     expect(elsewhere.length).toBeGreaterThan(1)
-    expect(elsewhere).toContain('packages/mcp-server/src')
+    expect(elsewhere).toContain('packages/mcp-server')
   })
 })

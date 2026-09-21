@@ -73,7 +73,7 @@ describe('browser tests resize through the viewport helper', () => {
     // what a passing run looks like. So the callers are counted too: the
     // rule means nothing if nothing resizes at all.
     const all = TEST_SCAN_DIRS.flatMap((dir) => listTestFiles(join(REPO_ROOT, dir)))
-    expect(all.length).toBeGreaterThan(900)
+    expect(all.length).toBeGreaterThan(1500)
     const callers = all.filter((file) => count(readFileSync(file, 'utf-8'), VIA_HELPER) > 0)
     expect(callers.length).toBeGreaterThanOrEqual(8)
   })

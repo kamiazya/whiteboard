@@ -94,7 +94,8 @@ moving it before writes start failing, not after.
 migration can still complete comfortably, which follows from how long a
 migration of a record that size takes and how fast the record is growing,
 and neither has been measured. Per the `measured-change` discipline the
-instrument lands before the number.
+instrument lands before the number. *(Answered by the 2026-09-22
+addendum — as a criterion, not a fraction.)*
 
 What IS decided: the band exists, crossing it is a state a keeper REPORTS
 rather than a log line, and the number is one measurement away rather than
@@ -142,9 +143,12 @@ port are exactly what has no answer.
 
 - **Whether a Cloudflare Worker keeper is adopted.** The forcing case, not a
   commitment.
-- **Whether 128 MB is enough for a realistic workspace.** Unmeasured, and it
-  is the measurement that decides whether such a keeper is worth building.
-- **The band's fraction**, per decision 3.
+- **Whether 128 MB is enough for a realistic workspace.** Measured after
+  this ADR was accepted — see the 2026-09-22 addendum: a few hundred
+  documents, not a few thousand. What that makes a Worker keeper worth is
+  still open.
+- **The band's fraction**, per decision 3 — answered as a CRITERION rather
+  than a number in the same addendum.
 - **Per-document limits.** This is about a workspace record, the unit a
   keeper holds and the unit that would exceed an isolate.
 
@@ -173,3 +177,49 @@ doing it silently.
 migration changes which keeper holds the data, which ADR-0035 decision 4
 makes a governance change, and a governance change is not something a
 threshold performs on someone's behalf.
+
+## Addendum 2026-09-22 — the band's criterion, and the measurement behind it
+
+Decision 3 left the fraction open and asked for it to be DERIVED. The
+instrument it was waiting for exists in the Node composition root's
+measurement scripts, and it changed the shape of the question rather than
+only filling in a number.
+
+Measured against a 128 MB isolate, with real document bodies:
+
+| documents | snapshot | resident | + export | peak |
+|---|---|---|---|---|
+| 180 | 3.2 MB | 21.9 MB | 25.5 MB | 47 MB |
+| 360 | 6.5 MB | 64.5 MB | 51.1 MB | 116 MB |
+| 720 | 12.8 MB | 209.8 MB | 88.2 MB | 298 MB |
+
+Three things follow, and the first two were not the expected answers.
+
+**Capacity is super-linear in DOCUMENT COUNT, not in content bytes.** Per
+document the cost runs 86 KB at 45 documents to 298 KB at 720. So a ceiling
+stated in megabytes of content is wrong at both ends of its own range, and
+the cheap write-path measurement decision 3's consequences asked for has to
+be calibrated per backend rather than carried across.
+
+**The binding cost is the EXPORT, not the resident record.** A 6.5 MB
+snapshot peaks at 116 MB — an 18x amplification — because a keeper answering
+a read materialises the bytes beside the document it read them from. A
+capacity rule watching resident size alone would admit a workspace that
+cannot be READ, which is a worse failure than refusing a write.
+
+**So the band's criterion is: one more full export still fits.** That is the
+derivation decision 3 asked for rather than a fraction chosen by feel — the
+band exists to buy grace for a migration, a migration's cost IS an export,
+and the band is therefore the largest record whose peak leaves room for
+another one. At these numbers it lands near HALF the limit: at 180 documents
+the peak is 47 MB and 81 MB remains, comfortably a second pass; at 360 the
+peak is 116 MB and the 12 MB left cannot export anything. Stating the
+criterion rather than the 50% keeps it correct on a backend whose
+amplification differs.
+
+What this does NOT settle: whether a Worker keeper is adopted. The answer to
+decision 3's companion question — "whether 128 MB is enough for a realistic
+workspace" — is *a few hundred documents, not a few thousand*, which is
+enough for a personal workspace and not for a shared one. Node's allocator
+is not workerd's and the Durable Object per-instance limit is undocumented,
+so the SHAPE transfers and the absolutes are this machine's.

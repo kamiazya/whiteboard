@@ -2,11 +2,14 @@ import { readProposals, writeProposal } from '@kamiazya/whiteboard-loro-adapter'
 import {
   edgePatchFieldsSchema,
   linePatchFieldsSchema,
+  type NodePatchFields,
+  nodePatchField,
   nodePatchFieldsSchema,
   PROPOSED_CHANGE_OPS,
   type Proposal,
   type ProposedChange,
   type SpatialCanvas,
+  type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
@@ -51,11 +54,17 @@ const LINE_PATCH_FIELDS = Object.keys(linePatchFieldsSchema.shape)
 
 /**
  * Thrown when the diff finds a difference the change vocabulary cannot
- * express. Unreachable through the tool as it stands — every proposable verb
- * writes only patch fields, and `node.add` refuses an id already on the board
- * — so this exists for the verb somebody makes proposable later without
- * teaching the diff about it. Loud, because the alternative is a proposal
- * that silently drops half of what it was asked to propose.
+ * express. Loud, because the alternative is a proposal that silently drops
+ * half of what it was asked to propose.
+ *
+ * It called itself unreachable — "every proposable verb writes only patch
+ * fields" — and that was true of the VERBS and false of the comparison. A
+ * verb writing `text` lands in a node's `resource` (ADR-0038 decision 3), so
+ * the diff, reading stored properties, saw a key it had never heard of and
+ * refused every default-mode text edit an agent made. The lesson is in
+ * `PatchView` below: a key a patch is stated in and a key an element is
+ * stored under are two vocabularies, and a diff between them has to say which
+ * one it is speaking.
  */
 class UnrepresentableChangeError extends Error {
   constructor(id: string, field: string) {
@@ -94,21 +103,54 @@ function sameFieldValue(before: unknown, after: unknown): boolean {
   return JSON.stringify(before) === JSON.stringify(after)
 }
 
+/**
+ * How an element answers one of the keys a patch is STATED in, and which of
+ * its stored keys those answers already account for.
+ *
+ * A node's content is a `resource` since ADR-0038 while the patch vocabulary
+ * still says `text` / `file` / `url` / `subpath`, so comparing stored
+ * properties directly reads `text` as unchanged on both sides and then finds
+ * `resource` differing into a key no change can carry — which refused the most
+ * ordinary edit an agent makes. `nodePatchField` is the READ half of
+ * `applyNodePatch`, the same seam a conflict check reads a prior through, so
+ * the diff states a change the way it will be applied rather than the way it
+ * happens to be stored.
+ */
+interface PatchView {
+  readonly read: (item: Fields, field: string) => unknown
+  /** Stored keys the `read` above already expresses, so the sweep skips them. */
+  readonly expressed: readonly string[]
+}
+
+const STORED_PROPERTY: PatchView = {
+  read: (item, field) => item[field],
+  expressed: [],
+}
+
+const NODE_CONTENT: PatchView = {
+  read: (item, field) =>
+    nodePatchField(item as unknown as SpatialNode, field as keyof NodePatchFields),
+  expressed: ['resource'],
+}
+
 function patchBetween(
   before: Fields,
   after: Fields,
   patchFields: readonly string[],
   id: string,
+  view: PatchView,
 ): { patch: Fields; assumed: Fields } | undefined {
   const patch: Fields = {}
   const assumed: Fields = {}
   for (const field of patchFields) {
-    if (sameFieldValue(before[field], after[field])) continue
-    patch[field] = after[field]
-    if (before[field] !== undefined) assumed[field] = before[field]
+    const had = view.read(before, field)
+    const has = view.read(after, field)
+    if (sameFieldValue(had, has)) continue
+    patch[field] = has
+    if (had !== undefined) assumed[field] = had
   }
   for (const field of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    if (field === 'id' || patchFields.includes(field)) continue
+    if (field === 'id' || patchFields.includes(field) || view.expressed.includes(field)) continue
     if (!sameFieldValue(before[field], after[field])) {
       throw new UnrepresentableChangeError(id, field)
     }
@@ -158,12 +200,14 @@ function diffCollection<T extends { id: string }>(options: {
   readonly before: readonly T[]
   readonly after: readonly T[]
   readonly patchFields: readonly string[]
+  readonly view?: PatchView
   readonly added: (item: T) => ChangeBody
   readonly patched: (id: string, patch: Fields, assumed: Fields) => ChangeBody
   readonly removed: (item: T) => ChangeBody
   readonly changeId: (id: string) => string
 }): ProposedChange[] {
   const { before, after, patchFields, added, patched, removed, changeId } = options
+  const view = options.view ?? STORED_PROPERTY
   const changes: ProposedChange[] = []
   const priorById = new Map(before.map((item) => [item.id, item]))
   const nextById = new Map(after.map((item) => [item.id, item]))
@@ -174,7 +218,7 @@ function diffCollection<T extends { id: string }>(options: {
       changes.push({ id: changeId(id), status: 'open', ...added(item) } as ProposedChange)
       continue
     }
-    const result = patchBetween(prior as Fields, item as Fields, patchFields, id)
+    const result = patchBetween(prior as Fields, item as Fields, patchFields, id, view)
     if (result !== undefined) {
       changes.push({
         id: changeId(id),
@@ -202,6 +246,7 @@ function proposedChangesFromDiff(before: SpatialCanvas, after: SpatialCanvas): P
       before: before.nodes,
       after: after.nodes,
       patchFields: NODE_PATCH_FIELDS,
+      view: NODE_CONTENT,
       changeId: (id) => changeIdFor('node', id),
       added: (node) => ({ op: 'node.add', node }),
       patched: (nodeId, patch, assumed) => ({ op: 'node.patch', nodeId, patch, assumed }),

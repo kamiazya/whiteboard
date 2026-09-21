@@ -120,7 +120,7 @@ const NAVIGATION_CEILING = 8
  * reports zero, which is the failure these numbers are meant to catch.
  */
 const COLD_LOAD_BUDGET = {
-  addressed: { workspaces: 2, documents: 3, names: 3, tags: 4, trash: 2 },
+  addressed: { workspaces: 2, documents: 2, names: 2, tags: 2, trash: 2 },
   settled: { workspaces: 2, documents: 1, names: 1, tags: 0, trash: 1 },
 } as const
 

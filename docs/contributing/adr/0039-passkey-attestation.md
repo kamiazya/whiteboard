@@ -359,10 +359,11 @@ by that daemon's base URL (decision 1) — never key material, which stays with
 the authenticator; registers with `attestation: 'none'`, ES256 and `userVerification:
 'required'` on the page's own origin; asks the registered credential to sign
 the recomputed challenge at promote, and answers `null` where it cannot ask,
-which the move records as unattested (decision 5's "absence means not
-asked"). Settings › This workspace shows the passkey's state and holds the
-move while a registration is in flight; History shows decision 9's fourth
-state, *human · verified*, from the presence of the attestation alone.
+which now REFUSES the move (see the 2026-09-22 addendum; it used to be
+recorded unattested). Settings › This workspace shows the passkey's state
+and disables the move in every state but *registered*; History shows
+decision 9's fourth state, *human · verified*, from the presence of the
+attestation alone.
 
 **#1614 — the seam, crossed for real.** `pnpm smoke:passkey-promote` in the
 distribution chain and CI's `verify` job: Chromium's CTAP2 virtual
@@ -491,6 +492,32 @@ only where an agent forging the click would matter. Decisions 4, 5, 8 and 9
 and the second paragraph of decision 2 are that revision. Kept here rather
 than silently rewritten because the mistake — deriving a claim from its proof
 — is an easy one to make again.
+
+**2026-09-22 — a transfer requires the evidence; decision 5 keeps its
+reading everywhere else.** Decision 5's "absence means not asked" is the
+right reading of a row in a log, and it was the wrong rule for a TRANSFER
+once the destination generalised. It was written when the only destination
+was the daemon on this machine, where ADR-0035 is explicit that there is
+nothing to defend against; a browser now transfers its whole workspace
+record straight to a SaaS or a self-hosted server (user decision,
+2026-09-22), and a keeper the user does not own must not accept a crossing
+nobody confirmed. So the transfer path asks for the assertion ALWAYS, and
+refuses when it cannot get one — the option carrying it has no default, so
+a caller cannot omit the question, and a `null` answer is a refusal rather
+than a recorded absence.
+
+Two things this deliberately does NOT do. It is not a per-destination rule:
+a requirement that relaxes for your own daemon is a requirement nobody can
+see at the moment they need it, and the check would sit on the side that
+benefits from skipping it. And it is not yet enforced by the RECEIVING
+keeper, which is the only place a requirement is one — the promote route
+still accepts an unattested body, so this increment closes the browser's
+own path and the route's half is named here as the open half rather than
+implied to be done.
+
+What it costs is stated rather than hidden: a browser that cannot hold a
+passkey cannot transfer a workspace, and the UI says so where the move
+used to be offered.
 
 ## Sources
 

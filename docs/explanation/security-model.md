@@ -98,8 +98,12 @@ exist for the daemon's own `/pair` origin, and the other way round. Every
 assertion is verified against that pin before the daemon merges anything —
 a wrong signature, a challenge for another workspace, or a replayed
 assertion (the authenticator's sign count did not advance) is refused, and
-nothing lands. A move made without a passkey is recorded as such; absence
-means the browser could not ask, not that the move was rejected.
+nothing lands. A move a browser cannot sign is REFUSED rather than recorded:
+transferring a workspace to another keeper is confirmed with a passkey, and
+a browser with none registered — or one that cannot hold one — cannot make
+the move. Elsewhere in the log, absence still means the browser could not
+ask rather than that anything was rejected; only the transfer requires the
+evidence, because only there is the destination a keeper you may not own.
 
 A **user-verification gate** — asking for a passkey before a browser-kept
 workspace is shown on this screen — is designed but not shipped. When it

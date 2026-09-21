@@ -69,7 +69,7 @@ test('runWireStep: reports success when the wire script exits zero', () => {
 })
 
 // --- pre-seeding the built dist ---
-import { seedBuiltDist } from './new-worktree.mjs'
+import { seedBuiltDist, seedsThisPath } from './new-worktree.mjs'
 
 // `pnpm install` links every workspace dep's declared `bin`. @kamiazya/whiteboard-mcp declares
 // `whiteboard -> dist/cli/index.js`, and `dist` is gitignored, so a fresh worktree's FIRST install
@@ -83,11 +83,34 @@ test('seeds the built dist when the main checkout has one', () => {
     mainRoot: '/repo',
     worktreeRoot: '/wt',
     existsSync: (p) => p === '/repo/packages/mcp-server/dist',
-    cpSync: (from, to) => copies.push([from, to]),
+    cpSync: (from, to, options) => copies.push([from, to, options]),
     log: () => {},
   })
   assert.equal(ok, true)
-  assert.deepEqual(copies, [['/repo/packages/mcp-server/dist', '/wt/packages/mcp-server/dist']])
+  assert.equal(copies.length, 1)
+  assert.deepEqual(copies[0].slice(0, 2), [
+    '/repo/packages/mcp-server/dist',
+    '/wt/packages/mcp-server/dist',
+  ])
+  // The copy is filtered, and by the exported rule rather than by a second
+  // copy of it — see the next test for what that rule refuses.
+  assert.equal(copies[0][2].recursive, true)
+  assert.equal(copies[0][2].filter, seedsThisPath)
+})
+
+// `dist/web-app` is the built web app three browser smokes SERVE as the
+// subject under test, so seeding it makes a fresh worktree test whatever the
+// main checkout last built. Measured once: 9 of 18 read-plane checks failed
+// on pristine main until the app was rebuilt in the worktree, and 37 of 37
+// passed after.
+test('the seed carries the CLI it exists for and never the built web app', () => {
+  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/cli/index.js'), true)
+  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/widget/entry.js'), true)
+  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/web-app'), false)
+  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/web-app/index.html'), false)
+  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/web-app/assets/App-1.js'), false)
+  // A path that merely CONTAINS the word is not the directory.
+  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/cli/web-apps.js'), true)
 })
 
 test('skips silently when the main checkout has no build yet', () => {

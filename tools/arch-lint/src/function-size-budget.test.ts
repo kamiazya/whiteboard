@@ -151,7 +151,7 @@ const BY_KEY = new Map(MEASURED.map((row) => [row.key, row.lines]))
 const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/App.tsx#App': 763,
   'apps/web/src/components/AppShell.tsx#AppShell': 299,
-  'apps/web/src/components/DocumentPreview.tsx#PastCanvasPreview': 67,
+  'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
   'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/PairedOriginsCard.tsx#PairedOriginsCard': 141,
@@ -288,7 +288,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#DocumentRow': 57,
   'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#TreeItem': 80,
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 992,
+  // Raised 992 -> 1008: the two list effects stopped repeating one another on
+  // a mount, and the lines are the guard plus the paragraph saying which run
+  // it skips and which it must not.
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 1008,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 167,
   'apps/web/src/components/workspace-files/WorkspaceFolderTree.tsx#FolderItem': 68,
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 60,
@@ -318,7 +321,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/daemon-file-adapter.ts#createDaemonFileAdapter': 70,
   'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 128,
   'apps/web/src/lib/document-sync-session.ts#commandTargetKey': 56,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 842,
+  // Raised 842 -> 884: the undo path takes back a write still inside the
+  // debounce window, which has to reach the timer and the queue this factory
+  // closes over — so it lives here rather than beside them. Shrinking it is
+  // the same job as [[unify-document-pages-behind-backend-port]], not a
+  // separate one.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 884,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 220,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 101,
   'apps/web/src/lib/document-sync-session.ts#writeCommandTarget': 139,
@@ -357,7 +365,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // is still the audit's slice-4 subject
   // (`issues/audit-2026-09-21-backlog`, item 6) and splitting it is that
   // lane's work, not this feature's.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 727,
+  // 727 -> 583: the backend seam left for `use-daemon-document-backend.ts`
+  // (audit item 6 slice 4). Recorded at the measurement rather than left at
+  // the old ceiling, so the next change spends headroom deliberately.
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 583,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
@@ -381,6 +392,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // `createDocument` ends with.
   // 182 -> 194 for `deleteDocument`: the delete call plus the same list
   // refresh and path move its two siblings end with.
+  // The backend seam out of `useDaemonDocument` (727 -> 583). Over the budget
+  // as it stands, and it was over the budget inside its host too — what this
+  // records is that it is now NAMED: one memo deciding which connection this
+  // page syncs through, the transport rule in front of it, and the auth
+  // refusal that belongs to a connection rather than to a page.
+  'apps/web/src/pages/use-daemon-document-backend.ts#useDaemonDocumentBackend': 118,
   'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 194,
   // The document-menu bundle: two hooks, two rows, the dialog and the alert
   // row. It is over the budget because it RETURNS JSX — the rows and the

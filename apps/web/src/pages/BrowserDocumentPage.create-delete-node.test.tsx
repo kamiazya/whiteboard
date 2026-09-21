@@ -33,6 +33,7 @@ import {
   clearWhiteboardDb,
   createNodeCommand,
   deleteNodeCommand,
+  describeBrowserStore,
   persistedNodeIds,
   textNodeCanvas,
 } from '../test-utils/browser-document.js'
@@ -103,8 +104,30 @@ function latestCanvasIds(): { ids: string[]; detail: string } {
     .join(' ')
   return {
     ids,
-    detail: `renders=${latestMountedCanvases.length} last4: ${trail || '(none)'}`,
+    detail: `renders=${latestMountedCanvases.length} ${historyState()} last4: ${trail || '(none)'}`,
   }
+}
+
+/**
+ * Whether the cluster still offers each verb, read at the moment an
+ * assertion fails.
+ *
+ * This is what separates the two ways a redo can leave an empty canvas, and
+ * the message could not tell them apart: `redo=enabled` means the click never
+ * consumed the step, `redo=disabled` means it did and restored nothing. Both
+ * print `expected [] to include 'undo-probe-node'` otherwise.
+ */
+function historyState(): string {
+  const read = (name: string): string => {
+    try {
+      return screen.getByRole('button', { name }).getAttribute('aria-disabled') === 'false'
+        ? 'enabled'
+        : 'disabled'
+    } catch {
+      return 'absent'
+    }
+  }
+  return `undo=${read('Undo')} redo=${read('Redo')}`
 }
 
 describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', () => {
@@ -133,12 +156,23 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
     // early onChange lands on a doc that is not ready to commit it.
     // Re-sending an identical canvas is a no-op on the doc, so retries never
     // stack extra undo steps.
+    //
+    // Dispatched only while the create has NOT landed, and that guard is the
+    // whole difference between this test being deterministic and failing
+    // 3 runs in 10: `onCanvasChange` debounces 300ms, so a dispatch on the
+    // iteration that PASSES leaves a write armed over a document the undo
+    // below is about to move. The session takes such a write back now rather
+    // than committing it blind (`dropQueuedWrite`), so what the extra
+    // dispatch costs today is an undo that takes back the RETRY instead of
+    // the create — one press short of the step this test is about.
     const undoButton = screen.getByRole('button', { name: 'Undo' })
     await waitFor(
       () => {
-        act(() => {
-          latestOnChange!(created, createNodeCommand('undo-probe-node', 20, 20))
-        })
+        if (undoButton.getAttribute('aria-disabled') !== 'false') {
+          act(() => {
+            latestOnChange!(created, createNodeCommand('undo-probe-node', 20, 20))
+          })
+        }
         expect(undoButton.getAttribute('aria-disabled')).toBe('false')
       },
       { interval: 600 },
@@ -190,7 +224,11 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
         act(() => {
           latestOnChange!(created, createCmd)
         })
-        expect(await persistedNodeIds(documentId)).toContain('created-node')
+        const persisted = await persistedNodeIds(documentId)
+        expect(
+          persisted,
+          `the create never reached the store for ${documentId} — ${await describeBrowserStore()}`,
+        ).toContain('created-node')
       },
       { interval: 600 },
     )
@@ -199,9 +237,16 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
     latestMountedCanvases = []
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    await waitFor(() => {
+    await waitFor(async () => {
       const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
-      expect(restoredIds).toContain('created-node')
+      // `[]` here and `[]` from the persist wait above read identically and
+      // mean opposite things — nothing was written, against the reload
+      // opening a different document (or none). Both halves are in the
+      // message so one occurrence decides it.
+      expect(
+        restoredIds,
+        `the reload did not show the created node — renders=${latestMountedCanvases.length} watching=${documentId} ${await describeBrowserStore()}`,
+      ).toContain('created-node')
     })
 
     // Now delete it and confirm it stays gone after a further remount.
@@ -213,7 +258,11 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
         act(() => {
           latestOnChange!(afterDelete, deleteCmd)
         })
-        expect(await persistedNodeIds(documentId)).not.toContain('created-node')
+        const persisted = await persistedNodeIds(documentId)
+        expect(
+          persisted,
+          `the delete never reached the store for ${documentId} — ${await describeBrowserStore()}`,
+        ).not.toContain('created-node')
       },
       { interval: 600 },
     )
@@ -222,9 +271,12 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
     latestMountedCanvases = []
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    await waitFor(() => {
+    await waitFor(async () => {
       const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
-      expect(restoredIds).not.toContain('created-node')
+      expect(
+        restoredIds,
+        `the reload still shows the deleted node — renders=${latestMountedCanvases.length} watching=${documentId} ${await describeBrowserStore()}`,
+      ).not.toContain('created-node')
     })
   })
 })

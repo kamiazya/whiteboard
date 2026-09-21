@@ -69,17 +69,7 @@ const documentReferenceFactsSchema = z
   .strict()
 export type DocumentReferenceFacts = z.infer<typeof documentReferenceFactsSchema>
 
-export const backlinkEntrySchema = z
-  .object({
-    documentId: documentIdSchema,
-    path: documentPathSchema,
-    name: z.string().min(1).optional(),
-    kind: documentKindSchema.optional(),
-    /** One short plain-text excerpt per reference, in document order. */
-    contexts: z.array(z.string()),
-  })
-  .strict()
-export type BacklinkEntry = z.infer<typeof backlinkEntrySchema>
+import type { BacklinkEntry } from './backlink-entry.js'
 
 interface Held {
   readonly seq: number

@@ -1,6 +1,15 @@
 /**
- * Promotion: the browser keeper's whole workspace record transferred into a
- * daemon workspace, identity and history intact.
+ * Promotion: the browser keeper's whole workspace record transferred to
+ * ANOTHER KEEPER's workspace, identity and history intact.
+ *
+ * The destination is `keeperBaseUrl` and has always been a plain parameter.
+ * It was called `daemonBaseUrl` until 2026-09-22 because the local daemon
+ * was the only thing that could receive one — a name that made the transfer
+ * read as daemon-shaped when nothing about it is. ADR-0023 makes the
+ * destination the workspace's new KEEPER, so that is the word. A browser
+ * transfers directly to a SaaS or a self-hosted server with no daemon hop
+ * (user decision, 2026-09-22); the receiving route is not gated on
+ * `authMode`, so server mode already answers it.
  *
  * A plain function, not a component — the UI that offers it arrives in its
  * own increment, and keeping loro-crdt behind the lazy chunks is that
@@ -23,6 +32,7 @@
  */
 
 import {
+  type Attestation,
   apiErrorReason,
   documentFileApiUrl,
   promoteWorkspaceResponseSchema,
@@ -40,8 +50,8 @@ import type { AttestOutcome } from './passkey-attestation.js'
 
 export interface PromoteWorkspaceOptions {
   fetch: typeof globalThis.fetch
-  daemonBaseUrl: string
-  /** The TARGET daemon workspace — promotion merges into an existing one. */
+  keeperBaseUrl: string
+  /** The TARGET workspace at that keeper — promotion merges into an existing one. */
   workspaceId: string
   /** The browser keeper's records (production: `new BrowserWorkspaceDocs()`). */
   workspaceDocs: WorkspaceDocs
@@ -53,12 +63,32 @@ export interface PromoteWorkspaceOptions {
   onProgress?: (phase: 'record' | 'blobs') => void
   /**
    * The person's evidence for THIS record (ADR-0039): asked once the bytes
-   * to sign exist and before they leave. Absent, or answering `null`, means
-   * no passkey is registered for this daemon and the move is recorded
-   * without evidence; a cancelled prompt aborts the move, since a person
-   * who declined the question did not confirm the crossing.
+   * to sign exist and before they leave. REQUIRED, and required in two
+   * senses — the option has no default, so a caller cannot forget to ask,
+   * and `null` (no passkey registered for this destination) refuses the
+   * move rather than recording it unconfirmed. A cancelled prompt refuses
+   * it too: a person who declined the question did not confirm the
+   * crossing.
+   *
+   * This reverses ADR-0039 decision 5's "absence means not asked" for the
+   * transfer path alone (user decision, 2026-09-22), because the
+   * DESTINATION generalised. While the only destination was the daemon on
+   * this machine there was nothing to defend against (ADR-0035), so
+   * recording the move unconfirmed cost nothing; a browser now transfers
+   * straight to a SaaS or a self-hosted server, where the keeper is one
+   * the user does not own. The rule is one rule rather than per
+   * destination: a requirement that varies by where you are sending is a
+   * requirement nobody can see at the moment they need it. What it costs is
+   * stated rather than hidden — a browser with no passkey cannot transfer.
+   *
+   * A passkey is registered per keeper because WebAuthn binds a credential
+   * to an origin, which is a property rather than an inconvenience: a
+   * local origin's rpId carries no port, so one registered against a
+   * daemon is offered to whatever else later claims that host. Evidence on
+   * a crossing to a keeper the user does not own is what a real domain can
+   * give and a loopback one cannot.
    */
-  attest?: (snapshot: Uint8Array) => Promise<AttestOutcome | null>
+  attest: (snapshot: Uint8Array) => Promise<AttestOutcome | null>
 }
 
 /**
@@ -85,7 +115,7 @@ export type PromoteWorkspaceResult =
       sourceWorkspaceId: string
       /** Every documentId the record carried across — the same ids, by design. */
       promotedDocumentIds: string[]
-      /** True when the daemon verified a passkey assertion and recorded it beside the rows. */
+      /** True when the keeper verified a passkey assertion and recorded it beside the rows. */
       attested: boolean
       /** Paths the merge left contested; surfaced, never auto-resolved. */
       shadowedPaths: string[]
@@ -119,11 +149,11 @@ export async function promoteWorkspace(
   try {
     return await promoteWorkspaceUnsafe(options)
   } catch {
-    // A thrown fetch (daemon offline, connection dropped mid-transfer) must
-    // surface as a structured failure the confirmation UI can show, never a
-    // rejected promise. The transfer itself is safe to re-run: the same
-    // snapshot re-POSTed is an idempotent merge.
-    return { kind: 'failed', reason: 'Could not reach the daemon (network error).' }
+    // A thrown fetch (the keeper unreachable, connection dropped
+    // mid-transfer) must surface as a structured failure the confirmation UI
+    // can show, never a rejected promise. The transfer itself is safe to
+    // re-run: the same snapshot re-POSTed is an idempotent merge.
+    return { kind: 'failed', reason: 'Could not reach the destination (network error).' }
   }
 }
 
@@ -148,10 +178,34 @@ function collectImageRefs(
   return refs
 }
 
+/**
+ * The evidence to send, or why this transfer cannot go ahead. All three
+ * failing answers are refusals: a transfer to another keeper is confirmed
+ * with a passkey, so no passkey registered here is as much a stop as a
+ * declined prompt (ADR-0039's 2026-09-22 addendum).
+ */
+function evidenceFor(
+  attested: AttestOutcome | null,
+): { ok: true; attestation: Attestation } | { ok: false; reason: string } {
+  if (attested === null) {
+    return {
+      ok: false,
+      reason:
+        'Register a passkey for the destination first: a move to another keeper is confirmed with one.',
+    }
+  }
+  if (attested.ok) return { ok: true, attestation: attested.attestation }
+  if (attested.reason === 'cancelled') {
+    return { ok: false, reason: 'The passkey prompt was cancelled, so nothing was moved.' }
+  }
+  const detail = attested.detail ? ` (${attested.detail})` : ''
+  return { ok: false, reason: `The passkey could not sign this move${detail}; nothing was moved.` }
+}
+
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
-  const { fetch, daemonBaseUrl, workspaceId, workspaceDocs, onProgress } = options
+  const { fetch, keeperBaseUrl, workspaceId, workspaceDocs, onProgress } = options
   // The keeper's own store, like BrowserWorkspaceDocs above: both address
   // the same claimed database, so tests seed through the production path.
   const fileStore = new DocumentFileStore()
@@ -168,16 +222,8 @@ async function promoteWorkspaceUnsafe(
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
 
   const snapshot = new Uint8Array(record.export({ mode: 'snapshot' }))
-  const attested = options.attest === undefined ? null : await options.attest(snapshot)
-  if (attested !== null && !attested.ok) {
-    return {
-      kind: 'failed',
-      reason:
-        attested.reason === 'cancelled'
-          ? 'The passkey prompt was cancelled, so nothing was moved.'
-          : `The passkey could not sign this move${attested.detail ? ` (${attested.detail})` : ''}; nothing was moved.`,
-    }
-  }
+  const evidence = evidenceFor(await options.attest(snapshot))
+  if (!evidence.ok) return { kind: 'failed', reason: evidence.reason }
 
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
@@ -185,13 +231,13 @@ async function promoteWorkspaceUnsafe(
   // anything lands (ADR-0039). The daemon also writes the explicit
   // checkpoints a person's move leaves behind.
   const res = await fetch(
-    `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/promote`,
+    `${keeperBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/promote`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         snapshot: bytesToBase64Url(snapshot),
-        ...(attested === null ? {} : { attestation: attested.attestation }),
+        attestation: evidence.attestation,
       }),
     },
   )
@@ -207,7 +253,7 @@ async function promoteWorkspaceUnsafe(
   // is its projection, not something this side can compute without knowing
   // what the target already held. A failed read-back degrades to "no
   // collisions reported", never to a failed promotion: the merge landed.
-  const shadowedPaths = await listDocuments(fetch, daemonBaseUrl, workspaceId)
+  const shadowedPaths = await listDocuments(fetch, keeperBaseUrl, workspaceId)
     .then((response) =>
       response.documents.filter((entry) => entry.shadowed === true).map((entry) => entry.path),
     )
@@ -225,7 +271,7 @@ async function promoteWorkspaceUnsafe(
       blobs.missing.push(fileId)
       continue
     }
-    const res = await fetch(`${daemonBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`, {
+    const res = await fetch(`${keeperBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': blob.type || 'image/png' },
       body: blob,

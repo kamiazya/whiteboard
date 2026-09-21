@@ -27,6 +27,56 @@ export function testIdFromTitle(title) {
 }
 
 /**
+ * The identity of an annotation that names no test.
+ *
+ * `integrator-flow.md`'s ninth, tenth and eleventh shapes all report every
+ * test as PASSED and fail the FILE — so vitest annotates them
+ * `Unhandled error`, with no project and no test path, and the run used to
+ * fall into `unattributedRuns` where nothing could count it. The tenth
+ * reached three hand-counted occurrences that way: the promotion threshold,
+ * passed without a single automatic signal.
+ *
+ * What the annotation DOES carry is a path and a message whose first token
+ * is the error class. Those two are the surface — the same
+ * `EnvironmentTeardownError` at the same module twice is one flake by the
+ * same rule as any other — and keying on the class as well as the path
+ * matters, because a `TypeError` there is a different defect that happens
+ * to share a file.
+ *
+ * Returns `null` when there is no path or no class to key on, which keeps
+ * the runner's own "Process completed with exit code 1." (path `.github`,
+ * empty title) out of the report as it always was.
+ */
+export function unhandledIdFrom(annotation) {
+  const { title, path, message } = annotation ?? {}
+  if (typeof title !== 'string' || title.trim() === '') return null
+  if (typeof path !== 'string' || !path.includes('/')) return null
+  const errorClass = /^([A-Z]\w*(?:Error|Exception))\b/.exec(String(message ?? '').trim())
+  if (errorClass === null) return null
+  return { id: `${errorClass[1]} @ ${path}`, path }
+}
+
+/**
+ * The CI leg a run's `ci-gate` summary says died, e.g. `test-unit (2)`.
+ *
+ * Deliberately NOT an identity: two runs that both failed `test-unit (2)`
+ * are not the same flake, and this report's tail tells a session to spend a
+ * fix lane. A false promotion signal is worse than an uncountable failure —
+ * which this file's own history has already paid for once. It is printed so
+ * the bucket is readable, and left out of `clusterFailures`'s keying.
+ */
+export function failedLegFrom(annotation) {
+  const match = /^\[ci-gate\]\s+(.+?):\s*failure\s*$/.exec(String(annotation?.message ?? '').trim())
+  return match === null ? null : match[1]
+}
+
+/** A window entry's annotations, however the caller supplied them. */
+function annotationsOf(run) {
+  if (Array.isArray(run.annotations)) return run.annotations
+  return (run.titles ?? []).map((title) => ({ title }))
+}
+
+/**
  * @param window `{ runId, createdAt, titles }[]` — one entry per failed run,
  *   `titles` the test-failure annotation titles that run produced.
  * @returns recurrences (id seen in >= 2 DISTINCT runs, most-occurrences
@@ -39,15 +89,28 @@ export function clusterFailures(window) {
   const byId = new Map()
   const unattributedRuns = []
   for (const run of window) {
-    const ids = new Set(
-      run.titles.map((title) => testIdFromTitle(title)).filter((id) => id !== null),
-    )
-    if (ids.size === 0) {
-      unattributedRuns.push({ runId: run.runId, createdAt: run.createdAt })
+    const annotations = annotationsOf(run)
+    // A real test failure is the better identity, so it wins outright: an
+    // unhandled error beside one is usually the same collapse seen from the
+    // other end, and keying both would report one run as two flakes.
+    const keyed = new Map()
+    for (const annotation of annotations) {
+      const testId = testIdFromTitle(annotation.title)
+      if (testId !== null) keyed.set(testId, null)
+    }
+    if (keyed.size === 0) {
+      for (const annotation of annotations) {
+        const unhandled = unhandledIdFrom(annotation)
+        if (unhandled !== null) keyed.set(unhandled.id, unhandled.path)
+      }
+    }
+    if (keyed.size === 0) {
+      const legs = [...new Set(annotations.map(failedLegFrom).filter((leg) => leg !== null))]
+      unattributedRuns.push({ runId: run.runId, createdAt: run.createdAt, legs })
       continue
     }
-    for (const id of ids) {
-      const entry = byId.get(id) ?? { id, runIds: [], latest: '' }
+    for (const [id, path] of keyed) {
+      const entry = byId.get(id) ?? { id, path, runIds: [], latest: '' }
       entry.runIds.push(run.runId)
       if (run.createdAt > entry.latest) entry.latest = run.createdAt
       byId.set(id, entry)
@@ -89,8 +152,11 @@ export function pathFromTestId(id) {
  */
 function fileStatusLine(entry, inspect) {
   if (typeof inspect !== 'function') return []
-  const path = pathFromTestId(entry.id)
-  if (path === null) return []
+  // An unhandled-error entry carries the path its annotation named, which is
+  // an ordinary source file rather than a test — the same question ("has
+  // this moved since it last failed?") and a different kind of answer.
+  const path = entry.path ?? pathFromTestId(entry.id)
+  if (path === null || path === undefined) return []
   let status
   try {
     status = inspect(path, entry.latest)
@@ -106,6 +172,31 @@ function fileStatusLine(entry, inspect) {
     ]
   }
   return []
+}
+
+/**
+ * Which CI legs the unattributed runs died on — information, not a claim.
+ *
+ * Without it the report says "4 run(s) with no test annotation" and a reader
+ * has four Actions pages to open before knowing whether they are one thing
+ * or four. With it they can see at a glance that three were `test-unit (2)`
+ * and one was `test-shared`, which is where to look — and the wording says
+ * so rather than saying anything about recurrence.
+ */
+function unattributedLegLines(unattributedRuns) {
+  const counts = new Map()
+  for (const run of unattributedRuns) {
+    for (const leg of run.legs ?? []) counts.set(leg, (counts.get(leg) ?? 0) + 1)
+  }
+  if (counts.size === 0) return []
+  const listed = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([leg, count]) => `${count}x ${leg}`)
+    .join(', ')
+  return [
+    `  Those runs died on: ${listed}. A leg name says WHICH job, never why, so it is`,
+    '  not counted as a recurrence — open the run to see what failed.',
+  ]
 }
 
 /** One line per recurrence; silence when there is none is the caller's job. */
@@ -124,6 +215,7 @@ export function formatReport({ recurrences, singles, unattributedRuns }, windowD
   lines.push(
     `  (${singles.length} single-occurrence test failure(s) and ${unattributedRuns.length} run(s) with no test annotation — infra-shaped — not listed.)`,
   )
+  lines.push(...unattributedLegLines(unattributedRuns))
   lines.push('')
   lines.push(
     '  Act on the >=2x entries NOW: launch a root-cause fix lane each (own worktree + dev-loop) — re-running is how a defect gets waved through. An entry marked above has MOVED since it last failed: re-check that one, and search the issue store for its file, before spending the lane.',
