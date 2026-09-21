@@ -78,3 +78,87 @@ export const VERSIONS_BY_DOCUMENT_INDEX = 'byDocument'
  * field left the schema without any row ever being rewritten.
  */
 export const RETIRED_VERSION_THUMBNAILS_STORE = 'versionThumbnails'
+
+/**
+ * A store this database holds, as data: its name, the options it is created
+ * with, and the indexes that belong to it.
+ *
+ * The opener used to spell each one as its own `if (!contains(name)) create`,
+ * eleven of them in a row. The guard was repeated eleven times and the schema
+ * was not readable anywhere — you recovered it by reading control flow. As a
+ * list it is a declaration, the guard lives once in the loop that applies it,
+ * and a new store is an entry rather than another branch.
+ */
+export type StoreSpec = {
+  readonly name: string
+  readonly options?: IDBObjectStoreParameters
+  readonly indexes?: readonly {
+    readonly name: string
+    readonly keyPath: string | readonly string[]
+    readonly options?: IDBIndexParameters
+  }[]
+}
+
+/**
+ * Every store the database holds at the current version, created on any open
+ * that does not already have it.
+ *
+ * Creation is unconditional-per-name on purpose: an upgrade from ANY older
+ * version reaches this list, so a store added at v16 is created for a v3
+ * database and for a fresh install alike, without either naming a version.
+ * The rename TARGETS are not here — they come from `RENAMED_STORES`, which
+ * already carries them as data.
+ */
+export const CREATED_STORES: readonly StoreSpec[] = [
+  { name: 'meta' },
+  { name: WORKSPACES_STORE },
+  { name: BLOBS_STORE },
+  { name: SYNC_DOCUMENTS_STORE },
+  { name: SYNC_SNAPSHOT_CHUNKS_STORE },
+  { name: CONTENT_TIMESTAMPS_STORE },
+  {
+    name: DOCUMENT_INDEX_STORE,
+    options: { keyPath: ['workspaceId', 'path'] },
+    indexes: [{ name: 'byId', keyPath: ['workspaceId', 'documentId'], options: { unique: true } }],
+  },
+  {
+    name: VERSIONS_STORE,
+    options: { keyPath: 'id' },
+    indexes: [{ name: VERSIONS_BY_DOCUMENT_INDEX, keyPath: ['workspaceId', 'documentId'] }],
+  },
+]
+
+/**
+ * Stores a past version created and this one must not keep. Deleted on any
+ * open that still has them.
+ *
+ * `reconnectKeypairs` (dropped at v6) held WebCrypto keypairs for unattended
+ * reconnect; a credential no longer read but still stored is still stealable,
+ * so it is deleted rather than abandoned. `versionThumbnails` (v18) held a
+ * baked-light PNG per saved point.
+ */
+export const DELETED_STORES: readonly string[] = [
+  'reconnectKeypairs',
+  RETIRED_VERSION_THUMBNAILS_STORE,
+]
+
+/** Create `spec` and its indexes if this database does not have it yet. */
+export function ensureStore(db: IDBDatabase, spec: StoreSpec): void {
+  if (db.objectStoreNames.contains(spec.name)) return
+  const store = db.createObjectStore(spec.name, spec.options)
+  for (const index of spec.indexes ?? []) {
+    store.createIndex(index.name, index.keyPath as string | string[], index.options)
+  }
+}
+
+/**
+ * Delete `name` if this database has it.
+ *
+ * The guard is the point: `deleteObjectStore` on a store that does not exist
+ * THROWS and aborts the whole upgrade transaction, which would brick the open
+ * for a fresh install (oldVersion 0) or for any database that never reached
+ * the version that created it.
+ */
+export function dropStore(db: IDBDatabase, name: string): void {
+  if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name)
+}

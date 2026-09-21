@@ -561,3 +561,92 @@ export function renameMetaKey(tx: IDBTransaction, from: string, to: string): voi
     meta.delete(from)
   }
 }
+
+/**
+ * One ordered upgrade step: it runs against the upgrade transaction and calls
+ * `done` when the cursors it opened have drained.
+ *
+ * `oldVersion` is passed to every step, not only the two that read it, so a
+ * step that starts reading it later is an edit to that step and to nothing
+ * else.
+ */
+export type OrderedUpgradeStep = {
+  readonly name: string
+  readonly run: (tx: IDBTransaction, oldVersion: number, done: () => void) => void
+}
+
+/**
+ * The steps that MUST run one after another, in this order, as a list.
+ *
+ * Order is the whole content of this declaration, and each entry says why it
+ * sits where it does. It is a list rather than nested callbacks because the
+ * ordering is data: adding a step is appending an entry, and reordering one
+ * is moving a line that carries its own reason with it. Written as nesting,
+ * the same information was seven levels of indentation whose reasons lived in
+ * a comment beside the outermost call — and a new step cost a rewrite of
+ * every level below it.
+ *
+ * What makes the order load-bearing rather than tidy: each step walks a store
+ * an earlier step is still filling. A cursor opened while another step's puts
+ * are still queued in their own callbacks sees an EMPTY store, does nothing,
+ * and looks exactly like a step that ran. Measured once for real — a v6
+ * pre-path row survived a v6->v8 open until the chain was ordered — and the
+ * migration suite fails 31 of its 44 cases if two adjacent entries here are
+ * swapped.
+ */
+export const ORDERED_UPGRADE_STEPS: readonly OrderedUpgradeStep[] = [
+  // First: it walks `documents`, which the rename copies have just finished
+  // filling, and it decides which of those rows are worth carrying at all.
+  {
+    name: 'discardPrePathDocuments',
+    run: (tx, _oldVersion, done) => discardPrePathDocuments(tx, done),
+  },
+  // After the discard, because it indexes what the discard leaves behind.
+  {
+    name: 'backfillDocumentIndex',
+    run: (tx, _oldVersion, done) => backfillDocumentIndex(tx, done),
+  },
+  { name: 'carryLoroDocuments', run: (tx, _oldVersion, done) => carryLoroDocuments(tx, done) },
+  {
+    name: 'splitInlineSnapshotChunks',
+    run: (tx, _oldVersion, done) => splitInlineSnapshotChunks(tx, done),
+  },
+  {
+    name: 'rekeyBrowserWorkspace',
+    run: (tx, _oldVersion, done) => rekeyBrowserWorkspace(tx, done),
+  },
+  {
+    name: 'mintBrowserWorkspaceSegment',
+    run: (tx, _oldVersion, done) => mintBrowserWorkspaceSegment(tx, done),
+  },
+  // LAST: it walks `syncDocuments`, which the carriers above are still
+  // filling on an older database, and it needs WORKSPACES_STORE's final
+  // membership — the rekey/mint entries above are what settle it — to tell a
+  // browser workspace from a replica.
+  { name: 'discardPlaintextReplicas', run: discardPlaintextReplicas },
+]
+
+/**
+ * Run `steps` one after another over the same upgrade transaction, calling
+ * `done` once the last one has drained.
+ *
+ * Recursive rather than a loop because each step signals completion through a
+ * callback: IndexedDB has no awaitable cursor, and an upgrade transaction
+ * cannot be held open across a real `await`.
+ */
+export function runUpgradeStepsInOrder(
+  steps: readonly OrderedUpgradeStep[],
+  tx: IDBTransaction,
+  oldVersion: number,
+  done: () => void,
+): void {
+  const next = (index: number): void => {
+    const step = steps[index]
+    if (!step) {
+      done()
+      return
+    }
+    step.run(tx, oldVersion, () => next(index + 1))
+  }
+  next(0)
+}
