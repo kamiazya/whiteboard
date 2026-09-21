@@ -1,4 +1,3 @@
-// @vitest-environment node
 /**
  * The transfer names its destination a KEEPER, not a daemon.
  *
@@ -21,11 +20,25 @@
  * `vocabulary.md`: fix what your change touches, never widen a diff to
  * sweep a package you had no reason to open.
  */
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const SRC = join(import.meta.dirname, '..', '..', 'src')
+/**
+ * `?raw` rather than `node:fs`: apps/web is browser-only and
+ * `web-app-boundary.test.ts` fails on a Node builtin ANYWHERE under
+ * `apps/web/src`, tests included — which is how the first version of this
+ * file reached CI green locally and red there. That guard lives in
+ * `mcp-server`, so no command scoped to the web projects runs it, and the
+ * pre-push gate does not either.
+ */
+const sources = import.meta.glob(
+  [
+    './promote-workspace.ts',
+    './replica-store.ts',
+    './user-settings-store.ts',
+    '../components/settings/PromoteWorkspaceSection.tsx',
+  ],
+  { query: '?raw', import: 'default', eager: true },
+) as Record<string, string>
 
 /**
  * The transfer's own module, and nothing else.
@@ -46,7 +59,16 @@ const TRANSFER_PATH = ['lib/promote-workspace.ts'] as const
  * order to retire them". What the guard is about is the IDENTIFIER.
  */
 function source(rel: string): string {
-  return readFileSync(join(SRC, rel), 'utf8')
+  // Matched on the path's TAIL, not its basename: two files named
+  // `index.ts` would otherwise answer for each other silently. A glob
+  // entry that stopped resolving would report the file as clean, so its
+  // absence throws rather than reading as an empty string.
+  const suffix = `/${rel.replace(/^lib\//, '')}`
+  const keys = Object.keys(sources).filter((path) => path.endsWith(suffix))
+  if (keys.length !== 1) {
+    throw new Error(`${rel} matched ${keys.length} scanned paths, expected exactly 1`)
+  }
+  return (sources[keys[0]] as string)
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/.*$/gm, '$1')
 }
