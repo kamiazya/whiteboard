@@ -20,7 +20,13 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 // it belongs in the collection phase, which no per-test timeout bounds.
 import { createApp } from '../app.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
-import { API_ROUTE_RULE_NAMES, resolveApiRouteScope, ruleClaiming } from './route-scope-registry.js'
+import {
+  API_ROUTE_RULE_NAMES,
+  GATED_RULE_NAMES,
+  gatedWorkspaceHandle,
+  resolveApiRouteScope,
+  ruleClaiming,
+} from './route-scope-registry.js'
 
 let tempDir: string
 
@@ -364,5 +370,102 @@ describe('no rule in the table is shadowed by an earlier one', () => {
       wrong,
       `shadowed: ${wrong.map((r) => `${r.method} ${r.path} -> ${r.claimed}`).join(', ')}`,
     ).toEqual([])
+  })
+})
+
+// S8 slice 2: every rule is CLASSIFIED — gated (a workspace membership
+// gate applies) or origin-trusted (it does not) — and the two lists
+// partition the whole table with no overlap and no omission. A new rule
+// added to API_ROUTE_RULES without a `workspace` extractor AND without being
+// added to ORIGIN_TRUSTED here fails this test, which is the point: nothing
+// ships silently unclassified.
+const GATED = [
+  'document file',
+  'workspace-document/promote',
+  'workspace-document sync',
+  'document update/export',
+  'document (rest)',
+  'document versions/compact',
+  'document branches',
+  'workspace checkpoints',
+  'versions/prune-sandwiched',
+  'files/purge-dangling',
+  'documents/optimize-all',
+  'workspaces (rest)',
+]
+
+const ORIGIN_TRUSTED = [
+  'runtime/ping',
+  'runtime/verify',
+  'sync transport',
+  'workspace members',
+  'workspace replica-key',
+  'runtime state',
+  'runtime (rest)',
+  'debug',
+  'fonts',
+  'ws-ticket',
+  'pairing/token',
+  'pairing grants and credentials',
+  'pairing/session-assert',
+]
+
+describe('S8: the membership-gate partition covers every rule', () => {
+  it('GATED + ORIGIN_TRUSTED covers every rule name in the table, with no overlap', () => {
+    expect(new Set(GATED).size).toBe(GATED.length)
+    expect(new Set(ORIGIN_TRUSTED).size).toBe(ORIGIN_TRUSTED.length)
+    expect(GATED.filter((name) => ORIGIN_TRUSTED.includes(name))).toEqual([])
+    expect([...GATED, ...ORIGIN_TRUSTED].sort()).toEqual([...API_ROUTE_RULE_NAMES].sort())
+  })
+
+  it('GATED is exactly the rule set that declares a workspace extractor', () => {
+    expect([...GATED].sort()).toEqual([...GATED_RULE_NAMES].sort())
+  })
+
+  it.for(GATED)('%s yields the workspace handle from the CLAIMED_BY request', (name) => {
+    const [method, path] = CLAIMED_BY[name as keyof typeof CLAIMED_BY]
+    expect(gatedWorkspaceHandle(method, path)).toEqual({ kind: 'handle', handle: 'ws1' })
+  })
+
+  it.for(ORIGIN_TRUSTED)('%s yields no workspace handle', (name) => {
+    const [method, path] = CLAIMED_BY[name as keyof typeof CLAIMED_BY]
+    expect(gatedWorkspaceHandle(method, path)).toEqual({ kind: 'none' })
+  })
+
+  it('the bare workspaces collection yields no handle, even though the rule itself is gated', () => {
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces')).toEqual({ kind: 'none' })
+    expect(gatedWorkspaceHandle('POST', '/api/workspaces')).toEqual({ kind: 'none' })
+  })
+
+  it('a v1-addressed document route yields the same handle as its path-addressed twin', () => {
+    expect(
+      gatedWorkspaceHandle('GET', '/api/v1/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV'),
+    ).toEqual({ kind: 'handle', handle: 'ws1' })
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces/ws1')).toEqual({
+      kind: 'handle',
+      handle: 'ws1',
+    })
+  })
+
+  it('a percent-encoded handle segment decodes', () => {
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces/my%20workspace')).toEqual({
+      kind: 'handle',
+      handle: 'my workspace',
+    })
+  })
+
+  it('an unclaimed path yields no handle', () => {
+    expect(gatedWorkspaceHandle('GET', '/api/some-route-nobody-declared-yet')).toEqual({
+      kind: 'none',
+    })
+  })
+
+  it('a malformed percent-encoded handle segment fails closed as undecodable, not as ungated', () => {
+    // `%E0%A4%A` is a truncated multi-byte UTF-8 percent-encoding —
+    // decodeURIComponent throws URIError on it. The rule ('workspaces
+    // (rest)') IS gated, so this must read as `undecodable`, never `none`.
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces/%E0%A4%A')).toEqual({
+      kind: 'undecodable',
+    })
   })
 })

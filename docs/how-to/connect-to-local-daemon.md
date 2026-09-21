@@ -266,6 +266,17 @@ not kept. The next time a removed person's browser tries to reach the
 workspace, it is told plainly that they were removed, rather than reading
 as an ordinary connection problem.
 
+**Adding the first member changes how the workspace is protected.** A
+workspace with no members added yet trusts anyone whose browser is paired
+with the daemon at all (origin trust) — the ordinary single-user case. The
+moment you add the first member, the workspace becomes member-gated:
+every document, sync and workspace-listing route on it now requires a
+session signed in as one of the listed members, for everyone, including
+whoever added the first member. Removing someone is felt immediately, not
+just in what they can read offline — their browser's live session ends
+right away, and its next request for anything in this workspace is
+refused rather than answered stale.
+
 ## See what this device keeps of a daemon-kept workspace
 
 Once a workspace is kept by a daemon, **Settings → Connections → This

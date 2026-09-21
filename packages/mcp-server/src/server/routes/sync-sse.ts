@@ -12,17 +12,23 @@
 // the daemon's own API; the client keeps a single stream (shared across tabs)
 // and adjusts its subscriptions over POST, because SSE itself is one-way.
 
-import { workspaceDocKey } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import {
+  workspaceDocKey,
+  workspaceIdOfDocKey,
+} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import type {
   SyncMessageEvent,
   SyncReadyEvent,
   SyncUpdateEvent,
 } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
 import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
+import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import { membershipRefusal } from '../security/workspace-access.js'
+import type { WorkspaceAdmit } from './auth.js'
 
 const log = getLogger('sync-sse')
 
@@ -172,7 +178,40 @@ function ensureSseUpdateFanout(): Promise<void> {
   return sseFanoutInstall
 }
 
-export function createSyncSseRouter() {
+export interface SyncSseRouterOptions {
+  /** S8 slice 2: the membership gate. Absent means no gate at all
+   *  (server-mode, and any composition that has not wired members). */
+  admit?: WorkspaceAdmit
+}
+
+/**
+ * The membership gate for the SSE transport (S8 slice 2): decides ONCE per
+ * distinct workspace among `keys`, refusing the whole request on the FIRST
+ * non-admitted one — before any stream lookup, so a refused caller learns
+ * nothing about stream ids. A malformed key is left to the route's own
+ * validation rather than refused here.
+ */
+async function firstMembershipRefusal(
+  c: Context,
+  admit: WorkspaceAdmit | undefined,
+  keys: readonly string[],
+): Promise<ReturnType<typeof membershipRefusal> | null> {
+  if (admit === undefined) return null
+  const decidedAdmitted = new Set<string>()
+  for (const key of keys) {
+    const workspaceId = workspaceIdOfDocKey(key)
+    if (workspaceId === null || decidedAdmitted.has(workspaceId)) continue
+    const access = await admit(c, workspaceId)
+    if (access !== 'admitted') {
+      log.warning({ workspaceId, reason: access }, 'sync sse refused')
+      return membershipRefusal(access)
+    }
+    decidedAdmitted.add(workspaceId)
+  }
+  return null
+}
+
+export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
   const app = new Hono()
 
   app.get('/api/sync/stream', async (c) => {
@@ -213,6 +252,9 @@ export function createSyncSseRouter() {
     const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
 
+    const refusal = await firstMembershipRefusal(c, options.admit, parsed.data.subscribe ?? [])
+    if (refusal) return c.json(refusal, 403)
+
     const stream = streams.get(parsed.data.streamId)
     // A subscribe for a stream that is not open is a client bug (a race with
     // reconnect, a stale streamId). Answering 200 would leave the caller
@@ -248,6 +290,9 @@ export function createSyncSseRouter() {
   app.post('/api/sync/message', async (c) => {
     const parsed = syncClientMessageRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
+
+    const refusal = await firstMembershipRefusal(c, options.admit, [parsed.data.doc])
+    if (refusal) return c.json(refusal, 403)
 
     const stream = streams.get(parsed.data.streamId)
     if (!stream) return c.json({ error: 'unknown_stream' }, 404)
