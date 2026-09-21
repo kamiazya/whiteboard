@@ -1884,10 +1884,9 @@ describe('createDocumentSyncSession', () => {
 
     const stored = new LoroDoc()
     stored.import(session.exportSnapshot() as Uint8Array)
-    expect(
-      readSpatialCanvas(stored),
-      'the queued write landed on top of the redo',
-    ).toEqual(session.getCanvas())
+    expect(readSpatialCanvas(stored), 'the queued write landed on top of the redo').toEqual(
+      session.getCanvas(),
+    )
     expect(session.getCanvas()).toEqual(afterFirst)
   })
 
@@ -1912,7 +1911,7 @@ describe('createDocumentSyncSession', () => {
     // something settling clears `unsaved`, so without a settle here the
     // document reads as pending for the rest of the session.
     const reported = onPersistenceChange.mock.calls.map(
-      ([state]: [BrowserPersistenceState]) => state.kind,
+      (call) => (call[0] as BrowserPersistenceState).kind,
     )
     expect(reported.at(-1)).toBe('saved')
   })

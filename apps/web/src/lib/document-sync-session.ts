@@ -1412,7 +1412,7 @@ export function createDocumentSyncSession(
       publishCanvasFromDoc(doc)
       return true
     }
-    if (!undoManager || !undoManager.canUndo()) return false
+    if (!undoManager?.canUndo()) return false
     undoManager.undo()
     publishCanvasFromDoc(doc)
     return true
