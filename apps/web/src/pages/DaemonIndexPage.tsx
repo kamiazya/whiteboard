@@ -479,14 +479,14 @@ export function DaemonIndexPage({
         )
         const existingPaths = new Set(rows.map((r) => r.path))
         const newPath = deriveCopyPath(sourcePath, existingPaths)
-        // What the legacy route defaulted this to. NOT necessarily the
-        // source's kind — issues/daemon-duplicate-copies-kind.
+        // This create is the ONLY place the copy's kind is set: the snapshot
+        // write below is a plain re-save, which never touches a stored kind.
         const created = await createDocument(
           daemonFetch,
           daemonBaseUrl,
           workspaceAtStart,
           newPath,
-          'spatial',
+          sourceRow?.kind ?? 'spatial',
         )
         await updateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
         const existingNames = new Set(rows.map((r) => r.displayName))
