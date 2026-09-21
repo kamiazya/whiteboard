@@ -19,28 +19,13 @@
  * steps cannot import this one — the handler calls them, so the edge back
  * would be a cycle.
  */
+import { CREATED_STORES, DELETED_STORES, dropStore, ensureStore } from './browser-idb-stores.js'
 import {
-  BLOBS_STORE,
-  CONTENT_TIMESTAMPS_STORE,
-  DOCUMENT_INDEX_STORE,
-  RETIRED_VERSION_THUMBNAILS_STORE,
-  SYNC_DOCUMENTS_STORE,
-  SYNC_SNAPSHOT_CHUNKS_STORE,
-  VERSIONS_BY_DOCUMENT_INDEX,
-  VERSIONS_STORE,
-  WORKSPACES_STORE,
-} from './browser-idb-stores.js'
-import {
-  backfillDocumentIndex,
-  carryLoroDocuments,
   copyStoreThenDelete,
-  discardPlaintextReplicas,
-  discardPrePathDocuments,
-  mintBrowserWorkspaceSegment,
+  ORDERED_UPGRADE_STEPS,
   RENAMED_STORES,
-  rekeyBrowserWorkspace,
   renameMetaKey,
-  splitInlineSnapshotChunks,
+  runUpgradeStepsInOrder,
   sweepVersionsWrittenBeforeDigests,
 } from './browser-idb-upgrades.js'
 
@@ -219,40 +204,12 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
     const req = indexedDB.open(dbName, DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = req.result
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      for (const [, to] of RENAMED_STORES) {
-        if (!db.objectStoreNames.contains(to)) db.createObjectStore(to)
-      }
-      // Guarded: deleteObjectStore on a store that does not exist throws and
-      // aborts the whole upgrade transaction, which would brick the DB open
-      // for a fresh install (oldVersion 0) or any DB that never reached v5.
-      if (db.objectStoreNames.contains('reconnectKeypairs')) {
-        db.deleteObjectStore('reconnectKeypairs')
-      }
-      if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
-      if (!db.objectStoreNames.contains(BLOBS_STORE)) db.createObjectStore(BLOBS_STORE)
-      if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE)) {
-        db.createObjectStore(SYNC_DOCUMENTS_STORE)
-      }
-      if (!db.objectStoreNames.contains(SYNC_SNAPSHOT_CHUNKS_STORE)) {
-        db.createObjectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
-      }
-      if (!db.objectStoreNames.contains(CONTENT_TIMESTAMPS_STORE)) {
-        db.createObjectStore(CONTENT_TIMESTAMPS_STORE)
-      }
-      if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
-        const index = db.createObjectStore(DOCUMENT_INDEX_STORE, {
-          keyPath: ['workspaceId', 'path'],
-        })
-        index.createIndex('byId', ['workspaceId', 'documentId'], { unique: true })
-      }
-      if (!db.objectStoreNames.contains(VERSIONS_STORE)) {
-        const versions = db.createObjectStore(VERSIONS_STORE, { keyPath: 'id' })
-        versions.createIndex(VERSIONS_BY_DOCUMENT_INDEX, ['workspaceId', 'documentId'])
-      }
-      if (db.objectStoreNames.contains(RETIRED_VERSION_THUMBNAILS_STORE)) {
-        db.deleteObjectStore(RETIRED_VERSION_THUMBNAILS_STORE)
-      }
+      // The schema is a declaration (`CREATED_STORES` / `DELETED_STORES`) and
+      // this is the loop that applies it. The rename TARGETS come from
+      // `RENAMED_STORES` instead, which is where the pairing lives.
+      for (const spec of CREATED_STORES) ensureStore(db, spec)
+      for (const [, to] of RENAMED_STORES) ensureStore(db, { name: to })
+      for (const name of DELETED_STORES) dropStore(db, name)
 
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.
       const tx = req.transaction
@@ -261,40 +218,19 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
       // copy in that chain writes this store.
       sweepVersionsWrittenBeforeDigests(tx, event.oldVersion)
       renameMetaKey(tx, 'defaultCanvasId', 'defaultDocumentId')
-      // The discard runs only once every rename copy has drained, because it
-      // walks the store those copies are still filling. Calling it beside them
-      // is NOT equivalent: a cursor opened while the copy's puts are still
-      // queued in their own callbacks sees an empty store, deletes nothing,
-      // and looks exactly like a successful upgrade. Measured — a v6 pre-path
-      // row survived a v6->v8 open until this was ordered.
+      // The ordered chain starts only once every rename copy has drained,
+      // because its first step walks the store those copies are still
+      // filling. Starting it beside them is NOT equivalent: a cursor opened
+      // while the copy's puts are still queued in their own callbacks sees an
+      // empty store, deletes nothing, and looks exactly like a successful
+      // upgrade. Measured — a v6 pre-path row survived a v6->v8 open until
+      // this was ordered. Why the steps are then ordered AMONG THEMSELVES is
+      // on `ORDERED_UPGRADE_STEPS`, entry by entry.
       let pendingCopies = RENAMED_STORES.length
       const onCopyDone = () => {
         pendingCopies -= 1
         if (pendingCopies === 0) {
-          // Ordered, for the same reason the discard is: the backfill walks
-          // `documents`, which the rename copies are still filling, and the
-          // discard decides which of those rows are worth carrying. Reading
-          // before either drains sees an empty store and silently indexes
-          // nothing.
-          discardPrePathDocuments(tx, () =>
-            backfillDocumentIndex(tx, () =>
-              carryLoroDocuments(tx, () =>
-                splitInlineSnapshotChunks(tx, () =>
-                  rekeyBrowserWorkspace(tx, () =>
-                    mintBrowserWorkspaceSegment(tx, () =>
-                      // Chained LAST: it walks `syncDocuments`, which the
-                      // carriers above are still filling on an older
-                      // database, and it needs `WORKSPACES_STORE`'s final
-                      // membership (the rename/rekey/mint chain above is
-                      // what settles it) to tell a browser workspace from a
-                      // replica.
-                      discardPlaintextReplicas(tx, event.oldVersion, () => {}),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          )
+          runUpgradeStepsInOrder(ORDERED_UPGRADE_STEPS, tx, event.oldVersion, () => {})
         }
       }
       for (const [from, to] of RENAMED_STORES) copyStoreThenDelete(db, tx, from, to, onCopyDone)
