@@ -230,6 +230,11 @@ export function WorkspaceFilesPanel({
 
   const readList = useCallback(() => source.listDocuments(), [source])
 
+  /** What the last list read was taken at, so the two effects below do not repeat one another. */
+  const readAtRef = useRef<{ readList: unknown; revision: unknown } | null>(null)
+  const revisionRef = useRef(revision)
+  revisionRef.current = revision
+
   /**
    * Re-reads the list and re-selects the row at `path`.
    *
@@ -371,6 +376,7 @@ export function WorkspaceFilesPanel({
       // unsaid, it would keep pointing at a folder nobody is looking at.
       onFolderChangeRef.current?.('')
     }
+    readAtRef.current = { readList, revision: revisionRef.current }
     readList()
       .then((entries) => {
         if (cancelled) return
@@ -391,8 +397,18 @@ export function WorkspaceFilesPanel({
   // and it resets the open folder. A document appearing or disappearing must
   // leave someone exactly where they were standing. The selection is dropped
   // only when the document it pointed at is gone.
+  //
+  // Both effects read the same list, and on a mount — or a workspace switch —
+  // both run for the same `readList` with the same `revision`, so the panel
+  // asked the daemon for every document twice before anyone had touched
+  // anything. Measured on the addressed cold load, which is what a bookmark
+  // and every reload take. The run that would REPEAT what the effect above
+  // just read is skipped; every later revision still refreshes, which is the
+  // whole reason this effect exists.
   useEffect(() => {
     if (revision === undefined) return
+    if (readAtRef.current?.readList === readList && readAtRef.current.revision === revision) return
+    readAtRef.current = { readList, revision }
     let cancelled = false
     void loadTagsInUse()
     readList()
