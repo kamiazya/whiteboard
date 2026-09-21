@@ -68,7 +68,7 @@
     "check:release-candidate:local": "pnpm check:release-candidate && pnpm mutation:contracts",
     "check:pages-release": "pnpm --filter @whiteboard/checks pages-release",
     "publish-gate": "pnpm --filter @whiteboard/checks publish-gate",
-    "lint": "biome check .",
+    "lint": "biome check --error-on-warnings .",
     "lint:fix": "biome check --write .",
     "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server apps/web/src",
     "knip": "knip",
