@@ -319,7 +319,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/pairing-grant.ts#consumeGrantFragment': 97,
   'apps/web/src/lib/passkey-attestation.ts#registerPasskey': 86,
   'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 95,
-  'apps/web/src/lib/replica-refresh.ts#scheduleReplicaRefresh': 61,
+  // 61 -> 64 (ADR-0042 S10): a failed or empty pull now reports itself through
+  // reportRefreshFailure/reportNoPull instead of a silent catch.
+  'apps/web/src/lib/replica-refresh.ts#scheduleReplicaRefresh': 64,
   'apps/web/src/lib/spatial/commands.ts#applyCommand': 146,
   'apps/web/src/lib/spatial/commands.ts#buildFragmentInsertCommand': 84,
   'apps/web/src/lib/spatial/commands.ts#reorderNodes': 64,
