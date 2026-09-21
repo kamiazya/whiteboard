@@ -403,6 +403,46 @@ describe('silent renewal on a hosted origin', () => {
     expect(screen.queryByTestId('replica-read-page-stub')).toBeNull()
   })
 
+  it('serves the replica read-only for a cold load of a /w/:id/d/:path address keyed by canonical id, no segment', async () => {
+    // The read-plane smoke's exact shape: a document route (not an index
+    // route) naming the registry's key directly (no `segment` recorded —
+    // replica-refresh.ts omits it when a daemon workspace has none). A
+    // registry lookup keyed on `segment` alone, or a replica branch gated
+    // to index routes, would both miss this and fall through to the
+    // browser flow instead of the locked/unpaired states ADR-0042 S5 ships.
+    const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA1'
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        storage: {
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+          replicas: {
+            [workspaceId]: {
+              daemonBaseUrl: 'http://127.0.0.1:3099',
+              syncedAt: '2026-09-01T12:00:00.000Z',
+            },
+          },
+        },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'none' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={[`/w/${workspaceId}/d/moved-note`]}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
+    })
+    const page = await screen.findByTestId('replica-read-page-stub')
+    expect(page.getAttribute('data-workspace-id')).toBe(workspaceId)
+    expect(receivedReplicaPageProps?.renewal).toBe('unreachable')
+    expect(screen.queryByTestId('browser-document-page')).toBeNull()
+    expect(screen.queryByTestId('browser-index-page')).toBeNull()
+  })
+
   it('an address with no replica behind it still falls to the browser flow when unreachable', async () => {
     localStorage.setItem(
       STORAGE_KEY,
