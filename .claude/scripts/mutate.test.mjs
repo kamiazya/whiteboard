@@ -5,7 +5,7 @@
 // makes about config regressing without a sound.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -51,6 +51,43 @@ test('restores the file even when the command fails', () => {
     const run = mutate([file, 'the exact line', 'the mutation', '--', process.execPath, '-e', 'process.exit(1)'])
     assert.equal(run.status, 1)
     assert.equal(readFileSync(file, 'utf8'), ORIGINAL)
+  })
+})
+
+test('refuses an empty needle, which would rewrite between every character', () => {
+  withFixture((file) => {
+    const run = mutate([file, '', 'x', '--', process.execPath, '-e', 'process.exit(0)'])
+    // 2, not 3: this is a usage error rather than a needle that missed.
+    assert.equal(run.status, 2, run.stderr)
+    assert.match(run.stderr, /empty/)
+    assert.equal(readFileSync(file, 'utf8'), ORIGINAL)
+  })
+})
+
+test('keeps a backup and exits 4 when the file cannot be restored', () => {
+  withFixture((file) => {
+    // The command makes the file unwritable, so the restore in `finally`
+    // throws. Without a durable backup the tree would be left mutated with
+    // no copy anywhere, and the thrown error would replace the command's
+    // exit code with its own.
+    const lock = `require('node:fs').chmodSync(${JSON.stringify(file)}, 0o444)`
+    const run = mutate([file, 'the exact line', 'the mutation', '--', process.execPath, '-e', lock])
+    try {
+      if (run.status === 0) {
+        // Running as a user the mode cannot stop (root in some containers):
+        // the premise does not hold here, so say so rather than assert on it.
+        assert.match(run.stderr, /restored/)
+        return
+      }
+      assert.equal(run.status, 4, run.stderr)
+      assert.match(run.stderr, /RESTORE FAILED/)
+      // The recovery path is printed and the backup really is there.
+      const backup = /The backup is kept at (\S+)/.exec(run.stderr)?.[1]
+      assert.ok(backup, run.stderr)
+      assert.equal(readFileSync(backup, 'utf8'), ORIGINAL)
+    } finally {
+      chmodSync(file, 0o644)
+    }
   })
 })
 
