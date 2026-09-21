@@ -491,10 +491,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/membership.ts#createMembershipRouter': 112,
   'packages/mcp-server/src/server/routes/oauth-authz.ts#createOAuthAuthzRouter': 208,
   'packages/mcp-server/src/server/routes/pairing.ts#createPairingRouter': 283,
-  // 59 -> 88 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
+  // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
   // same router as POST .../replica-key — one seam for a workspace's whole
   // replica posture rather than a second router with its own mount block.
-  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 88,
+  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 94,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 146,
   // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 115,
