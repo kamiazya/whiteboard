@@ -17,20 +17,11 @@ import {
   generateDocumentId,
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
-import {
-  DocumentHasDescendantsError,
-  type DocumentIndex,
-  DocumentMoveIntoSelfError,
-  DocumentNotFoundError,
-  DocumentPathTakenError,
-  isWorkspaceNotFoundError,
-  WorkspaceSegmentTakenError,
-} from '@kamiazya/whiteboard-ports'
+import { type DocumentIndex, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
   followReferencesAfterRename,
   type ServerDeps,
-  WorkspaceSegmentUnusableError,
   wbDocumentCreate,
   wbDocumentDelete,
   wbDocumentList,
@@ -39,10 +30,22 @@ import { Hono } from 'hono'
 import type { z } from 'zod'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
-import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateDocumentPath, validateWorkspaceId } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import type { WorkspaceAdmit } from '../auth.js'
-import { handleCorruptStoredData } from './_shared.js'
+import {
+  corruptStored,
+  firstOwned,
+  hasDescendants,
+  jsonBody,
+  moveIntoSelf,
+  notFoundAs,
+  pathTakenAs,
+  refusedBy,
+  segmentTaken,
+  segmentUnusable,
+  workspaceNotFoundAs,
+} from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 // Names the specific field createDocumentRequestSchema rejected, instead of a
@@ -132,6 +135,71 @@ export interface WorkspacesRouterOptions {
 // GET /api/workspaces
 // GET /api/workspaces/:workspaceId/documents
 // POST /api/workspaces/:workspaceId/documents  body: { path: string }
+/**
+ * Rewrite the references that pointed at the OLD paths, and never fail the
+ * rename for it.
+ *
+ * Every path the SUBTREE carried, not just the root, which is why the moves
+ * are derived here rather than written by the caller. The rename itself
+ * already stands by the time this runs, so both failure modes — some
+ * documents unrewritten, or the pass throwing outright — are a log line and
+ * a partially repaired workspace, never a failed rename.
+ */
+async function followRenameAndLog(
+  deps: ServerDeps,
+  {
+    workspaceId,
+    entriesBefore,
+    from,
+    to,
+  }: {
+    workspaceId: string
+    entriesBefore: Awaited<ReturnType<DocumentIndex['listDocuments']>>
+    from: string
+    to: string
+  },
+): Promise<void> {
+  const moves = movesForPathChange(entriesBefore, from, to)
+  if (moves.length === 0) return
+  try {
+    const follow = await followReferencesAfterRename(deps, { workspaceId, entriesBefore, moves })
+    if (follow.failedDocumentIds.length > 0) {
+      getLogger('document').warning(
+        { workspaceId, from, to, failed: follow.failedDocumentIds },
+        'rename followed references, but some documents could not be rewritten',
+      )
+    }
+  } catch (err) {
+    getLogger('document').warning(
+      { workspaceId, from, to, err },
+      'rename succeeded but the reference follow pass failed',
+    )
+  }
+}
+
+/**
+ * One workspace's row in the listing: what the registry holds, plus the two
+ * things only a per-row read can answer.
+ *
+ * Taken one row at a time by its caller, which is load-bearing — see the
+ * SQLITE_BUSY note there before making this concurrent.
+ */
+async function summarizeWorkspace(
+  deps: ServerDeps,
+  options: WorkspacesRouterOptions,
+  row: { workspaceId: string; segment?: string; displayName?: string },
+) {
+  return {
+    workspaceId: row.workspaceId,
+    ...(row.segment === undefined ? {} : { segment: row.segment }),
+    ...(row.displayName === undefined ? {} : { displayName: row.displayName }),
+    documentCount: await countDocuments(deps.documentIndex, row.workspaceId),
+    ...(options.replicaTier === undefined
+      ? {}
+      : { tier: await options.replicaTier(row.workspaceId) }),
+  }
+}
+
 export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   const app = new Hono()
 
@@ -161,28 +229,24 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // control a person opens by clicking. Revisit if this list ever feeds
       // something that polls.
       const counted = []
-      for (const { workspaceId, segment, displayName } of workspaces) {
+      for (const row of workspaces) {
         // ponytail: N x membersOnly (one PK lookup) per list — a batched
         // query is the upgrade path if this shows up in a profile. Checked
         // before the per-row documentCount read, so a filtered-out row costs no tree open.
-        if (options.admit !== undefined && (await options.admit(c, workspaceId)) !== 'admitted') {
+        if (
+          options.admit !== undefined &&
+          (await options.admit(c, row.workspaceId)) !== 'admitted'
+        ) {
           continue
         }
-        counted.push({
-          workspaceId,
-          ...(segment === undefined ? {} : { segment }),
-          ...(displayName === undefined ? {} : { displayName }),
-          documentCount: await countDocuments(deps.documentIndex, workspaceId),
-          ...(options.replicaTier === undefined
-            ? {}
-            : { tier: await options.replicaTier(workspaceId) }),
-        })
+        // Awaited IN the loop, never gathered: see the note above.
+        counted.push(await summarizeWorkspace(deps, options, row))
       }
       const response: ListWorkspacesResponse = { workspaces: counted }
       return c.json(response)
     } catch (err) {
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, [corruptStored])
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
@@ -221,11 +285,8 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // A segment the suffix loop believed free can still be taken by the
       // time the insert lands. The registry's own unique index is what
       // actually decides, and it reports the same named error a rename does.
-      if (err instanceof WorkspaceSegmentTakenError) {
-        return c.json({ title: err.message } satisfies ApiErrorBody, 409)
-      }
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, [segmentTaken, corruptStored])
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
@@ -237,13 +298,8 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   // carrying only a name would be asking to drop the address.
   app.patch('/api/workspaces/:workspaceId', async (c) => {
     const handle = c.req.param('workspaceId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+    const invalidWorkspaceId = refusedBy(() => validateWorkspaceId(handle))
+    if (invalidWorkspaceId) return c.json(invalidWorkspaceId, 400)
     const parsed = renameWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ title: 'segment or displayName must be valid' } satisfies ApiErrorBody, 400)
@@ -262,27 +318,20 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       }
       return c.json(response)
     } catch (err) {
-      if (err instanceof WorkspaceSegmentTakenError) {
-        return c.json({ title: err.message } satisfies ApiErrorBody, 409)
-      }
-      if (isWorkspaceNotFoundError(err)) {
-        return c.json({ title: `Workspace "${handle}" not found` } satisfies ApiErrorBody, 404)
-      }
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, [
+        segmentTaken,
+        workspaceNotFoundAs(`Workspace "${handle}" not found`),
+        corruptStored,
+      ])
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
 
   app.get('/api/workspaces/:workspaceId/documents', async (c) => {
     const handle = c.req.param('workspaceId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+    const invalidWorkspaceId = refusedBy(() => validateWorkspaceId(handle))
+    if (invalidWorkspaceId) return c.json(invalidWorkspaceId, 400)
     const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
       const deps = options.serverDeps ?? (await getDefaultServerDeps())
@@ -312,11 +361,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // So the two cases a client must tell apart are: a workspace that
       // exists and holds nothing answers 200 with an empty array, and only an
       // ABSENT one answers 404. A 404 here therefore means gone, never empty.
-      if (isWorkspaceNotFoundError(err)) {
-        return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
-      }
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, [
+        workspaceNotFoundAs(`Workspace "${workspaceId}" not found`),
+        corruptStored,
+      ])
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
@@ -325,39 +374,24 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   // On success, return { path } for client-side navigation.
   app.post('/api/workspaces/:workspaceId/documents', async (c) => {
     const handle = c.req.param('workspaceId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
-      throw err
+    const invalidWorkspaceId = refusedBy(() => validateWorkspaceId(handle))
+    if (invalidWorkspaceId) {
+      return c.json({ title: invalidWorkspaceId.message } satisfies ApiErrorBody, 400)
     }
     const workspaceId = await workspaceIdFromHandle(c, handle)
-    const raw = await c.req.json().catch(() => null)
-    if (raw === null) {
-      return c.json({ title: 'JSON body required' } satisfies ApiErrorBody, 400)
-    }
-    const parsed = createDocumentRequestSchema.safeParse(raw)
-    if (!parsed.success) {
-      return c.json(
-        { title: createDocumentRequestErrorTitle(parsed.error) } satisfies ApiErrorBody,
-        400,
-      )
-    }
-    const path = parsed.data.path
-    try {
-      validateDocumentPath(path)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
-      throw err
+    const body = await jsonBody(c, createDocumentRequestSchema, createDocumentRequestErrorTitle)
+    if ('refusal' in body) return c.json(body.refusal, 400)
+    const path = body.data.path
+    const invalidDocumentPath = refusedBy(() => validateDocumentPath(path))
+    if (invalidDocumentPath) {
+      return c.json({ title: invalidDocumentPath.message } satisfies ApiErrorBody, 400)
     }
     try {
       const deps = options.serverDeps ?? (await getDefaultServerDeps())
       await wbDocumentCreate(deps, {
         workspaceId,
         path,
-        kind: parsed.data.kind,
+        kind: body.data.kind,
         // Kept, and now safe. `saveDocument` used to upsert the workspace
         // row on the way past, so posting into a workspace that does not
         // exist has always worked here — the one surface that opted out of
@@ -378,19 +412,18 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         // Passed through as given. A blank name meaning "no name" is the
         // OPERATION's rule now, not a second copy of it here — two places
         // normalising the same field is two places that can stop agreeing.
-        ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
+        ...(body.data.name === undefined ? {} : { name: body.data.name }),
       })
       const response: CreateDocumentResponse = { path }
       return c.json(response)
     } catch (err) {
-      if (err instanceof DocumentPathTakenError) {
-        return c.json({ title: `Canvas "${path}" already exists` }, 409)
-      }
-      // The refusal the comment above promises: a handle that names nothing
-      // and cannot be a segment is the caller's to change, not a failure.
-      if (err instanceof WorkspaceSegmentUnusableError) {
-        return c.json({ title: err.message } satisfies ApiErrorBody, 400)
-      }
+      // `segmentUnusable` is the refusal the comment above promises: a handle
+      // that names nothing and cannot be a segment is the caller's to change.
+      const owned = firstOwned(err, [
+        pathTakenAs(`Canvas "${path}" already exists`),
+        segmentUnusable,
+      ])
+      if (owned) return c.json(owned.body, owned.status)
       getLogger('document').error({ err: err as Error }, 'wbDocumentCreate failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' } satisfies ApiErrorBody, 500)
     }
@@ -425,15 +458,12 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         // The tree index refuses an unknown workspace with a throw where the
         // retired SQL index answered null; this surface's spelling of both
         // is the same 404.
-        if (isWorkspaceNotFoundError(err)) {
-          return c.json({ title: `Canvas "${path}" not found` }, 404)
-        }
-        // A refusal, not a failure: the caller has to name what it destroys.
-        if (err instanceof DocumentHasDescendantsError) {
-          return c.json({ title: err.message } satisfies ApiErrorBody, 409)
-        }
-        const issue = handleCorruptStoredData(err)
-        if (issue) return c.json(issue.body, issue.status)
+        const owned = firstOwned(err, [
+          workspaceNotFoundAs(`Canvas "${path}" not found`),
+          hasDescendants,
+          corruptStored,
+        ])
+        if (owned) return c.json(owned.body, owned.status)
         getLogger('document').error({ err: err as Error }, 'wbDocumentDelete failed unexpectedly')
         return c.json({ title: 'Failed to delete canvas.' } satisfies ApiErrorBody, 500)
       }
@@ -460,21 +490,12 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
     'put',
     ['path'],
     async (c, workspaceId, path) => {
-      const raw = await c.req.json().catch(() => null)
-      if (raw === null) {
-        return c.json({ title: 'JSON body required' } satisfies ApiErrorBody, 400)
-      }
-      const parsed = renameDocumentPathRequestSchema.safeParse(raw)
-      if (!parsed.success) {
-        return c.json({ title: 'path is required' } satisfies ApiErrorBody, 400)
-      }
-      const newPath = parsed.data.path
-      try {
-        validateDocumentPath(newPath)
-      } catch (err) {
-        const body = validationErrorBody(err)
-        if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
-        throw err
+      const body = await jsonBody(c, renameDocumentPathRequestSchema, 'path is required')
+      if ('refusal' in body) return c.json(body.refusal, 400)
+      const newPath = body.data.path
+      const invalidDocumentPath = refusedBy(() => validateDocumentPath(newPath))
+      if (invalidDocumentPath) {
+        return c.json({ title: invalidDocumentPath.message } satisfies ApiErrorBody, 400)
       }
       try {
         const deps = options.serverDeps ?? (await getDefaultServerDeps())
@@ -483,58 +504,25 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         // mutation can take it.
         const entriesBefore = await deps.documentIndex.listDocuments({ workspaceId })
         await deps.documentIndex.moveDocument({ workspaceId, from: path, to: newPath })
-        // References written to the old paths follow the move — every path
-        // the SUBTREE carried, not just the root, which is why the moves are
-        // derived rather than written here. The rename itself already
-        // stands, so a follow failure is a log line and a partially repaired
-        // workspace, never a failed rename.
-        const moves = movesForPathChange(entriesBefore, path, newPath)
-        if (moves.length > 0) {
-          try {
-            const follow = await followReferencesAfterRename(deps, {
-              workspaceId,
-              entriesBefore,
-              moves,
-            })
-            if (follow.failedDocumentIds.length > 0) {
-              getLogger('document').warning(
-                { workspaceId, from: path, to: newPath, failed: follow.failedDocumentIds },
-                'rename followed references, but some documents could not be rewritten',
-              )
-            }
-          } catch (err) {
-            getLogger('document').warning(
-              { workspaceId, from: path, to: newPath, err },
-              'rename succeeded but the reference follow pass failed',
-            )
-          }
-        }
+        await followRenameAndLog(deps, { workspaceId, entriesBefore, from: path, to: newPath })
         const response: RenameDocumentPathResponse = { path: newPath }
         return c.json(response)
       } catch (err) {
         // Absent is a 404 here and a throw there — the same translation the
         // delete makes, in the opposite direction. An unknown WORKSPACE is
         // the same answer: nothing at that address.
-        if (isWorkspaceNotFoundError(err)) {
-          return c.json({ title: `Canvas "${path}" not found` }, 404)
-        }
-        if (err instanceof DocumentNotFoundError) {
-          return c.json({ title: `Canvas "${path}" not found` }, 404)
-        }
-        // A move into the document's own subtree is an unusable target, not
-        // a race with another document — 400, not 409.
-        if (err instanceof DocumentMoveIntoSelfError) {
-          return c.json({ title: err.message } satisfies ApiErrorBody, 400)
-        }
-        // Forward the raised message rather than rebuilding one from
-        // newPath: a subtree move collides on a PRODUCED path, so the path
-        // the caller asked for is often free and naming it sends them to
-        // retry the one thing that was never the problem.
-        if (err instanceof DocumentPathTakenError) {
-          return c.json({ title: err.message } satisfies ApiErrorBody, 409)
-        }
-        const issue = handleCorruptStoredData(err)
-        if (issue) return c.json(issue.body, issue.status)
+        //
+        // The path collision forwards the RAISED message rather than
+        // rebuilding one from newPath: a subtree move collides on a PRODUCED
+        // path, so the path the caller asked for is often free and naming it
+        // sends them to retry the one thing that was never the problem.
+        const owned = firstOwned(err, [
+          notFoundAs(`Canvas "${path}" not found`),
+          moveIntoSelf,
+          pathTakenAs(),
+          corruptStored,
+        ])
+        if (owned) return c.json(owned.body, owned.status)
         getLogger('document').error({ err: err as Error }, 'moveDocument failed unexpectedly')
         return c.json({ title: 'Failed to rename canvas.' } satisfies ApiErrorBody, 500)
       }

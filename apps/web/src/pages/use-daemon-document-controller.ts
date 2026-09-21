@@ -83,6 +83,27 @@ function errorMessage(err: unknown): string {
  * mirroring BrowserDocumentPage's own useMemo(backend, [documentId]) plus
  * useDocumentSync ownership split.
  */
+/**
+ * How a failed resolve is reported.
+ *
+ * A refusal names the workspace it refused, when one is known — the page can
+ * then offer to ask for access rather than only reporting an error. Anything
+ * else is a plain load failure.
+ */
+function reportResolveFailure(
+  err: unknown,
+  knownWorkspaceId: string | null,
+  setRefusal: (refusal: MembershipRefusalState) => void,
+  setLoadError: (message: string) => void,
+): void {
+  const code = membershipRefusal(err)
+  if (code !== null && knownWorkspaceId !== null) {
+    setRefusal({ code, workspaceId: knownWorkspaceId })
+    return
+  }
+  setLoadError(errorMessage(err))
+}
+
 export function useDaemonDocumentController(
   options: UseDaemonDocumentControllerOptions,
 ): DaemonDocumentController {
@@ -126,6 +147,11 @@ export function useDaemonDocumentController(
   useEffect(() => {
     let cancelled = false
     const seq = resolveSeqRef.current
+    // Still on screen AND still the latest resolve. A retry bumps the
+    // generation, so an earlier resolve settling later must not commit over
+    // it — the two halves always travel together, and writing them out at
+    // each of the four commit points is the conjunction saying one thing.
+    const current = () => !cancelled && seq === resolveSeqRef.current
     // Known once listWorkspaces resolves — closed over by resolveOnce so a
     // refusal from listDocuments can still name the workspace it refused,
     // even though `workspaceId` state itself is not admitted yet.
@@ -133,7 +159,7 @@ export function useDaemonDocumentController(
 
     async function resolveOnce(): Promise<void> {
       const { workspaces: list } = await listWorkspacesApi(daemonFetch, daemonBaseUrl)
-      if (cancelled || seq !== resolveSeqRef.current) return
+      if (!current()) return
       setWorkspaces(list)
 
       const wid = options.workspaceId ?? list[0]?.workspaceId ?? null
@@ -144,7 +170,7 @@ export function useDaemonDocumentController(
       knownWid = wid
 
       const { documents } = await listDocuments(daemonFetch, daemonBaseUrl, wid)
-      if (cancelled || seq !== resolveSeqRef.current) return
+      if (!current()) return
       // Admitted only now, together — never before listDocuments succeeds.
       // Setting workspaceId earlier would arm the page's replica push/refresh
       // effect (keyed on it) for a workspace that turns out to be refused,
@@ -167,15 +193,10 @@ export function useDaemonDocumentController(
           bindGuardRef.current,
         )
       } catch (err) {
-        if (cancelled || seq !== resolveSeqRef.current) return
-        const code = membershipRefusal(err)
-        if (code !== null && knownWid !== null) {
-          setRefusal({ code, workspaceId: knownWid })
-        } else {
-          setLoadError(errorMessage(err))
-        }
+        if (!current()) return
+        reportResolveFailure(err, knownWid, setRefusal, setLoadError)
       } finally {
-        if (!cancelled && seq === resolveSeqRef.current) setLoading(false)
+        if (current()) setLoading(false)
       }
     }
 

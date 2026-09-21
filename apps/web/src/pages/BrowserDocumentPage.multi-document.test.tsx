@@ -46,6 +46,7 @@ import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
+  describeBrowserStore,
   loroDocumentsKeys,
   persistedNodeIds,
   setTextCommand,
@@ -223,11 +224,14 @@ describe('BrowserDocumentPage multi-canvas UI (real IndexedDB)', () => {
     const mountsBeforeSwitchBack = latestMountedCanvases.length
     await openDocument(pathA)
 
-    await waitFor(() => {
+    await waitFor(async () => {
       const restoredIds = latestMountedCanvases
         .slice(mountsBeforeSwitchBack)
         .flatMap((canvas) => canvas.nodes.map((n) => n.id))
-      expect(restoredIds).toContain('multi-canvas-node-a')
+      expect(
+        restoredIds,
+        `switching back did not show the first document's node — rendersSinceSwitch=${latestMountedCanvases.length - mountsBeforeSwitchBack} ${await describeBrowserStore()}`,
+      ).toContain('multi-canvas-node-a')
     })
 
     expect(await loroDocumentsKeys()).not.toContain('__placeholder__')

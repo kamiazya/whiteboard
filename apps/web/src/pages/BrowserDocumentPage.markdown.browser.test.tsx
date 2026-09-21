@@ -2,6 +2,7 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { listLocalDocuments } from '../lib/local-document-summary.js'
+import { waitForOrSayWhen } from '../test-utils/late-arrival.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 /**
  * Markdown-canvas 導線 (real IndexedDB + real CodeMirror): create a markdown
@@ -792,14 +793,18 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // line rather than accepting a candidate.
     await userEvent.keyboard(`![[[[${BOARD_ID}#Launch]]{Enter}{Enter}and more typing`)
 
-    await waitFor(
+    // `waitForOrSayWhen` rather than a plain wait: this one has failed twice
+    // on CI from branches that cannot reach `apps/web`, and the message it
+    // gave could not say whether the embed was still loading or had loaded
+    // and drawn nothing — which are opposite bugs.
+    await waitForOrSayWhen(
       () => {
         const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
         expect(preview?.textContent).toContain('launch group text')
         expect(preview?.textContent).toContain('Embed board › Launch')
         expect(preview?.textContent).not.toContain('elsewhere text')
       },
-      { timeout: 10_000 },
+      { budgetMs: 10_000, subject: "the ![[canvas#Group]] embed's content" },
     )
   })
 

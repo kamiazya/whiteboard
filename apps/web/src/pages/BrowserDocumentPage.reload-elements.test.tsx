@@ -36,6 +36,7 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
+  describeBrowserStore,
   loroDocumentsKeys,
   persistedNodeIds,
   setTextCommand,
@@ -136,9 +137,12 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     // The restored scene must include the node written before remount.
-    await waitFor(() => {
+    await waitFor(async () => {
       const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
-      expect(restoredIds).toContain('reload-regression-node')
+      expect(
+        restoredIds,
+        `the reload did not show the node written before it — renders=${latestMountedCanvases.length} ${await describeBrowserStore()}`,
+      ).toContain('reload-regression-node')
     })
 
     const keysAfterRemount = await loroDocumentsKeys()

@@ -14,8 +14,9 @@
  * `destructive-copy.ts`'s. This holds only the shape that is the same either
  * way — which is why `copyId` is a parameter rather than a constant.
  */
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Copy, Trash2 } from 'lucide-react'
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
 import { DeleteDocumentDialog } from '../components/document-editor/DeleteDocumentDialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
@@ -31,6 +32,12 @@ export interface UseDocumentActionsOptions {
   readonly duplicateDocument: () => Promise<unknown>
   /** Resolves once the document is gone, or rejects. */
   readonly deleteDocument: () => Promise<void>
+  /**
+   * The decoded canvas, when this document HAS one — what the JSON Canvas row
+   * copies. Null for a markdown document, and for a board whose bytes have
+   * not arrived, which is the same answer either way: no row.
+   */
+  readonly canvas: SpatialCanvas | null
   /** Which keeper's delete sentence the confirmation shows. */
   readonly deleteCopyId: Extract<
     DestructiveActionId,
@@ -49,6 +56,7 @@ export interface DocumentActionSlots {
 export function useDocumentActions({
   documentId,
   documentKind,
+  canvas,
   duplicateDocument,
   deleteDocument,
   deleteCopyId,
@@ -76,6 +84,21 @@ export function useDocumentActions({
     menuTriggerRef: documentOpsButtonRef,
     menuItems: (
       <>
+        {canvas !== null && (
+          <DropdownMenuItem
+            onSelect={() => {
+              // Text on the clipboard survives any chat/paste channel intact,
+              // which a binary download cannot — the phone-friendly way to
+              // hand the exact canvas (coordinates included) to a debugger.
+              void navigator.clipboard
+                ?.writeText(serializeSpatial(canvas, 'extended'))
+                .catch(() => {})
+            }}
+          >
+            <Braces aria-hidden="true" className="size-3.5" />
+            Copy as JSON Canvas
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
           <Copy aria-hidden="true" className="size-3.5" />
           Duplicate
