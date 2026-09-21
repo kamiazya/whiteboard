@@ -218,9 +218,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // 800-line budget. Both are IN the lane, for the reason `tidy-units.ts`
     // is: leaving a piece of the heuristic out would shrink what the lane
     // sees while the report kept looking the same.
+    //
+    // 86 and 19 since `edge-ink.ts` came out of `edge-rules.ts` the same way
+    // — the ink TERMS — and is in the lane for the same reason.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 18,
-      production: 85,
+      mutated: 19,
+      production: 86,
     })
   })
 

@@ -142,6 +142,57 @@ interface SweepSegment {
 }
 
 /**
+ * Every path segment as a sweep record, inflated by the broad-phase slack
+ * and ordered by where it starts — which is the order the sweep consumes.
+ */
+function sweepSegments(paths: readonly (readonly Point[])[]): SweepSegment[] {
+  const segments: SweepSegment[] = []
+  for (let edge = 0; edge < paths.length; edge++) {
+    const path = paths[edge]!
+    for (let s = 1; s < path.length; s++) {
+      const a = path[s - 1]!
+      const b = path[s]!
+      segments.push({
+        edge,
+        a,
+        b,
+        minX: Math.min(a.x, b.x) - BROAD_PHASE_SLACK_PX,
+        maxX: Math.max(a.x, b.x) + BROAD_PHASE_SLACK_PX,
+        minY: Math.min(a.y, b.y) - BROAD_PHASE_SLACK_PX,
+        maxY: Math.max(a.y, b.y) + BROAD_PHASE_SLACK_PX,
+      })
+    }
+  }
+  segments.sort((s1, s2) => s1.minX - s2.minX || s1.maxX - s2.maxX || s1.edge - s2.edge)
+  return segments
+}
+
+/** Drop everything from `active` that ended left of `minX`, in place. */
+function evictPassed(active: SweepSegment[], minX: number): void {
+  let keep = 0
+  for (let i = 0; i < active.length; i++) {
+    if (active[i]!.maxX >= minX) active[keep++] = active[i]!
+  }
+  active.length = keep
+}
+
+/** Add one pair's triple into `scores`; an all-zero triple is not recorded. */
+function addPairScore(
+  scores: Map<number, [number, number, number]>,
+  key: number,
+  [overlap, illegible, crossings]: readonly [number, number, number],
+): void {
+  if (overlap === 0 && illegible === 0 && crossings === 0) return
+  const entry = scores.get(key)
+  if (entry === undefined) scores.set(key, [overlap, illegible, crossings])
+  else {
+    entry[0] += overlap
+    entry[1] += illegible
+    entry[2] += crossings
+  }
+}
+
+/**
  * Every edge pair's summed [overlap, illegible, crossings], keyed by
  * `i * paths.length + j` with `i < j` (the caller's pairKey formula).
  * Pairs whose every candidate segment pair scores zero may be absent —
@@ -162,50 +213,19 @@ interface SweepSegment {
 export function buildPairwiseScores(
   paths: readonly (readonly Point[])[],
 ): ReadonlyMap<number, readonly [number, number, number]> {
-  const segments: SweepSegment[] = []
-  for (let edge = 0; edge < paths.length; edge++) {
-    const path = paths[edge]!
-    for (let s = 1; s < path.length; s++) {
-      const a = path[s - 1]!
-      const b = path[s]!
-      segments.push({
-        edge,
-        a,
-        b,
-        minX: Math.min(a.x, b.x) - BROAD_PHASE_SLACK_PX,
-        maxX: Math.max(a.x, b.x) + BROAD_PHASE_SLACK_PX,
-        minY: Math.min(a.y, b.y) - BROAD_PHASE_SLACK_PX,
-        maxY: Math.max(a.y, b.y) + BROAD_PHASE_SLACK_PX,
-      })
-    }
-  }
-  segments.sort((s1, s2) => s1.minX - s2.minX || s1.maxX - s2.maxX || s1.edge - s2.edge)
-
+  const segments = sweepSegments(paths)
   const scores = new Map<number, [number, number, number]>()
   const active: SweepSegment[] = []
   for (const segment of segments) {
-    // Evict everything that ended left of this segment's start.
-    let keep = 0
-    for (let i = 0; i < active.length; i++) {
-      if (active[i]!.maxX >= segment.minX) active[keep++] = active[i]!
-    }
-    active.length = keep
+    evictPassed(active, segment.minX)
     for (const other of active) {
       if (other.edge === segment.edge) continue
       if (other.maxY < segment.minY || other.minY > segment.maxY) continue
       // Canonical argument order: the lower edge index's segment first,
       // matching the oracle's pairScore(paths[i], paths[j]) with i < j.
       const [lo, hi] = other.edge < segment.edge ? [other, segment] : [segment, other]
-      const [overlap, illegible, crossings] = scoreSegmentPair(lo.a, lo.b, hi.a, hi.b)
-      if (overlap === 0 && illegible === 0 && crossings === 0) continue
       const key = lo.edge * paths.length + hi.edge
-      const entry = scores.get(key)
-      if (entry === undefined) scores.set(key, [overlap, illegible, crossings])
-      else {
-        entry[0] += overlap
-        entry[1] += illegible
-        entry[2] += crossings
-      }
+      addPairScore(scores, key, scoreSegmentPair(lo.a, lo.b, hi.a, hi.b))
     }
     active.push(segment)
   }

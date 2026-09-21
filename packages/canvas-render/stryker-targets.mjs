@@ -20,6 +20,11 @@
 export const MUTATED = [
   // The cost model and the searches the differential oracles cover.
   'src/layout/edges/edge-rules.ts',
+  // Split out of `edge-rules.ts` and covered for that reason: the ink TERMS
+  // were part of that file's lane, and leaving them out would have SHRUNK
+  // what the lane sees while the report kept looking the same — the failure
+  // this list's pinned counts exist to stop.
+  'src/layout/edges/edge-ink.ts',
   // The diagonal clip the intrusion tier reads: a sampled oracle and two
   // invariants, so a survivor here would be a chord read wrong.
   'src/layout/edges/diagonal-ink.ts',
@@ -258,7 +263,7 @@ export const KNOWN_EQUIVALENT = {
     'ArithmeticOperator: s1.edge - s2.edge -> s1.edge + s2.edge': 1,
     'ArithmeticOperator: s1.maxX - s2.maxX -> s1.maxX + s2.maxX': 1,
     'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
-    'ConditionalExpression: active[i]!.maxX >= segment.minX -> true': 1,
+    'ConditionalExpression: active[i]!.maxX >= minX -> true': 1,
     'ConditionalExpression: denom === 0 -> false': 1,
     'ConditionalExpression: dx === 0 -> false': 1,
     'ConditionalExpression: dy === 0 -> false': 1,
@@ -267,7 +272,7 @@ export const KNOWN_EQUIVALENT = {
     'ConditionalExpression: other.maxY < segment.minY || other.minY > segment.maxY -> false': 1,
     'ConditionalExpression: other.minY > segment.maxY -> false': 1,
     'ConditionalExpression: overlap === 0 && illegible === 0 && crossings === 0 -> false': 1,
-    'EqualityOperator: active[i]!.maxX >= segment.minX -> active[i]!.maxX > segment.minX': 1,
+    'EqualityOperator: active[i]!.maxX >= minX -> active[i]!.maxX > minX': 1,
     'EqualityOperator: denom < 0 -> denom <= 0': 1,
     'EqualityOperator: hi > lo -> hi >= lo': 2,
     'EqualityOperator: illegible === 0 -> illegible !== 0': 1,
