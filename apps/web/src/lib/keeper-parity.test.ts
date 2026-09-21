@@ -132,6 +132,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'both-keepers',
     browser: 'src/pages/BrowserIndexPage.tsx',
   },
+  'src/pages/daemon-index-actions.ts': {
+    reach: 'both-keepers',
+    browser: 'src/pages/BrowserIndexPage.tsx',
+    note: 'what a delete and a duplicate MEAN on the daemon index, apart from the page that renders them; the browser page holds its own spelling of the same two steps against its index',
+  },
   'src/pages/PairConsentPage.tsx': {
     reach: 'daemon-itself',
     why: 'the screen where a person grants a web origin access to their daemon — it exists only because there is a daemon to pair with',
