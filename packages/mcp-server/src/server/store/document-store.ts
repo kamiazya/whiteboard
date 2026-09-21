@@ -18,6 +18,7 @@ import {
   type CreateWorkspaceInput,
   chunkSnapshot,
   createWorkspaceInputSchema,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   DocumentPathTakenError,
   type RenameWorkspaceInput,
   renameWorkspaceInputSchema,
@@ -48,12 +49,6 @@ import { FsBlobStore } from './fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
-
-// Chunk size shared with the MCP tool write path (server-core's
-// document-io.ts) and migration 0011's FS-blob importer: an arbitrary
-// value, but it must match across every writer of these rows so a snapshot
-// chunked by one path reassembles identically when read by another.
-const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
 export class ConflictError extends Error {
@@ -853,7 +848,7 @@ export async function compactDocument(
     }
     const { manifest: fresh, chunks } = chunkSnapshot(
       new Uint8Array(shallow),
-      SNAPSHOT_MAX_CHUNK_BYTES,
+      DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
     )
     const folded = await documentStore.saveCompactedSnapshot({
       docRef,

@@ -21,7 +21,12 @@ import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { collectStaleIssues, formatFindings } from './stale-issues-lib.mjs'
+import {
+  collectStaleIssues,
+  formatFindings,
+  issueDocumentsFrom,
+  unwrapToolResult,
+} from './stale-issues-lib.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 
@@ -31,12 +36,35 @@ function arg(name, fallback) {
 }
 const QUIET = process.argv.includes('--quiet')
 const WORKSPACE = arg('workspace', 'default')
+/** `wb_document_get` refuses more than this per call. */
+const DOCUMENTS_PER_READ = 20
 
 function repoRoot() {
   return execFileSync('git', ['rev-parse', '--show-toplevel'], {
     cwd: SCRIPT_DIR,
     encoding: 'utf-8',
   }).trim()
+}
+
+/**
+ * The checkout whose daemon holds the backlog.
+ *
+ * Per-worktree dev daemons each get their OWN data dir, so a worktree's
+ * daemon has no `default` workspace at all — while the session's MCP client
+ * reaches the MAIN checkout's daemon whichever worktree the work is in, which
+ * is not a coincidence: `new-worktree.mjs` says outright that a per-worktree
+ * MCP registration is not something the CLI can express (`~/.claude.json`
+ * holds one project key per repository). The ticket store is therefore always
+ * the main checkout's, and asking this worktree's daemon asks a daemon nobody
+ * files issues into. `WHITEBOARD_DEV_PORT` still overrides, for a session that
+ * really does point its client elsewhere.
+ */
+function mainCheckoutRoot(root) {
+  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: root,
+    encoding: 'utf-8',
+  }).trim()
+  return resolve(common, '..')
 }
 
 /**
@@ -62,9 +90,10 @@ async function main() {
     '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
   )
   const root = repoRoot()
+  const main = mainCheckoutRoot(root)
   const port = deriveDevPort({
-    repoRoot: root,
-    isMainCheckout: isMainCheckout(root),
+    repoRoot: main,
+    isMainCheckout: isMainCheckout(main),
     env: process.env,
   })
   const token = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
@@ -107,33 +136,46 @@ async function main() {
     })
     const text = await res.text()
     const payload = JSON.parse(text.startsWith('data:') ? text.slice(text.indexOf('{')) : text)
-    if (payload.error) throw new Error(`${name}: ${payload.error.message}`)
-    return payload.result?.structuredContent ?? {}
+    return unwrapToolResult(name, payload)
   }
 
   const listed = await call('wb_document_list', { workspaceId: WORKSPACE })
-  const documents = []
-  for (const entry of listed.documents ?? []) {
-    const got = await call('wb_document_get', {
+  const entries = listed.documents ?? []
+  // ONE batch read. `wb_document_get` takes `documentIds` and answers
+  // `{ documents, failed }`; a document it could not read lands in `failed`
+  // rather than failing the call, so it has to be looked at rather than
+  // inferred from a short `documents` array.
+  // The tool caps `documentIds` at 20 per call, so the read is chunked rather
+  // than sent whole — found by the unwrap above, which reported the refusal a
+  // silent reader had been discarding.
+  const fetched = { documents: [], failed: [] }
+  for (let at = 0; at < entries.length; at += DOCUMENTS_PER_READ) {
+    const page = await call('wb_document_get', {
       workspaceId: WORKSPACE,
-      documentId: entry.documentId,
+      documentIds: entries.slice(at, at + DOCUMENTS_PER_READ).map((entry) => entry.documentId),
     })
-    const front = got.frontmatter ?? {}
-    if (front.type !== 'issue') continue
-    documents.push({
-      documentId: entry.documentId,
-      path: entry.path,
-      ...(entry.name === undefined ? {} : { name: entry.name }),
-      ...(front.generated?.at === undefined ? {} : { generatedAt: front.generated.at }),
-      ...(front.generated?.by === undefined ? {} : { generatedBy: front.generated.by }),
-      // Unmodelled root keys ride in `facetsRaw` (ADR-0016); a document that
-      // predates that, or that never declared any, simply has none.
-      sources: front.facetsRaw?.sources ?? [],
-    })
+    fetched.documents.push(...(page.documents ?? []))
+    fetched.failed.push(...(page.failed ?? []))
   }
+  const { documents, unreadableSources, failed } = issueDocumentsFrom(entries, fetched)
 
   const findings = collectStaleIssues(documents, inspectorFor(root))
   const report = formatFindings(findings, documents.length)
+  // A document the daemon could not read, or one whose `sources` this check
+  // cannot parse, is said OUT LOUD even in quiet mode: each is a declaration
+  // that looks made and is not being judged, which is the failure this whole
+  // check exists to stop being silent about.
+  for (const entry of failed) {
+    process.stderr.write(
+      `[stale-issues] could not read ${entry.documentId}: ${entry.reason ?? 'no reason given'}\n`,
+    )
+  }
+  for (const path of unreadableSources) {
+    process.stderr.write(
+      `[stale-issues] ${path} declares sources this check cannot read — OKF wants ` +
+        `\`- resource: <path>\` entries, not bare strings\n`,
+    )
+  }
   if (report !== '') process.stdout.write(`${report}\n`)
   else if (!QUIET) {
     const judged = documents.filter((d) => d.sources.length > 0 && d.generatedAt !== undefined)
@@ -145,8 +187,11 @@ async function main() {
 }
 
 main().catch((error) => {
-  // Fail-open, and say why rather than exiting silently: the daemon being
-  // down, or an older one without the trust family, must not look like a
-  // workspace with nothing stale in it.
-  if (!QUIET) process.stderr.write(`[stale-issues] skipped: ${error.message}\n`)
+  // Fail-open, and say why — IN QUIET MODE TOO. The hook passes `--quiet` to
+  // mean "say nothing when there is nothing to report", and that used to
+  // swallow the reason as well, so a check that could not look at anything
+  // was indistinguishable from one that looked and found nothing. That is
+  // exactly how this went unnoticed: a daemon that is down, a workspace that
+  // does not exist on it, or a tool whose arguments have moved on.
+  process.stderr.write(`[stale-issues] skipped: ${error.message}\n`)
 })

@@ -22,6 +22,18 @@ import {
 } from '../test-utils/capturing-spatial-editor.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
+// This page schedules ADR-0023's replica pull and push in the background, on
+// an idle callback or a 1.5s timer. Nothing here is about replica caching, so
+// the schedulers are stubbed: left real they run mid-file against a fetch mock
+// shaped for something else, and the warning that follows is charged to
+// whichever case is executing by then
+// (`issues/replica-refresh-warning-lands-on-a-later-test`). Each answers the
+// CANCEL the page calls on unmount.
+vi.mock('../lib/replica-refresh.js', () => ({
+  scheduleReplicaRefresh: vi.fn(() => () => {}),
+  scheduleReplicaPush: vi.fn(() => () => {}),
+}))
+
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
   return {

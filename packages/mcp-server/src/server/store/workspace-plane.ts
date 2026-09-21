@@ -31,12 +31,14 @@ import type {
   SaveCompactedSnapshotResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
-import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import {
+  chunkSnapshot,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+  reassembleSnapshot,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { getDoc, openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
-
-const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
 /**
  * `DocumentStore` whose `document:` refs read and write THROUGH the
@@ -74,7 +76,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // stranger's history.
         const doc = await getDoc(input.docRef.workspaceId, entry.path)
         const bytes = new Uint8Array(doc.export({ mode: 'snapshot' }))
-        const { manifest, chunks } = chunkSnapshot(bytes, SNAPSHOT_MAX_CHUNK_BYTES)
+        const { manifest, chunks } = chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
         return {
           manifest,
           chunks,

@@ -1,4 +1,3 @@
-import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import {
   documentsApiUrl,
   saveVersionResponseSchema,
@@ -7,7 +6,7 @@ import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
-import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
@@ -18,6 +17,7 @@ import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
+import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
@@ -29,7 +29,6 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
-import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -121,16 +120,25 @@ function useDaemonDocument(
   // Both modules dedupe internally, so the effect can fire on every resolve.
   useEffect(() => {
     if (controller.workspaceId === null) return
-    scheduleReplicaPush({
+    const cancelPush = scheduleReplicaPush({
       fetch: daemonFetch,
       daemonBaseUrl,
       workspaceId: controller.workspaceId,
     })
-    scheduleReplicaRefresh({
+    const cancelRefresh = scheduleReplicaRefresh({
       fetch: daemonFetch,
       daemonBaseUrl,
       workspaceId: controller.workspaceId,
     })
+    // Both are scheduled onto an idle callback or a 1.5s timer, so without
+    // this they outlive the page that asked — and fire against a fetch, a
+    // daemon address and a workspace that have all moved on. Cancelling is
+    // free where the run has already begun (it is left alone to finish) and
+    // releases the dedupe where it has not, so the next resolve tries again.
+    return () => {
+      cancelPush()
+      cancelRefresh()
+    }
   }, [daemonFetch, daemonBaseUrl, controller.workspaceId])
 
   // Stable across the page's lifetime — read fresh (not cached in state)
@@ -313,12 +321,6 @@ function useDaemonDocument(
   // lazily create an empty canvas under the dangling ref. Image refs live in
   // the file store, not the documents list, so they are never "missing" here;
   // undefined while the list has not loaded keeps everything ordinary.
-  const missingFileRef = useMemo(() => {
-    const entries = controller.documents
-    if (entries.length === 0) return undefined
-    const known = new Set(entries.flatMap((entry) => [entry.path, ...(entry.id ? [entry.id] : [])]))
-    return (ref: string) => !isImageRef(ref) && !known.has(ref)
-  }, [controller.documents])
 
   const fileAdapter = useMemo(
     () =>
@@ -332,14 +334,20 @@ function useDaemonDocument(
     [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.path, resolveRefPath],
   )
 
+  // Undefined until the list names a row for this path — a refresh in flight
+  // leaves it so, which both the picker's exclusion and the backlinks fetch
+  // read as "not yet".
+  const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.id
+
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
-  // time instead (`resolveTitle`).
-  const resolveTitle = useMemo(() => linkTitles(controller.documents), [controller.documents])
-  const resolveAlias = useMemo(
-    () => createUniqueNameResolver(linkEntries(controller.documents)),
-    [controller.documents],
-  )
+  // time instead (`resolveTitle`). All four derivations are the shared hook's
+  // — a summary is already a `LinkableDocument`, so this page passes the list
+  // as it stands.
+  const { resolveAlias, resolveTitle, missingFileRef, pickerTargets } = useLinkResolution({
+    documents: controller.documents,
+    excludeDocumentId: currentDocumentId,
+  })
   // Canvas embeds (J5a) and image nodes (J5b) read the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
   // updatedAt, exactly as in browser mode — keyed by BOTH id and path so id
@@ -397,20 +405,7 @@ function useDaemonDocument(
   // one invisible for good.
   const threadWrite: CommentsRailWrite = spatialThreadWrite(() => canvasValueRef.current, onChange)
 
-  // The same list, one row per document, carried with ids so the picker can
-  // fall back to one when a name is ambiguous.
-  const pickerTargets = useMemo(
-    () =>
-      linkTargets(controller.documents, {
-        excludeDocumentId: controller.documents.find((d) => d.path === controller.path)?.id,
-      }),
-    [controller.documents, controller.path],
-  )
-
-  // Backlinks for the Connections chip. Keyed on the CURRENT document's id —
-  // an older daemon's id-less listing leaves it undefined and the chip
-  // disabled rather than querying with a path the route would reject.
-  const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.id
+  // Backlinks for the Connections chip, keyed on the CURRENT document's id.
   const { connections, refresh: refreshConnections } = useDaemonConnections({
     daemonFetch,
     daemonBaseUrl,

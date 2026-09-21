@@ -807,7 +807,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/spatial/commands.test.ts': 2042,
   'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1063,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
-  'apps/web/src/pages/DaemonDocumentPage.test.tsx': 876,
+  // Raised 876 -> 914 for the cancel case: the page's effect cleanup has to
+  // stop the replica refresh and the push it armed, and both schedulers'
+  // mocks have to answer a spy cancel rather than undefined.
+  'apps/web/src/pages/DaemonDocumentPage.test.tsx': 914,
   // Raised 2139 -> 2173: a duplicated note's copy was filed as a canvas, and
   // the case needs this file's installFetchMock/selectCard harness. Moving
   // that harness to test-utils/ is what would shrink this entry properly.
@@ -856,7 +859,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 973 -> 979: this ledger is on its own list, so the three-line reason a
   // raise is REQUIRED to carry overflows it. Raising both is the mechanism
   // working, not a loophole — the alternative is a raise with no reason.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 979,
+  // Raised 979 -> 983 for the entry above's own reason comment.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 983,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
