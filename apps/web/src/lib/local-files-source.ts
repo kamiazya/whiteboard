@@ -36,7 +36,6 @@ import {
   idbContentClock,
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
-
 import { loadWorkspaceDocumentProjection } from './workspace-content.js'
 
 /**
