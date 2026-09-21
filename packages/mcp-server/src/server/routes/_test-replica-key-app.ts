@@ -54,17 +54,17 @@ type IsolatedDbHandle = Awaited<ReturnType<IsolatedDbModule['createIsolatedDb']>
 
 export const WS = 'ws-1'
 export const HOSTED = 'https://latest.kamiazya-whiteboard.pages.dev'
-export const HOST = new URL(HOSTED).hostname
-export const FLAGS = WEBAUTHN_FLAG_UP | WEBAUTHN_FLAG_UV | WEBAUTHN_FLAG_BE
+const HOST = new URL(HOSTED).hostname
+const FLAGS = WEBAUTHN_FLAG_UP | WEBAUTHN_FLAG_UV | WEBAUTHN_FLAG_BE
 export const DAEMON_TOKEN = 'the-daemon-token'
 export const MACAROON_ROOT_KEY = new Uint8Array(32).fill(7)
 export const OAUTH_TOKEN = 'the-oauth-token'
-export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
 let dir: string | undefined
 let dbHandle: IsolatedDbHandle | undefined
 
-export interface MakeAppOptions {
+interface MakeAppOptions {
   known?: readonly string[]
   defaultTier?: 'no-offline' | 'offline' | 'bounded'
   leaseTtlMs?: number

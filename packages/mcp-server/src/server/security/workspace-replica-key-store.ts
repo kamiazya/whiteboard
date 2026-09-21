@@ -47,15 +47,22 @@ export interface WorkspaceReplicaKey {
   readonly keyId: string
 }
 
-/** `sha256("wb-workspace-key-id-v1" ‖ key ‖ salt)`, truncated to 16 bytes and
+/** The one builder of a `WorkspaceReplicaKey`, so the id can never be derived
+ *  from a different pair than the one it travels with. The id is
+ *  `sha256("wb-workspace-key-id-v1" ‖ key ‖ salt)`, truncated to 16 bytes and
  *  base64url-encoded (22 chars, no padding) — the same encoding
- *  `workspaceKeySalt` already uses in the wire contract. */
-function deriveKeyId(key: Uint8Array, salt: Uint8Array): string {
-  const hash = createHash('sha256')
-  hash.update('wb-workspace-key-id-v1')
-  hash.update(key)
-  hash.update(salt)
-  return hash.digest().subarray(0, 16).toString('base64url')
+ *  `workspaceKeySalt` already uses in the wire contract. Truncate the BYTES,
+ *  not the string: base64url's 22nd character also encodes part of byte 16. */
+function withKeyId(
+  key: Uint8Array<ArrayBuffer>,
+  salt: Uint8Array<ArrayBuffer>,
+): WorkspaceReplicaKey {
+  const digest = createHash('sha256')
+    .update('wb-workspace-key-id-v1')
+    .update(key)
+    .update(salt)
+    .digest()
+  return { key, salt, keyId: digest.subarray(0, 16).toString('base64url') }
 }
 
 export interface WorkspaceReplicaKeyStoreOptions {
@@ -112,9 +119,7 @@ export function createWorkspaceReplicaKeyStore(
         .where('workspaceId', '=', workspaceId)
         .executeTakeFirst()
       if (existing !== undefined) {
-        const key = cloneBytes(existing.key)
-        const salt = cloneBytes(existing.salt)
-        return { key, salt, keyId: deriveKeyId(key, salt) }
+        return withKeyId(cloneBytes(existing.key), cloneBytes(existing.salt))
       }
       // Insert-then-reselect, not insert-then-return-what-was-generated: a
       // concurrent mint may have already won the PK conflict below, and every
@@ -135,9 +140,7 @@ export function createWorkspaceReplicaKeyStore(
         .select(['key', 'salt'])
         .where('workspaceId', '=', workspaceId)
         .executeTakeFirstOrThrow()
-      const key = cloneBytes(row.key)
-      const salt = cloneBytes(row.salt)
-      return { key, salt, keyId: deriveKeyId(key, salt) }
+      return withKeyId(cloneBytes(row.key), cloneBytes(row.salt))
     },
     tierFor,
     async effectiveTier(workspaceId) {
@@ -169,7 +172,7 @@ export function createWorkspaceReplicaKeyStore(
         .values({ workspaceId, key, salt, createdAt })
         .onConflict((oc) => oc.column('workspaceId').doUpdateSet({ key, salt, createdAt }))
         .execute()
-      return { key: cloneBytes(key), salt: cloneBytes(salt), keyId: deriveKeyId(key, salt) }
+      return withKeyId(cloneBytes(key), cloneBytes(salt))
     },
   }
 }
