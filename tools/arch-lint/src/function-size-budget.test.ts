@@ -535,7 +535,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/security/ws-ticket-store.ts#createWsTicketStore': 52,
   'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 202,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
-  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 53,
+  // 53 -> 58: the refresh interval's in-flight write is now held and awaited
+  // before the marker is removed. `clearInterval` cancels the next tick and
+  // not the one already running, so a straggler used to recreate the marker
+  // after the `finally` deleted it — 8 of 60 runs, and the same straggler
+  // raced a test's own `rm -rf` into ENOTEMPTY on CI three times. The five
+  // lines are a promise handle, its assignment, the await, and three of
+  // comment saying why the await is there.
+  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 58,
   'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 214,
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,

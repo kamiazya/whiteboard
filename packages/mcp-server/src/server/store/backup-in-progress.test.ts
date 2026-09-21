@@ -101,6 +101,50 @@ describe('the backup-in-progress marker', () => {
    * fresh for as long as the pass runs. Without that a long copy expires its
    * own marker and GC resumes underneath it — the very window this closes.
    */
+  it('leaves no marker behind when a refresh was in flight as the pass ended', async () => {
+    // `setInterval(() => { void write() })` does not await its own write, and
+    // `clearInterval` cancels future ticks rather than the one already
+    // running. So a refresh that started just before the body returned used
+    // to land AFTER the `finally` removed the marker — recreating it, and
+    // leaving `backupIsInProgress` true for the rest of the TTL.
+    //
+    // Bounded by a RUN COUNT rather than a duration, for the reason the case
+    // below already gives: a time-boxed loop makes the slower machine do
+    // fewer attempts, which is what this file keeps being bitten by.
+    //
+    // Measured before the fix: 8 of 60 runs left the marker standing, and
+    // that straggler is also what raced the `afterEach` `rm` into
+    // `ENOTEMPTY: directory not empty` on CI three times.
+    const survivors: number[] = []
+    for (let run = 0; run < 60; run += 1) {
+      const runDir = await mkdtemp(join(tmpdir(), 'wb-backup-marker-straggler-'))
+      const staging = join(runDir, PENDING_WRITES_DIRNAME)
+      try {
+        await withBackupMarker(
+          runDir,
+          async () => {
+            // Return while a refresh is provably MID-WRITE. `writeFileAtomic`
+            // stages into `.pending-writes` and then renames, so a non-empty
+            // staging directory IS the condition "a write is in flight" —
+            // which is the state the straggler needs and the one a fixed
+            // sleep was only guessing at. Waiting on it is also what keeps
+            // this off the fixed-sleep ledger.
+            for (;;) {
+              const pending = await readdir(staging).catch(() => [])
+              if (pending.length > 0) return
+            }
+          },
+          { ttlMs: 60_000, refreshEveryMs: 1 },
+        )
+        if ((await readdir(runDir)).includes('backup-in-progress.json')) survivors.push(run)
+      } finally {
+        await rm(runDir, { recursive: true, force: true })
+      }
+    }
+
+    expect(survivors).toEqual([])
+  })
+
   it('stays valid across a pass longer than its own lifetime', async () => {
     // Asserted against the marker's own timestamps, never the wall clock.
     // Two earlier shapes of this test raced real timers and lost under a
