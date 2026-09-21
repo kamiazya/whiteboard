@@ -61,6 +61,7 @@ const sources = import.meta.glob(
     './pages/use-document-actions.tsx',
     './pages/DaemonDocumentPage.tsx',
     './pages/use-daemon-connections.ts',
+    './pages/use-daemon-document-backend.ts',
     './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
@@ -570,7 +571,10 @@ const CASES = [
       // composes both verbs' rows.
       './pages/use-delete-document.ts',
       './pages/use-document-actions.tsx',
-      './pages/use-document-actions.tsx',
+      // WHICH connection this page syncs through, and the auth refusal that
+      // belongs to a connection: moved THERE, so this ledger still accounts
+      // for `authError` and `createBackendRef`.
+      './pages/use-daemon-document-backend.ts',
     ],
     ledger: DAEMON_DOCUMENT_PAGE_STATE,
     label: 'DaemonDocumentPage',

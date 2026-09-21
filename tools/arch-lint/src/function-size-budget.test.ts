@@ -365,7 +365,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // is still the audit's slice-4 subject
   // (`issues/audit-2026-09-21-backlog`, item 6) and splitting it is that
   // lane's work, not this feature's.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 727,
+  // 727 -> 583: the backend seam left for `use-daemon-document-backend.ts`
+  // (audit item 6 slice 4). Recorded at the measurement rather than left at
+  // the old ceiling, so the next change spends headroom deliberately.
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 583,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
@@ -389,6 +392,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // `createDocument` ends with.
   // 182 -> 194 for `deleteDocument`: the delete call plus the same list
   // refresh and path move its two siblings end with.
+  // The backend seam out of `useDaemonDocument` (727 -> 583). Over the budget
+  // as it stands, and it was over the budget inside its host too — what this
+  // records is that it is now NAMED: one memo deciding which connection this
+  // page syncs through, the transport rule in front of it, and the auth
+  // refusal that belongs to a connection rather than to a page.
+  'apps/web/src/pages/use-daemon-document-backend.ts#useDaemonDocumentBackend': 118,
   'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 194,
   // The document-menu bundle: two hooks, two rows, the dialog and the alert
   // row. It is over the budget because it RETURNS JSX — the rows and the
