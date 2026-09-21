@@ -89,6 +89,58 @@ const ADDRESSED_ID = '01M231FG6BGKKWW4BAA6Z1C945'
  */
 const NAVIGATION_CEILING = 8
 
+/**
+ * What a cold load of this two-workspace arrangement COSTS, per endpoint,
+ * measured rather than assumed (three consecutive runs, 2026-09-21).
+ *
+ * This is the instrument the navigation ceiling above could not be. The
+ * storm this file is named for was counted in REQUESTS — two thirds of it
+ * `/document-tags`, an endpoint whose answer nobody blocks on — and a
+ * settle that rewrites the address once while asking for the same document
+ * list ten times is a storm that the ceiling reports as fine.
+ *
+ * Read the numbers before trusting them, because they are not 1:
+ *
+ * | endpoint  | addressed (`/w/default`) | settled from `/` |
+ * |-----------|--------------------------|------------------|
+ * | workspaces| 1-2 (varies by timing)   | 2                |
+ * | documents | 3                        | 1                |
+ * | names     | 3                        | 1                |
+ * | tags      | 4                        | 0                |
+ * | trash     | 2                        | 1                |
+ *
+ * The addressed path asks for ONE workspace's documents THREE times, and
+ * for its tag vocabulary four times. That is duplicate work, it is stable,
+ * and it is not what this file was opened to fix — so it is pinned here as
+ * what IS rather than what should be, and reducing it is its own change
+ * with its own before/after. Pinning it is what makes that change legible:
+ * whoever lowers these numbers will see them move.
+ *
+ * A ceiling AND a floor, because a fixture that answers nothing also
+ * reports zero, which is the failure these numbers are meant to catch.
+ */
+const COLD_LOAD_BUDGET = {
+  addressed: { workspaces: 2, documents: 3, names: 3, tags: 4, trash: 2 },
+  settled: { workspaces: 2, documents: 1, names: 1, tags: 0, trash: 1 },
+} as const
+
+function expectWithinBudget(
+  counts: Record<Endpoint, number>,
+  budget: { workspaces: number; documents: number; names: number; tags: number; trash: number },
+) {
+  for (const [endpoint, ceiling] of Object.entries(budget)) {
+    expect(
+      counts[endpoint as Endpoint],
+      `${endpoint} requests on one cold load (budget ${ceiling})`,
+    ).toBeLessThanOrEqual(ceiling)
+  }
+  // The floor: a cold load that reached the daemon at all asked for the
+  // workspace list and one workspace's documents. Without this, a fixture
+  // wired to nothing passes every ceiling above.
+  expect(counts.workspaces).toBeGreaterThanOrEqual(1)
+  expect(counts.documents).toBeGreaterThanOrEqual(1)
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -96,12 +148,34 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+/**
+ * Every endpoint a cold load of this arrangement can reach. `names` and
+ * `tags` answer 404 here (they always have — the page treats both as
+ * optional), but they are COUNTED, because the storm this file is named for
+ * was two thirds `/document-tags`: an endpoint whose answer nobody needs is
+ * exactly where repetition hides.
+ */
+type Endpoint = 'workspaces' | 'documents' | 'names' | 'tags' | 'trash' | 'fonts' | 'other'
+
 function installDaemonFetch() {
   const documentsAsked: string[] = []
+  const counts: Record<Endpoint, number> = {
+    workspaces: 0,
+    documents: 0,
+    names: 0,
+    tags: 0,
+    trash: 0,
+    fonts: 0,
+    other: 0,
+  }
+  const count = (endpoint: Endpoint) => {
+    counts[endpoint] += 1
+  }
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     const method = init?.method ?? 'GET'
     if (url.endsWith('/api/workspaces') && method === 'GET') {
+      count('workspaces')
       return Promise.resolve(
         jsonResponse({
           workspaces: [
@@ -117,6 +191,7 @@ function installDaemonFetch() {
       // segment and for the segment-less one is the raw canonical id — the
       // whole reason this arrangement makes the wrong answer visible.
       const handle = decodeURIComponent(documents[1] as string)
+      count('documents')
       documentsAsked.push(handle)
       if (handle !== 'default' && handle !== ADDRESSED_ID) {
         return Promise.resolve(jsonResponse({ documents: [] }))
@@ -140,16 +215,38 @@ function installDaemonFetch() {
       )
     }
     if (url.match(/\/api\/workspaces\/[^/]+\/trash$/)) {
+      count('trash')
       return Promise.resolve(jsonResponse({ entries: [] }))
+    }
+    if (url.match(/\/api\/workspaces\/[^/]+\/names$/)) {
+      count('names')
+      return Promise.resolve(jsonResponse({}, 404))
+    }
+    if (url.includes('/document-tags')) {
+      count('tags')
+      return Promise.resolve(jsonResponse({}, 404))
     }
     // Answered rather than 404'd: App asks the daemon for its installed faces
     // as soon as it has a target, and a refusal there is a REPORTED failure
     // the jsdom guard would fail this file for. Nothing here is about fonts.
-    if (url.endsWith('/api/fonts')) return Promise.resolve(jsonResponse({ fonts: [] }))
+    if (url.endsWith('/api/fonts')) {
+      count('fonts')
+      return Promise.resolve(jsonResponse({ fonts: [] }))
+    }
+    count('other')
     return Promise.resolve(jsonResponse({}, 404))
   })
   vi.stubGlobal('fetch', fetchMock)
-  return { documentsAsked }
+  return { documentsAsked, counts }
+}
+
+/** Lets a settle's own follow-up requests land before the counts are read. */
+async function settleRequests() {
+  for (let i = 0; i < 5; i += 1) {
+    await act(async () => {
+      await Promise.resolve()
+    })
+  }
 }
 
 afterEach(() => {
@@ -158,7 +255,7 @@ afterEach(() => {
 })
 
 it('opens the workspace the address names, not the one the daemon lists first', async () => {
-  const { documentsAsked } = installDaemonFetch()
+  const { documentsAsked, counts } = installDaemonFetch()
   const router = createMemoryRouter(
     [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
     {
@@ -177,6 +274,34 @@ it('opens the workspace the address names, not the one the daemon lists first', 
   // sticky selection did: it resolved that workspace, asked for its
   // documents, and only then met the address.
   expect(documentsAsked).not.toContain(NO_SEGMENT_ID)
+  await settleRequests()
+  expectWithinBudget(counts, COLD_LOAD_BUDGET.addressed)
+})
+
+it('costs the same to address a workspace by its canonical id as by its segment', async () => {
+  // ADR-0019 gives a workspace TWO handle forms, and every guard in the
+  // address sync compares PATHNAMES rather than the workspace a pathname
+  // resolves to — so the id form is a distinct address for the same
+  // workspace, and it is the form no other test in this repo drives. If a
+  // guard is defeated by it, the cost shows up here as a count, on the one
+  // endpoint each duplicated round would touch.
+  const { documentsAsked, counts } = installDaemonFetch()
+  const router = createMemoryRouter(
+    [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+    { initialEntries: [`/w/${ADDRESSED_ID}`] },
+  )
+  await act(async () => {
+    render(<RouterProvider router={router} />)
+  })
+
+  await screen.findByText('Font check')
+  // It normalises to the segment, which is the handle the workspace prefers.
+  await waitFor(() => {
+    expect(router.state.location.pathname).toBe('/w/default')
+  })
+  expect(documentsAsked).not.toContain(NO_SEGMENT_ID)
+  await settleRequests()
+  expectWithinBudget(counts, COLD_LOAD_BUDGET.addressed)
 })
 
 it('settles an address that named no workspace once, instead of trading it', async () => {
@@ -190,7 +315,7 @@ it('settles an address that named no workspace once, instead of trading it', asy
   // which is also what a subscription that was never wired reports, and the
   // addressed case above really does settle at zero — so the floor is what
   // says this test is watching anything at all.
-  installDaemonFetch()
+  const { counts } = installDaemonFetch()
   const router = createMemoryRouter(
     [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
     {
@@ -218,6 +343,8 @@ it('settles an address that named no workspace once, instead of trading it', asy
   // First-listed, because nothing in the address asked for the other one —
   // the standing fallback, and the workspace whose handle is its raw id.
   expect(router.state.location.pathname).toBe(`/w/${NO_SEGMENT_ID}`)
+  await settleRequests()
+  expectWithinBudget(counts, COLD_LOAD_BUDGET.settled)
 })
 
 it('keeps a DOCUMENT address whole while the workspace settles', async () => {
