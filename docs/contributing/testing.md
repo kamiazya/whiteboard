@@ -271,10 +271,11 @@ hand until every check is reliable. Its check 1 (the replica pull) used to
 fail to fire in 2 of 6 local runs — a race between a daemon deep link's
 silent pairing renewal and the browser-keeper address rewrite, fixed by
 `awaitingDaemonRenewal` in `use-workspace-address-sync.ts` — and now passes
-ten consecutive runs on a fresh build. Check 4 still fails on every run, a
-separate pre-existing defect unrelated to that fix (tracked on the
-read-plane ticket), so the smoke stays out of `verify` until it is resolved
-too.
+ten consecutive runs on a fresh build. Check 4 now fails on every run for a
+different reason: it asserts the landing a removed member got BEFORE
+membership gated the online routes (#1731), which that change inverted on
+purpose; the check is rewritten with the web slice that lands the removed
+page, and the smoke joins `verify` then.
 
 | Script | What it crosses for real |
 |---|---|
