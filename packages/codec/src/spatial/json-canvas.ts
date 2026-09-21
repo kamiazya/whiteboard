@@ -19,10 +19,11 @@ import { z } from 'zod'
  * It lives in the codec because it is a WIRE shape —
  * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md). Until
  * now it was the product's model, and this declaration is that model's schema
- * LIFTED here rather than a second one written beside it: `json-canvas.test.ts`
- * holds the two structurally identical while they are meant to be, and both of
- * its checks are deleted the moment the model diverges, when the round-trip
- * property takes over the claim.
+ * LIFTED here rather than a second one written beside it. Two equivalence
+ * tests held the wire shape and the model structurally identical while they
+ * were meant to be; the model has since diverged and both were deleted,
+ * exactly as they said they would be. The round-trip property carries the
+ * claim now.
  *
  * What the schemas below reuse from the model is vocabulary the two genuinely
  * share — an id, a colour, a comment, the facet key grammar. What they declare
