@@ -713,6 +713,35 @@ function createLine(canvas: SpatialCanvas, line: CanvasLine): SpatialCanvas {
  * when there is no such line — `updateNode`'s sibling, and the same totality
  * contract.
  */
+/**
+ * The input canvas when no edge carries the id, the way `deleteNode` and
+ * `deleteLine` already answer. Written inline as a bare `filter` until now,
+ * so a delete of an id nothing holds built a NEW canvas — nothing changed
+ * and everything keyed on canvas identity redrew.
+ */
+function deleteEdge(canvas: SpatialCanvas, id: string): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== id) }
+}
+
+/**
+ * An edge, replaced through `update`, or the input canvas when nothing
+ * carries the id — the edge twin of `updateNode` and `updateLine`.
+ *
+ * It did not exist, so eight call sites re-derived the same `some()` guard
+ * and `map` by hand. A guard written fifteen times is a guard the sixteenth
+ * site can omit, and `delete-edge` is what that looks like: it was the one
+ * that did.
+ */
+function updateEdge(
+  canvas: SpatialCanvas,
+  id: string,
+  update: (edge: CanvasEdge) => CanvasEdge,
+): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  return { ...canvas, edges: canvas.edges.map((edge) => (edge.id === id ? update(edge) : edge)) }
+}
+
 function updateLine(
   canvas: SpatialCanvas,
   id: string,
@@ -824,18 +853,16 @@ function setEdgeEnd(
 ): SpatialCanvas {
   const edge = canvas.edges.find((candidate) => candidate.id === id)
   if (edge === undefined) return canvas
+  // Two refusals the id guard cannot make: the node has to exist, and an
+  // edge may not be pointed at the node its OTHER end already names.
   if (!canvas.nodes.some((candidate) => candidate.id === node)) return canvas
   if (otherEndNode(edge, endpoint) === node) return canvas
-  return {
-    ...canvas,
-    edges: canvas.edges.map((candidate) => {
-      if (candidate.id !== id) return candidate
-      // `side` goes and `end` stays — see the command's own declaration for
-      // which of the two belongs to the box and which to the person.
-      const { side: _left, node: _was, ...rest } = candidate[endpoint]
-      return { ...candidate, [endpoint]: { ...rest, node } }
-    }),
-  }
+  return updateEdge(canvas, id, (candidate) => {
+    // `side` goes and `end` stays — see the command's own declaration for
+    // which of the two belongs to the box and which to the person.
+    const { side: _left, node: _was, ...rest } = candidate[endpoint]
+    return { ...candidate, [endpoint]: { ...rest, node } }
+  })
 }
 
 function setLineEnd(
@@ -952,22 +979,17 @@ function setEdgeEnds(
   fromEnd: 'none' | 'arrow',
   toEnd: 'none' | 'arrow',
 ): SpatialCanvas {
-  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  return {
-    ...canvas,
-    edges: canvas.edges.map((edge) => {
-      if (edge.id !== id) return edge
-      // An arrowhead lives ON the end it is drawn at (ADR-0037 slice 3), so
-      // the default is spelled by ABSENCE there rather than by a sibling key.
-      const { end: _fromEnd, ...from } = edge.from
-      const { end: _toEnd, ...to } = edge.to
-      return {
-        ...edge,
-        from: { ...from, ...(fromEnd === 'none' ? {} : { end: fromEnd }) },
-        to: { ...to, ...(toEnd === 'arrow' ? {} : { end: toEnd }) },
-      }
-    }),
-  }
+  return updateEdge(canvas, id, (edge) => {
+    // An arrowhead lives ON the end it is drawn at (ADR-0037 slice 3), so
+    // the default is spelled by ABSENCE there rather than by a sibling key.
+    const { end: _fromEnd, ...from } = edge.from
+    const { end: _toEnd, ...to } = edge.to
+    return {
+      ...edge,
+      from: { ...from, ...(fromEnd === 'none' ? {} : { end: fromEnd }) },
+      to: { ...to, ...(toEnd === 'arrow' ? {} : { end: toEnd }) },
+    }
+  })
 }
 
 /** `color: undefined` removes the field — the theme default, canonically. */
@@ -1054,21 +1076,16 @@ function setNodeFacet(
   key: string,
   payload: unknown,
 ): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id)) return canvas
-  return {
-    ...canvas,
-    nodes: canvas.nodes.map((node) => {
-      if (node.id !== id) return node
-      const { facets, ...rest } = node
-      const { [key]: _previous, ...otherFacets } = facets ?? {}
-      const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-      // The node's `embed` is untouched: independent fields now, where the
-      // format's extension made them two arms of one union.
-      return Object.keys(nextFacets).length === 0
-        ? (rest as typeof node)
-        : ({ ...rest, facets: nextFacets } as typeof node)
-    }),
-  }
+  return updateNode(canvas, id, (node) => {
+    const { facets, ...rest } = node
+    const { [key]: _previous, ...otherFacets } = facets ?? {}
+    const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
+    // The node's `embed` is untouched: independent fields now, where the
+    // format's extension made them two arms of one union.
+    return Object.keys(nextFacets).length === 0
+      ? (rest as typeof node)
+      : ({ ...rest, facets: nextFacets } as typeof node)
+  })
 }
 
 /**
@@ -1084,17 +1101,12 @@ function setEdgeFacet(
   key: string,
   payload: unknown,
 ): SpatialCanvas {
-  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  return {
-    ...canvas,
-    edges: canvas.edges.map((edge) => {
-      if (edge.id !== id) return edge
-      const { facets, ...rest } = edge
-      const { [key]: _previous, ...otherFacets } = facets ?? {}
-      const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
-      return Object.keys(nextFacets).length === 0 ? rest : { ...rest, facets: nextFacets }
-    }),
-  }
+  return updateEdge(canvas, id, (edge) => {
+    const { facets, ...rest } = edge
+    const { [key]: _previous, ...otherFacets } = facets ?? {}
+    const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
+    return Object.keys(nextFacets).length === 0 ? rest : { ...rest, facets: nextFacets }
+  })
 }
 
 function setEdgeBends(
@@ -1102,15 +1114,10 @@ function setEdgeBends(
   id: string,
   bends: readonly { readonly x: number; readonly y: number }[],
 ): SpatialCanvas {
-  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  return {
-    ...canvas,
-    edges: canvas.edges.map((edge) => {
-      if (edge.id !== id) return edge
-      const { bends: _previous, ...rest } = edge
-      return bends.length === 0 ? rest : { ...rest, bends: [...bends] }
-    }),
-  }
+  return updateEdge(canvas, id, (edge) => {
+    const { bends: _previous, ...rest } = edge
+    return bends.length === 0 ? rest : { ...rest, bends: [...bends] }
+  })
 }
 
 /**
@@ -1142,23 +1149,16 @@ function setNodeColor(
   id: string,
   color: CanvasColor | undefined,
 ): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id)) return canvas
-  return {
-    ...canvas,
-    nodes: canvas.nodes.map((node) => {
-      if (node.id !== id) return node
-      const { color: _removed, ...rest } = node
-      return color === undefined ? rest : { ...rest, color }
-    }),
-  }
+  return updateNode(canvas, id, (node) => {
+    const { color: _removed, ...rest } = node
+    return color === undefined ? rest : { ...rest, color }
+  })
 }
 
 function setNodeFile(canvas: SpatialCanvas, id: string, file: string): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && nodeFile(node) !== undefined)) return canvas
-  return {
-    ...canvas,
-    nodes: canvas.nodes.map((node) => (node.id === id ? withNodeFile(node, file) : node)),
-  }
+  return updateNode(canvas, id, (node) =>
+    nodeFile(node) !== undefined ? withNodeFile(node, file) : undefined,
+  )
 }
 
 function createGroup(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
@@ -1167,15 +1167,11 @@ function createGroup(canvas: SpatialCanvas, node: SpatialNode): SpatialCanvas {
 }
 
 function setGroupLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && isFrame(node))) return canvas
-  return {
-    ...canvas,
-    nodes: canvas.nodes.map((node) => {
-      if (node.id !== id || !isFrame(node)) return node
-      const { label: _removed, ...rest } = node
-      return label === '' ? rest : { ...rest, label }
-    }),
-  }
+  return updateNode(canvas, id, (node) => {
+    if (!isFrame(node)) return undefined
+    const { label: _removed, ...rest } = node
+    return label === '' ? rest : { ...rest, label }
+  })
 }
 
 function setGroupBackground(
@@ -1184,28 +1180,22 @@ function setGroupBackground(
   background: string | undefined,
   backgroundStyle: 'cover' | 'ratio' | 'repeat' | undefined,
 ): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && isFrame(node))) return canvas
-  return {
-    ...canvas,
-    nodes: canvas.nodes.map((node) => {
-      if (node.id !== id || !isFrame(node)) return node
-      const { background: _bg, backgroundStyle: _style, ...rest } = node
-      if (background === undefined) return rest
-      return {
-        ...rest,
-        background,
-        ...(backgroundStyle !== undefined ? { backgroundStyle } : {}),
-      }
-    }),
-  }
+  return updateNode(canvas, id, (node) => {
+    if (!isFrame(node)) return undefined
+    const { background: _bg, backgroundStyle: _style, ...rest } = node
+    if (background === undefined) return rest
+    return {
+      ...rest,
+      background,
+      ...(backgroundStyle !== undefined ? { backgroundStyle } : {}),
+    }
+  })
 }
 
 function setNodeUrl(canvas: SpatialCanvas, id: string, url: string): SpatialCanvas {
-  if (!canvas.nodes.some((node) => node.id === id && nodeUrl(node) !== undefined)) return canvas
-  return {
-    ...canvas,
-    nodes: canvas.nodes.map((node) => (node.id === id ? withNodeUrl(node, url) : node)),
-  }
+  return updateNode(canvas, id, (node) =>
+    nodeUrl(node) !== undefined ? withNodeUrl(node, url) : undefined,
+  )
 }
 
 function setEdgeColor(
@@ -1213,15 +1203,10 @@ function setEdgeColor(
   id: string,
   color: CanvasColor | undefined,
 ): SpatialCanvas {
-  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  return {
-    ...canvas,
-    edges: canvas.edges.map((edge) => {
-      if (edge.id !== id) return edge
-      const { color: _removed, ...rest } = edge
-      return color === undefined ? rest : { ...rest, color }
-    }),
-  }
+  return updateEdge(canvas, id, (edge) => {
+    const { color: _removed, ...rest } = edge
+    return color === undefined ? rest : { ...rest, color }
+  })
 }
 
 /** `side: undefined` removes the pin so routing derives the side again. */
@@ -1231,33 +1216,23 @@ function setEdgeSide(
   endpoint: 'from' | 'to',
   side: 'top' | 'right' | 'bottom' | 'left' | undefined,
 ): SpatialCanvas {
-  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  return {
-    ...canvas,
-    edges: canvas.edges.map((edge) => {
-      if (edge.id !== id) return edge
-      // An EDGE's end always names a node since ADR-0038 decision 2, so the
-      // narrowing the free arm used to need is gone. Pinning a side on a LINE
-      // is its own command when the editor grows one.
-      const { side: _removed, ...rest } = edge[endpoint]
-      return { ...edge, [endpoint]: side === undefined ? rest : { ...rest, side } }
-    }),
-  }
+  return updateEdge(canvas, id, (edge) => {
+    // An EDGE's end always names a node since ADR-0038 decision 2, so the
+    // narrowing the free arm used to need is gone. Pinning a side on a LINE
+    // is its own command when the editor grows one.
+    const { side: _removed, ...rest } = edge[endpoint]
+    return { ...edge, [endpoint]: side === undefined ? rest : { ...rest, side } }
+  })
 }
 
 function setEdgeLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
-  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  return {
-    ...canvas,
-    edges: canvas.edges.map((edge) => {
-      if (edge.id !== id) return edge
-      if (label === '') {
-        const { label: _removed, ...rest } = edge
-        return rest
-      }
-      return { ...edge, label }
-    }),
-  }
+  return updateEdge(canvas, id, (edge) => {
+    if (label === '') {
+      const { label: _removed, ...rest } = edge
+      return rest
+    }
+    return { ...edge, label }
+  })
 }
 
 /**
@@ -1324,7 +1299,7 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
     case 'create-node':
       return createNode(canvas, command.node)
     case 'delete-edge':
-      return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== command.id) }
+      return deleteEdge(canvas, command.id)
     case 'create-line':
       return createLine(canvas, command.line)
     case 'delete-line':
@@ -1362,23 +1337,9 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
     case 'set-edge-facet':
       return setEdgeFacet(canvas, command.id, command.key, command.payload)
     case 'set-node-tags':
-      return canvas.nodes.some((node) => node.id === command.id)
-        ? {
-            ...canvas,
-            nodes: canvas.nodes.map((node) =>
-              node.id === command.id ? withTagList(node, command.tags) : node,
-            ),
-          }
-        : canvas
+      return updateNode(canvas, command.id, (node) => withTagList(node, command.tags))
     case 'set-edge-tags':
-      return canvas.edges.some((edge) => edge.id === command.id)
-        ? {
-            ...canvas,
-            edges: canvas.edges.map((edge) =>
-              edge.id === command.id ? withTagList(edge, command.tags) : edge,
-            ),
-          }
-        : canvas
+      return updateEdge(canvas, command.id, (edge) => withTagList(edge, command.tags))
     case 'set-canvas-tags':
       return withTagList(canvas, command.tags)
     case 'set-edge-bends':

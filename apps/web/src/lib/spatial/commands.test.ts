@@ -31,6 +31,7 @@ import {
   endInkCommand,
   labelInkCommand,
 } from './commands.js'
+import commandsSource from './commands.ts?raw'
 
 function baseCanvas(): SpatialCanvas {
   return {
@@ -1947,5 +1948,95 @@ describe('re-attaching an end', () => {
     // which is what the gesture reads to leave the end where it was.
     expect(endInkCommand(canvas, 'e1', 'to', inAir)).toBeUndefined()
     expect(endInkCommand(canvas, 'nope', 'to', onC)).toBeUndefined()
+  })
+})
+
+// Every command that names an ELEMENT by id answers the input canvas BY
+// REFERENCE when nothing carries that id. Reference equality rather than
+// deep equality, because that is the property a caller depends on: a
+// re-render is skipped when the object is the same one.
+//
+// The fixture carries a node, an edge AND a line on purpose. On a canvas
+// whose `edges` is `[]` the `some()` guard is trivially false and the test
+// passes over a site that has no guard at all — which is most of what makes
+// this class silent.
+//
+// The table's payloads are hand-written; WHICH kinds have to be in it is
+// read off `commands.ts` itself, so a `set-node-*`/`set-edge-*`/`set-line-*`
+// command added later arrives unlisted and fails rather than joining the
+// fifteen sites that each re-derive this guard by hand.
+describe('a command naming an id nothing carries is a no-op', () => {
+  const populated = (): SpatialCanvas => ({
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
+    edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'a' } }],
+    lines: [
+      {
+        id: 'l1',
+        from: { kind: 'point' as const, point: { x: 1, y: 1 } },
+        to: { kind: 'point' as const, point: { x: 2, y: 2 } },
+        bends: [{ x: 3, y: 3 }],
+      },
+    ],
+  })
+
+  const MISSING = 'no-such-id'
+
+  const NO_OP: EditorCommand[] = [
+    { kind: 'move-node', id: MISSING, x: 1, y: 1 },
+    { kind: 'resize-node', id: MISSING, x: 1, y: 1, width: 10, height: 10 },
+    { kind: 'delete-node', id: MISSING },
+    { kind: 'set-text', id: MISSING, text: 'x' },
+    { kind: 'set-node-color', id: MISSING, color: '1' },
+    { kind: 'set-node-facet', id: MISSING, key: 'k/v0', payload: {} },
+    { kind: 'set-node-file', id: MISSING, file: 'x.png' },
+    { kind: 'set-node-tags', id: MISSING, tags: ['t'] },
+    { kind: 'set-node-url', id: MISSING, url: 'https://example.com' },
+    { kind: 'set-group-background', id: MISSING, background: 'b' },
+    { kind: 'set-group-label', id: MISSING, label: 'x' },
+    { kind: 'delete-edge', id: MISSING },
+    { kind: 'set-edge-bends', id: MISSING, bends: [{ x: 1, y: 1 }] },
+    { kind: 'set-edge-color', id: MISSING, color: '1' },
+    { kind: 'set-edge-end', id: MISSING, endpoint: 'from', node: 'a' },
+    { kind: 'set-edge-ends', id: MISSING, fromEnd: 'arrow', toEnd: 'none' },
+    { kind: 'set-edge-facet', id: MISSING, key: 'k/v0', payload: {} },
+    { kind: 'set-edge-label', id: MISSING, label: 'x' },
+    { kind: 'set-edge-side', id: MISSING, endpoint: 'from', side: 'top' },
+    { kind: 'set-edge-tags', id: MISSING, tags: ['t'] },
+    { kind: 'delete-line', id: MISSING },
+    { kind: 'move-line', id: MISSING, dx: 1, dy: 1 },
+    { kind: 'set-line-bends', id: MISSING, bends: [{ x: 1, y: 1 }] },
+    { kind: 'set-line-color', id: MISSING, color: '1' },
+    { kind: 'set-line-end', id: MISSING, endpoint: 'from', target: { kind: 'node', node: 'a' } },
+    { kind: 'set-line-facet', id: MISSING, key: 'k/v0', payload: {} },
+    { kind: 'set-line-ends', id: MISSING, fromEnd: 'arrow', toEnd: 'none' },
+    { kind: 'set-line-label', id: MISSING, label: 'x' },
+    { kind: 'set-line-side', id: MISSING, endpoint: 'from', side: 'top' },
+  ]
+
+  it('lists every set-node/edge-/line- command the switch declares', () => {
+    const declared = [
+      ...new Set(
+        [...commandsSource.matchAll(/case '(set-(?:node|edge|line)-[a-z-]+)':/g)].map(
+          (match) => match[1] as string,
+        ),
+      ),
+    ].sort()
+    // A scan that stopped matching would report the table as complete.
+    expect(declared.length).toBeGreaterThan(15)
+    const listed = new Set(NO_OP.map((command) => command.kind))
+    // Two match the shape and take no element id: both are canvas-WIDE
+    // settings whose names say `edge`/`line` because that is what they style,
+    // so there is no missing id for them to no-op on.
+    const noElementId = new Set(['set-line-jumps', 'set-edge-routing'])
+    expect(
+      declared.filter(
+        (kind) => !listed.has(kind as EditorCommand['kind']) && !noElementId.has(kind),
+      ),
+    ).toEqual([])
+  })
+
+  it.each(NO_OP)('$kind', (command) => {
+    const canvas = populated()
+    expect(applyCommand(canvas, command)).toBe(canvas)
   })
 })
