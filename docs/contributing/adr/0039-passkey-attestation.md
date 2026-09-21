@@ -4,8 +4,13 @@
 [ADR-0035](0035-device-keys-and-keeper.md) and amends the scope of its decision
 1 (that ADR carries the addendum). Decisions 1, 2, 3, 5 and 7, the promotion
 row of decision 4, and the History states of decision 9 are **implemented**
-(see *Implementation*, dated 2026-09-17); decision 6 and decision 9's profile
-are design of record, with their 2026-09-17 refinements under *Revisions*.
+(see *Implementation*, dated 2026-09-17); decision 6's BROWSER-workspace gate
+and decision 9's profile are design of record, with their 2026-09-17
+refinements under *Revisions*. Decision 6's user-verification gate for a
+DAEMON-kept workspace shipped 2026-09-21 as
+[ADR-0042](0042-offline-revocation.md) decision 6 — and cryptographically
+rather than screen-side, which is the opposite of what the 2026-09-17
+refinement expected (see *Revisions*).
 Revised the same day as acceptance, before it, when review split "verified"
 into a CLAIM and its EVIDENCE — decisions 5, 8 and 9, and the second paragraph
 of decision 2, are that revision; the first draft's decision 5 is kept under
@@ -411,6 +416,22 @@ no origin-squatting analogue. Rejected because moment 1 is exactly the boundary
 where the daemon has nothing to check, and moment 2 has no daemon in it at all.
 
 ## Revisions
+
+**2026-09-21 — the daemon-kept half of decision 6 shipped, and it is not
+screen-side.** The 2026-09-17 refinement below accepted that "for a
+daemon-kept workspace the gate is a screen-side hiding of content any paired
+origin can still fetch", and scoped the first increment to browser-kept
+workspaces for that reason. ADR-0042's sealed replica changed the premise:
+the content on this device is ciphertext, and the key that opens it is what
+the verified assertion produces. So the daemon-kept gate is real — a person
+who cannot satisfy the authenticator cannot read the copy, rather than being
+shown a page with the content withheld — and it arrived as ADR-0042 decision
+6's cold-start unlock, on one gesture as both ADRs required.
+
+What this does NOT change: decision 6's own browser-workspace gate remains
+design of record. A browser-kept workspace stores plain bytes by design
+(ADR-0042's split), so a gate there still hides rather than encrypts, and
+that is still the coarse-granularity trade this file already accepted.
 
 **2026-09-17 — decision 6 refined to a WORKSPACE gate, and decision 9's
 profile given a direction.** Two things the implementation of decisions 1–5

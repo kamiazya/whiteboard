@@ -189,10 +189,28 @@ workspace's replica is encrypted per chunk before it ever reaches IndexedDB —
 a browser-kept workspace (and every single document, replica or not) stores
 plain bytes as it always did, and the split is decided in one place
 (`apps/web/src/lib/replica-store.ts`'s `openDocumentStore`). The session key
-itself is never persisted: it lives only in an in-memory holder for the tab's
-life, so closing the tab and reopening it offline finds ciphertext with
-nothing to open it — there is no browser-side unlock without the daemon
-(a `prf`-derived cold start is deferred future work). A `bounded` lease
+itself is never persisted in the clear: it lives in an in-memory holder for
+the tab's life.
+
+**A later tab can open the copy without the daemon, using the passkey.**
+When the session's own passkey assertion produces a WebAuthn `prf` output —
+the same gesture that proves who is asking, never a second prompt — the key
+is wrapped under a value derived from that output and the ciphertext is left
+beside the replica. A cold start then offers "Unlock with your passkey": one
+gesture, no network. What lands on disk is useless to whatever later owns the
+origin, because the material that opens it exists only inside the
+authenticator.
+
+The cost is stated on the same screen, because it is real: **the passkey
+provider becomes the recovery path.** Lose that credential and this device's
+copy cannot be read again — the daemon still keeps the workspace, so a fresh
+copy can be pulled, but what had not yet reached the daemon is gone. Support
+for the extension is broad on platform authenticators and not universal; an
+authenticator that ignores it still verifies the person, and only the cold
+start is missing, leaving the earlier behaviour (the key lives for the tab's
+life) exactly as it was.
+
+A `bounded` lease
 lapses client-side on the same clock check the daemon's own copy uses, and a
 membership revocation is felt at the next ask, not before: an already-read
 replica stays readable in memory until the tab closes, matching the
@@ -202,18 +220,27 @@ recorded to seal it retroactively — the next IndexedDB open (`DB_VERSION`
 20) discards that record outright, chunks included, and the next daemon
 resolve re-pulls it sealed.
 
-**The offline read page shows one of five states**, decided from what the
-daemon's renewal answered and what the in-memory key holder knows, never
-from a raw network error read directly:
+**The offline read page shows one of six states**, decided from what the
+daemon's renewal answered, what the in-memory key holder knows, and whether
+this device remembered a wrapped key — never from a raw network error read
+directly:
 
 - **Needs a connection** — nothing is kept on this device yet.
 - **Readable, daemon unreachable** — the key is held in memory (a session
   that began online); edits keep accumulating and ship to the daemon once
   it returns.
-- **Locked, reconnect to unlock** — a copy is on this device but the key is
-  not held (a cold start, or a `bounded` lease that lapsed); a Reconnect
-  action re-asks the daemon and, if it answers, unlocks the same page
-  without losing the person's place.
+- **Locked, reconnect to unlock** — a copy is on this device, the key is
+  not held, and nothing was remembered to open it with (a `bounded` lease
+  that lapsed, or a session that never produced a `prf` output); a
+  Reconnect action re-asks the daemon and, if it answers, unlocks the same
+  page without losing the person's place.
+- **Unlock with your passkey** — a copy is on this device and a wrapped key
+  sits beside it, so one gesture opens it with the daemon unreachable. The
+  offer is withdrawn if the attempt shows nothing here can open the copy,
+  rather than repeated. It is never offered past a daemon decision: a
+  refused renewal or a membership refusal is the daemon reaching this
+  device, which is exactly when a revocation takes effect, and a local copy
+  must not outrank it.
 - **Unpaired** — the daemon was reached and no longer accepts this
   browser's pairing (the grant was revoked, or lost with the daemon's grant
   store). That says nothing about the person's membership, so the page says

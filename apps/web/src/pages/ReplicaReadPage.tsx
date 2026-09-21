@@ -45,10 +45,10 @@ import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
 import type { ReplicaKeyInput, ReplicaRenewalInput } from '../lib/replica-page-state.js'
-import { replicaPageState } from '../lib/replica-page-state.js'
+import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-state.js'
 import { lockedDetail, REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
-import { hasRememberedReplicaKey, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
+import { hasRememberedReplicaKey, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 
 export interface ReplicaReadPageProps {
@@ -85,6 +85,52 @@ function keyInputFor(state: LoadState): ReplicaKeyInput {
   if (state.kind === 'withheld') return { withheld: state.reason }
   if (state.kind === 'ready') return 'readable'
   return 'missing'
+}
+
+/**
+ * The panel every non-readable state renders: the state's sentence, its one
+ * action, and a line while that action is in flight.
+ *
+ * One component rather than a block per state, because the three that have
+ * an action ('needs-connection', 'locked', 'unlockable') differ only in
+ * their copy and what the button does — and a fourth arriving as a fourth
+ * near-identical block is how the first two came to drift apart in spacing.
+ */
+function ReplicaActionPanel({
+  state,
+  body,
+  action,
+  busy,
+  busyLine,
+  onAction,
+}: {
+  state: ReplicaPageState
+  body: string
+  action: string
+  busy: boolean
+  busyLine: string
+  onAction: () => void
+}) {
+  return (
+    <div className="p-4 text-sm text-muted-foreground" data-testid={`replica-state-${state}`}>
+      <p>{body}</p>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="mt-3"
+        aria-disabled={busy}
+        onClick={onAction}
+      >
+        {action}
+      </Button>
+      {busy && (
+        <p className="mt-2" data-testid={`replica-${state}-busy-line`}>
+          {busyLine}
+        </p>
+      )}
+    </div>
+  )
 }
 
 export function ReplicaReadPage({
@@ -476,50 +522,24 @@ export function ReplicaReadPage({
         </div>
       )}
       {(pageState === 'needs-connection' || pageState === 'locked') && (
-        <div
-          className="p-4 text-sm text-muted-foreground"
-          data-testid={`replica-state-${pageState}`}
-        >
-          <p>
-            {REPLICA_STATE_COPY[pageState].body}
-            {lockedLine && ` ${lockedLine}`}
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mt-3"
-            aria-disabled={reconnecting}
-            onClick={() => void handleReconnect()}
-          >
-            {REPLICA_STATE_COPY[pageState].action}
-          </Button>
-          {reconnecting && (
-            <p className="mt-2" data-testid="replica-reconnecting-line">
-              Reconnecting…
-            </p>
-          )}
-        </div>
+        <ReplicaActionPanel
+          state={pageState}
+          body={REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')}
+          action={REPLICA_STATE_COPY[pageState].action}
+          busy={reconnecting}
+          busyLine="Reconnecting…"
+          onAction={() => void handleReconnect()}
+        />
       )}
       {pageState === 'unlockable' && (
-        <div className="p-4 text-sm text-muted-foreground" data-testid="replica-state-unlockable">
-          <p>{REPLICA_STATE_COPY.unlockable.body}</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mt-3"
-            aria-disabled={unlocking}
-            onClick={() => void handleUnlock()}
-          >
-            {REPLICA_STATE_COPY.unlockable.action}
-          </Button>
-          {unlocking && (
-            <p className="mt-2" data-testid="replica-unlocking-line">
-              Waiting for your passkey…
-            </p>
-          )}
-        </div>
+        <ReplicaActionPanel
+          state="unlockable"
+          body={REPLICA_STATE_COPY.unlockable.body}
+          action={REPLICA_STATE_COPY.unlockable.action}
+          busy={unlocking}
+          busyLine="Waiting for your passkey…"
+          onAction={() => void handleUnlock()}
+        />
       )}
       {(pageState === 'removed' || pageState === 'unpaired') && (
         <p className="p-4 text-sm text-muted-foreground" data-testid={`replica-state-${pageState}`}>

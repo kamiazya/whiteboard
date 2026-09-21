@@ -351,7 +351,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 393,
+  // 393 -> 416: ADR-0042 decision 6's sixth state — an unlock attempt, the
+  // remembered-blob read, and one more render branch. Paid for first: the
+  // three action states now share ONE `ReplicaActionPanel` instead of a
+  // near-identical block each, which is where 26 of the added lines went.
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 416,
   // 89 -> 94: the Copies-on-this-device card mounts in BOTH branches, and
   // the disconnected one is where it matters most — with no daemon every
   // copy is browser-kept, so a card hidden there would hide the whole list.

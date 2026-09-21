@@ -29,8 +29,8 @@ import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
 import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
-import { rememberReplicaKey } from '../lib/replica-unlock.js'
 import { REPLICA_TIER_COPY } from '../lib/replica-tier-copy.js'
+import { rememberReplicaKey } from '../lib/replica-unlock.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -612,11 +612,11 @@ describe('ReplicaReadPage states', () => {
     const status = await screen.findByTestId('replica-live-status')
     expect(status.getAttribute('role')).toBe('status')
     await userEvent.click(await screen.findByRole('button', { name: 'Reconnect' }))
-    await screen.findByTestId('replica-reconnecting-line')
+    await screen.findByTestId('replica-locked-busy-line')
     expect(status.textContent).toBe('Reconnecting…')
     releaseReconnect()
     await vi.waitFor(() => {
-      expect(screen.queryByTestId('replica-reconnecting-line')).toBeNull()
+      expect(screen.queryByTestId('replica-locked-busy-line')).toBeNull()
       // 'locked' is itself a page-critical connectivity message, not
       // silence: a screen-reader user who was mid-'Reconnecting…' must
       // still hear why the page settled back where it did.

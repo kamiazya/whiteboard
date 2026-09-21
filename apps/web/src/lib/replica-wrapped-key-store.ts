@@ -11,7 +11,7 @@
  * **localStorage rather than IndexedDB**, deliberately. The requirement is
  * per-origin and surviving a tab close, which both satisfy; the blob is
  * ~120 bytes; and this way costs no `DB_VERSION` bump, no object store, no
- * entry in `idb-stored-shapes-surface.ts`'s ledger and no migration. It also
+ * entry in `idb-stored-shapes-surface.test.ts`'s ledger and no migration. It also
  * sits beside the passkey pin it is useless without, and the read-plane
  * smoke already scans localStorage for key bytes — so the guard that matters
  * is pointed at it for free.

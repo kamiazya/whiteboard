@@ -23,17 +23,18 @@
  * nothing. The challenge is random anyway, because a constant one would be
  * a signature a caller could replay somewhere that DOES verify.
  */
-import type { ReplicaKeyResponse } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import {
-  adoptSessionKey,
-  sessionKeyStatus,
-} from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import {
   deriveWrappingKey,
   unwrapWorkspaceKey,
   wrapWorkspaceKey,
 } from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
+import type { ReplicaKeyResponse } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import {
+  adoptSessionKey,
+  sessionKeyStatus,
+} from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   assertWithRegisteredPasskey,
   type PasskeyCredentials,
