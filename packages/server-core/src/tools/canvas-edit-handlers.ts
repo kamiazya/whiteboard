@@ -57,6 +57,299 @@ type OpNamed<K extends CanvasOp['op']> = Extract<CanvasOp, { op: K }>
  * (`fail`), which is what makes the batch all-or-nothing: no op reaches the
  * document until every one of them has applied.
  */
+/**
+ * How big a node the caller sized only partly, or not at all, comes out.
+ *
+ * Each fallback is its own rule, and they were three nested conditionals deep
+ * inside the `node.add` handler: a group keeps the flat default rather than
+ * the board's width (it is a container, not a column), and a text node's
+ * height is MEASURED against the width just decided when a measurer is
+ * available — which is why this cannot be a lookup table.
+ */
+function draftSize(
+  ctx: CanvasEditContext,
+  draft: NodeDraft,
+  id: string,
+): { width: number; height: number } {
+  const size = DEFAULT_SIZE[draft.type]
+  const width =
+    draft.width ?? (draft.type === 'group' ? size.width : (ctx.s.boardWidth ?? size.width))
+  if (draft.height !== undefined) return { width, height: draft.height }
+  if (draft.type !== 'text' || ctx.s.measure === undefined) return { width, height: size.height }
+  return {
+    width,
+    height: fittedHeight(
+      { ...draftContent(draft), id, x: 0, y: 0, width, height: size.height },
+      ctx.s.measure,
+      size.height,
+    ),
+  }
+}
+
+/**
+ * The model node a draft becomes, before validation.
+ *
+ * The published draft carries `type` plus one content field; the model carries
+ * a resource. That crossing happens here, at the tool's boundary — see
+ * `draftContent` for why the boundary exists at all — and the published names
+ * are destructured off so none rides through as an unknown key. `embed` and
+ * `facets` ARE the model's own fields on the input, so they travel in `rest`.
+ */
+function nodeFromDraft(
+  draft: NodeDraft,
+  id: string,
+  at: { x: number; y: number },
+  width: number,
+  height: number,
+): Record<string, unknown> {
+  const {
+    type: _type,
+    text: _text,
+    file: _file,
+    subpath: _subpath,
+    url: _url,
+    label: _label,
+    background: _background,
+    backgroundStyle: _backgroundStyle,
+    ...rest
+  } = draft as NodeDraft & Record<string, unknown>
+  return { ...rest, ...draftContent(draft), id, ...at, width, height }
+}
+
+/**
+ * A position the CALLER chose, in a group the caller named.
+ *
+ * Both are explicit, so the group grows until both hold — except before its
+ * top-left, which growth cannot reach, so that one is refused.
+ */
+function holdChosenPosition(
+  ctx: CanvasEditContext,
+  index: number,
+  op: string,
+  group: SpatialNode,
+  node: SpatialNode,
+): void {
+  const unplaced = ctx.s.placedByCursor.get(group.id)
+  if (unplaced !== undefined) {
+    ctx.s.placeAround(index, op, group, [node], unplaced)
+    return
+  }
+  if (node.x < group.x || node.y < group.y) {
+    fail(index, op, outsideDetail(node.id, node, group))
+  }
+  ctx.s.growToHold(index, op, group, [node])
+}
+
+/**
+ * Everything `region.set` refuses, refused UP FRONT — before anything is
+ * removed or moved.
+ *
+ * This op deletes by OMISSION, and silently dropping a locked element would be
+ * the worst possible reading of that. A listed node that is currently
+ * elsewhere is about to be moved, so its lock counts too. Written inline, four
+ * loops of refusal sat between the scope calculation and the first mutation,
+ * and "nothing is refused after something has moved" was a property of where
+ * those lines happened to be.
+ */
+function refuseRegionMembers(
+  ctx: CanvasEditContext,
+  index: number,
+  op: string,
+  groupId: string,
+  members: ReadonlySet<string>,
+  inScope: readonly SpatialNode[],
+  inScopeIds: ReadonlySet<string>,
+): void {
+  if (members.has(groupId)) {
+    fail(index, op, `"${groupId}" is the group itself, not one of its members`)
+  }
+  for (const id of members) {
+    if (ctx.s.nodeAt(id) === undefined) {
+      fail(
+        index,
+        op,
+        `node "${id}" is not on the canvas; region.set names members that exist — create it with node.add and within "${groupId}"`,
+      )
+    }
+  }
+  for (const node of inScope) {
+    if (ctx.s.nodeLocks.has(node.id)) {
+      fail(index, op, `node "${node.id}" inside the region is locked`)
+    }
+  }
+  for (const id of members) {
+    if (!inScopeIds.has(id) && ctx.s.nodeLocks.has(id)) {
+      fail(index, op, `node "${id}" is locked; unlock it before moving it into "${groupId}"`)
+    }
+  }
+}
+
+/**
+ * Where a drafted node goes: the position the caller gave, a slot inside the
+ * group they named, or the next place on the cursor's own walk.
+ *
+ * Partial geometry is treated as NONE — a node given an x but no y has no
+ * position, and guessing the other half would put it somewhere the caller did
+ * not ask for either.
+ */
+function placeDraft(
+  ctx: CanvasEditContext,
+  index: number,
+  op: string,
+  draft: NodeDraft,
+  within: string | undefined,
+  width: number,
+  height: number,
+): { positioned: boolean; group: SpatialNode | undefined; at: { x: number; y: number } } {
+  const positioned = draft.x !== undefined && draft.y !== undefined
+  const group = within === undefined ? undefined : ctx.s.groupNamed(index, op, within)
+  const at = positioned
+    ? { x: draft.x as number, y: draft.y as number }
+    : group === undefined
+      ? ctx.s.cursor.next(ctx.s.nodes, width, height)
+      : ctx.s.placeInside(index, op, group, [{ width, height }])[0]
+  if (at === undefined) fail(index, op, 'no placement')
+  return { positioned, group, at }
+}
+
+/**
+ * The arriving half of a membership change: members that are currently
+ * elsewhere move in, placed around the ones already inside, and the group
+ * grows if it has no room.
+ *
+ * A member ACROSS the boundary is neither arriving nor settled: that is the
+ * mid-drag case the scope rule protects, so it is left exactly where it is.
+ */
+function bringMembersIn(
+  ctx: CanvasEditContext,
+  index: number,
+  op: string,
+  group: SpatialNode,
+  listed: readonly string[],
+  inScopeIds: ReadonlySet<string>,
+): void {
+  const arriving = listed.filter((id) => {
+    if (inScopeIds.has(id)) return false
+    const node = ctx.s.nodeAt(id)
+    return node === undefined || !overlaps(node, group)
+  })
+  const placements = ctx.s.placeInside(
+    index,
+    op,
+    group,
+    arriving.map((id) => {
+      const node = ctx.s.nodeAt(id)
+      return { width: node?.width ?? 0, height: node?.height ?? 0 }
+    }),
+  )
+  arriving.forEach((id, at) => {
+    const placed = placements[at]
+    const node = ctx.s.nodeAt(id)
+    if (placed === undefined || node === undefined) return
+    const moved = { ...node, ...placed }
+    ctx.s.nodes = ctx.s.nodes.map((candidate) => (candidate.id === id ? moved : candidate))
+    ctx.s.touchedNodes.add(id)
+    ctx.s.geometry.set(id, { id, ...placed, width: node.width, height: node.height })
+  })
+}
+
+/**
+ * Which edges leave with a membership change.
+ *
+ * An edge goes if either endpoint just went — a dangling edge stores a canvas
+ * the next read refuses — or, when `edges` is given, if it runs between two
+ * members and is not listed. A listed edge must exist and must have BOTH ends
+ * among the members, which is refused before anything is removed.
+ *
+ * Scoped to THIS op. `touchedEdges` spans the whole batch, so an edge an
+ * earlier op merely touched is not this region's to delete.
+ */
+function settleRegionEdges(
+  ctx: CanvasEditContext,
+  index: number,
+  op: string,
+  members: ReadonlySet<string>,
+  listed: readonly string[] | undefined,
+  droppedIds: ReadonlySet<string>,
+): void {
+  const keep = listed === undefined ? undefined : new Set(listed)
+  if (keep !== undefined) refuseListedEdges(ctx, index, op, members, keep)
+  removeLeavingEdges(ctx, members, keep, droppedIds)
+}
+
+/**
+ * A listed edge must exist and must have BOTH ends among the members — an
+ * edge is in the region only when both ends are. Refused before anything is
+ * removed, like every other `region.set` check.
+ */
+function refuseListedEdges(
+  ctx: CanvasEditContext,
+  index: number,
+  op: string,
+  members: ReadonlySet<string>,
+  keep: ReadonlySet<string>,
+): void {
+  for (const id of keep) {
+    const edge = ctx.s.edgeAt(id)
+    if (edge === undefined) fail(index, op, `edge "${id}" is not on the canvas`)
+    for (const endpoint of endNodes(edge)) {
+      if (!members.has(endpoint)) {
+        fail(
+          index,
+          op,
+          `edge "${id}" ends at "${endpoint}", which is not a member; an edge is in the region only when both ends are`,
+        )
+      }
+    }
+  }
+}
+
+/** Remove the edges a membership change leaves stranded or unlisted. */
+function removeLeavingEdges(
+  ctx: CanvasEditContext,
+  members: ReadonlySet<string>,
+  keep: ReadonlySet<string> | undefined,
+  droppedIds: ReadonlySet<string>,
+): void {
+  const removedEdges = new Set<string>()
+  for (const edge of ctx.s.edges) {
+    const strandedBy = endIn(edge.from, droppedIds) || endIn(edge.to, droppedIds)
+    const unlistedAmongMembers =
+      keep !== undefined &&
+      endIn(edge.from, members) &&
+      endIn(edge.to, members) &&
+      !keep.has(edge.id)
+    if (strandedBy || unlistedAmongMembers) {
+      removedEdges.add(edge.id)
+      ctx.s.touchedEdges.add(edge.id)
+      ctx.s.edgeLocks.delete(edge.id)
+    }
+  }
+  ctx.s.edges = ctx.s.edges.filter((edge) => !removedEdges.has(edge.id))
+}
+
+/**
+ * The leaving half of a membership change: what was inside and is not listed
+ * goes, because `region.set` deletes by OMISSION.
+ *
+ * Returns the ids it removed, which is what decides whether an edge is left
+ * dangling — see `settleRegionEdges`.
+ */
+function dropOmittedMembers(
+  ctx: CanvasEditContext,
+  inScope: readonly SpatialNode[],
+  members: ReadonlySet<string>,
+): Set<string> {
+  const dropped = inScope.filter((node) => !members.has(node.id))
+  const droppedIds = new Set(dropped.map((node) => node.id))
+  for (const node of dropped) {
+    ctx.s.touchedNodes.add(node.id)
+    ctx.s.nodeLocks.delete(node.id)
+  }
+  ctx.s.nodes = ctx.s.nodes.filter((node) => !droppedIds.has(node.id))
+  return droppedIds
+}
+
 const CANVAS_EDIT_HANDLERS: {
   [K in CanvasOp['op']]: (ctx: CanvasEditContext, op: OpNamed<K>, index: number) => void
 } = {
@@ -66,73 +359,27 @@ const CANVAS_EDIT_HANDLERS: {
     if (ctx.s.nodeAt(id) !== undefined) {
       fail(index, op.op, `node id "${id}" is already on the canvas; patch it or choose another id`)
     }
-    const size = DEFAULT_SIZE[draft.type]
-    const width =
-      draft.width ?? (draft.type === 'group' ? size.width : (ctx.s.boardWidth ?? size.width))
-    const height =
-      draft.height ??
-      (draft.type === 'text' && ctx.s.measure !== undefined
-        ? fittedHeight(
-            { ...draftContent(draft), id, x: 0, y: 0, width, height: size.height },
-            ctx.s.measure,
-            size.height,
-          )
-        : size.height)
-    // Partial geometry is treated as none: a node given an x but no
-    // y has no position, and guessing the other half would put it
-    // somewhere the caller did not ask for either.
-    const positioned = draft.x !== undefined && draft.y !== undefined
-    const within = op.within ?? undefined
-    const group = within === undefined ? undefined : ctx.s.groupNamed(index, op.op, within)
-    const at = positioned
-      ? { x: draft.x as number, y: draft.y as number }
-      : group === undefined
-        ? ctx.s.cursor.next(ctx.s.nodes, width, height)
-        : ctx.s.placeInside(index, op.op, group, [{ width, height }])[0]
-    if (at === undefined) fail(index, op.op, 'no placement')
+    const { width, height } = draftSize(ctx, draft, id)
+    const { positioned, group, at } = placeDraft(
+      ctx,
+      index,
+      op.op,
+      draft,
+      op.within ?? undefined,
+      width,
+      height,
+    )
 
     // `embed` and `facets` are the model's own fields on the input
     // now, so they ride through `rest` rather than being unpacked
     // from a published extension key — see WRITE_EXTENSION.
-    const {
-      type: _type,
-      text: _text,
-      file: _file,
-      subpath: _subpath,
-      url: _url,
-      label: _label,
-      background: _background,
-      backgroundStyle: _backgroundStyle,
-      ...rest
-    } = draft as NodeDraft & Record<string, unknown>
-    const parsed = spatialNodeSchema.safeParse({
-      ...rest,
-      // The draft's published `type` and content field become the
-      // model's resource here, at the tool's boundary — see
-      // `draftContent` for why that boundary exists at all.
-      ...draftContent(draft),
-      id,
-      ...at,
-      width,
-      height,
-    })
+    const parsed = spatialNodeSchema.safeParse(nodeFromDraft(draft, id, at, width, height))
     if (!parsed.success) fail(index, op.op, ctx.s.issues(parsed.error))
     if (draft.height !== undefined && ctx.s.measure !== undefined) {
       assertTextFits(index, op.op, parsed.data, ctx.s.measure)
     }
-    // A position the CALLER chose, in a group the caller named: both
-    // are explicit, and the group grows so both hold — except before
-    // its top-left, which growth keeps, so that one is refused.
     if (positioned && group !== undefined) {
-      const unplaced = ctx.s.placedByCursor.get(group.id)
-      if (unplaced !== undefined) {
-        ctx.s.placeAround(index, op.op, group, [parsed.data], unplaced)
-      } else {
-        if (parsed.data.x < group.x || parsed.data.y < group.y) {
-          fail(index, op.op, outsideDetail(id, parsed.data, group))
-        }
-        ctx.s.growToHold(index, op.op, group, [parsed.data])
-      }
+      holdChosenPosition(ctx, index, op.op, group, parsed.data)
     }
     ctx.s.nodes = [
       ...ctx.s.nodes,
@@ -350,32 +597,7 @@ const CANVAS_EDIT_HANDLERS: {
     const inScope = unsettled ? [] : ctx.s.nodes.filter(ctx.s.enclosedBy(group))
     const inScopeIds = new Set(inScope.map((node) => node.id))
     const members = new Set(op.nodes)
-    if (members.has(group.id)) {
-      fail(index, op.op, `"${group.id}" is the group itself, not one of its members`)
-    }
-    for (const id of members) {
-      if (ctx.s.nodeAt(id) === undefined) {
-        fail(
-          index,
-          op.op,
-          `node "${id}" is not on the canvas; region.set names members that exist — create it with node.add and within "${group.id}"`,
-        )
-      }
-    }
-    // Refused up front, before anything is removed or moved: this op
-    // deletes by OMISSION, and silently dropping a locked element
-    // would be the worst possible reading of that. A listed node
-    // that is elsewhere is about to be moved, so its lock counts too.
-    for (const node of inScope) {
-      if (ctx.s.nodeLocks.has(node.id)) {
-        fail(index, op.op, `node "${node.id}" inside the region is locked`)
-      }
-    }
-    for (const id of members) {
-      if (!inScopeIds.has(id) && ctx.s.nodeLocks.has(id)) {
-        fail(index, op.op, `node "${id}" is locked; unlock it before moving it into "${group.id}"`)
-      }
-    }
+    refuseRegionMembers(ctx, index, op.op, group.id, members, inScope, inScopeIds)
 
     // A group this batch placed at the cursor, still holding nothing,
     // goes around its members where they sit: their bounds plus the
@@ -388,79 +610,15 @@ const CANVAS_EDIT_HANDLERS: {
       group = ctx.s.placeAround(index, op.op, group, rects, unplaced)
     }
 
-    const dropped = inScope.filter((node) => !members.has(node.id))
-    const droppedIds = new Set(dropped.map((node) => node.id))
-    for (const node of dropped) {
-      ctx.s.touchedNodes.add(node.id)
-      ctx.s.nodeLocks.delete(node.id)
-    }
-    ctx.s.nodes = ctx.s.nodes.filter((node) => !droppedIds.has(node.id))
+    const droppedIds = dropOmittedMembers(ctx, inScope, members)
 
     // Members that are elsewhere come in, placed around the ones
     // already inside; the group grows if it has no room. A member
     // ACROSS the boundary is neither: that is the mid-drag case the
     // scope rule protects, so it is left exactly where it is.
-    const arriving = op.nodes.filter((id) => {
-      if (inScopeIds.has(id)) return false
-      const node = ctx.s.nodeAt(id)
-      return node === undefined || !overlaps(node, group)
-    })
-    const placements = ctx.s.placeInside(
-      index,
-      op.op,
-      group,
-      arriving.map((id) => {
-        const node = ctx.s.nodeAt(id)
-        return { width: node?.width ?? 0, height: node?.height ?? 0 }
-      }),
-    )
-    arriving.forEach((id, at) => {
-      const placed = placements[at]
-      const node = ctx.s.nodeAt(id)
-      if (placed === undefined || node === undefined) return
-      const moved = { ...node, ...placed }
-      ctx.s.nodes = ctx.s.nodes.map((candidate) => (candidate.id === id ? moved : candidate))
-      ctx.s.touchedNodes.add(id)
-      ctx.s.geometry.set(id, { id, ...placed, width: node.width, height: node.height })
-    })
+    bringMembersIn(ctx, index, op.op, group, op.nodes, inScopeIds)
 
-    // An edge goes if either endpoint just went — a dangling edge
-    // stores a canvas the next read refuses — or, when `edges` is
-    // given, if it runs between two members and is not listed.
-    // Scoped to THIS op. `touchedEdges` spans the whole batch, so an
-    // edge an earlier op merely touched is not this region's to
-    // delete.
-    const keep = op.edges === undefined ? undefined : new Set(op.edges)
-    if (keep !== undefined) {
-      for (const id of keep) {
-        const edge = ctx.s.edgeAt(id)
-        if (edge === undefined) fail(index, op.op, `edge "${id}" is not on the canvas`)
-        for (const endpoint of endNodes(edge)) {
-          if (!members.has(endpoint)) {
-            fail(
-              index,
-              op.op,
-              `edge "${id}" ends at "${endpoint}", which is not a member; an edge is in the region only when both ends are`,
-            )
-          }
-        }
-      }
-    }
-    const removedEdges = new Set<string>()
-    for (const edge of ctx.s.edges) {
-      const strandedBy = endIn(edge.from, droppedIds) || endIn(edge.to, droppedIds)
-      const unlistedAmongMembers =
-        keep !== undefined &&
-        endIn(edge.from, members) &&
-        endIn(edge.to, members) &&
-        !keep.has(edge.id)
-      if (strandedBy || unlistedAmongMembers) {
-        removedEdges.add(edge.id)
-        ctx.s.touchedEdges.add(edge.id)
-        ctx.s.edgeLocks.delete(edge.id)
-      }
-    }
-    ctx.s.edges = ctx.s.edges.filter((edge) => !removedEdges.has(edge.id))
+    settleRegionEdges(ctx, index, op.op, members, op.edges, droppedIds)
     return
   },
   'comment.add': (ctx, op, index) => {

@@ -171,38 +171,50 @@ export function placeWithin(
   occupied: readonly Rect[],
 ): { x: number; y: number }[] {
   const taken: Rect[] = [...occupied]
-  const left = box.x + PLACEMENT_GUTTER_PX
-  const right = box.x + box.width
   const out: { x: number; y: number }[] = []
   for (const size of sizes) {
-    let y = box.y + PLACEMENT_GUTTER_PX
-    for (;;) {
-      let x = left
-      let nextRow: number | undefined
-      let at: Rect | undefined
-      for (;;) {
-        const candidate = { x, y, ...size }
-        const hit = taken.find((rect) => crowds(candidate, rect))
-        if (hit === undefined) {
-          at = candidate
-          break
-        }
-        const below = hit.y + hit.height + PLACEMENT_GUTTER_PX
-        nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
-        x = hit.x + hit.width + PLACEMENT_GUTTER_PX
-        if (x + size.width > right) break
-      }
-      if (at !== undefined) {
-        out.push({ x: at.x, y: at.y })
-        taken.push(at)
-        break
-      }
-      // Every hit sits at or below y with the gutter, so this strictly
-      // advances and the walk ends once y is under everything taken.
-      y = nextRow ?? y + size.height + PLACEMENT_GUTTER_PX
-    }
+    const at = freeSlotFor(box, size, taken)
+    out.push({ x: at.x, y: at.y })
+    taken.push(at)
   }
   return out
+}
+
+/**
+ * The first free slot for ONE box, scanning rows top to bottom.
+ *
+ * Each row is walked past whatever crowds the candidate, and when the row is
+ * full the next starts under the LOWEST of what blocked it. Every hit sits at
+ * or below `y` with the gutter, so the walk strictly advances and ends once
+ * `y` is under everything taken.
+ *
+ * Separated from `placeWithin` because that is the only thing the outer loop
+ * does: place one box, remember it, repeat. Written as three nested loops the
+ * row walk, the column walk and the per-box repeat read as one algorithm, and
+ * only the innermost two are.
+ */
+function freeSlotFor(
+  box: Rect,
+  size: { width: number; height: number },
+  taken: readonly Rect[],
+): Rect {
+  const left = box.x + PLACEMENT_GUTTER_PX
+  const right = box.x + box.width
+  let y = box.y + PLACEMENT_GUTTER_PX
+  for (;;) {
+    let x = left
+    let nextRow: number | undefined
+    for (;;) {
+      const candidate = { x, y, ...size }
+      const hit = taken.find((rect) => crowds(candidate, rect))
+      if (hit === undefined) return candidate
+      const below = hit.y + hit.height + PLACEMENT_GUTTER_PX
+      nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
+      x = hit.x + hit.width + PLACEMENT_GUTTER_PX
+      if (x + size.width > right) break
+    }
+    y = nextRow ?? y + size.height + PLACEMENT_GUTTER_PX
+  }
 }
 
 /**
