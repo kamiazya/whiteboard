@@ -8,7 +8,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { PastDocument } from '../lib/versions-backend.js'
-import { DocumentPreview } from './DocumentPreview.js'
+import { VersionPreview } from './VersionPreview.js'
 
 afterEach(cleanup)
 
@@ -25,7 +25,7 @@ const SURFACE_PX = 400
 function mount(theme: 'light' | 'dark') {
   return render(
     <div style={{ width: `${SURFACE_PX}px`, height: `${SURFACE_PX}px` }}>
-      <DocumentPreview past={past} theme={theme} />
+      <VersionPreview past={past} theme={theme} />
     </div>,
   )
 }
@@ -70,7 +70,7 @@ const transformOf = (container: HTMLElement): string =>
 const scaleOf = (container: HTMLElement): number =>
   Number(/scale\(([^)]+)\)/.exec(transformOf(container))?.[1] ?? Number.NaN)
 
-describe('DocumentPreview', () => {
+describe('VersionPreview', () => {
   it('draws a past canvas in the theme the app is in', async () => {
     const dark = mount('dark')
     await expect

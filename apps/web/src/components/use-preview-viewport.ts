@@ -4,7 +4,7 @@
  * The editor's own navigation cannot be reused here: it lives inside
  * `SpatialEditor`, entangled with the gesture reducer that also moves nodes,
  * and a preview is read-only by construction precisely so no edit path
- * exists (see `DocumentPreview`). What IS shared is the arithmetic —
+ * exists (see `VersionPreview`). What IS shared is the arithmetic —
  * `lib/spatial/viewport.ts` is the one definition of the transform, so a
  * preview and the editor pan and zoom by the same rules.
  *

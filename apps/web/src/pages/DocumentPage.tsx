@@ -10,7 +10,6 @@ import {
 } from 'react'
 import { CommentsRailAside } from '../components/annotations/CommentsRailChrome.js'
 import { ConnectionsPanel } from '../components/connections/ConnectionsPanel.js'
-import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { InspectorPanel } from '../components/document-editor/InspectorPanel.js'
@@ -23,6 +22,7 @@ import {
 } from '../components/document-properties/DocumentProperties.js'
 import { ProposalsPanel } from '../components/proposals/ProposalsPanel.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
+import { VersionPreview } from '../components/VersionPreview.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
@@ -163,7 +163,7 @@ function DocumentPageBody({
   // opens the column with its naming field ready. Nothing here takes one.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // The past state the person is LOOKING at, drawn in place of the editor.
-  // Read-only by construction — see DocumentPreview — so "look, then decide"
+  // Read-only by construction — see VersionPreview — so "look, then decide"
   // cannot turn into an edit against a state that is not the document's.
   const [preview, setPreview] = useState<VersionPreviewSession | null>(null)
   // Asking for a bookmark opens the History column with its naming field
@@ -445,7 +445,7 @@ function DocumentPageBody({
          the document actions row, in flow.
 
          Not writable while a past state is on screen: the editor is
-         replaced by DocumentPreview but this rail is not, and its
+         replaced by VersionPreview but this rail is not, and its
          writes go to the LIVE document. */
       <CommentsRailAside
         rail={commentsRail}
@@ -461,7 +461,7 @@ function DocumentPageBody({
           // the same answer for both. A markdown body draws its
           // passages where they are already; and while a past state is
           // on screen the live editor is UNMOUNTED (`preview ?
-          // DocumentPreview : DocumentEditorSurface` below), so the
+          // VersionPreview : DocumentEditorSurface` below), so the
           // handle is null and a row would be a button that does
           // nothing. The index still counts either way — it just has
           // nowhere to send you, which the panel draws as a row that is
@@ -586,7 +586,7 @@ function DocumentPageBody({
       {model.slots.replaceEditor ?? (
         <div className="relative h-full min-h-0 min-w-0">
           {preview ? (
-            <DocumentPreview past={preview.past} theme={resolvedTheme} />
+            <VersionPreview past={preview.past} theme={resolvedTheme} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}

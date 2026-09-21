@@ -151,7 +151,7 @@ const BY_KEY = new Map(MEASURED.map((row) => [row.key, row.lines]))
 const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/App.tsx#App': 763,
   'apps/web/src/components/AppShell.tsx#AppShell': 299,
-  'apps/web/src/components/DocumentPreview.tsx#PastCanvasPreview': 67,
+  'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
   'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/PairedOriginsCard.tsx#PairedOriginsCard': 141,
