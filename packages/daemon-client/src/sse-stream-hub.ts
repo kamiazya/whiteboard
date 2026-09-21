@@ -185,10 +185,10 @@ export function workspaceDocKey(workspaceId: string): string {
 /**
  * The workspace a doc key addresses, for a caller that needs the id rather
  * than the route — the daemon's membership gate, in particular, decides once
- * per workspace rather than per document key. Same split as `canvasDocUrl`:
- * a `workspace:` key names it directly, a per-document key is
- * `${workspaceId}/${path}` split on the first slash. `null` for a
- * malformed key (matching `canvasDocUrl`'s own refusal shape).
+ * per workspace rather than per document key. A `workspace:` key names it
+ * directly; a per-document key is `${workspaceId}/${path}`, split on the
+ * first slash (a path may contain more, a workspace id never does). `null`
+ * for a malformed key — `canvasDocUrl` refuses through this same split.
  */
 export function workspaceIdOfDocKey(doc: string): string | null {
   if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) {
@@ -219,17 +219,13 @@ export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
 
 function canvasDocUrl(baseUrl: string, doc: string, action: 'update' | 'snapshot'): string | null {
   const base = baseUrl.replace(/\/$/, '')
+  const workspaceId = workspaceIdOfDocKey(doc)
+  if (workspaceId === null) return null
   if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) {
-    const workspaceId = doc.slice(WORKSPACE_DOC_KEY_PREFIX.length)
-    if (workspaceId.length === 0) return null
     return `${base}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/${action}`
   }
-  const slash = doc.indexOf('/')
-  if (slash <= 0 || slash === doc.length - 1) return null
   // Raw halves: documentApiUrl encodes per segment itself.
-  const workspaceId = doc.slice(0, slash)
-  const path = doc.slice(slash + 1)
-  return `${base}${documentApiUrl(workspaceId, path, action)}`
+  return `${base}${documentApiUrl(workspaceId, doc.slice(workspaceId.length + 1), action)}`
 }
 
 export class SseStreamHub implements SseStreamSource {

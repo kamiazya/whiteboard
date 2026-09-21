@@ -78,18 +78,10 @@ export function grantCoversRoute(
 }
 
 /** The one per-request memo of "which grant authenticated this request",
- *  read back by `resolvedGrantOf` — same idiom as `workspace-handle.ts`'s
- *  memo, and for the same reason: `membershipAdmit` needs the grant a later
- *  handler has no other way to reach (the daemon has no single `deps`
- *  object handlers all read from). */
+ *  read back by `membershipAdmit` — same idiom as `workspace-handle.ts`'s
+ *  memo, and for the same reason: a later handler has no other way to reach
+ *  the grant (the daemon has no single `deps` object handlers all read from). */
 const grantMemo = new WeakMap<Request, ResolvedGrant>()
-
-/** The grant this middleware resolved for the current request, or
- *  `undefined` if the middleware never ran (a composition that forgot to
- *  mount it). Used by `membershipAdmit`. */
-export function resolvedGrantOf(c: Context): ResolvedGrant | undefined {
-  return grantMemo.get(c.req.raw)
-}
 
 /** S8 slice 2: the membership gate this middleware applies to a gated route
  *  before `next()`. Absent (server-mode) means no gate at all — server-mode
@@ -97,9 +89,6 @@ export function resolvedGrantOf(c: Context): ResolvedGrant | undefined {
  *  unconditionally, so a gate there would be a no-op. */
 export interface DaemonAuthGate {
   members: MemberProfileStore
-  /** Defaults to the shared per-request handle->id memo. Overridable so a
-   *  route test can resolve against a canonical id directly. */
-  workspaceIdOf?: (c: Context, handle: string) => Promise<string>
 }
 
 export function createDaemonAuthMiddleware(
@@ -146,8 +135,7 @@ export function createDaemonAuthMiddleware(
     if (gate !== undefined) {
       const handle = gatedWorkspaceHandle(c.req.method, c.req.path)
       if (handle !== null) {
-        const resolveId = gate.workspaceIdOf ?? workspaceIdFromHandle
-        const workspaceId = await resolveId(c, handle)
+        const workspaceId = await workspaceIdFromHandle(c, handle)
         const access = await workspaceAccess(grant, workspaceId, gate.members)
         if (access !== 'admitted') {
           log.warning(
@@ -176,5 +164,5 @@ const NO_GRANT_RESOLVED: ResolvedGrant = { kind: 'pairing', scopes: [] }
 
 export function membershipAdmit(members: MemberProfileStore): WorkspaceAdmit {
   return (c, workspaceId) =>
-    workspaceAccess(resolvedGrantOf(c) ?? NO_GRANT_RESOLVED, workspaceId, members)
+    workspaceAccess(grantMemo.get(c.req.raw) ?? NO_GRANT_RESOLVED, workspaceId, members)
 }
