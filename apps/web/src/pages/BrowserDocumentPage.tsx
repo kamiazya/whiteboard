@@ -58,7 +58,6 @@ import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
 import { DocumentPage } from './DocumentPage.js'
 import type {
@@ -73,6 +72,7 @@ import {
   type LoroStoreLike,
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
+import { useDocumentListRefresh } from './use-document-list-refresh.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
 
@@ -156,24 +156,6 @@ function useBrowserDocument(
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
-  // Enumeration is a Promise, not reactive state — refresh whenever the
-  // current canvas identity or its own updatedAt changes (covers switch,
-  // create-then-switch, and edits to the current row reflecting in the list).
-  // The generation guard drops a stale resolution that would otherwise
-  // clobber a newer refresh triggered by a fast switch.
-  const [documents, setDocuments] = useState<DocumentSnapshot[]>([])
-  const listGenerationRef = useRef(0)
-  // A ref that matches NEITHER a live id nor a live path points at a
-  // deleted canvas: the editor renders a quiet "Missing reference" and hides
-  // the follow affordances instead of navigating to a dead route. Paths are
-  // known too — a legacy path ref names a live document, same rule as the
-  // daemon page. Image refs live in the file store, not this list; undefined
-  // while the list has not loaded keeps everything ordinary.
-  const missingFileRef = useMemo(() => {
-    if (documents.length === 0) return undefined
-    const known = new Set(documents.flatMap((entry) => [entry.documentId, entry.path]))
-    return (ref: string) => !isImageRef(ref) && !known.has(ref)
-  }, [documents])
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
 
@@ -254,6 +236,25 @@ function useBrowserDocument(
     [markdownDoc.doc, markdownDoc.bodyTextOf],
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
+  // Called HERE rather than with the rest of the state above: it reads
+  // `currentUpdatedAt`, and it OWNS the enumerated flag the URL -> document
+  // effect below reads. The list and its two readers now sit in that order.
+  const { documents, enumeratedRef: documentsEnumeratedRef } = useDocumentListRefresh({
+    documentId,
+    currentUpdatedAt,
+    listDocuments,
+  })
+  // A ref that matches NEITHER a live id nor a live path points at a
+  // deleted canvas: the editor renders a quiet "Missing reference" and hides
+  // the follow affordances instead of navigating to a dead route. Paths are
+  // known too — a legacy path ref names a live document, same rule as the
+  // daemon page. Image refs live in the file store, not this list; undefined
+  // while the list has not loaded keeps everything ordinary.
+  const missingFileRef = useMemo(() => {
+    if (documents.length === 0) return undefined
+    const known = new Set(documents.flatMap((entry) => [entry.documentId, entry.path]))
+    return (ref: string) => !isImageRef(ref) && !known.has(ref)
+  }, [documents])
 
   // [[path]] resolution for the markdown preview goes through the same
   // link-entries table the daemon page reads; a stored row says
@@ -375,10 +376,6 @@ function useBrowserDocument(
   // the URL still names the previously-known canvas id, that's this
   // component's own pending push catching up, not an external navigation —
   // skip it and let the other effect finish the sync.
-  // Whether listDocuments has answered at least once. Read by the URL ->
-  // document effect to tell "this path does not exist" from "the list has not
-  // arrived", which look identical in `switcherOptions`.
-  const documentsEnumeratedRef = useRef(false)
   const lastKnownCanvasIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (documentId === null || documentPath === null) return
@@ -424,22 +421,6 @@ function useBrowserDocument(
       if (!switched) repair()
     })
   }, [location.pathname, documentId, documentPath, switchDocument])
-
-  useEffect(() => {
-    if (documentId === null) return
-    const generation = ++listGenerationRef.current
-    listDocuments()
-      .then((list) => {
-        if (generation !== listGenerationRef.current) return
-        documentsEnumeratedRef.current = true
-        setDocuments(list)
-      })
-      .catch((err: unknown) => {
-        // A stale/failed list refresh must not surface as an unhandled
-        // rejection; the switcher just keeps showing its last-known list.
-        log.error('listDocuments failed', err)
-      })
-  }, [documentId, currentUpdatedAt, listDocuments])
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
   // re-connecting on re-renders when id is unchanged. A markdown canvas
