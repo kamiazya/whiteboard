@@ -17,6 +17,42 @@ Do not write an ADR for routine implementation choices, style preferences, or de
 
 ADRs are numbered sequentially: `ADR-0001`, `ADR-0002`, etc. The filename follows the pattern `NNNN-short-title.md`. Numbers are never reused, even if an ADR is superseded.
 
+## Referring to code: name the identifier, not the path
+
+An ADR is history. Nothing updates one when the code moves, and
+`comment-file-pointers.test.ts` — which holds a backticked filename in a
+comment or in `.claude/**` against `git ls-files` — deliberately stops short
+of `docs/`, on the ground that documentation is read when somebody goes
+looking rather than handed over unasked. So a path written here is
+unguarded, and the drift is silent.
+
+**It is also already the norm.** Measured 2026-09-22 across every ADR: 290
+backticked file-looking tokens, and **16 ADRs name at least one path that
+resolves to nothing.** Some are innocent — a gitignored file, a library
+name, a runtime artefact, this file's own `NNNN-short-title.md` placeholder
+— but the rest are real: ADR-0002 still points at `shared/api-client.ts` and
+`shared/daemon-backend.ts`, which moved into the `daemon-client` package;
+ADR-0009 names `canvas-store.ts` and a `meta.ts` its own notes record as
+deleted; ADR-0014 names four `references/` modules that have since moved.
+
+So prefer, in descending order of durability:
+
+1. **An identifier** — `chunkSnapshot`, `workspaceDocCache`,
+   `COMPACT_DELTA_BYTES`. Survives a file move, and a reader can grep for it.
+2. **A quotation** of the code or comment being discussed. The text is its
+   own address.
+3. **The thing, in prose** — "the daemon's document store", "the web app's
+   destructive-copy module". Survives a rename of the file AND of the symbol.
+4. **A package name** — `ports`, `apps/web`. Coarse enough to be stable.
+5. **A path**, only when the file's LOCATION is itself the decision (a
+   migration's own log key, a config file the deployment reads).
+
+This is forward-looking. The sixteen are NOT swept: a decision record is
+history, and rewriting the reasoning would misreport what was decided — the
+same rule that keeps `slug` and `OpenCanvas` in ADR-0007, 0008 and 0009
+behind a dated note. Fix a stale pointer only when you are already editing
+that ADR for another reason, and say so.
+
 ## Status lifecycle
 
 | Status | Meaning |

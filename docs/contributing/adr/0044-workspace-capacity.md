@@ -22,11 +22,11 @@ Three things look like limits and are not.
 
 - `chunkSnapshot`'s `maxChunkBytes` is a splitting parameter. It decides how
   a snapshot is cut into rows, never whether it may be stored. As of
-  2026-09-22 it has one declaration
-  (`DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES` in `ports`) and a scan that fails on a
-  second, which matters here only because a backend declaring its own
-  capacity will also want its own chunk size and there is now one place that
-  says what the existing planes use.
+  2026-09-22 it has one declaration, `DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES` in
+  the `ports` package, and a scan that fails on a second — which matters
+  here only because a backend declaring its own capacity will also want its
+  own chunk size, and there is now one place saying what the existing planes
+  use.
 - `COMPACT_DELTA_BYTES` (64 KiB) triggers a FOLD. It keeps the delta log
   short; it refuses nothing.
 - The HTTP body limits — 16 MiB on a workspace-document update, 24 MiB on a
@@ -35,8 +35,8 @@ Three things look like limits and are not.
   refuses only an oversized single POST.
 
 **The only written statement of a capacity policy in the whole repository is
-a comment for a feature that no longer exists**, at
-`server/store/document-store.ts`:
+a comment for a feature that no longer exists** — in the daemon's document
+store, above the workspace-document cache:
 
 > Soft cap for snapshot size. Do not block saves when exceeded because
 > preserving user data is more important; emit one warning per threshold
@@ -52,8 +52,8 @@ The forcing case is a keeper on a runtime with a hard ceiling. A Cloudflare
 Durable Object holds 128 MB per isolate, WebAssembly allocations included,
 and a Durable Object is the shape a Worker-hosted keeper takes: the write
 path assumes one live `LoroDoc` per workspace in one process
-(`store/document-store.ts`'s `workspaceDocCache`), which is per-workspace
-instance affinity and nothing else. **A ceiling like that cannot be honoured
+(`workspaceDocCache`, in the daemon's document store), which is
+per-workspace instance affinity and nothing else. **A ceiling like that cannot be honoured
 by warning.** Past it the write does not degrade, it fails, and the process
 holding the document may not survive to report why.
 
@@ -129,8 +129,8 @@ port are exactly what has no answer.
 ### What becomes harder
 
 - Every write path gains a refusal case, and each one needs a sentence a
-  person can act on. The single-definition discipline `lib/destructive-copy.ts`
-  keeps for confirmation copy applies here too.
+  person can act on. The single-definition discipline the web app keeps for
+  destructive confirmation copy applies here too.
 - Capacity has to be measurable cheaply, on the write path, without reading
   the whole record. What that measurement is, per backend, is not decided
   here.
