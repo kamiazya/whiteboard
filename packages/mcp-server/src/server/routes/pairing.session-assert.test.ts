@@ -6,6 +6,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { apiErrorReason } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   pairingTokenResponseSchema,
   type SessionAssertChallengeResponse,
@@ -198,10 +199,12 @@ describe('POST /api/pairing/session-assert', () => {
       body: 'not json',
     })
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'invalid JSON body' })
+    const body = await res.json()
+    expect(body).toEqual({ error: 'invalid_body', message: expect.any(String) })
+    expect(apiErrorReason(body)).toContain('not valid JSON')
   })
 
-  it('refuses a body that fails schema validation with 400 and the issues', async () => {
+  it('refuses a body that fails schema validation with 400, saying which field', async () => {
     const fixture = makeApp()
     const { token } = await pairedSession(fixture)
     // Missing every required assertion field.
@@ -212,9 +215,14 @@ describe('POST /api/pairing/session-assert', () => {
       { Authorization: `Bearer ${token}`, Origin: HOSTED },
     )
     expect(res.status).toBe(400)
-    const body = (await res.json()) as { error: string; issues: unknown[] }
-    expect(body.error).toBe('invalid input')
-    expect(body.issues.length).toBeGreaterThan(0)
+    const body = (await res.json()) as { error: string; message?: string }
+    expect(body.error).toBe('invalid_request')
+    // The issues used to ride a raw `issues` array, which the api error
+    // contract does not admit — so `apiErrorReason` discarded the whole body
+    // and every caller showed a generic banner. They are the reason now.
+    const reason = apiErrorReason(body)
+    expect(reason).toBeDefined()
+    expect(reason).toContain('credentialId')
   })
 
   it('completes the full pin -> challenge -> assertion path and binds the session', async () => {

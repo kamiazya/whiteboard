@@ -6,6 +6,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { apiErrorReason } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   type AddMemberRequest,
   listMembersResponseSchema,
@@ -211,7 +212,11 @@ describe('POST /api/workspaces/:workspaceId/members', () => {
       body: '{not json',
     })
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'invalid JSON body' })
+    const body = await res.json()
+    expect(body).toEqual({ error: 'invalid_body', message: expect.any(String) })
+    // The point of the code+reason split: a client reads the reason through
+    // the one shared reader, not by recognising a sentence in the code slot.
+    expect(apiErrorReason(body)).toContain('not valid JSON')
   })
 
   // addMemberRequestSchema only checks origin is a non-empty string, not that
@@ -224,7 +229,9 @@ describe('POST /api/workspaces/:workspaceId/members', () => {
       displayName: 'Ada Lovelace',
     } satisfies AddMemberRequest)
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'malformed origin' })
+    const body = await res.json()
+    expect(body).toEqual({ error: 'invalid_origin', message: expect.any(String) })
+    expect(apiErrorReason(body)).toContain('http(s) URL')
   })
 
   it('adds a pinned passkey as a member and the list reflects it', async () => {
