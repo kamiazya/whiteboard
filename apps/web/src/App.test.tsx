@@ -580,6 +580,53 @@ describe('silent renewal on a hosted origin', () => {
     // named all along rather than whatever the (now moot) rewrite chose.
     expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
   })
+
+  it('releases the gate on a failed renewal too, and the deep link then falls through to the browser', async () => {
+    // The symmetric case to the one above: `awaitingDaemonRenewal` must
+    // release on the FAILURE resolution as well as the success one — the
+    // field turns false the moment `daemonRenewal` stops being null, which
+    // 'refused'/'unreachable' satisfy exactly as 'paired' does. Held open
+    // the same way, so there is a real pending window to assert the address
+    // survives before proving it stops being undecided afterwards.
+    const workspaceId = '01BRWAAAAAAAAAAAAAAAAAAAA5'
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    let resolveRenewal: (result: import('./lib/pairing-grant.js').GrantConsumeResult) => void =
+      () => {}
+    renewPairingTokenMock.mockImplementationOnce(
+      () =>
+        new Promise<import('./lib/pairing-grant.js').GrantConsumeResult>((resolve) => {
+          resolveRenewal = resolve
+        }),
+    )
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      { initialEntries: [`/w/${workspaceId}/d/moved-note`] },
+    )
+    render(<RouterProvider router={router} />)
+
+    // Still undecided: same pending assertion as the success case above.
+    await screen.findByTestId('browser-index-page')
+    expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
+
+    await act(async () => {
+      resolveRenewal({ status: 'refused' })
+    })
+
+    // Gate released, and this workspace is nobody's browser workspace — the
+    // browser-keeper rewrite effect (use-workspace-address-sync.ts) now runs
+    // and lands on the browser's own workspace, the same way an address
+    // naming a workspace this browser never kept always does.
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    await screen.findByTestId('browser-index-page')
+  })
 })
 
 describe('grant exchange failure surfacing', () => {
