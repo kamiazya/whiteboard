@@ -850,7 +850,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1068,
+  // 1068 -> 1078: its SIBLING, the note-body embed, has failed the same way
+  // twice more, so it takes the same instrument and the note says the two
+  // are one subject.
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 1078,
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1035,
   // Raised 876 -> 914 for the cancel case: the page's effect cleanup has to
   // stop the replica refresh and the push it armed, and both schedulers'
