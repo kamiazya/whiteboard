@@ -136,12 +136,20 @@ replica the browser already decrypted before removal keeps whatever it
 already read; the protection is against a *future* fetch, not against
 something already on disk.
 
-Three tiers. `workspaces.replicaTier` is a per-workspace override the daemon
-already reads (falling back to the `WHITEBOARD_REPLICA_TIER` default below
-when unset), but nothing yet writes it — no CLI flag or admin route sets a
-workspace's tier today, so every workspace runs on the process default until
-that write path ships (see
-[Configuration](../reference/configuration.md)):
+Three tiers. `workspaces.replicaTier` is a per-workspace override:
+`PUT /api/workspaces/:workspaceId/replica-tier` sets it, and `{ tier: null }`
+clears it back to the `WHITEBOARD_REPLICA_TIER` default (see
+[Configuration](../reference/configuration.md)). That route sits at the
+`runtime:admin` bar — the same bar as membership and grant management —
+rather than the `workspace:write` the rest of a workspace's fields sit
+behind: a tier decides whether a copy of a workspace may leave the daemon at
+all, which is an operator's call rather than something any member may relax
+for everyone. Today that bar is cleared by the daemon token, an operator-
+issued macaroon or OAuth grant carrying `runtime:admin`, and — the accepted
+v1 posture already true of membership and grant management above — any
+paired browser session, since a pairing grant currently carries every scope.
+Narrowing what a pairing session may do is its own future increment, not
+something this route does on its own.
 
 - `no-offline` — the daemon refuses to hand out a key for this workspace at
   all (`replica_not_allowed`).

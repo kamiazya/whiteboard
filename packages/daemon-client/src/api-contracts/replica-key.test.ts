@@ -7,6 +7,10 @@ import {
   type ReplicaKeyResponse,
   replicaKeyResponseSchema,
   replicaTierSchema,
+  type SetReplicaTierRequest,
+  type SetReplicaTierResponse,
+  setReplicaTierRequestSchema,
+  setReplicaTierResponseSchema,
 } from './replica-key.js'
 import { roundtrip } from './roundtrip.test-helper.js'
 
@@ -90,5 +94,45 @@ describe('replicaKeyResponseSchema', () => {
   // .strict() is what refuses a caller that tries to fold one in here.
   it('rejects a response carrying an epoch field', () => {
     expect(replicaKeyResponseSchema.safeParse({ ...offline, epoch: 0 }).success).toBe(false)
+  })
+})
+
+describe('setReplicaTierRequestSchema', () => {
+  it('accepts every declared tier and the explicit clear', () => {
+    for (const tier of ['no-offline', 'offline', 'bounded', null] as const) {
+      const request: SetReplicaTierRequest = { tier }
+      expect(roundtrip(setReplicaTierRequestSchema, request)).toEqual(request)
+    }
+  })
+
+  it('rejects an unknown tier', () => {
+    expect(setReplicaTierRequestSchema.safeParse({ tier: 'full-offline' }).success).toBe(false)
+  })
+
+  it('rejects a missing tier field', () => {
+    expect(setReplicaTierRequestSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('rejects an undeclared field (.strict()) — no lease TTL or epoch may ride along', () => {
+    expect(
+      setReplicaTierRequestSchema.safeParse({ tier: 'bounded', leaseExpiresAt: '2026-09-28' })
+        .success,
+    ).toBe(false)
+  })
+})
+
+describe('setReplicaTierResponseSchema', () => {
+  it('roundtrips a set response', () => {
+    const response: SetReplicaTierResponse = { tier: 'no-offline', effectiveTier: 'no-offline' }
+    expect(roundtrip(setReplicaTierResponseSchema, response)).toEqual(response)
+  })
+
+  it('roundtrips a cleared response, where tier is null but effectiveTier still resolves', () => {
+    const response: SetReplicaTierResponse = { tier: null, effectiveTier: 'offline' }
+    expect(roundtrip(setReplicaTierResponseSchema, response)).toEqual(response)
+  })
+
+  it('rejects a response with no effectiveTier (never optional — a clear still resolves one)', () => {
+    expect(setReplicaTierResponseSchema.safeParse({ tier: null }).success).toBe(false)
   })
 })

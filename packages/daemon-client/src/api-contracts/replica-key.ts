@@ -42,3 +42,27 @@ export const replicaKeyResponseSchema = z
     message: 'leaseExpiresAt must be present iff tier is bounded',
   })
 export type ReplicaKeyResponse = z.infer<typeof replicaKeyResponseSchema>
+
+/**
+ * PUT /api/workspaces/:workspaceId/replica-tier (ADR-0042 decision 1
+ * addendum): sets or clears the workspace's own tier override. Gated at
+ * `runtime:admin`, not `workspace:write` — a tier decides whether a copy of
+ * a workspace may leave the daemon at all, which is an operator's call
+ * rather than something any member may relax for everyone.
+ *
+ * `tier: null` is the explicit clear, back to the process's
+ * `WHITEBOARD_REPLICA_TIER` default — one route and one verb express both
+ * set and clear rather than a second endpoint for "unset". `.strict()`
+ * refuses a caller that tries to thread a lease TTL or an epoch through,
+ * the same guard `replicaKeyResponseSchema` applies for the same reason.
+ */
+export const setReplicaTierRequestSchema = z.object({ tier: replicaTierSchema.nullable() }).strict()
+export type SetReplicaTierRequest = z.infer<typeof setReplicaTierRequestSchema>
+
+/** Echoes both the raw override (`null` once cleared) and what it resolves
+ *  to — an operator reads "cleared -> falls back to the default" from one
+ *  response instead of a second request. */
+export const setReplicaTierResponseSchema = z
+  .object({ tier: replicaTierSchema.nullable(), effectiveTier: replicaTierSchema })
+  .strict()
+export type SetReplicaTierResponse = z.infer<typeof setReplicaTierResponseSchema>

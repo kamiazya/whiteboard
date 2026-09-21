@@ -62,9 +62,11 @@ interface RouteScopeRule {
   /**
    * S8: which WORKSPACE this route reaches, for the membership gate
    * (`workspace-access.ts`). Absent means origin-trusted — the route is not
-   * gated on membership at all (pairing/runtime/debug/etc, and the two
-   * surfaces — `workspace members`, `workspace replica-key` — that already
-   * decide membership themselves at a finer grain than this table can see).
+   * gated on membership at all: pairing/runtime/debug/etc; `workspace
+   * members` and `workspace replica-key`, which decide membership
+   * themselves at a finer grain than this table can see; and `workspace
+   * replica-tier`, an operator decision with no membership concept at all
+   * (the bar IS the whole gate — see routes/replica-key.ts's header).
    *
    * Return `undefined` when this request has no handle segment at all
    * (legitimately ungated, e.g. the bare workspaces collection), and `null`
@@ -269,6 +271,19 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     name: 'workspace replica-key',
     claims: matching(/^\/api\/workspaces\/[^/]+\/replica-key$/, 'POST'),
     decide: always('workspace:read'),
+  },
+
+  // The tier itself (ADR-0042 decision 1 addendum, 2026-09-21): a security-
+  // posture change about whether a copy of this workspace may leave the
+  // daemon at all, so it sits at the same admin bar as membership and grant
+  // management above — an operator decision, not the workspace:write below
+  // that any member's write-scoped grant already carries. Placed above
+  // `workspaces (rest)` so first-match-wins cannot let a PUT on this path
+  // fall through to that broader, weaker scope.
+  {
+    name: 'workspace replica-tier',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/replica-tier$/, 'PUT'),
+    decide: always('runtime:admin'),
   },
 
   // Workspace routes: default write -> workspace:write, read -> workspace:read.
