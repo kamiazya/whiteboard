@@ -479,6 +479,8 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: a counter that nudges HeaderBranchChip to refetch on an externally observed HEAD change; the chip is keyed on the document itself and refetches on a switch without this',
   connectionsRefresh:
     'no subject: a counter that re-runs the backlinks fetch; that fetch is keyed on the document id and nulls the value first, so the counter decides WHEN to refetch, never WHAT is shown',
+  pathScope:
+    'no subject: a monotonic counter that NAMES the scope rather than living in one — a backlinks response compares itself against the value it was requested in, so a switch bumping it is what makes a late answer drop. Resetting it on a switch is the one thing it must never do',
 
   createBackendRef:
     'no subject: mirrors the `createBackend` prop, reassigned every render — it exists so a parent’s inline arrow cannot make the session’s lifetime depend on the parent’s render',
