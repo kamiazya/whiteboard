@@ -2,7 +2,7 @@
 // web app's critical path (the pairing hook and the identity pin import it
 // statically), and a root import there is retained whole by the bundler —
 // measured at 144.5 KB → 413.8 KB gzip, loro's WASM included. See
-// server-core-root-imports.test.ts.
+// tools/arch-lint/src/daemon-client-subpath.test.ts.
 import {
   attestationSchema,
   base64urlSchema,

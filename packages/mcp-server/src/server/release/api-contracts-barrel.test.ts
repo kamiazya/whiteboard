@@ -24,10 +24,17 @@ describe('api-contracts barrel scope', () => {
   it('re-exports exactly the declared public surface — no other api-contracts modules', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
-    // '@kamiazya/whiteboard-server-core' is a deliberate widening: the
-    // /api/v1 document contracts (canvas list + OKF read) AND the api error
-    // body contract are consumed by apps/web through this barrel so it never
-    // imports the shared-layer package directly (architecture-map.md).
+    // The two '@kamiazya/whiteboard-server-core/*' entries are a deliberate
+    // widening: the /api/v1 document contracts (canvas list + OKF read) AND
+    // the api error body contract are consumed by apps/web through this
+    // barrel so it never imports the shared-layer package directly
+    // (architecture-map.md).
+    //
+    // Both are SUBPATHS, and there is no root entry any more. That is now a
+    // rule rather than a habit — tools/arch-lint's
+    // daemon-client-subpath.test.ts fails on a root import anywhere in
+    // daemon-client — and `/contracts` is the subpath the tool contracts
+    // arrived through when it landed.
     //
     // `./errors.js` left this list when that contract moved DOWN to
     // server-core: `/api/v1` is served from there, so a contract declared in
@@ -41,8 +48,8 @@ describe('api-contracts barrel scope', () => {
     // graph in the entry chunk — 421.4 KB gzip against a 152 KB budget,
     // caught by `smoke:bundle-size` after a build and by nothing before it.
     expect(specifiers).toEqual([
-      '@kamiazya/whiteboard-server-core',
       '@kamiazya/whiteboard-server-core/api-errors',
+      '@kamiazya/whiteboard-server-core/contracts',
       './document.js',
       // document-url: the live-canvas API's URL shape, exported so apps/web
       // builds request URLs through the same function the daemon's own

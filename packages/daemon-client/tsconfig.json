@@ -1,7 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    // DOM, because this package is the daemon's BROWSER-safe half and names
+    // web-platform types (`CryptoKey`, `BufferSource`, `RequestInfo`) in its
+    // own signatures. It compiled without this line only because importing
+    // server-core's ROOT barrel dragged hono's ambient declarations in — so
+    // the browser-safe package was borrowing its web types from the server's
+    // dependency graph, and moving to the `./contracts` subpath is what
+    // revealed it.
+    "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,

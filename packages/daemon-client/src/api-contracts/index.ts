@@ -10,25 +10,6 @@
 // from its single definition instead of a hand-written mirror that can
 // silently drift from the server's shape.
 
-// The /api/v1 schemas still come from the root. They are off the critical
-// path today, which is a property of who imports them rather than a
-// Re-exported from server-core so apps/web keeps consuming every daemon HTTP
-// contract through this one barrel instead of importing a shared-layer
-// package it is not allowed to depend on directly (see
-// .claude/rules/architecture-map.md).
-//
-// These seven come from the ROOT. They are off apps/web's critical path
-// today, which is a property of who imports them rather than a guarantee —
-// see the block below for what the root costs when that stops being true.
-export {
-  backlinksOutputSchema as documentBacklinksResponseSchema,
-  documentSearchOutputSchema as documentSearchResponseSchema,
-  documentTagsOutputSchema as workspaceDocumentTagsResponseSchema,
-  exportOkfOutputSchema as documentOkfV1ResponseSchema,
-  linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
-  wbDocumentCreateOutputSchema as createDocumentV1ResponseSchema,
-  wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
-} from '@kamiazya/whiteboard-server-core'
 // The error contract moved DOWN to server-core to join them — `/api/v1` is
 // served from there, so a contract filed in this package was above half the
 // routes it describes — and it comes from the SUBPATH, never the root
@@ -47,6 +28,27 @@ export {
   errorBody,
   invalidRequestBody,
 } from '@kamiazya/whiteboard-server-core/api-errors'
+// The /api/v1 schemas still come from the root. They are off the critical
+// path today, which is a property of who imports them rather than a
+// Re-exported from server-core so apps/web keeps consuming every daemon HTTP
+// contract through this one barrel instead of importing a shared-layer
+// package it is not allowed to depend on directly (see
+// .claude/rules/architecture-map.md).
+//
+// These seven come from `./contracts`, which declares nothing and
+// re-exports each schema from a schemas-only module beside the tool that
+// serves it. They used to come from the ROOT, where being harmless was a
+// property of who imported them rather than a guarantee — see the block
+// below for what the root costs when that stops being true.
+export {
+  backlinksOutputSchema as documentBacklinksResponseSchema,
+  documentSearchOutputSchema as documentSearchResponseSchema,
+  documentTagsOutputSchema as workspaceDocumentTagsResponseSchema,
+  exportOkfOutputSchema as documentOkfV1ResponseSchema,
+  linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
+  wbDocumentCreateOutputSchema as createDocumentV1ResponseSchema,
+  wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
+} from '@kamiazya/whiteboard-server-core/contracts'
 export * from './document.js'
 export * from './document-url.js'
 export * from './fonts.js'
@@ -97,7 +99,7 @@ import type {
   linkifyMentionsOutputSchema as _linkifyMentionsResponseSchema,
   wbDocumentListOutputSchema as _listDocumentsV1ResponseSchema,
   documentTagsOutputSchema as _workspaceDocumentTagsResponseSchema,
-} from '@kamiazya/whiteboard-server-core'
+} from '@kamiazya/whiteboard-server-core/contracts'
 import type { z as _z } from 'zod'
 export type DocumentBacklinksResponse = _z.infer<typeof _documentBacklinksResponseSchema>
 export type WorkspaceDocumentTagsResponse = _z.infer<typeof _workspaceDocumentTagsResponseSchema>

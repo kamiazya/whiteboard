@@ -12,6 +12,10 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./contracts": {
+      "types": "./src/contracts.ts",
+      "import": "./src/contracts.ts"
+    },
     "./api-errors": {
       "types": "./src/api-errors.ts",
       "import": "./src/api-errors.ts"

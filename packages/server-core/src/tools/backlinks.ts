@@ -1,27 +1,15 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
-import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
-import {
-  backlinkEntrySchema,
-  mentionsOfIn,
-  ReferenceAggregate,
-} from '../references/reference-aggregate.js'
+import { mentionsOfIn, ReferenceAggregate } from '../references/reference-aggregate.js'
 import type { ServerDeps } from '../server-deps.js'
+import type { BacklinksInput, BacklinksOutput } from './backlinks.schemas.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 
-export const backlinksInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
-  .strict()
-export type BacklinksInput = z.infer<typeof backlinksInputSchema>
-
-export const backlinksOutputSchema = z
-  .object({
-    backlinks: z.array(backlinkEntrySchema),
-    /** Sources naming this document in prose without a resolving link. */
-    unlinkedMentions: z.array(backlinkEntrySchema),
-  })
-  .strict()
-export type BacklinksOutput = z.infer<typeof backlinksOutputSchema>
+export {
+  type BacklinksInput,
+  type BacklinksOutput,
+  backlinksInputSchema,
+  backlinksOutputSchema,
+} from './backlinks.schemas.js'
 
 /**
  * Every document in the workspace that references `documentId`, with one

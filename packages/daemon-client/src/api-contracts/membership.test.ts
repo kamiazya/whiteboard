@@ -4,7 +4,7 @@
  * constraint the `.strict()` shape declares.
  */
 
-import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core'
+import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core/api-errors'
 import { describe, expect, it } from 'vitest'
 import {
   type AddMemberRequest,

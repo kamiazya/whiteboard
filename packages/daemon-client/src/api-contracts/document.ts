@@ -50,7 +50,7 @@ import {
   operatorInfoSchema,
   requestOperatorSchema,
   versionEntrySchema,
-} from '@kamiazya/whiteboard-server-core'
+} from '@kamiazya/whiteboard-server-core/versions/version-entry'
 
 export { operatorInfoSchema, versionEntrySchema }
 
