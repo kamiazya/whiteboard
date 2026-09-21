@@ -154,6 +154,24 @@ export type MarkdownRailRequest = {
   readonly maxWidth: number
 }
 
+/**
+ * Why a worker refused — the ONE reply shape every request here answers with.
+ *
+ * A worker that throws, or that is asked to lay out a body nobody
+ * pre-parsed, must not leave the caller waiting — and must never guess. The
+ * caller does the same work on the main thread instead, so a failure costs
+ * responsiveness and never content.
+ *
+ * Declared once rather than per response union: four copies of one shape are
+ * four places a field can be added to three of them, and a caller switching
+ * on `type` would still narrow to something the producer never sends.
+ */
+export type WorkerFailure = {
+  readonly type: 'failed'
+  readonly id: number
+  readonly reason: string
+}
+
 export type MarkdownRailResponse =
   | {
       readonly type: 'markdown-rail-done'
@@ -161,7 +179,7 @@ export type MarkdownRailResponse =
       readonly blocks: readonly { x: number; y: number; w: number; h: number }[]
       readonly anchors: readonly { line: number; y: number }[]
     }
-  | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+  | WorkerFailure
 
 /**
  * Render a markdown BODY to SVG.
@@ -204,7 +222,7 @@ export type MarkdownRenderResponse =
       /** What the SVG's own viewBox covers, so a caller can scale it. */
       readonly bounds: BoundingBox
     }
-  | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+  | WorkerFailure
 
 /**
  * A document whose OUTLINE is wanted, in one of the three shapes a caller can
@@ -273,7 +291,7 @@ export type OutlineResponse =
        */
       readonly symbol?: VisualSymbolFacet
     }
-  | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+  | WorkerFailure
 
 /**
  * A face this realm should hold, as bytes — a theme's family the main
@@ -314,15 +332,7 @@ export type LayoutResponse =
        */
       readonly fontsMissing?: readonly string[]
     }
-  | {
-      // A worker that throws, or that is asked to lay out a body nobody
-      // pre-parsed, must not leave the editor waiting — and must never guess.
-      // The caller lays the same canvas out on the main thread instead, so
-      // either failure costs responsiveness and never content.
-      readonly type: 'failed'
-      readonly id: number
-      readonly reason: string
-    }
+  | WorkerFailure
 
 /**
  * Why a worker refused. `font-degraded` is the one worth distinguishing: it
