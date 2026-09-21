@@ -155,6 +155,39 @@ export interface CanvasContextMenuProps {
   readonly missingFileRef?: (file: string) => boolean
 }
 
+/**
+ * What the right-click is ABOUT, resolved once for the menu that follows.
+ *
+ * The same id may name an edge or a LINE: the hit-test hands both out the
+ * same way, because the scene routes them through one pass, so the menu is
+ * where the two part company — and it used to look in one collection only.
+ * A COMMENT is its own subject: it is not content, so none of the node, edge
+ * or canvas verbs apply to it.
+ */
+function menuSubject(
+  contextMenu: { nodeId?: string; edgeId?: string; commentId?: string },
+  canvas: SpatialCanvas,
+  live: SpatialCanvas,
+) {
+  const node =
+    contextMenu.nodeId === undefined
+      ? undefined
+      : canvas.nodes.find((n) => n.id === contextMenu.nodeId)
+  const edge =
+    contextMenu.edgeId === undefined
+      ? undefined
+      : canvas.edges.find((entry) => entry.id === contextMenu.edgeId)
+  const line =
+    contextMenu.edgeId === undefined || edge !== undefined
+      ? undefined
+      : (canvas.lines ?? []).find((entry) => entry.id === contextMenu.edgeId)
+  const comment =
+    contextMenu.commentId === undefined
+      ? undefined
+      : live.comments?.find((entry) => entry.id === contextMenu.commentId)
+  return { node, edge, line, comment }
+}
+
 export function CanvasContextMenu({
   commands,
   contextMenu,
@@ -214,28 +247,7 @@ export function CanvasContextMenu({
   const selectedAlignableBoxes = () =>
     alignableBoxesOf(canvasRef.current.nodes, selectedId === null ? [] : [selectedId, ...extraIds])
 
-  const node =
-    contextMenu.nodeId === undefined
-      ? undefined
-      : canvas.nodes.find((n) => n.id === contextMenu.nodeId)
-  const edge =
-    contextMenu.edgeId === undefined
-      ? undefined
-      : canvas.edges.find((entry) => entry.id === contextMenu.edgeId)
-  // The same id may name a LINE. The hit-test hands both out the same way —
-  // the scene routes edges and lines through one pass — so the menu is where
-  // the two part company, and it looked in one collection only.
-  const line =
-    contextMenu.edgeId === undefined || edge !== undefined
-      ? undefined
-      : (canvas.lines ?? []).find((entry) => entry.id === contextMenu.edgeId)
-
-  // A comment's menu is its own: it is not content, so none of the
-  // node/edge/canvas verbs apply.
-  const comment =
-    contextMenu.commentId === undefined
-      ? undefined
-      : canvasRef.current.comments?.find((entry) => entry.id === contextMenu.commentId)
+  const { node, edge, line, comment } = menuSubject(contextMenu, canvas, canvasRef.current)
 
   const activeEditor = contextMenu.editor ?? null
   // The catalog took the caret's focus for its rows; closing gives it back,
@@ -246,113 +258,144 @@ export function CanvasContextMenu({
     setContextMenu(null)
     activeEditor?.focus()
   }
-  const items: readonly ContextMenuItem[] =
-    activeEditor !== null
-      ? verbCatalogItems({
-          headingLevel: activeEditor.headingLevel(),
-          run: activeEditor.run,
-          close,
-          ...(activeEditor.composeThread !== undefined && activeEditor.selectedRange() !== null
-            ? { composeThread: () => activeEditor.composeThread?.() }
-            : {}),
-        })
-      : comment !== undefined
-        ? commentMenuItems({ comment, applyResult })
-        : contextMenu.verbs === 'annotation'
-          ? annotationVerbItems({
-              node,
-              edge,
-              point: contextMenu.point,
-              setCommentCompose,
-              showResolvedComments,
-              setShowResolvedComments,
-            })
-          : node === undefined && line !== undefined
-            ? inkMenuItems({
-                line,
-                lines: canvas.lines ?? [],
-                palette: resolveCanvasPalette(canvas, theme),
-                isEdgeLocked,
-                edgeLockEnabled,
-                onToggleEdgeLock,
-                applyResult,
-                setSelectedEdgeId,
-                setEdgeLabelEditId,
-                selectedInkIds,
-                createId,
-                deleteInk: (id) => deleteInkCommand(canvas, id),
-              })
-            : node === undefined && edge !== undefined
-              ? edgeMenuItems({
-                  edge,
-                  point: contextMenu.point,
-                  setCommentCompose,
-                  palette: resolveCanvasPalette(canvas, theme),
-                  isEdgeLocked,
-                  edgeLockEnabled,
-                  applyResult,
-                  setEdgeLabelEditId,
-                  setSelectedEdgeId,
-                  onToggleEdgeLock,
-                  facetRegistry,
-                  setFacetPanelOpen,
-                })
-              : node === undefined
-                ? canvasMenuItems({
-                    point: contextMenu.point,
-                    canvas,
-                    canvasRef,
-                    isLocked,
-                    fileRefOptions,
-                    onAddImage,
-                    pendingImagePointRef,
-                    imageInputRef,
-                    pasteClipboard,
-                    createNodeAt,
-                    setLinkDialog,
-                    createGroupAtViewportCenter,
-                    setDocumentPicker,
-                    applyBoxMoves,
-                    setCommentCompose,
-                    showResolvedComments,
-                    setShowResolvedComments,
-                  })
-                : nodeMenuItems({
-                    node,
-                    canvas,
-                    canvasRef,
-                    palette: resolveCanvasPalette(canvas, theme),
-                    gestureState,
-                    isLocked,
-                    lockEnabled,
-                    isEdgeLocked,
-                    extraIds,
-                    selectedId,
-                    isImageFileRef,
-                    missingFileRef,
-                    fileRefOptions,
-                    facetRegistry,
-                    selectedAlignableBoxes,
-                    pendingBackgroundGroupIdRef,
-                    imageInputRef,
-                    applyResult,
-                    applyBoxMoves,
-                    copySelection,
-                    cutSelection,
-                    duplicateSelection,
-                    reorderSelection,
-                    groupSelection,
-                    openLinkNode,
-                    onOpenFileRef,
-                    onAddImage,
-                    onToggleNodeLock,
-                    setGroupLabelEditId,
-                    setLinkDialog,
-                    setDocumentPicker,
-                    setFacetPanelOpen,
-                    setCommentCompose,
-                  })
+  /**
+   * WHICH menu a right-click gets, in priority order.
+   *
+   * An open text editor owns the press outright (the catalog is the note
+   * editor's own), then a comment — not content, so none of the node, edge or
+   * canvas verbs apply — then the annotation-only set hand mode asks for, then
+   * the object under the pointer. Written as one nested ternary the order was
+   * six levels of indentation; as a chain it is the list it always was.
+   */
+  /**
+   * The menus that are NOT about content, in the order they claim the press.
+   *
+   * An open text editor owns it outright — the catalog is the note editor's
+   * own — then a comment, which is not content so none of the node, edge or
+   * canvas verbs apply, then the annotation-only set hand mode asks for.
+   * Answers `undefined` when the press is about the board itself.
+   */
+  const nonContentItems = (): readonly ContextMenuItem[] | undefined => {
+    if (activeEditor !== null) {
+      return verbCatalogItems({
+        headingLevel: activeEditor.headingLevel(),
+        run: activeEditor.run,
+        close,
+        ...(activeEditor.composeThread !== undefined && activeEditor.selectedRange() !== null
+          ? { composeThread: () => activeEditor.composeThread?.() }
+          : {}),
+      })
+    }
+    if (comment !== undefined) return commentMenuItems({ comment, applyResult })
+    if (contextMenu.verbs === 'annotation') {
+      return annotationVerbItems({
+        node,
+        edge,
+        point: contextMenu.point,
+        setCommentCompose,
+        showResolvedComments,
+        setShowResolvedComments,
+      })
+    }
+    return undefined
+  }
 
+  /**
+   * The menu for whatever object the pointer is over, ink and relations
+   * parting company here because the hit-test hands both out the same way.
+   */
+  const contentItems = (): readonly ContextMenuItem[] => {
+    if (node === undefined && line !== undefined) {
+      return inkMenuItems({
+        line,
+        lines: canvas.lines ?? [],
+        palette: resolveCanvasPalette(canvas, theme),
+        isEdgeLocked,
+        edgeLockEnabled,
+        onToggleEdgeLock,
+        applyResult,
+        setSelectedEdgeId,
+        setEdgeLabelEditId,
+        selectedInkIds,
+        createId,
+        deleteInk: (id) => deleteInkCommand(canvas, id),
+      })
+    }
+    if (node === undefined && edge !== undefined) {
+      return edgeMenuItems({
+        edge,
+        point: contextMenu.point,
+        setCommentCompose,
+        palette: resolveCanvasPalette(canvas, theme),
+        isEdgeLocked,
+        edgeLockEnabled,
+        applyResult,
+        setEdgeLabelEditId,
+        setSelectedEdgeId,
+        onToggleEdgeLock,
+        facetRegistry,
+        setFacetPanelOpen,
+      })
+    }
+    if (node === undefined) {
+      return canvasMenuItems({
+        point: contextMenu.point,
+        canvas,
+        canvasRef,
+        isLocked,
+        fileRefOptions,
+        onAddImage,
+        pendingImagePointRef,
+        imageInputRef,
+        pasteClipboard,
+        createNodeAt,
+        setLinkDialog,
+        createGroupAtViewportCenter,
+        setDocumentPicker,
+        applyBoxMoves,
+        setCommentCompose,
+        showResolvedComments,
+        setShowResolvedComments,
+      })
+    }
+    return nodeMenuItems({
+      node,
+      canvas,
+      canvasRef,
+      palette: resolveCanvasPalette(canvas, theme),
+      gestureState,
+      isLocked,
+      lockEnabled,
+      isEdgeLocked,
+      extraIds,
+      selectedId,
+      isImageFileRef,
+      missingFileRef,
+      fileRefOptions,
+      facetRegistry,
+      selectedAlignableBoxes,
+      pendingBackgroundGroupIdRef,
+      imageInputRef,
+      applyResult,
+      applyBoxMoves,
+      copySelection,
+      cutSelection,
+      duplicateSelection,
+      reorderSelection,
+      groupSelection,
+      openLinkNode,
+      onOpenFileRef,
+      onAddImage,
+      onToggleNodeLock,
+      setGroupLabelEditId,
+      setLinkDialog,
+      setDocumentPicker,
+      setFacetPanelOpen,
+      setCommentCompose,
+    })
+  }
+
+  const items: readonly ContextMenuItem[] = nonContentItems() ?? contentItems()
   return (
     <ContextMenu
       x={contextMenu.x}

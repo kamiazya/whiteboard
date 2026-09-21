@@ -314,18 +314,12 @@ export function ContextMenu({
     </div>
   )
 
-  function renderCatalogItem(item: ContextMenuItem, index: number) {
-    return item.kind === 'separator' ? (
-      <hr key={`separator-${index}`} className="my-1 border-border" />
-    ) : item.kind === 'heading' ? (
-      <div
-        key={`heading-${item.label}`}
-        role="presentation"
-        className="px-3 pt-1.5 pb-0.5 text-[0.65rem] font-medium tracking-wide text-muted-foreground"
-      >
-        {item.label}
-      </div>
-    ) : item.kind === 'options' ? (
+  /**
+   * An options row is a PICKER, drawn with the same option group every
+   * other selection in the app uses, in its MENU shell.
+   */
+  function renderOptionsRow(item: Extract<ContextMenuItem, { kind: 'options' }>) {
+    return (
       <Fragment key={item.label}>
         <fieldset
           aria-label={item.label}
@@ -390,7 +384,26 @@ export function ContextMenu({
           <CustomColorPanel value={item.customColor.value} onPick={item.customColor.onPick} />
         )}
       </Fragment>
-    ) : (
+    )
+  }
+
+  function renderCatalogItem(item: ContextMenuItem, index: number) {
+    if (item.kind === 'separator') {
+      return <hr key={`separator-${index}`} className="my-1 border-border" />
+    }
+    if (item.kind === 'heading') {
+      return (
+        <div
+          key={`heading-${item.label}`}
+          role="presentation"
+          className="px-3 pt-1.5 pb-0.5 text-[0.65rem] font-medium tracking-wide text-muted-foreground"
+        >
+          {item.label}
+        </div>
+      )
+    }
+    if (item.kind === 'options') return renderOptionsRow(item)
+    return (
       <button
         key={item.label}
         type="button"
