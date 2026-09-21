@@ -13,10 +13,6 @@ import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import {
-  DaemonTerminalScreen,
-  membershipRefusedScreen,
-} from '../components/document-editor/MembershipGateView.js'
 import { Button } from '../components/ui/button.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
@@ -48,6 +44,7 @@ import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
+import { DaemonTerminalScreen, membershipRefusedScreen } from './daemon-terminal-screens.js'
 import type {
   DocumentKeeper,
   DocumentKeeperAnswer,
