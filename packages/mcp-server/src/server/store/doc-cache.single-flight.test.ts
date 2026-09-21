@@ -54,15 +54,15 @@ describe('getOrLoad is single-flight per key', () => {
   it('keeps separate keys on separate flights', async () => {
     // A single-flight map keyed on the wrong thing would collapse these into
     // one load and hand doc-b's caller doc-a's instance.
-    const a = deferredLoader()
-    const b = deferredLoader()
-    const first = getOrLoad('ws1', 'doc-a', a.load)
-    const second = getOrLoad('ws1', 'doc-b', b.load)
+    const loaderA = deferredLoader()
+    const loaderB = deferredLoader()
+    const first = getOrLoad('ws1', 'doc-a', loaderA.load)
+    const second = getOrLoad('ws1', 'doc-b', loaderB.load)
 
     const docA = new LoroDoc()
     const docB = new LoroDoc()
-    a.release(docA)
-    b.release(docB)
+    loaderA.release(docA)
+    loaderB.release(docB)
 
     expect(await first).toBe(docA)
     expect(await second).toBe(docB)
