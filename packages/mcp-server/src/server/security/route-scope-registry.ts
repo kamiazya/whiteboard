@@ -65,8 +65,14 @@ interface RouteScopeRule {
    * gated on membership at all (pairing/runtime/debug/etc, and the two
    * surfaces — `workspace members`, `workspace replica-key` — that already
    * decide membership themselves at a finer grain than this table can see).
+   *
+   * Return `undefined` when this request has no handle segment at all
+   * (legitimately ungated, e.g. the bare workspaces collection), and `null`
+   * when a handle segment is present but failed to decode — the caller
+   * (`gatedWorkspaceHandle`) turns that into a distinct fail-closed signal
+   * rather than treating it the same as "not gated".
    */
-  readonly workspace?: (path: string) => string | undefined
+  readonly workspace?: (path: string) => string | null | undefined
 }
 
 const exactly =
@@ -82,19 +88,27 @@ const under =
   (path: string): boolean =>
     prefixes.some((prefix) => path.startsWith(prefix))
 
-function decodeHandle(raw: string | undefined): string | undefined {
+// `undefined`: no capturing group matched this path at all (the rule
+// declares an extractor but this particular request has no handle segment,
+// e.g. the bare workspaces collection) — legitimately not gated.
+// `null`: a handle segment was present but failed strict decoding (e.g.
+// invalid percent-encoding) — the route IS gated and the handle is simply
+// unreadable, which must fail closed rather than read the same as
+// "no handle" (see `gatedWorkspaceHandle`).
+function decodeHandle(raw: string | undefined): string | null | undefined {
   if (raw === undefined) return undefined
   try {
     return decodeURIComponent(raw)
   } catch {
-    return undefined
+    return null
   }
 }
 
 // The /api/w/:handle/... family (document file, workspace-document,
 // document update/export, document (rest)).
 const wHandlePattern = /^\/api\/w\/([^/]+)\//
-const wHandle = (path: string): string | undefined => decodeHandle(wHandlePattern.exec(path)?.[1])
+const wHandle = (path: string): string | null | undefined =>
+  decodeHandle(wHandlePattern.exec(path)?.[1])
 
 // The /api/(v1/)?workspaces/:handle(/...|$) family. Also yields the handle
 // for /api/workspaces/:id itself (summary/rename/delete) — a non-member
@@ -102,7 +116,7 @@ const wHandle = (path: string): string | undefined => decodeHandle(wHandlePatter
 // too; only the bare collection GET|POST /api/workspaces is exempt (no
 // capturing group matches there).
 const workspacesHandlePattern = /^\/api\/(?:v1\/)?workspaces\/([^/]+)(?:\/|$)/
-const workspacesHandle = (path: string): string | undefined =>
+const workspacesHandle = (path: string): string | null | undefined =>
   decodeHandle(workspacesHandlePattern.exec(path)?.[1])
 
 const always =
@@ -369,17 +383,37 @@ export function ruleClaiming(method: string, path: string): string | null {
   return API_ROUTE_RULES.find((rule) => rule.claims(path, method))?.name ?? null
 }
 
-/**
- * The workspace HANDLE (segment or canonical id, unresolved) this request's
- * route reaches, for the membership gate — the FIRST claiming rule's
- * extractor, same first-match-wins order as `resolveApiRouteScope`. `null`
- * when no rule claims the path, or the claiming rule is origin-trusted
- * (declares no `workspace` extractor).
+/** `gatedWorkspaceHandle`'s three outcomes:
+ *  - `none`: no rule claims the path, the claiming rule is origin-trusted
+ *    (declares no `workspace` extractor), or the rule declares one but this
+ *    request has no handle segment (e.g. the bare workspaces collection).
+ *    Not gated — the caller may proceed straight to `next()`.
+ *  - `handle`: the workspace handle (segment or canonical id, unresolved)
+ *    this request's route reaches.
+ *  - `undecodable`: the claiming rule IS gated and a handle segment is
+ *    present, but it failed strict decoding (e.g. invalid percent-encoding).
+ *    The caller cannot determine which workspace this reaches, so it must
+ *    refuse rather than silently skip the membership check — the same
+ *    fail-closed posture `resolveApiRouteScope`'s `null` documents above.
  */
-export function gatedWorkspaceHandle(method: string, path: string): string | null {
-  if (!path.startsWith('/api/')) return null
+export type GatedWorkspaceHandle =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'handle'; readonly handle: string }
+  | { readonly kind: 'undecodable' }
+
+/**
+ * The workspace HANDLE this request's route reaches, for the membership
+ * gate — the FIRST claiming rule's extractor, same first-match-wins order
+ * as `resolveApiRouteScope`.
+ */
+export function gatedWorkspaceHandle(method: string, path: string): GatedWorkspaceHandle {
+  if (!path.startsWith('/api/')) return { kind: 'none' }
   const rule = API_ROUTE_RULES.find((r) => r.claims(path, method))
-  return rule?.workspace?.(path) ?? null
+  if (rule?.workspace === undefined) return { kind: 'none' }
+  const handle = rule.workspace(path)
+  if (handle === undefined) return { kind: 'none' }
+  if (handle === null) return { kind: 'undecodable' }
+  return { kind: 'handle', handle }
 }
 
 // Returns `null` when no rule above claims the path — the signal to fail

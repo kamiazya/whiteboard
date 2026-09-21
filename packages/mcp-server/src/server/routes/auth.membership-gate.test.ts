@@ -261,6 +261,31 @@ describe.for(Object.entries(GATED_CLAIMS))('gated row %s', ([name, [method, path
   })
 })
 
+describe('an undecodable workspace handle segment fails closed', () => {
+  it('a bound member is still refused when the workspace handle fails to decode', async () => {
+    const fixture = await makeApp()
+    const session = await bindSession(fixture)
+    const profile = await fixture.members.ensureProfile({
+      origin: HOSTED,
+      credentialId: session.credentialId,
+      displayName: 'Ada',
+    })
+    await fixture.members.addMember(WS, profile.id)
+
+    // '%E0%A4%A' is a truncated multi-byte UTF-8 percent-encoding that
+    // `decodeURIComponent` throws on — the same input
+    // route-scope-registry.test.ts pins as `{ kind: 'undecodable' }'. Even
+    // a real, admitted member on the workspace this garbled segment would
+    // otherwise have named must be refused: the middleware cannot know
+    // which workspace it reaches, so it must not skip the gate.
+    const res = await fixture.app.request(`/api/workspaces/%E0%A4%A`, {
+      headers: bearer(session.token),
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ error: 'not_a_member' })
+  })
+})
+
 describe('the middleware logs a refusal with fields, and nothing on admission', () => {
   it('logs { workspaceId, rule, reason } fields-first on a refusal', async () => {
     const fixture = await makeApp()

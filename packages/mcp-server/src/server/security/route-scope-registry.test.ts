@@ -424,31 +424,48 @@ describe('S8: the membership-gate partition covers every rule', () => {
 
   it.for(GATED)('%s yields the workspace handle from the CLAIMED_BY request', (name) => {
     const [method, path] = CLAIMED_BY[name as keyof typeof CLAIMED_BY]
-    expect(gatedWorkspaceHandle(method, path)).toBe('ws1')
+    expect(gatedWorkspaceHandle(method, path)).toEqual({ kind: 'handle', handle: 'ws1' })
   })
 
   it.for(ORIGIN_TRUSTED)('%s yields no workspace handle', (name) => {
     const [method, path] = CLAIMED_BY[name as keyof typeof CLAIMED_BY]
-    expect(gatedWorkspaceHandle(method, path)).toBeNull()
+    expect(gatedWorkspaceHandle(method, path)).toEqual({ kind: 'none' })
   })
 
   it('the bare workspaces collection yields no handle, even though the rule itself is gated', () => {
-    expect(gatedWorkspaceHandle('GET', '/api/workspaces')).toBeNull()
-    expect(gatedWorkspaceHandle('POST', '/api/workspaces')).toBeNull()
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces')).toEqual({ kind: 'none' })
+    expect(gatedWorkspaceHandle('POST', '/api/workspaces')).toEqual({ kind: 'none' })
   })
 
   it('a v1-addressed document route yields the same handle as its path-addressed twin', () => {
     expect(
       gatedWorkspaceHandle('GET', '/api/v1/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV'),
-    ).toBe('ws1')
-    expect(gatedWorkspaceHandle('GET', '/api/workspaces/ws1')).toBe('ws1')
+    ).toEqual({ kind: 'handle', handle: 'ws1' })
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces/ws1')).toEqual({
+      kind: 'handle',
+      handle: 'ws1',
+    })
   })
 
   it('a percent-encoded handle segment decodes', () => {
-    expect(gatedWorkspaceHandle('GET', '/api/workspaces/my%20workspace')).toBe('my workspace')
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces/my%20workspace')).toEqual({
+      kind: 'handle',
+      handle: 'my workspace',
+    })
   })
 
   it('an unclaimed path yields no handle', () => {
-    expect(gatedWorkspaceHandle('GET', '/api/some-route-nobody-declared-yet')).toBeNull()
+    expect(gatedWorkspaceHandle('GET', '/api/some-route-nobody-declared-yet')).toEqual({
+      kind: 'none',
+    })
+  })
+
+  it('a malformed percent-encoded handle segment fails closed as undecodable, not as ungated', () => {
+    // `%E0%A4%A` is a truncated multi-byte UTF-8 percent-encoding —
+    // decodeURIComponent throws URIError on it. The rule ('workspaces
+    // (rest)') IS gated, so this must read as `undecodable`, never `none`.
+    expect(gatedWorkspaceHandle('GET', '/api/workspaces/%E0%A4%A')).toEqual({
+      kind: 'undecodable',
+    })
   })
 })

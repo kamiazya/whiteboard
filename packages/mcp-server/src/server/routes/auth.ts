@@ -133,9 +133,19 @@ export function createDaemonAuthMiddleware(
     grantMemo.set(c.req.raw, grant)
 
     if (gate !== undefined) {
-      const handle = gatedWorkspaceHandle(c.req.method, c.req.path)
-      if (handle !== null) {
-        const workspaceId = await workspaceIdFromHandle(c, handle)
+      const gated = gatedWorkspaceHandle(c.req.method, c.req.path)
+      if (gated.kind === 'undecodable') {
+        // The route IS membership-gated and carries a handle segment, but it
+        // cannot be read — fail closed rather than treat this the same as
+        // an origin-trusted route with nothing to gate.
+        log.warning(
+          { rule: ruleClaiming(c.req.method, c.req.path) },
+          'membership refused: undecodable workspace handle',
+        )
+        return c.json(membershipRefusal('not_a_member'), 403)
+      }
+      if (gated.kind === 'handle') {
+        const workspaceId = await workspaceIdFromHandle(c, gated.handle)
         const access = await workspaceAccess(grant, workspaceId, gate.members)
         if (access !== 'admitted') {
           log.warning(
