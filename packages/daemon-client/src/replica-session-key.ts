@@ -2,6 +2,7 @@ import type { MembershipRefusalCode } from './api-contracts/membership.js'
 import { membershipRefusalSchema } from './api-contracts/membership.js'
 import type { ReplicaTier } from './api-contracts/replica-key.js'
 import { replicaKeyResponseSchema } from './api-contracts/replica-key.js'
+import type { z } from 'zod'
 import { deriveDocumentKey } from './read-plane.js'
 import { fromBase64 } from './sse-stream-hub.js'
 
@@ -27,6 +28,16 @@ export type BindOutcome =
 export interface ReplicaSource {
   fetch: typeof fetch
   bindSession: () => Promise<BindOutcome>
+  /**
+   * Called with each response the daemon MINTS, so a caller can wrap and
+   * persist it for a cold start (ADR-0042 decision 6). The parsed response
+   * rather than the decoded bytes: a cold start rebuilds this holder's
+   * state through `adoptSessionKey`, which takes the same shape, so there
+   * is never a second hand-written idea of what a replica key is.
+   *
+   * Not called for a withheld answer — there is nothing to keep.
+   */
+  onKeyResponse?: (response: ReplicaKeyResponse) => void
 }
 
 export type SessionKeyResult =
@@ -95,6 +106,50 @@ function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   return fromBase64(value.replace(/-/g, '+').replace(/_/g, '/'))
 }
 
+/** What `/replica-key` answers, parsed — the shape a cold start wraps and adopts. */
+export type ReplicaKeyResponse = z.infer<typeof replicaKeyResponseSchema>
+
+/**
+ * The ONE conversion from a parsed response to what the holder keeps.
+ * `fetchSessionKey` and `adoptSessionKey` both go through it, so a replica
+ * restored from disk and one just fetched cannot be two different states.
+ */
+function heldFrom(response: ReplicaKeyResponse): Extract<SessionKeyResult, { kind: 'key' }> {
+  return {
+    kind: 'key',
+    workspaceKey: base64UrlToBytes(response.workspaceKey),
+    workspaceKeySalt: base64UrlToBytes(response.workspaceKeySalt),
+    tier: response.tier,
+    leaseExpiresAt:
+      response.leaseExpiresAt === undefined ? undefined : Date.parse(response.leaseExpiresAt),
+  }
+}
+
+/**
+ * Holds a key somebody else unwrapped, as if this session had fetched it.
+ *
+ * Answers whether it was taken. It is REFUSED in two cases, each because
+ * taking it would be worse than not having it: a lease that has already
+ * passed would hold bytes every read then rejects, and a pair this session
+ * already holds a key for outranks a blob from disk, which may be older
+ * than the live session that minted the held one.
+ */
+export function adoptSessionKey(
+  daemonBaseUrl: string,
+  workspaceId: string,
+  response: ReplicaKeyResponse,
+): boolean {
+  const key = cacheKey(daemonBaseUrl, workspaceId)
+  const held = heldFrom(response)
+  if (lapsed(held)) return false
+  const existing = cache.get(key)
+  if (existing !== undefined && existing.kind === 'key' && !lapsed(existing)) return false
+  cache.set(key, held)
+  unreachableAt.delete(key)
+  derivedKeyMemo.delete(key)
+  return true
+}
+
 async function fetchSessionKey(
   daemonBaseUrl: string,
   workspaceId: string,
@@ -117,16 +172,8 @@ async function fetchSessionKey(
     if (!parsed.success) {
       return { kind: 'withheld', reason: 'unreachable' }
     }
-    return {
-      kind: 'key',
-      workspaceKey: base64UrlToBytes(parsed.data.workspaceKey),
-      workspaceKeySalt: base64UrlToBytes(parsed.data.workspaceKeySalt),
-      tier: parsed.data.tier,
-      leaseExpiresAt:
-        parsed.data.leaseExpiresAt === undefined
-          ? undefined
-          : Date.parse(parsed.data.leaseExpiresAt),
-    }
+    source.onKeyResponse?.(parsed.data)
+    return heldFrom(parsed.data)
   }
 
   const refusal = membershipRefusalSchema.safeParse(body)
