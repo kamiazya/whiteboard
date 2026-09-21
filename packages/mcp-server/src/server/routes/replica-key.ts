@@ -20,6 +20,18 @@
 // revoked"), so a lease is a courtesy to the browser, not a server-side
 // enforcement mechanism.
 //
+// POST /api/workspaces/:workspaceId/replica-key/rotate (ADR-0042 decision 1,
+// 2026-09-21 addendum): replaces the workspace's key+salt outright — see
+// workspace-replica-key-store.ts's header for why REPLACE rather than an
+// epoch bump. Gated at `runtime:admin`, the same bar as the tier route
+// below: rotation is at least as consequential as a tier change, since
+// every document key derived from the OLD pair (and every browser replica
+// sealed under it) stops opening the instant this lands. Not gated on
+// tier itself — a `no-offline` workspace must still be rotatable, or a
+// compromised one becomes unfixable. Like the tier route, and unlike the
+// plain key route above, the handler does not re-resolve the grant or
+// check a passkey binding: the registry bar is the whole gate.
+//
 // PUT /api/workspaces/:workspaceId/replica-tier (ADR-0042 decision 1
 // addendum, 2026-09-21): sets or clears the tier itself. Gated at
 // `runtime:admin` (route-scope-registry.ts's `workspace replica-tier` rule)
@@ -32,7 +44,9 @@
 import type { MembershipRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   type ReplicaKeyResponse,
+  type RotateReplicaKeyResponse,
   replicaKeyResponseSchema,
+  rotateReplicaKeyResponseSchema,
   type SetReplicaTierResponse,
   setReplicaTierRequestSchema,
   setReplicaTierResponseSchema,
@@ -106,14 +120,36 @@ export function createReplicaKeyRouter({
       )
     }
 
-    const { key, salt } = await keys.keyFor(workspaceId)
+    const { key, salt, keyId } = await keys.keyFor(workspaceId)
     const response: ReplicaKeyResponse = replicaKeyResponseSchema.parse({
       workspaceKey: toBase64Url(key),
       workspaceKeySalt: toBase64Url(salt),
       tier,
+      keyId,
       ...(tier === 'bounded'
         ? { leaseExpiresAt: new Date(Date.now() + leaseTtlMs).toISOString() }
         : {}),
+    })
+    return c.json(response, 200)
+  })
+
+  app.post('/api/workspaces/:workspaceId/replica-key/rotate', async (c) => {
+    const workspaceId = c.req.param('workspaceId')
+    const invalidId = badWorkspaceIdBody(workspaceId)
+    if (invalidId) return c.json(invalidId, 400)
+    if (!(await workspaceExists(workspaceId))) {
+      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'replica-key rotation refused')
+      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
+    }
+
+    const rotated = await keys.rotateKey(workspaceId)
+    // A `warning`-level record, not `notice`: same audit-trail reasoning as
+    // `replica-tier changed` below — an operator searches for this after
+    // the fact, under the DEFAULT WHITEBOARD_LOG_LEVEL. Only the id, never
+    // the key or salt bytes.
+    log.warning({ workspaceId, keyId: rotated.keyId }, 'replica-key rotated')
+    const response: RotateReplicaKeyResponse = rotateReplicaKeyResponseSchema.parse({
+      keyId: rotated.keyId,
     })
     return c.json(response, 200)
   })

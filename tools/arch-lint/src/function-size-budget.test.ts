@@ -503,10 +503,20 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/membership.ts#createMembershipRouter': 112,
   'packages/mcp-server/src/server/routes/oauth-authz.ts#createOAuthAuthzRouter': 208,
   'packages/mcp-server/src/server/routes/pairing.ts#createPairingRouter': 283,
+  // Renamed from replica-key.test.ts#bindSession (extracted to the shared
+  // `_test-*` fixture module both replica-key.test.ts and
+  // replica-key-rotate.test.ts import — see that file's own header for why
+  // it is named `_test-` rather than `*.test.ts`, and this ledger's `isTest`
+  // classifier reads only the `.test.ts` suffix, so the entry moves ledgers
+  // too).
+  'packages/mcp-server/src/server/routes/_test-replica-key-app.ts#bindSession': 64,
   // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
   // same router as POST .../replica-key — one seam for a workspace's whole
   // replica posture rather than a second router with its own mount block.
-  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 94,
+  // 94 -> 116 (ADR-0042 decision 1, 2026-09-21 rotation addendum): POST
+  // .../replica-key/rotate joins the same router for the same reason —
+  // one seam for a workspace's whole replica posture.
+  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 116,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 146,
   // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 115,
@@ -531,7 +541,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // New (ADR-0042 decision 1 addendum): the setter's write-side validation
   // and the boolean answer to the lazy-row hazard both belong beside
   // tierFor/effectiveTier rather than in a second file over the same table.
-  'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 62,
+  // 62 -> 82 (ADR-0042 decision 1, 2026-09-21 rotation addendum): rotateKey
+  // belongs beside keyFor/setTier for the same reason.
+  'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 82,
   'packages/mcp-server/src/server/security/ws-ticket-store.ts#createWsTicketStore': 52,
   'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 202,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
@@ -621,7 +633,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/server-args.differential.test.ts#oldBackup': 64,
   'packages/mcp-server/src/server/app.routes.fuzz.property.test.ts#fillPattern': 65,
   'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 77,
-  'packages/mcp-server/src/server/routes/replica-key.test.ts#bindSession': 64,
   'packages/mcp-server/src/server/security/server-mode-env-config.differential.test.ts#parseOld': 157,
   'packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts#fitCanvasOp': 89,
   'packages/workspace-index/src/loro-workspace-document-index.test.ts#inMemoryWorkspaceDocs': 58,

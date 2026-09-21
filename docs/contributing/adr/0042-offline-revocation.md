@@ -216,3 +216,84 @@ clears this bar today too, not only the daemon token or an operator-issued
 macaroon/OAuth grant. Narrowing what a pairing session may do is a future
 increment shared with those two surfaces, not something this route does on
 its own.
+
+## Addendum (2026-09-21): key rotation, and the reading it settles
+
+`workspace-replica-key-store.ts`'s header used to say the read-plane
+workspace key is "minted lazily on first read and never rotated by this
+store — a rotation is a (not yet built) explicit route, not a side effect of
+a read." This addendum builds that route and records the design question it
+had to answer first, because the two readings differ in whether the
+per-document `epoch` (`read-plane.ts`'s `deriveDocumentKey`) plays any part
+in rotation at all, and picking the wrong one would have made the other
+false.
+
+**Reading A — replace the workspace key.** A new random key + salt.
+Every document key derived from the old pair differs, so every ciphertext
+already sealed under it stops opening the moment rotation lands.
+
+**Reading B — bump an epoch.** The workspace key stays; a document is
+re-keyed at a higher epoch only as it is re-sealed, so old-epoch ciphertext
+stays readable until then.
+
+**This is Reading A**, and the epoch plays no part in it. The reason is
+what rotation is FOR: a workspace key is rotated when it is suspected
+compromised, and the whole point is to deny the holder of the OLD pair —
+under Reading B, that holder still derives every old-epoch document key from
+the pair they already have, so B denies them nothing and is not a response
+to compromise at all. `POST /api/workspaces/:workspaceId/replica-key/rotate`
+therefore calls `WorkspaceReplicaKeyStore.rotateKey`, which overwrites the
+row's `key` and `salt` outright in one upsert statement (atomic with respect
+to a concurrent `keyFor`, so a reader never derives a key from a torn mix of
+the old and new pair). `deriveDocumentKey`'s `epoch` parameter is untouched
+by rotation and stays exactly what it was before this addendum: a
+per-DOCUMENT number with no per-workspace meaning to bump.
+
+**What this denies, and what it does not — the same honesty ADR-0043
+decision 2 holds for the act plane applies here.** Rotation is not
+"cryptographically revoked" for anyone already holding the old pair:
+
+- A session that already has the old key **in memory** keeps reading with
+  it, and keeps SEALING NEW WRITES under it, until it next asks the daemon
+  for a key and receives the rotated one. Rotation does not reach into a
+  live tab.
+- Whoever held the old pair keeps every byte they already copied — the old
+  ciphertext AND the old key that opens it. Rotation denies future reads
+  under the new pair; it does not undo past exposure.
+- **Every browser replica sealed under the old pair becomes unreadable and
+  must be re-pulled.** This is a real cost, not a footnote: a workspace with
+  a large offline replica pays a full re-download after a rotation, over
+  whatever link the browser has at the time.
+
+**The response carries a `keyId`** (`sha256("wb-workspace-key-id-v1" ‖ key ‖
+salt)`, truncated and base64url-encoded — never stored, so it cannot drift
+from the bytes it names), both from the rotate route and now optionally from
+the plain key route. This is the contract the browser-side half of this
+feature — recording the `keyId` a cached replica was sealed under, dropping
+and re-pulling on a mismatch, and a page state for "the copy on this device
+can no longer be opened" distinct from `locked` (which promises the copy
+comes back once the daemon is reachable — after a rotation, reaching the
+daemon is not what brings it back) — is handed to as a filed follow-up. That
+lane owns `replica-session-key.ts`, `replica-store.ts`,
+`replica-page-state.ts` and `replica-state-copy.ts`; this addendum ships the
+`keyId` those files need to tell rotation apart from corruption, since
+without it a post-rotation AEAD failure reads as `StoredDocumentUnreadableError('malformed')`
+— "this document is damaged" — which is exactly the surprise a rotated key
+must not produce.
+
+**The epoch item goes back on the backlog with "no purpose found."** Nothing
+in this system bumps a document's epoch today, and rotation — the feature
+the epoch's own module comment named as its reason for existing — turns out
+not to use it either. Filed as a whiteboard issue rather than closed, so the
+next reader does not have to re-derive this.
+
+The bar is `runtime:admin`, the same as decision 1's tier route above and
+for the same reason: rotation is a security-posture change at least as
+consequential as a tier change, and `route-scope-registry.ts`'s `workspace
+replica-key rotate` rule places it ahead of the broader fallback. It is
+deliberately NOT gated on tier — a `no-offline` workspace must still be
+rotatable, or a workspace with a suspected-compromised key and no offline
+copies becomes the one workspace nobody can fix. The same honest limit as
+decision 1's tier addendum applies unchanged: under the accepted v1 posture
+a pairing grant carries every scope, so this bar does not today separate an
+operator from a paired browser session.

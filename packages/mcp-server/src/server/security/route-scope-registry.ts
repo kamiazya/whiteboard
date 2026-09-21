@@ -273,6 +273,21 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     decide: always('workspace:read'),
   },
 
+  // Rotation (ADR-0042 decision 1, 2026-09-21 addendum): replaces the
+  // workspace's key+salt outright, denying every document key derived from
+  // the OLD pair and every browser replica sealed under it — at least as
+  // consequential as the tier change below, so it sits at the same admin
+  // bar rather than the plain key route's workspace:read. Placed above
+  // `workspace replica-key` in this file for readability only: the plain
+  // route's pattern is `$`-anchored and does not match a `/rotate` suffix,
+  // so ordering between the two rules cannot shadow either one — pinned by
+  // `CLAIMED_BY` below rather than assumed.
+  {
+    name: 'workspace replica-key rotate',
+    claims: matching(/^\/api\/workspaces\/[^/]+\/replica-key\/rotate$/, 'POST'),
+    decide: always('runtime:admin'),
+  },
+
   // The tier itself (ADR-0042 decision 1 addendum, 2026-09-21): a security-
   // posture change about whether a copy of this workspace may leave the
   // daemon at all, so it sits at the same admin bar as membership and grant

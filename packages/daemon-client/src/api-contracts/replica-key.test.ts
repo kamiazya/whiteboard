@@ -5,8 +5,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   type ReplicaKeyResponse,
+  type RotateReplicaKeyResponse,
   replicaKeyResponseSchema,
   replicaTierSchema,
+  rotateReplicaKeyResponseSchema,
   type SetReplicaTierRequest,
   type SetReplicaTierResponse,
   setReplicaTierRequestSchema,
@@ -16,6 +18,7 @@ import { roundtrip } from './roundtrip.test-helper.js'
 
 const KEY_43 = 'A'.repeat(43)
 const SALT_22 = 'B'.repeat(22)
+const KEY_ID_22 = 'C'.repeat(22)
 
 describe('replicaTierSchema', () => {
   it('accepts every declared tier', () => {
@@ -94,6 +97,48 @@ describe('replicaKeyResponseSchema', () => {
   // .strict() is what refuses a caller that tries to fold one in here.
   it('rejects a response carrying an epoch field', () => {
     expect(replicaKeyResponseSchema.safeParse({ ...offline, epoch: 0 }).success).toBe(false)
+  })
+
+  // keyId is OPTIONAL, not required: a daemon that predates rotation
+  // answers this route with no keyId at all, and a browser bundle newer
+  // than that daemon must still parse the response (the reverse skew — an
+  // older bundle against a keyId-carrying daemon — is the accepted cost;
+  // see the ADR-0042 addendum).
+  it('roundtrips a response with keyId, and parses one with keyId absent', () => {
+    expect(roundtrip(replicaKeyResponseSchema, { ...offline, keyId: KEY_ID_22 })).toEqual({
+      ...offline,
+      keyId: KEY_ID_22,
+    })
+    expect(replicaKeyResponseSchema.safeParse(offline).success).toBe(true)
+  })
+
+  it('rejects a keyId of the wrong length', () => {
+    expect(replicaKeyResponseSchema.safeParse({ ...offline, keyId: 'C'.repeat(21) }).success).toBe(
+      false,
+    )
+  })
+})
+
+describe('rotateReplicaKeyResponseSchema', () => {
+  it('roundtrips a rotation response', () => {
+    const response: RotateReplicaKeyResponse = { keyId: KEY_ID_22 }
+    expect(roundtrip(rotateReplicaKeyResponseSchema, response)).toEqual(response)
+  })
+
+  it('rejects a missing keyId', () => {
+    expect(rotateReplicaKeyResponseSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('rejects a malformed keyId', () => {
+    expect(rotateReplicaKeyResponseSchema.safeParse({ keyId: 'not-base64url!' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects an undeclared field (.strict()) — no key bytes or salt may ride along', () => {
+    expect(
+      rotateReplicaKeyResponseSchema.safeParse({ keyId: KEY_ID_22, workspaceKey: KEY_43 }).success,
+    ).toBe(false)
   })
 })
 
