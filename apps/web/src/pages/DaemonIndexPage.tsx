@@ -12,18 +12,14 @@ import {
   createDocument,
   DaemonApiError,
   deleteDocument,
-  getDocumentSnapshot,
   getWorkspaceNames,
   listDocuments,
   listTrash,
   listWorkspaces,
-  setDocumentDisplayName,
-  updateDocument,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
-import { deriveCopyName } from '../lib/derive-copy-name.js'
-import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
+import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 
@@ -471,33 +467,16 @@ export function DaemonIndexPage({
       // its completion (the rows refresh) to the page is gated separately,
       // below, on whether that workspace is still the one being viewed.
       try {
-        const snapshot = await getDocumentSnapshot(
-          daemonFetch,
+        await duplicateDaemonDocument({
+          fetch: daemonFetch,
           daemonBaseUrl,
-          workspaceAtStart,
+          workspaceId: workspaceAtStart,
           sourcePath,
-        )
-        const existingPaths = new Set(rows.map((r) => r.path))
-        const newPath = deriveCopyPath(sourcePath, existingPaths)
-        // This create is the ONLY place the copy's kind is set: the snapshot
-        // write below is a plain re-save, which never touches a stored kind.
-        const created = await createDocument(
-          daemonFetch,
-          daemonBaseUrl,
-          workspaceAtStart,
-          newPath,
-          sourceRow?.kind ?? 'spatial',
-        )
-        await updateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, created.path, snapshot)
-        const existingNames = new Set(rows.map((r) => r.displayName))
-        const newName = deriveCopyName(sourceRow?.displayName ?? sourcePath, existingNames)
-        await setDocumentDisplayName(
-          daemonFetch,
-          daemonBaseUrl,
-          workspaceAtStart,
-          created.path,
-          newName,
-        )
+          kind: sourceRow?.kind ?? 'spatial',
+          displayName: sourceRow?.displayName ?? sourcePath,
+          existingPaths: rows.map((r) => r.path),
+          existingNames: rows.map((r) => r.displayName),
+        })
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (isStale()) return
         await loadWorkspace(workspaceAtStart, isStale)

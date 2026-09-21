@@ -8,6 +8,7 @@ import {
   listDocuments,
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
+import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
 import {
   type MembershipRefusalState,
   membershipRefusal,
@@ -41,6 +42,15 @@ export interface DaemonDocumentController {
   documents: DocumentSummary[]
   switchDocument: (path: string) => void
   createDocument: (path: string) => Promise<void>
+  /**
+   * Copy the document on screen and FOLLOW the copy.
+   *
+   * Rejects rather than holding its own error, unlike `createDocument` above:
+   * the page owns the refusal surface for this one, through the same
+   * `useDuplicateDocument` the browser keeper uses — one hook, so the two
+   * keepers cannot word the same refusal differently.
+   */
+  duplicateDocument: () => Promise<void>
   createError: string | null
   /** A membership refusal the resolve could not get past (ADR-0041/0042 S8),
    *  naming the workspace — known once listWorkspaces has resolved, even
@@ -205,6 +215,29 @@ export function useDaemonDocumentController(
     [daemonFetch, daemonBaseUrl, workspaceId],
   )
 
+  const duplicateDocument = useCallback(async (): Promise<void> => {
+    if (workspaceId === null || path === null) {
+      throw new Error('No document is open to duplicate.')
+    }
+    const source = documents.find((entry) => entry.path === path)
+    const copy = await duplicateDaemonDocument({
+      fetch: daemonFetch,
+      daemonBaseUrl,
+      workspaceId,
+      sourcePath: path,
+      kind: source?.kind ?? 'spatial',
+      displayName: source?.displayName ?? path,
+      existingPaths: documents.map((entry) => entry.path),
+      existingNames: documents.map((entry) => entry.displayName ?? entry.path),
+    })
+    // Same two steps `createDocument` ends with, and the same order: the list
+    // is refreshed BEFORE the path moves, so the page never points at a
+    // document its own switcher does not hold yet.
+    const { documents: refreshed } = await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
+    setDocuments(refreshed)
+    setPath(copy.path)
+  }, [daemonFetch, daemonBaseUrl, workspaceId, path, documents])
+
   return {
     loading,
     loadError,
@@ -214,6 +247,7 @@ export function useDaemonDocumentController(
     documents,
     switchDocument,
     createDocument,
+    duplicateDocument,
     createError,
     refusal,
     retry,
