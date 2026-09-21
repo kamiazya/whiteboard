@@ -280,7 +280,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1045 -> 1090: the daemon-page address ping-pong fix marks the
   // pathname it supersedes and re-checks daemonKept live in the rewrite's
   // async callback.
-  'apps/web/src/App.tsx': 1090,
+  'apps/web/src/App.tsx': 917,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
