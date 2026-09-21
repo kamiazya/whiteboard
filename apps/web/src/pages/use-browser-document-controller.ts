@@ -503,7 +503,7 @@ export function useBrowserDocumentController(
       // Flush any pending edit on the current canvas before switching away
       // from it, so a fast switch never drops an in-flight rename.
       const flushed = await flushSave()
-      if (generation !== switchGenerationRef.current) return false // superseded while flushing
+      if (generation !== switchGenerationRef.current) return false // superseded; optimisation only
       if (!flushed) return false
       try {
         const loaded = await loadLocalDocument(indexRef.current, id, clockRef.current)
