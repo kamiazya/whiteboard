@@ -375,7 +375,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 66,
   'apps/web/src/pages/use-auto-checkpoint.ts#useAutoCheckpoint': 60,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 458,
-  'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController.load': 67,
   // Raised 157 -> 182 for `duplicateDocument`: the copy itself is one call
   // into lib/duplicate-daemon-document.ts, shared with the index page; what
   // is here is the list refresh and the path move, the same two steps
