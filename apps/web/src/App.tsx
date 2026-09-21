@@ -368,6 +368,19 @@ export function App({ providerState }: AppProps) {
     (!forcedBrowser &&
       (daemonConnection.status === 'paired' || grantConnection?.status === 'paired')) ||
     effectiveState.kind === 'daemon'
+  // The browser-keeper rewrite effect (below) reads this INSIDE an async
+  // callback rather than through its own effect closure — a ref kept
+  // current every render, not the value `daemonKept` held when the effect
+  // last ran. `switchBrowserWorkspace`'s rejection for an unrecognized
+  // (daemon) handle settles fast enough that it used to land AFTER a
+  // same-tick pairing renewal had already committed `daemonKept: true`
+  // (this ref) but BEFORE that render's effect cleanup had torn down the
+  // in-flight async call (the effect's own `cancelled` flag) — so the
+  // rewrite fired anyway, using a browserHandle/navigate that were still
+  // perfectly valid, just answering a question the app had already moved
+  // past. See that effect's comment for the storm this produced.
+  const daemonKeptRef = useRef(daemonKept)
+  daemonKeptRef.current = daemonKept
 
   // ADR-0023's offline read: the addressed workspace is daemon-kept, the
   // daemon answered the renewal with nothing usable, and this browser holds
@@ -384,6 +397,23 @@ export function App({ providerState }: AppProps) {
   // closure, so without this the replay pushes a duplicate history entry
   // for the navigation the first run already performed.
   const lastNavigatedPathRef = useRef<string | null>(null)
+  // Shared with the URL -> state effect below (hoisted here, ahead of it,
+  // for exactly that reason). Declared in THIS component, so React flushes
+  // both effects in ONE commit whenever they both have a reason to run —
+  // and per React's own ordering, this one (declared first) runs before
+  // that one. That ordering is what a navigate() below can lean on: marking
+  // the pathname this effect is about to supersede as "already synced"
+  // stops the URL -> state effect, reading the SAME stale `location.pathname`
+  // a moment later in the same flush, from parsing it back into `daemonView`
+  // — which is what turned a single stale address (a browser-keeper rewrite
+  // that raced a still-resolving pairing renewal) into the two effects
+  // alternately overwriting each other's fix, forever: each one's own
+  // "did I already handle this path" ref never caught it, because the
+  // address ping-ponged between exactly two values and neither effect saw
+  // the pathname it had just itself produced land on ITS side of the check
+  // before the other effect read it. Measured as ~500 req/s of
+  // /api/workspaces + document-tags with the daemon page never settling.
+  const lastRouteSyncPathRef = useRef(location.pathname)
   useEffect(() => {
     if (isPairRoute) return
     // A browser-kept session's address is not daemonView's to write —
@@ -424,6 +454,11 @@ export function App({ providerState }: AppProps) {
       daemonView.kind === 'index' &&
       currentRoute?.kind === 'index' &&
       currentRoute.workspace === undefined
+    // Mark the pathname THIS navigate is about to replace as already
+    // synced, before the URL -> state effect (same commit, runs after this
+    // one) can read it back into `daemonView` — see `lastRouteSyncPathRef`'s
+    // comment above.
+    lastRouteSyncPathRef.current = location.pathname
     navigate(path, { replace: isFirstSync || namingTheSameIndex })
     // location.pathname is read, not depended on: including it would refire
     // this effect on every navigation (including the one it just performed),
@@ -595,6 +630,16 @@ export function App({ providerState }: AppProps) {
     let cancelled = false
     const rewrite = () => {
       if (cancelled) return
+      // Re-checked live (see `daemonKeptRef`'s comment): this effect's OWN
+      // `daemonKept` closure is whatever it was when the effect last ran,
+      // which for an address that just turned daemon-kept is stale by the
+      // time an async resolve/reject actually reaches here — the pairing
+      // renewal driving `daemonKept` true is a real network round trip, so
+      // it regularly loses the race against this rejection, but its state
+      // update still lands (and this ref updates) before this callback
+      // fires. Skipping stops the rewrite from ever reaching a now-daemon-
+      // kept address — the ping-pong this produced never gets a first move.
+      if (daemonKeptRef.current) return
       const path = workspacePath(browserHandle)
       if (location.pathname !== path) navigate(path, { replace: true })
     }
@@ -629,8 +674,8 @@ export function App({ providerState }: AppProps) {
   // ping-pong that remounted the canvas page (and its WebSocket) ~170
   // times a second. Only an actual pathname CHANGE is a URL-driven
   // navigation; the ref seeds from the mount pathname so the mount run and
-  // any replay of it are no-ops.
-  const lastRouteSyncPathRef = useRef(location.pathname)
+  // any replay of it are no-ops. `lastRouteSyncPathRef` itself is declared
+  // above, beside the state->URL effect — see its comment.
   useEffect(() => {
     if (isPairRoute) return
     if (lastRouteSyncPathRef.current === location.pathname) return

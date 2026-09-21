@@ -108,6 +108,7 @@
     "smoke:codex": "node scripts/smoke/mcp-codex-cli-smoke.mjs",
     "smoke:daemon-origin": "node --import tsx/esm scripts/smoke/mcp-daemon-origin-smoke.mjs",
     "smoke:passkey-promote": "node --import tsx/esm scripts/smoke/mcp-passkey-promote-smoke.mjs",
+    "smoke:read-plane": "node --import tsx/esm scripts/smoke/mcp-read-plane-smoke.mjs",
     "smoke:lna-transport": "node scripts/smoke/mcp-lna-transport-smoke.mjs",
     "smoke:all": "pnpm smoke:e2e && pnpm smoke:claude",
     "prepublishOnly": "test -x dist/cli/index.js",

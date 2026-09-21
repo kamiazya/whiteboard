@@ -48,6 +48,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
   resetReplicaRefreshForTests()
 })
 
@@ -158,6 +159,39 @@ describe('scheduleReplicaRefresh', () => {
     scheduleReplicaRefresh(deps({ cache }))
     await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
     expect(createUserSettingsStore().load().storage.replicas?.[WS]).toBeUndefined()
+  })
+
+  // The production `schedule` default (no `deps.schedule` override) is what
+  // bounds a background pull to a real deadline — a page kept continuously
+  // busy must not leave a replica-registry write waiting indefinitely. Every
+  // other test in this file supplies a synchronous `schedule` stub, which
+  // never exercises this branch at all.
+  it('with no schedule override, production idle-callback scheduling bounds the pull to a 2s timeout', async () => {
+    const idle = vi.fn((run: () => void) => {
+      run()
+      return 0
+    })
+    vi.stubGlobal('requestIdleCallback', idle)
+    const cache = vi
+      .fn()
+      .mockResolvedValue({ kind: 'ok', syncedAt: '2026-09-01T12:00:00.000Z', documentCount: 1 })
+    scheduleReplicaRefresh(deps({ cache, schedule: undefined }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
+    expect(idle).toHaveBeenCalledWith(expect.any(Function), { timeout: 2000 })
+  })
+
+  it('with no schedule override and no requestIdleCallback, production scheduling falls back to a setTimeout', async () => {
+    // jsdom has no requestIdleCallback at all, so this is the environment's
+    // natural fallback path — no stubbing needed to reach it.
+    expect(typeof requestIdleCallback).toBe('undefined')
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout'] })
+    vi.setSystemTime(new Date('2026-09-01T12:05:00.000Z'))
+    const cache = vi
+      .fn()
+      .mockResolvedValue({ kind: 'ok', syncedAt: '2026-09-01T12:00:00.000Z', documentCount: 1 })
+    scheduleReplicaRefresh(deps({ cache, schedule: undefined }))
+    await vi.advanceTimersByTimeAsync(1500)
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
   })
 })
 
