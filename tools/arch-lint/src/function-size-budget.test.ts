@@ -187,6 +187,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/verb-catalog.tsx#verbCatalogItems': 64,
   'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner': 649,
   'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner.runProbe': 92,
+  // A Settings card of the same shape as its two neighbours below (334 and
+  // 522): the rows, the shared confirm dialog and the two-step delete are
+  // one screen's worth of state, and the row already IS extracted
+  // (`CopyRowItem`). Splitting further would separate the dialog from the
+  // `pending`/`deleting` state that decides whether it may close. 126 -> 147
+  // when the registry read learned to degrade: a browser that refuses
+  // IndexedDB has to leave the card listing what it CAN read rather than
+  // rejecting, and that branch is where the explanation lives.
+  'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 147,
   'apps/web/src/components/settings/MembersCard.tsx#MembersCard': 334,
   'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 522,
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 163,
@@ -339,7 +348,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
   'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 393,
-  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 89,
+  // 89 -> 94: the Copies-on-this-device card mounts in BOTH branches, and
+  // the disconnected one is where it matters most — with no daemon every
+  // copy is browser-kept, so a card hidden there would hide the whole list.
+  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 94,
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
   'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 66,
@@ -535,7 +547,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/security/ws-ticket-store.ts#createWsTicketStore': 52,
   'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 202,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
-  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 53,
+  // 53 -> 58: the refresh interval's in-flight write is now held and awaited
+  // before the marker is removed. `clearInterval` cancels the next tick and
+  // not the one already running, so a straggler used to recreate the marker
+  // after the `finally` deleted it — 8 of 60 runs, and the same straggler
+  // raced a test's own `rm -rf` into ENOTEMPTY on CI three times. The five
+  // lines are a promise handle, its assignment, the await, and three of
+  // comment saying why the await is there.
+  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 58,
   'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 214,
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,

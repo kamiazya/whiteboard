@@ -37,8 +37,14 @@ const VISUAL_PATHS = [
   /^packages\/canvas-render\/src\//,
 ]
 
-/** Tests and stories describe a surface; they are not the surface. */
-const NOT_A_SURFACE = /\.(test|bench|spec|docs-snapshot)\.[cm]?[jt]sx?$/
+/**
+ * Tests, stories and test PLUMBING describe a surface; they are not the
+ * surface. The `test-utils/` segment is here because `canvas-render`'s entry
+ * in the list above is the whole package, so a three-line fast-check
+ * configuration under it was reported as "a file a human looks at" and asked
+ * for a figure of itself.
+ */
+const NOT_A_SURFACE = /\.(test|bench|spec|docs-snapshot)\.[cm]?[jt]sx?$|(^|\/)(test-utils|__fixtures__|__mocks__)\//
 
 /**
  * A figure. Markdown image, HTML img, or a bare attachment URL — a body
@@ -54,7 +60,26 @@ const HAS_FIGURE = /!\[[^\]]*\]\([^)]+\)|<img\s|https:\/\/github\.com\/user-atta
  * separates it, because insisting on an em dash makes the escape hostile to
  * type and the character is the first thing a keyboard drops.
  */
-const STATES_NO_FIGURE = /visual evidence:\s*none\s*[—–:-]\s*\S{3}/i
+const STATES_NO_FIGURE = /visual evidence:\s*none\s*[—–:-][ \t]*(\S.*)/i
+
+/** At least three non-space characters of REASON — see `statesNoFigure`. */
+const MIN_REASON_CHARS = 3
+
+/**
+ * Whether the body states a reason rather than merely the word "none".
+ *
+ * The length is counted over the reason with whitespace removed, which is
+ * the fix for a real defect: the rule was `\S{3}` directly in the pattern,
+ * meaning THREE CONSECUTIVE non-space characters immediately after the dash.
+ * A reason beginning "a " or "an " therefore failed — measured at three of
+ * five real skip lines written in one session — and the cheapest way out was
+ * to reword until the regex was happy, which teaches that the rule is about
+ * the wording rather than about deciding.
+ */
+function statesNoFigure(body) {
+  const reason = body.match(STATES_NO_FIGURE)?.[1]?.trim() ?? ''
+  return reason.replace(/\s+/g, '').length >= MIN_REASON_CHARS
+}
 
 let input
 try {
@@ -96,7 +121,7 @@ try {
   const body = readBody(command, where)
   // A body arriving by stdin, an editor, or --fill is not readable here.
   if (body === null) process.exit(0)
-  if (HAS_FIGURE.test(body) || STATES_NO_FIGURE.test(body)) process.exit(0)
+  if (HAS_FIGURE.test(body) || statesNoFigure(body)) process.exit(0)
 
   const changed = git(['diff', '--name-only', 'origin/main...HEAD'])
     .split('\n')

@@ -15,12 +15,6 @@
 #
 # Configuration lives in sonar-project.properties, next to the exclusions it
 # has to stay in sync with.
-#
-# It also ships the SAME lcov to DeepSource (.deepsource.toml), the other
-# report-only lane, rather than paying for a second ~10-minute coverage run in
-# a workflow of its own. The name stays `SonarQube` because renaming a
-# workflow renames its checks; what it means is "the coverage-and-report-only
-# lane". Deleting this file therefore turns OFF DeepSource's coverage too.
 name: SonarQube
 
 on:
@@ -31,9 +25,6 @@ on:
 
 permissions:
   contents: read
-  # The DeepSource CLI exchanges a GitHub OIDC token for temporary access, so
-  # this lane needs no DEEPSOURCE_DSN secret at all.
-  id-token: write
 
 # A PR only cares about its latest push, so superseding an in-flight
 # analysis there is right. The DEFAULT BRANCH is the opposite: its analysis
@@ -84,43 +75,3 @@ jobs:
       - uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      # LAST on purpose: this step is allowed to fail the job (an upload that
-      # silently does nothing is worse than a red report-only lane), and
-      # failing here means Sonar's analysis has already been uploaded.
-      #
-      # A pinned archive and a checksum THIS REPO records, rather than the
-      # `curl … | sh` the docs give. That installer reads both the version and
-      # the expected hash from cli.deepsource.com's own manifest.json, so its
-      # "Checksum verified" line rules out a corrupted download and nothing
-      # else — and this job holds `id-token: write` over a checkout, so a
-      # compromised host would be executing arbitrary code next to both.
-      # Pinning the hash here means a substituted binary has to match a value
-      # that is in git. Same reason every action above is pinned by SHA.
-      #
-      # Bumping it: read cli.deepsource.com/manifest.json for the new version
-      # and its linux_amd64 sha256, and change both lines together.
-      #
-      # --commit is not optional either. On `pull_request`, checkout builds a
-      # MERGE commit, and the CLI's git detection reports against that: the
-      # upload succeeds, the step goes green, and DeepSource discards it —
-      # "the merge commit doesn't exist upstream". Measured on this lane's
-      # first real run, which reported against d61b9449 and landed nowhere.
-      - name: Report coverage to DeepSource
-        env:
-          CLI_VERSION: '2.0.55'
-          CLI_SHA256: '3d8264fef2487b39a7b9efd801d06bce8d04fe1ed8d5b5f13a876cd31e5a680d'
-        run: |
-          set -euo pipefail
-          archive="deepsource_${CLI_VERSION}_linux_amd64.tar.gz"
-          # --proto-redir is the point: -L follows redirects, and without it a
-          # redirect to http:// would fetch this executable in the clear.
-          curl -fsSL --proto '=https' --proto-redir '=https' \
-            -o "$RUNNER_TEMP/$archive" "https://cli.deepsource.com/build/$archive"
-          echo "${CLI_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" deepsource
-          # Run from the repository root: the CLI resolves the lcov's file
-          # paths against the working directory.
-          "$RUNNER_TEMP/deepsource" report --analyzer test-coverage \
-            --key javascript --value-file tmp/coverage/lcov.info --use-oidc \
-            --commit "${{ github.event.pull_request.head.sha || github.sha }}"

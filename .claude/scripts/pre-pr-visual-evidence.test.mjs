@@ -86,6 +86,35 @@ test('allows a UI diff that states why there is no figure', () => {
   assert.equal(runHook(work, bodyArg(body)).status, 0)
 })
 
+test('a reason beginning "a" or "an" is a stated decision', () => {
+  // The rule was `\S{3}` straight after the dash, which demands three
+  // CONSECUTIVE non-space characters and so rejects a reason whose first word
+  // is one or two letters. Measured at three of five real skip lines from one
+  // session, every one of them a sentence the hook had just asked for.
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  for (const reason of [
+    'Visual evidence: none — a shell hook, whose verified output is pasted above.',
+    'Visual evidence: none — an arch-lint guard and the markdown it now reads.',
+  ]) {
+    assert.equal(runHook(work, bodyArg(reason)).status, 0, reason)
+  }
+})
+
+test('a one-character reason is still not a stated decision', () => {
+  // The other side of the pair: the length rule has to keep rejecting what
+  // `\S{3}` was there to reject.
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, bodyArg('Visual evidence: none — x')).status, 2)
+})
+
+test('a test-utils file under a UI package is not a rendered surface', () => {
+  // canvas-render's entry in VISUAL_PATHS is the whole package, so a
+  // three-line fast-check configuration under it was reported as a file a
+  // human looks at and asked for a figure of itself.
+  const work = makeRepoPair('packages/canvas-render/src/test-utils/fast-check.ts')
+  assert.equal(runHook(work, bodyArg('## What\n\nSome prose.')).status, 0)
+})
+
 test('a bare "none" with no reason is not a stated decision', () => {
   // The escape exists to turn an omission into a decision. Without a reason
   // it is the same omission with a sentence in front of it.

@@ -13,13 +13,13 @@ import { z } from 'zod'
  */
 const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 /**
- * `sceneDigest`'s output is the ONLY Zod-schematized surface in this
- * package: it is the AI-facing spatial digest that crosses a process
- * boundary (the `/document/{id}/layout` route payload and the `canvas_layout`
- * MCP tool output), per this repo's zod-schema-discipline. Every array
- * below uses an explicit total sort with a documented tie-breaker — no
- * Set/Map iteration order is allowed to leak into the output, or the
- * AI-facing JSON would be non-reproducible across runs.
+ * `sceneDigest`'s output crosses a process boundary as AI-facing JSON, which
+ * is why it is schematized at all (this repo's zod-schema-discipline). Its
+ * one consumer is `server-core`'s `canvas-snapshot.ts`, which spreads it
+ * into `canvasSnapshotSchema` — the output of the **`wb_canvas_snapshot`**
+ * MCP tool. Every array below uses an explicit total sort with a documented
+ * tie-breaker, so no Set/Map iteration order leaks into it and the JSON is
+ * reproducible across runs.
  */
 
 const bboxSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })

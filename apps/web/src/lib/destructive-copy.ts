@@ -36,6 +36,7 @@ export type DestructiveActionId =
   | 'delete-documents-browser'
   | 'delete-documents-daemon'
   | 'remove-member'
+  | 'delete-replica-copy'
 
 /**
  * Built from the noun for the thing being destroyed, so a note reads "The
@@ -78,6 +79,16 @@ export const DESTRUCTIVE_COPY = {
   // access now rather than at some later sync.
   'remove-member': (name) =>
     `Remove ${name} from this workspace? They lose access now, and anything they change offline after this point will not be kept.`,
+
+  // Deleting a CACHED copy is housekeeping, not revocation (ADR-0042
+  // decision 3): the daemon still keeps the workspace, so the only thing at
+  // risk is what this device has not managed to send yet. Saying "the
+  // workspace is deleted" would be false, and saying "nothing is lost" would
+  // be false too whenever the daemon has been unreachable — so the sentence
+  // names exactly the one thing that does not come back. The subject is the
+  // workspace's own name.
+  'delete-replica-copy': (name) =>
+    `This device's copy of ${name} is removed. Anything in it that has not reached the daemon yet is lost; the daemon keeps the workspace, so a copy can be pulled again.`,
 } satisfies Record<DestructiveActionId, DestructiveDescription>
 
 /**
