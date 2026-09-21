@@ -58,27 +58,97 @@ const SCAN_DIRS = [
 const DECLARATION_SITE = 'packages/ports/src/snapshot.ts'
 
 /**
- * A chunk size DECLARED as a literal: a binding whose name ends in
- * `CHUNK_BYTES` assigned a number, or the manifest field itself given a
- * literal. `maxChunkBytes: someConstant` and a parameter named
- * `maxChunkBytes` are both hand-overs, not declarations, and do not match.
+ * A chunk size DECLARED as a literal, in the three spellings it can take: a
+ * binding whose name ends in `CHUNK_BYTES` assigned a number, the manifest
+ * field itself given one, or a literal passed straight to `chunkSnapshot`.
+ *
+ * The third was missing when this scan was written, and it is the one a
+ * writer in a hurry reaches for: `chunkSnapshot(bytes, 1_000_000)` declares
+ * a chunk size as surely as a `const` does.
+ * `background-work-costs.test.ts` had already learned this exact lesson one
+ * level out — its third test exists because a worker could declare its
+ * ceiling INLINE and pass a scan that only read the central map. This
+ * file's header cites that precedent and the first version still had the
+ * hole, which is the part worth recording.
+ *
+ * `maxChunkBytes: someConstant`, a parameter named `maxChunkBytes`, and
+ * `chunkSnapshot(bytes, SOME_CONSTANT)` are hand-overs, not declarations,
+ * and do not match.
  */
-const DECLARATION = /(?:[A-Z_]*CHUNK_BYTES|maxChunkBytes)\s*[:=]\s*-?\d[\d_]*/
+const DECLARATION =
+  /(?:[A-Z_]*CHUNK_BYTES|maxChunkBytes)\s*[:=]\s*-?\d[\d_]*|chunkSnapshot\s*\([^,()]*,\s*-?\d[\d_]*/
 
 /**
- * Files allowed to declare their own, each with the reason. Both are frozen
- * historical values; see this file's header. Length pinned so a third entry
- * is a decision visible in the diff.
+ * Files allowed to declare their own, each pinned to the EXACT declaration
+ * it is exempt for. See this file's header for the three kinds.
+ *
+ * Pinned to the TEXT rather than to the file, because membership alone is a
+ * blanket: an allowlisted file could add a second, unrelated declaration and
+ * the scan would skip the whole file. Measured — sneaking a
+ * `const SNEAKED_CHUNK_BYTES = 777` into an allowlisted file left all five
+ * tests green. `file-size-budget.test.ts` already knew this; its own comment
+ * says its first version "recorded a count nothing compared against", and
+ * 11 of 17 files grew under a green build.
  */
-const ALLOWLIST: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts':
-    'a migration replays with the value it originally wrote; its own comment says so',
-  'apps/web/src/lib/browser-idb-upgrades.ts':
-    'the same reason one level out: an already-migrated record must keep claiming the value it was migrated with',
-  'packages/mcp-server/src/server/store/libsql/libsql-document-store.ts':
-    'writeUnreadableRecord stores -1 on purpose, an invalid value the conformance seam needs so a reader can be shown refusing it',
-  'packages/ports/src/test-utils/document-store-conformance.ts':
-    'the conformance suite chunks at 4 bytes deliberately; at the production value every fixture would be one chunk and reassembly would never run',
+interface AllowedDeclaration {
+  /**
+   * The exact declarations this file is exempt for, with how many times the
+   * source spells each. Counted rather than merely listed, because two of
+   * these files write the same value more than once and a list would exempt
+   * a third copy nobody looked at.
+   */
+  readonly declarations: readonly { readonly text: string; readonly times: number }[]
+  readonly reason: string
+}
+
+const ALLOWLIST: Readonly<Record<string, AllowedDeclaration>> = {
+  'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts': {
+    declarations: [{ text: 'const IMPORT_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
+    reason: 'a migration replays with the value it originally wrote; its own comment says so',
+  },
+  'apps/web/src/lib/browser-idb-upgrades.ts': {
+    declarations: [{ text: 'const LEGACY_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
+    reason:
+      'the same reason one level out: an already-migrated record must keep claiming the value it was migrated with',
+  },
+  'packages/mcp-server/src/server/store/libsql/libsql-document-store.ts': {
+    // Twice: the insert and the `doUpdateSet` that has to write the same
+    // poison value, or an upsert would leave a readable record behind.
+    declarations: [{ text: 'maxChunkBytes: -1', times: 2 }],
+    reason:
+      'writeUnreadableRecord stores -1 on purpose, an invalid value the conformance seam needs so a reader can be shown refusing it',
+  },
+  'packages/ports/src/test-utils/document-store-conformance.ts': {
+    // The default parameter once, and two manifest literals built from it.
+    declarations: [
+      { text: 'maxChunkBytes = 4', times: 1 },
+      { text: 'maxChunkBytes: 4', times: 2 },
+    ],
+    reason:
+      'the conformance suite chunks at 4 bytes deliberately; at the production value every fixture would be one chunk and reassembly would never run',
+  },
+}
+
+/** How many times `text` appears in `source`. */
+function occurrences(source: string, text: string): number {
+  return source.split(text).length - 1
+}
+
+/**
+ * The source with each allowed declaration removed exactly as many times as
+ * the entry claims, so what remains is everything the file declares BEYOND
+ * its exemption.
+ */
+function beyondTheExemption(source: string, allowed: AllowedDeclaration): string {
+  let rest = source
+  for (const { text, times } of allowed.declarations) {
+    for (let i = 0; i < times; i += 1) {
+      const at = rest.indexOf(text)
+      if (at === -1) break
+      rest = rest.slice(0, at) + rest.slice(at + text.length)
+    }
+  }
+  return rest
 }
 
 /**
@@ -103,7 +173,11 @@ const FIXTURES: readonly { readonly source: string; readonly declares: boolean }
   // The poison value a conformance seam writes is still a declaration: a
   // store that hardcodes one has to say so here.
   { source: 'await trx.values({ maxChunkBytes: -1 })', declares: true },
+  // The shape review found missing: a literal at the call site.
+  { source: 'chunkSnapshot(bytes, 1_000_000)', declares: true },
+  { source: 'chunkSnapshot(\n  snapshot,\n  4,\n)', declares: true },
   { source: 'chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)', declares: false },
+  { source: 'chunkSnapshot(bytes, opts.maxChunkBytes)', declares: false },
   { source: 'const { maxChunkBytes } = manifest', declares: false },
   { source: 'function chunkSnapshot(bytes: Uint8Array, maxChunkBytes: number)', declares: false },
   { source: 'maxChunkBytes: manifest.maxChunkBytes', declares: false },
@@ -125,28 +199,40 @@ describe('the snapshot chunk size is written in one place', () => {
     expect(production.length).toBeGreaterThan(300)
   })
 
-  it('no writer outside ports declares its own chunk size', () => {
+  it('no writer outside ports declares its own chunk size, allowlisted files included', () => {
     const hits: string[] = []
     for (const path of production) {
       const rel = relative(REPO_ROOT, path).split(sep).join('/')
       if (rel === DECLARATION_SITE) continue
-      if (ALLOWLIST[rel] !== undefined) continue
-      const source = stripCommentsAndStrings(readFileSync(path, 'utf8'))
+      const allowed = ALLOWLIST[rel]
+      const whole = stripCommentsAndStrings(readFileSync(path, 'utf8'))
+      // An exemption covers ONE declaration, so the rest of an allowlisted
+      // file is scanned like anyone else's.
+      const source = allowed === undefined ? whole : beyondTheExemption(whole, allowed)
       const match = DECLARATION.exec(source)
       if (match !== null) hits.push(`${rel}: ${match[0].trim()}`)
     }
     expect(hits).toEqual([])
   })
 
-  it('every allowlisted file exists and really declares one', () => {
-    // An allowlist entry that has stopped being true is an exemption for
-    // nothing, and it reads exactly like a rule being kept.
-    for (const [rel, reason] of Object.entries(ALLOWLIST)) {
+  it('every allowlisted file spells each exempt declaration exactly as many times as claimed', () => {
+    // Guarded from both sides. An entry that has stopped being true is an
+    // exemption for nothing and reads exactly like a rule being kept; an
+    // entry claiming FEWER than the source has would exempt a copy nobody
+    // classified, which is how the second `maxChunkBytes: -1` and the two
+    // conformance literals were found.
+    for (const [rel, allowed] of Object.entries(ALLOWLIST)) {
       const source = stripCommentsAndStrings(readFileSync(join(REPO_ROOT, rel), 'utf8'))
-      expect(DECLARATION.test(source), `${rel} no longer declares a chunk size`).toBe(true)
-      expect(reason.split(/\s+/).length, `${rel}'s reason is too short to be one`).toBeGreaterThan(
-        8,
-      )
+      for (const { text, times } of allowed.declarations) {
+        expect(
+          occurrences(source, text),
+          `${rel} spells \`${text}\` a different number of times`,
+        ).toBe(times)
+      }
+      expect(
+        allowed.reason.split(/\s+/).length,
+        `${rel}'s reason is too short to be one`,
+      ).toBeGreaterThan(8)
     }
   })
 
