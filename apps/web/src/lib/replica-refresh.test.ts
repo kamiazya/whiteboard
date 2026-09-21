@@ -208,6 +208,25 @@ describe('scheduleReplicaRefresh', () => {
     })
   })
 
+  it('a pull that throws a non-Error value is still logged, with typeof standing in for its name', async () => {
+    // The `instanceof Error` check's other branch — a thrown string, which
+    // `fetch` never produces itself but any dependency it calls through
+    // (JSON.parse, a rejected native promise) legitimately can.
+    const fetchThatThrowsAString = (async () => {
+      throw 'network down'
+    }) as unknown as typeof globalThis.fetch
+    scheduleReplicaRefresh(deps({ fetch: fetchThatThrowsAString }))
+    await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
+    const [message, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
+    expect(message).toMatch(/failed/)
+    expect(fields).toMatchObject({
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      name: 'string',
+      message: 'network down',
+    })
+  })
+
   // The production `schedule` default (no `deps.schedule` override) is what
   // bounds a background pull to a real deadline — a page kept continuously
   // busy must not leave a replica-registry write waiting indefinitely. Every
