@@ -186,6 +186,19 @@ async function bindSession(fixture: Awaited<ReturnType<typeof makeApp>>) {
   return { token, credentialId, origin: HOSTED }
 }
 
+/** Seeds a second, unrelated member directly through the store so the
+ *  workspace stays member-GATED for a test that is not about that member —
+ *  without this, a workspace with zero members admits everyone (S8). */
+async function addGatingMember(fixture: Awaited<ReturnType<typeof makeApp>>) {
+  const profile = await fixture.members.ensureProfile({
+    origin: HOSTED,
+    credentialId: 'gating-member-cred',
+    displayName: 'Gating Member',
+  })
+  await fixture.members.addMember(WS, profile.id)
+  return profile
+}
+
 describe('POST /api/workspaces/:workspaceId/replica-key', () => {
   it('400s a malformed workspaceId', async () => {
     const { app } = await makeApp()
@@ -247,8 +260,26 @@ describe('POST /api/workspaces/:workspaceId/replica-key', () => {
     expect(body.tier).toBe('offline')
   })
 
-  it('refuses a pairing session with no passkey binding', async () => {
+  it('member-less workspace: an unbound pairing session gets 200 (origin trust, S8)', async () => {
     const fixture = await makeApp()
+    fixture.grants.addGrant(HOSTED)
+    const tokenRes = await fixture.app.request('/api/pairing/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: HOSTED },
+      body: JSON.stringify({ grantType: 'origin' }),
+    })
+    const { token } = pairingTokenResponseSchema.parse(await tokenRes.json())
+
+    const res = await post(fixture.app, `/api/workspaces/${WS}/replica-key`, {
+      Authorization: `Bearer ${token}`,
+      Origin: HOSTED,
+    })
+    expect(res.status).toBe(200)
+  })
+
+  it('member-gated workspace: refuses an unbound pairing session', async () => {
+    const fixture = await makeApp()
+    await addGatingMember(fixture)
     fixture.grants.addGrant(HOSTED)
     const tokenRes = await fixture.app.request('/api/pairing/token', {
       method: 'POST',
@@ -267,19 +298,18 @@ describe('POST /api/workspaces/:workspaceId/replica-key', () => {
     })
   })
 
-  it('refuses an OAuth grant carrying workspace:read but no passkey — the registry rule alone is not the gate', async () => {
+  it('an OAuth grant carrying workspace:read is operator-issued and gets 200 even on a member-gated workspace', async () => {
     const fixture = await makeApp()
+    await addGatingMember(fixture)
     const res = await post(fixture.app, `/api/workspaces/${WS}/replica-key`, {
       Authorization: `Bearer ${OAUTH_TOKEN}`,
     })
-    expect(res.status).toBe(403)
-    expect((await res.json()) as { error: string }).toMatchObject({
-      error: 'requires_person_session',
-    })
+    expect(res.status).toBe(200)
   })
 
   it('refuses a bound session whose passkey was never admitted as a member', async () => {
     const fixture = await makeApp()
+    await addGatingMember(fixture)
     const { token } = await bindSession(fixture)
     const res = await post(fixture.app, `/api/workspaces/${WS}/replica-key`, {
       Authorization: `Bearer ${token}`,
@@ -315,6 +345,11 @@ describe('POST /api/workspaces/:workspaceId/replica-key', () => {
 
   it('revoke-then-read: L1 removal kills the bound token, and a fresh session for the same passkey is refused', async () => {
     const fixture = await makeApp()
+    // A second, unrelated member keeps the workspace GATED after the first
+    // is removed below — otherwise removing the only member reverts the
+    // workspace to origin trust (S8) and the "fresh session refused"
+    // assertion at the end would no longer hold.
+    await addGatingMember(fixture)
     const { token, credentialId } = await bindSession(fixture)
     const addRes = await fixture.app.request(`/api/workspaces/${WS}/members`, {
       method: 'POST',

@@ -118,6 +118,16 @@ and a person removed from a workspace's membership is refused the key again
 the next time their session asks for one — even though nothing about their
 *existing* replica or its content changes at that moment.
 
+The membership check applies only to a plain paired-browser session, and
+only once a workspace **has** members. A workspace with none yet — the
+common case before anyone has been added — hands out the key to a paired
+session with no passkey required. Any request already trusted at the
+daemon's own boundary (the daemon token, an open daemon with no token
+configured, or an OAuth grant/token issued through the daemon's own consent
+flow) always bypasses the membership check, member or no: none of those can
+name a person to check membership for, and they already carry the daemon's
+own authority.
+
 **The daemon holds the key in plaintext.** It mints and stores the key itself,
 so this is not end-to-end encryption from the daemon's point of view, and
 product copy about it must never say "cryptographically revoked" — a removed
