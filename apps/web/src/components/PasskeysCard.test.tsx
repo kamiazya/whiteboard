@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
@@ -77,6 +77,166 @@ beforeEach(() => {
 })
 
 describe('PasskeysCard', () => {
+  // A changed `fetchApi` identity means a DIFFERENT daemon, and these pins are
+  // credential ids: a stale list rendered against the current daemon offers a
+  // Remove button that sends another daemon's `credentialId` to this one. Six
+  // `generation !== generationRef.current` checks in the component stop that,
+  // and every other case here uses a single fetch and never rerenders, so all
+  // six were unreachable.
+  const NEW_PIN = {
+    credentialId: 'Y3JlZC1uZXctZGFlbW9u',
+    origin: 'http://127.0.0.1:4099',
+    backupEligible: false,
+    createdAt: '2026-09-20T00:00:00.000Z',
+  }
+
+  /** A fetch the test settles by hand, either way. */
+  function heldFetch() {
+    let release!: (response: Response) => void
+    let fail!: (reason: Error) => void
+    const held = new Promise<Response>((resolve, reject) => {
+      release = resolve
+      fail = reject
+    })
+    return { release, fail, fetchFn: vi.fn(() => held) }
+  }
+
+  const provide = (fetchFn: unknown, baseUrl: string) => (
+    <DaemonApiContext.Provider value={fetchFn as typeof globalThis.fetch}>
+      <PasskeysCard daemonBaseUrl={baseUrl} passkeyCredentials={fakePasskey()} />
+    </DaemonApiContext.Provider>
+  )
+
+  it('CONTROL: a held list released with no daemon switch DOES render', async () => {
+    // Without this, the case below proves nothing: "the old daemon's pins are
+    // absent" is equally true when the release simply has not been flushed
+    // yet, and an absence assertion cannot tell those apart. This one shares
+    // the harness and the flush, and asserts PRESENCE — so if it passes, the
+    // flush reaches a setState and the absence next door is about the guard.
+    const held = heldFetch()
+    render(provide(held.fetchFn, DAEMON))
+
+    await act(async () => {
+      held.release(jsonResponse({ credentials: PINS }))
+    })
+
+    for (const pin of PINS) {
+      expect(screen.getByTestId(`passkey-${pin.credentialId}`)).not.toBeNull()
+    }
+  })
+
+  it('a list from the previous daemon never lands on the current one', async () => {
+    const old = heldFetch()
+    const newFetch = vi.fn(async () => jsonResponse({ credentials: [NEW_PIN] }))
+
+    const { rerender } = render(provide(old.fetchFn, DAEMON))
+    rerender(provide(newFetch, 'http://127.0.0.1:4099'))
+    await screen.findByTestId(`passkey-${NEW_PIN.credentialId}`)
+
+    // The old daemon answers last, with ITS pins.
+    await act(async () => {
+      old.release(jsonResponse({ credentials: PINS }))
+    })
+
+    expect(screen.getByTestId(`passkey-${NEW_PIN.credentialId}`)).not.toBeNull()
+    for (const pin of PINS) {
+      expect(screen.queryByTestId(`passkey-${pin.credentialId}`)).toBeNull()
+    }
+  })
+
+  it('a revoke sent to the previous daemon does not remove a row from the current one', async () => {
+    // `revoke` reads the generation WITHOUT incrementing it, so the switch's
+    // own reload is what invalidates an in-flight DELETE.
+    //
+    // The new daemon's list holds the SAME credentialId, which is the only
+    // arrangement that can fail: one passkey registered on both daemons. A
+    // new list that shares no id with the revoked one filters to itself
+    // unchanged, so the guard is unobservable — measured, that version of
+    // this case survived deleting the guard outright.
+    const SHARED = PINS[1]?.credentialId ?? ''
+    const del = heldFetch()
+    const oldFetch = vi.fn((_url: string, init?: RequestInit) =>
+      init?.method === 'DELETE'
+        ? del.fetchFn()
+        : Promise.resolve(jsonResponse({ credentials: PINS })),
+    )
+    const newFetch = vi.fn(async () =>
+      jsonResponse({
+        credentials: [
+          NEW_PIN,
+          {
+            credentialId: SHARED,
+            origin: 'http://127.0.0.1:4099',
+            backupEligible: false,
+            createdAt: 'x',
+          },
+        ],
+      }),
+    )
+
+    const { rerender } = render(provide(oldFetch, DAEMON))
+    const row = await screen.findByTestId(`passkey-${SHARED}`)
+    fireEvent.click(within(row).getByRole('button', { name: /remove/i }))
+
+    rerender(provide(newFetch, 'http://127.0.0.1:4099'))
+    await screen.findByTestId(`passkey-${NEW_PIN.credentialId}`)
+
+    await act(async () => {
+      del.release(jsonResponse({ revoked: true }))
+    })
+
+    // The current daemon still holds it; saying otherwise tells the person a
+    // passkey is gone that would still be accepted.
+    expect(screen.getByTestId(`passkey-${SHARED}`)).not.toBeNull()
+  })
+
+  it('a FAILED list from the previous daemon does not error out the current one', async () => {
+    // The `catch` has its own generation check, and it is the one a reader
+    // would notice: a stale network failure replacing a loaded list with the
+    // error state says the CURRENT daemon is unreachable when it answered
+    // fine a moment ago.
+    const old = heldFetch()
+    const newFetch = vi.fn(async () => jsonResponse({ credentials: [NEW_PIN] }))
+
+    const { rerender } = render(provide(old.fetchFn, DAEMON))
+    rerender(provide(newFetch, 'http://127.0.0.1:4099'))
+    await screen.findByTestId(`passkey-${NEW_PIN.credentialId}`)
+
+    await act(async () => {
+      old.fail(new Error('the previous daemon went away'))
+    })
+
+    expect(screen.getByTestId(`passkey-${NEW_PIN.credentialId}`)).not.toBeNull()
+  })
+
+  it('a FAILED revoke on the previous daemon does not post its message here', async () => {
+    const del = heldFetch()
+    const oldFetch = vi.fn((_url: string, init?: RequestInit) =>
+      init?.method === 'DELETE'
+        ? del.fetchFn()
+        : Promise.resolve(jsonResponse({ credentials: PINS })),
+    )
+    const newFetch = vi.fn(async () => jsonResponse({ credentials: [NEW_PIN] }))
+
+    const { rerender } = render(provide(oldFetch, DAEMON))
+    const row = await screen.findByTestId(`passkey-${PINS[1]?.credentialId}`)
+    fireEvent.click(within(row).getByRole('button', { name: /remove/i }))
+
+    rerender(provide(newFetch, 'http://127.0.0.1:4099'))
+    await screen.findByTestId(`passkey-${NEW_PIN.credentialId}`)
+
+    await act(async () => {
+      del.fail(new Error('the previous daemon went away'))
+    })
+
+    // Naming the OLD daemon's origin in a message about the current one is
+    // the whole defect: the person is told a removal failed on a daemon they
+    // are no longer looking at.
+    expect(screen.getByTestId('passkeys-card').textContent).not.toMatch(
+      new RegExp(PINS[1]?.origin ?? 'x'),
+    )
+  })
+
   it('lists each pinned passkey, and says which are confined to one device', async () => {
     renderCard(async () => jsonResponse({ credentials: PINS }))
 
