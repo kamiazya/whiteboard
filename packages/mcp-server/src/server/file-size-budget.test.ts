@@ -340,7 +340,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // no canvas value, so a page reading only the canvas cannot see one. One
   // session serves both document pages, which is what keeps the two keepers
   // from drifting on it — and most of the eighteen lines say that.
-  'apps/web/src/lib/document-sync-session.ts': 1493,
+  // Raised 1493 -> 1535: an undo now takes back a write still inside its
+  // debounce window, and what costs the lines is the WHY — committing that
+  // write after an undo wrote the pre-undo canvas back over a document the
+  // screen had already left, publishing nothing and discarding the redo
+  // stack.
+  'apps/web/src/lib/document-sync-session.ts': 1535,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -798,7 +803,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1863 -> 1892: the v20 idempotency case now seeds a post-v20
   // sealed replica row so the version guard has something it would delete.
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
-  'apps/web/src/lib/document-sync-session.test.ts': 2768,
+  // Raised 2768 -> 2855 for the three cases pinning that undo: the document
+  // agreeing with the screen after an undo and after a redo, and a taken-back
+  // write settling as saved rather than reading as pending forever.
+  'apps/web/src/lib/document-sync-session.test.ts': 2855,
   // Raised 1550 -> 1615 with the two ink writes above: five examples for the
   // move (both ends, a node end held, the two no-ops) and the colour.
   // Raised 1615 -> 1675 with the three ink-fragment cases: a paste of pure
@@ -883,7 +891,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // is the deliberateness the guard exists to force. SIX branches have now
   // raised it for that reason independently; the number is the resolved
   // file's own, re-measured at each merge rather than carried from a side.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 1013,
+  // 1013 -> 1021 for the two reasons above, which this file pays for because
+  // it is on its own list. #1792 takes this entry off the list for exactly
+  // that reason: the number records how many entries there are, so every
+  // branch that records a raise moves it and two of them conflict here.
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 1025,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard
