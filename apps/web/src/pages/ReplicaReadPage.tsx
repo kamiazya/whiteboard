@@ -47,6 +47,7 @@ import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entr
 import type { ReplicaKeyInput, ReplicaRenewalInput } from '../lib/replica-page-state.js'
 import { replicaPageState } from '../lib/replica-page-state.js'
 import { lockedDetail, REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
+import { hasRememberedReplicaKey, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
 import { ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 
@@ -101,6 +102,7 @@ export function ReplicaReadPage({
   // a cold load takes, never a bespoke retry.
   const [attempt, setAttempt] = useState(0)
   const [reconnecting, setReconnecting] = useState(false)
+  const [unlocking, setUnlocking] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   // The markdown editor's controlled value, re-derived when the selection
   // changes; edits go straight into the record's containers and a debounced
@@ -216,8 +218,34 @@ export function ReplicaReadPage({
     }
   }, [workspaceId, daemonBaseUrl, attempt, withheld])
 
+  // Read on every render rather than held in state: `unlockReplicaKey` can
+  // DROP the blob (a spent lease, ciphertext nothing here opens), and a
+  // remembered flag captured once would go on offering an unlock that has
+  // just been established to be impossible. The `attempt` bump an unlock ends
+  // with is what re-reads it.
+  const remembered = hasRememberedReplicaKey(daemonBaseUrl, workspaceId)
   const pageState =
-    state.kind === 'loading' ? null : replicaPageState({ renewal, key: keyInputFor(state) })
+    state.kind === 'loading'
+      ? null
+      : replicaPageState({ renewal, key: keyInputFor(state), remembered })
+
+  /**
+   * The cold start (ADR-0042 decision 6). No `forget` first, unlike
+   * Reconnect: there is nothing stale to clear, and forgetting would drop
+   * the very cache `unlockReplicaKey` is about to fill. Re-asking the page
+   * afterwards is what turns a taken key into content — and what re-reads
+   * `remembered` when the attempt dropped the blob instead.
+   */
+  const handleUnlock = useCallback(async () => {
+    if (unlocking) return
+    setUnlocking(true)
+    try {
+      await unlockReplicaKey({ daemonBaseUrl, workspaceId })
+    } finally {
+      setUnlocking(false)
+      setAttempt((a) => a + 1)
+    }
+  }, [daemonBaseUrl, workspaceId, unlocking])
 
   // forget-then-ask (ADR-0042's own reconnect contract, S4a): the S5 spec's
   // failure mode is a stale cached `withheld:'unreachable'` outliving a
@@ -374,7 +402,9 @@ export function ReplicaReadPage({
           ? REPLICA_STATE_COPY[pageState].body
           : pageState === 'locked' || pageState === 'needs-connection'
             ? REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')
-            : null
+            : pageState === 'unlockable'
+              ? REPLICA_STATE_COPY.unlockable.body
+              : null
 
   return (
     <div className="flex h-full flex-col" data-testid="replica-read-page">
@@ -467,6 +497,26 @@ export function ReplicaReadPage({
           {reconnecting && (
             <p className="mt-2" data-testid="replica-reconnecting-line">
               Reconnecting…
+            </p>
+          )}
+        </div>
+      )}
+      {pageState === 'unlockable' && (
+        <div className="p-4 text-sm text-muted-foreground" data-testid="replica-state-unlockable">
+          <p>{REPLICA_STATE_COPY.unlockable.body}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-3"
+            aria-disabled={unlocking}
+            onClick={() => void handleUnlock()}
+          >
+            {REPLICA_STATE_COPY.unlockable.action}
+          </Button>
+          {unlocking && (
+            <p className="mt-2" data-testid="replica-unlocking-line">
+              Waiting for your passkey…
             </p>
           )}
         </div>

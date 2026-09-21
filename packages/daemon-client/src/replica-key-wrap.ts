@@ -11,8 +11,8 @@
  * The cost of this, chosen knowingly (ADR-0035 named it, user decision
  * 2026-09-21): **the passkey provider becomes the recovery path.** Lose the
  * credential there and the local copy cannot be read again. That is a
- * sentence the UI owes the user, and it is declared once in
- * `apps/web`'s destructive-copy module rather than here.
+ * sentence the UI owes the user, and it is declared once in `apps/web`'s
+ * `replica-state-copy.ts`, on the state that offers the unlock.
  *
  * ## Why the binding is the AAD and not the HKDF info
  *
