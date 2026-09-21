@@ -193,6 +193,10 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   query: 'no subject: what was typed; the results it produces are `hits`, which IS cleared',
   lastCardCount:
     'no subject: how MANY cards the last listing drew, never which — and it has to outlive the switch on purpose, because sizing the placeholder grid to the outgoing list is what holds the layout still while the incoming one loads',
+  readAtRef:
+    'no subject: the (source, revision) pair the last list read was taken at, so the two list effects do not repeat one another on a mount — it names no workspace, and on a switch the new source is what it is compared against, which is the switch being noticed rather than missed',
+  revisionRef:
+    'no subject: mirrors the revision prop, reassigned every render, so the switch effect can record what it read at without taking a dependency on it',
 }
 
 const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
