@@ -8,7 +8,9 @@ description: A skill that standardizes whiteboard MCP and daemon verification. U
 This repository splits verification targets into two categories.
 
 - **Server/daemon-side changes**
-  Example: `src/server/**`, `src/app/hooks/useWhiteboardSync.ts`, `src/daemon/**`
+  Example: `src/server/**`, `src/daemon/**`, and the browser's sync client
+  `packages/daemon-client/src/daemon-backend.ts` (which is where the former
+  `useWhiteboardSync` hook ended up)
 - **MCP schema/registration-side changes**
   Example: descriptions, schemas, or registration in `src/server/mcp/index.ts` and `src/server/mcp/tools/**`
 
@@ -117,7 +119,7 @@ first passes. Do not open with a quota-consuming one.
 - If you get an error other than `no_client`
   - A guard likely regressed in `routes/export.ts`, `routes/viewport.ts`, or `routes/ws.ts`
 - If version restore returns the wrong element count
-  - There is likely a regression in `routes/canvas.ts` or `store/version-store.ts`
+  - There is likely a regression in `routes/document.ts` or `store/version-store.ts`
 
 ## Working Rules
 

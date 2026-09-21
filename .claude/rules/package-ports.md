@@ -116,8 +116,7 @@ nothing to say so at compile time.
   `vitest.config.ts`).
 - Every schema has accept + reject example tests; `chunkSnapshot`/
   `reassembleSnapshot` also have fast-check round-trip and
-  order-independence properties (`src/snapshot-helpers.properties.test.ts`,
-  `src/negotiate-protocol-version.properties.test.ts`).
+  order-independence properties (`src/snapshot-helpers.properties.test.ts`).
 - `src/smoke.test.ts` imports the package by its published specifier
   (`@kamiazya/whiteboard-ports`), not a relative path, to exercise
   `package.json` `exports` resolution the way a real consumer will.
