@@ -32,10 +32,56 @@ language js
 // here, and keying on the name would buy nothing while missing a handler
 // that spells it otherwise. Measured 0 non-Hono `.notFound()` calls in the
 // scoped directory.
-`$c.notFound()` where {
-  register_diagnostic(
-    span = $c,
-    message = "c.notFound() answers text/plain, and every refusal under /api/ in this daemon is JSON: a caller parsing the body gets a SyntaxError instead of the reason. Answer c.json({ error: 'not_found', message }, 404) instead.",
-    severity = "error"
-  )
+
+any {
+  // Hono's built-in 404 answers text/plain.
+  `$c.notFound()` where {
+    register_diagnostic(
+      span = $c,
+      message = "c.notFound() answers text/plain, and every refusal under /api/ in this daemon is JSON: a caller parsing the body gets a SyntaxError instead of the reason. Answer c.json({ error: 'not_found', message }, 404) instead.",
+      severity = "error"
+    )
+  },
+
+  // An EXCEPTION's message in the slot a client switches on.
+  //
+  // `apiErrorBodySchema`'s code arm requires snake_case (`apiErrorCodeSchema`),
+  // so `{ error: err.message }` is out of contract twice over: the code is a
+  // sentence nobody can branch on, and with no `message` beside it
+  // `apiErrorReason` answers `undefined` and every caller shows a generic
+  // banner. Ten of server-core's nineteen refusals were this shape.
+  //
+  // GRIT rather than the source scan beside it
+  // (`routes/error-body-shape.test.ts`), because that scan reads the `error`
+  // value only when it is a STRING LITERAL — a member expression is invisible
+  // to it, verified by putting one back and watching the scan stay green. The
+  // runtime half (the fuzz lanes parsing every 4xx/5xx under the contract)
+  // catches it only on a branch the fuzz happens to provoke. This is
+  // syntactic, unambiguous and total over its scope.
+  `$c.json({ error: $err.message }, $status)` where {
+    register_diagnostic(
+      span = $err,
+      message = "An exception's message in the `error` slot is out of contract twice: the code is a sentence no client can switch on, and with no `message` beside it apiErrorReason answers undefined. Use errorBody('some_code', err.message).",
+      severity = "error"
+    )
+  },
+
+  // A validation failure's `issues` array, which the contract does not admit.
+  //
+  // `apiErrorBodySchema`'s code arm is `.strict()`, so a body carrying
+  // `issues` fails to parse and `apiErrorReason` discards it WHOLE — the only
+  // description of what was wrong, in the one field no reader looks at. Six
+  // sites in mcp-server and nine in server-core answered this way.
+  //
+  // `{ $..., issues: $issues }`, not `{ $...rest, ... }`: the named-spread
+  // form COMPILES and matches nothing. Measured against a file holding the
+  // exact shape — a rule that loads clean and never fires, which is the
+  // failure this plugin's fixture pair exists to make loud, and it did.
+  `$c.json({ $..., issues: $issues }, $status)` where {
+    register_diagnostic(
+      span = $issues,
+      message = "A raw `issues` array is outside the api error contract, whose code arm is strict: apiErrorReason discards the whole body and the caller shows a generic banner. Use invalidRequestBody(parsed.error), which flattens them into the reason.",
+      severity = "error"
+    )
+  }
 }
