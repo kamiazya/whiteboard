@@ -49,6 +49,15 @@ export const MUTATED = [
   // would have SHRUNK what the lane sees while the report kept looking the
   // same, which is the failure this list's pinned counts exist to stop.
   'src/tidy-units.ts',
+  // Split out of `tidy.ts` with it: the axis vocabulary every pass reads,
+  // and the band pass it was introduced for. Both are in the lane for the
+  // reason `tidy-units.ts` is — this is where the heuristic lives, so this
+  // is where the residue goes. `tidy-axis.ts` earns it twice over: a rule
+  // written asymmetrically on one axis is exactly the defect the vocabulary
+  // exists to make impossible, and the lane is what checks that claim
+  // rather than restating it.
+  'src/tidy-axis.ts',
+  'src/tidy-bands.ts',
   // A four-candidate search whose property scores the candidates from the
   // definition of overlap, sharing nothing with the search.
   'src/layout/comment-placement.ts',
@@ -194,8 +203,11 @@ export const KNOWN_EQUIVALENT = {
   // the margin apart then answers differently, and the grouped tidy
   // scoreboard kills it. Each hand-verified; the reasoning is
   // `package-canvas-render.md`.
-  'src/tidy.ts': {
-    'ConditionalExpression: delta === 0 -> false': 1,
+  // The zero-delta entry moved here with `shift` when the axis vocabulary
+  // came out of `tidy.ts`, and became TWO: `shift` is written once per axis
+  // rather than once with a branch, which is the whole point of it.
+  'src/tidy-axis.ts': {
+    'ConditionalExpression: delta === 0 -> false': 2,
   },
   // `p` is a signed segment delta that the axis-aligned skip above the loop
   // keeps nonzero, so `<=` and `<` agree; a chord whose entry and exit

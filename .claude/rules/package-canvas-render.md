@@ -1790,6 +1790,36 @@ because that is where `tidy.ts`'s own survivors had migrated once its
 scoreboard existed, so leaving it out would have shrunk the lane's reach while
 the report read the same.
 
+**An AXIS is a thing here, and that is what made the rest legible**
+(`tidy-axis.ts`). Every rule in this file is stated once and run twice, and
+each one used to carry `axis === 'x' ? … : …` at every read of a position,
+every write of one, and every pick of an origin or a floor — 18 of them, each
+a branch a reader resolves before seeing what the rule says, and each the one
+place a rule can be written asymmetrically by accident. `Axis` is `near` /
+`size` / `at(fraction)` / `of(pair)` / `moved` / `shift` plus the anchors a
+drawer actually sets on it (`bandFractions`: the near edge, the centre, and on
+x the far edge, since a width is named and a height is usually fitted to the
+text). It is its own module rather than filed beside the band pass it was
+introduced for, because four passes read it, and a contract filed under its
+first consumer is one the others reach up to.
+
+`tidy-bands.ts` went with it: the band pass, plus `SnapGuard` — the two things
+a snap may not buy alignment with (a neighbour's margin, and the frame's),
+bundled because every site that asks one asks the other. Both are in the
+mutation lane for the reason `tidy-units.ts` is. `tidy-axis.ts` earns it
+twice over: a rule written asymmetrically on one axis is exactly the defect
+the vocabulary exists to make impossible, and the lane is what checks that
+claim rather than restating it.
+
+What the decomposition is worth, measured against Biome's
+`noExcessiveCognitiveComplexity` at 15: this file carried **six** functions
+over it at 52 / 44 / 37 / 31 / 29 / 19, and carries none. The three ledger
+entries it held in `function-size-budget.test.ts` — `alignBands` 92 lines,
+`tidyLevel` 148, `resolveOverlaps` 51 — are gone rather than lowered. Nothing
+about the OUTPUT moved: all 1650 `canvas-render-node` tests pass unchanged,
+`tidy-quality.test.ts` included, whose debt AND price columns are pinned
+exactly and would report any behaviour change as a moved number.
+
 **Board-wide GUIDE LINES in tidy were implemented, measured and REJECTED
 — by the composition score, on its first use as a decision instrument.**
 The idea is sound and the mechanism worked: cluster every input anchor at
