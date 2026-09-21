@@ -149,7 +149,12 @@ export function transferWindowUrl(
   keeperBaseUrl: string,
   { senderOrigin, nonce }: { senderOrigin: string; nonce: string },
 ): string {
-  const base = keeperBaseUrl.replace(/\/+$/, '')
+  // Trimmed with a loop rather than `/\/+$/`: a greedy quantifier anchored at
+  // the end re-tries from every start position when the match fails, which is
+  // O(n^2) in a trailing run of slashes. The destination is a value a person
+  // can type, so the cheap linear form is the one to write.
+  let base = keeperBaseUrl
+  while (base.endsWith('/')) base = base.slice(0, -1)
   const params = new URLSearchParams({ from: senderOrigin, nonce })
   return `${base}/receive-transfer#${params.toString()}`
 }

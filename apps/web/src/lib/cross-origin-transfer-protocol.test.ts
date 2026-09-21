@@ -44,7 +44,7 @@ describe('the transfer offer', () => {
       // The premise, asserted rather than assumed: this value really is what
       // a structured clone hands over — right tag, wrong constructor.
       expect(other.Uint8Array).not.toBe(Uint8Array)
-      expect(foreign instanceof Uint8Array).toBe(false)
+      expect(foreign).not.toBeInstanceOf(Uint8Array)
       expect(Object.prototype.toString.call(foreign)).toBe('[object Uint8Array]')
 
       const parsed = transferRequestSchema.safeParse(offer({ snapshot: foreign }))
@@ -107,6 +107,15 @@ describe('the window URL carries the sender origin in its fragment', () => {
     // not accumulate which app sent people to it.
     const [beforeHash] = url.split('#')
     expect(beforeHash).toBe('https://keeper.example/receive-transfer')
+    // Several trailing slashes, which is what distinguishes the trim loop
+    // from a single slice — and a keeper base URL a person typed can have
+    // them.
+    expect(
+      transferWindowUrl('https://keeper.example///', {
+        senderOrigin: 'https://app.example',
+        nonce: NONCE,
+      }).split('#')[0],
+    ).toBe('https://keeper.example/receive-transfer')
     expect(parseTransferWindowUrl(`#${url.split('#')[1]}`)).toEqual({
       senderOrigin: 'https://app.example',
       nonce: NONCE,
