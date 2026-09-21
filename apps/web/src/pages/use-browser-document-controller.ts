@@ -154,6 +154,79 @@ const defaultLoroStore = /* @__PURE__ */ new LoroStore()
 const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
 const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
 
+/**
+ * The stores a page reads to decide which document it opens. Taken as a
+ * bundle because the two candidate sources below each want most of them, and
+ * threading four refs through each is an argument list saying nothing.
+ */
+interface OpeningStores {
+  readonly index: DocumentIndex
+  readonly pointer: DefaultDocumentPointer
+  readonly clock: ContentClock
+  readonly loro: LoroStoreLike
+}
+
+/**
+ * Whether this mount is still the one on screen.
+ *
+ * Passed rather than checked once at the end, because most of the
+ * cancellation points below guard a WRITE — setting the pointer, seeding a
+ * document — not merely a `setState` on a component that has gone. A
+ * resolution that only checked when it finished would still perform them.
+ */
+type StillMounted = () => boolean
+
+/**
+ * The document a deep link names, or null when the path resolves to nothing.
+ *
+ * An index that cannot resolve is indistinguishable from a path that is not
+ * there, and both answer null: letting the read throw would dead-end EVERY
+ * deep link on a degraded store, and App mounts this page only with a path,
+ * so that is every mount. The workspace id is read through the null-answering
+ * accessor for the same reason — in an argument position its throw would
+ * precede the promise and escape the caller's `catch`.
+ */
+async function openDeepLink(
+  stores: OpeningStores,
+  path: string,
+  alive: StillMounted,
+): Promise<DocumentSnapshot | null> {
+  const workspaceId = browserWorkspaceIdOrNull()
+  const requested =
+    workspaceId === null
+      ? null
+      : await stores.index.resolveDocument({ workspaceId, path }).catch(() => null)
+  if (!alive() || requested === null) return null
+  const snap = await loadLocalDocument(stores.index, requested.documentId, stores.clock)
+  if (!alive() || snap === null) return null
+  await stores.pointer.set(requested.documentId)
+  return alive() ? snap : null
+}
+
+/**
+ * The document the pointer names, seeding a new one when it names nothing.
+ *
+ * `'unreadable'` is its own answer rather than null: a pointer naming a
+ * document the index no longer has is a degraded read the caller reports,
+ * where "nothing pointed at yet" is the ordinary first visit.
+ */
+async function openPointedAt(
+  stores: OpeningStores,
+  alive: StillMounted,
+): Promise<DocumentSnapshot | 'unreadable' | null> {
+  const id = await stores.pointer.get()
+  if (!alive()) return null
+  if (id === null) {
+    const created = await createSeededDocument(stores.index, stores.loro, stores.clock)
+    if (!alive()) return null
+    await stores.pointer.set(created.documentId)
+    return alive() ? created : null
+  }
+  const snap = await loadLocalDocument(stores.index, id, stores.clock)
+  if (!alive()) return null
+  return snap ?? 'unreadable'
+}
+
 export function useBrowserDocumentController(
   index: DocumentIndex,
   deps: BrowserControllerDeps = {},
@@ -266,64 +339,24 @@ export function useBrowserDocumentController(
 
   useEffect(() => {
     let cancelled = false
+    const alive = () => !cancelled
 
     async function load() {
-      if (initialPath !== undefined) {
-        // An index that cannot resolve is indistinguishable from a path that
-        // is not there, and both fall through to the same place. Letting the
-        // read throw instead would dead-end EVERY deep link on a degraded
-        // store — and App mounts this page only with a path, so that is every
-        // mount.
-        // The id is read through the null-answering accessor for the same
-        // reason: in an argument position its throw would precede the promise
-        // and escape the `.catch` below, dead-ending the deep link this
-        // fallback exists to keep open.
-        const workspaceId = browserWorkspaceIdOrNull()
-        const requested =
-          workspaceId === null
-            ? null
-            : await indexRef.current
-                .resolveDocument({ workspaceId, path: initialPath })
-                .catch(() => null)
-        if (cancelled) return
-        if (requested !== null) {
-          const snap = await loadLocalDocument(
-            indexRef.current,
-            requested.documentId,
-            clockRef.current,
-          )
-          if (cancelled) return
-          if (snap !== null) {
-            await pointerRef.current.set(requested.documentId)
-            if (!cancelled) setSnapshot(snap)
-            return
-          }
-        }
-        // Not found: silently fall through to the normal default-document flow
-        // below rather than showing a degraded banner — a stale bookmark must
-        // not dead-end the user.
+      const stores: OpeningStores = {
+        index: indexRef.current,
+        pointer: pointerRef.current,
+        clock: clockRef.current,
+        loro: loroRef.current,
       }
-
-      const id = await pointerRef.current.get()
-      if (cancelled) return
-
-      if (id === null) {
-        const created = await createSeededDocument(
-          indexRef.current,
-          loroRef.current,
-          clockRef.current,
-        )
-        if (cancelled) return
-        await pointerRef.current.set(created.documentId)
-        if (!cancelled) setSnapshot(created)
-        return
-      }
-
-      const snap = await loadLocalDocument(indexRef.current, id, clockRef.current)
-      if (cancelled) return
-      if (snap !== null) {
-        setSnapshot(snap)
-      } else {
+      // A deep link that resolves to nothing falls through to the normal
+      // default-document flow rather than showing a degraded banner — a stale
+      // bookmark must not dead-end the user.
+      const deepLinked =
+        initialPath === undefined ? null : await openDeepLink(stores, initialPath, alive)
+      if (!alive()) return
+      const opened = deepLinked ?? (await openPointedAt(stores, alive))
+      if (!alive() || opened === null) return
+      if (opened === 'unreadable') {
         // The pointer names a document the index no longer has. Generic safe
         // copy, no raw error.
         setPersistenceRef.current({
@@ -332,7 +365,9 @@ export function useBrowserDocumentController(
           message: 'The canvas data could not be read.',
           lastSavedAt: null,
         })
+        return
       }
+      setSnapshot(opened)
     }
 
     load().catch(() => {
