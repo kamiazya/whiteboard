@@ -11,6 +11,17 @@
 // what a document is ABOUT, not where a fix will land. Nothing here can catch
 // the other failure either, a document that was wrong when it was written.
 
+/**
+ * The resource an entry names. OKF writes `- resource: <path>`, and half the
+ * issues in this backlog were written as bare strings instead — which carry
+ * exactly the same thing. Reading both is the difference between judging
+ * those documents and silently skipping them: measured 2026-09-22, 11 of 17
+ * open issues declared sources this check had been discarding.
+ */
+export function resourceOf(source) {
+  return typeof source === 'string' ? source : source?.resource
+}
+
 /** OKF §6.2: a path-valued field may be an absolute URL, which git cannot judge. */
 export function isCheckableResource(resource) {
   return typeof resource === 'string' && resource !== '' && !/^[a-z][a-z0-9+.-]*:\/\//i.test(resource)
@@ -44,7 +55,7 @@ export function collectStaleIssues(documents, inspect) {
     const changed = []
     const missing = []
     for (const source of sources) {
-      const resource = source?.resource
+      const resource = resourceOf(source)
       if (!isCheckableResource(resource)) continue
       const target = toRepoRelative(resource)
       const verdict = inspect(target, doc.generatedAt)
@@ -84,4 +95,68 @@ export function formatFindings(findings, total) {
   lines.push('  Re-read before acting on one. If it is already resolved, close it:')
   lines.push('  type: issue -> note, name prefixed "RESOLVED — " (see the ticketing skill).')
   return lines.join('\n')
+}
+
+/**
+ * Unwrap an MCP `tools/call` payload, raising BOTH kinds of failure.
+ *
+ * A tool that refuses reports `result.isError` with the reason in `content`,
+ * not a JSON-RPC `error` — so a reader that checks only the latter sees a
+ * result with no `structuredContent` and treats it as an empty answer. That
+ * is how this check came to report "nothing to report — 0 of 0" over a
+ * workspace of 57 documents for as long as it did: `wb_document_get` became a
+ * batch read taking `documentIds`, the caller kept sending `documentId`, and
+ * every refusal was read as a document with no frontmatter.
+ *
+ * A check whose own breakage is indistinguishable from a clean result is
+ * worse than no check, so this throws and the caller says why.
+ */
+export function unwrapToolResult(name, payload) {
+  if (payload?.error) throw new Error(`${name}: ${payload.error.message}`)
+  const result = payload?.result ?? {}
+  if (result.isError === true) {
+    const said = (result.content ?? [])
+      .map((part) => part?.text)
+      .filter((text) => typeof text === 'string')
+      .join(' ')
+      .trim()
+    throw new Error(`${name}: ${said === '' ? 'the tool reported an error with no message' : said}`)
+  }
+  return result.structuredContent ?? {}
+}
+
+/**
+ * Join a `wb_document_list` listing to a batch `wb_document_get` answer and
+ * keep the issues.
+ *
+ * `unreadableSources` is the third silent skip: a document whose `sources`
+ * yield no path at all — every entry an object with no `resource`, or a URL
+ * git cannot judge — has made a declaration `collectStaleIssues` cannot read,
+ * which is indistinguishable from having declared nothing. It is counted so
+ * the caller can say so. Bare-string entries are NOT in it; they are read
+ * (see `resourceOf`).
+ */
+export function issueDocumentsFrom(listed, fetched) {
+  const byId = new Map((fetched?.documents ?? []).map((doc) => [doc.documentId, doc]))
+  const documents = []
+  const unreadableSources = []
+  for (const entry of listed) {
+    const front = byId.get(entry.documentId)?.frontmatter ?? {}
+    if (front.type !== 'issue') continue
+    // Unmodelled root keys ride in `facetsRaw` (ADR-0016); a document that
+    // predates that, or that never declared any, simply has none.
+    const sources = front.facetsRaw?.sources ?? []
+    if (sources.length > 0 && !sources.some((source) => isCheckableResource(resourceOf(source)))) {
+      unreadableSources.push(entry.path)
+    }
+    documents.push({
+      documentId: entry.documentId,
+      path: entry.path,
+      ...(entry.name === undefined ? {} : { name: entry.name }),
+      ...(front.generated?.at === undefined ? {} : { generatedAt: front.generated.at }),
+      ...(front.generated?.by === undefined ? {} : { generatedBy: front.generated.by }),
+      sources,
+    })
+  }
+  return { documents, unreadableSources, failed: fetched?.failed ?? [] }
 }
