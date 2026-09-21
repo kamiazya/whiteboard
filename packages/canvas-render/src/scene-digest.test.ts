@@ -67,6 +67,75 @@ describe('sceneDigest', () => {
     expect(digest.containment).toEqual([])
   })
 
+  it('orders clusters and their members by CODE UNIT, not by the runtime locale', () => {
+    // Real node ids are nanoid-style (`A-Za-z0-9_-`), so a cluster's members
+    // are routinely mixed case — and the two comparators disagree there:
+    // `'A'.localeCompare('a')` is 1 while `'A' < 'a'`. Every other fixture in
+    // this file lets the digest assign `n0`, `n1`, …, which is all lowercase
+    // and cannot tell them apart.
+    //
+    // This matters beyond tidiness: the digest is spread into
+    // `canvasSnapshotSchema`, the `wb_canvas_snapshot` MCP tool's output, and
+    // scene-digest.ts's own header says a locale-dependent sort makes it
+    // "differ between two machines holding identical input".
+    const shaped = (id: string, x: number): Scene['nodes'][number] =>
+      ({ kind: 'shape', id, bbox: { x, y: 0, w: 10, h: 10 } }) as Scene['nodes'][number]
+
+    // Close enough to cluster together, so ordering WITHIN a group is tested.
+    const together = sceneDigest({ nodes: [shaped('na', 0), shaped('Nb', 20)] })
+    expect(together.clusters).toEqual([['Nb', 'na']])
+
+    // Far apart, so each is its own group and ordering BETWEEN groups is too.
+    const apart = sceneDigest({ nodes: [shaped('na', 0), shaped('Nb', 500)] })
+    expect(apart.clusters).toEqual([['Nb'], ['na']])
+  })
+
+  it('orders EVERY id-keyed array by code unit, not only the clusters', () => {
+    // The same locale hazard reached four arrays, not one: the overlap pair
+    // list, the containment list, and both cluster sorts. A fixture that only
+    // exercises clusters leaves the other two fixed but unguarded.
+    const box = (id: string, x: number, y: number, w: number, h: number): Scene['nodes'][number] =>
+      ({ kind: 'shape', id, bbox: { x, y, w, h } }) as Scene['nodes'][number]
+
+    // Two overlapping pairs and two containments, with ids whose code-unit
+    // and locale orders disagree (`'A' < 'a'` but `'a'.localeCompare('A') < 0`).
+    const digest = sceneDigest({
+      nodes: [
+        box('na', 0, 0, 100, 100),
+        box('Nb', 50, 50, 100, 100), // overlaps na
+        box('ma', 0, 0, 10, 10), // contained by na
+        box('Mb', 60, 60, 10, 10), // contained by Nb
+      ],
+    })
+
+    const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+    const sortedByCodeUnit = (xs: readonly string[]) =>
+      xs.every((_, i) => i === 0 || byCodeUnit(xs[i - 1] as string, xs[i] as string) <= 0)
+
+    expect(digest.overlaps.length).toBeGreaterThan(0)
+    expect(sortedByCodeUnit(digest.overlaps.map(([first]) => first))).toBe(true)
+    expect(digest.overlaps.every(([first, second]) => byCodeUnit(first, second) <= 0)).toBe(true)
+
+    expect(digest.containment.length).toBeGreaterThan(0)
+    expect(sortedByCodeUnit(digest.containment.map((c) => c.child))).toBe(true)
+
+    // The fifth site is the tie-break that picks WHICH container, and it only
+    // runs when two candidates have the SAME area — which the scene above
+    // never produces, so it needs its own fixture or the fix is unguarded.
+    const tied = sceneDigest({
+      nodes: [
+        box('pa', 0, 0, 100, 100),
+        box('Pb', 0, 0, 100, 100), // identical area, so the id breaks the tie
+        box('kid', 10, 10, 5, 5),
+      ],
+    })
+    expect(tied.containment).toContainEqual({ parent: 'Pb', child: 'kid' })
+
+    expect(digest.clusters.length).toBeGreaterThan(0)
+    expect(sortedByCodeUnit(digest.clusters.map((group) => group[0] as string))).toBe(true)
+    expect(digest.clusters.every((group) => sortedByCodeUnit(group))).toBe(true)
+  })
+
   it('clusters nodes within the proximity threshold via single-linkage', () => {
     const digest = sceneDigest(
       scene(

@@ -21,6 +21,21 @@ import { describe, expect, it } from 'vitest'
 // scan that over-reports reads as thorough, so the exclusions below are
 // shape rules rather than an allowlist, and only what survives them is a
 // decision somebody has to make.
+//
+// It reads `.claude/**/*.md` as well, and every line of it rather than the
+// comment lines, because that markdown IS the comment: it auto-loads into
+// every session, so a pointer that has gone stale there is read aloud to
+// whoever opens the repo next. Widening it found 25 more, eleven of them in
+// one rule file describing a surface ADR-0029 deleted. The scan stops at
+// `.claude/` rather than all markdown on the same ground — `docs/` is read
+// when somebody goes looking, not handed over unasked.
+//
+// Widening needed no new shape rule, which is worth saying because the
+// probe that sized the work claimed three. A glob (`*.test.ts`), a brace
+// expansion and a backticked sentence are all already excluded by the
+// character class below, which admits no `*`, `{` or space: a looser probe
+// invented the work, and the guard's own rule answered 25 where the probe
+// said 27.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 
 /** Every tracked path, which is what a pointer may name. */
@@ -73,6 +88,23 @@ const DELIBERATE: Record<string, string> = {
     'same sentence: the route went with the version row thumbnail',
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#sweep-imported-fs-blobs.ts':
     "a migration's own text is history and is never rewritten (.claude/rules/vocabulary.md); the sweeper existed when this was written (#858)",
+
+  // The `.claude/**/*.md` half. Every one of these is a sentence whose
+  // SUBJECT is the file's absence — a rule explaining why a surface went.
+  // Correcting the name would make each say the opposite of what it says.
+  '.claude/rules/package-canvas-render.md#scene-transform.ts':
+    "mcp-server's FORMER file, named to say where `layout/translate-scene.ts` came from",
+  '.claude/rules/package-canvas-render.md#spatial-scene-appearance.ts':
+    'one of the three per-surface resolvers the theme layer deleted; the sentence is the list of what it replaced',
+  '.claude/rules/package-canvas-render.md#viewer-appearance.ts': 'same list, canvas-viewer half',
+  '.claude/rules/package-canvas-viewer.md#viewer-appearance.ts':
+    'the paragraph exists to record that this package stopped owning its own resolver',
+  '.claude/rules/package-plugin-visual.md#edge-router.ts':
+    'the heading is "the facet that is no longer here" — ADR-0037 slice 4 deleted it and bends became a model field',
+  '.claude/rules/tool-arch-lint.md#mcp/session-resolver.ts':
+    'moved rather than exempted; the sentence names both the old path and `server/current-workspace.ts` it became',
+  '.claude/rules/vocabulary.md#meta.ts':
+    'the clause is literally "(since deleted)" — this is why `kind` won over `format`',
 }
 
 interface Pointer {
@@ -86,9 +118,13 @@ function unresolvedPointers(): Pointer[] {
   const byBasename = new Set(tracked.map((path) => basename(path)))
   const found: Pointer[] = []
   const seen = new Set<string>()
-  for (const file of tracked.filter((path) => /\.tsx?$/.test(path))) {
+  const scanned = tracked.filter(
+    (path) => /\.tsx?$/.test(path) || (path.startsWith('.claude/') && path.endsWith('.md')),
+  )
+  for (const file of scanned) {
+    const wholeFile = file.endsWith('.md')
     for (const line of readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')) {
-      if (!/^\s*(\/\/|\*|\/\*)/.test(line)) continue
+      if (!wholeFile && !/^\s*(\/\/|\*|\/\*)/.test(line)) continue
       for (const match of line.matchAll(/`([A-Za-z0-9._/-]+\.tsx?)`/g)) {
         const name = match[1] ?? ''
         if (!isPointer(name)) continue
@@ -110,8 +146,15 @@ const UNRESOLVED = unresolvedPointers()
 
 describe('a backticked filename in a comment names a file that exists', () => {
   it('read a plausible number of comment pointers', () => {
-    // Both halves: a regex that stopped matching would report every pointer
-    // as resolving, which is the same shape as a clean tree.
+    // This half is the SCAN: an `ls-files` that answered nothing would report
+    // every pointer as resolving, which is the same shape as a clean tree.
+    //
+    // It is not the regex canary, though it said so until measured. Replacing
+    // the pointer regex with one that matches nothing leaves this case GREEN
+    // and fails 'holds no exemption for a pointer that now resolves' — every
+    // DELIBERATE key goes obsolete at once, which is the louder signal
+    // anyway. Left where it landed rather than moved, because the comment was
+    // the defect, not the placement.
     const tracked = trackedFiles()
     expect(tracked.length).toBeGreaterThan(1000)
     expect(UNRESOLVED.length).toBeLessThan(40)

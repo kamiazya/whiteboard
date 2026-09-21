@@ -136,12 +136,20 @@ replica the browser already decrypted before removal keeps whatever it
 already read; the protection is against a *future* fetch, not against
 something already on disk.
 
-Three tiers. `workspaces.replicaTier` is a per-workspace override the daemon
-already reads (falling back to the `WHITEBOARD_REPLICA_TIER` default below
-when unset), but nothing yet writes it — no CLI flag or admin route sets a
-workspace's tier today, so every workspace runs on the process default until
-that write path ships (see
-[Configuration](../reference/configuration.md)):
+Three tiers. `workspaces.replicaTier` is a per-workspace override:
+`PUT /api/workspaces/:workspaceId/replica-tier` sets it, and `{ tier: null }`
+clears it back to the `WHITEBOARD_REPLICA_TIER` default (see
+[Configuration](../reference/configuration.md)). That route sits at the
+`runtime:admin` bar — the same bar as membership and grant management —
+rather than the `workspace:write` the rest of a workspace's fields sit
+behind: a tier decides whether a copy of a workspace may leave the daemon at
+all, which is an operator's call rather than something any member may relax
+for everyone. Today that bar is cleared by the daemon token, an operator-
+issued macaroon or OAuth grant carrying `runtime:admin`, and — the accepted
+v1 posture already true of membership and grant management above — any
+paired browser session, since a pairing grant currently carries every scope.
+Narrowing what a pairing session may do is its own future increment, not
+something this route does on its own.
 
 - `no-offline` — the daemon refuses to hand out a key for this workspace at
   all (`replica_not_allowed`).
@@ -149,6 +157,26 @@ that write path ships (see
 - `bounded` — the key comes with a `leaseExpiresAt` timestamp. The daemon
   keeps no lease table server-side; honouring the lapse (discarding the key
   once it passes) is the browser's own responsibility.
+
+**Rotation.** `POST /api/workspaces/:workspaceId/replica-key/rotate`
+replaces the workspace's key and salt outright with a fresh random pair —
+not an epoch bump on any document, which would leave the old workspace key
+able to derive every old-epoch document key and deny nobody anything. This
+is the response to a workspace key suspected compromised: every document
+key derived from the OLD pair, and every browser replica sealed under it,
+stops opening the moment rotation lands. Sits at the same `runtime:admin`
+bar as the tier route above, and — deliberately — is not gated on tier at
+all, so a `no-offline` workspace can still be rotated.
+
+Say plainly what rotation does **not** do, matching the caveat above about
+the daemon holding the key in plaintext: a browser tab that already holds
+the old key in memory keeps reading with it, and keeps sealing new writes
+under it, until it next asks the daemon and receives the rotated pair.
+Whoever already copied the old ciphertext keeps it, along with the old key
+that opens it — rotation denies a future read under the new pair, not a
+past one. And every existing browser replica of this workspace becomes
+unreadable and must be downloaded again in full; there is no partial
+recovery.
 
 A member sees which tier applies to a workspace they are viewing as a plain
 sentence in **Settings → Connections → This workspace** — no jargon, no

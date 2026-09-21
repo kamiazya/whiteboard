@@ -66,11 +66,14 @@ is **currently empty**.
 workspace manifest (enumerated from pnpm-workspace's globs, so a new package
 joins unlisted) reading `dependencies` AND `devDependencies` — the latter is
 the door the direction check never inspects, and measured, the one real
-cycle (canvas-render <-> plugin-visual) enters through it.
-`KNOWN_PACKAGE_CYCLES` allowlists it, both-sides guarded; the type-only
-property of the closing edge stays with
-`plugin-visual/src/canvas-render-type-only.test.ts`, because a manifest
-cannot see how an import is spelled.
+cycle (canvas-render <-> plugin-visual) entered through it.
+`KNOWN_PACKAGE_CYCLES` is the allowlist for one found and not yet fixed, and
+it is **currently empty**: the cycle it held was dissolved by extracting
+`packages/scene`, so plugin-visual no longer reaches the renderer at all.
+What replaced the allowlist is stricter than what guarded it — the entry
+needed a hand guard for a type-only import a manifest cannot see, and
+`plugin-visual/src/renderer-independence.test.ts` now pins that there is no
+import of the renderer of ANY kind.
 
 ## What the composition roots do and do not get
 

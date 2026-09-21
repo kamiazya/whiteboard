@@ -187,6 +187,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/verb-catalog.tsx#verbCatalogItems': 64,
   'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner': 649,
   'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner.runProbe': 92,
+  // A Settings card of the same shape as its two neighbours below (334 and
+  // 522): the rows, the shared confirm dialog and the two-step delete are
+  // one screen's worth of state, and the row already IS extracted
+  // (`CopyRowItem`). Splitting further would separate the dialog from the
+  // `pending`/`deleting` state that decides whether it may close. 126 -> 147
+  // when the registry read learned to degrade: a browser that refuses
+  // IndexedDB has to leave the card listing what it CAN read rather than
+  // rejecting, and that branch is where the explanation lives.
+  'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 147,
   'apps/web/src/components/settings/MembersCard.tsx#MembersCard': 334,
   'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 522,
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 163,
@@ -339,18 +348,21 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 879,
   'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 331,
   'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 697,
-  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 676,
+  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
   'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 393,
-  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 89,
+  // 89 -> 94: the Copies-on-this-device card mounts in BOTH branches, and
+  // the disconnected one is where it matters most — with no daemon every
+  // copy is browser-kept, so a card hidden there would hide the whole list.
+  'apps/web/src/pages/SettingsPage.tsx#ConnectionsSection': 94,
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
   'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 66,
   'apps/web/src/pages/use-auto-checkpoint.ts#useAutoCheckpoint': 60,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 458,
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController.load': 67,
-  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 150,
+  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 157,
   'apps/web/src/pages/use-markdown-document.ts#useMarkdownDocument': 378,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
@@ -495,7 +507,20 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/membership.ts#createMembershipRouter': 112,
   'packages/mcp-server/src/server/routes/oauth-authz.ts#createOAuthAuthzRouter': 208,
   'packages/mcp-server/src/server/routes/pairing.ts#createPairingRouter': 283,
-  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 59,
+  // Renamed from replica-key.test.ts#bindSession (extracted to the shared
+  // `_test-*` fixture module both replica-key.test.ts and
+  // replica-key-rotate.test.ts import — see that file's own header for why
+  // it is named `_test-` rather than `*.test.ts`, and this ledger's `isTest`
+  // classifier reads only the `.test.ts` suffix, so the entry moves ledgers
+  // too).
+  'packages/mcp-server/src/server/routes/_test-replica-key-app.ts#bindSession': 64,
+  // 59 -> 94 (ADR-0042 decision 1 addendum): PUT .../replica-tier joins the
+  // same router as POST .../replica-key — one seam for a workspace's whole
+  // replica posture rather than a second router with its own mount block.
+  // 94 -> 116 (ADR-0042 decision 1, 2026-09-21 rotation addendum): POST
+  // .../replica-key/rotate joins the same router for the same reason —
+  // one seam for a workspace's whole replica posture.
+  'packages/mcp-server/src/server/routes/replica-key.ts#createReplicaKeyRouter': 116,
   'packages/mcp-server/src/server/routes/runtime.ts#createRuntimeRouter': 146,
   // 109 -> 115 (ADR-0041 S8 slice 2): subscribe/message decide membership once per distinct workspace.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 115,
@@ -517,10 +542,23 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/security/server-mode-env-config.ts#parseServerModeEnvConfig': 90,
   'packages/mcp-server/src/server/security/server-mode-exposure.ts#resolveServerModeExposure': 91,
   'packages/mcp-server/src/server/security/webauthn-credential-store.ts#createWebAuthnCredentialStore': 65,
+  // New (ADR-0042 decision 1 addendum): the setter's write-side validation
+  // and the boolean answer to the lazy-row hazard both belong beside
+  // tierFor/effectiveTier rather than in a second file over the same table.
+  // 62 -> 82 (ADR-0042 decision 1, 2026-09-21 rotation addendum): rotateKey
+  // belongs beside keyFor/setTier for the same reason.
+  'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 82,
   'packages/mcp-server/src/server/security/ws-ticket-store.ts#createWsTicketStore': 52,
   'packages/mcp-server/src/server/server-mode-http.ts#startServerModeHttp': 202,
   'packages/mcp-server/src/server/store/auto-compact.ts#scheduleAutoCompact': 59,
-  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 53,
+  // 53 -> 58: the refresh interval's in-flight write is now held and awaited
+  // before the marker is removed. `clearInterval` cancels the next tick and
+  // not the one already running, so a straggler used to recreate the marker
+  // after the `finally` deleted it — 8 of 60 runs, and the same straggler
+  // raced a test's own `rm -rf` into ENOTEMPTY on CI three times. The five
+  // lines are a promise handle, its assignment, the await, and three of
+  // comment saying why the await is there.
+  'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 58,
   'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 214,
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,
@@ -578,7 +616,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
  * budget would be a second rule nobody agreed.
  */
 const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/App.daemon-address.test.tsx#installDaemonFetch': 55,
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx#daemonStub': 81,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#checkInvariants': 80,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#run~23': 127,
@@ -589,7 +626,7 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/promote-workspace.browser.test.tsx#daemonStub': 52,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 74,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
-  'apps/web/src/pages/DaemonIndexPage.test.tsx#installFetchMock': 88,
+  'apps/web/src/pages/DaemonIndexPage.test.tsx#installFetchMock': 93,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
   'packages/canvas-render/src/layout/edges/grid-route.optimality.properties.test.ts#referenceCost': 106,
   'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,
@@ -600,7 +637,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/server-args.differential.test.ts#oldBackup': 64,
   'packages/mcp-server/src/server/app.routes.fuzz.property.test.ts#fillPattern': 65,
   'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 77,
-  'packages/mcp-server/src/server/routes/replica-key.test.ts#bindSession': 64,
   'packages/mcp-server/src/server/security/server-mode-env-config.differential.test.ts#parseOld': 157,
   'packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts#fitCanvasOp': 89,
   'packages/workspace-index/src/loro-workspace-document-index.test.ts#inMemoryWorkspaceDocs': 58,

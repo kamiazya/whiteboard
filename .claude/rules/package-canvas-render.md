@@ -806,7 +806,7 @@ the table alone.
       focusable DOM-overlay/keyboard treatment this pure-geometry package
       cannot own — upgrade path is an editor-side overlay in a later
       slice). `apps/web` supplies the card (`toFacetCard` in
-      `use-canvas-file-seams.ts`); export still resolves nothing by default,
+      `use-document-file-seams.ts`); export still resolves nothing by default,
       so it stays a pure function of the canvas snapshot, exactly parallel
       to the style opt-in above.
 

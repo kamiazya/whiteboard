@@ -208,34 +208,67 @@ describe('listDocuments', () => {
 })
 
 describe('createDocument', () => {
+  const created = {
+    workspaceId: 'w1',
+    documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+    path: 'new-canvas',
+  }
+
   it('parses a valid response body', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'new-canvas' }))
-    const result = await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas')
-    expect(result).toEqual({ path: 'new-canvas' })
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(created, 201))
+    const result = await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas', 'spatial')
+    expect(result).toEqual(created)
+  })
+
+  it('refuses a body WIDER than the contract, which is what .strict() is for', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ ...created, secretToken: 'leaked' }, 201))
+    await expect(
+      createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas', 'spatial'),
+    ).rejects.toThrow(/validation/i)
   })
 
   it('rejects a malformed response body without returning raw JSON', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ nope: true }))
-    await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/validation/i)
+    await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'spatial')).rejects.toThrow(
+      /validation/i,
+    )
   })
 
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Conflict' }, 409))
-    await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/conflict/i)
+    await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'spatial')).rejects.toThrow(
+      /conflict/i,
+    )
   })
 
-  it('sends kind in the POST body when given, omits it otherwise', async () => {
+  it('POSTs to /api/v1 and parses the richer result v1 answers with', async () => {
+    // The legacy arm answered `{ path }` alone, so a caller learned neither
+    // the id the server minted nor the workspace it filed the document
+    // under. v1's create is the same operation the MCP tool runs, and says
+    // both.
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(created, 201))
+    const result = await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'new-canvas', 'spatial')
+    expect(fetchFn.mock.calls[0]![0]).toBe(`${DAEMON_BASE_URL}/api/v1/workspaces/w1/documents`)
+    expect(result.documentId).toBe('01J9ZC8XK4PQRS7TVWXY0ABCDE')
+    expect(result.path).toBe('new-canvas')
+  })
+
+  it('always sends kind, and omits name rather than sending null', async () => {
+    // v1's input is a discriminated union on `kind` and `.strict()`, so a
+    // missing discriminator or a null `name` is refused outright.
     const sentBody = (fetchFn: ReturnType<typeof vi.fn>) => {
       const init = fetchFn.mock.calls[0]![1] as RequestInit
       return JSON.parse(init.body as string)
     }
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'x' }))
-    await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'markdown')
-    expect(sentBody(fetchFn)).toEqual({ path: 'x', kind: 'markdown' })
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ...created, path: 'x' }, 201))
+    await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'markdown', 'A name')
+    expect(sentBody(fetchFn)).toEqual({ path: 'x', kind: 'markdown', name: 'A name' })
     fetchFn.mockClear()
-    fetchFn.mockResolvedValue(jsonResponse({ path: 'y' }))
-    await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'y')
-    expect(sentBody(fetchFn)).toEqual({ path: 'y' })
+    fetchFn.mockResolvedValue(jsonResponse({ ...created, path: 'y' }, 201))
+    await createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'y', 'spatial')
+    expect(sentBody(fetchFn)).toEqual({ path: 'y', kind: 'spatial' })
   })
 })
 

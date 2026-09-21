@@ -5,11 +5,18 @@
  * regression that only shows up for one particular workspaceId shape does
  * not slip past a fixed pair of example ids.
  */
+import {
+  deriveDocumentKey,
+  openBytes,
+  sealBytes,
+} from '@kamiazya/whiteboard-daemon-client/read-plane'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
+import { cloneBytes } from '../store/inmemory/clone-bytes.js'
 import {
   createWorkspaceReplicaKeyStore,
+  type WorkspaceReplicaKey,
   type WorkspaceReplicaKeyStore,
 } from './workspace-replica-key-store.js'
 
@@ -52,6 +59,15 @@ describe('keyFor', () => {
     expect(salt.length).toBe(16)
   })
 
+  it('keyId is a 22-char base64url id, stable across calls and equal only for equal (key, salt) pairs', async () => {
+    const a1 = await store.keyFor('ws-a')
+    const a2 = await store.keyFor('ws-a')
+    const b = await store.keyFor('ws-b')
+    expect(a1.keyId).toMatch(/^[A-Za-z0-9_-]{22}$/)
+    expect(a2.keyId).toBe(a1.keyId)
+    expect(b.keyId).not.toBe(a1.keyId)
+  })
+
   // The race is real at the JS level (every keyFor call starts before any
   // insert resolves), though libsql serialises statements on one connection
   // — so this proves the onConflict path answers correctly under
@@ -87,11 +103,6 @@ describe('keyFor', () => {
   })
 })
 
-interface WorkspaceReplicaKey {
-  key: Uint8Array
-  salt: Uint8Array
-}
-
 describe('tierFor / effectiveTier', () => {
   it('is null when unset', async () => {
     await insertWorkspace('ws-1')
@@ -120,5 +131,179 @@ describe('tierFor / effectiveTier', () => {
   it('throws on a stored tier value that is not one of the declared enum members', async () => {
     await insertWorkspace('ws-1', 'quantum-offline')
     await expect(store.tierFor('ws-1')).rejects.toThrow()
+  })
+})
+
+describe('setTier', () => {
+  it.for([
+    'no-offline',
+    'offline',
+    'bounded',
+  ] as const)('round-trips %s through tierFor and effectiveTier', async (tier) => {
+    await insertWorkspace('ws-1')
+    expect(await store.setTier('ws-1', tier)).toBe(true)
+    expect(await store.tierFor('ws-1')).toBe(tier)
+    expect(await store.effectiveTier('ws-1')).toBe(tier)
+  })
+
+  it('clearing back to null falls back to the constructor default', async () => {
+    await insertWorkspace('ws-1', 'no-offline')
+    expect(await store.setTier('ws-1', null)).toBe(true)
+    expect(await store.tierFor('ws-1')).toBeNull()
+    expect(await store.effectiveTier('ws-1')).toBe('offline')
+  })
+
+  it('rejects a value outside the declared enum and leaves the column unchanged', async () => {
+    await insertWorkspace('ws-1', 'offline')
+    // @ts-expect-error — exercising the runtime guard against a caller that
+    // bypasses the type system, the same hazard `tierFor` guards on read.
+    await expect(store.setTier('ws-1', 'session')).rejects.toThrow()
+    expect(await store.tierFor('ws-1')).toBe('offline')
+  })
+
+  it('answers false for a workspace with no registry row, and creates none', async () => {
+    expect(await store.setTier('no-such-workspace', 'offline')).toBe(false)
+    expect(await store.tierFor('no-such-workspace')).toBeNull()
+  })
+
+  it('is idempotent and touches no other column', async () => {
+    await handle.db
+      .insertInto('workspaces')
+      .values({
+        id: 'ws-1',
+        displayName: 'Ada',
+        segment: 'ada',
+        createdAt: 111,
+        updatedAt: 222,
+        replicaTier: null,
+      })
+      .execute()
+    await store.setTier('ws-1', 'bounded')
+    await store.setTier('ws-1', 'bounded')
+    const row = await handle.db
+      .selectFrom('workspaces')
+      .selectAll()
+      .where('id', '=', 'ws-1')
+      .executeTakeFirstOrThrow()
+    expect(row).toEqual({
+      id: 'ws-1',
+      displayName: 'Ada',
+      segment: 'ada',
+      createdAt: 111,
+      updatedAt: 222,
+      replicaTier: 'bounded',
+    })
+  })
+
+  it('leaves the key-table untouched by a tier write, in both directions', async () => {
+    await insertWorkspace('ws-1')
+    await store.setTier('ws-1', 'no-offline')
+    expect(
+      await handle.db
+        .selectFrom('workspaceReplicaKeys')
+        .selectAll()
+        .where('workspaceId', '=', 'ws-1')
+        .execute(),
+    ).toEqual([])
+
+    const minted = await store.keyFor('ws-1')
+    await store.setTier('ws-1', null)
+    const afterClear = await handle.db
+      .selectFrom('workspaceReplicaKeys')
+      .selectAll()
+      .where('workspaceId', '=', 'ws-1')
+      .executeTakeFirstOrThrow()
+    expect(cloneBytes(afterClear.key)).toEqual(minted.key)
+  })
+})
+
+function pairId(key: Uint8Array, salt: Uint8Array): string {
+  return `${Buffer.from(key).toString('base64url')}:${Buffer.from(salt).toString('base64url')}`
+}
+
+describe('rotateKey', () => {
+  it('answers a fresh key/salt/keyId, and the old bytes never reappear from keyFor', async () => {
+    const before = await store.keyFor('ws-1')
+    const rotated = await store.rotateKey('ws-1')
+    expect(rotated.key).not.toEqual(before.key)
+    expect(rotated.salt).not.toEqual(before.salt)
+    expect(rotated.keyId).not.toBe(before.keyId)
+
+    const after = await store.keyFor('ws-1')
+    expect(after.key).toEqual(rotated.key)
+    expect(after.salt).toEqual(rotated.salt)
+    expect(after.keyId).toBe(rotated.keyId)
+  })
+
+  it('mints a fresh pair for a workspace never read before, rather than throwing', async () => {
+    const rotated = await store.rotateKey('ws-never-read')
+    expect(rotated.key.length).toBe(32)
+    expect(rotated.salt.length).toBe(16)
+    expect(await store.keyFor('ws-never-read')).toEqual(rotated)
+  })
+
+  it('leaves a sibling workspace untouched', async () => {
+    const other = await store.keyFor('ws-other')
+    await store.rotateKey('ws-1')
+    expect(await store.keyFor('ws-other')).toEqual(other)
+  })
+
+  it('leaves workspaces.replicaTier and every other workspace column untouched', async () => {
+    await insertWorkspace('ws-1', 'bounded')
+    await store.rotateKey('ws-1')
+    expect(await store.tierFor('ws-1')).toBe('bounded')
+  })
+
+  // THE test that matters: bytes sealed under the pre-rotation pair must be
+  // refused under the post-rotation pair — proved through real AES-GCM
+  // (deriveDocumentKey + sealBytes/openBytes), never by comparing key bytes,
+  // which would only prove the store changed. The pre-rotation key opening
+  // its own envelope is the control that proves the envelope encrypts
+  // anything at all.
+  it('denies pre-rotation ciphertext under the post-rotation key, real AES-GCM open', async () => {
+    const before = await store.keyFor('ws-1')
+    const context = { documentId: 'doc-1', epoch: 0 }
+    const plaintext = new TextEncoder().encode('secret board content')
+    const preKey = await deriveDocumentKey({
+      workspaceKey: before.key,
+      workspaceKeySalt: before.salt,
+      ...context,
+    })
+    const envelope = await sealBytes(preKey, plaintext, context)
+    await expect(openBytes(preKey, envelope, context)).resolves.toEqual(plaintext)
+
+    const after = await store.rotateKey('ws-1')
+    const postKey = await deriveDocumentKey({
+      workspaceKey: after.key,
+      workspaceKeySalt: after.salt,
+      ...context,
+    })
+    await expect(openBytes(postKey, envelope, context)).rejects.toThrow()
+  })
+
+  // The race is real at the JS level, the same shape `keyFor`'s own
+  // concurrency test above relies on. Every observed pair must be either
+  // wholly the pre-round pair or wholly the post-round pair — never a cross
+  // of the two, which would derive a document key that opens nothing and
+  // fail silently in production.
+  it('interleaved rotate + concurrent keyFor calls never observe a mixed (key, salt) pair', async () => {
+    for (let round = 0; round < 20; round++) {
+      const before = await store.keyFor('ws-race')
+      const beforeId = pairId(before.key, before.salt)
+      const [rotated, ...reads] = await Promise.all([
+        store.rotateKey('ws-race'),
+        ...Array.from({ length: 8 }, (): Promise<WorkspaceReplicaKey> => store.keyFor('ws-race')),
+      ])
+      const afterId = pairId(rotated.key, rotated.salt)
+      for (const read of reads) {
+        expect([beforeId, afterId]).toContain(pairId(read.key, read.salt))
+      }
+    }
+    const rows = await handle.db
+      .selectFrom('workspaceReplicaKeys')
+      .selectAll()
+      .where('workspaceId', '=', 'ws-race')
+      .execute()
+    expect(rows).toHaveLength(1)
   })
 })

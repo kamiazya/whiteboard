@@ -560,7 +560,11 @@ describe('DaemonDocumentPage', () => {
 
   it('clicking Create a canvas derives a path and mounts the editor once the canvas exists', async () => {
     mockListDocuments.mockResolvedValueOnce({ documents: [] })
-    mockCreateDocument.mockResolvedValue({ path: 'untitled' })
+    mockCreateDocument.mockResolvedValue({
+      workspaceId: 'ws1',
+      documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+      path: 'untitled',
+    })
     mockListDocuments.mockResolvedValueOnce({
       documents: [
         { path: 'untitled', id: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' },
@@ -589,6 +593,7 @@ describe('DaemonDocumentPage', () => {
       DAEMON_BASE_URL,
       'w1',
       'untitled',
+      'spatial',
     )
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     // Hand (view-only) is the default tool; the host history cluster only
@@ -598,7 +603,8 @@ describe('DaemonDocumentPage', () => {
 
   it('disables Create a canvas while a create is in flight, and a same-tick second click is a no-op', async () => {
     mockListDocuments.mockResolvedValue({ documents: [] })
-    let resolveCreate: (value: { path: string }) => void = () => {}
+    let resolveCreate: (value: { workspaceId: string; documentId: string; path: string }) => void =
+      () => {}
     mockCreateDocument.mockReturnValue(
       new Promise((resolve) => {
         resolveCreate = resolve
@@ -630,7 +636,11 @@ describe('DaemonDocumentPage', () => {
     expect(mockCreateDocument).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      resolveCreate({ path: 'untitled' })
+      resolveCreate({
+        workspaceId: 'ws1',
+        documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+        path: 'untitled',
+      })
     })
   })
 

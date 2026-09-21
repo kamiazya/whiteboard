@@ -13,13 +13,13 @@ import { z } from 'zod'
  */
 const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 /**
- * `sceneDigest`'s output is the ONLY Zod-schematized surface in this
- * package: it is the AI-facing spatial digest that crosses a process
- * boundary (the `/document/{id}/layout` route payload and the `canvas_layout`
- * MCP tool output), per this repo's zod-schema-discipline. Every array
- * below uses an explicit total sort with a documented tie-breaker — no
- * Set/Map iteration order is allowed to leak into the output, or the
- * AI-facing JSON would be non-reproducible across runs.
+ * `sceneDigest`'s output crosses a process boundary as AI-facing JSON, which
+ * is why it is schematized at all (this repo's zod-schema-discipline). Its
+ * one consumer is `server-core`'s `canvas-snapshot.ts`, which spreads it
+ * into `canvasSnapshotSchema` — the output of the **`wb_canvas_snapshot`**
+ * MCP tool. Every array below uses an explicit total sort with a documented
+ * tie-breaker, so no Set/Map iteration order leaks into it and the JSON is
+ * reproducible across runs.
  */
 
 const bboxSchema = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
@@ -145,9 +145,7 @@ function computeOverlaps(entries: readonly DigestEntry[]): [string, string][] {
       }
     }
   }
-  return pairs.sort(([a1, b1], [a2, b2]) =>
-    a1 === a2 ? b1.localeCompare(b2) : a1.localeCompare(a2),
-  )
+  return pairs.sort(([a1, b1], [a2, b2]) => (a1 === a2 ? byCodeUnit(b1, b2) : byCodeUnit(a1, a2)))
 }
 
 function computeContainment(entries: readonly DigestEntry[]): { parent: string; child: string }[] {
@@ -160,12 +158,12 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
     if (candidates.length === 0) continue
     const smallest = [...candidates].sort((a, b) => {
       const areaDiff = area(a.bbox) - area(b.bbox)
-      return areaDiff !== 0 ? areaDiff : a.id.localeCompare(b.id)
+      return areaDiff !== 0 ? areaDiff : byCodeUnit(a.id, b.id)
     })[0]
     result.push({ parent: smallest.id, child: child.id })
   }
   return result.sort((a, b) =>
-    a.child === b.child ? a.parent.localeCompare(b.parent) : a.child.localeCompare(b.child),
+    a.child === b.child ? byCodeUnit(a.parent, b.parent) : byCodeUnit(a.child, b.child),
   )
 }
 
@@ -202,9 +200,13 @@ function computeClusters(entries: readonly DigestEntry[]): string[][] {
     groups.set(root, group)
   }
 
+  // `byCodeUnit`, like every other sort here. These two said `localeCompare`,
+  // which is the one thing this file's own header calls "a defect rather than
+  // a fix" — it reads the runtime's default locale and ICU data, so two
+  // machines holding identical input answered different clusters.
   return [...groups.values()]
-    .map((group) => [...group].sort((a, b) => a.localeCompare(b)))
-    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map((group) => [...group].sort(byCodeUnit))
+    .sort((a, b) => byCodeUnit(a[0], b[0]))
 }
 
 /** Maximal empty axis-aligned rectangles over the union bounding box, on a fixed grid. */

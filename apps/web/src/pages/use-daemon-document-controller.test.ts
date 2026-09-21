@@ -156,7 +156,11 @@ describe('useDaemonDocumentController', () => {
   it('createDocument creates via the daemon and switches to the new canvas', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValueOnce({ documents: [] })
-    mockCreateDocument.mockResolvedValue({ path: 'brand-new' })
+    mockCreateDocument.mockResolvedValue({
+      workspaceId: 'ws1',
+      documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+      path: 'brand-new',
+    })
     mockListDocuments.mockResolvedValueOnce({
       documents: [
         { path: 'brand-new', id: 'id-brand-new', updatedAt: '2026-01-03', kind: 'spatial' },
@@ -172,7 +176,13 @@ describe('useDaemonDocumentController', () => {
       await result.current.createDocument('brand-new')
     })
 
-    expect(mockCreateDocument).toHaveBeenCalledWith(fetchFn, DAEMON_BASE_URL, 'w1', 'brand-new')
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      fetchFn,
+      DAEMON_BASE_URL,
+      'w1',
+      'brand-new',
+      'spatial',
+    )
     expect(result.current.path).toBe('brand-new')
   })
 

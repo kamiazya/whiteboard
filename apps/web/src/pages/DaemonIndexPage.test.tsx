@@ -118,7 +118,7 @@ function installFetchMock(routes: MockRoutes) {
       if (routes.delayWorkspaces) return routes.delayWorkspaces.then(respond)
       return Promise.resolve(respond())
     }
-    const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents$/)
+    const documentsMatch = url.match(/\/api\/(?:v1\/)?workspaces\/([^/]+)\/documents$/)
     if (documentsMatch && (!init || init.method === undefined)) {
       const workspaceId = decodeURIComponent(documentsMatch[1])
       const override = routes.onListDocuments?.(workspaceId)
@@ -133,7 +133,12 @@ function installFetchMock(routes: MockRoutes) {
       const workspaceId = decodeURIComponent(documentsMatch[1])
       const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
       routes.onCreateDocument?.(workspaceId, body.path, body.kind)
-      return Promise.resolve(jsonResponse({ path: body.path }))
+      return Promise.resolve(
+        jsonResponse(
+          { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
+          201,
+        ),
+      )
     }
     const canvasDeleteMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents\/([^/]+)$/)
     if (canvasDeleteMatch && init?.method === 'DELETE') {
@@ -1003,10 +1008,15 @@ describe('DaemonIndexPage', () => {
           }),
         )
       }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
+      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as { path: string }
         created.push(['ws-a', body.path])
-        return Promise.resolve(jsonResponse({ path: body.path }))
+        return Promise.resolve(
+          jsonResponse(
+            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
+            201,
+          ),
+        )
       }
       if (url.endsWith('/api/workspaces/ws-a/names')) {
         return Promise.resolve(jsonResponse({ documents: { alpha: 'Alpha' }, pinned: [] }))
@@ -1103,9 +1113,14 @@ describe('DaemonIndexPage', () => {
           }),
         )
       }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
+      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as { path: string }
-        return Promise.resolve(jsonResponse({ path: body.path }))
+        return Promise.resolve(
+          jsonResponse(
+            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
+            201,
+          ),
+        )
       }
       if (
         url.endsWith('/api/workspaces/ws-a/names') ||
@@ -1226,7 +1241,7 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
+      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ message: 'boom' }, 500))
       }
       if (url.endsWith('/api/workspaces/ws-a/documents')) {
@@ -1257,9 +1272,14 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
+      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
         created.push(JSON.parse(String(init.body)).path as string)
-        return Promise.resolve(jsonResponse({ path: 'untitled' }))
+        return Promise.resolve(
+          jsonResponse(
+            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
+            201,
+          ),
+        )
       }
       if (url.endsWith('/api/workspaces/ws-a/documents')) {
         return Promise.resolve(jsonResponse({ documents: [] }))
@@ -1291,7 +1311,7 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
+      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
         created.push(JSON.parse(String(init.body)).path as string)
         return new Promise<Response>((resolve) => {
           resolveCreate = resolve
@@ -1315,7 +1335,12 @@ describe('DaemonIndexPage', () => {
     fireEvent.click(button)
     expect(created).toEqual(['untitled'])
 
-    resolveCreate?.(jsonResponse({ path: 'untitled' }))
+    resolveCreate?.(
+      jsonResponse(
+        { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
+        201,
+      ),
+    )
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     expect(created).toEqual(['untitled'])
   })
@@ -1331,14 +1356,19 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces')) {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
+      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
         const path = JSON.parse(String(init?.body ?? '{}')).path as string
         created.push(path)
         if (serverPaths.includes(path)) {
           return Promise.resolve(jsonResponse({ title: `Canvas "${path}" already exists` }, 409))
         }
         serverPaths = [...serverPaths, path]
-        return Promise.resolve(jsonResponse({ path }))
+        return Promise.resolve(
+          jsonResponse(
+            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path },
+            201,
+          ),
+        )
       }
       if (url.endsWith('/api/workspaces/ws-a/documents')) {
         // The list starts EMPTY (a second tab created "untitled"), so the first derive collides.

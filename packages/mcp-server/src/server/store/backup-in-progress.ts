@@ -136,8 +136,12 @@ export async function withBackupMarker<T>(
   // is a property of the data. Without this a long copy expires its own
   // marker and GC resumes underneath it, which is the window this closes.
   // unref'd: keeping a marker warm must never hold a process open.
+  // The in-flight write is HELD: `clearInterval` cancels the next tick, not
+  // the one already running, so a refresh that started just before the body
+  // returned used to land after the `rm` below and recreate the marker.
+  let inFlight: Promise<void> = Promise.resolve()
   const refresh = setInterval(() => {
-    void write()
+    inFlight = write()
   }, refreshEveryMs)
   refresh.unref()
 
@@ -145,6 +149,7 @@ export async function withBackupMarker<T>(
     return await body()
   } finally {
     clearInterval(refresh)
+    await inFlight
     await rm(markerPath(dataDir), { force: true }).catch(() => {})
   }
 }

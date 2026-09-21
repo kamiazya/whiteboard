@@ -155,7 +155,6 @@
     }
   },
   "devDependencies": {
-    "@fast-check/vitest": "^0.4.1",
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
@@ -176,7 +175,6 @@
     "@vitest/browser-playwright": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "concurrently": "^9",
-    "fast-check": "^4.7.0",
     "jsdom": "^30.0.1",
     "libsql": "^0.5.29",
     "playwright": "1.61.1",
