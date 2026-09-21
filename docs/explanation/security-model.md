@@ -274,6 +274,19 @@ keeps origin trust only UNTIL its first member is added; removing every
 member does not reopen it. A workspace that has ever had a member stays
 person-gated, now admitting nobody until a member is added again.
 
+**The gate has exactly one exit, and only the daemon's owner can take it.**
+An operator can return a workspace to origin trust with
+`DELETE /api/workspaces/:workspaceId/members-only`, which clears the marker
+and leaves the memberships alone. It is barred to the **daemon token**,
+judged by the credential's kind rather than by its scopes: a paired
+browser's grant carries every scope today, so a scope-based bar would let
+an origin reopen the very gate that exists to stop it being trusted. There
+is no browser UI, and there cannot be one at that bar. It exists because
+the gate otherwise has no way out — an operator who removes the last
+membership, possibly their own, would be locked out of their own workspace
+with no route back but editing the database by hand. Nothing beyond a log
+line records that a reopen happened.
+
 This applies to **local-daemon mode only**. Server-mode credentials are all
 operator-issued through the external Identity Provider, which is already
 trusted with everything; there is no separate person-vs-pairing distinction
