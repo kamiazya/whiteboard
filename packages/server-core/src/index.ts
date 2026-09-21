@@ -1,3 +1,11 @@
+export type { ApiErrorBody } from './api-errors.js'
+export {
+  apiErrorBodySchema,
+  apiErrorCodeSchema,
+  apiErrorReason,
+  errorBody,
+  invalidRequestBody,
+} from './api-errors.js'
 export { createServer } from './create-server.js'
 export { countAliveNodes, countLegacyTombstones } from './document-counts.js'
 export type { Logger, LogSink } from './log.js'

@@ -2,10 +2,9 @@
  * The title a markdown body announces about itself, if it announces one.
  *
  * Used to NAME a document that nobody named — see `use-markdown-document`.
- * Deliberately line-anchored text matching rather than a markdown parse, the
- * same call `set-heading-level.ts` and `toggle-task-checkbox.ts` make and for
- * the same reason: a level-1 ATX heading is only ever `#` + whitespace + text
- * at the start of a line, and a full parse buys nothing at that depth.
+ * Deliberately line-anchored text matching rather than a markdown parse: a
+ * level-1 ATX heading is only ever `#` + whitespace + text at the start of a
+ * line, and a full parse buys nothing at that depth.
  *
  * The rule is narrow on purpose. Only the FIRST non-blank line counts: a
  * heading further down is a section, not the document's title, and naming a
@@ -13,8 +12,7 @@
  */
 
 /**
- * `# ` + text, with the space required — `#tag` is body text, matching
- * `set-heading-level.ts`'s heading rule.
+ * `# ` + text, with the space required — `#tag` is body text.
  */
 const ATX_H1 = /^#[ \t]+(.+)$/
 

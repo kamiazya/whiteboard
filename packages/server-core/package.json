@@ -12,6 +12,10 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./api-errors": {
+      "types": "./src/api-errors.ts",
+      "import": "./src/api-errors.ts"
+    },
     "./versions/version-entry": {
       "types": "./src/versions/version-entry.ts",
       "import": "./src/versions/version-entry.ts"
