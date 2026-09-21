@@ -14,10 +14,15 @@ import { describe, expect, it } from 'vitest'
 // closer to delete the entry — so paying debt off is recorded, not just
 // tolerated silently forever.
 //
-// Deliberately NOT covered: the checklist's companion "functions stay under
-// 50 lines" clause. That needs an AST to find function boundaries, which is
-// a different instrument than counting a file's newlines — out of scope for
-// this slice.
+// The checklist's companion "functions stay under 50 lines" clause needs an
+// AST to find function boundaries, which is a different instrument than
+// counting a file's newlines. It is `tools/arch-lint/src/
+// function-size-budget.test.ts` now, on this same shrink-only contract —
+// there rather than here because the AST comes from
+// `@typescript/typescript6`, which only that package depends on. The two are
+// not interchangeable: a file budget is satisfied by MOVING mass, which is
+// how 834 lines of pointer handling left `SpatialEditor.tsx` for a file of
+// their own while remaining one function.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 
 const LINE_BUDGET = 800
@@ -747,7 +752,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // case).
   // Raised 1733 -> 1819 for S5's read-plane states (ADR-0042 decisions
   // 3-5): renewal/reconnect prop assertions plus the removed-state test.
-  'apps/web/src/App.test.tsx': 1819,
+  // Raised 1819 -> 1859 for S9's document-route/canonical-id replica case
+  // (the read-plane smoke's exact registry shape — no segment).
+  'apps/web/src/App.test.tsx': 1859,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
@@ -840,7 +847,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // 951 -> 959 for the two S5 raises above (App.tsx, App.test.tsx) and
   // this entry's own two-line sentence — this file always grows by its
   // own edit too.
-  'packages/mcp-server/src/server/file-size-budget.test.ts': 963,
+  'packages/mcp-server/src/server/file-size-budget.test.ts': 970,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
   // both REASONS were kept, because each explains a different change the
   // merged table now holds; only the numbers were re-measured. A scoreboard

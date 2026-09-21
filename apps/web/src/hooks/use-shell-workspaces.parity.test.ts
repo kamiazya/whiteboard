@@ -15,11 +15,17 @@
 // asymmetry becomes a decision on the record instead of a method somebody
 // forgot to add.
 //
+// It reads `use-shell-workspaces.ts`, where both sources are built. Sitting
+// them side by side makes the asymmetry visible to a READER as well, which
+// is a second rung and not a replacement: adjacency is not a guard, and the
+// method that went missing would look no different beside its twin than it
+// did a hundred lines away.
+//
 // Read at build time via `?raw` rather than at runtime, so this stays free of
 // `node:fs` — apps/web is browser-only (see web-app-boundary.test.ts).
 
 import { describe, expect, it } from 'vitest'
-import appSource from './App.tsx?raw'
+import hookSource from './use-shell-workspaces.ts?raw'
 
 /**
  * The `source: { ... }` literal that follows a declaration, as text.
@@ -56,7 +62,7 @@ describe('both keepers offer the same switcher affordances', () => {
     ['daemon', 'const daemonWorkspaces'],
     ['browser', 'const browserWorkspaces'],
   ])('%s declares list, create and rename', (_keeper, declaration) => {
-    const block = sourceBlock(appSource, declaration)
+    const block = sourceBlock(hookSource, declaration)
     // A scan that found nothing would make every assertion below vacuous, and
     // would read as agreement rather than as a scan that missed.
     expect(block.length).toBeGreaterThan(100)

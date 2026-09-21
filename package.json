@@ -48,6 +48,7 @@
     "smoke:claude": "pnpm --filter @kamiazya/whiteboard-mcp smoke:claude",
     "smoke:codex": "pnpm --filter @kamiazya/whiteboard-mcp smoke:codex",
     "smoke:daemon-origin": "pnpm --filter @kamiazya/whiteboard-mcp smoke:daemon-origin",
+    "smoke:read-plane": "pnpm --filter @kamiazya/whiteboard-mcp smoke:read-plane",
     "smoke:passkey-promote": "pnpm --filter @kamiazya/whiteboard-mcp smoke:passkey-promote",
     "smoke:distribution:packaged": "pnpm smoke:claude && pnpm smoke:codex && node tests/e2e/distribution/packaged-daemon-backup-restore-smoke.mjs && node tests/e2e/distribution/packaged-daemon-logs-smoke.mjs && node tests/e2e/distribution/packaged-daemon-support-bundle-smoke.mjs && node tests/e2e/distribution/packaged-daemon-token-smoke.mjs && node tests/e2e/distribution/packaged-server-mode-app-smoke.mjs && node tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs && node tests/e2e/distribution/packaged-server-mode-entrypoint-smoke.mjs",
     "smoke:all": "pnpm --filter @kamiazya/whiteboard-mcp smoke:all",

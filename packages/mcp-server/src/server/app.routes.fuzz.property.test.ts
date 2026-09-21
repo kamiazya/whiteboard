@@ -46,6 +46,7 @@ import {
   workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { listFontsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
+import { apiErrorBodySchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
   daemonPingResponseSchema,
@@ -694,6 +695,18 @@ describe('every daemon route answers or refuses with a reason, never a 5xx', () 
             } else {
               // A refusal the client cannot read.
               expect.fail(detail)
+            }
+            if (res.status >= 400 && contentType.includes('json')) {
+              // The runtime half of `routes/error-body-shape.test.ts`. That
+              // scan reads object LITERALS, so it cannot see a body built by
+              // `errorBody`, whose `code` parameter is a plain `string` — a
+              // sentence passed to it typechecks. This parses what actually
+              // went out, under the same contract the web client reads it
+              // with, including the snake_case code.
+              const refusal = apiErrorBodySchema.safeParse(JSON.parse(text))
+              expect(refusal.success, `${detail}\n${JSON.stringify(refusal.error?.issues)}`).toBe(
+                true,
+              )
             }
             if (res.status < 300) {
               answered.set(key, (answered.get(key) ?? 0) + 1)
