@@ -1,7 +1,7 @@
+import { tagsInUse } from '@kamiazya/whiteboard-model'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { TagInUse, WorkspaceFilesSource } from '../../lib/files-source.js'
-import { countTagsInUse } from '../../lib/tags-in-use.js'
 
 export interface TagsInUse {
   /**
@@ -45,7 +45,7 @@ export function useTagsInUse(
 
   const tags = useMemo<readonly TagInUse[]>(() => {
     if (counted !== null) return counted
-    return countTagsInUse(
+    return tagsInUse(
       (documents ?? []).map((entry) => ({
         what: entry.kind === 'spatial' ? 'board' : 'document',
         tags: entry.tags ?? [],

@@ -73,3 +73,70 @@ export const tagsWriteSchema = z.array(tagWriteSchema).superRefine((tags, ctx) =
  * they sit on, the way a malformed facet bucket costs the facets.
  */
 export const storedTagsSchema = z.array(z.string()).optional().catch(undefined)
+
+/**
+ * What can carry a tag ([ADR-0040](../../../docs/contributing/adr/0040-scoped-tags.md)
+ * decision 5). The word both keepers count by, so neither spells it inline.
+ */
+export type TagBearerKind = 'document' | 'board' | 'node' | 'edge'
+
+/**
+ * One row of a workspace's tag vocabulary: the tag, a scoped tag's halves
+ * beside it, and how many of each kind of thing carry it.
+ */
+export const tagInUseSchema = z
+  .object({
+    tag: z.string().min(1),
+    key: z.string().optional(),
+    value: z.string().optional(),
+    documents: z.number().int().nonnegative(),
+    boards: z.number().int().nonnegative(),
+    nodes: z.number().int().nonnegative(),
+    edges: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export type TagInUse = z.infer<typeof tagInUseSchema>
+
+const COUNTED: Record<TagBearerKind, keyof Omit<TagInUse, 'tag' | 'key' | 'value'>> = {
+  document: 'documents',
+  board: 'boards',
+  node: 'nodes',
+  edge: 'edges',
+}
+
+/**
+ * The vocabulary in use over a set of bearers, one row per tag, sorted by tag.
+ *
+ * It lives HERE, below both keepers, because it is a DECISION rather than
+ * I/O: a bearer counts once however many times it repeats a tag, and the
+ * sort is code-unit order so every machine answers the same list. Each
+ * keeper gathers its own bearers — the daemon from its store, the browser
+ * from IndexedDB — and that part is rightly twinned; counting them is not.
+ * Written twice, the two keepers could answer different `inUse` rows for one
+ * workspace and only a parity test would ever notice.
+ *
+ * The parameter is narrower than either keeper's own bearer type on purpose:
+ * this needs what a bearer IS and what it carries, and nothing else.
+ */
+export function tagsInUse(
+  bearers: readonly { readonly what: TagBearerKind; readonly tags: readonly string[] }[],
+): TagInUse[] {
+  const rows = new Map<string, TagInUse>()
+  for (const bearer of bearers) {
+    for (const tag of new Set(bearer.tags)) {
+      const scoped = parseScopedTag(tag)
+      const row = rows.get(tag) ?? {
+        tag,
+        ...(scoped === undefined ? {} : { key: scoped.key, value: scoped.value }),
+        documents: 0,
+        boards: 0,
+        nodes: 0,
+        edges: 0,
+      }
+      rows.set(tag, { ...row, [COUNTED[bearer.what]]: row[COUNTED[bearer.what]] + 1 })
+    }
+  }
+  // Code-unit order, not locale order: the same answer on every machine.
+  return [...rows.values()].sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0))
+}

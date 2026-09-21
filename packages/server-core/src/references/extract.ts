@@ -5,7 +5,12 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasEdge,
+  SpatialCanvas,
+  SpatialNode,
+  TagBearerKind,
+} from '@kamiazya/whiteboard-model'
 import { frameLabel, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { searchableTexts, snippetAround } from '@kamiazya/whiteboard-search'
@@ -58,8 +63,8 @@ export interface ContentFacts {
   readonly bearers: readonly TagBearer[]
 }
 
-export interface TagBearer {
-  readonly what: 'document' | 'board' | 'node' | 'edge'
+interface TagBearer {
+  readonly what: TagBearerKind
   /** The node's or edge's id; absent on the document and the board. */
   readonly id?: string
   /** What a reader would call it: a node's text, an edge's label or its two ends. */
