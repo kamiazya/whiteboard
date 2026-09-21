@@ -87,4 +87,39 @@ describe('daemonStatusResultSchema', () => {
       }),
     ).toThrow()
   })
+
+  it('refuses a RESULT widened past the contract — the class tsc cannot see', () => {
+    expect(() =>
+      daemonStatusResultSchema.parse({
+        schemaVersion: 1,
+        ok: true,
+        reason: null,
+        recordFound: true,
+        recordFresh: true,
+        daemonToken: 'leaked',
+      }),
+    ).toThrow(/daemonToken/)
+  })
+
+  it('refuses a record widened past the four fields the contract publishes — the class tsc cannot see', () => {
+    // A result assembled with a SPREAD compiles clean however wide it is:
+    // TypeScript's excess-property check does not apply to spread
+    // properties. `.strict()` is the only thing between that and stdout.
+    expect(() =>
+      daemonStatusResultSchema.parse({
+        schemaVersion: 1,
+        ok: true,
+        reason: null,
+        recordFound: true,
+        recordFresh: true,
+        record: {
+          pid: 1,
+          port: 2,
+          version: 'v',
+          startedAt: 's',
+          dataDir: '/home/someone/.whiteboard',
+        },
+      }),
+    ).toThrow(/dataDir/)
+  })
 })
