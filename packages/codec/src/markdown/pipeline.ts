@@ -32,7 +32,7 @@ const stringifier = unified()
  * Closed syntax set: CommonMark + GFM (tables/strikethrough/task lists) +
  * math ($..$ / $$..$$). `[[wikiLink]]`/`![[embed]]` are NOT parsed here —
  * they have no remark syntax extension in this package; resolving them from
- * plain text is `references.ts`'s job, applied as a separate pass over the
+ * plain text is `references/`'s job, applied as a separate pass over the
  * already-parsed MdastRoot.
  */
 export function parseMarkdownBody(body: string): MdastRoot {
