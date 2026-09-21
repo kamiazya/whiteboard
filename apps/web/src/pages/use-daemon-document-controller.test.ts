@@ -1,24 +1,39 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import * as passkeySession from '../lib/passkey-session.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
-vi.mock('../lib/daemon-api-client.js', () => ({
+// Spreads importOriginal so `DaemonApiError` stays the REAL class — the
+// membership classifier's `instanceof DaemonApiError` throws on `undefined`
+// otherwise, and every rejection case below reads as an unrelated failure.
+vi.mock('../lib/daemon-api-client.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof daemonApiClient>()),
   listWorkspaces: vi.fn(),
   listDocuments: vi.fn(),
   createDocument: vi.fn(),
 }))
 
+vi.mock('../lib/passkey-session.js', () => ({
+  bindPasskeySession: vi.fn(),
+}))
+
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
+const mockBindPasskeySession = vi.mocked(passkeySession.bindPasskeySession)
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 const fetchFn = vi.fn() as unknown as typeof fetch
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockBindPasskeySession.mockResolvedValue({ ok: true })
 })
+
+function refusal(code: 'requires_person_session' | 'not_a_member') {
+  return new daemonApiClient.DaemonApiError('refused', 403, { error: code, message: 'refused' })
+}
 
 describe('useDaemonDocumentController', () => {
   it('picks the first workspace when no workspaceId is given', async () => {
@@ -235,5 +250,126 @@ describe('useDaemonDocumentController', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.loadError).toBe('network down')
+  })
+
+  // A membership refusal is realistically answered by the workspace-scoped
+  // route (listDocuments) — GET /api/workspaces FILTERS a gated workspace
+  // out rather than refusing it, so listWorkspaces always resolves.
+  it('a requires_person_session refusal binds the passkey once and retries, loading the workspace', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListDocuments
+      .mockRejectedValueOnce(refusal('requires_person_session'))
+      .mockResolvedValueOnce({
+        documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      })
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockBindPasskeySession).toHaveBeenCalledTimes(1)
+    expect(result.current.refusal).toBeNull()
+    expect(result.current.loadError).toBeNull()
+    expect(result.current.workspaceId).toBe('w1')
+  })
+
+  it('a second requires_person_session refusal (bind already spent) surfaces as controller.refusal, not loadError', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListDocuments.mockRejectedValue(refusal('requires_person_session'))
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockBindPasskeySession).toHaveBeenCalledTimes(1)
+    expect(result.current.refusal).toEqual({ code: 'requires_person_session', workspaceId: 'w1' })
+    expect(result.current.loadError).toBeNull()
+    expect(result.current.workspaceId).toBeNull()
+  })
+
+  it('a not_a_member refusal surfaces as controller.refusal without ever binding', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListDocuments.mockRejectedValue(refusal('not_a_member'))
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockBindPasskeySession).not.toHaveBeenCalled()
+    expect(result.current.refusal).toEqual({ code: 'not_a_member', workspaceId: 'w1' })
+    expect(result.current.workspaceId).toBeNull()
+  })
+
+  it('a not_a_member refusal arriving AFTER a successful bind surfaces as controller.refusal', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListDocuments
+      .mockRejectedValueOnce(refusal('requires_person_session'))
+      .mockRejectedValueOnce(refusal('not_a_member'))
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockBindPasskeySession).toHaveBeenCalledTimes(1)
+    expect(result.current.refusal).toEqual({ code: 'not_a_member', workspaceId: 'w1' })
+    // Admission gate: workspaceId is set only once listDocuments succeeds, so
+    // a refused workspace never arms the push/refresh effect that keys on it.
+    expect(result.current.workspaceId).toBeNull()
+  })
+
+  it('workspaceId stays null while listDocuments is pending, even though listWorkspaces has resolved', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    let resolveDocuments: (v: { documents: never[] }) => void = () => {}
+    mockListDocuments.mockReturnValue(
+      new Promise((resolve) => {
+        resolveDocuments = resolve
+      }),
+    )
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+
+    await waitFor(() => expect(mockListDocuments).toHaveBeenCalled())
+    expect(result.current.workspaceId).toBeNull()
+
+    await act(async () => {
+      resolveDocuments({ documents: [] })
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.workspaceId).toBe('w1')
+  })
+
+  it('retry() after a bind-already-spent refusal permits exactly one more bind', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListDocuments
+      // attempt 0: first load refuses, bind #1 runs, the retried load refuses again → surfaces
+      .mockRejectedValueOnce(refusal('requires_person_session'))
+      .mockRejectedValueOnce(refusal('requires_person_session'))
+      // attempt 1 (after retry()): first load refuses again, bind #2 runs, the retried load succeeds
+      .mockRejectedValueOnce(refusal('requires_person_session'))
+      .mockResolvedValueOnce({
+        documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      })
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.refusal).toEqual({ code: 'requires_person_session', workspaceId: 'w1' })
+    expect(mockBindPasskeySession).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      result.current.retry()
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockBindPasskeySession).toHaveBeenCalledTimes(2)
+    expect(result.current.refusal).toBeNull()
+    expect(result.current.workspaceId).toBe('w1')
   })
 })

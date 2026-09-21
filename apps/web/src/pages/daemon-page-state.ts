@@ -26,6 +26,14 @@ import type {
   WorkspaceEmptyState,
 } from './document-page-state.js'
 
+/** The daemon refused the resolve/document read on membership grounds
+ *  (ADR-0041/0042 S8) — read from `DaemonApiError.body` through
+ *  `membershipRefusal`, never from a controller-field guess. */
+export interface DaemonMembershipRefusal {
+  code: 'requires_person_session' | 'not_a_member'
+  workspaceId: string
+}
+
 export interface DaemonPageStateInput {
   loading: boolean
   loadError: string | null
@@ -37,10 +45,23 @@ export interface DaemonPageStateInput {
    * path (the page's `workspaceSyncDocumentId !== undefined`).
    */
   documentAtPath: boolean
+  refusal: DaemonMembershipRefusal | null
+}
+
+/**
+ * Daemon only: the resolve or document read was refused on membership
+ * grounds. Declared here rather than in the shared `document-page-state.ts`
+ * — the browser keeper has no membership.
+ */
+export interface MembershipRefusedState {
+  kind: 'membership-refused'
+  code: DaemonMembershipRefusal['code']
+  workspaceId: string
 }
 
 export type DaemonPageState =
   | LoadingState
+  | MembershipRefusedState
   | LoadDegradedState
   | DocumentMissingState
   | WorkspaceEmptyState
@@ -49,6 +70,13 @@ export type DaemonPageState =
 export function deriveDaemonPageState(input: DaemonPageStateInput): DaemonPageState {
   if (input.loading) {
     return { kind: 'loading' }
+  }
+  if (input.refusal !== null) {
+    return {
+      kind: 'membership-refused',
+      code: input.refusal.code,
+      workspaceId: input.refusal.workspaceId,
+    }
   }
   if (input.loadError !== null) {
     return { kind: 'load-degraded', message: input.loadError }

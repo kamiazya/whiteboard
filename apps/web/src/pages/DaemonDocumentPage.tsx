@@ -13,6 +13,7 @@ import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
+import { MembershipGateView } from '../components/document-editor/MembershipGateView.js'
 import { Button } from '../components/ui/button.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
@@ -50,6 +51,7 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { ReplicaReadPage } from './ReplicaReadPage.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
 const log = getAppLogger('daemon-document-page')
@@ -536,10 +538,34 @@ function useDaemonDocument(
     canvas,
     documentCount: controller.documents.length,
     documentAtPath: workspaceSyncDocumentId !== undefined,
+    refusal: controller.refusal,
   })
 
   if (pageState.kind === 'loading') {
     return { kind: 'terminal', node: <DocumentPageSkeleton label="Connecting to daemon" /> }
+  }
+
+  // A membership refusal is terminal: no backend is ever built for it (the
+  // `canvas`/`workspaceSyncDocumentId` memos above stay unresolved, so no
+  // WS/SSE subscribe is attempted either). `not_a_member` lands on S5's
+  // removed surface; `requires_person_session` offers the one retry the
+  // controller's own once-only bind guard did not spend.
+  if (pageState.kind === 'membership-refused') {
+    if (pageState.code === 'not_a_member') {
+      return {
+        kind: 'terminal',
+        node: (
+          <ReplicaReadPage
+            workspaceId={pageState.workspaceId}
+            daemonBaseUrl={daemonBaseUrl}
+            renewal="unreachable"
+            withheld="not_a_member"
+            onReconnect={controller.retry}
+          />
+        ),
+      }
+    }
+    return { kind: 'terminal', node: <MembershipGateView onRetry={controller.retry} /> }
   }
 
   if (pageState.kind === 'load-degraded') {

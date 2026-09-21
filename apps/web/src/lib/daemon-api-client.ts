@@ -53,24 +53,29 @@ export { createDaemonFetch }
 
 /** Thrown by `fetchAndParse` on a non-ok response, carrying the HTTP status
  *  so callers can branch on it (e.g. 404 vs. a real failure) instead of
- *  parsing the message string. */
+ *  parsing the message string. `body` is the parsed JSON of the response
+ *  (undefined when the body was not JSON) — the seam a typed refusal (e.g.
+ *  `membershipRefusalSchema`) is read back through, by CODE rather than by
+ *  matching the message sentence. */
 export class DaemonApiError extends Error {
   readonly status: number
-  constructor(message: string, status: number) {
+  readonly body: unknown
+  constructor(message: string, status: number, body?: unknown) {
     super(message)
     this.name = 'DaemonApiError'
     this.status = status
+    this.body = body
   }
 }
 
-async function parseProblemDetails(res: Response): Promise<string> {
+async function parseProblemDetails(res: Response): Promise<{ message: string; body: unknown }> {
   try {
-    const reason = apiErrorReason(await res.json())
-    if (reason !== undefined) return reason
+    const body: unknown = await res.json()
+    const reason = apiErrorReason(body)
+    return { message: reason ?? `Request failed (${res.status}).`, body }
   } catch {
-    // fall through to the generic message below
+    return { message: `Request failed (${res.status}).`, body: undefined }
   }
-  return `Request failed (${res.status}).`
 }
 
 async function fetchAndParse<T>(
@@ -81,7 +86,8 @@ async function fetchAndParse<T>(
 ): Promise<T> {
   const res = await fetchFn(url, init)
   if (!res.ok) {
-    throw new DaemonApiError(await parseProblemDetails(res), res.status)
+    const { message, body } = await parseProblemDetails(res)
+    throw new DaemonApiError(message, res.status, body)
   }
   const json = await res.json()
   try {
@@ -237,7 +243,7 @@ export async function getDocumentSnapshot(
   const url = `${daemonBaseUrl}${documentApiUrl(workspaceId, path, 'snapshot')}`
   const res = await fetchFn(url)
   if (!res.ok) {
-    throw new Error(await parseProblemDetails(res))
+    throw new Error((await parseProblemDetails(res)).message)
   }
   return new Uint8Array(await res.arrayBuffer())
 }
@@ -451,7 +457,8 @@ export async function fetchFontFile(
 ): Promise<ArrayBuffer> {
   const res = await fetchFn(`${daemonBaseUrl}/api/fonts/${encodeURIComponent(fontId)}/file`)
   if (!res.ok) {
-    throw new DaemonApiError(await parseProblemDetails(res), res.status)
+    const { message, body } = await parseProblemDetails(res)
+    throw new DaemonApiError(message, res.status, body)
   }
   return await res.arrayBuffer()
 }

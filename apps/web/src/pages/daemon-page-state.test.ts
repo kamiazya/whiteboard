@@ -12,6 +12,7 @@ const editingInput = {
   canvas,
   documentCount: 3,
   documentAtPath: true,
+  refusal: null,
 }
 
 describe('deriveDaemonPageState', () => {
@@ -55,31 +56,75 @@ describe('deriveDaemonPageState', () => {
     expect(deriveDaemonPageState(editingInput)).toEqual({ kind: 'editing' })
   })
 
+  it('a refusal → membership-refused carrying the code and workspaceId', () => {
+    expect(
+      deriveDaemonPageState({
+        ...editingInput,
+        refusal: { code: 'not_a_member', workspaceId: 'ws-1' },
+      }),
+    ).toEqual({ kind: 'membership-refused', code: 'not_a_member', workspaceId: 'ws-1' })
+    expect(
+      deriveDaemonPageState({
+        ...editingInput,
+        refusal: { code: 'requires_person_session', workspaceId: 'ws-1' },
+      }),
+    ).toEqual({
+      kind: 'membership-refused',
+      code: 'requires_person_session',
+      workspaceId: 'ws-1',
+    })
+  })
+
+  it('loading beats a refusal, same as every other field', () => {
+    expect(
+      deriveDaemonPageState({
+        ...editingInput,
+        loading: true,
+        refusal: { code: 'not_a_member', workspaceId: 'ws-1' },
+      }),
+    ).toEqual({ kind: 'loading' })
+  })
+
   it('the cascade is exhaustive over the documented surface', () => {
-    // Every (loading × loadError × canvas × count × atPath) cell maps to one
-    // of the five documented kinds — a sixth kind cannot appear unnoticed.
+    // Every (loading × loadError × canvas × count × atPath × refusal) cell
+    // maps to one of the six documented kinds — a seventh kind cannot appear
+    // unnoticed.
     const kinds = new Set<string>()
     for (const loading of [true, false]) {
       for (const loadError of [null, 'boom']) {
         for (const c of [null, canvas]) {
           for (const documentCount of [0, 2]) {
             for (const documentAtPath of [false, true]) {
-              kinds.add(
-                deriveDaemonPageState({
-                  loading,
-                  loadError,
-                  canvas: c,
-                  documentCount,
-                  documentAtPath,
-                }).kind,
-              )
+              for (const refusal of [
+                null,
+                { code: 'requires_person_session' as const, workspaceId: 'ws-1' },
+                { code: 'not_a_member' as const, workspaceId: 'ws-1' },
+              ]) {
+                kinds.add(
+                  deriveDaemonPageState({
+                    loading,
+                    loadError,
+                    canvas: c,
+                    documentCount,
+                    documentAtPath,
+                    refusal,
+                  }).kind,
+                )
+              }
             }
           }
         }
       }
     }
     expect([...kinds].sort()).toEqual(
-      ['document-missing', 'editing', 'load-degraded', 'loading', 'workspace-empty'].sort(),
+      [
+        'document-missing',
+        'editing',
+        'load-degraded',
+        'loading',
+        'membership-refused',
+        'workspace-empty',
+      ].sort(),
     )
   })
 })
