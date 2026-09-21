@@ -206,3 +206,74 @@ describe('bindPasskeySession', () => {
     expect(body).not.toHaveProperty('kind')
   })
 })
+
+describe('bindPasskeySession: the one gesture (ADR-0042 d6)', () => {
+  /** A fetch that answers the two session-assert calls in order. */
+  function bindingFetch(): typeof globalThis.fetch {
+    return vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/challenge')
+        ? jsonResponse(200, {
+            challenge: CHALLENGE_B64U,
+            expiresAt: '2026-01-01T00:00:00.000Z',
+          })
+        : jsonResponse(200, {
+            credentialId: b64u(RAW_ID),
+            profileId: null,
+            boundUntil: '2026-01-01T01:00:00.000Z',
+          }),
+    ) as unknown as typeof globalThis.fetch
+  }
+
+  function credentialsYielding(prf?: Uint8Array): {
+    credentials: PasskeyCredentials
+    asked: () => CredentialRequestOptions[]
+  } {
+    const calls: CredentialRequestOptions[] = []
+    return {
+      credentials: {
+        create: async () => null,
+        get: async (options) => {
+          calls.push(options as CredentialRequestOptions)
+          const credential = assertionCredential() as unknown as Record<string, unknown>
+          credential.getClientExtensionResults = () =>
+            prf === undefined ? {} : { prf: { results: { first: prf.buffer } } }
+          return credential as unknown as Credential
+        },
+      },
+      asked: () => calls,
+    }
+  }
+
+  it('carries a prf input on the assertion it already performs, and answers with its output', async () => {
+    const first = new Uint8Array(32).fill(5)
+    const { credentials, asked } = credentialsYielding(first)
+
+    const outcome = await bindPasskeySession({
+      daemonBaseUrl: DAEMON,
+      fetch: bindingFetch(),
+      credentials,
+      storage: withRegisteredPasskey(),
+    })
+
+    // ONE prompt does both jobs: it binds the session to the person AND
+    // yields the material that wraps this replica's key for a cold start.
+    expect(asked()).toHaveLength(1)
+    expect(asked()[0]?.publicKey?.extensions?.prf).toBeDefined()
+    expect(outcome).toEqual({ ok: true, prfOutput: first })
+  })
+
+  it('still binds the session when the authenticator produced no key material', async () => {
+    const { credentials } = credentialsYielding(undefined)
+
+    const outcome = await bindPasskeySession({
+      daemonBaseUrl: DAEMON,
+      fetch: bindingFetch(),
+      credentials,
+      storage: withRegisteredPasskey(),
+    })
+
+    // prf support is broad and not universal. Losing the cold start is the
+    // whole cost; the session is bound either way.
+    expect(outcome).toEqual({ ok: true })
+  })
+})

@@ -26,13 +26,17 @@ import {
   sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { DocumentStore } from '@kamiazya/whiteboard-ports'
+import { getAppLogger } from './app-logger.js'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import type { PasskeyCredentials } from './passkey-attestation.js'
 import { bindPasskeySession } from './passkey-session.js'
+import { rememberReplicaKey } from './replica-unlock.js'
 import type { ReplicaKeyProvider } from './sealed-document-store.js'
 import { SealedDocumentStore } from './sealed-document-store.js'
 import { createUserSettingsStore } from './user-settings-store.js'
+
+const log = getAppLogger('replica-store')
 
 const WORKSPACE_TREE_REF = /^workspace-tree:(.+)$/
 
@@ -42,6 +46,13 @@ interface ConnectedKeeper {
   /** The wrapped, authorized fetch — named `daemonFetch` for `keeper-parity.test.ts`'s scan. */
   daemonFetch: typeof globalThis.fetch
   credentials?: PasskeyCredentials
+  /**
+   * The key material the session bind's assertion produced, once it has.
+   * Held per CONNECTION rather than in a module map, so a reconnect or a
+   * disconnect drops it with everything else that session knew — the bytes
+   * are the one thing that could open every replica of this daemon.
+   */
+  prfOutput?: Uint8Array<ArrayBuffer>
 }
 
 /** Module state: the daemon App is currently connected to, or none. */
@@ -57,13 +68,47 @@ function replicaDaemonBaseUrl(workspaceId: string): string | undefined {
   return createUserSettingsStore().load().storage.replicas?.[workspaceId]?.daemonBaseUrl
 }
 
-/** A `ReplicaSource` only when the replica's own daemon is the one this tab is connected to. */
-function sourceFor(daemonBaseUrl: string): ReplicaSource | undefined {
+/**
+ * A `ReplicaSource` only when the replica's own daemon is the one this tab
+ * is connected to.
+ *
+ * Its `onKeyResponse` is where a cold start is PAID FOR (ADR-0042 decision
+ * 6): the session bind's own assertion already produced the wrapping
+ * material, so a key the daemon mints is wrapped and left beside the replica
+ * without anyone being prompted a second time. With no prf output held —
+ * an authenticator that ignores the extension, or a session that was
+ * already bound and so performed no gesture this tab — nothing is written,
+ * and the replica behaves exactly as it did before this existed.
+ *
+ * Failure is swallowed on purpose. Remembering is an OPTIMISATION for the
+ * next tab; a workspace that just opened must not fail because a
+ * localStorage write did.
+ */
+function sourceFor(daemonBaseUrl: string, workspaceId: string): ReplicaSource | undefined {
   if (connected === null || connected.baseUrl !== daemonBaseUrl) return undefined
-  const { daemonFetch, credentials } = connected
+  const keeper = connected
+  const { daemonFetch, credentials } = keeper
   return {
     fetch: daemonFetch,
-    bindSession: () => bindPasskeySession({ daemonBaseUrl, fetch: daemonFetch, credentials }),
+    bindSession: async () => {
+      const outcome = await bindPasskeySession({ daemonBaseUrl, fetch: daemonFetch, credentials })
+      // Only onto the connection this bind belongs to: a disconnect or a
+      // reconnect mid-bind replaced `connected`, and the new one never
+      // performed this gesture.
+      if (outcome.ok && outcome.prfOutput !== undefined && connected === keeper) {
+        keeper.prfOutput = outcome.prfOutput
+      }
+      return outcome
+    },
+    onKeyResponse: (response) => {
+      const prfOutput = keeper.prfOutput
+      if (prfOutput === undefined || connected !== keeper) return
+      void rememberReplicaKey({ daemonBaseUrl, workspaceId, response, prfOutput }).catch(
+        (error: unknown) => {
+          log.info('a replica key could not be remembered for a cold start', error)
+        },
+      )
+    },
   }
 }
 
@@ -74,9 +119,11 @@ const routingProvider: ReplicaKeyProvider = {
     const workspaceId = match[1] as string
     const daemonBaseUrl = replicaDaemonBaseUrl(workspaceId)
     if (daemonBaseUrl === undefined) return 'plaintext'
-    return replicaKeyProviderFor(daemonBaseUrl, workspaceId, sourceFor(daemonBaseUrl)).keyFor(
-      documentId,
-    )
+    return replicaKeyProviderFor(
+      daemonBaseUrl,
+      workspaceId,
+      sourceFor(daemonBaseUrl, workspaceId),
+    ).keyFor(documentId)
   },
 }
 

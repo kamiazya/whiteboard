@@ -326,7 +326,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/local-files-source.ts#createLocalFilesSource.searchDocuments': 59,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
   'apps/web/src/lib/pairing-grant.ts#consumeGrantFragment': 97,
-  'apps/web/src/lib/passkey-attestation.ts#registerPasskey': 86,
+  // 86 -> 87: the credential now negotiates the `prf` extension at CREATE
+  // (ADR-0042 d6), which several authenticators decide there rather than at
+  // assertion time. One property on the options object; its reasoning is a
+  // named constant beside the function rather than a comment inside it.
+  'apps/web/src/lib/passkey-attestation.ts#registerPasskey': 87,
   'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 95,
   // 61 -> 64 (ADR-0042 S10): a failed or empty pull now reports itself through
   // reportRefreshFailure/reportNoPull instead of a silent catch.
@@ -347,7 +351,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 393,
+  // 393 -> 416: ADR-0042 decision 6's sixth state — an unlock attempt, the
+  // remembered-blob read, and one more render branch. Paid for first: the
+  // three action states now share ONE `ReplicaActionPanel` instead of a
+  // near-identical block each, which is where 26 of the added lines went.
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 416,
   // 89 -> 94: the Copies-on-this-device card mounts in BOTH branches, and
   // the disconnected one is where it matters most — with no daemon every
   // copy is browser-kept, so a card hidden there would hide the whole list.
