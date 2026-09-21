@@ -89,13 +89,13 @@ describe('switchDocument supersession', () => {
     await store.save(snap)
     const hook = renderHook(() => useBrowserDocumentController(store.index, options))
     await act(async () => {})
-    let a: DocumentSnapshot | undefined
-    let b: DocumentSnapshot | undefined
+    let docA: DocumentSnapshot | undefined
+    let docB: DocumentSnapshot | undefined
     await act(async () => {
-      a = await hook.result.current.createDocument('A')
-      b = await hook.result.current.createDocument('B')
+      docA = await hook.result.current.createDocument('A')
+      docB = await hook.result.current.createDocument('B')
     })
-    return { hook, a: a as DocumentSnapshot, b: b as DocumentSnapshot }
+    return { hook, a: docA as DocumentSnapshot, b: docB as DocumentSnapshot }
   }
 
   it('a switch overtaken while LOADING lands on nothing, and the later one holds', async () => {
