@@ -243,11 +243,14 @@ result omits what you cannot read rather than showing a "forbidden" row
 for it. The operator-issued daemon token sees every workspace, same as
 today.
 
-**What a removed person sees today**: the daemon page's generic load error,
-carrying the refusal's message ("this session is not signed in as a
-member" / "no such member in this workspace"). A dedicated "You were
-removed" page — the one the replica-key route's own removed state already
-has — is a follow-up increment, not yet shipped for the online routes.
+**What a removed person sees**: the same "You were removed from this
+workspace" page the replica-key route's own removed state already shows
+(ADR-0042 decision 4) — reached now from the online routes too, not only
+from an offline replica. A session that has simply never bound its passkey
+yet (`requires_person_session`) is asked for it once — a status message and
+a "Try again" action — rather than shown either page; a second refusal in
+the same page life falls to that same prompt again, never a silent retry
+loop.
 
 ## Daemon impersonation (loopback port squatting, the other direction)
 

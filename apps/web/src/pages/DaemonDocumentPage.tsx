@@ -44,6 +44,7 @@ import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
+import { DaemonTerminalScreen, membershipRefusedScreen } from './daemon-terminal-screens.js'
 import type {
   DocumentKeeper,
   DocumentKeeperAnswer,
@@ -536,10 +537,25 @@ function useDaemonDocument(
     canvas,
     documentCount: controller.documents.length,
     documentAtPath: workspaceSyncDocumentId !== undefined,
+    refusal: controller.refusal,
   })
 
   if (pageState.kind === 'loading') {
-    return { kind: 'terminal', node: <DocumentPageSkeleton label="Connecting to daemon" /> }
+    return {
+      kind: 'terminal',
+      node: (
+        <DaemonTerminalScreen status="">
+          <DocumentPageSkeleton label="Connecting to daemon" />
+        </DaemonTerminalScreen>
+      ),
+    }
+  }
+
+  if (pageState.kind === 'membership-refused') {
+    return {
+      kind: 'terminal',
+      node: membershipRefusedScreen(pageState, daemonBaseUrl, controller.retry),
+    }
   }
 
   if (pageState.kind === 'load-degraded') {

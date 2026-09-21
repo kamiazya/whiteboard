@@ -139,6 +139,31 @@ describe('listWorkspaces', () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Not found' }, 404))
     await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toThrow(/not found/i)
   })
+
+  it('carries the parsed JSON body on DaemonApiError, for a caller to branch on the error code', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: 'not_a_member', message: 'this person is not a member' }, 403),
+      )
+    await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toMatchObject({
+      status: 403,
+      body: { error: 'not_a_member', message: 'this person is not a member' },
+    })
+  })
+
+  it('leaves DaemonApiError.body undefined when the response is not JSON', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response('not json', {
+        status: 500,
+        headers: { 'Content-Type': 'text/plain' },
+      }),
+    )
+    await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toMatchObject({
+      status: 500,
+      body: undefined,
+    })
+  })
 })
 
 describe('listDocuments', () => {

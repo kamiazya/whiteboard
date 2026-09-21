@@ -161,6 +161,20 @@ describe('ReplicaReadPage', () => {
     expect(await screen.findAllByText(/Hello from the cache/)).toHaveLength(2)
   })
 
+  it('the offline banner omits the synced clause when syncedAt is absent', async () => {
+    await seedReplica()
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        daemonBaseUrl={DAEMON}
+        renewal="unreachable"
+        onReconnect={noopReconnect}
+      />,
+    )
+    const banner = await screen.findByTestId('replica-offline-banner')
+    expect(banner.textContent).not.toMatch(/synced/i)
+  })
+
   it('a spatial edit persists as a visible diff — the unknown record survives', async () => {
     // Decision 3's spatial half. The unknown-version record is the sharp
     // edge: a whole-canvas resync would delete it, and on a replica that
@@ -470,6 +484,28 @@ describe('ReplicaReadPage states', () => {
     )
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(document.querySelector('[contenteditable]')).toBeNull()
+  })
+
+  it('withheld not_a_member renders removed with no replica record on this device, opening none', async () => {
+    // No seedReplica(): the daemon already answered directly (a live-daemon
+    // membership refusal), so the page must never open the record at all —
+    // without the withheld prop bypassing that open, an ABSENT record here
+    // would read as 'needs-connection' rather than 'removed'.
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        daemonBaseUrl={DAEMON}
+        renewal="unreachable"
+        withheld="not_a_member"
+        onReconnect={noopReconnect}
+      />,
+    )
+    const removed = await screen.findByTestId('replica-state-removed')
+    expect(removed.textContent).toContain(
+      'removed from this workspace; changes made since then were not sent',
+    )
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
   })
 
   it('the reason reaches the page: unknown_credential is locked, not removed', async () => {

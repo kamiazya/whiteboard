@@ -54,12 +54,22 @@ export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
   workspaceId: string
   displayName?: string
-  /** When the replica was last synced, from the registry entry. */
-  syncedAt: string
+  /** When the replica was last synced, from the registry entry. Absent when
+   *  the page is mounted directly for a live-daemon refusal rather than for
+   *  an actual offline replica — only the readable banner's "(synced …)"
+   *  clause reads it. */
+  syncedAt?: string
   /** The daemon this replica belongs to — what a Reconnect forgets keys for. */
   daemonBaseUrl: string
   /** What App's silent renewal answered: reached-and-refused, or not reached at all (ADR-0042 decisions 3-5). */
   renewal: ReplicaRenewalInput
+  /**
+   * A membership refusal the DAEMON already answered directly (not from the
+   * replica-key holder), so the page never opens the replica record at all
+   * — a removed member with no replica record on this device would
+   * otherwise read as 'needs-connection' rather than 'removed'.
+   */
+  withheld?: WithheldReason
   /** Re-runs App's renewal (and, through it, the key ask) — the Reconnect action. */
   onReconnect: () => void | Promise<void>
 }
@@ -82,6 +92,7 @@ export function ReplicaReadPage({
   syncedAt,
   daemonBaseUrl,
   renewal,
+  withheld,
   onReconnect,
 }: ReplicaReadPageProps) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
@@ -140,6 +151,14 @@ export function ReplicaReadPage({
   useEffect(() => {
     let cancelled = false
     setState({ kind: 'loading' })
+    // The daemon already answered directly (a live-daemon membership
+    // refusal, not a replica-key holder verdict) — never open the record at
+    // all. Without this branch a removed member with no replica record on
+    // this device would read as 'needs-connection' rather than 'removed'.
+    if (withheld !== undefined) {
+      setState({ kind: 'withheld', reason: withheld })
+      return
+    }
     // Read BEFORE the open, not only after: a lapsed entry is what
     // `open()` itself will discover (`sessionKey`'s own lapse check runs
     // inside the store's `keyFor`), and that check CLEARS the cache entry
@@ -195,7 +214,7 @@ export function ReplicaReadPage({
     return () => {
       cancelled = true
     }
-  }, [workspaceId, daemonBaseUrl, attempt])
+  }, [workspaceId, daemonBaseUrl, attempt, withheld])
 
   const pageState =
     state.kind === 'loading' ? null : replicaPageState({ renewal, key: keyInputFor(state) })
@@ -371,9 +390,11 @@ export function ReplicaReadPage({
           >
             <span className="font-medium">{displayName ?? workspaceId}</span>
             {' — the daemon that keeps this workspace is unreachable. '}
-            This is the copy cached in this browser (synced{' '}
-            {formatRelative(syncedAt, { pastDay: 'absolute' })}). Edits save here and ship to the
-            daemon when it returns.
+            This is the copy cached in this browser
+            {syncedAt !== undefined && (
+              <> (synced {formatRelative(syncedAt, { pastDay: 'absolute' })})</>
+            )}
+            . Edits save here and ship to the daemon when it returns.
           </div>
           <div className="flex min-h-0 flex-1">
             <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
