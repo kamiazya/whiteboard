@@ -138,11 +138,6 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     return c.json(options.getStatus())
   })
 
-  app.post('/api/runtime/touch', (c) => {
-    options.touch()
-    return c.json({ ok: true })
-  })
-
   // Storage usage report. Cheap stat()-only walk of getDataDir(); nothing is cached.
   // `lastAutoCompactedAt` is the freshest auto-Optimize timestamp across
   // every canvas, so the UI can surface "Auto-optimised Ns ago" without
