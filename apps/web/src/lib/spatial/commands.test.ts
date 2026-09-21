@@ -43,6 +43,21 @@ function baseCanvas(): SpatialCanvas {
 }
 
 describe('applyCommand', () => {
+  // A drag landing a hair left of the origin rounds to `-0`, which this
+  // command stores whole. `===` cannot see it; `Object.is` can, and that is
+  // React's `memo` comparison — see `toPosition`.
+  it('move-node stores a positive zero for a position that rounds to negative zero', () => {
+    const canvas = baseCanvas()
+    const next = applyCommand(canvas, { kind: 'move-node', id: 'a', x: -0.3, y: -0.4 })
+
+    expect(Object.is(next.nodes[0]?.x, -0)).toBe(false)
+    expect(Object.is(next.nodes[0]?.y, -0)).toBe(false)
+    // Said the other way round, so a change that returned `undefined` or the
+    // untouched node would not pass by accident.
+    expect(next.nodes[0]?.x).toBe(0)
+    expect(next.nodes[0]?.y).toBe(0)
+  })
+
   it('move-node changes only that node x/y, leaving everything else reference-equal', () => {
     const canvas = baseCanvas()
     const snapshot = structuredClone(canvas)
