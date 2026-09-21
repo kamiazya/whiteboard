@@ -54,6 +54,12 @@
           },
           {
             "type": "command",
+            "command": "node .claude/scripts/hooks/pre-merge-show-comments.mjs",
+            "_comment": "Blocks the FIRST `gh pr merge` on a head that has inline review comments, printing their bodies. Two PRs in one session merged past unread findings because the count and the merge were in the same shell call. Per (PR, head SHA): the second attempt goes through, a new commit re-arms it. Fail-open no-op for every other Bash call.",
+            "timeout": 60
+          },
+          {
+            "type": "command",
             "command": "node .claude/scripts/hooks/pre-pr-visual-evidence.mjs",
             "_comment": "Blocks `gh pr create` when the diff changes a surface a human looks at and the body carries neither a figure nor a stated reason for having none. AGENTS.md asked for this in prose and the practice hollowed out anyway \u2014 a heading over an after-only capture reads as compliance. Fail-open no-op for every other Bash call, and for a body it cannot read.",
             "timeout": 30
