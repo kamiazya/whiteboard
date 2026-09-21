@@ -13,7 +13,10 @@ import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import { MembershipGateView } from '../components/document-editor/MembershipGateView.js'
+import {
+  DaemonTerminalScreen,
+  membershipRefusedScreen,
+} from '../components/document-editor/MembershipGateView.js'
 import { Button } from '../components/ui/button.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
@@ -37,7 +40,6 @@ import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
-import { PASSKEY_NEEDED_COPY } from '../lib/membership-refusal.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
@@ -52,33 +54,9 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
-import { ReplicaReadPage } from './ReplicaReadPage.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
 const log = getAppLogger('daemon-document-page')
-
-/**
- * One `role="status"` region, mounted for the whole `loading` ->
- * `membership-refused` (requires_person_session) span, so the DOM node a
- * screen reader is already tracking just gets new text rather than being
- * replaced by a fresh one that arrives already carrying its message
- * (polite-live-region.test.ts). Empty during `loading` — the skeleton
- * announces that state through its own `role="status"` — and only speaks
- * once `MembershipGateView`'s copy is the thing to announce. Reused across
- * renders because it is the SAME component reference at both call sites:
- * that is what keeps React from tearing the paragraph down when the visible
- * child underneath it swaps from the skeleton to the gate view.
- */
-function DaemonTerminalScreen({ status, children }: { status: string; children: ReactNode }) {
-  return (
-    <>
-      <p role="status" aria-live="polite" data-testid="daemon-live-status" className="sr-only">
-        {status}
-      </p>
-      {children}
-    </>
-  )
-}
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
@@ -576,33 +554,10 @@ function useDaemonDocument(
     }
   }
 
-  // A membership refusal is terminal: no backend is ever built for it (the
-  // `canvas`/`workspaceSyncDocumentId` memos above stay unresolved, so no
-  // WS/SSE subscribe is attempted either). `not_a_member` lands on S5's
-  // removed surface; `requires_person_session` offers the one retry the
-  // controller's own once-only bind guard did not spend.
   if (pageState.kind === 'membership-refused') {
-    if (pageState.code === 'not_a_member') {
-      return {
-        kind: 'terminal',
-        node: (
-          <ReplicaReadPage
-            workspaceId={pageState.workspaceId}
-            daemonBaseUrl={daemonBaseUrl}
-            renewal="unreachable"
-            withheld="not_a_member"
-            onReconnect={controller.retry}
-          />
-        ),
-      }
-    }
     return {
       kind: 'terminal',
-      node: (
-        <DaemonTerminalScreen status={PASSKEY_NEEDED_COPY.body}>
-          <MembershipGateView onRetry={controller.retry} />
-        </DaemonTerminalScreen>
-      ),
+      node: membershipRefusedScreen(pageState, daemonBaseUrl, controller.retry),
     }
   }
 

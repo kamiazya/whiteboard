@@ -334,7 +334,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/versions-backend.contract.ts#versionsBackendContract': 95,
   'apps/web/src/pages/BrowserDocumentPage.tsx#useBrowserDocument': 879,
   'apps/web/src/pages/BrowserIndexPage.tsx#BrowserIndexPage': 331,
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 706,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 697,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 676,
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
