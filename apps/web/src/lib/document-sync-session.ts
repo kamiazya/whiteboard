@@ -1371,9 +1371,48 @@ export function createDocumentSyncSession(
     notifyHistoryChanged()
   }
 
+  /**
+   * Takes back a write still inside its debounce window, answering whether
+   * there was one.
+   *
+   * A queued write carries a WHOLE canvas (`latestNext`) captured before the
+   * undo, so the moment the document moves underneath it, committing it
+   * writes the pre-undo picture back. A commit publishes nothing, so the
+   * screen keeps showing the undone state over a document that no longer
+   * holds it — and the write is a local change, which discards the redo
+   * stack on its way past. Measured at the page layer: the node was gone
+   * from the editor and back in the document 250ms later, with Redo
+   * disabled and nothing to restore.
+   *
+   * Dropped rather than flushed: a flush would have to drain the commit
+   * chain before the undo could pop the step it creates, and `undo` answers
+   * a click synchronously.
+   * ponytail: drop the queued write; flush it instead if undo ever becomes
+   * something a caller can await.
+   */
+  function dropQueuedWrite(): boolean {
+    if (debounceTimer === null && pendingTargets.size === 0) return false
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = null
+    pendingTargets.clear()
+    latestNext = null
+    // Nothing is left to land, and `unsaved` is only cleared by something
+    // settling — without this the document reads as pending for the rest of
+    // the session.
+    void settleAfterCommitDrained()
+    return true
+  }
+
   function undo(): boolean {
-    if (!undoManager || !doc) return false
-    if (!undoManager.canUndo()) return false
+    if (!doc) return false
+    // An edit still inside its debounce window is the most recent thing the
+    // person did and is not in the document yet, so taking it back IS the
+    // undo — the committed stack is left alone.
+    if (dropQueuedWrite()) {
+      publishCanvasFromDoc(doc)
+      return true
+    }
+    if (!undoManager?.canUndo()) return false
     undoManager.undo()
     publishCanvasFromDoc(doc)
     return true
@@ -1382,6 +1421,9 @@ export function createDocumentSyncSession(
   function redo(): boolean {
     if (!undoManager || !doc) return false
     if (!undoManager.canRedo()) return false
+    // Same staleness, for the same reason: the queued write was computed
+    // against the document as it stood before this redo.
+    dropQueuedWrite()
     undoManager.redo()
     publishCanvasFromDoc(doc)
     return true
