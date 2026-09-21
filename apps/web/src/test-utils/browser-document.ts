@@ -15,6 +15,8 @@ import { Loro } from 'loro-crdt'
 import { SYNC_DOCUMENTS_STORE, whiteboardDbName } from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 
@@ -242,4 +244,33 @@ export function createNodeCommand(id: string, x: number, y: number): EditorComma
 /** The command a real SpatialEditor would report when deleting the node with `id`. */
 export function deleteNodeCommand(id: string): EditorCommand {
   return { kind: 'delete-node', id }
+}
+
+/**
+ * What the browser keeper actually holds right now, as one line.
+ *
+ * A page test that fails on `expected [] to include '<node>'` says nothing
+ * about WHICH emptiness it met: a write that never landed, a reload that
+ * opened a different document, or a page that never mounted an editor at
+ * all. Those have opposite causes and the message is identical for each,
+ * which is what has made `issues/create-delete-node-full-suite-flake` cost a
+ * fresh investigation per occurrence.
+ *
+ * Reads through the same stores the assertions read, so it can be called from
+ * inside a failing assertion's message without changing what the test
+ * exercises. Never throws: a store that cannot be read is part of the answer.
+ */
+export async function describeBrowserStore(): Promise<string> {
+  const pointer = await new IdbDefaultDocumentPointer().get().catch(() => '<unreadable>')
+  const rows = await new IdbDocumentIndex()
+    .listDocuments({ workspaceId: getBrowserWorkspaceId() })
+    .catch(() => null)
+  if (rows === null) return `pointer=${pointer ?? '<none>'} documents=<unreadable>`
+  const described = await Promise.all(
+    rows.map(async (row) => {
+      const ids = await persistedNodeIds(row.documentId).catch(() => ['<unreadable>'])
+      return `${row.documentId}:[${ids.join(',')}]`
+    }),
+  )
+  return `pointer=${pointer ?? '<none>'} documents={${described.join(' ')}}`
 }
