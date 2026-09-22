@@ -1,12 +1,12 @@
 import {
   type Proposal,
-  type ProposedChange,
   type ProposedChangeStatus,
   proposalSchema,
   proposedChangeSchema,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
 import { type DocumentContainers, PROPOSALS_KEY } from './containers.js'
+import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
 /** The nested map of changes inside one proposal's container. */
@@ -105,14 +105,7 @@ export function readProposals(doc: DocumentContainers): Proposal[] {
   for (const proposalId of proposalsMap.keys()) {
     const container = proposalContainer(doc, proposalId)
     if (container === undefined) continue
-    const changesContainer = changesOf(container)
-    const changes: ProposedChange[] = []
-    if (changesContainer !== undefined) {
-      for (const changeId of changesContainer.keys()) {
-        const parsed = proposedChangeSchema.safeParse(changesContainer.get(changeId))
-        if (parsed.success) changes.push(parsed.data)
-      }
-    }
+    const changes = acceptedEntries(changesOf(container), proposedChangeSchema)
     const author = container.get(AUTHOR_FIELD)
     const createdAt = container.get(CREATED_AT_FIELD)
     const parsed = proposalSchema.safeParse({

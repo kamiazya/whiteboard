@@ -18,6 +18,7 @@
 // from the scaled path with fixed canvas-unit sizing, so they come out
 // relatively larger inside a miniature. Both are acceptable for embed
 // rendering and pinned by tests rather than hidden.
+
 import type {
   Appearance,
   BoundingBox,
@@ -27,6 +28,9 @@ import type {
   TableCellSceneNode,
   TableRowSceneNode,
 } from '@kamiazya/whiteboard-scene'
+import { sceneBounds } from '../scene-bounds.js'
+import type { EmbeddedCanvasBox, EmbeddedCanvasMiniature } from './nodes/mdast-blocks.js'
+import { translateScene } from './translate-scene.js'
 
 type ScalableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
 
@@ -143,4 +147,24 @@ export function scaleScene(scene: Scene, factor: number): Scene {
   if (!Number.isFinite(factor) || factor <= 0) return scene
   if (factor === 1) return scene
   return { nodes: scene.nodes.map((node) => scaleNode(node, factor) as SceneNode) }
+}
+
+/**
+ * A laid-out scene scaled to fit a box (never upscaled) and placed at its
+ * top-left corner. `undefined` for a degenerate fit — an empty scene, or a
+ * box with no room — so the caller can draw its fallback instead. Shared by
+ * the file-node miniature and the markdown body's canvas embed, which are
+ * the same picture in two frames.
+ */
+export function fitSceneIntoBox(
+  scene: Scene,
+  box: Omit<EmbeddedCanvasBox, 'embedPath'>,
+): EmbeddedCanvasMiniature | undefined {
+  const bounds = sceneBounds(scene)
+  const fit = Math.min(box.maxWidth / bounds.w, box.maxHeight / bounds.h, 1)
+  if (!Number.isFinite(fit) || fit <= 0) return undefined
+  const atOrigin = translateScene(scene, -bounds.x, -bounds.y)
+  const scaled = scaleScene(atOrigin, fit)
+  const placed = translateScene(scaled, box.x, box.y)
+  return { nodes: placed.nodes, w: bounds.w * fit, h: bounds.h * fit }
 }

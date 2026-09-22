@@ -1228,6 +1228,22 @@ describe('reconcileSpatialCanvas', () => {
     expect(doc.getMap('nodes').get('from-the-future')).toEqual({ type: 'hologram', shimmer: true })
   })
 
+  // The half of "writes only what changed" the test above cannot see: it
+  // changes A and removes B, so every write it makes is one that SHOULD happen.
+  // An op for an unchanged element would ship from a replica and last-writer-
+  // wins over the keeper's concurrent edit to it. This pins the PROPERTY, not
+  // the JS equality check in `reconcileById`: Loro itself records no op for a
+  // `set` of an identical value (measured against a changed-value control), so
+  // deleting that check changes nothing observable and is an equivalent mutant.
+  test('an unchanged canvas reconciles to no ops at all', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [A, B], edges: [] })
+    const prev = readSpatialCanvas(doc)
+    const before = doc.oplogVersion()
+    reconcileSpatialCanvas(doc, prev, prev)
+    expect(doc.oplogVersion().compare(before)).toBe(0)
+  })
+
   test('reconciles edges and comments by the same visible-diff rule', () => {
     const doc = makeDoc()
     writeSpatialCanvas(doc, {

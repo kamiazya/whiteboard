@@ -427,6 +427,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration.register': 58,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 101,
   'packages/canvas-render/src/layout/comments.ts#composeComments': 159,
+  // Moved out of `spatial-canvas.ts` unchanged. `composeNode` reads 96 here
+  // against 93 there only because gaining `export` wrapped its signature
+  // onto four lines; the body is byte-identical.
+  'packages/canvas-render/src/layout/compose-node.ts#composeNode': 96,
+  'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 94,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 52,
@@ -449,8 +454,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/proposals.ts#composeProposals': 110,
   'packages/canvas-render/src/layout/scale-scene.ts#scaleNode': 88,
   'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 68,
-  'packages/canvas-render/src/layout/spatial-canvas.ts#composeNode': 93,
-  'packages/canvas-render/src/layout/spatial-canvas.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
   'packages/canvas-render/src/quality/composition-score.ts#scoreComposition': 95,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
@@ -499,8 +502,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/facet-ui/src/facet-catalog-picker.tsx#FacetCatalogPicker': 79,
   'packages/facet-ui/src/option-group.tsx#FacetOption': 77,
   'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 99,
-  'packages/loro-adapter/src/loro-bridge.ts#reconcileSpatialCanvas': 54,
-  'packages/loro-adapter/src/loro-bridge.ts#writeSpatialCanvasInto': 82,
   'packages/loro-adapter/src/workspace-tree.ts#syncMapEntries': 54,
   'packages/loro-adapter/src/workspace-tree.ts#writeWorkspaceDocumentContent': 62,
   'packages/mcp-server/src/cli/daemon-doctor.ts#runDaemonDoctor': 73,

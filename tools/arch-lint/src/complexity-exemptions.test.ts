@@ -25,7 +25,14 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
  * buys is that everything NOT on it stays clean, without anyone having to
  * remember to enrol a directory after clearing it.
  */
-const EXEMPT_COUNT = 131
+// 131 -> 132 when `layout/compose-node.ts` came out of `spatial-canvas.ts`:
+// no complex code was added, one exempt file became two. `composeNode`
+// (22) moved with its body byte-identical, and `spatial-canvas.ts` keeps two
+// functions over the threshold of its own (25 and 17), so neither file can
+// leave the list. Lowering `composeNode` under 15 is real work on its logic
+// and belongs in its own change, not inside a move whose review rests on
+// the body being unchanged.
+const EXEMPT_COUNT = 129
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {

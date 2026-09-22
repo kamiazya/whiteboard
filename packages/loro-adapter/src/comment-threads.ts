@@ -11,6 +11,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
 import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
+import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
 /** The nested map of messages inside one thread's container. */
@@ -137,13 +138,10 @@ export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
     const container = threadContainer(doc, threadId)
     if (container === undefined) continue
     const messagesContainer = container.get(MESSAGES_KEY)
-    const messages: CommentMessage[] = []
-    if (messagesContainer instanceof LoroMap) {
-      for (const messageId of messagesContainer.keys()) {
-        const parsed = commentMessageSchema.safeParse(messagesContainer.get(messageId))
-        if (parsed.success) messages.push(parsed.data)
-      }
-    }
+    const messages = acceptedEntries(
+      messagesContainer instanceof LoroMap ? messagesContainer : undefined,
+      commentMessageSchema,
+    )
     const createdAt = container.get(CREATED_AT_FIELD)
     const parsed = commentThreadSchema.safeParse({
       id: threadId,
