@@ -80,6 +80,16 @@ test('allows a UI diff whose body carries a figure', () => {
   assert.equal(runHook(work, bodyArg(body)).status, 0)
 })
 
+test('a figure still pointing at a local path is not a figure', () => {
+  // Nothing uploads a local path any more (gh image replaced --attach), so on
+  // GitHub it renders as a broken image while reading like evidence here.
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  const body = '## Visual repro\n\n![figure](tmp/screenshots/figure.png)'
+  const { status, stderr } = runHook(work, bodyArg(body))
+  assert.equal(status, 2)
+  assert.match(stderr, /gh image/)
+})
+
 test('allows a UI diff that states why there is no figure', () => {
   const work = makeRepoPair('apps/web/src/components/Thing.tsx')
   const body = 'Visual evidence: none — renames a prop, renders identically.'

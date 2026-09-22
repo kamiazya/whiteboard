@@ -183,7 +183,6 @@
         "!packages/facet-ui/src/derived-form.tsx",
         "!packages/facet-ui/src/option-group.tsx",
         "!packages/history/src/checkpoints/retention.ts",
-        "!packages/loro-adapter/src/workspace-tree.ts",
         "!packages/mcp-server/scripts/eval/mcp-tool-surface-eval.mjs",
         "!packages/mcp-server/scripts/eval/tasks.mjs",
         "!packages/mcp-server/scripts/measure/chunking-spike.mjs",
