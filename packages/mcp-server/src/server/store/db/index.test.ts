@@ -21,9 +21,8 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getDb, closeDb, clearDbCache, registerDbDisposeHook, runDbDisposeHooks } = await import(
-  './index.js'
-)
+const { getDb, getRawDb, closeDb, clearDbCache, registerDbDisposeHook, runDbDisposeHooks } =
+  await import('./index.js')
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
 const { readDatabaseLocationRecord } = await import('./location-record.js')
 
@@ -150,7 +149,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
   })
 
   it('closeDb() runs registered dispose hooks while the connection is still open, then destroys it', async () => {
-    const db = await getDb(tempDir)
+    const db = await getRawDb(tempDir)
     let queriedDuringHook = false
     activeHookRun = async () => {
       // The connection must still be usable from inside the hook — proves
@@ -189,7 +188,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
   })
 
   it('clearDbCache() runs registered dispose hooks before destroying the cached connection', async () => {
-    const db = await getDb(tempDir)
+    const db = await getRawDb(tempDir)
     let queriedDuringHook = false
     activeHookRun = async () => {
       await sql`SELECT 1`.execute(db)
@@ -221,7 +220,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
   })
 
   it('clearDbCache() tolerates a throwing/rejecting dispose hook and still destroys the connection', async () => {
-    const db = await getDb(tempDir)
+    const db = await getRawDb(tempDir)
     activeHookRun = async () => {
       throw new Error('boom')
     }
@@ -243,7 +242,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
   })
 
   it('clearDbCache() still destroys the connection when a dispose hook throws synchronously', async () => {
-    const db = await getDb(tempDir)
+    const db = await getRawDb(tempDir)
     throwSynchronouslyOnDispose = true
 
     clearDbCache()
@@ -394,7 +393,7 @@ describe('the journal mode a database is opened in', () => {
 
   it('keeps serving writes while a second connection holds a snapshot open', async () => {
     // getDb creates the file, and the journal mode lives in the file.
-    const db = await getDb(tempDir)
+    const db = await getRawDb(tempDir)
     await sql`create table probe (i integer primary key, v text)`.execute(db)
 
     const dbPath = join(tempDir, 'whiteboard.db')
@@ -439,7 +438,7 @@ describe('the journal mode a database is opened in', () => {
    * unfixed code.
    */
   it('records WAL in the file, which is what a separate process reads', async () => {
-    const db = await getDb(tempDir)
+    const db = await getRawDb(tempDir)
     const mode = await sql<{ journal_mode: string }>`pragma journal_mode`.execute(db)
     expect(mode.rows[0]?.journal_mode).toBe('wal')
   })

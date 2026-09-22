@@ -43,7 +43,7 @@ describe('createIsolatedDb (memory)', () => {
   it('enables PRAGMA foreign_keys so application-side FKs are enforced', async () => {
     const handle = await createIsolatedDb({ dataDir: scratch, memory: true })
     try {
-      const pragma = await sql<{ foreign_keys: number }>`PRAGMA foreign_keys`.execute(handle.db)
+      const pragma = await sql<{ foreign_keys: number }>`PRAGMA foreign_keys`.execute(handle.rawDb)
       expect(pragma.rows[0]?.foreign_keys).toBe(1)
     } finally {
       await handle.dispose()

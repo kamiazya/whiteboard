@@ -31,7 +31,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // and the file node's four early returns became a ranked list of
 // representations. The count is stated here and nowhere else, because several
 // sessions pay the list down concurrently and a number in a comment goes stale.
-const EXEMPT_COUNT = 120
+const EXEMPT_COUNT = 114
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {

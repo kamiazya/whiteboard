@@ -19,9 +19,10 @@ import type {
   SnapshotChunk,
 } from '@kamiazya/whiteboard-ports'
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
-import { type Kysely, sql, type Transaction } from 'kysely'
+import { sql, type Transaction } from 'kysely'
 import { getLogger } from '../../log.js'
 import type { DatabaseSchema } from '../db/schema.js'
+import { inTenantTransaction, type TenantDatabase } from '../db/tenant-database.js'
 import { cloneBytes } from '../inmemory/clone-bytes.js'
 
 const log = getLogger('libsql-document-store')
@@ -43,7 +44,7 @@ function toBlob(bytes: Uint8Array): Buffer {
   return Buffer.from(bytes)
 }
 
-type Db = Kysely<DatabaseSchema>
+type Db = TenantDatabase
 type Trx = Transaction<DatabaseSchema>
 
 async function upsertFrontier(trx: Trx, docKey: string, frontier: Frontier): Promise<void> {
@@ -160,7 +161,7 @@ export class LibsqlDocumentStore implements DocumentStore {
     const docKey = docRefKey(docRef)
     const frontierBlob = toBlob(frontier)
 
-    await this.db.transaction().execute(async (trx) => {
+    await inTenantTransaction(this.db, async (trx) => {
       await trx
         .insertInto('documentSnapshots')
         .values({
@@ -219,7 +220,7 @@ export class LibsqlDocumentStore implements DocumentStore {
   ): Promise<SaveCompactedSnapshotResult> {
     const docKey = docRefKey(input.docRef)
     const frontierBlob = toBlob(input.frontier)
-    return this.db.transaction().execute(async (trx) => {
+    return inTenantTransaction(this.db, async (trx) => {
       const existing = await trx
         .selectFrom('documentSnapshots')
         .select('generation')
@@ -316,7 +317,7 @@ export class LibsqlDocumentStore implements DocumentStore {
     // All four tables in one transaction. A partial delete would leave a
     // frontier or a delta run addressing a snapshot that is gone, which
     // loadSnapshot cannot distinguish from a document mid-write.
-    await this.db.transaction().execute(async (trx) => {
+    await inTenantTransaction(this.db, async (trx) => {
       await trx.deleteFrom('documentSnapshotChunks').where('docKey', '=', docKey).execute()
       await trx.deleteFrom('documentSnapshots').where('docKey', '=', docKey).execute()
       await trx.deleteFrom('documentDeltas').where('docKey', '=', docKey).execute()
@@ -330,7 +331,7 @@ export class LibsqlDocumentStore implements DocumentStore {
     const newFrontier = cloneBytes(deltaBatch.newFrontier)
     const frontierBlob = toBlob(newFrontier)
 
-    await this.db.transaction().execute(async (trx) => {
+    await inTenantTransaction(this.db, async (trx) => {
       const maxRow = await trx
         .selectFrom('documentDeltas')
         .select((eb) => eb.fn.max('seq').as('maxSeq'))
@@ -373,7 +374,7 @@ export class LibsqlDocumentStore implements DocumentStore {
     // One transaction across all four reads: a fold landing between them
     // would answer a log from before it and a generation from after, which is
     // exactly the pair a tailing reader uses to decide it is caught up.
-    return this.db.transaction().execute(async (trx) => {
+    return inTenantTransaction(this.db, async (trx) => {
       const [rows, highest, snapshot, frontierRow] = await Promise.all([
         trx
           .selectFrom('documentDeltas')

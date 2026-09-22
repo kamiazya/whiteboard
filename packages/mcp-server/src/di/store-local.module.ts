@@ -1,7 +1,6 @@
 import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { ContainerModule } from 'inversify'
-import type { Kysely } from 'kysely'
-import type { DatabaseSchema } from '../server/store/db/schema.js'
+import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import {
   CacheCoherentDocumentIndex,
   cacheBackedWorkspaceDocs,
@@ -12,7 +11,7 @@ import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-stor
 import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
 
 export interface StoreLocalModuleOptions {
-  db: Kysely<DatabaseSchema>
+  db: TenantDatabase
   blobDir: string
 }
 

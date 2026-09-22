@@ -1,5 +1,5 @@
 import { WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
-import type { Database } from './index.js'
+import type { TenantDatabase } from './tenant-database.js'
 
 /**
  * `segment`/`displayName` are ADR-0019's identity layers, claimed only on
@@ -44,7 +44,7 @@ export interface WorkspaceIdentity {
 // left untouched so a name set elsewhere does not get clobbered by a
 // follow-up child write.
 export async function upsertWorkspaceRow(
-  db: Database,
+  db: TenantDatabase,
   workspaceId: string,
   identity: WorkspaceIdentity = {},
 ): Promise<void> {
@@ -91,7 +91,7 @@ export async function upsertWorkspaceRow(
  * is the row.
  */
 export async function renameWorkspaceRow(
-  db: Database,
+  db: TenantDatabase,
   workspaceId: string,
   identity: WorkspaceIdentity,
 ): Promise<{ segment: string | null; displayName: string | null } | null> {
