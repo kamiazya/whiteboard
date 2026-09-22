@@ -28,6 +28,16 @@ import { LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { z } from 'zod'
 import type { DocumentContainers } from './containers.js'
 import { contentDigestOf } from './content-digest.js'
+import {
+  clearRootContainer,
+  containerKind,
+  copyContainerValue,
+  docRoots,
+  freshNodeRoots,
+  nodeRoots,
+  projectedKind,
+  syncRootContainer,
+} from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 import { openMergeableMap, openMergeableMovableList } from './mergeable-containers.js'
 
@@ -691,96 +701,6 @@ export function adoptWorkspaceDocument(
   return resolveWorkspaceDocumentById(doc, input.documentId)
 }
 
-/** Structural equality for the plain-JSON values the bridge stores in map entries. */
-function jsonEqual(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-  const aRec = a as Record<string, unknown>
-  const bRec = b as Record<string, unknown>
-  const aKeys = Object.keys(aRec)
-  if (aKeys.length !== Object.keys(bRec).length) return false
-  return aKeys.every((key) => key in bRec && jsonEqual(aRec[key], bRec[key]))
-}
-
-/**
- * Makes `target`'s entries equal `source`'s, entry by entry, and says
- * whether anything changed.
- *
- * Container-aware, which is the whole reason it exists: a thread under
- * `threads` and a proposal under `proposals` are nested CONTAINERS (mergeable,
- * so two peers writing one at once converge), and `toJSON()` flattens a
- * container into the object it holds. A sync that reads the projection and
- * `set`s what it finds writes the thread back as a VALUE — which the
- * record then carries across a restart, where the reader skips it and the
- * writer, asked to open a container at a key holding a value, throws.
- * Neither side of the round trip failed, and the loss showed only across a
- * restart. So an entry that is a container in the source is synced into a
- * container in the target, recursively, and only a plain value is `set`.
- *
- * A key that holds a value where the source has a container is a record
- * written by the flattening sync above: it is replaced by the container, so
- * the flattened thread reads again once its document is next saved.
- *
- * A DIFF: an equal entry commits nothing, so an identical sync leaves the
- * frontier where it was — the property the daemon's per-save write-through
- * depends on.
- */
-function syncMapEntries(target: LoroMap, source: LoroMap): boolean {
-  let changed = false
-  for (const key of source.keys()) {
-    const wanted = source.get(key) as unknown
-    const existing = target.get(key) as unknown
-    // A plain value may carry a `kind` FIELD (a thread anchor does); only a
-    // container has the method.
-    const wantedKind =
-      typeof wanted === 'object' &&
-      wanted !== null &&
-      typeof (wanted as { kind?: unknown }).kind === 'function'
-        ? (wanted as { kind: () => string }).kind()
-        : null
-    if (wantedKind === 'Text' || wantedKind === 'MovableList' || wantedKind === 'List') {
-      // A container `LoroMap.set` cannot take: recreated whole, the way
-      // copyNodeData carries it, rather than handed to `set` as a value.
-      if (existing !== undefined) target.delete(key)
-      if (wantedKind === 'Text') {
-        target.setContainer(key, new LoroText()).insert(0, (wanted as LoroText).toString())
-      } else {
-        const list = target.setContainer(key, new LoroMovableList())
-        for (const entry of (wanted as LoroMovableList).toJSON() as unknown[]) {
-          list.push(entry as Parameters<typeof list.push>[0])
-        }
-      }
-      changed = true
-    } else if (wanted instanceof LoroMap) {
-      if (existing !== undefined && !(existing instanceof LoroMap)) {
-        target.delete(key)
-        changed = true
-      }
-      const child = existing instanceof LoroMap ? existing : openMergeableMap(target, key)
-      if (!(existing instanceof LoroMap)) changed = true
-      if (syncMapEntries(child, wanted)) changed = true
-    } else if (existing instanceof LoroMap) {
-      // A container where a value is wanted: nothing writes this shape
-      // today, but replacing is the only answer that leaves the target
-      // equal to the source.
-      target.delete(key)
-      target.set(key, wanted as Parameters<LoroMap['set']>[1])
-      changed = true
-    } else if (!jsonEqual(existing, wanted)) {
-      target.set(key, wanted as Parameters<LoroMap['set']>[1])
-      changed = true
-    }
-  }
-  for (const key of target.keys()) {
-    if (source.get(key) === undefined) {
-      target.delete(key)
-      changed = true
-    }
-  }
-  return changed
-}
-
 /**
  * Makes an EXISTING tree document's content equal a standalone document's —
  * the write half of `adoptWorkspaceDocument`, exposed for callers whose node
@@ -812,6 +732,7 @@ export function writeWorkspaceDocumentContent(
   const node = nodeById(doc, documentId)
   if (node === null) return false
   const projected = source.toJSON() as Record<string, unknown>
+  const roots = nodeRoots(node.data)
   // Tracked so the updatedAt stamp rides ONLY a real diff, in the same
   // commit as it — an identical write must keep committing no ops at all.
   let changed = false
@@ -820,46 +741,11 @@ export function writeWorkspaceDocumentContent(
     // key (an import, a document written before the prefix) must not write it
     // onto the node's plane namespace.
     if (isPlaneKey(key)) continue
-    if (typeof value === 'string') {
-      const text = node.data.getOrCreateContainer(key, new LoroText())
-      if (text.toString() !== value) {
-        text.delete(0, text.length)
-        if (value.length > 0) text.insert(0, value)
-        changed = true
-      }
-    } else if (Array.isArray(value)) {
-      // A legacy List/MovableList root (old clients' `elements`). Carried as
-      // a VALUE copy — dropping a container kind the bridge does not favour
-      // would turn a save into content loss. Rewritten wholesale on change:
-      // this shape has no per-entry key to diff by.
-      const list = node.data.getOrCreateContainer(key, new LoroMovableList())
-      if (!jsonEqual(list.toJSON(), value)) {
-        for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
-        for (const entry of value) list.push(entry as Parameters<typeof list.push>[0])
-        changed = true
-      }
-    } else if (typeof value === 'object' && value !== null) {
-      // The container, not its JSON: a nested container (a thread, a
-      // proposal) has to arrive as one. See syncMapEntries.
-      const map = node.data.getOrCreateContainer(key, new LoroMap())
-      if (syncMapEntries(map, source.getMap(key))) changed = true
-    }
+    if (syncRootContainer(roots, key, value, source)) changed = true
   }
   for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
     if (key in projected) continue
-    if (kind === 'map') {
-      const map = node.data.getOrCreateContainer(key, new LoroMap())
-      for (const entryKey of Object.keys(map.toJSON() as Record<string, unknown>)) {
-        map.delete(entryKey)
-        changed = true
-      }
-    } else {
-      const text = node.data.getOrCreateContainer(key, new LoroText())
-      if (text.length > 0) {
-        text.delete(0, text.length)
-        changed = true
-      }
-    }
+    if (clearRootContainer(roots, key, kind)) changed = true
   }
   if (changed) node.data.set('updatedAt', opts.updatedAt ?? Date.now())
   doc.commit()
@@ -878,27 +764,12 @@ export const WORKSPACE_TRASH_KEY = 'trash'
  * hardcoded list is the version that silently drops the newest field.
  */
 function copyNodeData(source: LoroTreeNode, target: LoroTreeNode): void {
+  const into = freshNodeRoots(target.data)
   for (const key of source.data.keys()) {
     const value = source.data.get(key) as unknown
-    const kind =
-      typeof value === 'object' && value !== null && 'kind' in value
-        ? (value as { kind: () => string }).kind()
-        : null
-    if (kind === 'Map') {
-      syncMapEntries(target.data.setContainer(key, new LoroMap()), value as LoroMap)
-    } else if (kind === 'Text') {
-      target.data.setContainer(key, new LoroText()).insert(0, (value as LoroText).toString())
-    } else if (kind === 'MovableList' || kind === 'List') {
-      const list = target.data.setContainer(key, new LoroMovableList())
-      for (const entry of (value as LoroMovableList).toJSON() as unknown[]) {
-        list.push(entry as Parameters<typeof list.push>[0])
-      }
-    } else if (kind === null) {
-      target.data.set(key, value)
-    }
-    // Any other container kind is dropped rather than half-copied. Nothing
-    // writes one today; when something does, this is where it has to be
-    // taught, and a wrong copy would be worse than a visible gap.
+    const kind = containerKind(value)
+    if (kind === null) target.data.set(key, value as Parameters<LoroMap['set']>[1])
+    else copyContainerValue(into, key, kind, value)
   }
   // A restored document must satisfy the same pre-attached-containers
   // invariant a created one does (see attachContentContainers) — a source
@@ -1072,23 +943,9 @@ export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): Loro
     // PLANE_KEY_PREFIX for what carrying one into the projection costs.
     if (isPlaneKey(key)) continue
     const value = node.data.get(key) as unknown
-    const kind =
-      typeof value === 'object' && value !== null && 'kind' in value
-        ? (value as { kind: () => string }).kind()
-        : null
-    if (kind === 'Map') {
-      syncMapEntries(out.getMap(key), value as LoroMap)
-    } else if (kind === 'Text') {
-      out.getText(key).insert(0, (value as LoroText).toString())
-    } else if (kind === 'MovableList' || kind === 'List') {
-      // A legacy list root, carried as a value copy — see
-      // writeWorkspaceDocumentContent's array branch.
-      const list = out.getMovableList(key)
-      for (const entry of (value as LoroMovableList).toJSON() as unknown[]) {
-        list.push(entry as Parameters<typeof list.push>[0])
-      }
-    }
+    const kind = containerKind(value)
     // Scalars are node meta, not content — see the doc comment.
+    if (kind !== null) copyContainerValue(docRoots(out), key, kind, value)
   }
   out.commit()
   return out
@@ -1110,37 +967,12 @@ export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): Loro
 export function reconcileDocContent(target: LoroDoc, past: LoroDoc): void {
   const wanted = past.toJSON() as Record<string, unknown>
   const current = target.toJSON() as Record<string, unknown>
-  for (const [key, value] of Object.entries(wanted)) {
-    if (typeof value === 'string') {
-      const text = target.getText(key)
-      if (text.toString() !== value) {
-        text.delete(0, text.length)
-        if (value.length > 0) text.insert(0, value)
-      }
-    } else if (Array.isArray(value)) {
-      const list = target.getMovableList(key)
-      if (!jsonEqual(list.toJSON(), value)) {
-        for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
-        for (const entry of value) list.push(entry as Parameters<typeof list.push>[0])
-      }
-    } else if (typeof value === 'object' && value !== null) {
-      syncMapEntries(target.getMap(key), past.getMap(key))
-    }
-  }
+  const roots = docRoots(target)
+  for (const [key, value] of Object.entries(wanted)) syncRootContainer(roots, key, value, past)
   for (const [key, value] of Object.entries(current)) {
-    if (key in wanted) continue
-    if (typeof value === 'string') {
-      const text = target.getText(key)
-      if (text.length > 0) text.delete(0, text.length)
-    } else if (Array.isArray(value)) {
-      const list = target.getMovableList(key)
-      for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
-    } else if (typeof value === 'object' && value !== null) {
-      const map = target.getMap(key)
-      for (const entryKey of Object.keys(map.toJSON() as Record<string, unknown>)) {
-        map.delete(entryKey)
-      }
-    }
+    const kind = projectedKind(value)
+    if (key in wanted || kind === null) continue
+    clearRootContainer(roots, key, kind)
   }
   target.commit()
 }

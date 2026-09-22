@@ -34,6 +34,7 @@ import { MembersCard } from '../components/settings/MembersCard.js'
 import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspaceSection.js'
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
 import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
+import { TransferToKeeperSection } from '../components/settings/TransferToKeeperSection.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -225,15 +226,31 @@ function GeneralSection({
 // shape now that the page mounts this section once: one instance, one read,
 // and a mutation lands on the list the person is looking at. See
 // SettingsPage's doc comment for what mounting it twice used to cost.
-function ConnectionsSection({
-  daemon,
-  onDisconnected,
-  workspaceId,
-}: {
+type ConnectionsProps = {
   daemon?: ConnectedDaemon
   onDisconnected?: () => void
   workspaceId?: string
-}) {
+}
+
+/**
+ * Where this workspace is kept, and where it can go. Sending to another keeper
+ * needs no daemon, so it sits beside the daemon's section rather than inside
+ * each of its connected/disconnected branches.
+ */
+function ConnectionsTab({ daemon, onDisconnected, workspaceId }: ConnectionsProps) {
+  return (
+    <>
+      <ConnectionsSection
+        daemon={daemon}
+        onDisconnected={onDisconnected}
+        workspaceId={workspaceId}
+      />
+      <TransferToKeeperSection />
+    </>
+  )
+}
+
+function ConnectionsSection({ daemon, onDisconnected, workspaceId }: ConnectionsProps) {
   // Keyed on the primitive fields, not `daemon` itself, so a re-render that
   // rebuilds the same `daemon` object (a new reference, same values) does not
   // rebuild this function — which would hand DaemonApiContext a new identity
@@ -413,13 +430,7 @@ function sectionContent(
     case 'fonts':
       return <FontsSection daemon={props.daemon} />
     case 'connections':
-      return (
-        <ConnectionsSection
-          daemon={props.daemon}
-          onDisconnected={props.onDisconnected}
-          workspaceId={props.workspaceId}
-        />
-      )
+      return <ConnectionsTab {...props} />
     case 'developer':
       return <GestureTraceRow />
   }
