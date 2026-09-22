@@ -638,7 +638,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/workspace-tail.ts#createWorkspaceTail': 90,
   'packages/mcp-server/src/shared/diagnostics/support-bundle-writer.ts#writeSupportBundle': 53,
   'packages/mcp-server/src/shared/test-utils/tool-surface-metrics.ts#parameterCoverage': 63,
-  'packages/model/src/proposal-apply.ts#applyCanvasChange': 80,
   'packages/model/src/test-utils/zod-arbitrary.ts#walkShape': 132,
   'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,
   'packages/ports/src/snapshot-helpers.ts#reassembleSnapshot': 94,
@@ -667,7 +666,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // as a cap on `chunkSnapshot` instead of a default its writers share.
   'packages/workspace-index/src/document-store-workspace-docs.ts#save': 99,
   'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 53,
-  'packages/workspace-index/src/loro-workspace-document-index.ts#moveDocument': 64,
   'tools/arch-lint/src/scanner.ts#collectModuleSpecifiers': 61,
   'tools/arch-lint/src/source-scan.ts#stripCommentsAndStrings': 54,
 }

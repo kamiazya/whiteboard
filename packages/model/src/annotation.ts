@@ -293,6 +293,35 @@ export interface CommentTargetNode {
   readonly height: number
 }
 
+/** Where a thread's projected comment stands, per anchor arm; see `canvasCommentFromThread`. */
+function commentPlace(
+  anchor: AnnotationAnchor,
+  nodeById: ((id: string) => CommentTargetNode | undefined) | undefined,
+):
+  | {
+      readonly x: number
+      readonly y: number
+      readonly targetNodeId?: string
+      readonly targetEdgeId?: string
+    }
+  | undefined {
+  if (anchor.kind === 'document') return undefined
+  if (anchor.kind === 'spatial') {
+    const rect = spatialAnchorRect(anchor, nodeById)
+    if (rect !== undefined) return { x: rect.x + rect.width, y: rect.y }
+    return {
+      x: anchor.x,
+      y: anchor.y,
+      ...(anchor.nodeId === undefined ? {} : { targetNodeId: anchor.nodeId }),
+      ...(anchor.edgeId === undefined ? {} : { targetEdgeId: anchor.edgeId }),
+    }
+  }
+  const node = anchor.nodeId === undefined ? undefined : nodeById?.(anchor.nodeId)
+  return node === undefined
+    ? undefined
+    : { x: node.x + node.width, y: node.y, targetNodeId: node.id }
+}
+
 /**
  * One thread as the canvas still sees it: a single comment at a spatial
  * anchor. Lossy by construction — a thread's replies have nowhere to go in a
@@ -327,31 +356,8 @@ export function canvasCommentFromThread(
   // conversation opened with rather than whichever arrived first.
   const opening = thread.messages[0]
   if (opening === undefined) return undefined
-  const { anchor } = thread
-  let place: {
-    readonly x: number
-    readonly y: number
-    readonly targetNodeId?: string
-    readonly targetEdgeId?: string
-  }
-  if (anchor.kind === 'document') return undefined
-  if (anchor.kind === 'spatial') {
-    const rect = spatialAnchorRect(anchor, nodeById)
-    place =
-      rect !== undefined
-        ? { x: rect.x + rect.width, y: rect.y }
-        : {
-            x: anchor.x,
-            y: anchor.y,
-            ...(anchor.nodeId === undefined ? {} : { targetNodeId: anchor.nodeId }),
-            ...(anchor.edgeId === undefined ? {} : { targetEdgeId: anchor.edgeId }),
-          }
-  } else {
-    if (anchor.nodeId === undefined) return undefined
-    const node = nodeById?.(anchor.nodeId)
-    if (node === undefined) return undefined
-    place = { x: node.x + node.width, y: node.y, targetNodeId: node.id }
-  }
+  const place = commentPlace(thread.anchor, nodeById)
+  if (place === undefined) return undefined
   return {
     id: thread.id,
     ...place,
