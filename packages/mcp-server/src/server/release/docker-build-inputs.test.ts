@@ -94,6 +94,28 @@ describe('the closure covers what the image compiles', () => {
   })
 })
 
+describe('the closure follows every field that pulls a package into the image', () => {
+  it.each([
+    'dependencies',
+    'devDependencies',
+    'peerDependencies',
+  ])('reaches a workspace package named only in %s', (field) => {
+    const index = new Map([
+      ['root', { dir: 'packages/root', manifest: { [field]: { leaf: 'workspace:*' } } }],
+      ['leaf', { dir: 'packages/leaf', manifest: {} }],
+    ])
+    expect(workspaceClosure(['root'], index)).toEqual(['packages/leaf', 'packages/root'])
+  })
+
+  it('does not follow a registry range', () => {
+    const index = new Map([
+      ['root', { dir: 'packages/root', manifest: { dependencies: { leaf: '^1.0.0' } } }],
+      ['leaf', { dir: 'packages/leaf', manifest: {} }],
+    ])
+    expect(workspaceClosure(['root'], index)).toEqual(['packages/root'])
+  })
+})
+
 describe('affectsDockerBuild answers for a change set', () => {
   it('is true for a source file inside a closure package', () => {
     expect(affectsDockerBuild(['packages/model/src/spatial.ts'], closure)).toBe(true)

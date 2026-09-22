@@ -469,6 +469,101 @@ function channelUse(
   return carriedBy.length > 0 ? { use: 'carried', carriedBy } : { use: 'contested', carriedBy: [] }
 }
 
+/**
+ * `deficit`: a declared construct whose members wear only the default.
+ * `redundancy`: one whose members wear more than one treatment.
+ */
+function classCoverage(allClasses: readonly (readonly string[])[], key: (id: string) => string) {
+  let deficit = 0
+  let redundancy = 0
+  for (const members of allClasses) {
+    const keys = new Set(members.map(key))
+    if (keys.size === 1 && keys.has(DEFAULT_KEY)) deficit++
+    if (keys.size >= 2) redundancy++
+  }
+  return { deficit, redundancy }
+}
+
+/**
+ * Who wears each SPENT treatment. The default is not a symbol a reader was
+ * given — it is the absence of one — so it can be neither overloaded nor
+ * in excess; a construct wearing only it is `deficit`, above.
+ */
+function wearersOf(
+  boxes: readonly SpatialNode[],
+  key: (id: string) => string,
+): Map<string, Set<string>> {
+  const wearers = new Map<string, Set<string>>()
+  for (const box of boxes) {
+    const k = key(box.id)
+    if (k === DEFAULT_KEY) continue
+    wearers.set(k, (wearers.get(k) ?? new Set<string>()).add(box.id))
+  }
+  return wearers
+}
+
+type TreatmentReading = 'carries' | 'overload' | 'excess' | 'undeclared'
+
+/**
+ * The three cases are exclusive, which is what keeps a planted defect in
+ * one column: a treatment worn INSIDE one class carries that construct; one
+ * worn by whole classes and nothing else carries several, which is
+ * overload; and one that CUTS a class corresponds to no construct at all,
+ * which is excess. Written as a partition of the cases rather than as two
+ * independent tests, because the first version tested them independently
+ * and charged the same board both.
+ */
+function readTreatment(
+  worn: ReadonlySet<string>,
+  partitions: readonly NamedPartition[],
+  allClasses: readonly (readonly string[])[],
+): TreatmentReading {
+  // With nothing declared there is no class to be inside, to span, or to
+  // cut, so the three-way split below has no question to answer and used
+  // to answer `excess` for want of an alternative. `partitions` and
+  // `allClasses` are empty together — a partition reaching this point has
+  // at least two classes, since `declaredPartitions` filters the rest.
+  if (partitions.length === 0) return 'undeclared'
+  const insideSomeClass = allClasses.some((members) => {
+    const set = new Set(members)
+    return [...worn].every((id) => set.has(id))
+  })
+  if (insideSomeClass) return 'carries'
+  const isWholeClasses = partitions.some((p) =>
+    [...classesOf(p.partition).values()].every((members) => {
+      const held = members.filter((id) => worn.has(id)).length
+      return held === 0 || held === members.length
+    }),
+  )
+  return isWholeClasses ? 'overload' : 'excess'
+}
+
+function treatmentMisuse(
+  wearers: ReadonlyMap<string, ReadonlySet<string>>,
+  partitions: readonly NamedPartition[],
+  allClasses: readonly (readonly string[])[],
+) {
+  const counts: Record<TreatmentReading, number> = {
+    carries: 0,
+    overload: 0,
+    excess: 0,
+    undeclared: 0,
+  }
+  for (const worn of wearers.values()) counts[readTreatment(worn, partitions, allClasses)]++
+  return counts
+}
+
+/** The fewest channels any two treatments in use differ by; 0 below two. */
+function nearestTreatmentDistance(inUse: readonly Treatment[]): number {
+  let distance = Number.POSITIVE_INFINITY
+  for (let i = 0; i < inUse.length; i++) {
+    for (let j = i + 1; j < inUse.length; j++) {
+      distance = Math.min(distance, channelsApart(inUse[i] as Treatment, inUse[j] as Treatment))
+    }
+  }
+  return Number.isFinite(distance) ? distance : 0
+}
+
 export function scoreFacets(canvas: SpatialCanvas): FacetScore {
   const boxes = canvas.nodes.filter((n) => !isFrame(n))
   const treatment = new Map(boxes.map((b) => [b.id, treatmentOf(b)]))
@@ -477,72 +572,18 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
   const partitions = declaredPartitions(canvas, boxes)
   const allClasses = partitions.flatMap((p) => [...classesOf(p.partition).values()])
 
-  let deficit = 0
-  let redundancy = 0
-  for (const members of allClasses) {
-    const keys = new Set(members.map(key))
-    if (keys.size === 1 && keys.has(DEFAULT_KEY)) deficit++
-    if (keys.size >= 2) redundancy++
-  }
-
-  // Who wears each SPENT treatment. The default is not a symbol a reader was
-  // given — it is the absence of one — so it can be neither overloaded nor
-  // in excess; a construct wearing only it is `deficit`, above.
-  const wearers = new Map<string, Set<string>>()
-  for (const box of boxes) {
-    const k = key(box.id)
-    if (k === DEFAULT_KEY) continue
-    wearers.set(k, (wearers.get(k) ?? new Set<string>()).add(box.id))
-  }
-
-  // The three cases are exclusive, which is what keeps a planted defect in
-  // one column: a treatment worn INSIDE one class carries that construct; one
-  // worn by whole classes and nothing else carries several, which is
-  // overload; and one that CUTS a class corresponds to no construct at all,
-  // which is excess. Written as a partition of the cases rather than as two
-  // independent tests, because the first version tested them independently
-  // and charged the same board both.
-  let overload = 0
-  let excess = 0
-  let undeclared = 0
-  for (const [, worn] of wearers) {
-    // With nothing declared there is no class to be inside, to span, or to
-    // cut, so the three-way split below has no question to answer and used
-    // to answer `excess` for want of an alternative. `partitions` and
-    // `allClasses` are empty together — a partition reaching this point has
-    // at least two classes, since `declaredPartitions` filters the rest.
-    if (partitions.length === 0) {
-      undeclared++
-      continue
-    }
-    const insideSomeClass = allClasses.some((members) => {
-      const set = new Set(members)
-      return [...worn].every((id) => set.has(id))
-    })
-    if (insideSomeClass) continue
-    const isWholeClasses = partitions.some((p) =>
-      [...classesOf(p.partition).values()].every((members) => {
-        const held = members.filter((id) => worn.has(id)).length
-        return held === 0 || held === members.length
-      }),
-    )
-    if (isWholeClasses) overload++
-    else excess++
-  }
+  const { deficit, redundancy } = classCoverage(allClasses, key)
+  const { overload, excess, undeclared } = treatmentMisuse(
+    wearersOf(boxes, key),
+    partitions,
+    allClasses,
+  )
 
   const inUse = [...new Set(boxes.map((b) => key(b.id)))].map((k) => {
     const [colour = '', shape = ''] = k.split('|')
     return { colour, shape }
   })
-  let distance = 0
-  if (inUse.length >= 2) {
-    distance = Number.POSITIVE_INFINITY
-    for (let i = 0; i < inUse.length; i++) {
-      for (let j = i + 1; j < inUse.length; j++) {
-        distance = Math.min(distance, channelsApart(inUse[i] as Treatment, inUse[j] as Treatment))
-      }
-    }
-  }
+  const distance = nearestTreatmentDistance(inUse)
 
   const ids = boxes.map((b) => b.id)
   const of = (read: (t: Treatment) => string) => (id: string) =>
@@ -585,7 +626,7 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
     overload,
     excess,
     undeclared,
-    distance: Number.isFinite(distance) ? distance : 0,
+    distance,
     treatments: inUse.length,
     redundancy,
   }

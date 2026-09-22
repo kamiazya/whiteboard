@@ -33,6 +33,32 @@ export function chunkSnapshot(
   return { manifest: { chunkCount, totalBytes, maxChunkBytes }, chunks }
 }
 
+/** Every index in `[0, chunkCount)` exactly once, and nothing outside it. */
+function assertExactlyOneChunkPerIndex(chunks: readonly SnapshotChunk[], chunkCount: number): void {
+  const seenIndices = new Set<number>()
+  for (const chunk of chunks) {
+    if (!Number.isInteger(chunk.index) || chunk.index < 0 || chunk.index >= chunkCount) {
+      throw new SnapshotReassemblyError(
+        'EXTRA_CHUNK',
+        `chunk index ${chunk.index} is out of range for chunkCount ${chunkCount}`,
+      )
+    }
+    if (seenIndices.has(chunk.index)) {
+      throw new SnapshotReassemblyError(
+        'DUPLICATE_INDEX',
+        `chunk index ${chunk.index} appears more than once`,
+      )
+    }
+    seenIndices.add(chunk.index)
+  }
+
+  for (let index = 0; index < chunkCount; index++) {
+    if (!seenIndices.has(index)) {
+      throw new SnapshotReassemblyError('MISSING_CHUNK', `chunk index ${index} is missing`)
+    }
+  }
+}
+
 /**
  * Reconstructs the original bytes from a manifest and its chunks.
  * Order-independent: chunks are sorted by `index` before validation, so a
@@ -64,28 +90,7 @@ export function reassembleSnapshot(
     )
   }
 
-  const seenIndices = new Set<number>()
-  for (const chunk of chunks) {
-    if (!Number.isInteger(chunk.index) || chunk.index < 0 || chunk.index >= chunkCount) {
-      throw new SnapshotReassemblyError(
-        'EXTRA_CHUNK',
-        `chunk index ${chunk.index} is out of range for chunkCount ${chunkCount}`,
-      )
-    }
-    if (seenIndices.has(chunk.index)) {
-      throw new SnapshotReassemblyError(
-        'DUPLICATE_INDEX',
-        `chunk index ${chunk.index} appears more than once`,
-      )
-    }
-    seenIndices.add(chunk.index)
-  }
-
-  for (let index = 0; index < chunkCount; index++) {
-    if (!seenIndices.has(index)) {
-      throw new SnapshotReassemblyError('MISSING_CHUNK', `chunk index ${index} is missing`)
-    }
-  }
+  assertExactlyOneChunkPerIndex(chunks, chunkCount)
 
   const sorted = [...chunks].sort((a, b) => a.index - b.index)
 

@@ -191,12 +191,12 @@ imports. Start the run, then leave the working tree alone.
   isolation it reproduces only intermittently (1 in 17 reruns) while CI
   load makes it reliable.
 - **A tenth: `EnvironmentTeardownError: Cannot load '<module>' ... after the
-  environment was torn down`.** The ninth's signature — `2130 passed`,
-  `Errors 2`, job red, so the exit code is the only tell — with another
-  cause. NOT the in-body `await import()` shape: every import in the chain
-  was static, so hoisting fixes nothing. Vitest instantiates a static graph
-  on demand and its tail was still loading at teardown; the file it names is
-  a victim. Did not reproduce in three runs of CI's own shard command.
+  environment was torn down`.** The ninth's signature, another cause: a
+  file ended with DYNAMIC imports in flight (App's mount effect, lazy
+  pages), whose chains are static, so hoisting fixes nothing. The owner is the log's `originated in "<file>"`, not the module
+  named; mocking that module moves the error. Fixed in `web-jsdom` by
+  `vitest.setup.ts` awaiting `vi.dynamicImportSettled()`.
+
 - **An eleventh: a `vi.mock` factory that outlives its own test.**
   `VITEST_BROWSER_CONNECTION_CLOSED`, `[birpc] rpc is closed, cannot call
   "resolveManualMock"`, a stack through playwright's `_onRoute`. The ninth

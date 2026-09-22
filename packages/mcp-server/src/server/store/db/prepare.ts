@@ -1,4 +1,4 @@
-import { getDb } from './index.js'
+import { getRawDb } from './index.js'
 import { runMigrations } from './migrator.js'
 
 // Memoized startup hook. Idempotent across repeated calls per dataDir, so
@@ -10,7 +10,7 @@ export function prepareDataDir(dataDir: string): Promise<void> {
   const existing = ready.get(dataDir)
   if (existing) return existing
   const pending = (async () => {
-    const db = await getDb(dataDir)
+    const db = await getRawDb(dataDir)
     await runMigrations(db)
   })()
   ready.set(dataDir, pending)

@@ -42,6 +42,14 @@ describe('fullTextSearch', () => {
     expect(results[0]?.contexts[0]).toContain('検索基盤')
   })
 
+  it('centres the snippet on the query as typed, not on an earlier lone word of it', () => {
+    // `beta` alone occurs first; a snippet around it would sit a whole
+    // radius away from the phrase the person searched for.
+    const text = `beta ${'filler '.repeat(40)}alpha beta`
+    const [hit] = fullTextSearch([DOC('a', [text])], 'alpha beta')
+    expect(hit?.contexts[0]).toContain('alpha beta')
+  })
+
   it('finds a document by a single CJK character — the first keystroke of a Japanese query', () => {
     // What a Japanese reader types FIRST is one character, and a name is
     // one CJK run: bigram-only indexing makes every such query answer
