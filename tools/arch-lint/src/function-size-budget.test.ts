@@ -622,7 +622,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,
   'packages/mcp-server/src/server/store/db/index.ts#buildDb': 62,
-  'packages/mcp-server/src/server/store/db/test-helpers.ts#createIsolatedDb': 54,
   'packages/mcp-server/src/server/store/document-store.ts#compactDocument': 93,
   'packages/mcp-server/src/server/store/document-store.ts#renameDocumentPath': 53,
   'packages/mcp-server/src/server/store/document-store.ts#saveDocument': 66,

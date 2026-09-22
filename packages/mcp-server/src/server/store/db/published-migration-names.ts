@@ -41,4 +41,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0028-member-profiles',
   '0029-workspace-replica-keys',
   '0030-workspace-members-only',
+  '0031-tenants',
 ] as const satisfies readonly string[]
