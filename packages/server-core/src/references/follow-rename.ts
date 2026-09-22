@@ -36,6 +36,7 @@ import {
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
+import type { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../tools/document-io.js'
 import { ContentFactsCache } from './content-facts-cache.js'
@@ -94,19 +95,7 @@ export async function followReferencesAfterRename(
         input.workspaceId,
         entry.documentId as DocumentId,
       )
-      if (readDocumentKind(doc) === 'spatial') {
-        const result = rewriteCanvasReferences(readSpatialCanvas(doc), plan)
-        if (!result.changed) continue
-        // Targeted writes, never a whole-canvas resync: readSpatialCanvas
-        // drops records the current schema cannot parse, and writing the
-        // whole canvas back would DELETE them.
-        for (const node of result.changedNodes) writeSpatialNode(doc, node)
-      } else {
-        const body = readMarkdownBody(doc)
-        const next = rewriteReferenceTargets(body, plan)
-        if (next === body) continue
-        writeMarkdownBody(doc, next)
-      }
+      if (!rewriteDocument(doc, plan)) continue
       await saveDocumentSnapshot(deps, input.workspaceId, entry.documentId as DocumentId, doc)
       updated.push(entry.documentId)
     } catch {
@@ -114,4 +103,29 @@ export async function followReferencesAfterRename(
     }
   }
   return { updatedDocumentIds: updated, failedDocumentIds: failed }
+}
+
+/**
+ * Rewrites one document's reference targets in place, by its kind, and says
+ * whether anything changed — so the caller saves only what moved.
+ */
+function rewriteDocument(doc: LoroDoc, plan: ReadonlyMap<string, string>): boolean {
+  if (readDocumentKind(doc) === 'spatial') {
+    const result = rewriteCanvasReferences(readSpatialCanvas(doc), plan)
+    if (!result.changed) return false
+    // Targeted writes, never a whole-canvas resync: readSpatialCanvas drops
+    // records the current schema cannot parse, and writing the whole canvas
+    // back would DELETE them.
+    for (const node of result.changedNodes) writeSpatialNode(doc, node)
+    return true
+  }
+  const body = readMarkdownBody(doc)
+  const next = rewriteReferenceTargets(body, plan)
+  // Totality rather than a reachable case: the scan and the rewrite share
+  // `scanReferences`, so a body holding a ref the plan names is a body the
+  // rewrite changes. Kept because it costs a comparison and a caller that
+  // saved an unchanged document would report it as updated.
+  if (next === body) return false
+  writeMarkdownBody(doc, next)
+  return true
 }
