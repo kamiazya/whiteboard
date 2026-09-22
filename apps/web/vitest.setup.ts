@@ -1,7 +1,7 @@
 import { clearCatalogRecents } from '@kamiazya/whiteboard-facet-ui'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { cleanup } from '@testing-library/react'
-import { afterEach, expect, vi } from 'vitest'
+import { afterAll, afterEach, expect, vi } from 'vitest'
 import { BROWSER_DEFAULT_SEGMENT } from './src/lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from './src/lib/browser-workspace-id.js'
 import {
@@ -238,3 +238,12 @@ afterEach(() => {
 // for the reason storage and fake timers are: what a test changes globally,
 // the setup restores.
 afterEach(clearCatalogRecents)
+
+// A test that mounts App leaves the dynamic imports its effects start still
+// loading when the file ends — the replica keeper App connects on mount, and
+// whatever the pages it lazy-loads import in turn. The environment is then
+// torn down under them, and vitest reports every test PASSED while the file
+// exits 1 on `EnvironmentTeardownError` (integrator-flow.md's tenth shape).
+// Mocking the module each time only moves the error to the next one in the
+// graph, so the file waits for all of them instead.
+afterAll(() => vi.dynamicImportSettled())
