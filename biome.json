@@ -164,7 +164,6 @@
         "!packages/canvas-render/src/layout/nodes/node-outline.ts",
         "!packages/canvas-render/src/layout/passage-highlight.ts",
         "!packages/canvas-render/src/layout/proposals.ts",
-        "!packages/canvas-render/src/layout/spatial-canvas.ts",
         "!packages/canvas-render/src/references/targets.ts",
         "!packages/canvas-render/src/scene-bounds.ts",
         "!packages/canvas-render/src/scene-digest.ts",

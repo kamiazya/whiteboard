@@ -229,9 +229,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // `tidy-units.ts`. What pins it is the scene and SVG suites, which are
     // examples, so a mutation report over it would be survivors nobody can
     // act on — the reasoning `svg/paint.ts` left under.
+    //
+    // 88 and 19 since `layout/canvas-theme.ts` came out of it too — which
+    // theme a canvas is drawn in — outside the lane for the same reason.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 19,
-      production: 87,
+      production: 88,
     })
   })
 
