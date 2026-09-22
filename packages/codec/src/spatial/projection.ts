@@ -196,21 +196,20 @@ export function valueLeafPaths(value: unknown): readonly string[] {
 function walkValue(value: unknown, path: string, out: string[]): void {
   if (Array.isArray(value)) {
     for (const item of value) walkValue(item, `${path}[]`, out)
-    return
+  } else if (value !== null && typeof value === 'object') {
+    walkObject(value, path, out)
+  } else {
+    out.push(path)
   }
-  if (value !== null && typeof value === 'object') {
-    for (const [key, child] of Object.entries(value)) {
-      if (child === undefined) continue
-      const next = path === '' ? key : `${path}.${key}`
-      if (key === 'facets') {
-        out.push(`${next}/*`)
-        continue
-      }
-      walkValue(child, next, out)
-    }
-    return
+}
+
+function walkObject(value: object, path: string, out: string[]): void {
+  for (const [key, child] of Object.entries(value)) {
+    if (child === undefined) continue
+    const next = path === '' ? key : `${path}.${key}`
+    if (key === 'facets') out.push(`${next}/*`)
+    else walkValue(child, next, out)
   }
-  out.push(path)
 }
 
 /**

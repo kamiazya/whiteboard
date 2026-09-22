@@ -46,38 +46,34 @@ function mergeAdjacentText(children: unknown[]): unknown[] {
   return merged
 }
 
-function normalizeNode(node: unknown): unknown {
-  if (!isPlainObject(node)) return node
+/**
+ * `meta`/`lang` (fence info string) and `title`/`alt`/`label` (link and
+ * image attributes) all render as nothing when empty — an empty string
+ * there is textually identical to the field being absent altogether.
+ */
+const RENDERS_EMPTY_AS_ABSENT = new Set(['meta', 'lang', 'title', 'alt', 'label'])
 
-  const normalized: Record<string, unknown> = { type: node.type }
-
-  for (const [key, value] of Object.entries(node)) {
-    if (key === 'type') continue
-    if (Array.isArray(value)) {
-      normalized[key] = mergeAdjacentText(value.map(normalizeNode))
-      continue
-    }
-    // A code/math fence's `meta` is free text typed after the language on
-    // the opening fence line — an empty string there is textually identical
-    // to no meta at all, so both collapse to the same canonical value.
-    // `meta`/`lang` (fence info string) and `title`/`alt`/`label` (link and
-    // image attributes) all render as nothing when empty — an empty string
-    // there is textually identical to the field being absent altogether.
-    if (
-      (key === 'meta' || key === 'lang' || key === 'title' || key === 'alt' || key === 'label') &&
-      typeof value === 'string'
-    ) {
-      // The fence info string's leading/trailing whitespace around `meta`
-      // (and around `lang` itself) is not preserved by mdast-util-to-markdown
-      // — trim before comparing rather than only special-casing "all
-      // whitespace".
-      const trimmed = value.trim()
-      normalized[key] = trimmed === '' ? undefined : trimmed
-      continue
-    }
-    normalized[key] = value === null ? undefined : value
+function normalizeField(key: string, value: unknown): unknown {
+  if (Array.isArray(value)) return mergeAdjacentText(value.map(normalizeNode))
+  if (RENDERS_EMPTY_AS_ABSENT.has(key) && typeof value === 'string') {
+    // The fence info string's leading/trailing whitespace around `meta`
+    // (and around `lang` itself) is not preserved by mdast-util-to-markdown
+    // — trim before comparing rather than only special-casing "all
+    // whitespace".
+    const trimmed = value.trim()
+    return trimmed === '' ? undefined : trimmed
   }
+  return value === null ? undefined : value
+}
 
+const isBlank = (value: unknown): boolean =>
+  value === null || value === undefined || String(value).trim() === ''
+
+/** What a node's TYPE canonicalises, beyond what each field does alone. */
+function canonicalizeByType(
+  node: Record<string, unknown>,
+  normalized: Record<string, unknown>,
+): void {
   if (node.type === 'list') {
     normalized.ordered = Boolean(node.ordered)
     normalized.spread = Boolean(node.spread)
@@ -90,13 +86,18 @@ function normalizeNode(node: unknown): unknown {
   // `meta` has nowhere to render (it would be parsed back as `lang` itself),
   // so mdast-util-to-markdown drops it. Canonicalize that combination up
   // front rather than only trimming meta in isolation.
-  if (
-    (node.type === 'code' || node.type === 'math') &&
-    (node.lang === null || node.lang === undefined || String(node.lang).trim() === '')
-  ) {
+  if ((node.type === 'code' || node.type === 'math') && isBlank(node.lang)) {
     normalized.meta = undefined
   }
+}
 
+function normalizeNode(node: unknown): unknown {
+  if (!isPlainObject(node)) return node
+  const normalized: Record<string, unknown> = { type: node.type }
+  for (const [key, value] of Object.entries(node)) {
+    if (key !== 'type') normalized[key] = normalizeField(key, value)
+  }
+  canonicalizeByType(node, normalized)
   return normalized
 }
 
