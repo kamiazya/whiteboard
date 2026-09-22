@@ -122,7 +122,8 @@ function FieldInput({
   // A single-field facet often labels its field the way the facet is named
   // ("Shape" / "Shape"); saying it twice tells a reader nothing.
   const name = field.label === title ? title : `${title} ${field.label}`
-  if (field.control.kind === 'toggle') {
+  const control = field.control
+  if (control.kind === 'toggle') {
     return (
       <input
         id={id}
@@ -133,39 +134,20 @@ function FieldInput({
       />
     )
   }
-  if (field.control.kind === 'segmented') {
-    // Bound before the map: TypeScript re-widens `field.control` inside a
-    // callback, and the layout is read there.
-    const control = field.control
-    // NOT wrapped in anything labelable, and the caller does not wrap this
-    // arm in a `<label>` either (see the field list below). A `<label>`
-    // inside a `<label>` is invalid, and the browser resolves a click on
-    // the inner one against the OUTER label's control — so the option a
-    // person pressed is not the one that takes the press. The group's own
-    // `aria-label` is what names it.
+  if (control.kind === 'segmented') {
     return (
-      // A card grid must fill the row it stands in, and an inline span does
-      // not — so the wrapper becomes a block when it holds one.
-      <span id={id} {...(control.layout === 'cards' ? { style: { display: 'block' } } : {})}>
-        <FacetOptionGroup label={name} layout={control.layout}>
-          {control.options.map((option) => (
-            <FacetOption
-              key={option.label}
-              name={id}
-              layout={control.layout}
-              label={option.label}
-              selected={option.value === null ? value === undefined : value === option.value}
-              onSelect={() => (option.value === null ? onClear() : onChange(option.value))}
-              {...(glyphIcon(option.glyph, registry) === undefined
-                ? {}
-                : { glyph: glyphIcon(option.glyph, registry) })}
-            />
-          ))}
-        </FacetOptionGroup>
-      </span>
+      <SegmentedField
+        id={id}
+        name={name}
+        control={control}
+        value={value}
+        registry={registry}
+        onChange={onChange}
+        onClear={onClear}
+      />
     )
   }
-  if (field.control.kind === 'choice') {
+  if (control.kind === 'choice') {
     return (
       <select
         id={id}
@@ -175,7 +157,7 @@ function FieldInput({
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="">—</option>
-        {field.control.options.map((option) => (
+        {control.options.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
@@ -183,29 +165,96 @@ function FieldInput({
       </select>
     )
   }
-  // A datalist only when there is something to list: an empty one still
-  // draws a dropdown affordance on some browsers, promising choices it
-  // does not have.
+  return (
+    <TextField
+      id={id}
+      name={name}
+      field={field}
+      value={value}
+      onChange={onChange}
+      {...(suggestions === undefined ? {} : { suggestions })}
+    />
+  )
+}
+
+/**
+ * NOT wrapped in anything labelable, and the caller does not wrap this arm
+ * in a `<label>` either (see the field list below). A `<label>` inside a
+ * `<label>` is invalid, and the browser resolves a click on the inner one
+ * against the OUTER label's control — so the option a person pressed is not
+ * the one that takes the press. The group's own `aria-label` is what names it.
+ */
+function SegmentedField({
+  id,
+  name,
+  control,
+  value,
+  registry,
+  onChange,
+  onClear,
+}: {
+  readonly id: string
+  readonly name: string
+  readonly control: Extract<FacetFormField['control'], { kind: 'segmented' }>
+  readonly value: unknown
+  readonly registry: FacetRegistry
+  readonly onChange: (next: unknown) => void
+  readonly onClear: () => void
+}) {
+  return (
+    // A card grid must fill the row it stands in, and an inline span does
+    // not — so the wrapper becomes a block when it holds one.
+    <span id={id} {...(control.layout === 'cards' ? { style: { display: 'block' } } : {})}>
+      <FacetOptionGroup label={name} layout={control.layout}>
+        {control.options.map((option) => (
+          <FacetOption
+            key={option.label}
+            name={id}
+            layout={control.layout}
+            label={option.label}
+            selected={option.value === null ? value === undefined : value === option.value}
+            onSelect={() => (option.value === null ? onClear() : onChange(option.value))}
+            {...(glyphIcon(option.glyph, registry) === undefined
+              ? {}
+              : { glyph: glyphIcon(option.glyph, registry) })}
+          />
+        ))}
+      </FacetOptionGroup>
+    </span>
+  )
+}
+
+/** A text or number box, with a datalist only when there is something to list. */
+function TextField({
+  id,
+  name,
+  field,
+  value,
+  onChange,
+  suggestions,
+}: {
+  readonly id: string
+  readonly name: string
+  readonly field: FacetFormField
+  readonly value: unknown
+  readonly onChange: (next: unknown) => void
+  readonly suggestions?: readonly string[]
+}) {
+  // An empty datalist still draws a dropdown affordance on some browsers,
+  // promising choices it does not have.
   const listId = suggestions !== undefined && suggestions.length > 0 ? `${id}-options` : undefined
+  const isNumber = field.control.kind === 'number'
   return (
     <>
       <input
         id={id}
         aria-label={name}
-        type={field.control.kind === 'number' ? 'number' : 'text'}
+        type={isNumber ? 'number' : 'text'}
         style={CONTROL}
         value={value === undefined || value === null ? '' : String(value)}
         {...(field.placeholder === undefined ? {} : { placeholder: field.placeholder })}
         {...(listId === undefined ? {} : { list: listId })}
-        onChange={(event) =>
-          onChange(
-            field.control.kind === 'number'
-              ? event.target.value === ''
-                ? undefined
-                : Number(event.target.value)
-              : event.target.value,
-          )
-        }
+        onChange={(event) => onChange(readFieldValue(event.target.value, isNumber))}
       />
       {listId !== undefined && (
         <datalist id={listId}>
@@ -216,6 +265,12 @@ function FieldInput({
       )}
     </>
   )
+}
+
+/** An empty number box is the field being ABSENT, not the number zero. */
+function readFieldValue(raw: string, isNumber: boolean): unknown {
+  if (!isNumber) return raw
+  return raw === '' ? undefined : Number(raw)
 }
 
 /** Drops keys the human left empty, so an optional field stays absent. */
@@ -242,6 +297,179 @@ export interface DerivedFacetFormProps {
    * schema still decides.
    */
   readonly suggestions?: Readonly<Record<string, readonly string[]>>
+}
+
+/** A facet no derivation can edit: its stored payload, read-only. */
+function UnsupportedFacet({ title, stored }: { readonly title: string; readonly stored: unknown }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <span style={{ fontSize: '0.75rem', color: MUTED }}>{title}</span>
+      <pre
+        style={{
+          overflowX: 'auto',
+          borderRadius: '0.25rem',
+          background: ACCENT,
+          padding: '0.25rem',
+          fontSize: '0.7rem',
+        }}
+      >
+        {stored === undefined ? '—' : JSON.stringify(stored)}
+      </pre>
+      <span style={{ fontSize: '0.7rem', color: MUTED }}>
+        This facet needs its own editor; shown read-only.
+      </span>
+    </div>
+  )
+}
+
+function CatalogRow({
+  facetKey,
+  title,
+  form,
+  catalog,
+  stored,
+  current,
+  registry,
+  onWrite,
+}: {
+  readonly facetKey: string
+  readonly title: string
+  readonly form: Extract<FacetForm, { kind: 'picker' }>
+  readonly catalog: NonNullable<Extract<FacetForm, { kind: 'picker' }>['catalog']>
+  readonly stored: unknown
+  readonly current: string
+  readonly registry: FacetRegistry
+  readonly onWrite: (key: string, payload: unknown) => void
+}) {
+  return (
+    <div style={ROW}>
+      <span style={{ color: MUTED }}>{title}</span>
+      <CatalogPopover
+        label={`Choose ${title.toLowerCase()}`}
+        current={triggerFace(form.options, catalog, stored, current, registry)}
+      >
+        <FacetCatalogPicker
+          facetKey={facetKey}
+          title={title}
+          catalog={catalog}
+          registry={registry}
+          listed={form.options}
+          listedLayout={form.layout}
+          selectedKey={current}
+          // Straight through the same door every other control here takes:
+          // `null` clears, anything else is validated before it is stored.
+          onPick={(payload) => onWrite(facetKey, payload === null ? undefined : payload)}
+        />
+      </CatalogPopover>
+    </div>
+  )
+}
+
+/**
+ * A PICKER is the whole form: one control, whole payloads, and the
+ * facet's absence as an ordinary option rather than a button beside it.
+ *
+ * That last part is why there is no Clear here. The derived form used to
+ * offer one whenever anything was stored, and the theme row ended up
+ * with two ways to say "no theme" — a `Default` segment and a `Clear`
+ * whose visible text named nothing it would clear. One control, one way.
+ */
+function PickerFacet({
+  facetKey,
+  title,
+  form,
+  stored,
+  registry,
+  onWrite,
+}: {
+  readonly facetKey: string
+  readonly title: string
+  readonly form: Extract<FacetForm, { kind: 'picker' }>
+  readonly stored: unknown
+  readonly registry: FacetRegistry
+  readonly onWrite: (key: string, payload: unknown) => void
+}) {
+  // Keyed rather than stringified directly: a stored payload's key order
+  // is its WRITER's, and `wb_facet_set` or a document authored elsewhere
+  // has no reason to match this declaration's. Compared raw, such a value
+  // matches no option and the picker draws with nothing selected.
+  const current = facetPayloadKey(stored)
+
+  if (form.catalog !== undefined) {
+    return (
+      <CatalogRow
+        facetKey={facetKey}
+        title={title}
+        form={form}
+        catalog={form.catalog}
+        stored={stored}
+        current={current}
+        registry={registry}
+        onWrite={onWrite}
+      />
+    )
+  }
+
+  return (
+    <PickerOptionsRow
+      facetKey={facetKey}
+      title={title}
+      form={form}
+      current={current}
+      registry={registry}
+      onWrite={onWrite}
+    />
+  )
+}
+
+/**
+ * The same shape a field of the same layout takes, so a panel holding both
+ * does not lay out two rows two ways: a CHIP row is name-left /
+ * options-right, and a CARD row is a full-width grid under its name, because
+ * cells that share a line with a label are no longer cells.
+ */
+function PickerOptionsRow({
+  facetKey,
+  title,
+  form,
+  current,
+  registry,
+  onWrite,
+}: {
+  readonly facetKey: string
+  readonly title: string
+  readonly form: Extract<FacetForm, { kind: 'picker' }>
+  readonly current: string
+  readonly registry: FacetRegistry
+  readonly onWrite: (key: string, payload: unknown) => void
+}) {
+  return (
+    <div style={form.layout === 'cards' ? STACKED_ROW : ROW}>
+      <span style={{ color: MUTED }}>{title}</span>
+      <FacetOptionGroup label={title} layout={form.layout}>
+        {form.options.map((option) => {
+          const glyph = glyphIcon(option.glyph, registry)
+          return (
+            <FacetOption
+              key={option.label}
+              name={`facet-picker-${facetKey}`}
+              layout={form.layout}
+              label={option.label}
+              selected={facetPayloadKey(option.payload) === current}
+              // Straight through the write path, the same as every other
+              // control here: `null` clears, anything else is validated
+              // before it is stored. A picker payload was already parsed
+              // at definition time, so this is the second of two nets.
+              onSelect={() =>
+                onWrite(facetKey, option.payload === null ? undefined : option.payload)
+              }
+              {...(glyph === undefined ? {} : { glyph })}
+            />
+          )
+        })}
+      </FacetOptionGroup>
+    </div>
+  )
 }
 
 export function DerivedFacetForm({
@@ -271,110 +499,17 @@ export function DerivedFacetForm({
   }
   const set = (name: string, value: unknown) => setDraft((prev) => ({ ...prev, [name]: value }))
 
-  if (form.kind === 'unsupported') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        <span style={{ fontSize: '0.75rem', color: MUTED }}>{title}</span>
-        <pre
-          style={{
-            overflowX: 'auto',
-            borderRadius: '0.25rem',
-            background: ACCENT,
-            padding: '0.25rem',
-            fontSize: '0.7rem',
-          }}
-        >
-          {stored === undefined ? '—' : JSON.stringify(stored)}
-        </pre>
-        <span style={{ fontSize: '0.7rem', color: MUTED }}>
-          This facet needs its own editor; shown read-only.
-        </span>
-      </div>
-    )
-  }
-
-  /**
-   * A PICKER is the whole form: one control, whole payloads, and the
-   * facet's absence as an ordinary option rather than a button beside it.
-   *
-   * That last part is why there is no Clear here. The derived form used to
-   * offer one whenever anything was stored, and the theme row ended up
-   * with two ways to say "no theme" — a `Default` segment and a `Clear`
-   * whose visible text named nothing it would clear. One control, one way.
-   */
+  if (form.kind === 'unsupported') return <UnsupportedFacet title={title} stored={stored} />
   if (form.kind === 'picker') {
-    // Keyed rather than stringified directly: a stored payload's key order
-    // is its WRITER's, and `wb_facet_set` or a document authored elsewhere
-    // has no reason to match this declaration's. Compared raw, such a value
-    // matches no option and the picker draws with nothing selected.
-    const current = facetPayloadKey(stored)
-
-    /**
-     * A CATALOG opens in a popover, and the row keeps one line.
-     *
-     * Inline, `visual.symbol`'s grid was taller than every other facet in
-     * the panel put together and pushed the rows under it off screen. So
-     * the row shows what is CHOSEN and the choosing happens over the top —
-     * which is also what lets the catalog's chunk stay unfetched until
-     * somebody opens it.
-     */
-    if (form.catalog !== undefined) {
-      const catalog = form.catalog
-      return (
-        <div style={ROW}>
-          <span style={{ color: MUTED }}>{title}</span>
-          <CatalogPopover
-            label={`Choose ${title.toLowerCase()}`}
-            current={triggerFace(form.options, catalog, stored, current, registry)}
-          >
-            <FacetCatalogPicker
-              facetKey={facetKey}
-              title={title}
-              catalog={catalog}
-              registry={registry}
-              listed={form.options}
-              listedLayout={form.layout}
-              selectedKey={current}
-              // Straight through the same door every other control here
-              // takes: `null` clears, anything else is validated before it
-              // is stored.
-              onPick={(payload) => onWrite(facetKey, payload === null ? undefined : payload)}
-            />
-          </CatalogPopover>
-        </div>
-      )
-    }
-
-    // The same shape a field of the same layout takes, so a panel holding
-    // both does not lay out two rows two ways: a CHIP row is name-left /
-    // options-right, and a CARD row is a full-width grid under its name,
-    // because cells that share a line with a label are no longer cells.
     return (
-      <div style={form.layout === 'cards' ? STACKED_ROW : ROW}>
-        <span style={{ color: MUTED }}>{title}</span>
-        <FacetOptionGroup label={title} layout={form.layout}>
-          {form.options.map((option) => {
-            const glyph = glyphIcon(option.glyph, registry)
-            return (
-              <FacetOption
-                key={option.label}
-                name={`facet-picker-${facetKey}`}
-                layout={form.layout}
-                label={option.label}
-                selected={facetPayloadKey(option.payload) === current}
-                // Straight through the write path, the same as every other
-                // control here: `null` clears, anything else is validated
-                // before it is stored. A picker payload was already parsed
-                // at definition time, so this is the second of two nets.
-                onSelect={() =>
-                  onWrite(facetKey, option.payload === null ? undefined : option.payload)
-                }
-                {...(glyph === undefined ? {} : { glyph })}
-              />
-            )
-          })}
-        </FacetOptionGroup>
-      </div>
+      <PickerFacet
+        facetKey={facetKey}
+        title={title}
+        form={form}
+        stored={stored}
+        registry={registry}
+        onWrite={onWrite}
+      />
     )
   }
 

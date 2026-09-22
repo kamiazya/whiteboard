@@ -251,3 +251,36 @@ describe('label nesting', () => {
     expect(container.querySelectorAll('label').length).toBeGreaterThan(1)
   })
 })
+
+describe('a number field that is emptied writes no number', () => {
+  const counted = definePlugin({
+    id: 'demo',
+    displayName: 'Demo',
+    facets: [
+      defineFacet({
+        name: 'count',
+        displayName: 'Count',
+        version: 'v0',
+        targets: ['node'],
+        schema: z.object({ count: z.number().optional() }),
+      }),
+    ],
+  })
+
+  it('clears the field rather than storing zero', () => {
+    const onWrite = vi.fn()
+    render(
+      <DerivedFacetForm
+        facetKey="demo.count/v0"
+        title="Count"
+        registry={createFacetRegistry([counted])}
+        stored={{ count: 5 }}
+        onWrite={onWrite}
+      />,
+    )
+    const field = screen.getByLabelText('Count') as HTMLInputElement
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Count' }))
+    expect(onWrite).toHaveBeenCalledWith('demo.count/v0', {})
+  })
+})

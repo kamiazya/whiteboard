@@ -415,56 +415,67 @@ function humanize(name: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase()
 }
 
-export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec): FacetForm {
-  // A declared picker WINS over anything the schema would derive. Both
-  // shapes this serves derive something on their own — a union derives
-  // `variants`, an object derives `fields` — and neither is what the
-  // plugin means: the derivation describes the STORAGE, and the picker
-  // describes the choice a person is actually making.
-  if (editor?.picker !== undefined) {
-    const catalog = editor.picker.catalog
-    return {
-      kind: 'picker',
-      // Empty for a specimen picker, which `withAssetOptions` then fills.
-      // The form carries no `specimenIcon` of its own: a vessel draws the
-      // glyphs it is given, and the registry reads the spec directly.
-      options: editor.picker.options ?? [],
-      layout: editor.picker.layout ?? 'chips',
-      ...(catalog === undefined ? {} : { catalog }),
-    }
+/**
+ * A declared picker WINS over anything the schema would derive. Both shapes
+ * this serves derive something on their own — a union derives `variants`, an
+ * object derives `fields` — and neither is what the plugin means: the
+ * derivation describes the STORAGE, and the picker describes the choice a
+ * person is actually making.
+ */
+function declaredPickerForm(picker: NonNullable<FacetEditorSpec['picker']>): FacetForm {
+  const catalog = picker.catalog
+  return {
+    kind: 'picker',
+    // Empty for a specimen picker, which `withAssetOptions` then fills.
+    // The form carries no `specimenIcon` of its own: a vessel draws the
+    // glyphs it is given, and the registry reads the spec directly.
+    options: picker.options ?? [],
+    layout: picker.layout ?? 'chips',
+    ...(catalog === undefined ? {} : { catalog }),
   }
+}
+
+/** One union arm as a variant, or `undefined` when the arm cannot be one. */
+function variantOf(
+  arm: z.ZodTypeAny,
+  discriminant: string | undefined,
+): { name: string; variant: FacetFormVariant } | undefined {
+  if (!(arm instanceof z.ZodObject)) return undefined
+  const shape = arm.shape as Record<string, z.ZodTypeAny>
+  const found = discriminantOf(shape)
+  if (found === undefined) return undefined
+  const [name, label] = found
+  if (discriminant !== undefined && discriminant !== name) return undefined
+  const fields = fieldsOf(shape, name)
+  return fields === undefined ? undefined : { name, variant: { label, fields } }
+}
+
+/** Called only for a `ZodUnion`; typed loosely because zod's own arm type is internal. */
+function unionForm(schema: z.ZodTypeAny): FacetForm {
+  const arms = (schema as unknown as { options: readonly z.ZodTypeAny[] }).options
+  const variants: FacetFormVariant[] = []
+  let discriminant: string | undefined
+  for (const arm of arms) {
+    const found = variantOf(arm, discriminant)
+    if (found === undefined) return UNSUPPORTED
+    // Two arms selected by the same literal cannot be told apart by a
+    // picker, and the second would be unreachable.
+    if (variants.some((variant) => variant.label === found.variant.label)) return UNSUPPORTED
+    discriminant = found.name
+    variants.push(found.variant)
+  }
+  return discriminant === undefined
+    ? UNSUPPORTED
+    : { kind: 'variants', discriminant, discriminantLabel: humanize(discriminant), variants }
+}
+
+export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec): FacetForm {
+  if (editor?.picker !== undefined) return declaredPickerForm(editor.picker)
   if (schema instanceof z.ZodObject) {
     const fields = fieldsOf(schema.shape as Record<string, z.ZodTypeAny>, undefined, editor)
     return fields === undefined ? UNSUPPORTED : { kind: 'fields', fields }
   }
-  if (schema instanceof z.ZodUnion) {
-    const arms = schema.options as readonly z.ZodTypeAny[]
-    const variants: FacetFormVariant[] = []
-    let discriminant: string | undefined
-    for (const arm of arms) {
-      if (!(arm instanceof z.ZodObject)) return UNSUPPORTED
-      const shape = arm.shape as Record<string, z.ZodTypeAny>
-      const found = discriminantOf(shape)
-      if (found === undefined) return UNSUPPORTED
-      const [name, label] = found
-      if (discriminant !== undefined && discriminant !== name) return UNSUPPORTED
-      discriminant = name
-      // Two arms selected by the same literal cannot be told apart by a
-      // picker, and the second would be unreachable.
-      if (variants.some((variant) => variant.label === label)) return UNSUPPORTED
-      const fields = fieldsOf(shape, name)
-      if (fields === undefined) return UNSUPPORTED
-      variants.push({ label, fields })
-    }
-    return discriminant === undefined
-      ? UNSUPPORTED
-      : {
-          kind: 'variants',
-          discriminant,
-          discriminantLabel: humanize(discriminant),
-          variants,
-        }
-  }
+  if (schema instanceof z.ZodUnion) return unionForm(schema)
   return UNSUPPORTED
 }
 
