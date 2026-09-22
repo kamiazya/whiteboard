@@ -12,6 +12,22 @@ describe('a document becomes OCIF and comes back', () => {
     expect(toOcif({ nodes: [], edges: [] }).ocif).toContain('v0.7.0')
   })
 
+  it('emits no extension of ours for a node that carries nothing OCIF cannot state', () => {
+    // Absence says "not set"; an empty `@whiteboard/*` entry would say the
+    // same thing in bytes every foreign reader has to carry and preserve.
+    const projected = toOcif({
+      nodes: [
+        textNode({ id: 'a', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+        groupNode({ id: 'g', x: -10, y: -10, width: 40, height: 40 }),
+      ],
+      edges: [],
+    })
+    const ourTypes = (projected.nodes ?? []).flatMap((n) =>
+      (n.data ?? []).map((d) => d.type).filter((type) => type.startsWith('@whiteboard/')),
+    )
+    expect(ourTypes).toEqual([])
+  })
+
   it('makes an edge an @ocif/edge and a line an @ocif/arrow', () => {
     // The decision ADR-0038 took, and what it bought this file: the branch
     // that used to ask whether both ends named a node is gone, because the

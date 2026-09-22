@@ -47,6 +47,11 @@ import {
 const resourceIdFor = (nodeId: string) => `${nodeId}/content`
 
 /** An extension of ours, or nothing when there is nothing to carry. */
+/** `fields` without its undefined entries, key order kept — absence is how a payload says "not set". */
+function definedFields(fields: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined))
+}
+
 function ours(type: string, payload: Record<string, unknown>): OcifExtension | undefined {
   return Object.keys(payload).length === 0 ? undefined : { type, ...payload }
 }
@@ -147,6 +152,40 @@ function membersOf(group: SpatialNode, nodes: readonly SpatialNode[]): string[] 
  */
 const contentIsShadowed = (node: SpatialNode) => node.embed !== undefined && !isFrame(node)
 
+function frameEntries(node: SpatialNode, nodes: readonly SpatialNode[]): OcifExtension[] {
+  const chrome = ours(
+    OCIF_TYPE.groupChrome,
+    definedFields({
+      label: node.label,
+      background: node.background,
+      backgroundStyle: node.backgroundStyle,
+    }),
+  )
+  const group: OcifExtension = { type: OCIF_TYPE.group, members: membersOf(node, nodes) }
+  return chrome === undefined ? [group] : [group, chrome]
+}
+
+/** What a node carries that OCIF has no field for, as one extension of ours. */
+function nodeExtras(node: SpatialNode): OcifExtension | undefined {
+  const shadowed = contentIsShadowed(node)
+  const kind = shadowed ? nodeKind(node) : undefined
+  return ours(
+    OCIF_TYPE.nodeExtras,
+    definedFields({
+      color: node.color,
+      subpath: nodeSubpath(node),
+      versionRef: node.embed?.versionRef,
+      text: shadowed ? nodeText(node) : undefined,
+      file: shadowed ? nodeFile(node) : undefined,
+      url: shadowed ? nodeUrl(node) : undefined,
+      // The published `kind` keeps the FORMAT's four words, which is what a
+      // reader of an earlier export already has. The model's own kind is
+      // derived now, so this is a projection like every other field here.
+      kind: kind === 'frame' ? 'group' : kind,
+    }),
+  )
+}
+
 function projectNode(
   node: SpatialNode,
   nodes: readonly SpatialNode[],
@@ -154,32 +193,8 @@ function projectNode(
   const representation = representationFor(node)
   const data: OcifExtension[] = [...facetEntries(node.facets)]
 
-  if (isFrame(node)) {
-    data.push({ type: OCIF_TYPE.group, members: membersOf(node, nodes) })
-    const chrome = ours(OCIF_TYPE.groupChrome, {
-      ...(node.label === undefined ? {} : { label: node.label }),
-      ...(node.background === undefined ? {} : { background: node.background }),
-      ...(node.backgroundStyle === undefined ? {} : { backgroundStyle: node.backgroundStyle }),
-    })
-    if (chrome !== undefined) data.push(chrome)
-  }
-  const shadowed = contentIsShadowed(node)
-  const subpath = nodeSubpath(node)
-  const text = nodeText(node)
-  const file = nodeFile(node)
-  const url = nodeUrl(node)
-  const extras = ours(OCIF_TYPE.nodeExtras, {
-    ...(node.color === undefined ? {} : { color: node.color }),
-    ...(subpath !== undefined ? { subpath } : {}),
-    ...(node.embed?.versionRef === undefined ? {} : { versionRef: node.embed.versionRef }),
-    ...(shadowed && text !== undefined ? { text } : {}),
-    ...(shadowed && file !== undefined ? { file } : {}),
-    ...(shadowed && url !== undefined ? { url } : {}),
-    // The published `kind` keeps the FORMAT's four words, which is what a
-    // reader of an earlier export already has. The model's own kind is
-    // derived now, so this is a projection like every other field here.
-    ...(shadowed ? { kind: nodeKind(node) === 'frame' ? 'group' : nodeKind(node) } : {}),
-  })
+  if (isFrame(node)) data.push(...frameEntries(node, nodes))
+  const extras = nodeExtras(node)
   if (extras !== undefined) data.push(extras)
   const tags = tagsEntry(node.tags)
   if (tags !== undefined) data.push(tags)
