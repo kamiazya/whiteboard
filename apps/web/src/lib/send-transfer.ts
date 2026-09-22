@@ -95,60 +95,106 @@ export function sendTransfer(options: SendTransferOptions): Promise<SendTransfer
     })
   }
 
-  return new Promise((resolve) => {
-    let offered = false
-    let settled = false
-    const settle = (result: SendTransferResult): void => {
-      if (settled) return
-      settled = true
-      globalThis.removeEventListener('message', onMessage)
-      clearInterval(closedWatch)
-      resolve(result)
-    }
-
-    const offer = (protocol: unknown): void => {
-      if (protocol !== CROSS_ORIGIN_TRANSFER_PROTOCOL) {
-        settle({ ok: false, reason: protocolRefusal(protocol) })
-        return
-      }
-      offered = true
-      void options.payload.then(
-        (payload) => {
-          // The person may have closed the window while the record was read.
-          if (settled) return
-          popup.postMessage(
-            { type: 'transfer-offer', protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL, nonce, ...payload },
-            destination,
-          )
-        },
-        () =>
-          settle({
-            ok: false,
-            reason: "This browser's workspace could not be read, so nothing was sent.",
-          }),
-      )
-    }
-
-    const onMessage = (event: MessageEvent): void => {
+  let offered = false
+  return talkTo<SendTransferResult>(popup, options.closedPollMs ?? 500, {
+    onMessage: (event, talk) => {
       const read = readHandshakeMessage(event, destination, nonce)
-      if (read.kind === 'result') settle(read.result)
-      else if (read.kind === 'ready' && !offered) offer(read.protocol)
-    }
-    globalThis.addEventListener('message', onMessage)
-
-    // ponytail: a window has no "closed" event, so this polls `popup.closed`;
-    // a person may sit in the popup for as long as their passkey takes, so
-    // there is deliberately no timeout — closing the window IS the cancel.
-    const closedWatch = setInterval(() => {
-      if (!popup.closed) return
-      settle({
+      if (read.kind === 'result') talk.settle(read.result)
+      else if (read.kind === 'ready' && !offered) {
+        offered = true
+        offerRecord(talk, read.protocol, { popup, destination, nonce, payload: options.payload })
+      }
+    },
+    onClosed: (talk) =>
+      talk.settle({
         ok: false,
         reason: offered
           ? 'The window was closed before the keeper reported back. Check the destination before trying again — the transfer may have landed.'
           : 'The window was closed before the transfer started, so nothing was sent.',
-      })
-    }, options.closedPollMs ?? 500)
+      }),
   })
+}
+
+interface Talk<T> {
+  settle(result: T): void
+  readonly settled: boolean
+}
+
+/**
+ * A conversation with a window this page opened: every message is handed to
+ * `onMessage` until something settles, the window closing is handed to
+ * `onClosed`, and the answer is taken once — after which the listener and the
+ * watch are gone. The lifetime lives here so the protocol above says only
+ * what to answer.
+ *
+ * ponytail: a window has no "closed" event, so this polls `popup.closed`; a
+ * person may sit in the popup for as long as their passkey takes, so there is
+ * deliberately no timeout — closing the window IS the cancel.
+ */
+function talkTo<T>(
+  popup: PopupHandle,
+  pollMs: number,
+  handlers: {
+    onMessage(event: MessageEvent, talk: Talk<T>): void
+    onClosed(talk: Talk<T>): void
+  },
+): Promise<T> {
+  return new Promise((resolve) => {
+    let done = false
+    const talk: Talk<T> = {
+      get settled() {
+        return done
+      },
+      settle(result) {
+        done = true
+        globalThis.removeEventListener('message', onMessage)
+        clearInterval(closedWatch)
+        resolve(result)
+      },
+    }
+    const onMessage = (event: MessageEvent): void => handlers.onMessage(event, talk)
+    globalThis.addEventListener('message', onMessage)
+    const closedWatch = setInterval(() => {
+      if (popup.closed) handlers.onClosed(talk)
+    }, pollMs)
+  })
+}
+
+/** Answers the destination's ready: refuse a protocol this app does not speak, else post the record. */
+function offerRecord(
+  talk: Talk<SendTransferResult>,
+  protocol: unknown,
+  to: {
+    popup: PopupHandle
+    destination: string
+    nonce: string
+    payload: Promise<TransferPayload>
+  },
+): void {
+  if (protocol !== CROSS_ORIGIN_TRANSFER_PROTOCOL) {
+    talk.settle({ ok: false, reason: protocolRefusal(protocol) })
+    return
+  }
+  void to.payload.then(
+    (payload) => {
+      // The person may have closed the window while the record was read.
+      if (talk.settled) return
+      to.popup.postMessage(
+        {
+          type: 'transfer-offer',
+          protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+          nonce: to.nonce,
+          ...payload,
+        },
+        to.destination,
+      )
+    },
+    () =>
+      talk.settle({
+        ok: false,
+        reason: "This browser's workspace could not be read, so nothing was sent.",
+      }),
+  )
 }
 
 type HandshakeMessage =

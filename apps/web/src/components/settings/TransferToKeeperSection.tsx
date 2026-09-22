@@ -1,10 +1,8 @@
-import { useState } from 'react'
 import {
-  type PopupHandle,
-  parseDestination,
-  type SendTransferResult,
-  sendTransfer,
-} from '../../lib/send-transfer.js'
+  type TransferToKeeperState,
+  useTransferToKeeper,
+} from '../../hooks/use-transfer-to-keeper.js'
+import type { PopupHandle, SendTransferResult } from '../../lib/send-transfer.js'
 import { Button } from '../ui/button.js'
 
 /**
@@ -29,31 +27,8 @@ export function TransferToKeeperSection({
   /** Test seam; production uses `window.open`. */
   openWindow?: (url: string) => PopupHandle | null
 }): React.JSX.Element {
-  const [address, setAddress] = useState('')
-  const [state, setState] = useState<
-    { kind: 'idle' } | { kind: 'sending' } | { kind: 'done'; result: SendTransferResult }
-  >({ kind: 'idle' })
-  const destination = address.trim() === '' ? null : parseDestination(address, location.origin)
-
-  const send = (): void => {
-    if (destination === null || !destination.ok) return
-    setState({ kind: 'sending' })
-    // Opened in THIS task, before anything is awaited: a popup blocker
-    // refuses a window.open that follows an await. The record is read while
-    // the destination loads.
-    const payload = Promise.all([
-      import('../../lib/transfer-payload.js'),
-      import('../../lib/browser-workspace-docs.js'),
-    ]).then(([{ readTransferPayload }, { BrowserWorkspaceDocs }]) =>
-      readTransferPayload(new BrowserWorkspaceDocs()),
-    )
-    void sendTransfer({
-      keeperBaseUrl: destination.keeperBaseUrl,
-      senderOrigin: location.origin,
-      payload,
-      ...(openWindow === undefined ? {} : { openWindow }),
-    }).then((result) => setState({ kind: 'done', result }))
-  }
+  const { address, setAddress, addressError, canSend, state, send } =
+    useTransferToKeeper(openWindow)
 
   return (
     <section aria-label="Send to another keeper" className="space-y-2">
@@ -74,27 +49,35 @@ export function TransferToKeeperSection({
           onChange={(event) => setAddress(event.target.value)}
         />
       </label>
-      {destination !== null && !destination.ok && (
+      {addressError !== null && (
         <p className="text-xs text-muted-foreground" data-testid="transfer-keeper-address-error">
-          {destination.reason}
+          {addressError}
         </p>
       )}
       <Button
         type="button"
         size="sm"
         data-testid="transfer-send"
-        disabled={destination === null || !destination.ok || state.kind === 'sending'}
+        disabled={!canSend}
         onClick={send}
       >
         {state.kind === 'sending' ? 'Waiting for the keeper…' : 'Send'}
       </Button>
-      {/* Mounted before it speaks (polite-live-region.test.ts): a status
-          region that arrives with its message is announced inconsistently,
-          so this one is always in the tree and only its text changes. */}
-      <p className="text-xs" role="status" aria-live="polite" data-testid="transfer-report">
-        {state.kind === 'done' ? reportFor(state.result) : ''}
-      </p>
+      <TransferReport state={state} />
     </section>
+  )
+}
+
+/**
+ * Mounted before it speaks (polite-live-region.test.ts): a status region that
+ * arrives with its message is announced inconsistently, so this one is always
+ * in the tree and only its text changes.
+ */
+function TransferReport({ state }: { state: TransferToKeeperState }): React.JSX.Element {
+  return (
+    <p className="text-xs" role="status" aria-live="polite" data-testid="transfer-report">
+      {state.kind === 'done' ? reportFor(state.result) : ''}
+    </p>
   )
 }
 

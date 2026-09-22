@@ -226,15 +226,31 @@ function GeneralSection({
 // shape now that the page mounts this section once: one instance, one read,
 // and a mutation lands on the list the person is looking at. See
 // SettingsPage's doc comment for what mounting it twice used to cost.
-function ConnectionsSection({
-  daemon,
-  onDisconnected,
-  workspaceId,
-}: {
+type ConnectionsProps = {
   daemon?: ConnectedDaemon
   onDisconnected?: () => void
   workspaceId?: string
-}) {
+}
+
+/**
+ * Where this workspace is kept, and where it can go. Sending to another keeper
+ * needs no daemon, so it sits beside the daemon's section rather than inside
+ * each of its connected/disconnected branches.
+ */
+function ConnectionsTab({ daemon, onDisconnected, workspaceId }: ConnectionsProps) {
+  return (
+    <>
+      <ConnectionsSection
+        daemon={daemon}
+        onDisconnected={onDisconnected}
+        workspaceId={workspaceId}
+      />
+      <TransferToKeeperSection />
+    </>
+  )
+}
+
+function ConnectionsSection({ daemon, onDisconnected, workspaceId }: ConnectionsProps) {
   // Keyed on the primitive fields, not `daemon` itself, so a re-render that
   // rebuilds the same `daemon` object (a new reference, same values) does not
   // rebuild this function — which would hand DaemonApiContext a new identity
@@ -258,7 +274,6 @@ function ConnectionsSection({
         {/* Discoverable while disabled: the move exists before its
             precondition is met, so its condition can be read here. */}
         <PromoteWorkspaceSection settingsStore={settingsStore} />
-        <TransferToKeeperSection />
         {/* Rendered without a daemon too, and that is exactly when it matters
             most: with none connected every copy here is browser-kept, so a
             card hidden in this branch would hide the whole list. */}
@@ -286,7 +301,6 @@ function ConnectionsSection({
           settingsStore={settingsStore}
           workspaceId={workspaceId}
         />
-        <TransferToKeeperSection />
         <LocalCopiesCard settingsStore={settingsStore} workspaceId={workspaceId} />
         {/* Hidden without a known workspace id: a cold load with a daemon
             merely detected names none yet, and the card would have nothing
@@ -416,13 +430,7 @@ function sectionContent(
     case 'fonts':
       return <FontsSection daemon={props.daemon} />
     case 'connections':
-      return (
-        <ConnectionsSection
-          daemon={props.daemon}
-          onDisconnected={props.onDisconnected}
-          workspaceId={props.workspaceId}
-        />
-      )
+      return <ConnectionsTab {...props} />
     case 'developer':
       return <GestureTraceRow />
   }

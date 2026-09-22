@@ -230,25 +230,34 @@ describe('sending a transfer through a window at the destination', () => {
   })
 
   it('stops listening once settled, so a late ready cannot send a closed transfer', async () => {
-    // The case only REMOVING the listener protects: the person closed the
-    // window before anything was offered, so `offered` is still false — and
-    // a ready arriving afterwards would otherwise post their workspace to a
-    // transfer they had already abandoned. (The first draft of this test
-    // sent a second ready after an offer; `offered` stopped that on its own,
-    // so deleting the removal left it green and it proved nothing.)
-    const popup = fakePopup()
-    const sent = sendTransfer(baseOptions(popup))
-    popup.closed = true
-    await expect(sent).resolves.toMatchObject({
-      ok: false,
-      reason: expect.stringMatching(/nothing was sent/),
-    })
-    arrive(KEEPER, {
-      type: 'transfer-ready',
-      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
-      nonce: NONCE,
-    })
-    expect(popup.posted).toEqual([])
+    // Two things keep an abandoned transfer from posting: the listener goes
+    // away, and the offer re-checks `settled` after the read. Each alone hides
+    // the other's removal from `posted`, so the listener is asserted on
+    // directly — a listener left behind per attempt is the leak itself.
+    const added = vi.spyOn(globalThis, 'addEventListener')
+    const removed = vi.spyOn(globalThis, 'removeEventListener')
+    try {
+      const popup = fakePopup()
+      const sent = sendTransfer(baseOptions(popup))
+      const listener = added.mock.calls.find(([type]) => type === 'message')?.[1]
+      expect(listener).toBeDefined()
+      popup.closed = true
+      await expect(sent).resolves.toMatchObject({
+        ok: false,
+        reason: expect.stringMatching(/nothing was sent/),
+      })
+      expect(removed).toHaveBeenCalledWith('message', listener)
+      arrive(KEEPER, {
+        type: 'transfer-ready',
+        protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+        nonce: NONCE,
+      })
+      await Promise.resolve()
+      expect(popup.posted).toEqual([])
+    } finally {
+      added.mockRestore()
+      removed.mockRestore()
+    }
   })
 })
 
