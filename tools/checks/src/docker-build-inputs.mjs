@@ -56,6 +56,23 @@ export function dockerBuildTargets(dockerfileText) {
 }
 
 /**
+ * The names a manifest depends on through the `workspace:` protocol, across
+ * every field that pulls a package into the image.
+ * @param {Record<string, unknown>} manifest
+ * @returns {string[]}
+ */
+function workspaceDependenciesOf(manifest) {
+  const fields = /** @type {Record<string, Record<string, unknown>>} */ (
+    /** @type {unknown} */ (manifest)
+  )
+  return ['dependencies', 'devDependencies', 'peerDependencies'].flatMap((field) =>
+    Object.entries(fields[field] ?? {})
+      .filter(([, range]) => typeof range === 'string' && range.startsWith('workspace:'))
+      .map(([dep]) => dep),
+  )
+}
+
+/**
  * Workspace `dependencies` closure of the given package names.
  * @param {string[]} roots package names
  * @param {Map<string, { dir: string, manifest: Record<string, unknown> }>} byName
@@ -68,14 +85,7 @@ export function workspaceClosure(roots, byName) {
     const name = /** @type {string} */ (queue.pop())
     if (seen.has(name) || !byName.has(name)) continue
     seen.add(name)
-    const manifest = /** @type {Record<string, Record<string, string>>} */ (
-      /** @type {unknown} */ (byName.get(name)?.manifest ?? {})
-    )
-    for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
-      for (const [dep, range] of Object.entries(manifest[field] ?? {})) {
-        if (typeof range === 'string' && range.startsWith('workspace:')) queue.push(dep)
-      }
-    }
+    queue.push(...workspaceDependenciesOf(byName.get(name)?.manifest ?? {}))
   }
   return [...seen]
     .map((name) => byName.get(name)?.dir)
