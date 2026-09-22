@@ -51,7 +51,7 @@ describe('opening a transfer session from this window own URL', () => {
     // No session means the page has nothing to talk to and must say so,
     // rather than listening for a message it cannot attribute.
     expect(openTransferSession('')).toBeNull()
-    expect(openTransferSession('#from=not-an-origin&nonce=' + NONCE)).toBeNull()
+    expect(openTransferSession(`#from=not-an-origin&nonce=${NONCE}`)).toBeNull()
     expect(openTransferSession(`#from=${SENDER}`)).toBeNull()
   })
 
