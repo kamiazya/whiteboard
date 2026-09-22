@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
-import { createStoreLocalModule } from '../di/store-local.module.js'
+import { createSelfHostStoreLocalModule } from '../di/store-local.module.js'
 import { bindPasskeySessionOverHttp } from '../shared/test-utils/bind-passkey-session.js'
 import {
   claimIsolatedDataDir,
@@ -59,7 +59,7 @@ describe('startHttpServer route membership gate — app.ts admit wiring (S8 slic
     // `http-server.ws-membership-gate.test.ts`.
     const db = await getDb(dir)
     const documentIndex = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: dir })),
+      createContainer(createSelfHostStoreLocalModule(db, dir)),
     ).documentIndex
     await documentIndex.createWorkspace({ workspaceId: WS_GATED })
     await documentIndex.createWorkspace({ workspaceId: WS_OPEN })

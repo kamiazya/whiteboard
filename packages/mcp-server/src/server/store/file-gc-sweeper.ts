@@ -17,6 +17,8 @@ import { lstat, readdir, realpath } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
+import { workspaceDir, workspaceFilesDir, workspacesRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { validateWorkspaceId } from '../validators.js'
 import { isMissingFileError } from './corrupt-stored-data.js'
 import { listWorkspaces } from './document-store.js'
@@ -63,7 +65,10 @@ async function discoverFsWorkspaces(): Promise<string[]> {
   const dataDir = getDataDir()
   let entries: Dirent<string>[]
   try {
-    entries = await readdir(dataDir, { withFileTypes: true, encoding: 'utf8' })
+    entries = await readdir(workspacesRoot(dataDir, SELF_HOST_TENANT_ID), {
+      withFileTypes: true,
+      encoding: 'utf8',
+    })
   } catch (err) {
     if (isMissingFileError(err)) return []
     throw err
@@ -79,7 +84,7 @@ async function discoverFsWorkspaces(): Promise<string[]> {
   const result: string[] = []
   for (const entry of entries) {
     const name = entry.name
-    const entryPath = join(dataDir, name)
+    const entryPath = join(workspacesRoot(dataDir, SELF_HOST_TENANT_ID), name)
 
     // lstat BEFORE any further inspection: a symlinked top-level entry could
     // point outside the data dir entirely, and discovery feeds a destructive
@@ -119,15 +124,11 @@ async function discoverFsWorkspaces(): Promise<string[]> {
       continue
     }
 
-    // 'blobs' is a valid workspace id (validateWorkspaceId permits it) and
-    // document-store.ts also uses <dataDir>/blobs as the snapshot root
-    // (<dataDir>/blobs/<workspaceId>/document/...), so this directory serves
-    // double duty. The snapshot layout has no files/ child of its own, so
-    // this containment check alone already tells the two apart: only an
-    // upload-only workspace literally named 'blobs' — which the upload
-    // route would have written to <dataDir>/blobs/files — passes here.
+    // A workspace dir is one with a `files/` child. Since the tenant layout
+    // (`data-layout.ts`) puts workspaces under their own `workspaces/` root,
+    // a workspace named `blobs` is no longer confusable with the blob root.
     try {
-      const filesStat = await lstat(join(entryPath, 'files'))
+      const filesStat = await lstat(workspaceFilesDir(dataDir, SELF_HOST_TENANT_ID, name))
       if (!filesStat.isDirectory()) continue
     } catch {
       continue
@@ -208,7 +209,7 @@ async function checkSubpathContainment(
 // symlink), so a DB-listed workspace needs the same files/ subpath check.
 async function isDbWorkspaceDirSafe(workspaceId: string): Promise<boolean> {
   const dataDir = getDataDir()
-  const entryPath = join(dataDir, workspaceId)
+  const entryPath = workspaceDir(dataDir, SELF_HOST_TENANT_ID, workspaceId)
 
   let realDataDir: string
   try {
@@ -225,7 +226,7 @@ async function isDbWorkspaceDirSafe(workspaceId: string): Promise<boolean> {
   if (dirCheck === 'unsafe') return false
   if (dirCheck === 'missing') return true
 
-  const filesPath = join(entryPath, 'files')
+  const filesPath = workspaceFilesDir(dataDir, SELF_HOST_TENANT_ID, workspaceId)
   const filesCheck = await checkSubpathContainment(
     workspaceId,
     filesPath,

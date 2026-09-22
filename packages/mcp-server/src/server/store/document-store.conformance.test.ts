@@ -14,6 +14,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, vi } from 'vitest'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -44,7 +46,7 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
     clearCache()
     const index = new CacheCoherentDocumentIndex(
       cacheBackedWorkspaceDocs(),
-      new FsBlobStore(tempDir),
+      new FsBlobStore(blobsRoot(tempDir, SELF_HOST_TENANT_ID), tempDir),
       workspaceRegistry(),
     )
     return {

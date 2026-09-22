@@ -27,7 +27,7 @@ vi.mock('../../config.js', () => ({
 const { getDb } = await import('../../store/db/index.js')
 const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
-const { createStoreLocalModule } = await import('../../../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
 const { createDocumentMetadataRouter } = await import('./metadata.js')
 const { createWorkspaceDocumentRouter } = await import('./workspace-document.js')
@@ -38,7 +38,7 @@ const SEGMENT = 'design'
 async function seeded(): Promise<Awaited<ReturnType<typeof resolveServerDeps>>> {
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
-  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   await deps.documentIndex.createWorkspace({ workspaceId: CANONICAL, segment: SEGMENT })
   // Asserted, not assumed: every case below is about a SEGMENT resolving, and
   // a registry that quietly dropped it would make them pass by falling through

@@ -31,7 +31,7 @@ const { saveDocument } = await import('../../store/document-store.js')
 const { getDb } = await import('../../store/db/index.js')
 const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
-const { createStoreLocalModule } = await import('../../../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
 
 async function depsRecordingTeardown(): Promise<{
@@ -40,7 +40,7 @@ async function depsRecordingTeardown(): Promise<{
   cleaned: string[]
 }> {
   const db = await getDb(tmp.dir)
-  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   const entered: string[] = []
   const cleaned: string[] = []
   const real = deps.documentTeardown
@@ -85,7 +85,7 @@ async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   // `dbReady`; these create nothing first, so they have to migrate here.
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
-  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   if (bootstrapWorkspace) await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
   const created: string[] = []
   const listed: string[] = []
@@ -306,9 +306,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   }> {
     await prepareDataDir(tmp.dir)
     const db = await getDb(tmp.dir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
     const moved: string[] = []
     const inner2 = deps.documentIndex
     const index = spyIndex(inner2, {

@@ -85,7 +85,7 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
-const { createStoreLocalModule } = await import('../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../di/store-local.module.js')
 const { getDb } = await import('./store/db/index.js')
 const { clearCache } = await import('./store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store.js')
@@ -151,9 +151,7 @@ async function seededApp(): Promise<Seeded> {
   // (the module-level document store), as production composes it — the
   // default container is an in-memory store the legacy routes never see.
   const db = await getDb(dataDir)
-  const serverDeps = resolveServerDeps(
-    createContainer(createStoreLocalModule({ db, blobDir: dataDir })),
-  )
+  const serverDeps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, dataDir)))
   const app = createApp({ ...runtimeOptions(), serverDeps })
   const auth = { Authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }
   const create = async (body: unknown) => {

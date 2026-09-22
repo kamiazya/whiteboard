@@ -38,15 +38,23 @@ function emptyBucket(): StorageBucket {
 
 // Categorise a path under getDataDir(). Mirrors the layout the daemon actually
 // writes today:
-//   blobs/<workspaceId>/document/<id>.loro         — canvas Loro snapshots
-//   blobs/<workspaceId>/versions/<id>.png        — version thumbnails
-//   <workspaceId>/files/<id>.png                 — user-uploaded files
-//   <workspaceId>/exports/<file>.png             — export artifacts
+//   tenants/<t>/blobs/<workspaceId>/document/<id>.loro   — canvas Loro snapshots
+//   tenants/<t>/blobs/<workspaceId>/versions/<id>.png    — version thumbnails
+//   tenants/<t>/workspaces/<workspaceId>/files/<id>.png  — user-uploaded files
+//   tenants/<t>/workspaces/<workspaceId>/exports/<f>.png — export artifacts
 //   logs/                                        — daemon log files
 //   whiteboard.db / .db-wal / .db-shm            — metadata SQLite
 //   daemon.json                                   — port + token registry
 function categorize(relPath: string): StorageCategory {
-  const segments = relPath.split('/').filter(Boolean)
+  // A tenant's own bytes are under `tenants/<tenantId>/` (`data-layout.ts`),
+  // and what they are is the same question whichever tenant holds them, so
+  // the prefix is peeled and the rest classified as before. A workspace's
+  // files sit one level deeper than they used to, under `workspaces/`.
+  const all = relPath.split('/').filter(Boolean)
+  const segments =
+    all[0] === 'tenants'
+      ? all.slice(2).filter((part, index) => !(index === 0 && part === 'workspaces'))
+      : all
   const head = segments[0] ?? ''
   if (head === 'blobs') {
     // Version thumbnails live at blobs/<ws>/versions/{id}.png; canvas

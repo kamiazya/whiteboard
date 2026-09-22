@@ -35,7 +35,7 @@ vi.mock('../config.js', () => ({
 const { getDb } = await import('../store/db/index.js')
 const { prepareDataDir } = await import('../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../di/container.js')
-const { createStoreLocalModule } = await import('../../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
 const { registerDocumentTools } = await import('./document-tools.js')
 
 const SEGMENT = 'by-segment'
@@ -66,9 +66,7 @@ describe('a batch addressed by segment reaches the workspace behind it', () => {
   it('applies wb_workspace_edit ops when the handle is a segment, not an id', async () => {
     await prepareDataDir(tmp.dir)
     const db = await getDb(tmp.dir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
     await deps.documentIndex.createWorkspace({ workspaceId: WORKSPACE_ID, segment: SEGMENT })
     // The fixture is only useful if the two spellings differ — otherwise
     // "resolved by segment" is satisfied by resolving nothing at all.
