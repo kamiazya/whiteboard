@@ -93,6 +93,34 @@ describe('applyCanvasChange', () => {
     expect(applyCanvasChange(once, PATCH_A)).toEqual(once)
   })
 
+  it.each<SpatialProposedChange>([
+    {
+      id: 'add:n',
+      status: 'open',
+      op: 'node.add',
+      node: textNode({ id: 'n', x: 0, y: 90, width: 100, height: 40, text: 'N' }),
+    },
+    {
+      id: 'add:e',
+      status: 'open',
+      op: 'edge.add',
+      edge: { id: 'e2', from: { node: 'a' }, to: { node: 'b' } },
+    },
+    {
+      id: 'add:l',
+      status: 'open',
+      op: 'line.add',
+      line: {
+        id: 'l',
+        from: { kind: 'node', node: 'a' },
+        to: { kind: 'point', point: { x: 5, y: 80 } },
+      },
+    },
+  ])('adopts $op once however many times it is pressed', (change) => {
+    const once = applyCanvasChange(BOARD, change)
+    expect(applyCanvasChange(once, change)).toEqual(once)
+  })
+
   it('leaves the canvas alone when the change names nothing that is there', () => {
     const gone: SpatialCanvas = { nodes: [NODE_B], edges: [] }
     expect(applyCanvasChange(gone, PATCH_A)).toEqual(gone)

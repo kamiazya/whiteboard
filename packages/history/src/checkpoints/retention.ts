@@ -63,21 +63,17 @@ export function sandwichedAutoVersionIds(rows: readonly SandwichCandidate[]): st
     list.push(row)
     byBranch.set(row.branchName, list)
   }
-  const toDelete: string[] = []
-  for (const list of byBranch.values()) {
-    let firstManual = -1
-    let lastManual = -1
-    for (let i = 0; i < list.length; i++) {
-      if (!(list[i] as SandwichCandidate).auto) {
-        if (firstManual === -1) firstManual = i
-        lastManual = i
-      }
-    }
-    if (firstManual === -1 || lastManual === firstManual) continue
-    for (let i = firstManual + 1; i < lastManual; i++) {
-      const row = list[i] as SandwichCandidate
-      if (row.auto) toDelete.push(row.id)
-    }
-  }
-  return toDelete
+  return [...byBranch.values()].flatMap(sandwichedIn)
+}
+
+/** One branch's sandwiched automatic rows, in keeping order. */
+function sandwichedIn(list: readonly SandwichCandidate[]): string[] {
+  const manual = list.flatMap((row, i) => (row.auto ? [] : [i]))
+  const first = manual[0]
+  const last = manual.at(-1)
+  if (first === undefined || last === undefined) return []
+  return list
+    .slice(first + 1, last)
+    .filter((row) => row.auto)
+    .map((row) => row.id)
 }

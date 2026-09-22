@@ -159,6 +159,26 @@ export function fullTextSearch(
 }
 
 /**
+ * Where the query matches `lower`: the raw needle if it occurs verbatim,
+ * otherwise the earliest matching token.
+ */
+function firstMatch(
+  lower: string,
+  needle: string,
+  tokens: readonly string[],
+): { index: number; length: number } | undefined {
+  const verbatim = needle === '' ? -1 : lower.indexOf(needle)
+  if (verbatim !== -1) return { index: verbatim, length: needle.length }
+  let best: { index: number; length: number } | undefined
+  for (const token of tokens) {
+    const at = lower.indexOf(token)
+    if (at !== -1 && (best === undefined || at < best.index))
+      best = { index: at, length: token.length }
+  }
+  return best
+}
+
+/**
  * Excerpts, keyed on the RAW query string when it occurs verbatim (the
  * common case, and the most readable snippet); a query that only matches
  * token-wise falls back to the first matching token's position.
@@ -168,19 +188,8 @@ function contextsFor(doc: SearchableDocument, query: string): string[] {
   const tokens = tokenize(query)
   const contexts: string[] = []
   for (const text of doc.texts) {
-    const lower = text.toLowerCase()
-    let index = needle === '' ? -1 : lower.indexOf(needle)
-    let length = needle.length
-    if (index === -1) {
-      for (const token of tokens) {
-        const at = lower.indexOf(token)
-        if (at !== -1 && (index === -1 || at < index)) {
-          index = at
-          length = token.length
-        }
-      }
-    }
-    if (index !== -1) contexts.push(snippetAround(text, index, length))
+    const match = firstMatch(text.toLowerCase(), needle, tokens)
+    if (match !== undefined) contexts.push(snippetAround(text, match.index, match.length))
     if (contexts.length >= 3) break
   }
   return contexts
