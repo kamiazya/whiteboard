@@ -158,7 +158,6 @@
         "!apps/web/src/pages/ReplicaReadPage.tsx",
         "!packages/canvas-render/src/layout/comments.ts",
         "!packages/canvas-render/src/layout/contributed-router.ts",
-        "!packages/canvas-render/src/layout/compose-node.ts",
         "!packages/canvas-render/src/layout/edges/spatial-edges.ts",
         "!packages/canvas-render/src/layout/markdown-body.ts",
         "!packages/canvas-render/src/layout/nodes/mdast-blocks.ts",
