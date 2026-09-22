@@ -574,23 +574,17 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // 75 -> 76 (ADR-0041 S8 slice 2): every accepted decision carries the resolved grant for the upgrade's membership check.
   'packages/mcp-server/src/server/routes/ws-auth.ts#authorizeWsUpgrade': 76,
   'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 291,
-  'packages/mcp-server/src/server/security/credential-resolver.ts#createCredentialResolver': 92,
-  'packages/mcp-server/src/server/security/credential-resolver.ts#createCredentialResolver.resolve': 88,
   // 108 -> 117: `reopenToOriginTrust`, the membership gate's only exit
   // (user decision 2026-09-21). A factory gains a method; there is nothing
   // to extract, and splitting the store by which table a method touches
   // would put the `membersOnly` insert and its clear in different files.
   'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 117,
   'packages/mcp-server/src/server/security/oauth-authz-transactions.ts#createOAuthTransactionStore': 299,
-  'packages/mcp-server/src/server/security/oauth-jwt-validator.ts#createOAuthJwtValidator': 88,
-  'packages/mcp-server/src/server/security/oauth-jwt-validator.ts#createOAuthJwtValidator.validate': 63,
   'packages/mcp-server/src/server/security/oauth-resource-strategy.ts#createOAuthResourceServerAuthStrategy': 68,
   'packages/mcp-server/src/server/security/oauth-resource-strategy.ts#createOAuthResourceServerAuthStrategy.authorize': 62,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   'packages/mcp-server/src/server/security/pairing-grant-store.ts#createPairingGrantStore': 67,
   'packages/mcp-server/src/server/security/pairing-session.ts#createPairingTokenStore': 55,
-  'packages/mcp-server/src/server/security/server-mode-env-config.ts#parseServerModeEnvConfig': 90,
-  'packages/mcp-server/src/server/security/server-mode-exposure.ts#resolveServerModeExposure': 91,
   'packages/mcp-server/src/server/security/webauthn-credential-store.ts#createWebAuthnCredentialStore': 65,
   // New (ADR-0042 decision 1 addendum): the setter's write-side validation
   // and the boolean answer to the lazy-row hazard both belong beside

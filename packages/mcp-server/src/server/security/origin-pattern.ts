@@ -191,20 +191,14 @@ export function matchOrigin(
     return false
   }
 
-  for (const pattern of patterns) {
-    if (pattern.kind === 'exact') {
-      if (parsed.origin === pattern.origin) return true
-      continue
-    }
+  return patterns.some((pattern) => matchesPattern(parsed, pattern))
+}
 
-    if (parsed.protocol !== 'https:') continue
-    if (parsed.port !== pattern.port) continue
-
-    const labels = parsed.hostname.split('.')
-    if (labels.length < 2) continue
-    const requestSuffix = labels.slice(1).join('.')
-    if (requestSuffix === pattern.suffixHost) return true
-  }
-
-  return false
+/** One pattern against one parsed origin: exact, or an https suffix on a port. */
+function matchesPattern(parsed: URL, pattern: OriginPattern): boolean {
+  if (pattern.kind === 'exact') return parsed.origin === pattern.origin
+  if (parsed.protocol !== 'https:' || parsed.port !== pattern.port) return false
+  const labels = parsed.hostname.split('.')
+  if (labels.length < 2) return false
+  return labels.slice(1).join('.') === pattern.suffixHost
 }
