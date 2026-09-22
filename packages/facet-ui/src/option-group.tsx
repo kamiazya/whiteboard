@@ -230,6 +230,56 @@ export interface FacetOptionProps {
   readonly layout?: 'chips' | 'cards' | 'grid'
 }
 
+/**
+ * The three cell shapes, each with its selected form. A table rather than
+ * nested ternaries: the shape and the selection are independent questions,
+ * and reading them as one is what made this the file's knottiest function.
+ */
+const CELL_STYLE: Readonly<
+  Record<FacetOptionVariant, { readonly on: CSSProperties; readonly off: CSSProperties }>
+> = {
+  chips: { on: OPTION_SELECTED, off: OPTION },
+  cards: { on: CARD_SELECTED, off: CARD },
+  grid: { on: GRID_OPTION_SELECTED, off: GRID_OPTION },
+}
+
+const GLYPH_STYLE: Readonly<Record<FacetOptionVariant, CSSProperties>> = {
+  chips: GLYPH,
+  cards: CARD_GLYPH,
+  grid: GRID_GLYPH,
+}
+
+type FacetOptionVariant = 'chips' | 'cards' | 'grid'
+
+/** A menu draws its own chrome, so its item is a chip whatever the row asks for. */
+function MenuOption({
+  label,
+  selected,
+  onSelect,
+  glyph,
+  body,
+}: {
+  readonly label: string
+  readonly selected: boolean
+  readonly onSelect: () => void
+  readonly glyph: ReactNode
+  readonly body: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={selected}
+      aria-label={label}
+      title={glyph === undefined ? undefined : label}
+      onClick={onSelect}
+      style={selected ? OPTION_SELECTED : OPTION}
+    >
+      {body}
+    </button>
+  )
+}
+
 export function FacetOption({
   name,
   label,
@@ -240,49 +290,29 @@ export function FacetOption({
   layout = 'chips',
 }: FacetOptionProps) {
   const id = useId()
-  const card = layout === 'cards' && shell !== 'menu'
-  const grid = layout === 'grid' && shell !== 'menu'
+  const variant: FacetOptionVariant = shell === 'menu' ? 'chips' : layout
+  const card = variant === 'cards'
   const body =
     glyph === undefined ? (
       label
     ) : (
-      <span aria-hidden="true" style={card ? CARD_GLYPH : grid ? GRID_GLYPH : GLYPH}>
+      <span aria-hidden="true" style={GLYPH_STYLE[variant]}>
         {glyph}
       </span>
     )
-  const cellStyle = grid
-    ? selected
-      ? GRID_OPTION_SELECTED
-      : GRID_OPTION
-    : card
-      ? selected
-        ? CARD_SELECTED
-        : CARD
-      : selected
-        ? OPTION_SELECTED
-        : OPTION
   if (shell === 'menu') {
     return (
-      <button
-        type="button"
-        role="menuitemradio"
-        aria-checked={selected}
-        aria-label={label}
-        title={glyph === undefined ? undefined : label}
-        onClick={onSelect}
-        style={selected ? OPTION_SELECTED : OPTION}
-      >
-        {body}
-      </button>
+      <MenuOption label={label} selected={selected} onSelect={onSelect} glyph={glyph} body={body} />
     )
   }
+  const cell = CELL_STYLE[variant]
   return (
     <label
       htmlFor={id}
       // The label carries the focus ring because the input it labels is
       // clipped to a pixel — without this a keyboard user arrowing through
       // the group sees nothing move.
-      style={cellStyle}
+      style={selected ? cell.on : cell.off}
       // A card prints its word, so a tooltip repeating it is noise.
       title={glyph === undefined || card ? undefined : label}
       onFocus={(event) => {
@@ -322,7 +352,7 @@ export interface FacetOptionGroupProps {
   readonly layout?: 'chips' | 'cards' | 'grid'
 }
 
-const GROUP_STYLE: Readonly<Record<'chips' | 'cards' | 'grid', CSSProperties>> = {
+const GROUP_STYLE: Readonly<Record<FacetOptionVariant, CSSProperties>> = {
   chips: GROUP,
   cards: CARD_GROUP,
   grid: GRID_GROUP,

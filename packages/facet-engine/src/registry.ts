@@ -191,6 +191,31 @@ export function defineWorkspaceStencilPlugin(
  * off whichever check it found inconvenient, and the reservation is the only
  * rule that is about WHO is defining rather than about what.
  */
+/**
+ * Each asset's own SHAPE, by the schema that owns it. What a stencil's facet
+ * payloads MEAN belongs to the plugin that registered those facets, which may
+ * not be this one and is not knowable until every plugin is present — so that
+ * half runs in `createFacetRegistry`.
+ */
+function assertAssetShapes(plugin: FacetPlugin): void {
+  const kinds = [
+    { kind: 'theme', entries: plugin.assets?.themes, schema: themeTokensSchema },
+    { kind: 'icon', entries: plugin.assets?.icons, schema: iconAssetSchema },
+    { kind: 'stencil', entries: plugin.assets?.stencils, schema: stencilAssetSchema },
+  ] as const
+  for (const { kind, entries, schema } of kinds) {
+    for (const [name, asset] of Object.entries(entries ?? {})) {
+      assertAssetName(plugin.id, name)
+      const result = schema.safeParse(asset)
+      if (!result.success) {
+        throw new Error(
+          `plugin "${plugin.id}" ${kind} asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
+        )
+      }
+    }
+  }
+}
+
 function validatePlugin(plugin: FacetPlugin): FacetPlugin {
   if (!SEGMENT_PATTERN.test(plugin.id)) {
     throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
@@ -205,37 +230,7 @@ function validatePlugin(plugin: FacetPlugin): FacetPlugin {
     }
     seen.add(facet.name)
   }
-  for (const [name, tokens] of Object.entries(plugin.assets?.themes ?? {})) {
-    assertAssetName(plugin.id, name)
-    const result = themeTokensSchema.safeParse(tokens)
-    if (!result.success) {
-      throw new Error(
-        `plugin "${plugin.id}" theme asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
-      )
-    }
-  }
-  for (const [name, icon] of Object.entries(plugin.assets?.icons ?? {})) {
-    assertAssetName(plugin.id, name)
-    const result = iconAssetSchema.safeParse(icon)
-    if (!result.success) {
-      throw new Error(
-        `plugin "${plugin.id}" icon asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
-      )
-    }
-  }
-  // Only the stencil's own SHAPE is checked here. What each of its facet
-  // payloads means belongs to the plugin that registered that facet, which
-  // may not be this one and is not knowable until every plugin is present —
-  // so that half runs in `createFacetRegistry`.
-  for (const [name, stencil] of Object.entries(plugin.assets?.stencils ?? {})) {
-    assertAssetName(plugin.id, name)
-    const result = stencilAssetSchema.safeParse(stencil)
-    if (!result.success) {
-      throw new Error(
-        `plugin "${plugin.id}" stencil asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
-      )
-    }
-  }
+  assertAssetShapes(plugin)
   return plugin
 }
 
@@ -398,23 +393,26 @@ function assetLabel(id: string, declared: string | undefined): string {
   return bare.charAt(0).toUpperCase() + bare.slice(1)
 }
 
-export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegistry {
+/** The plugins by id; a duplicate id is a build-time error, not a silent overwrite. */
+function indexPlugins(plugins: readonly FacetPlugin[]): Map<string, FacetPlugin> {
   const byId = new Map<string, FacetPlugin>()
   for (const plugin of plugins) {
-    if (byId.has(plugin.id)) {
-      throw new Error(`duplicate plugin id "${plugin.id}"`)
-    }
+    if (byId.has(plugin.id)) throw new Error(`duplicate plugin id "${plugin.id}"`)
     byId.set(plugin.id, plugin)
   }
+  return byId
+}
 
-  const definitionOf = (namespace: string, name: string): FacetDefinition | undefined =>
-    byId.get(namespace)?.facets.find((facet) => facet.name === name)
-
-  const currentKey = (namespace: string, definition: FacetDefinition): string =>
-    `${namespace}.${definition.name}/${definition.version}`
-
-  // Composed once: the registry is immutable data, and every write and
-  // every render asks the same question of the same tables.
+/**
+ * Every plugin's assets under their qualified ids, composed once: the
+ * registry is immutable data, and every write and every render asks the same
+ * question of the same tables.
+ */
+function collectAssets(plugins: readonly FacetPlugin[]): {
+  themes: Map<string, ThemeTokens>
+  icons: Map<string, IconAsset>
+  stencils: Map<string, StencilAsset>
+} {
   const themes = new Map<string, ThemeTokens>()
   const icons = new Map<string, IconAsset>()
   const stencils = new Map<string, StencilAsset>()
@@ -431,14 +429,21 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
       stencils.set(`${plugin.id}.${name}`, stencilAssetSchema.parse(stencil))
     }
   }
-  // The half `definePlugin` could not do: a stencil's facet payloads judged
-  // by the plugins that own those facets, now that every plugin is present.
-  // A specimen picker's MARK, checked here for the reason the stencil check
-  // below is here and not at `defineFacet`: a facet is defined before any
-  // registry exists, so the facet cannot know what icons a deployment holds.
-  // An unregistered id makes `iconAsset` answer undefined and every card's
-  // glyph is dropped — a row of empty boxes, which the specimen mechanism's
-  // own contract calls worse than a plugin that does not load.
+  return { themes, icons, stencils }
+}
+
+/**
+ * The half `definePlugin` could not do: a specimen picker's MARK, checked
+ * once every plugin is present. A facet is defined before any registry
+ * exists, so it cannot know what icons a deployment holds. An unregistered
+ * id makes `iconAsset` answer undefined and every card's glyph is dropped —
+ * a row of empty boxes, which the specimen mechanism's own contract calls
+ * worse than a plugin that does not load.
+ */
+function assertSpecimenIconsRegistered(
+  plugins: readonly FacetPlugin[],
+  icons: ReadonlyMap<string, IconAsset>,
+): void {
   for (const plugin of plugins) {
     for (const definition of plugin.facets) {
       const specimen = definition.editor?.picker?.specimenIcon
@@ -449,31 +454,90 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
       )
     }
   }
+}
 
-  // A stencil is a vocabulary shipped once and applied to many nodes, so an
-  // invalid payload here is not one bad write — it is every write that names
-  // this stencil, in a deployment, refused one at a time with the author
-  // nowhere near. Loud at build is the only place it is cheap.
+/**
+ * A stencil is a vocabulary shipped once and applied to many nodes, so an
+ * invalid payload here is not one bad write — it is every write that names
+ * this stencil, in a deployment, refused one at a time with the author
+ * nowhere near. Loud at build is the only place it is cheap.
+ */
+function assertStencilPayloadsValid(
+  stencils: ReadonlyMap<string, StencilAsset>,
+  definitionOf: (namespace: string, name: string) => FacetDefinition | undefined,
+  currentKey: (namespace: string, definition: FacetDefinition) => string,
+): void {
   for (const [id, stencil] of stencils) {
     for (const [key, payload] of Object.entries(stencil.facets)) {
-      const parsed = parseKey(key)
-      const definition = parsed === null ? undefined : definitionOf(parsed.namespace, parsed.name)
-      if (parsed === null || definition === undefined) {
-        throw new Error(`stencil asset "${id}" names facet "${key}", which no plugin registered`)
-      }
-      if (parsed.version !== definition.version) {
-        throw new Error(
-          `stencil asset "${id}" names facet "${key}", which is not the current version — use "${currentKey(parsed.namespace, definition)}"`,
-        )
-      }
-      const result = definition.schema.safeParse(payload)
-      if (!result.success) {
-        throw new Error(
-          `stencil asset "${id}" payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
-        )
-      }
+      assertStencilFacet(id, key, payload, definitionOf, currentKey)
     }
   }
+}
+
+function assertStencilFacet(
+  id: string,
+  key: string,
+  payload: unknown,
+  definitionOf: (namespace: string, name: string) => FacetDefinition | undefined,
+  currentKey: (namespace: string, definition: FacetDefinition) => string,
+): void {
+  const parsed = parseKey(key)
+  const definition = parsed === null ? undefined : definitionOf(parsed.namespace, parsed.name)
+  if (parsed === null || definition === undefined) {
+    throw new Error(`stencil asset "${id}" names facet "${key}", which no plugin registered`)
+  }
+  if (parsed.version !== definition.version) {
+    throw new Error(
+      `stencil asset "${id}" names facet "${key}", which is not the current version — use "${currentKey(parsed.namespace, definition)}"`,
+    )
+  }
+  const result = definition.schema.safeParse(payload)
+  if (!result.success) {
+    throw new Error(
+      `stencil asset "${id}" payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
+    )
+  }
+}
+
+/**
+ * A payload stored under an OLDER version: parsed with the retained schema,
+ * then walked one version at a time. Any missing entry or failed parse drops
+ * it — the same drop-not-fail rule every storage read follows.
+ */
+function migrateForward(
+  definition: FacetDefinition,
+  storedKey: string,
+  stored: number,
+  current: number,
+  payload: unknown,
+): FacetResolution {
+  const entry = definition.compat?.[storedKey]
+  if (entry === undefined) return { kind: 'dropped' }
+  const parsedOld = entry.schema.safeParse(payload)
+  if (!parsedOld.success) return { kind: 'dropped' }
+
+  let value: unknown = parsedOld.data
+  for (let step = stored; step < current; step += 1) {
+    const stepEntry = definition.compat?.[`v${step}`]
+    if (stepEntry === undefined) return { kind: 'dropped' }
+    value = stepEntry.migrate(value)
+  }
+  const result = definition.schema.safeParse(value)
+  return result.success ? { kind: 'resolved', value: result.data } : { kind: 'dropped' }
+}
+
+export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegistry {
+  const byId = indexPlugins(plugins)
+
+  const definitionOf = (namespace: string, name: string): FacetDefinition | undefined =>
+    byId.get(namespace)?.facets.find((facet) => facet.name === name)
+
+  const currentKey = (namespace: string, definition: FacetDefinition): string =>
+    `${namespace}.${definition.name}/${definition.version}`
+
+  const { themes, icons, stencils } = collectAssets(plugins)
+  assertSpecimenIconsRegistered(plugins, icons)
+  assertStencilPayloadsValid(stencils, definitionOf, currentKey)
   const tableOf = (kind: AssetKind): ReadonlyMap<string, unknown> =>
     kind === 'themes' ? themes : kind === 'icons' ? icons : stencils
 
@@ -669,22 +733,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
         return result.success ? { kind: 'resolved', value: result.data } : { kind: 'dropped' }
       }
 
-      // Older version: parse with the retained schema, then walk the chain
-      // one version at a time. Any missing entry or failed parse drops the
-      // payload — the same drop-not-fail rule every storage read follows.
-      const entry = definition.compat?.[parsed.version]
-      if (entry === undefined) return { kind: 'dropped' }
-      const parsedOld = entry.schema.safeParse(payload)
-      if (!parsedOld.success) return { kind: 'dropped' }
-
-      let value: unknown = parsedOld.data
-      for (let step = stored; step < current; step += 1) {
-        const stepEntry = definition.compat?.[`v${step}`]
-        if (stepEntry === undefined) return { kind: 'dropped' }
-        value = stepEntry.migrate(value)
-      }
-      const result = definition.schema.safeParse(value)
-      return result.success ? { kind: 'resolved', value: result.data } : { kind: 'dropped' }
+      return migrateForward(definition, parsed.version, stored, current, payload)
     },
   }
 }

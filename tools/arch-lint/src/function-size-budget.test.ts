@@ -484,7 +484,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/daemon-client/src/replica-session-key.ts#sessionKey': 57,
   'packages/daemon-client/src/test-utils/document-backend-contract.ts#documentBackendContract': 102,
   'packages/daemon-client/src/test-utils/sse-stream-source-contract.ts#sseStreamSourceContract': 185,
-  'packages/facet-engine/src/form.ts#deriveFacetForm': 52,
   'packages/facet-engine/src/form.ts#normalizePicker': 53,
   'packages/facet-engine/src/registry.ts#createFacetRegistry': 290,
   'packages/facet-ui/src/catalog-picker.tsx#CatalogPicker': 228,
