@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -57,12 +57,20 @@ describe('the blob store under a tenant', () => {
   })
 })
 
+describe('a tenant own files, beside its blobs', () => {
+  it('keeps one tenant origin-keyed files out of another', () => {
+    expect(tenantRoot(dataDir, SELF)).not.toBe(tenantRoot(dataDir, OTHER))
+  })
+})
+
 describe('moving a data directory written before tenants existed', () => {
   async function seedLegacy(): Promise<void> {
     await mkdir(join(dataDir, 'blobs', 'ab'), { recursive: true })
     await writeFile(join(dataDir, 'blobs', 'ab', 'cdef'), 'blob-bytes')
     await mkdir(join(dataDir, 'ws-1', 'files'), { recursive: true })
     await writeFile(join(dataDir, 'ws-1', 'files', 'a.png'), 'file-bytes')
+    await writeFile(join(dataDir, 'pairing-grants.json'), '{"grants":[]}')
+    await writeFile(join(dataDir, 'webauthn-credentials.json'), '{"credentials":[]}')
     // Keeper-wide neighbours that must NOT move.
     await writeFile(join(dataDir, 'whiteboard.db'), 'db')
     await writeFile(join(dataDir, 'daemon-identity.json'), '{}')
@@ -71,8 +79,19 @@ describe('moving a data directory written before tenants existed', () => {
 
   it('moves blobs and workspace files under the tenant, and leaves the keeper own files', async () => {
     await seedLegacy()
-    const moved = await moveLegacyDataDirUnderTenant(dataDir, SELF)
-    expect(moved).toEqual({ blobs: true, workspaces: ['ws-1'] })
+    const moved = await moveLegacyDataDirUnderTenant(dataDir, SELF, {
+      files: ['pairing-grants.json', 'webauthn-credentials.json'],
+    })
+    expect(moved).toEqual({
+      blobs: true,
+      workspaces: ['ws-1'],
+      files: ['pairing-grants.json', 'webauthn-credentials.json'],
+    })
+    // The origin-keyed stores travel with the tenant: a grant one tenant gave
+    // must not answer for another (user decision 2026-09-23).
+    expect(await readFile(join(tenantRoot(dataDir, SELF), 'pairing-grants.json'), 'utf8')).toBe(
+      '{"grants":[]}',
+    )
     expect(await readdir(join(dataDir, 'tenants', SELF, 'blobs', 'ab'))).toEqual(['cdef'])
     expect(await readdir(workspaceFilesDir(dataDir, SELF, 'ws-1'))).toEqual(['a.png'])
     expect((await readdir(dataDir)).sort()).toEqual([
@@ -85,11 +104,10 @@ describe('moving a data directory written before tenants existed', () => {
 
   it('is a no-op the second time, so a restart does not move a live tenant back', async () => {
     await seedLegacy()
-    await moveLegacyDataDirUnderTenant(dataDir, SELF)
-    expect(await moveLegacyDataDirUnderTenant(dataDir, SELF)).toEqual({
-      blobs: false,
-      workspaces: [],
-    })
+    await moveLegacyDataDirUnderTenant(dataDir, SELF, { files: ['pairing-grants.json'] })
+    expect(
+      await moveLegacyDataDirUnderTenant(dataDir, SELF, { files: ['pairing-grants.json'] }),
+    ).toEqual({ blobs: false, workspaces: [], files: [] })
     expect(await readdir(join(dataDir, 'tenants', SELF, 'blobs', 'ab'))).toEqual(['cdef'])
   })
 
@@ -97,7 +115,7 @@ describe('moving a data directory written before tenants existed', () => {
     await seedLegacy()
     await mkdir(workspaceFilesDir(dataDir, SELF, 'ws-1'), { recursive: true })
     await writeFile(join(workspaceFilesDir(dataDir, SELF, 'ws-1'), 'kept.png'), 'newer')
-    const moved = await moveLegacyDataDirUnderTenant(dataDir, SELF)
+    const moved = await moveLegacyDataDirUnderTenant(dataDir, SELF, { files: [] })
     expect(moved.workspaces).toEqual([])
     // The tenant's own copy stands, and the legacy directory is still there to
     // look at rather than merged blindly.

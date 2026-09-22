@@ -40,9 +40,8 @@ import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
-import { createPairingGrantStore } from './security/pairing-grant-store.js'
+import { createSelfHostOriginTrustStores } from './security/origin-trust-stores.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
-import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import { membershipRefusal, workspaceAccess } from './security/workspace-access.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
@@ -324,16 +323,16 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // but two call sites is two places for one to be forgotten — and a
   // forgotten one does not fail loudly, it refuses every macaroon.
   const macaroonRootKey = createMacaroonRootKey({ dataDir: getDataDir() }).rootKey
-  const pairingGrants = createPairingGrantStore(getDataDir())
+  const originTrust = createSelfHostOriginTrustStores(getDataDir())
   const pairing = {
-    grants: pairingGrants,
+    grants: originTrust.grants,
     codes: createPairingCodeStore(),
     tokens: createPairingTokenStore(),
-    credentials: createWebAuthnCredentialStore(getDataDir()),
+    credentials: originTrust.credentials,
   }
   const envWebOrigins = options.allowedWebOrigins ?? []
   const allowedWebOrigins = () => {
-    const grantOrigins = pairingGrants.origins()
+    const grantOrigins = originTrust.grants.origins()
     if (grantOrigins.length === 0 && Array.isArray(envWebOrigins)) return envWebOrigins
     return [...envWebOrigins, ...grantOrigins]
   }
