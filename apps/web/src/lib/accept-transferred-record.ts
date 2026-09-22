@@ -51,9 +51,12 @@ export type AcceptTransferResult =
   | { ok: false; reason: string }
 
 export interface AcceptTransferOptions {
+  /**
+   * An AUTHORIZED fetch for this keeper — built by `createDaemonFetch`, the
+   * one place this app attaches a daemon credential (daemon-auth-seam.test.ts).
+   * Taking the token and setting the header here would be a second seam.
+   */
   fetch: typeof globalThis.fetch
-  /** The keeper's own token, R3-injected into the page it served. */
-  daemonToken: string
   /** The workspace here to merge INTO — a promote merges into an existing one. */
   workspaceId: string
   snapshot: Uint8Array
@@ -75,7 +78,7 @@ export async function acceptTransferredRecord(
 }
 
 async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTransferResult> {
-  const { fetch, daemonToken, workspaceId, snapshot } = options
+  const { fetch, workspaceId, snapshot } = options
   const origin = options.origin ?? globalThis.location.origin
 
   const arriving = readArrivingRecord(snapshot)
@@ -89,7 +92,7 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
 
   const res = await fetch(`/api/w/${encodeURIComponent(workspaceId)}/workspace-document/promote`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${daemonToken}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       snapshot: bytesToBase64Url(snapshot),
       attestation: evidence.attestation,

@@ -8,10 +8,11 @@
  * rendering anything. The gate it defers to is `lib/receive-transfer.ts`,
  * where the order of the origin, shape and nonce checks is the design.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { acceptTransferredRecord } from '../lib/accept-transferred-record.js'
 import { CROSS_ORIGIN_TRANSFER_PROTOCOL } from '../lib/cross-origin-transfer-protocol.js'
 import { listWorkspaces } from '../lib/daemon-api-client.js'
+import { createDaemonFetch } from '../lib/daemon-auth-fetch.js'
 import type { PasskeyCredentials } from '../lib/passkey-attestation.js'
 import {
   type OfferedTransfer,
@@ -63,9 +64,10 @@ export function useTransferHandshake({
   const [stage, setStage] = useState<TransferStage>(() =>
     openTransferSession(hash) === null ? { kind: 'not-a-transfer' } : { kind: 'waiting' },
   )
+  const keeperFetch = useKeeperFetch(daemonToken, fetchFn)
   const { targets, targetId, setTargetId } = useKeeperWorkspaceTargets({
-    enabled: session !== null && daemonToken !== undefined,
-    fetchFn,
+    enabled: session !== null,
+    keeperFetch,
   })
   // Held in a ref as well as in state: the accept handler must act on the
   // bytes it was given, and a re-render between the offer and the press must
@@ -103,11 +105,10 @@ export function useTransferHandshake({
 
   const accept = useCallback(async () => {
     const offer = offered.current
-    if (offer === null || session === null || daemonToken === undefined || targetId === '') return
+    if (offer === null || session === null || keeperFetch === null || targetId === '') return
     setStage({ kind: 'accepting' })
     const outcome = await acceptTransferredRecord({
-      fetch: fetchFn,
-      daemonToken,
+      fetch: keeperFetch,
       workspaceId: targetId,
       snapshot: offer.snapshot,
       ...(credentials === undefined ? {} : { credentials }),
@@ -133,7 +134,7 @@ export function useTransferHandshake({
         imagesMissing: outcome.imagesMissing,
       })
     }
-  }, [session, daemonToken, targetId, fetchFn, opener, credentials])
+  }, [session, keeperFetch, targetId, opener, credentials])
 
   return { session, stage, targets, targetId, setTargetId, accept }
 }
@@ -147,10 +148,11 @@ export function useTransferHandshake({
  */
 function useKeeperWorkspaceTargets({
   enabled,
-  fetchFn,
+  keeperFetch,
 }: {
   enabled: boolean
-  fetchFn: typeof globalThis.fetch
+  /** Null when this page is not served by a keeper: there is nothing to list. */
+  keeperFetch: typeof globalThis.fetch | null
 }): {
   targets: { workspaceId: string; displayName?: string }[]
   targetId: string
@@ -159,8 +161,8 @@ function useKeeperWorkspaceTargets({
   const [targets, setTargets] = useState<{ workspaceId: string; displayName?: string }[]>([])
   const [targetId, setTargetId] = useState('')
   useEffect(() => {
-    if (!enabled) return
-    void listWorkspaces(fetchFn, '')
+    if (!enabled || keeperFetch === null) return
+    void listWorkspaces(keeperFetch, '')
       .then((response) => {
         setTargets(response.workspaces)
         setTargetId((current) => current || (response.workspaces[0]?.workspaceId ?? ''))
@@ -168,6 +170,25 @@ function useKeeperWorkspaceTargets({
       // A keeper that cannot list its own workspaces cannot accept into one;
       // the accept control stays disabled and the page says why.
       .catch(() => setTargets([]))
-  }, [enabled, fetchFn])
+  }, [enabled, keeperFetch])
   return { targets, targetId, setTargetId }
+}
+
+/**
+ * Every request this page makes is to its OWN keeper, and the credential
+ * reaches it through the one seam that attaches it (`createDaemonFetch`,
+ * daemon-auth-seam.test.ts) — never a header set here. Null when the page is
+ * not served by a keeper: there is then nothing it may ask.
+ */
+function useKeeperFetch(
+  daemonToken: string | undefined,
+  fetchFn: typeof globalThis.fetch,
+): typeof globalThis.fetch | null {
+  return useMemo(
+    () =>
+      daemonToken === undefined
+        ? null
+        : createDaemonFetch(globalThis.location.origin, daemonToken, fetchFn),
+    [daemonToken, fetchFn],
+  )
 }
