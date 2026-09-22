@@ -67,29 +67,8 @@ export function contributedRoute(
 ): ResolvedEdgeNode | undefined {
   const router = routerFor(canvas, edge, resolution)
   if (router === undefined) return undefined
-  const from = canvas.nodes.find((node) => node.id === endNode(edge.from))
-  const to = canvas.nodes.find((node) => node.id === endNode(edge.to))
-  if (from === undefined || to === undefined) return undefined
-  const request: EdgeRouteRequest = {
-    edge,
-    from: boxOf(from),
-    to: boxOf(to),
-    obstacles: canvas.nodes
-      .filter((node) => node.id !== endNode(edge.from) && node.id !== endNode(edge.to))
-      .map(boxOf),
-    // Passed only when BOTH sides resolved, so the contract can promise a
-    // router that anchors means sides. A half-answer would make every router
-    // repeat the same "and if the side is missing" branch.
-    anchors:
-      anchors?.fromSide === undefined || anchors.toSide === undefined
-        ? undefined
-        : {
-            fromSide: anchors.fromSide,
-            toSide: anchors.toSide,
-            ...(anchors.from === undefined ? {} : { from: anchors.from }),
-            ...(anchors.to === undefined ? {} : { to: anchors.to }),
-          },
-  }
+  const request = routeRequest(canvas, edge, anchors)
+  if (request === undefined) return undefined
   const route = router(request)
   if (route === null || route.path.length < 2) return undefined
   return {
@@ -101,6 +80,41 @@ export function contributedRoute(
     fromEnd: edge.from.end ?? 'none',
     toEnd: edge.to.end ?? 'arrow',
     ...(route.rounded === true ? { rounded: true as const } : {}),
+  }
+}
+
+/** What a router is handed: the two end boxes, every other box, and the sides. */
+function routeRequest(
+  canvas: SpatialCanvas,
+  edge: RoutableElement,
+  anchors: EdgeAnchorPair | undefined,
+): EdgeRouteRequest | undefined {
+  const from = canvas.nodes.find((node) => node.id === endNode(edge.from))
+  const to = canvas.nodes.find((node) => node.id === endNode(edge.to))
+  if (from === undefined || to === undefined) return undefined
+  return {
+    edge,
+    from: boxOf(from),
+    to: boxOf(to),
+    obstacles: canvas.nodes
+      .filter((node) => node.id !== endNode(edge.from) && node.id !== endNode(edge.to))
+      .map(boxOf),
+    anchors: bothSides(anchors),
+  }
+}
+
+/**
+ * The anchors, only when BOTH sides resolved, so the contract can promise a
+ * router that anchors means sides. A half-answer would make every router
+ * repeat the same "and if the side is missing" branch.
+ */
+function bothSides(anchors: EdgeAnchorPair | undefined): EdgeRouteRequest['anchors'] {
+  if (anchors?.fromSide === undefined || anchors.toSide === undefined) return undefined
+  return {
+    fromSide: anchors.fromSide,
+    toSide: anchors.toSide,
+    ...(anchors.from === undefined ? {} : { from: anchors.from }),
+    ...(anchors.to === undefined ? {} : { to: anchors.to }),
   }
 }
 

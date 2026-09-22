@@ -14,7 +14,7 @@
 // untouched. y carries no such wrapper transform anywhere in the backend, so
 // it is always shifted unconditionally, at every depth.
 //
-// This mirrors `scene-bounds.ts`'s `subtreeOffsetX`/`childrenOf` walk
+// This mirrors `scene-bounds.ts`'s `subtreeOffsetX`/`sceneChildrenOf` walk
 // exactly, because both functions must agree on which nodes are
 // x-transform boundaries — see the tripwire test in translate-scene.test.ts.
 import type {

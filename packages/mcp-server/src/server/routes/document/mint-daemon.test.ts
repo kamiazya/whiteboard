@@ -22,16 +22,14 @@ vi.mock('../../config.js', () => ({
 const { getDb } = await import('../../store/db/index.js')
 const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
-const { createStoreLocalModule } = await import('../../../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { wbDocumentCreate } = await import('@kamiazya/whiteboard-server-core')
 
 describe('the daemon mints and then resolves its own segment', () => {
   it('files the posted handle as a segment the registry can resolve back', async () => {
     await prepareDataDir(tmp.dir)
     const db = await getDb(tmp.dir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
 
     const created = await wbDocumentCreate(deps, {
       workspaceId: 'e2e',
@@ -60,9 +58,7 @@ describe('two concurrent creates into the same new handle converge', () => {
   it('agrees on one workspace instead of one of them losing the segment race', async () => {
     await prepareDataDir(tmp.dir)
     const db = await getDb(tmp.dir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
 
     // The mint reads `resolveWorkspace` and then writes, and the write lock
     // is keyed by the id it just GENERATED — so two callers bootstrapping

@@ -2,9 +2,11 @@
 // the six preset swatches in a colour picker must show the strokes the theme
 // will actually paint, or the picker lies about every pick (ADR-0030).
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import type { RenderContribution } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '../theme/spatial-palette.js'
-import { resolveCanvasPalette, resolveCanvasThemeFontFamily } from './spatial-canvas.js'
+import { resolveCanvasPalette, resolveCanvasThemeFontFamily } from './canvas-theme.js'
 
 const canvasIn = (theme: string | undefined): SpatialCanvas => ({
   nodes: [],
@@ -42,6 +44,22 @@ describe('resolveCanvasPalette', () => {
 
   it('a theme nothing registered falls back to the bundled palette, like the layout does', () => {
     expect(resolveCanvasPalette(canvasIn('nobody.home'), 'light')).toBe(SPATIAL_LIGHT_PALETTE)
+  })
+
+  it('when two contributions each read a theme off the canvas, the first one listed wins', () => {
+    const reads = (namespace: string, id: string): RenderContribution => ({
+      namespace,
+      readTheme: () => id,
+    })
+    const contributions = [visualRenderContribution, reads('other', 'visual.neon')]
+    expect(resolveCanvasPalette(canvasIn('visual.sketch'), 'dark', { contributions }).surface).toBe(
+      resolveCanvasPalette(canvasIn('visual.sketch'), 'dark').surface,
+    )
+    expect(
+      resolveCanvasPalette(canvasIn(undefined), 'dark', {
+        contributions: [reads('first', 'visual.neon'), visualRenderContribution],
+      }).surface,
+    ).toBe('#030711')
   })
 })
 

@@ -9,7 +9,7 @@ import { createStoreLocalModule } from './store-local.module.js'
 describe('createStoreLocalModule', () => {
   it('binds both store tokens to real implementations', () => {
     const fakeDb = {} as Parameters<typeof createStoreLocalModule>[0]['db']
-    const mod = createStoreLocalModule({ db: fakeDb, blobDir: '/tmp/blobs' })
+    const mod = createStoreLocalModule({ db: fakeDb, dataDir: '/tmp/data', tenantId: 'self-host' })
 
     const container = new Container()
     container.load(mod)
@@ -23,7 +23,7 @@ describe('createStoreLocalModule', () => {
 
   it('returns singletons for repeated gets', () => {
     const fakeDb = {} as Parameters<typeof createStoreLocalModule>[0]['db']
-    const mod = createStoreLocalModule({ db: fakeDb, blobDir: '/tmp/blobs' })
+    const mod = createStoreLocalModule({ db: fakeDb, dataDir: '/tmp/data', tenantId: 'self-host' })
 
     const container = new Container()
     container.load(mod)

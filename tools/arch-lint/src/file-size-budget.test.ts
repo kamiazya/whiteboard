@@ -459,92 +459,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `resolveReference` seam a body already carries — so a written path can
   // be a workspace attachment instead of only an absolute URL.
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1752,
-  // Two layers grew this file, and the ceiling is the MEASURED total after
-  // both, not either branch's number:
-  //
-  // +49: the comment pin carries how many messages its conversation holds —
-  // the count run, its placement on the pin, and the `messagesByThread` the
-  // layout derives from `threads`. The canvas was the last surface that did
-  // not say it, so a reader crossing between it and the rail met the same
-  // conversation described two ways.
-  //
-  // +207 for `composeProposals` and its two geometry helpers (ADR-0029
-  // decision 1): where a change would land, and the bubble saying how many
-  // are waiting. It reuses the comment layer's constants and placer rather
-  // than growing a second set.
-  //
-  // +1: the leader edge carries `commentChrome`, so the keyed projection can
-  // mark a conversation's whole chrome as the annotation layer. Without it the
-  // leader is the one piece that cuts while the pin and bubble ramp.
-  //
-  // +12: `resolveContributions` also resolves each node's silhouette now, so
-  // it takes the canvas and answers a third field. That is the whole growth —
-  // a signature and a return that no longer fit one line each — and it buys
-  // deleting the call site where `nodeOutlines` was resolved separately, which
-  // is where `layoutSpatialEdges` came to be missing it.
-  // +5 for the proposal bubble's own width: the import that names it grew
-  // past one line, and the call site gained `density: 'compact'`. Nothing
-  // was misfiled this time — the constant and its measured rationale live
-  // in `comment-body.ts`, beside the comment width they are judged against,
-  // so what is left here is the two lines that actually use them.
-  //
-  // +23 more for seeding every comment PIN as a placement obstacle before
-  // the loop rather than pushing each as it is emitted: an anchor helper
-  // both the pre-pass and the loop call, and the pass itself. It is the fix
-  // for a real defect the widened candidate ring exposed — a bubble landing
-  // on a neighbour's pin — and it has to be a pre-pass, since pushing each
-  // pin as it is drawn protects only the comments after it.
-  // +248 for the render theme layer (ADR-0030 decision 5): the theme is
-  // resolved PER CANVAS at every nesting level of the recursion this file
-  // owns (`withCanvasTheme`), so an embed reads its own facet before the
-  // host's, and the ink, the default shape and the default routing it
-  // implies are read where each node and edge is composed. Raised rather
-  // than split: the resolution reads and rewrites `ResolvedLayoutOptions`,
-  // and a module holding it would import the recursion's private options
-  // type back from here. The palette a chrome previews resolves through the
-  // same `pickThemeId`, so it sits here too.
-  // +17 more for `paintOrderOf`, groups behind what they hold whatever the
-  // stored order says. +4 for `annotates`, the link from a label's run back
-  // to the edge or container it names, set where each label is placed.
-  // +26 for the per-edge routing fold and the contributed router's call
-  // site. The router's own resolution is `layout/contributed-router.ts`;
-  // what stays here is the composer asking for it and falling back.
-  // +8: `pullEdgeOntoOutlines` and `proposedEdgePath` each ask for a node
-  // that may not be there, which is two lines apiece plus the sentence
-  // saying a free end has no silhouette to be pulled onto.
-  // 2444 -> 2463: the proposal layer draws a proposed LINE. Without it the
-  // op stored a change nothing rendered — built but unwired, and every test
-  // green over a board that said nothing had happened.
-  // 2463 -> 2484 across ADR-0038 decision 3's reader conversion, in two
-  // steps. +5: `isFrame` took the model import past the formatter's width
-  // and wrapped it. +16: the other eight accessors joined that same list,
-  // which is eight lines of the sixteen, and the rest is rationale that had
-  // nowhere to live before — why the file arm's `?? ''` is unreachable
-  // rather than a default, and why the dispatch asks what a node HOLDS.
-  //
-  // The seam does not shrink this file; the FLIP does, and only once the
-  // arms it dispatches over stop existing. Said plainly because the earlier
-  // entry promised the reduction at this step and the number went the other
-  // way.
-  // +3, and the entry above was right: the flip did NOT shrink this file. The
-  // arms stopped existing and `composeNode` still dispatches over four cases,
-  // because `nodeKind` has the same four answers the union's discriminant had
-  // — plus `undefined`, which is a fifth case the union could not express and
-  // the defensive branch now has a real caller for.
-  // +4: the legend attached to the top-level scene (ADR-0040 decision 6) —
-  // derived in legend/canvas-legend.ts, so the layout only asks and attaches.
-  // +10: the tag library option (ADR-0040 decision 5) — declared here, applied
-  // in tags/declared-colours.ts, so the layout only passes the canvas through.
-  // +2: the edge-only entry point applies the library too, so a live drag
-  // draws an edge in its declared colour — the same step the theme takes.
-  // 2479 -> 1560 when the comment and proposal overlays and the options
-  // vocabulary moved to their own modules (task #84). A pure move: no test
-  // was rewritten and the suite went 1622 -> 1626 on the four cases the
-  // extraction's own guards added.
-  // +22 on the merge: the content seam's accessors and the reasons the
-  // dispatch asks what a node HOLDS, landing in the file the overlay and
-  // options extraction had just cut to 1560.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 811,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -917,7 +831,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
-  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
+  // +17 for the tenant layout: this file's subject IS filesystem paths, so
+  // every seed now names a tenant's workspaces root, and three symlink seeds
+  // gained the parent mkdir that root needs. Splitting it instead would have
+  // duplicated ~148 lines of vi.mock/hoisted setup into the second file.
+  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 1002,
   // 3143 -> 3176: the agent-activity summary's only assertion was
   // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
   // pinning its wording and order.

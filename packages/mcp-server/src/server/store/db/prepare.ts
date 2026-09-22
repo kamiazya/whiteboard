@@ -1,3 +1,5 @@
+import { moveLegacyDataDirUnderTenant } from '../../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { getRawDb } from './index.js'
 import { runMigrations } from './migrator.js'
 
@@ -12,6 +14,10 @@ export function prepareDataDir(dataDir: string): Promise<void> {
   const pending = (async () => {
     const db = await getRawDb(dataDir)
     await runMigrations(db)
+    // AFTER the database migrations: 0008 and 0012 rewrite file names under
+    // the pre-tenant layout, so the directories have to still be where those
+    // migrations left them when they run.
+    await moveLegacyDataDirUnderTenant(dataDir, SELF_HOST_TENANT_ID)
   })()
   ready.set(dataDir, pending)
   pending.catch(() => {

@@ -9,10 +9,31 @@ import {
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
 import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
+import { blobsRoot } from '../server/tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../server/tenant/id.js'
 
 export interface StoreLocalModuleOptions {
   db: TenantDatabase
-  blobDir: string
+  /** The data directory; where inside it this tenant's bytes go is `data-layout.ts`'s. */
+  dataDir: string
+  tenantId: string
+}
+
+function tenantBlobStore(opts: StoreLocalModuleOptions): FsBlobStore {
+  return new FsBlobStore(blobsRoot(opts.dataDir, opts.tenantId), opts.dataDir)
+}
+
+/**
+ * The local stores for the keeper's only tenant. A many-tenant keeper binds
+ * per request and calls `createStoreLocalModule` with that tenant instead;
+ * every composition root today holds one, so this is the one place the
+ * self-host tenant is chosen.
+ */
+export function createSelfHostStoreLocalModule(
+  db: TenantDatabase,
+  dataDir: string,
+): ContainerModule {
+  return createStoreLocalModule({ db, dataDir, tenantId: SELF_HOST_TENANT_ID })
 }
 
 export function createStoreLocalModule(opts: StoreLocalModuleOptions): ContainerModule {
@@ -27,14 +48,14 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
       .toDynamicValue(() => new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(opts.db)))
       .inSingletonScope()
     bind(TOKENS.BlobStore)
-      .toDynamicValue(() => new FsBlobStore(opts.blobDir))
+      .toDynamicValue(() => tenantBlobStore(opts))
       .inSingletonScope()
     bind(TOKENS.DocumentIndex)
       .toDynamicValue(
         () =>
           new CacheCoherentDocumentIndex(
             cacheBackedWorkspaceDocs(),
-            new FsBlobStore(opts.blobDir),
+            tenantBlobStore(opts),
             workspaceRegistry(),
           ),
       )

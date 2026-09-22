@@ -48,8 +48,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
+import { resolveCanvasPalette } from '../layout/canvas-theme.js'
 import { computeEdgeJumps } from '../layout/edges/edge-jumps.js'
-import { layoutSpatialCanvas, resolveCanvasPalette } from '../layout/spatial-canvas.js'
+import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { createFakeMeasure } from './fake-measure.js'
 

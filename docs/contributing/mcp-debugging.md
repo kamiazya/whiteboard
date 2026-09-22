@@ -191,11 +191,13 @@ If instead the daemon fails to start with:
 
 ```
 Database migration failed: permission denied reading the data directory. Check filesystem
-permissions on the workspace blob directories under <data dir>/blobs and restart.
+permissions on the blob directories under <data dir>/tenants/<tenant>/blobs (or
+<data dir>/blobs on a data directory this daemon has not started yet) and restart.
 ```
 
 a migration hit a permission error walking the data dir's filesystem tree (not the SQLite file
-itself) — typically an externally-changed owner/mode on `<data dir>/blobs/<workspaceId>/canvas`,
+itself) — typically an externally-changed owner/mode under a tenant's blob directory
+(`<data dir>/tenants/<tenant>/blobs`, or the pre-tenant `<data dir>/blobs` a first start moves),
 or a restrictive umask. Fix the directory's permissions (or ownership) and restart; this is not a
 disposable-database case, so do not delete `whiteboard.db`.
 

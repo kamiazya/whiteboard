@@ -1,4 +1,3 @@
-import { join } from 'node:path'
 import {
   autoVersionsOverCap,
   MAX_AUTO_PER_DOCUMENT,
@@ -117,10 +116,6 @@ export interface VersionStore {
     workspaceId: string,
     path: string,
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
-}
-
-function _blobsRoot(): string {
-  return join(getDataDir(), 'blobs')
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

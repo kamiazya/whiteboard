@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path'
 import type { BlobRef } from '@kamiazya/whiteboard-ports'
 import { describeBlobStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { blobsRoot } from '../../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { isCorruptStoredDataError } from '../corrupt-stored-data.js'
 import { InMemoryBlobStore } from '../inmemory/in-memory-blob-store.js'
 import { FsBlobStore } from './fs-blob-store.js'
@@ -33,7 +35,7 @@ describe('FsBlobStore', () => {
   describeBlobStoreConformance(async () => {
     const dir = await mkdtemp(join(tmpdir(), 'fs-blob-conformance-'))
     return {
-      store: new FsBlobStore(dir),
+      store: new FsBlobStore(blobsRoot(dir, SELF_HOST_TENANT_ID), dir),
       dispose: () => rm(dir, { recursive: true, force: true }),
     }
   })
@@ -43,7 +45,7 @@ describe('FsBlobStore', () => {
 
   beforeEach(async () => {
     baseDir = await mkdtemp(join(tmpdir(), 'fs-blob-store-'))
-    store = new FsBlobStore(baseDir)
+    store = new FsBlobStore(blobsRoot(baseDir, SELF_HOST_TENANT_ID), baseDir)
   })
 
   afterEach(async () => {
@@ -55,7 +57,11 @@ describe('FsBlobStore', () => {
     // with EISDIR (not ENOENT), which must propagate rather than be
     // treated as an already-deleted blob.
     const ref: BlobRef = { algorithm: 'sha-256', digestHex: '5'.repeat(64) }
-    const filePath = join(baseDir, 'blobs', ref.digestHex.slice(0, 2), ref.digestHex.slice(2))
+    const filePath = join(
+      blobsRoot(baseDir, SELF_HOST_TENANT_ID),
+      ref.digestHex.slice(0, 2),
+      ref.digestHex.slice(2),
+    )
     await mkdir(filePath, { recursive: true })
 
     await expect(store.delete({ ref })).rejects.toMatchObject({ code: 'ERR_FS_EISDIR' })
@@ -69,7 +75,7 @@ describe('FsBlobStore', () => {
     const { ref: refB } = await store.put({ bytes: bytesB })
 
     expect(refA).toEqual(refB)
-    expect(await countFilesRecursively(join(baseDir, 'blobs'))).toBe(1)
+    expect(await countFilesRecursively(blobsRoot(baseDir, SELF_HOST_TENANT_ID))).toBe(1)
   })
 
   it('gives distinct refs and distinct files for distinct bytes', async () => {
@@ -77,14 +83,14 @@ describe('FsBlobStore', () => {
     const { ref: refB } = await store.put({ bytes: new Uint8Array([2]) })
 
     expect(refA).not.toEqual(refB)
-    expect(await countFilesRecursively(join(baseDir, 'blobs'))).toBe(2)
+    expect(await countFilesRecursively(blobsRoot(baseDir, SELF_HOST_TENANT_ID))).toBe(2)
   })
 
   it('stores the blob sharded by hash prefix: <baseDir>/blobs/<first2>/<remaining62>', async () => {
     const bytes = new Uint8Array([1, 2, 3])
     const { ref } = await store.put({ bytes })
 
-    const shardDir = join(baseDir, 'blobs', ref.digestHex.slice(0, 2))
+    const shardDir = join(blobsRoot(baseDir, SELF_HOST_TENANT_ID), ref.digestHex.slice(0, 2))
     const entries = await readdir(shardDir)
 
     expect(entries).toEqual([ref.digestHex.slice(2)])
@@ -92,7 +98,11 @@ describe('FsBlobStore', () => {
 
   it('get throws CorruptStoredDataError when the on-disk envelope is malformed JSON', async () => {
     const ref: BlobRef = { algorithm: 'sha-256', digestHex: '3'.repeat(64) }
-    const filePath = join(baseDir, 'blobs', ref.digestHex.slice(0, 2), ref.digestHex.slice(2))
+    const filePath = join(
+      blobsRoot(baseDir, SELF_HOST_TENANT_ID),
+      ref.digestHex.slice(0, 2),
+      ref.digestHex.slice(2),
+    )
     await mkdir(dirname(filePath), { recursive: true })
     await writeFile(filePath, 'not json', 'utf8')
 
@@ -103,7 +113,11 @@ describe('FsBlobStore', () => {
 
   it('get throws CorruptStoredDataError when the envelope is missing bytesBase64', async () => {
     const ref: BlobRef = { algorithm: 'sha-256', digestHex: '4'.repeat(64) }
-    const filePath = join(baseDir, 'blobs', ref.digestHex.slice(0, 2), ref.digestHex.slice(2))
+    const filePath = join(
+      blobsRoot(baseDir, SELF_HOST_TENANT_ID),
+      ref.digestHex.slice(0, 2),
+      ref.digestHex.slice(2),
+    )
     await mkdir(dirname(filePath), { recursive: true })
     await writeFile(filePath, JSON.stringify({ contentType: 'image/png' }), 'utf8')
 
@@ -173,7 +187,7 @@ describe('FsBlobStore concurrent rewrite', () => {
   it('keeps an existing blob readable while the same bytes are put again', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'fs-blob-rewrite-'))
     try {
-      const store = new FsBlobStore(dir)
+      const store = new FsBlobStore(blobsRoot(dir, SELF_HOST_TENANT_ID), dir)
       // Large enough that the write spans many reads. A small blob can finish
       // inside one scheduler turn and hide the window entirely.
       const bytes = new Uint8Array(6 * 1024 * 1024).fill(0x41)
@@ -208,12 +222,12 @@ describe('FsBlobStore concurrent rewrite', () => {
   it('leaves no temporary files in the shard directory', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'fs-blob-tmp-'))
     try {
-      const store = new FsBlobStore(dir)
+      const store = new FsBlobStore(blobsRoot(dir, SELF_HOST_TENANT_ID), dir)
       const bytes = new Uint8Array(1024).fill(0x42)
       const { ref } = await store.put({ bytes, contentType: 'image/png' })
       await store.put({ bytes, contentType: 'image/png' })
 
-      const shard = join(dir, 'blobs', ref.digestHex.slice(0, 2))
+      const shard = join(blobsRoot(dir, SELF_HOST_TENANT_ID), ref.digestHex.slice(0, 2))
       expect(await readdir(shard)).toEqual([ref.digestHex.slice(2)])
     } finally {
       await rm(dir, { recursive: true, force: true })

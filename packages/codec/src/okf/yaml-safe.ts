@@ -15,6 +15,16 @@ import { z } from 'zod'
  * built-in structural recursion, so a cycle is reported as a normal ZodError
  * instead of crashing the process.
  */
+/** Why a non-container value cannot round-trip through YAML, or `undefined` when it can. */
+function scalarUnsafety(node: unknown): string | undefined {
+  if (node === undefined) return 'undefined is not yaml-safe'
+  if (typeof node === 'number' && !Number.isFinite(node)) return `${node} is not yaml-safe`
+  if (typeof node === 'bigint' || typeof node === 'function' || typeof node === 'symbol') {
+    return `${typeof node} is not yaml-safe`
+  }
+  return undefined
+}
+
 export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((value, ctx) => {
   // Ancestor stack (not a whole-traversal seen set): a DAG where one object
   // is legitimately referenced from two different branches is not cyclic
@@ -23,16 +33,9 @@ export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((
   const ancestors: object[] = []
 
   function walk(node: unknown, path: (string | number)[]): void {
-    if (node === undefined) {
-      ctx.addIssue({ code: 'custom', message: 'undefined is not yaml-safe', path })
-      return
-    }
-    if (typeof node === 'number' && !Number.isFinite(node)) {
-      ctx.addIssue({ code: 'custom', message: `${node} is not yaml-safe`, path })
-      return
-    }
-    if (typeof node === 'bigint' || typeof node === 'function' || typeof node === 'symbol') {
-      ctx.addIssue({ code: 'custom', message: `${typeof node} is not yaml-safe`, path })
+    const unsafe = scalarUnsafety(node)
+    if (unsafe !== undefined) {
+      ctx.addIssue({ code: 'custom', message: unsafe, path })
       return
     }
     if (node === null || typeof node !== 'object') return
@@ -43,15 +46,10 @@ export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((
     }
     ancestors.push(node)
 
-    if (Array.isArray(node)) {
-      for (const [index, item] of node.entries()) {
-        walk(item, [...path, index])
-      }
-    } else {
-      for (const [key, item] of Object.entries(node)) {
-        walk(item, [...path, key])
-      }
-    }
+    const children: [string | number, unknown][] = Array.isArray(node)
+      ? [...node.entries()]
+      : Object.entries(node)
+    for (const [key, item] of children) walk(item, [...path, key])
 
     ancestors.pop()
   }

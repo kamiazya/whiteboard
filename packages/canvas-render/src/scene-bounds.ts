@@ -18,7 +18,7 @@ import { LEGEND_MARGIN_PX, legendPanelSize } from './legend/legend-geometry.js'
  * `SceneNode` union (they only ever appear nested under `list`/`table`),
  * but `sceneBounds` still needs to descend into them to find their runs.
  */
-type WalkNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
+export type SceneWalkNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
 
 /**
  * The minimum extent (px) any axis of a `sceneBounds` result is clamped to.
@@ -81,13 +81,16 @@ function bboxEdges(bbox: BoundingBox): { x0: number; y0: number; x1: number; y1:
  * `<g>`, leaving its children absolute. A non-finite `bbox.x` contributes no
  * shift rather than poisoning the whole subtree with NaN.
  */
-function subtreeOffsetX(node: WalkNode): number {
+function subtreeOffsetX(node: SceneWalkNode): number {
   if (node.kind !== 'listItem' && node.kind !== 'tableCell') return 0
   return Number.isFinite(node.bbox.x) ? node.bbox.x : 0
 }
 
-/** Children arrays present per node variant, used by the iterative walk. */
-function childrenOf(node: WalkNode): readonly WalkNode[] | undefined {
+/**
+ * What a scene node holds, per variant — the one definition of how a scene
+ * nests, read by this walk and by `collectTextRuns`.
+ */
+export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] | undefined {
   switch (node.kind) {
     case 'blockquote':
     case 'group':
@@ -131,7 +134,7 @@ export function sceneBounds(scene: Scene): BoundingBox {
   let extent: Extent | null = null
   // Each frame carries the accumulated x-shift of its ancestors' transforms,
   // so nested wrappers compose exactly as nested `<g transform>` elements do.
-  const stack: { node: WalkNode; offsetX: number }[] = scene.nodes.map((node) => ({
+  const stack: { node: SceneWalkNode; offsetX: number }[] = scene.nodes.map((node) => ({
     node,
     offsetX: 0,
   }))
@@ -177,7 +180,7 @@ export function sceneBounds(scene: Scene): BoundingBox {
       }
     }
 
-    const children = childrenOf(node)
+    const children = sceneChildrenOf(node)
     if (children) {
       const childOffsetX = offsetX + subtreeOffsetX(node)
       for (const child of children) stack.push({ node: child, offsetX: childOffsetX })

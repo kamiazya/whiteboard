@@ -32,6 +32,8 @@ import { join } from 'node:path'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { workspaceFilesDir } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -73,7 +75,7 @@ function canvasDoc(text: string): LoroDoc {
 
 /** Seeded past the default GC grace window, so a dangling file really unlinks. */
 async function seedAgedFile(workspaceId: string, fileId: string, bytes: number): Promise<void> {
-  const dir = join(tempDir, workspaceId, 'files')
+  const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId)
   await mkdir(dir, { recursive: true })
   const path = join(dir, `${fileId}.png`)
   await writeFile(path, Buffer.alloc(bytes, 0xab))
@@ -121,5 +123,5 @@ it('reclaims a file that only a past state of the document references', async ()
 
   const { purgedCount } = await purgeDanglingFiles(WS)
   expect(purgedCount).toBe(1)
-  await expect(readdir(join(tempDir, WS, 'files'))).resolves.toEqual([])
+  await expect(readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS))).resolves.toEqual([])
 })

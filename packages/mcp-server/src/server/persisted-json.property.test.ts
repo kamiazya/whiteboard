@@ -40,6 +40,8 @@ import {
   writeDatabaseLocationRecord,
 } from './store/db/location-record.js'
 import { FsBlobStore } from './store/fs/fs-blob-store.js'
+import { blobsRoot } from './tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from './tenant/id.js'
 
 const viaJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
 
@@ -240,7 +242,10 @@ describe('the blob envelope', () => {
     [fc.uint8Array({ maxLength: 4096 }), fc.option(fc.string(), { nil: undefined })],
     withDefaults({ numRuns: 100 }),
   )('gives back the bytes and content type that were put', async (bytes, contentType) => {
-    const store = new FsBlobStore(await freshDir('blobs'))
+    const store = new FsBlobStore(
+      blobsRoot(await freshDir('blobs'), SELF_HOST_TENANT_ID),
+      await freshDir('blobs'),
+    )
     const { ref } = await store.put({ bytes, contentType })
     expect(await store.put({ bytes, contentType })).toEqual({ ref })
     expect(await store.has({ ref })).toEqual({ exists: true })
@@ -260,7 +265,7 @@ describe('the blob manifest', () => {
     withDefaults({ numRuns: 40 }),
   )('records exactly the blobs the mirror found', async (blobs, mirror) => {
     const dataDir = await freshDir('mirror-src')
-    const store = new FsBlobStore(dataDir)
+    const store = new FsBlobStore(blobsRoot(dataDir, SELF_HOST_TENANT_ID), dataDir)
     const digests = new Set<string>()
     for (const bytes of blobs) digests.add((await store.put({ bytes })).ref.digestHex)
 
