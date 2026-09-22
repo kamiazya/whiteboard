@@ -320,6 +320,21 @@ describe('workspace tree', () => {
       expect(Object.keys(roots)).not.toContain('documentId')
     })
 
+    // A TEXT root, which the round trip above cannot see: a spatial canvas
+    // lives in Map containers. Measured, dropping the text copy from the rule
+    // projection shares with restore left every test in this package green —
+    // it was pinned only three packages away, by the daemon's rename routes.
+    it('a markdown body survives projection', () => {
+      const standalone = new LoroDoc()
+      standalone.getText('body').insert(0, '# carried\n\nbody text')
+      standalone.commit()
+      const doc = workspace()
+      adoptWorkspaceDocument(doc, { path: 'note', documentId: ID_A, kind: 'markdown' }, standalone)
+
+      const projected = projectWorkspaceDocument(doc, ID_A)
+      expect(projected?.getText('body').toString()).toBe('# carried\n\nbody text')
+    })
+
     it('answers null for an id the tree does not hold', () => {
       expect(projectWorkspaceDocument(workspace(), ID_A)).toBeNull()
     })

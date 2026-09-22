@@ -25,7 +25,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
  * buys is that everything NOT on it stays clean, without anyone having to
  * remember to enrol a directory after clearing it.
  */
-const EXEMPT_COUNT = 131
+const EXEMPT_COUNT = 130
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {

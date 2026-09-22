@@ -344,7 +344,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // container (a thread, a proposal) instead of flattening it to a value.
   // 1165: the fold recreates a nested text or list container instead of
   // handing it to `LoroMap.set`.
-  'packages/loro-adapter/src/workspace-tree.ts': 1165,
+  // 1165 -> 998: the content-sync rule the tree write, the standalone restore
+  // and the projection all apply left for `content-sync.ts`.
+  'packages/loro-adapter/src/workspace-tree.ts': 998,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers

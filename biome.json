@@ -192,7 +192,6 @@
         "!packages/loro-adapter/src/comment-threads.ts",
         "!packages/loro-adapter/src/loro-bridge.ts",
         "!packages/loro-adapter/src/proposals.ts",
-        "!packages/loro-adapter/src/workspace-tree.ts",
         "!packages/mcp-server/scripts/eval/mcp-tool-surface-eval.mjs",
         "!packages/mcp-server/scripts/eval/tasks.mjs",
         "!packages/mcp-server/scripts/measure/chunking-spike.mjs",

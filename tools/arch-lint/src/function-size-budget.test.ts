@@ -487,8 +487,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 99,
   'packages/loro-adapter/src/loro-bridge.ts#reconcileSpatialCanvas': 54,
   'packages/loro-adapter/src/loro-bridge.ts#writeSpatialCanvasInto': 82,
-  'packages/loro-adapter/src/workspace-tree.ts#syncMapEntries': 54,
-  'packages/loro-adapter/src/workspace-tree.ts#writeWorkspaceDocumentContent': 62,
   'packages/mcp-server/src/cli/daemon-doctor.ts#runDaemonDoctor': 73,
   'packages/mcp-server/src/cli/daemon-logs.ts#buildInputs': 65,
   'packages/mcp-server/src/cli/daemon-run.ts#runDaemonRun': 176,
