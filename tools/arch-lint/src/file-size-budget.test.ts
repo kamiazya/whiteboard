@@ -873,7 +873,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 2139 -> 2173: a duplicated note's copy was filed as a canvas, and
   // the case needs this file's installFetchMock/selectCard harness. Moving
   // that harness to test-utils/ is what would shrink this entry properly.
-  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2173,
+  // 2173 -> 2221: the lone-survivor naming gained a test. A mutation showed
+  // the re-offer's row lookup could be replaced with `undefined` and all 108
+  // index-page tests stayed green, so the comment explaining why the dialog
+  // must not read `Delete "2 documents"?` was pinning nothing.
+  'apps/web/src/pages/DaemonIndexPage.test.tsx': 2221,
   'apps/web/src/pages/SettingsPage.test.tsx': 905,
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1500,
   'packages/canvas-render/src/layout/comments.test.ts': 823,
