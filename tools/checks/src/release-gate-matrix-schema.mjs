@@ -57,7 +57,42 @@ export const KNOWN_RUNTIME_BUCKETS = new Set(['fast', 'medium', 'slow'])
  * @returns {value is string}
  */
 function isNonEmptyString(value) {
-  return typeof value === 'string' && value.length > 0
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+/**
+ * The string fields each `prCoverage` kind must carry, in the order they are
+ * checked.
+ *
+ * A conditional step is exercised on SOME pull requests. Its two extra fields
+ * exist so that stays a stated policy rather than a silent weakening of
+ * workflow-step: `condition` is checked against the step's real `if:` (a
+ * drifted copy fails), and `conditionReason` is the argument for why the pull
+ * requests it skips cannot change the gate's answer — the only part a reader
+ * cannot derive from the workflow.
+ *
+ * `isNonEmptyString` trims: a blank field names nothing, whichever it is.
+ * @type {Record<string, readonly string[]>}
+ */
+const REQUIRED_BY_KIND = {
+  'workflow-step': ['workflow', 'jobId', 'stepName'],
+  'conditional-workflow-step': ['workflow', 'jobId', 'stepName', 'condition', 'conditionReason'],
+  aggregate: ['workflow', 'jobId'],
+  exception: ['reason'],
+}
+
+/**
+ * @param {unknown} substrings
+ * @returns {string | undefined}
+ */
+function expectedSubstringsProblem(substrings) {
+  if (!Array.isArray(substrings) || substrings.length === 0) {
+    return 'prCoverage.expectedCommandSubstrings must be a non-empty array when present'
+  }
+  if (substrings.some((entry) => !isNonEmptyString(entry))) {
+    return 'prCoverage.expectedCommandSubstrings entries must be non-empty strings'
+  }
+  return undefined
 }
 
 /**
@@ -78,66 +113,106 @@ export function validatePrCoverage(prCoverage) {
       reason: `prCoverage.kind must be one of ${[...KNOWN_PR_COVERAGE_KINDS].join(', ')}`,
     }
   }
-  switch (p.kind) {
-    case 'workflow-step':
-    case 'conditional-workflow-step':
-    case 'aggregate': {
-      if (!isNonEmptyString(p.workflow)) {
-        return { ok: false, reason: 'prCoverage.workflow must be a non-empty string' }
-      }
-      if (!isNonEmptyString(p.jobId)) {
-        return { ok: false, reason: 'prCoverage.jobId must be a non-empty string' }
-      }
-      if (
-        (p.kind === 'workflow-step' || p.kind === 'conditional-workflow-step') &&
-        !isNonEmptyString(p.stepName)
-      ) {
-        return { ok: false, reason: 'prCoverage.stepName must be a non-empty string' }
-      }
-      // A conditional step is exercised on SOME pull requests. Both extra
-      // fields exist so that stays a stated policy rather than a silent
-      // weakening of workflow-step: `condition` is checked against the step's
-      // real `if:` (a drifted copy fails), and `conditionReason` is the
-      // argument for why the pull requests it skips cannot change the gate's
-      // answer — the only part a reader cannot derive from the workflow.
-      if (p.kind === 'conditional-workflow-step') {
-        if (!isNonEmptyString(p.condition)) {
-          return { ok: false, reason: 'prCoverage.condition must be a non-empty string' }
-        }
-        if (!isNonEmptyString(p.conditionReason)) {
-          return { ok: false, reason: 'prCoverage.conditionReason must be a non-empty string' }
-        }
-      }
-      if (p.kind === 'aggregate') {
-        if ('expectedCommandSubstrings' in p) {
-          if (
-            !Array.isArray(p.expectedCommandSubstrings) ||
-            p.expectedCommandSubstrings.length === 0
-          ) {
-            return {
-              ok: false,
-              reason: 'prCoverage.expectedCommandSubstrings must be a non-empty array when present',
-            }
-          }
-          if (p.expectedCommandSubstrings.some((s) => !isNonEmptyString(s))) {
-            return {
-              ok: false,
-              reason: 'prCoverage.expectedCommandSubstrings entries must be non-empty strings',
-            }
-          }
-        }
-      }
-      break
-    }
-    case 'exception': {
-      if (typeof p.reason !== 'string' || p.reason.trim().length === 0) {
-        return { ok: false, reason: 'prCoverage.reason must be a non-empty string' }
-      }
-      break
-    }
+  const missing = REQUIRED_BY_KIND[p.kind].find((field) => !isNonEmptyString(p[field]))
+  if (missing !== undefined) {
+    return { ok: false, reason: `prCoverage.${missing} must be a non-empty string` }
+  }
+  if (p.kind === 'aggregate' && 'expectedCommandSubstrings' in p) {
+    const reason = expectedSubstringsProblem(p.expectedCommandSubstrings)
+    if (reason !== undefined) return { ok: false, reason }
   }
   return { ok: true }
 }
+
+/**
+ * @param {string} field
+ * @returns {(g: Record<string, unknown>) => string | undefined}
+ */
+const nonEmptyString = (field) => (g) =>
+  isNonEmptyString(g[field]) ? undefined : `${field} must be a non-empty string`
+
+/**
+ * @param {string} field
+ * @param {Set<unknown>} known
+ * @returns {(g: Record<string, unknown>) => string | undefined}
+ */
+const oneOf = (field, known) => (g) =>
+  known.has(g[field])
+    ? undefined
+    : `${field} must be one of ${[...known].join(', ')}, got "${g[field]}"`
+
+/**
+ * @param {string} field
+ * @returns {(g: Record<string, unknown>) => string | undefined}
+ */
+const boolean = (field) => (g) =>
+  typeof g[field] === 'boolean' ? undefined : `${field} must be boolean`
+
+/** @param {Record<string, unknown>} g */
+function requiredForProblem(g) {
+  if (!Array.isArray(g.requiredFor) || g.requiredFor.length === 0) {
+    return 'requiredFor must be a non-empty array'
+  }
+  if (g.requiredFor.some((t) => typeof t !== 'string')) {
+    return 'requiredFor entries must be strings'
+  }
+  const unknownTier = g.requiredFor.find((t) => !KNOWN_REQUIRED_FOR_TIERS.has(t))
+  return unknownTier === undefined
+    ? undefined
+    : `requiredFor must be one of ${[...KNOWN_REQUIRED_FOR_TIERS].join(', ')}, got "${unknownTier}"`
+}
+
+// Docker-required gates must never appear in non-Docker aggregates.
+// ci and local-release scripts run without Docker; mixing Docker gates
+// in would silently skip them on non-Docker runners.
+//
+// The `publish-dry-run` tier is deliberately NOT on that list. Its runner is
+// `pnpm publish:dry-run`, whose Docker half exits 0 with a skip line when no
+// daemon answers — the same fail-soft the ci/local-release aggregates must
+// not have, and correct here because the tier's job is to rehearse a publish,
+// not to gate one. That distinction is the tier's whole reason to exist:
+// before it, the two `publish:dry-run:*` jobs ran on every PR while being
+// declared in no tier at all, so nothing tied their ci.yml steps to a policy
+// file and `smoke:docker`'s prCoverage exception could cite a job the matrix
+// had never heard of.
+/** @param {Record<string, unknown>} g */
+function dockerTierProblem(g) {
+  if (g.requiresDocker !== true) return undefined
+  const tiers = /** @type {string[]} */ (g.requiredFor)
+  const tier = ['ci', 'local-release'].find((t) => tiers.includes(t))
+  return tier === undefined ? undefined : `Docker-required gate must not be required for ${tier}`
+}
+
+/** @param {Record<string, unknown>} g */
+function prCoverageProblem(g) {
+  if (!('prCoverage' in g) || g.prCoverage === undefined) return undefined
+  const result = validatePrCoverage(g.prCoverage)
+  return result.ok ? undefined : `prCoverage: ${result.reason}`
+}
+
+/**
+ * A gate's rules, in the order they are checked; the first that answers is
+ * the gate's reason.
+ *
+ * No runner honors a per-gate `env` map (publish-gate.mjs and
+ * pages-release.mjs only read id/command/requiredFor), so it is
+ * deliberately NOT schema-validated here — validating a field nothing
+ * consumes would look load-bearing but silently do nothing. Any shape
+ * under `env` is tolerated as an additive unknown field.
+ */
+const GATE_RULES = [
+  nonEmptyString('id'),
+  nonEmptyString('command'),
+  nonEmptyString('category'),
+  oneOf('category', KNOWN_CATEGORIES),
+  requiredForProblem,
+  boolean('requiresDocker'),
+  boolean('requiresNetwork'),
+  nonEmptyString('expectedRuntimeBucket'),
+  oneOf('expectedRuntimeBucket', KNOWN_RUNTIME_BUCKETS),
+  dockerTierProblem,
+  prCoverageProblem,
+]
 
 /**
  * Validate a single release-gate-matrix.json gate entry.
@@ -149,82 +224,10 @@ export function validateGate(gate) {
     return { ok: false, reason: 'gate must be an object' }
   }
   const g = /** @type {Record<string, unknown>} */ (gate)
-  if (!isNonEmptyString(g.id)) {
-    return { ok: false, reason: 'id must be a non-empty string' }
+  for (const rule of GATE_RULES) {
+    const reason = rule(g)
+    if (reason !== undefined) return { ok: false, reason }
   }
-  if (!isNonEmptyString(g.command)) {
-    return { ok: false, reason: 'command must be a non-empty string' }
-  }
-  if (!isNonEmptyString(g.category)) {
-    return { ok: false, reason: 'category must be a non-empty string' }
-  }
-  if (!KNOWN_CATEGORIES.has(g.category)) {
-    return {
-      ok: false,
-      reason: `category must be one of ${[...KNOWN_CATEGORIES].join(', ')}, got "${g.category}"`,
-    }
-  }
-  if (!Array.isArray(g.requiredFor) || g.requiredFor.length === 0) {
-    return { ok: false, reason: 'requiredFor must be a non-empty array' }
-  }
-  if (/** @type {unknown[]} */ (g.requiredFor).some((t) => typeof t !== 'string')) {
-    return { ok: false, reason: 'requiredFor entries must be strings' }
-  }
-  const unknownTier = /** @type {string[]} */ (g.requiredFor).find(
-    (t) => !KNOWN_REQUIRED_FOR_TIERS.has(t),
-  )
-  if (unknownTier !== undefined) {
-    return {
-      ok: false,
-      reason: `requiredFor must be one of ${[...KNOWN_REQUIRED_FOR_TIERS].join(', ')}, got "${unknownTier}"`,
-    }
-  }
-  if (typeof g.requiresDocker !== 'boolean') {
-    return { ok: false, reason: 'requiresDocker must be boolean' }
-  }
-  if (typeof g.requiresNetwork !== 'boolean') {
-    return { ok: false, reason: 'requiresNetwork must be boolean' }
-  }
-  if (!isNonEmptyString(g.expectedRuntimeBucket)) {
-    return { ok: false, reason: 'expectedRuntimeBucket must be a non-empty string' }
-  }
-  if (!KNOWN_RUNTIME_BUCKETS.has(g.expectedRuntimeBucket)) {
-    return {
-      ok: false,
-      reason: `expectedRuntimeBucket must be one of ${[...KNOWN_RUNTIME_BUCKETS].join(', ')}, got "${g.expectedRuntimeBucket}"`,
-    }
-  }
-  // Docker-required gates must never appear in non-Docker aggregates.
-  // ci and local-release scripts run without Docker; mixing Docker gates
-  // in would silently skip them on non-Docker runners.
-  //
-  // The `publish-dry-run` tier is deliberately NOT on that list. Its runner is
-  // `pnpm publish:dry-run`, whose Docker half exits 0 with a skip line when no
-  // daemon answers — the same fail-soft the ci/local-release aggregates must
-  // not have, and correct here because the tier's job is to rehearse a publish,
-  // not to gate one. That distinction is the tier's whole reason to exist:
-  // before it, the two `publish:dry-run:*` jobs ran on every PR while being
-  // declared in no tier at all, so nothing tied their ci.yml steps to a policy
-  // file and `smoke:docker`'s prCoverage exception could cite a job the matrix
-  // had never heard of.
-  if (g.requiresDocker === true) {
-    const tiers = /** @type {string[]} */ (g.requiredFor)
-    if (tiers.includes('ci')) {
-      return { ok: false, reason: 'Docker-required gate must not be required for ci' }
-    }
-    if (tiers.includes('local-release')) {
-      return { ok: false, reason: 'Docker-required gate must not be required for local-release' }
-    }
-  }
-  if ('prCoverage' in g && g.prCoverage !== undefined) {
-    const result = validatePrCoverage(g.prCoverage)
-    if (!result.ok) return { ok: false, reason: `prCoverage: ${result.reason}` }
-  }
-  // No runner honors a per-gate `env` map (publish-gate.mjs and
-  // pages-release.mjs only read id/command/requiredFor), so it is
-  // deliberately NOT schema-validated here — validating a field nothing
-  // consumes would look load-bearing but silently do nothing. Any shape
-  // under `env` is tolerated as an additive unknown field.
   return { ok: true }
 }
 

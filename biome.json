@@ -235,11 +235,7 @@
         "!packages/server-core/src/references/reference-aggregate.ts",
         "!tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs",
         "!tools/arch-lint/src/cycle-check.ts",
-        "!tools/arch-lint/src/source-scan.ts",
-        "!tools/checks/src/ci-gate.mjs",
-        "!tools/checks/src/docker-build-inputs.mjs",
-        "!tools/checks/src/release-gate-matrix-schema.mjs",
-        "!tools/checks/src/verify-pack-contents.mjs"
+        "!tools/arch-lint/src/source-scan.ts"
       ],
       "linter": {
         "rules": {
