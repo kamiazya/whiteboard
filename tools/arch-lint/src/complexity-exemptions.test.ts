@@ -25,12 +25,13 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
  * buys is that everything NOT on it stays clean, without anyone having to
  * remember to enrol a directory after clearing it.
  */
-// 131 -> 132 when `layout/compose-node.ts` came out of `spatial-canvas.ts`
-// carrying `composeNode` (22), and back to 131 when that was paid down: the
-// kind `switch` became a `satisfies Record<NodeKind, …>` table and the file
-// node's four early returns became a ranked list of representations. Nothing
-// in `compose-node.ts` is over 15 now.
-const EXEMPT_COUNT = 131
+// `layout/compose-node.ts` joined the list when it came out of
+// `spatial-canvas.ts` carrying `composeNode` (22), and left it when that was
+// paid down: the kind `switch` became a `satisfies Record<NodeKind, …>` table
+// and the file node's four early returns became a ranked list of
+// representations. The count is stated here and nowhere else, because several
+// sessions pay the list down concurrently and a number in a comment goes stale.
+const EXEMPT_COUNT = 128
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
