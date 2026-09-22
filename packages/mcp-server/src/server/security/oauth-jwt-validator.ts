@@ -210,8 +210,8 @@ interface ValidatorSettings {
   readonly clockSkewSeconds: number
   readonly allowedAlgorithms: readonly string[]
   readonly allowUntypedAccessTokens: boolean
-  readonly scopeClaim: string
-  readonly keyResolver: JWTVerifyGetKey
+  readonly scopeClaim: 'scope' | 'scp'
+  readonly keyResolver: JwtKeyResolver
 }
 
 const audienceList = (audience: string | readonly string[]): string | string[] =>
@@ -226,8 +226,8 @@ async function verifiedPayload(
   token: string,
   settings: ValidatorSettings,
 ): Promise<
-  | { readonly ok: true; readonly payload: Record<string, unknown> }
-  | OAuthResourceTokenValidationResult
+  | { readonly kind: 'payload'; readonly payload: Record<string, unknown> }
+  | { readonly kind: 'refusal'; readonly result: OAuthResourceTokenValidationResult }
 > {
   let resolverFailed = false
   // Wrap keyResolver to detect resolver-thrown errors vs jose-internal
@@ -251,11 +251,13 @@ async function verifiedPayload(
       requiredClaims: ['exp'],
     })
     const payload = verified.payload as Record<string, unknown>
-    if (settings.allowUntypedAccessTokens) return { ok: true, payload }
+    if (settings.allowUntypedAccessTokens) return { kind: 'payload', payload }
     const typed = isAccessTokenTyped(verified.protectedHeader.typ) || payload.token_use === 'access'
-    return typed ? { ok: true, payload } : { ok: false, reason: 'not_access_token' }
+    return typed
+      ? { kind: 'payload', payload }
+      : { kind: 'refusal', result: { ok: false, reason: 'not_access_token' } }
   } catch (err) {
-    return refusalFor(err, resolverFailed)
+    return { kind: 'refusal', result: refusalFor(err, resolverFailed) }
   }
 }
 
@@ -264,7 +266,7 @@ async function validateToken(
   settings: ValidatorSettings,
 ): Promise<OAuthResourceTokenValidationResult> {
   const verified = await verifiedPayload(input.token, settings)
-  if (!verified.ok) return verified
+  if (verified.kind === 'refusal') return verified.result
   const { payload } = verified
 
   if (typeof payload.sub !== 'string' || payload.sub === '') {

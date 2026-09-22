@@ -228,12 +228,13 @@ export interface OAuthTransactionStore {
 function redemptionRefusal(
   record: { codeExpiresAt?: number; clientId: string; redirectUri: string; codeChallenge: string },
   input: RedeemAuthorizationCodeInput,
+  codeVerifier: string,
   at: number,
 ): 'invalid_grant' | 'redirect_uri_mismatch' | 'pkce_verification_failed' | null {
   if (record.codeExpiresAt === undefined || record.codeExpiresAt < at) return 'invalid_grant'
   if (record.clientId !== input.clientId) return 'invalid_grant'
   if (record.redirectUri !== input.redirectUri) return 'redirect_uri_mismatch'
-  if (!verifyPkce(record.codeChallenge, input.codeVerifier)) return 'pkce_verification_failed'
+  if (!verifyPkce(record.codeChallenge, codeVerifier)) return 'pkce_verification_failed'
   return null
 }
 
@@ -410,7 +411,7 @@ export function createOAuthTransactionStore(options?: {
     transactions.set(transactionId, { ...record, status: 'redeemed' })
     codeHashIndex.delete(codeHash)
 
-    const refusal = redemptionRefusal(record, input, now())
+    const refusal = redemptionRefusal(record, input, input.codeVerifier, now())
     if (refusal !== null) return { ok: false, reason: refusal }
 
     return { ok: true, transactionId, scopes: record.scopes, clientId: record.clientId }
