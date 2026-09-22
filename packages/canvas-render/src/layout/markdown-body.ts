@@ -60,20 +60,41 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
           measure: options.measure,
           appearance: canvasAppearance ?? createSpatialTheme({ mode: 'light' }),
           embedPath: box.embedPath,
-          ...(style !== undefined ? { style } : {}),
-          ...(fontAvailable !== undefined ? { fontAvailable } : {}),
-          ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
-          ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
-          ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
-          // The whole bundle, not the two seams a body reads: a canvas
-          // embedded in a note has file nodes of its own, and those read
-          // `resolveReference`, which the note's layout never touches.
-          ...(options.references !== undefined ? { references: options.references } : {}),
-          ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
-          ...(options.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
+          ...pickKeys(options, FORWARDED_TO_EMBEDDED_CANVAS),
         }),
         box,
       ),
     ...rest,
   })
+}
+
+/**
+ * What a canvas embedded in a note inherits from the note's layout. The
+ * whole reference bundle, not the two seams a body reads: a canvas embedded
+ * in a note has file nodes of its own, and those read `resolveReference`,
+ * which the note's layout never touches.
+ */
+const FORWARDED_TO_EMBEDDED_CANVAS = [
+  'style',
+  'fontAvailable',
+  'highlightCode',
+  'renderMath',
+  'renderDiagram',
+  'references',
+  'resolveEmbed',
+  'resolveTitle',
+] as const satisfies readonly (keyof MarkdownBodyLayoutOptions & keyof SpatialLayoutOptions)[]
+
+/**
+ * The named keys of `source`. An `undefined` is copied like any value: every
+ * one of these the layout reads defaults with `??`, so absent and undefined
+ * mean the same thing there.
+ */
+function pickKeys<T extends object, K extends keyof T>(
+  source: T,
+  keys: readonly K[],
+): Partial<Pick<T, K>> {
+  const out: Partial<Pick<T, K>> = {}
+  for (const key of keys) out[key] = source[key]
+  return out
 }

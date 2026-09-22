@@ -21,6 +21,7 @@ import type { CommentThread, TextQuoteSelector } from '@kamiazya/whiteboard-mode
 import type { Appearance, SceneNode, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
+import { type SceneWalkNode, sceneChildrenOf } from '../scene-bounds.js'
 import { runFontOf } from './nodes/mdast-blocks.js'
 
 /** A thread about a passage of a node's text, as the layout needs it. */
@@ -49,32 +50,9 @@ export function nodePassagesOf(threads: readonly CommentThread[]): readonly Node
 /** Every text run under `nodes`, in reading order. */
 export function collectTextRuns(nodes: readonly SceneNode[]): TextRunNode[] {
   const out: TextRunNode[] = []
-  const visit = (node: SceneNode): void => {
-    switch (node.kind) {
-      case 'textRun':
-        out.push(node)
-        return
-      case 'paragraph':
-      case 'heading':
-        out.push(...node.runs)
-        return
-      case 'codeBlock':
-        out.push(...(node.runs ?? []))
-        return
-      case 'list':
-        for (const item of node.items) for (const child of item.children) visit(child)
-        return
-      case 'table':
-        for (const row of node.rows) for (const cell of row.cells) out.push(...cell.runs)
-        return
-      case 'blockquote':
-      case 'embedResolved':
-      case 'group':
-        for (const child of node.children) visit(child)
-        return
-      default:
-        return
-    }
+  const visit = (node: SceneWalkNode): void => {
+    if (node.kind === 'textRun') out.push(node)
+    for (const child of sceneChildrenOf(node) ?? []) visit(child)
   }
   for (const node of nodes) visit(node)
   return out

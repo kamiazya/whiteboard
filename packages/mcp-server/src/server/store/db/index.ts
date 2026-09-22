@@ -19,11 +19,11 @@ import { mkdir } from 'node:fs/promises'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, sql } from 'kysely'
 import { getDataDir } from '../../config.js'
+import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { databaseIsInsideDataDir, resolveDatabaseLocation } from './location.js'
 import { writeDatabaseLocationRecord } from './location-record.js'
 import type { DatabaseSchema } from './schema.js'
 import { type TenantDatabase, tenantDatabase } from './tenant-database.js'
-import { SELF_HOST_TENANT_ID } from './tenant-scope.js'
 
 export type Database = Kysely<DatabaseSchema>
 

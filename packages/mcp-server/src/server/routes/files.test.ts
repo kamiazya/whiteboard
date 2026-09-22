@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { workspaceFilesDir } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
 
@@ -67,7 +69,9 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
 
     // Confirm the file was written.
     const { readFile } = await import('node:fs/promises')
-    const saved = await readFile(join(tempDir, 'session1', 'files', 'file-001.png'))
+    const saved = await readFile(
+      join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+    )
     expect(saved[0]).toBe(0x89) // PNG magic
   })
 
@@ -129,13 +133,17 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     await Promise.resolve()
 
     const { readFile } = await import('node:fs/promises')
-    await expect(readFile(join(tempDir, 'session1', 'files', 'file-001.png'))).rejects.toThrow()
+    await expect(
+      readFile(join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png')),
+    ).rejects.toThrow()
 
     releaseLock?.()
     const res = await responsePromise
     expect(res.status).toBe(204)
 
-    const saved = await readFile(join(tempDir, 'session1', 'files', 'file-001.png'))
+    const saved = await readFile(
+      join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+    )
     expect(saved[0]).toBe(0x89)
   })
 })
@@ -143,7 +151,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
 describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
-    await mkdir(join(tempDir, 'session1', 'files'), { recursive: true })
+    await mkdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), { recursive: true })
   })
 
   afterEach(async () => {
@@ -153,7 +161,10 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   it('returns a saved image with its MIME type', async () => {
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
     const { writeFile } = await import('node:fs/promises')
-    await writeFile(join(tempDir, 'session1', 'files', 'file-001.png'), imageData)
+    await writeFile(
+      join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+      imageData,
+    )
 
     const app = createFilesRouter()
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
@@ -175,7 +186,10 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('returns a JSON 404 when the files directory does not exist yet', async () => {
-    await rm(join(tempDir, 'session1', 'files'), { recursive: true, force: true })
+    await rm(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), {
+      recursive: true,
+      force: true,
+    })
 
     const app = createFilesRouter()
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
@@ -185,9 +199,12 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('returns structured 500 when the files path is corrupt instead of a directory', async () => {
-    await rm(join(tempDir, 'session1', 'files'), { recursive: true, force: true })
+    await rm(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), {
+      recursive: true,
+      force: true,
+    })
     const { writeFile } = await import('node:fs/promises')
-    await writeFile(join(tempDir, 'session1', 'files'), 'not-a-directory')
+    await writeFile(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'not-a-directory')
 
     const app = createFilesRouter()
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
@@ -200,7 +217,9 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('returns structured 500 when readFile fails for the matched path', async () => {
-    await mkdir(join(tempDir, 'session1', 'files', 'file-001.png'), { recursive: true })
+    await mkdir(join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'), {
+      recursive: true,
+    })
 
     const app = createFilesRouter()
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
@@ -216,9 +235,12 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     // When both 'file-001' and 'file-001-extra' exist, requesting 'file-001'
     // must return only the exact match 'file-001.png'.
     const { writeFile } = await import('node:fs/promises')
-    await writeFile(join(tempDir, 'session1', 'files', 'file-001.png'), new Uint8Array([0x01]))
     await writeFile(
-      join(tempDir, 'session1', 'files', 'file-001-extra.png'),
+      join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+      new Uint8Array([0x01]),
+    )
+    await writeFile(
+      join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001-extra.png'),
       new Uint8Array([0x02]),
     )
 

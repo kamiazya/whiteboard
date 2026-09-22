@@ -237,31 +237,43 @@ export function outlineContains(
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false
   const outline = nodeOutline(shapeId, box, shapes)
   if (outline === null) return false
-  switch (outline.kind) {
-    case 'ellipse': {
-      if (outline.rx <= 0 || outline.ry <= 0) {
-        return point.x === outline.cx && point.y === outline.cy
-      }
-      const nx = (point.x - outline.cx) / outline.rx
-      const ny = (point.y - outline.cy) / outline.ry
-      return nx * nx + ny * ny <= 1
-    }
-    case 'polygon':
-      return convexPolygonContains(outline.points, point)
-    case 'cylinder': {
-      const { x, y, w, h, ry } = outline
-      if (point.x < x || point.x > x + w) return false
-      if (point.y >= y + ry && point.y <= y + h - ry) return true
-      const rx = w / 2
-      if (rx <= 0 || ry <= 0) return point.y >= y && point.y <= y + h
-      // Above the body: the upper half of the top-cap ellipse; below: the
-      // lower half of the bottom bulge. Same quadratic as the ellipse case.
-      const capCy = point.y < y + ry ? y + ry : y + h - ry
-      const nx = (point.x - (x + rx)) / rx
-      const ny = (point.y - capCy) / ry
-      return nx * nx + ny * ny <= 1
-    }
-  }
+  return outlineHolds(outline, point)
+}
+
+type Point = { readonly x: number; readonly y: number }
+type OutlineOf<K extends NodeOutline['kind']> = Extract<NodeOutline, { kind: K }>
+type ContainsFns = {
+  readonly [K in NodeOutline['kind']]: (outline: OutlineOf<K>, point: Point) => boolean
+}
+
+/** Containment per outline kind — a kind this table lacks is a type error. */
+const CONTAINS_BY_KIND = {
+  ellipse: (outline, point) => insideEllipse(point, outline.cx, outline.cy, outline.rx, outline.ry),
+  polygon: (outline, point) => convexPolygonContains(outline.points, point),
+  cylinder: (outline, point) => {
+    const { x, y, w, h, ry } = outline
+    if (point.x < x || point.x > x + w) return false
+    if (point.y >= y + ry && point.y <= y + h - ry) return true
+    const rx = w / 2
+    if (rx <= 0 || ry <= 0) return point.y >= y && point.y <= y + h
+    // Above the body: the upper half of the top-cap ellipse; below: the
+    // lower half of the bottom bulge.
+    const capCy = point.y < y + ry ? y + ry : y + h - ry
+    return insideEllipse(point, x + rx, capCy, rx, ry)
+  },
+} satisfies ContainsFns
+
+function outlineHolds<K extends NodeOutline['kind']>(outline: OutlineOf<K>, point: Point): boolean {
+  const contains: ContainsFns[K] = CONTAINS_BY_KIND[outline.kind]
+  return contains(outline, point)
+}
+
+/** Inside or on an axis-aligned ellipse; a degenerate one holds only its centre. */
+function insideEllipse(point: Point, cx: number, cy: number, rx: number, ry: number): boolean {
+  if (rx <= 0 || ry <= 0) return point.x === cx && point.y === cy
+  const nx = (point.x - cx) / rx
+  const ny = (point.y - cy) / ry
+  return nx * nx + ny * ny <= 1
 }
 
 /** Search resolution for the boundary crossing: 2^-32 of the segment

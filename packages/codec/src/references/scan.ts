@@ -30,6 +30,29 @@ function splitFragment(raw: string): { target: string; fragment: string | undefi
 }
 
 /**
+ * Given the index of the `]` or `|` that ends a reference's target, where the
+ * reference closes and its alias — or, when this `[[` never closes, where the
+ * scan resumes. Resuming past everything inspected is what keeps the scan
+ * linear (see `findNextReference`).
+ */
+function closeReference(
+  value: string,
+  targetEnd: number,
+): { end: number; alias: string | undefined } | { resumeAt: number } {
+  if (value[targetEnd] === ']') {
+    return value[targetEnd + 1] === ']'
+      ? { end: targetEnd + 2, alias: undefined }
+      : { resumeAt: targetEnd + 1 }
+  }
+  let j = targetEnd + 1
+  while (j < value.length && value[j] !== ']') j++
+  if (j < value.length && value[j + 1] === ']') {
+    return { end: j + 2, alias: value.slice(targetEnd + 1, j) }
+  }
+  return { resumeAt: j + 1 }
+}
+
+/**
  * Finds the next `[[...]]`/`![[...]]` occurrence at or after `cursor`, scanning
  * with `indexOf` instead of a regex. A quantified-class regex equivalent to
  * this grammar (`[^\]|]+` for the target, `[^\]]*` for the alias) is
@@ -59,35 +82,19 @@ export function findNextReference(value: string, cursor: number): ReferenceMatch
       continue
     }
 
-    if (value[i] === ']') {
-      if (value[i + 1] === ']') {
-        return {
-          index: matchStart,
-          full: value.slice(matchStart, i + 2),
-          isEmbed: hasBang,
-          target,
-          alias: undefined,
-          fragment,
-        }
-      }
-      pos = i + 1
+    const close = closeReference(value, i)
+    if ('resumeAt' in close) {
+      pos = close.resumeAt
       continue
     }
-
-    let j = i + 1
-    while (j < value.length && value[j] !== ']') j++
-    if (j < value.length && value[j + 1] === ']') {
-      const alias = value.slice(i + 1, j)
-      return {
-        index: matchStart,
-        full: value.slice(matchStart, j + 2),
-        isEmbed: hasBang,
-        target,
-        alias,
-        fragment,
-      }
+    return {
+      index: matchStart,
+      full: value.slice(matchStart, close.end),
+      isEmbed: hasBang,
+      target,
+      alias: close.alias,
+      fragment,
     }
-    pos = j + 1
   }
   return undefined
 }

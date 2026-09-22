@@ -13,6 +13,8 @@ import {
 import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
 import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
+import { workspaceFilesDir } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { validateFileId, validateWorkspaceId, validationErrorBody } from '../validators.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
 import { onDocumentFile } from './document/path-route.js'
@@ -79,7 +81,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
           415,
         )
       }
-      const dir = join(getDataDir(), workspaceId, 'files')
+      const dir = workspaceFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId)
       const filePath = join(dir, `${fileId}${ext}`)
       const bytes = new Uint8Array(await c.req.arrayBuffer())
       if (bytes.length === 0) {
@@ -126,7 +128,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
       throw err
     }
     try {
-      const dir = join(getDataDir(), workspaceId, 'files')
+      const dir = workspaceFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId)
       const files = await readStoredFileNames(dir)
       // JSON like every other refusal here: `c.notFound()` is plain text,
       // which the browser client cannot read.

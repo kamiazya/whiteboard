@@ -33,7 +33,9 @@ vi.mock('../di/container.js', () => ({
   createContainer: vi.fn(() => ({})),
   resolveServerDeps: vi.fn(() => ({})),
 }))
-vi.mock('../di/store-local.module.js', () => ({ createStoreLocalModule: vi.fn(() => ({})) }))
+vi.mock('../di/store-local.module.js', () => ({
+  createSelfHostStoreLocalModule: vi.fn(() => ({})),
+}))
 
 import { createApp } from './app.js'
 import { startServerModeHttp } from './server-mode-http.js'

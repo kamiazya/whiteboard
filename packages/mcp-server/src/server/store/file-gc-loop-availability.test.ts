@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { workspaceFilesDir } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
 
@@ -79,7 +81,7 @@ async function seedWorkspace(
 }
 
 async function seedDanglingFile(workspaceId: string, name: string): Promise<void> {
-  const dir = join(tempDir, workspaceId, 'files')
+  const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId)
   await mkdir(dir, { recursive: true })
   const path = join(dir, name)
   await writeFile(path, Buffer.alloc(1024, 0xab))

@@ -38,6 +38,8 @@ import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { errorMessage } from '../../shared/error-message.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
@@ -516,7 +518,7 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
 async function workspaceTreeIndex(): Promise<LoroWorkspaceDocumentIndex> {
   return new CacheCoherentDocumentIndex(
     cacheBackedWorkspaceDocs(),
-    new FsBlobStore(getDataDir()),
+    new FsBlobStore(blobsRoot(getDataDir(), SELF_HOST_TENANT_ID), getDataDir()),
     workspaceRegistry(),
   )
 }

@@ -40,7 +40,6 @@ import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type {
-  BoundingBox,
   DecorationContext,
   EdgeRouter,
   NodeDecoration,
@@ -55,26 +54,16 @@ import { highlightCode } from '../highlight/lowlight.js'
 import { canvasLegend } from '../legend/canvas-legend.js'
 import { withReferenceSeams } from '../references/seams.js'
 import { withDeclaredColours } from '../tags/declared-colours.js'
-import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import {
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
-  type SpatialPalette,
-} from '../theme/spatial-palette.js'
-import type { SpatialThemeMode } from '../theme/spatial-theme.js'
-import { createThemedAppearance, paletteFromTokens } from '../theme/theme-asset.js'
+import { createThemedAppearance } from '../theme/theme-asset.js'
+import { canvasTheme, resolveThemeTable, themeFace } from './canvas-theme.js'
 import { composeComments, composeRegionOutlines, regionsOf } from './comments.js'
 import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
 import { assignEdgeAnchors, type EdgeAnchorPair, routeEdge } from './edges/spatial-edges.js'
-import type {
-  ResolvedLayoutOptions,
-  SpatialLayoutOptions,
-  SpatialRenderStyle,
-} from './layout-options.js'
+import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
 import { outlineEntryPoint, type ShapeContribution, type ShapeTable } from './nodes/node-outline.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { nodePassagesOf } from './passage-highlight.js'
@@ -153,6 +142,64 @@ function composeEdge(
   }
 }
 
+type Point = { readonly x: number; readonly y: number }
+
+/**
+ * One END of a routed path: the point it terminates at, the point before it
+ * (the approach an outline is entered along), and how to put a moved
+ * terminal back. Both ends are the same operation on a path read from
+ * opposite sides — `tidy-axis.ts` makes the same move for x and y.
+ */
+interface PathEnd {
+  readonly terminal: (path: readonly Point[]) => Point | undefined
+  readonly inward: (path: readonly Point[]) => Point | undefined
+  readonly replace: (path: readonly Point[], terminal: Point) => readonly Point[]
+}
+
+const PATH_ENDS = {
+  from: {
+    terminal: (path) => path[0],
+    inward: (path) => path[1],
+    replace: (path, terminal) => [terminal, ...path.slice(1)],
+  },
+  to: {
+    terminal: (path) => path.at(-1),
+    inward: (path) => path.at(-2),
+    replace: (path, terminal) => [...path.slice(0, -1), terminal],
+  },
+} satisfies Record<'from' | 'to', PathEnd>
+
+/**
+ * Pulls ONE end of a path onto the silhouette of the node it attaches to.
+ * A free end has no node, and a node with no declared outline has nothing to
+ * be pulled onto; either leaves the path as it was.
+ */
+function pullEndOntoOutline(
+  path: readonly Point[],
+  end: 'from' | 'to',
+  edge: RoutableElement,
+  canvas: SpatialCanvas,
+  nodeOutlines: Readonly<Record<string, string>>,
+  shapes: ShapeTable | undefined,
+): readonly Point[] {
+  const id = endNode(edge[end])
+  const kind = id === undefined ? undefined : nodeOutlines[id]
+  const node =
+    kind === undefined ? undefined : canvas.nodes.find((candidate) => candidate.id === id)
+  if (kind === undefined || node === undefined) return path
+  const at = PATH_ENDS[end]
+  const terminal = at.terminal(path)
+  const inward = at.inward(path)
+  if (terminal === undefined || inward === undefined) return path
+  const box = { x: node.x, y: node.y, w: node.width, h: node.height }
+  const pulled = outlineEntryPoint(kind, box, inward, terminal, shapes)
+  // Compare coordinates, not object identity: relying on outlineEntryPoint
+  // returning the very same object on its no-op paths is an unstated
+  // contract, and a fresh-but-equal point must not rewrite the path (the
+  // scene-diff scoreboard pins that untouched edges stay byte-identical).
+  return pulled.x === terminal.x && pulled.y === terminal.y ? path : at.replace(path, pulled)
+}
+
 /**
  * A route terminates ON the endpoint's bbox border, which for every
  * inscribed outline is OUTSIDE the silhouette except at tangent points —
@@ -170,44 +217,16 @@ function pullEdgeOntoOutlines(
   shapes: ShapeTable | undefined,
 ): ResolvedEdgeNode {
   if (nodeOutlines === undefined || routed.path.length < 2) return routed
-  const boxOf = (id: string): BoundingBox | undefined => {
-    const node = canvas.nodes.find((candidate) => candidate.id === id)
-    return node === undefined ? undefined : { x: node.x, y: node.y, w: node.width, h: node.height }
+  let path: readonly Point[] = routed.path
+  // The ends are independent: with three or more points each is entered along
+  // its own segment, and on a two-point path both lie on one line, so either
+  // is entered along that line whichever is pulled first (swapping the order
+  // changes no test). `to` first is kept only because it is the order the
+  // bytes were produced in — the entry search is iterative in floating point.
+  for (const end of ['to', 'from'] as const) {
+    path = pullEndOntoOutline(path, end, edge, canvas, nodeOutlines, shapes)
   }
-  let path = routed.path
-  // Compare coordinates, not object identity: relying on outlineEntryPoint
-  // returning the very same object on its no-op paths is an unstated
-  // contract, and a fresh-but-equal point must not rewrite the path (the
-  // scene-diff scoreboard pins that untouched edges stay byte-identical).
-  const moved = (
-    a: { readonly x: number; readonly y: number },
-    b: { readonly x: number; readonly y: number },
-  ): boolean => a.x !== b.x || a.y !== b.y
-  // A free end has no node, so no silhouette to be pulled onto — it already
-  // sits exactly where the document put it.
-  const toId = endNode(edge.to)
-  const toKind = toId === undefined ? undefined : nodeOutlines[toId]
-  const toBox = toKind === undefined || toId === undefined ? undefined : boxOf(toId)
-  if (toKind !== undefined && toBox !== undefined) {
-    const last = path[path.length - 1]
-    const inward = path[path.length - 2]
-    if (last !== undefined && inward !== undefined) {
-      const pulled = outlineEntryPoint(toKind, toBox, inward, last, shapes)
-      if (moved(pulled, last)) path = [...path.slice(0, -1), pulled]
-    }
-  }
-  const fromId = endNode(edge.from)
-  const fromKind = fromId === undefined ? undefined : nodeOutlines[fromId]
-  const fromBox = fromKind === undefined || fromId === undefined ? undefined : boxOf(fromId)
-  if (fromKind !== undefined && fromBox !== undefined) {
-    const first = path[0]
-    const inward = path[1]
-    if (first !== undefined && inward !== undefined) {
-      const pulled = outlineEntryPoint(fromKind, fromBox, inward, first, shapes)
-      if (moved(pulled, first)) path = [pulled, ...path.slice(1)]
-    }
-  }
-  return path === routed.path ? routed : { ...routed, path }
+  return path === routed.path ? routed : { ...routed, path: [...path] }
 }
 
 /**
@@ -412,90 +431,6 @@ function resolveContributions(
   }
 }
 
-/** The composed theme table a contribution set resolves to, by namespaced id. */
-export function resolveThemeTable(
-  contributions: readonly RenderContribution[],
-): Readonly<Record<string, ThemeTokens>> {
-  const table: Record<string, ThemeTokens> = {}
-  for (const contribution of contributions) {
-    for (const [name, tokens] of Object.entries(contribution.themes ?? {})) {
-      table[`${contribution.namespace}.${name}`] = tokens
-    }
-  }
-  return table
-}
-
-/**
- * The palette ONE canvas is drawn in under a style — the theme the style
- * resolves to (`pickThemeId`: the canvas's own under `'document'`, a named
- * one, none under `'clean'`), for the mode, else the bundled palette for
- * that mode. `style` defaults to `'document'`, the editor's look.
- *
- * For an editor chrome that previews paint rather than painting: the paper
- * under the canvas, and a colour picker's swatches showing the strokes a
- * pick will produce. Resolved here so the preview and the layout read the
- * same table AND the same style; a chrome reading the saved theme while
- * the session draws clean showed neon's night under a clean board.
- */
-export function resolveCanvasPalette(
-  canvas: SpatialCanvas,
-  mode: SpatialThemeMode,
-  options: {
-    readonly style?: SpatialRenderStyle
-    readonly contributions?: readonly RenderContribution[]
-  } = {},
-): SpatialPalette {
-  const contributions = options.contributions ?? [visualRenderContribution]
-  const own = contributions
-    .map((contribution) => contribution.readTheme?.(canvas))
-    .find((id) => id !== undefined)
-  const themeId = pickThemeId(options.style ?? 'document', own, undefined)
-  const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
-  if (tokens === undefined) return mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
-  return paletteFromTokens(tokens.palette[mode])
-}
-
-/**
- * The family the theme this canvas draws in NAMES, or nothing — the style
- * resolves to no theme, or the theme declares no family of its own.
- *
- * Separate from `resolveCanvasPalette` in ONE way that matters: an absent
- * `style` is `'clean'` here, not `'document'`. A palette is asked for by a
- * surface already drawing the document; this is asked by a tool ECHOING a
- * caller's `style`, where absent means the bundled look and so nothing for
- * the caller to go and fetch.
- */
-export function resolveCanvasThemeFontFamily(
-  canvas: SpatialCanvas,
-  options: {
-    readonly style?: SpatialRenderStyle
-    readonly contributions?: readonly RenderContribution[]
-  } = {},
-): string | undefined {
-  const contributions = options.contributions ?? [visualRenderContribution]
-  const own = contributions
-    .map((contribution) => contribution.readTheme?.(canvas))
-    .find((id) => id !== undefined)
-  const themeId = pickThemeId(options.style, own, undefined)
-  const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
-  return tokens?.fontFamily
-}
-
-/**
- * The theme id a canvas draws in, under the style the caller asked for:
- * `'clean'` never has one; a theme id IS one; `'document'` takes the
- * canvas's own, else the host's (an embed inherits), else none.
- */
-function pickThemeId(
-  style: SpatialRenderStyle | undefined,
-  own: string | undefined,
-  inherited: string | undefined,
-): string | undefined {
-  if (style === undefined || style === 'clean') return undefined
-  if (style === 'document') return own ?? inherited
-  return style
-}
-
 /**
  * Resolves the theme for ONE canvas (ADR-0030 decision 5) and re-derives
  * everything that depends on it: the appearance resolver, and the
@@ -508,32 +443,15 @@ function withCanvasTheme(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): ResolvedLayoutOptions {
-  const own = resolved.contributions
-    .map((contribution) => contribution.readTheme?.(canvas))
-    .find((id) => id !== undefined)
-  const themeId = pickThemeId(resolved.style, own, resolved.activeTheme?.id)
-  const tokens = themeId === undefined ? undefined : resolved.themeTable[themeId]
-  if (themeId !== undefined && tokens === undefined) {
-    resolved.onDegrade?.({ kind: 'unknown-theme', theme: themeId })
-  }
-  const activeTheme =
-    themeId !== undefined && tokens !== undefined ? { id: themeId, tokens } : undefined
-  let appearance = resolved.baseAppearance
-  if (activeTheme !== undefined) {
-    const wanted = activeTheme.tokens.fontFamily
-    const available =
-      wanted === undefined
-        ? false
-        : (resolved.fontAvailable ?? ((family) => family === SPATIAL_THEME_FONT_FAMILY))(wanted)
-    if (wanted !== undefined && !available) {
-      resolved.onDegrade?.({ kind: 'font-missing', family: wanted })
-    }
-    appearance = createThemedAppearance({
-      tokens: activeTheme.tokens,
-      mode: resolved.baseAppearance.mode ?? 'light',
-      fontFamily: available && wanted !== undefined ? wanted : SPATIAL_THEME_FONT_FAMILY,
-    })
-  }
+  const activeTheme = canvasTheme(canvas, resolved)
+  const appearance =
+    activeTheme === undefined
+      ? resolved.baseAppearance
+      : createThemedAppearance({
+          tokens: activeTheme.tokens,
+          mode: resolved.baseAppearance.mode ?? 'light',
+          fontFamily: themeFace(activeTheme.tokens.fontFamily, resolved),
+        })
   // The inherited theme is REPLACED, never merged under: a child naming a
   // theme this build does not carry draws clean, so it must not keep the
   // host's ink and routing defaults beside its own clean paint.

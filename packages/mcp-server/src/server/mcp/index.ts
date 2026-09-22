@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/server'
 import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { z } from 'zod'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
-import { createStoreLocalModule } from '../../di/store-local.module.js'
+import { createSelfHostStoreLocalModule } from '../../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { createCanvasClientNotifier } from '../canvas-client-notifier.js'
 import { getDataDir } from '../config.js'
@@ -116,7 +116,7 @@ export async function createMcpServer(options: CreateMcpServerOptions = {}) {
 
   const dataDir = getDataDir()
   const db = await getDb(dataDir)
-  const container = createContainer(createStoreLocalModule({ db, blobDir: dataDir }))
+  const container = createContainer(createSelfHostStoreLocalModule(db, dataDir))
   const deps = resolveServerDeps(container, { daemonActor: daemonDeviceActor(dataDir) })
   // The WS-route bridge is attached at the roots rather than in
   // resolveServerDeps (the di graph must not import the routes layer); this

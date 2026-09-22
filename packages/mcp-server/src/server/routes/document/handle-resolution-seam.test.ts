@@ -26,6 +26,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-handle-seam-')
@@ -61,7 +62,13 @@ describe('handle resolution and the request that follows it', () => {
     const otherDir = await mkdtemp(join(tmpdir(), 'whiteboard-handle-seam-other-'))
     await prepareDataDir(otherDir)
     const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db: await getDb(otherDir), blobDir: otherDir })),
+      createContainer(
+        createStoreLocalModule({
+          db: await getDb(otherDir),
+          dataDir: otherDir,
+          tenantId: SELF_HOST_TENANT_ID,
+        }),
+      ),
     )
 
     await deps.documentIndex.createWorkspace({ workspaceId: WS, segment: SEGMENT })

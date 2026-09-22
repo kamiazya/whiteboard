@@ -8,6 +8,8 @@ import type { BackupBlobReferences } from './store/backup-blob-mirror.js'
 import { mirrorRootFor, readBackupBlobManifest } from './store/backup-blob-mirror.js'
 import { BACKUP_MARKER_FILENAME } from './store/backup-in-progress.js'
 import { DB_FILENAME } from './store/db/location.js'
+import { blobsRoot } from './tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from './tenant/id.js'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
@@ -236,7 +238,7 @@ export const NEVER_COPIED_FOR_TESTS: readonly string[] = NEVER_COPIED
  * SQLite replays a `-wal` into any database later placed beside it.
  */
 function isUnderBlobs(dataDir: string, path: string): boolean {
-  const blobs = join(dataDir, 'blobs')
+  const blobs = blobsRoot(dataDir, SELF_HOST_TENANT_ID)
   return path === blobs || path.startsWith(`${blobs}${sep}`)
 }
 
@@ -398,13 +400,13 @@ async function materialiseMirroredBlobs(
   for (const digest of references.blobs) {
     wanted.push({
       from: join(mirrorRoot, 'blobs', digest.slice(0, 2), digest.slice(2)),
-      to: join(targetDataDir, 'blobs', digest.slice(0, 2), digest.slice(2)),
+      to: join(blobsRoot(targetDataDir, SELF_HOST_TENANT_ID), digest.slice(0, 2), digest.slice(2)),
     })
   }
   for (const [relativePath, digest] of Object.entries(references.files)) {
     wanted.push({
       from: join(mirrorRoot, 'files', digest.slice(0, 2), digest.slice(2)),
-      to: join(targetDataDir, 'blobs', ...relativePath.split('/')),
+      to: join(blobsRoot(targetDataDir, SELF_HOST_TENANT_ID), ...relativePath.split('/')),
     })
   }
 

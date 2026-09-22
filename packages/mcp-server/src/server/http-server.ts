@@ -12,7 +12,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { WebSocketServer } from 'ws'
 import { IdleTimer } from '../daemon/idle-timer.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
-import { createStoreLocalModule } from '../di/store-local.module.js'
+import { createSelfHostStoreLocalModule } from '../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
@@ -359,7 +359,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   await ensureWorkspaceId(dataDir)
   const db = await getDb(dataDir)
   const resolvedDeps = resolveServerDeps(
-    createContainer(createStoreLocalModule({ db, blobDir: dataDir })),
+    createContainer(createSelfHostStoreLocalModule(db, dataDir)),
     {
       ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
       daemonActor: daemonDeviceActor(dataDir),

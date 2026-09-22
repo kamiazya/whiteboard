@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { blobsRoot, workspaceFilesDir } from './tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from './tenant/id.js'
 
 // DATA_DIR is read-through a getter so tests can swap the dir mid-run.
 // This is the same pattern document-store.test.ts uses.
@@ -53,7 +55,7 @@ async function seedDataDir(dir: string): Promise<{
   // Seed via the real store APIs so the backup/restore drill exercises
   // the actual on-disk layout (DB + blobs + per-workspace files dir).
   dataDir = dir
-  await mkdir(join(dir, 'session1', 'files'), { recursive: true })
+  await mkdir(workspaceFilesDir(dir, SELF_HOST_TENANT_ID, 'session1'), { recursive: true })
 
   // Canvas with a deterministic element.
   const doc = new LoroDoc()
@@ -66,7 +68,10 @@ async function seedDataDir(dir: string): Promise<{
 
   // File blob (image attachment) at <ws>/files/<fileId>.<ext>.
   const fileBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  await writeFile(join(dir, 'session1', 'files', 'file-001.png'), fileBytes)
+  await writeFile(
+    join(workspaceFilesDir(dir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+    fileBytes,
+  )
 
   // Version metadata.
   const versions = new FileVersionStore()
@@ -117,7 +122,9 @@ describe('backup-restore drill', () => {
       }[]
       expect(restoredElements).toEqual(seeded.canvasElements)
 
-      const restoredBlob = await readFile(join(roots.target, 'session1', 'files', 'file-001.png'))
+      const restoredBlob = await readFile(
+        join(workspaceFilesDir(roots.target, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+      )
       expect(new Uint8Array(restoredBlob)).toEqual(seeded.fileBytes)
 
       const versions = new FileVersionStore()
@@ -238,7 +245,7 @@ describe('backup-restore drill', () => {
       await writeFile(join(outside, 'attacker-secret.txt'), 'attacker-content')
       await symlink(
         join(outside, 'attacker-secret.txt'),
-        join(roots.src, 'session1', 'files', 'evil-link.png'),
+        join(workspaceFilesDir(roots.src, SELF_HOST_TENANT_ID, 'session1'), 'evil-link.png'),
       )
 
       let caught: unknown
@@ -272,12 +279,14 @@ describe('backup-restore drill', () => {
       // backupDataDir, which would already reject the symlink).
       // Simulates a backup produced by another tool that the user
       // hands us at restore time.
-      await mkdir(join(roots.backup, 'session1', 'files'), { recursive: true })
+      await mkdir(workspaceFilesDir(roots.backup, SELF_HOST_TENANT_ID, 'session1'), {
+        recursive: true,
+      })
       await writeFile(join(roots.backup, 'whiteboard.db'), 'fake-db')
       await writeFile(join(outside, 'attacker-secret.txt'), 'attacker-content')
       await symlink(
         join(outside, 'attacker-secret.txt'),
-        join(roots.backup, 'session1', 'files', 'evil-link.png'),
+        join(workspaceFilesDir(roots.backup, SELF_HOST_TENANT_ID, 'session1'), 'evil-link.png'),
       )
 
       let caught: unknown
@@ -372,8 +381,8 @@ describe('backupDataDir with excludeDatabaseFile', () => {
   it('copies the blobs but leaves the stale database behind', async () => {
     const roots = await makeDrillRoots()
     try {
-      await mkdir(join(roots.src, 'blobs', 'ab'), { recursive: true })
-      await writeFile(join(roots.src, 'blobs', 'ab', 'cdef'), 'blob bytes')
+      await mkdir(join(blobsRoot(roots.src, SELF_HOST_TENANT_ID), 'ab'), { recursive: true })
+      await writeFile(join(blobsRoot(roots.src, SELF_HOST_TENANT_ID), 'ab', 'cdef'), 'blob bytes')
       await writeFile(join(roots.src, 'whiteboard.db'), 'pre-migration rows')
       await writeFile(
         join(roots.src, 'storage.json'),
@@ -396,7 +405,9 @@ describe('backupDataDir with excludeDatabaseFile', () => {
       const copied = await readdir(roots.backup)
       expect(copied.filter((f) => f.startsWith('whiteboard.db'))).toEqual([])
 
-      expect(await readFile(join(roots.backup, 'blobs', 'ab', 'cdef'), 'utf8')).toBe('blob bytes')
+      expect(
+        await readFile(join(blobsRoot(roots.backup, SELF_HOST_TENANT_ID), 'ab', 'cdef'), 'utf8'),
+      ).toBe('blob bytes')
       // The record travels: it is how restore later knows this backup was
       // never meant to hold rows.
       expect(await readFile(join(roots.backup, 'storage.json'), 'utf8')).toContain(
@@ -442,15 +453,17 @@ describe('backupDataDir and the blob temp area', () => {
     try {
       await mkdir(join(roots.src, PENDING_WRITES_DIRNAME), { recursive: true })
       await writeFile(join(roots.src, PENDING_WRITES_DIRNAME, 'half-written.tmp'), 'partial')
-      await mkdir(join(roots.src, 'blobs', 'ab'), { recursive: true })
-      await writeFile(join(roots.src, 'blobs', 'ab', 'cdef'), 'blob bytes')
+      await mkdir(join(blobsRoot(roots.src, SELF_HOST_TENANT_ID), 'ab'), { recursive: true })
+      await writeFile(join(blobsRoot(roots.src, SELF_HOST_TENANT_ID), 'ab', 'cdef'), 'blob bytes')
       await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
 
       await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
 
       expect(await readdir(roots.backup)).not.toContain(PENDING_WRITES_DIRNAME)
       // Everything real still travels.
-      expect(await readFile(join(roots.backup, 'blobs', 'ab', 'cdef'), 'utf8')).toBe('blob bytes')
+      expect(
+        await readFile(join(blobsRoot(roots.backup, SELF_HOST_TENANT_ID), 'ab', 'cdef'), 'utf8'),
+      ).toBe('blob bytes')
       expect(await readFile(join(roots.backup, 'whiteboard.db'), 'utf8')).toBe('rows')
     } finally {
       await rm(roots.root, { recursive: true, force: true })
@@ -479,8 +492,8 @@ describe('backupDataDir and files that must not travel', () => {
       await writeFile(join(roots.src, 'daemon.json'), '{"token":"super-secret-bearer"}')
       await writeFile(join(roots.src, 'backup-in-progress.json'), '{"schemaVersion":1}')
       await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
-      await mkdir(join(roots.src, 'blobs'), { recursive: true })
-      await writeFile(join(roots.src, 'blobs', 'keep'), 'blob bytes')
+      await mkdir(blobsRoot(roots.src, SELF_HOST_TENANT_ID), { recursive: true })
+      await writeFile(join(blobsRoot(roots.src, SELF_HOST_TENANT_ID), 'keep'), 'blob bytes')
 
       await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
 
@@ -488,7 +501,9 @@ describe('backupDataDir and files that must not travel', () => {
       expect(copied).not.toContain('daemon.json')
       expect(copied).not.toContain('backup-in-progress.json')
       // Everything real still travels.
-      expect(await readFile(join(roots.backup, 'blobs', 'keep'), 'utf8')).toBe('blob bytes')
+      expect(
+        await readFile(join(blobsRoot(roots.backup, SELF_HOST_TENANT_ID), 'keep'), 'utf8'),
+      ).toBe('blob bytes')
     } finally {
       await rm(roots.root, { recursive: true, force: true })
     }

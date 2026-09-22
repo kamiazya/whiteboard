@@ -33,7 +33,7 @@ const { saveDocument, resolveDocumentIdAtPath } = await import('../../store/docu
 const { clearCache } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
-const { createStoreLocalModule } = await import('../../../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { getDb } = await import('../../store/db/index.js')
 
@@ -53,7 +53,7 @@ function canvasDoc(text: string): LoroDoc {
 async function appWithRealDeps() {
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
-  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   // The store-local composition is the trash-capable one — pinned here so a
   // regression in the DI's structural capability detection fails loudly,
   // rather than as a cascade of 501s in the tests below.
