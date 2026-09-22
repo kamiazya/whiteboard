@@ -72,6 +72,17 @@ test('background-work runs by default, so recurring or blocking work cannot pass
   assert.ok(defaultWorkflowDimensions().includes('background-work'))
 })
 
+// `complexity` is default for the same reason as the two above: code that is hard to follow
+// passes its tests and does what it should, and the lint threshold fires only once the shape is
+// set. The lane asks whether a structure would remove the difficulty rather than an exemption —
+// a user decision (2026-09-23), and opt-in is the same as absent since it depends on a reviewer
+// thinking to ask.
+test('complexity runs by default, so a harder-to-follow diff is asked for a structural answer', () => {
+  assert.ok(resourceDimensionNames().includes('complexity'))
+  assert.ok(agentDimensionNames().includes('complexity'))
+  assert.ok(defaultWorkflowDimensions().includes('complexity'))
+})
+
 // `agentType` is a plain string the Workflow runtime resolves at spawn time: a repo-owned agent
 // renamed or typo'd here is not a load error, it is a lane that quietly runs as something else.
 // Namespaced ids (`plugin:agent`) come from installed plugins and are not ours to check.

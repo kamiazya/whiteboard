@@ -22,6 +22,7 @@ import {
   frameBackgroundStyle,
   frameLabel,
   isFrame,
+  type NodeKind,
   nodeFile,
   nodeKind,
   nodeSubpath,
@@ -690,99 +691,110 @@ function composeGroupBackground(
   }
 }
 
+/** Draws one kind of node. */
+type NodeComposer = (node: SpatialNode, options: ResolvedLayoutOptions) => readonly SceneNode[]
+
+/**
+ * What each KIND of node draws. A table, so a kind added to `NodeKind` fails
+ * here (`satisfies`) rather than arriving at a branch nobody wrote.
+ */
+const COMPOSE_BY_KIND = {
+  file: composeFileNode,
+  text: composeTextNode,
+  frame: composeFrameNode,
+  link: composeLinkNode,
+} satisfies Record<NodeKind, NodeComposer>
+
 export function composeNode(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  // Dispatches on what a node HOLDS rather than on the stored discriminant,
-  // so this switch says the same thing before and after ADR-0038 decision 3
-  // dissolves that union. `NodeKind` is closed, so it still narrows to
-  // `never` — the exhaustiveness the defensive arm below is measured against
-  // survives the move.
-  switch (nodeKind(node)) {
-    case 'file': {
-      // Resolved ONCE per node and threaded through every rank below. The
-      // seams this replaced re-asked for the same key at each rank, which
-      // meant a caller's lookup ran four times per file node.
-      //
-      // The `?? ''` is unreachable rather than a default: `nodeKind` answered
-      // `file`, and that kind IS "has a location", so the accessor cannot be
-      // empty here. It resolves to nothing if it ever were, which is the same
-      // never-throw degradation the arms below already take.
-      const resolved = referenceFor(nodeFile(node) ?? '', options)
-      const image = composeFileImage(node, resolved, options)
-      if (image !== undefined) {
-        // Full-bleed image, no label run — the filename would overlap the
-        // picture; the accessible name travels on the image node itself.
-        return [chromeShape(node, options), image]
-      }
-      const embed = composeFileEmbed(node, resolved, options)
-      if (embed !== undefined) {
-        const chrome = chromeShape(node, options)
-        const label = labelOf(node, resolved)
-        return label === undefined
-          ? [chrome, embed]
-          : [
-              chrome,
-              ...placeAboveNode(node, { nodes: [labelRun(label, options, node.width)] }),
-              embed,
-            ]
-      }
-      const markdown = composeFileMarkdown(node, resolved, options)
-      if (markdown !== undefined) return markdown
-      const facets = composeFileFacets(node, resolved, options)
-      if (facets !== undefined) return facets
-      const chrome = chromeShape(node, options)
-      const label = labelOf(node, resolved)
-      return label === undefined
-        ? [chrome]
-        : [
-            chrome,
-            ...placeInNode(
-              node,
-              { nodes: [labelRun(label, options, contentWidth(node, options))] },
-              options,
-            ),
-          ]
-    }
-    case 'text':
-      return composeTextNode(node, options)
-    case 'frame': {
-      const chrome = chromeShape(node, options)
-      const background = composeGroupBackground(node, options)
-      const base = background === undefined ? [chrome] : [chrome, background]
-      const label = labelOf(node, undefined)
-      return label === undefined
-        ? base
-        : [...base, ...placeAboveNode(node, { nodes: [labelRun(label, options, node.width)] })]
-    }
-    case 'link': {
-      const chrome = chromeShape(node, options)
-      const label = labelOf(node, undefined)
-      return label === undefined
-        ? [chrome]
-        : [
-            chrome,
-            ...placeInNode(
-              node,
-              { nodes: [labelRun(label, options, contentWidth(node, options))] },
-              options,
-            ),
-          ]
-    }
-    default: {
-      // Defensive branch: `NodeKind` is closed, so this is unreachable for
-      // schema-valid input. Kept so an unrecognized kind (a value cast past
-      // the type system) still degrades to chrome-only rather than throwing.
-      options.onDegrade?.({
-        kind: 'unknown-node-kind',
-        nodeId: node.id,
-        // The media type is what a reader needs here: `nodeKind` answers
-        // `undefined` precisely when nothing claims the resource, so naming
-        // the kind would say nothing at all.
-        type: node.resource?.mimeType ?? 'none',
-      })
-      return [chromeShape(node, options)]
-    }
+  const kind = nodeKind(node)
+  // Unclaimed resource, or a kind cast past the type: chrome only, no throw.
+  const compose: NodeComposer | undefined = kind === undefined ? undefined : COMPOSE_BY_KIND[kind]
+  if (compose !== undefined) return compose(node, options)
+  options.onDegrade?.({
+    kind: 'unknown-node-kind',
+    nodeId: node.id,
+    // The media type, since `nodeKind` is `undefined` exactly when nothing
+    // claims the resource.
+    type: node.resource?.mimeType ?? 'none',
+  })
+  return [chromeShape(node, options)]
+}
+
+/** A node's label drawn above the box or inside it; nothing when it has none. */
+function labelRuns(
+  node: SpatialNode,
+  label: string | undefined,
+  where: 'above' | 'inside',
+  options: ResolvedLayoutOptions,
+): readonly SceneNode[] {
+  if (label === undefined) return []
+  return where === 'above'
+    ? placeAboveNode(node, { nodes: [labelRun(label, options, node.width)] })
+    : placeInNode(node, { nodes: [labelRun(label, options, contentWidth(node, options))] }, options)
+}
+
+/** One way a file node can show what it points at, or `undefined` to pass. */
+type FileRepresentation = (
+  node: SpatialNode,
+  resolved: ResolvedReference | undefined,
+  options: ResolvedLayoutOptions,
+) => readonly SceneNode[] | undefined
+
+/**
+ * How a file node shows its reference, in RANK order (decision #11): the
+ * first that answers draws the node; none answering leaves the label.
+ */
+const FILE_REPRESENTATIONS: readonly FileRepresentation[] = [
+  // Full-bleed image, no label run — the filename would overlap the picture;
+  // the accessible name travels on the image node itself.
+  (node, resolved, options) => {
+    const image = composeFileImage(node, resolved, options)
+    return image === undefined ? undefined : [chromeShape(node, options), image]
+  },
+  (node, resolved, options) => {
+    const embed = composeFileEmbed(node, resolved, options)
+    return embed === undefined
+      ? undefined
+      : [
+          chromeShape(node, options),
+          ...labelRuns(node, labelOf(node, resolved), 'above', options),
+          embed,
+        ]
+  },
+  composeFileMarkdown,
+  composeFileFacets,
+]
+
+function composeFileNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
+  // Resolved ONCE and threaded through every rank. `?? ''` is unreachable —
+  // a `file` IS "has a location" — and would resolve to nothing, not throw.
+  const resolved = referenceFor(nodeFile(node) ?? '', options)
+  for (const represent of FILE_REPRESENTATIONS) {
+    const drawn = represent(node, resolved, options)
+    if (drawn !== undefined) return drawn
   }
+  return [
+    chromeShape(node, options),
+    ...labelRuns(node, labelOf(node, resolved), 'inside', options),
+  ]
+}
+
+function composeFrameNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
+  const chrome = chromeShape(node, options)
+  const background = composeGroupBackground(node, options)
+  return [
+    chrome,
+    ...(background === undefined ? [] : [background]),
+    ...labelRuns(node, labelOf(node, undefined), 'above', options),
+  ]
+}
+
+function composeLinkNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
+  return [
+    chromeShape(node, options),
+    ...labelRuns(node, labelOf(node, undefined), 'inside', options),
+  ]
 }
