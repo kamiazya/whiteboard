@@ -21,17 +21,6 @@ interface WorkspacesTable {
   replicaTier: string | null
 }
 
-interface BranchesTable {
-  documentId: string
-  workspaceId: string
-  name: string
-  tipFrontiers: string
-  color: string | null
-  sourceBranchName: string | null
-  sourceVersionId: string | null
-  createdAt: Timestamp
-}
-
 interface VersionsTable {
   id: string
   // No FK since migration 0016 — delete paths sweep these rows explicitly
@@ -177,9 +166,17 @@ interface WorkspaceMembersOnlyTable {
   since: Timestamp
 }
 
+// Every tenant-scoped table (`tenant-scope.ts`) also has a `tenantId` column,
+// deliberately NOT declared here: the tenant-bound handle stamps it on insert,
+// filters on it and strips it from results, so a store cannot name it at all.
+// `tenant-database.test.ts` checks the physical columns against the ledger.
+interface TenantsTable {
+  id: string
+  createdAt: Timestamp
+}
+
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
-  branches: BranchesTable
   versions: VersionsTable
   runtime: RuntimeTable
   documentSnapshots: DocumentSnapshotsTable
@@ -192,4 +189,5 @@ export interface DatabaseSchema {
   workspaceMemberships: WorkspaceMembershipsTable
   workspaceReplicaKeys: WorkspaceReplicaKeysTable
   workspaceMembersOnly: WorkspaceMembersOnlyTable
+  tenants: TenantsTable
 }
