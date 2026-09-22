@@ -1,0 +1,120 @@
+# ADR-0045: An account is who logs in; a user is who a tenant knows
+
+**Status:** Draft — the SHAPE is recorded while the conversation that produced
+it is fresh (owner, 2026-09-23), and three questions are deliberately left
+open below. Nothing in this ADR is implemented, and
+[ADR-0041](0041-profile-and-authority.md)'s Member/profile remains what ships.
+This record exists so the tenant work does not foreclose the split, and so the
+decisions it still needs arrive as amendments rather than as a rewrite.
+
+## Context
+
+The tenant boundary landed as a database mechanism: a keeper holds tenants
+(self-host one, SaaS many), every tenant-scoped table carries the tenant, and
+stores reach the database only through a handle bound to one. Classifying
+`memberProfiles` and `profileCredentials` forced a question the schema cannot
+answer: **is a profile a person, or a person-inside-one-tenant?**
+
+Today it is both at once. `memberProfiles` is minted per keeper
+(ADR-0041 decision 1), `profileCredentials` maps a WebAuthn credential to it,
+and ADR-0041's Member is "a `MemberProfile` a workspace's keeper has admitted
+to that workspace". With one tenant those are indistinguishable. With many,
+conflating them decides two things nobody agreed to: that one person's identity
+is the same object in every tenant, and that a tenant's admin sees a person who
+also belongs to another tenant.
+
+The owner's framing (2026-09-23), when asked whether a profile belongs to a
+tenant:
+
+> ややこしいですが、Slackのようにアカウントとユーザーは別の概念でもいいかも。
+> あと仕事用とプライベートでアカウントを分けるとかも考慮できるとよいかも。
+> とはいえ、Workspaceからやテナントから見たユーザーの単位は変わらない様に
+> 設計したいです。
+
+Three things, and the third is a constraint on the other two: an ACCOUNT and a
+USER may be different concepts; a person may keep separate accounts (work and
+private); and **the unit a workspace or a tenant sees as "a user" must not
+change**.
+
+## Decision
+
+1. **A USER is who a person is inside ONE tenant.** This is `memberProfiles` as
+   it stands — a display name, and the thing a membership, an attribution, a
+   comment author and a version's operator point at. It is tenant-scoped.
+   Everything a workspace names keeps pointing here, which is what makes the
+   constraint above hold: adding accounts moves nothing a workspace can see.
+
+2. **An ACCOUNT is the login identity: what a passkey authenticates.** It is
+   keeper-wide, belongs to no tenant, and holds credentials. It carries no
+   display name a tenant reads, no membership, and no authority of its own —
+   authority reaches a resource through a user
+   ([ADR-0043](0043-authority-as-keys.md)), never through an account.
+
+3. **An account links to zero or more users, at most one per tenant.** Signing
+   in with an account and then choosing a tenant resolves to that tenant's
+   user. A person who wants to be two people in one tenant uses two accounts,
+   which is the same answer as "work and private".
+
+4. **Nothing joins two accounts.** A person holding a work account and a
+   private one is two accounts to this system, even when the same authenticator
+   holds both credentials. Declaring them the same person is exactly what
+   ADR-0035 decision 4 says a keeper may not do.
+
+5. **The credential table moves under the account, and nothing else moves.**
+   `profileCredentials` (credential -> profile) becomes credential -> account
+   plus account -> user. That is a change on the authentication side only; the
+   workspace-facing unit does not move, per the constraint.
+
+6. **Self-host keeps exactly one account per person and need not show the
+   concept.** A keeper with one tenant has one user per account, so the UI has
+   nothing to choose between. The split must not add a step to the local
+   daemon's pairing flow.
+
+## What is NOT decided
+
+These need the owner, and each one is a real fork rather than a detail:
+
+1. **How a request picks its tenant.** By subdomain, by a path prefix, or from
+   the account's session (the account names its tenants and one is current).
+   The tenant work left this open, and it decides whether `authMode`
+   (`'local-daemon'` vs `'server-mode'`) is the discriminator at all.
+2. **Whether an account may be admitted to a tenant it has no user in, and by
+   whom.** An invitation creates the user; who may send one, and whether an
+   account can refuse, is governance and is not settled here.
+3. **What a person sees when one authenticator holds credentials for two
+   accounts.** Decision 4 says the system does not join them; a passkey picker
+   showing two entries for the same face is a UX question that may yet argue
+   for naming accounts.
+
+## Consequences
+
+- **Easier:** a tenant's member list cannot leak that a person exists
+  elsewhere, because it is a list of users and a user belongs to one tenant.
+  Attribution stays stable when an account is deleted, since a user is not the
+  credential.
+- **Harder:** two objects where there was one, and the join has to be right or
+  a sign-in resolves to the wrong tenant's user. The keeper-wide account table
+  is the one thing the tenant handle deliberately does not scope, so its every
+  query is a place isolation can be lost.
+- **A migration when it lands:** the credential rows have to split, with each
+  existing profile becoming one account plus one user. In a self-host that is
+  a one-to-one rewrite; there is no SaaS data yet.
+- **Cost of recording it now:** the tenant increment classified
+  `memberProfiles` and `profileCredentials` as tenant-scoped, which is the
+  reading this ADR makes permanent for the user half and provisional for the
+  credential half.
+
+## Alternatives considered
+
+- **A profile is global, joined to tenants by memberships.** One object, no
+  migration, and it breaks the constraint: a tenant would read a display name
+  the person set for another tenant, and an admin listing members would see an
+  identity that is not theirs.
+- **A profile is tenant-scoped and there is no account.** What ships today,
+  extended. A person then registers a passkey per tenant, and a keeper with
+  many tenants asks the same person to enrol repeatedly — acceptable at one
+  tenant, which is why it is what ships, and the reason this ADR is a draft
+  rather than a rewrite.
+- **An account IS the user, with a per-tenant nickname.** Collapses decision 3
+  into a field. It reads simpler and loses decision 4: two accounts for one
+  person become impossible, so "work and private" cannot be expressed.
