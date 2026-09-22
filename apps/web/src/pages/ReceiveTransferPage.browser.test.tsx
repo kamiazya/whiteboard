@@ -66,6 +66,11 @@ function senderSnapshot(): Uint8Array {
 function keeperStub(target: LoroDoc, promotes: unknown[]): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
+    // A keeper refuses what carries no credential — so a request that skipped
+    // the auth seam fails here the way it would against a real one.
+    if (new Headers(init?.headers).get('Authorization') !== 'Bearer t') {
+      return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+    }
     if (url.endsWith('/api/workspaces')) {
       return Response.json({ workspaces: [{ workspaceId: 'ws-here', displayName: 'Here' }] })
     }
