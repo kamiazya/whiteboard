@@ -54,8 +54,19 @@ const REGULAR_CONTAINER_SITES: Record<string, { calls: number; reason: string }>
     reason:
       'the helper itself: an occupied key keeps the behaviour it had, because ensureMergeable* throws on one',
   },
+  'content-sync.ts': {
+    // The three accessors of `nodeRoots`, moved here from `workspace-tree.ts`
+    // with the rule they serve. They open a tree document's CONTENT
+    // containers, so the reason below is theirs too.
+    calls: 3,
+    reason:
+      "`nodeRoots` opens a tree document's content containers for the diff write; those are pre-attached at creation from CONTENT_CONTAINER_KEYS, so no replica opens one first",
+  },
   'workspace-tree.ts': {
-    calls: 9,
+    // 9 -> 4: the write's five sites (text/list/map to sync, map/text to
+    // clear) became the three `nodeRoots` accessors in `content-sync.ts`. The
+    // SET of containers opened is unchanged — only the places that spell it.
+    calls: 4,
     reason:
       "a document's content containers, pre-attached at creation from CONTENT_CONTAINER_KEYS so no replica opens one first; mergeable costs 18.6% of the delta log here for a hazard that is already closed",
   },
