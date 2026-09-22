@@ -48,6 +48,9 @@ const GIT = CWD ? `git -C ${CWD}` : 'git'
 // visible to any other dimension, and neither is visible in the diff. Most runs answer
 // `notApplicable` cheaply; that is the cost, and it is one lane. Drop it explicitly via
 // `dimensions` for a diff that plainly cannot touch server-side work.
+// `complexity` is default for that same reason: code that is hard to follow is CORRECT code,
+// and the lint threshold only fires once the shape is set. The lane asks whether a STRUCTURE
+// (a table, a ranked list, a boundary) would remove it, instead of an exemption or a helper.
 const RAW_DIMENSIONS = A.dimensions || [
   'correctness',
   'contract',
@@ -55,6 +58,7 @@ const RAW_DIMENSIONS = A.dimensions || [
   'test-coverage',
   'reachability',
   'background-work',
+  'complexity',
 ]
 // Mirrors .claude/workflows/lib/normalize-dimensions.mjs (unit-tested via node:test — the
 // workflow runtime executes this file as a standalone function body with no module resolution,

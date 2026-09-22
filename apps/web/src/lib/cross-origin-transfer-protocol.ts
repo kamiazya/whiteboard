@@ -114,6 +114,20 @@ export const transferResponseSchema = z.discriminatedUnion('ok', [
     shadowedPaths: z.array(z.string()),
     /** Whether the receiving keeper verified a passkey assertion of its own. */
     attested: z.boolean(),
+    /**
+     * Images the merged record POINTS AT and the destination does not have.
+     *
+     * Image bytes live in the SENDING browser's own file store, outside the
+     * record, and the receiving window is at another origin and cannot read
+     * it — so a transfer carries documents and history and not pictures.
+     * Reported as a count of what is missing rather than left for someone to
+     * discover: a keeper can enumerate what the record references, which is
+     * also exactly the list a sender would have to post to carry them.
+     *
+     * Optional so a receiver that does not compute it is still readable by
+     * this version of the sender.
+     */
+    imagesMissing: z.array(z.string()).optional(),
   }),
   z.object({
     type: z.literal('transfer-result'),
