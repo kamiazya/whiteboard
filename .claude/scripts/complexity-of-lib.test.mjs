@@ -90,3 +90,20 @@ test('the table shows what is over, near, or moved, and leaves out the rest', ()
   assert.match(table, /\+1\s+a\.ts:1\s+moved/)
   assert.doesNotMatch(table, /still/)
 })
+
+test('against a base, a new function shows however low it scores, so moved complexity is visible', () => {
+  // Measured on a real refactor: `pullEdgeOntoOutlines` went 25 -> 4 and the
+  // helper it gained scored 8, which the near-threshold filter hid — so the
+  // table showed a drop without showing where the rest went.
+  const table = formatTable(
+    compare(
+      [{ file: 'a.ts', name: 'pull', line: 1, score: 25 }],
+      [
+        { file: 'a.ts', name: 'pull', line: 1, score: 4 },
+        { file: 'a.ts', name: 'pullEnd', line: 9, score: 8 },
+      ],
+    ),
+    15,
+  )
+  assert.match(table, /8\s+new\s+a\.ts:9\s+pullEnd/)
+})

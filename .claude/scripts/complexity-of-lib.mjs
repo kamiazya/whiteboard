@@ -69,13 +69,18 @@ export function compare(baseRows, headRows) {
 
 /**
  * The table. Shows what a reader has to act on: anything over the threshold,
- * anything within `near` of it, and anything whose score moved. Everything
- * else scores low and did not change, which is not news.
+ * anything within `near` of it, anything whose score moved — and, against a
+ * base, every function that is NEW or GONE whatever it scores. Those two are
+ * how complexity MOVES: a function that dropped from 25 to 4 says nothing
+ * until the 21 that left can be seen arriving somewhere, which is the
+ * difference between removing branches and relocating them.
  */
 export function formatTable(rows, threshold, near = 3) {
   const floor = threshold - near
+  const isNewOrGone = (r) => 'base' in r && (r.base === null || r.score === null)
   const worth = rows.filter(
-    (r) => (r.score ?? 0) >= floor || (r.base ?? 0) >= floor || (r.delta ?? 0) !== 0,
+    (r) =>
+      (r.score ?? 0) >= floor || (r.base ?? 0) >= floor || (r.delta ?? 0) !== 0 || isNewOrGone(r),
   )
   worth.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.file.localeCompare(b.file))
   const hasBase = rows.some((r) => 'base' in r)
