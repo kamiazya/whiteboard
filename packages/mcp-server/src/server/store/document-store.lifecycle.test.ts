@@ -8,6 +8,8 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 // Swap DATA_DIR to a temp directory through vi.mock.
 let tempDir: string
@@ -184,7 +186,10 @@ describe('deleting a document', () => {
         blobStore: {} as never,
         documentIndex: new LoroWorkspaceDocumentIndex(
           cacheBackedWorkspaceDocs(),
-          new FsBlobStore(join(tempDir, 'blobs')),
+          new FsBlobStore(
+            blobsRoot(join(tempDir, 'blobs'), SELF_HOST_TENANT_ID),
+            join(tempDir, 'blobs'),
+          ),
         ),
         documentTeardown,
       },

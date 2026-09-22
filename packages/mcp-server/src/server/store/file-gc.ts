@@ -7,6 +7,8 @@ import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
+import { workspaceFilesDir as tenantFilesDir } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { validateWorkspaceId } from '../validators.js'
 import { backupIsInProgress } from './backup-in-progress.js'
 import { isMissingFileError } from './corrupt-stored-data.js'
@@ -37,7 +39,7 @@ export type PurgeFilesResult = z.infer<typeof purgeResultSchema>
 
 function workspaceFilesDir(workspaceId: string): string {
   validateWorkspaceId(workspaceId)
-  const dir = join(getDataDir(), workspaceId, 'files')
+  const dir = tenantFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId)
   return assertPathWithinDir(dir, getDataDir(), 'files dir')
 }
 

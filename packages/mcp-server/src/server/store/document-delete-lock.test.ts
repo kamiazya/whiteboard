@@ -34,7 +34,7 @@ const { FileVersionStore } = await import('./version-store.js')
 const { getDb } = await import('./db/index.js')
 const { prepareDataDir } = await import('./db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../di/container.js')
-const { createStoreLocalModule } = await import('../../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
 const { wbDocumentCreate, wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
 
 describe('wbDocumentDelete', () => {
@@ -49,9 +49,7 @@ describe('wbDocumentDelete', () => {
   it('leaves no version row behind for a version saved while the delete is in flight', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tempDir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
     // Registered explicitly: `createWorkspace: true` is ADR-0019's MINT
     // boundary, and a mint would key the workspace by a fresh ULID with
     // `ws-1` as its segment — leaving the store reads below naming nothing.

@@ -4,7 +4,7 @@ import { daemonDeviceActor } from '../server/daemon-actor.js'
 import { getDb } from '../server/store/db/index.js'
 import { prepareDataDir } from '../server/store/db/prepare.js'
 import { createContainer, resolveServerDeps } from './container.js'
-import { createStoreLocalModule } from './store-local.module.js'
+import { createSelfHostStoreLocalModule } from './store-local.module.js'
 
 /**
  * The `ServerDeps` the daemon's own HTTP routes fall back to.
@@ -39,7 +39,7 @@ export async function getDefaultServerDeps(): Promise<ServerDeps> {
   const dataDir = getDataDir()
   await prepareDataDir(dataDir)
   const db = await getDb(dataDir)
-  return resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: dataDir })), {
+  return resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, dataDir)), {
     daemonActor: daemonDeviceActor(dataDir),
   })
 }

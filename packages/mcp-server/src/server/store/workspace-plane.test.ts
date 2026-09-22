@@ -22,6 +22,8 @@ import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/tes
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -79,7 +81,10 @@ async function stores() {
     // operates on the same live workspace doc every other path writes.
     index: new LoroWorkspaceDocumentIndex(
       cacheBackedWorkspaceDocs(),
-      new FsBlobStore(joinPath(tempDir, 'blobs')),
+      new FsBlobStore(
+        blobsRoot(joinPath(tempDir, 'blobs'), SELF_HOST_TENANT_ID),
+        joinPath(tempDir, 'blobs'),
+      ),
     ),
   }
 }

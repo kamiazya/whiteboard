@@ -50,8 +50,9 @@ export async function runMigrations(db: Database): Promise<void> {
     if ((error as NodeJS.ErrnoException | undefined)?.code === 'EACCES') {
       throw new Error(
         `Database migration failed${failed ? ` at ${failed}` : ''}: permission denied reading ` +
-          'the data directory. Check filesystem permissions on the workspace blob directories ' +
-          'under <data dir>/blobs and restart. See docs/contributing/mcp-debugging.md ' +
+          'the data directory. Check filesystem permissions on the blob directories under ' +
+          '<data dir>/tenants/<tenant>/blobs (or <data dir>/blobs on a data directory this ' +
+          'daemon has not started yet) and restart. See docs/contributing/mcp-debugging.md ' +
           '(Database Migration Errors).',
         { cause: error },
       )

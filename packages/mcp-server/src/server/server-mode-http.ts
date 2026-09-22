@@ -10,7 +10,7 @@ import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
 import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import { createContainer, resolveServerDeps } from '../di/container.js'
-import { createStoreLocalModule } from '../di/store-local.module.js'
+import { createSelfHostStoreLocalModule } from '../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
@@ -116,7 +116,7 @@ export async function startServerModeHttp(
   const dataDir = getDataDir()
   await ensureWorkspaceId(dataDir)
   const serverDeps = resolveServerDeps(
-    createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
+    createContainer(createSelfHostStoreLocalModule(await getDb(dataDir), dataDir)),
     {
       ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }),
       daemonActor: daemonDeviceActor(dataDir),
