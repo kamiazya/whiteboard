@@ -18,19 +18,18 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { compare, formatTable, scoresFrom, thresholdFrom } from './complexity-of-lib.mjs'
+import { argsFrom, compare, formatTable, scoresFrom, thresholdFrom } from './complexity-of-lib.mjs'
 
 // The tree being measured is the caller's, not the one this script sits in:
 // a worktree runs its own copy, but a reviewer may run this one against another.
 const ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim()
-const args = process.argv.slice(2)
-const baseAt = args.indexOf('--base')
-const base = baseAt === -1 ? null : args[baseAt + 1]
-const positional = args.filter((a, i) => !a.startsWith('--') && i !== baseAt + 1)
-const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf-8' })
+const { base, changed, files: named } = argsFrom(process.argv.slice(2))
+// stderr is dropped: `git show` of a file new in this diff is expected to fail.
+const git = (...a) =>
+  execFileSync('git', a, { cwd: ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] })
 
-let files = positional
-if (args.includes('--changed')) {
+let files = named
+if (changed) {
   if (base === null) throw new Error('--changed needs --base <ref>')
   files = git('diff', '--name-only', '--diff-filter=AMR', `${base}...HEAD`)
     .split('\n')

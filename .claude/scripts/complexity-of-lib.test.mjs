@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { compare, formatTable, scoresFrom, thresholdFrom } from './complexity-of-lib.mjs'
+import { argsFrom, compare, formatTable, scoresFrom, thresholdFrom } from './complexity-of-lib.mjs'
 
 const diag = (path, line, column, endColumn, score) => ({
   severity: 'error',
@@ -106,4 +106,45 @@ test('against a base, a new function shows however low it scores, so moved compl
     15,
   )
   assert.match(table, /8\s+new\s+a\.ts:9\s+pullEnd/)
+})
+
+test('without --base, the first file is still a file', () => {
+  // The index of an absent `--base` is -1, so "skip the argument after it"
+  // skipped index 0: a single file answered "no files".
+  assert.deepEqual(argsFrom(['a.ts', 'b.ts']), { base: null, changed: false, files: ['a.ts', 'b.ts'] })
+  assert.deepEqual(argsFrom(['--base', 'origin/main', 'a.ts']), {
+    base: 'origin/main',
+    changed: false,
+    files: ['a.ts'],
+  })
+  assert.deepEqual(argsFrom(['--base', 'origin/main', '--changed']), {
+    base: 'origin/main',
+    changed: true,
+    files: [],
+  })
+})
+
+test('a function that moved to another file compares against itself, and says where from', () => {
+  // Extracting a module is the structural answer this tool exists to credit,
+  // and it read as a wall of `new` beside a wall of `gone`.
+  const rows = compare(
+    [{ file: 'big.ts', name: 'resolvePalette', line: 440, score: 6 }],
+    [{ file: 'theme.ts', name: 'resolvePalette', line: 58, score: 6 }],
+  )
+  assert.deepEqual(rows, [
+    { file: 'theme.ts', name: 'resolvePalette', line: 58, score: 6, base: 6, delta: 0, from: 'big.ts' },
+  ])
+  assert.match(formatTable(rows, 15), /6\s+6\s+0\s+theme\.ts:58\s+resolvePalette\s+\(from big\.ts\)/)
+})
+
+test('a name in several files is not guessed at: it stays new and gone', () => {
+  const rows = compare(
+    [
+      { file: 'a.ts', name: 'helper', line: 1, score: 3 },
+      { file: 'b.ts', name: 'helper', line: 1, score: 5 },
+    ],
+    [{ file: 'c.ts', name: 'helper', line: 1, score: 4 }],
+  )
+  assert.equal(rows.find((r) => r.file === 'c.ts').base, null)
+  assert.equal(rows.filter((r) => r.score === null).length, 2)
 })

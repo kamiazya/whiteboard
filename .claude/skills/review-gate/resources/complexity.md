@@ -20,8 +20,10 @@ node .claude/scripts/complexity-of.mjs --base origin/main --changed
 
 scores every function the diff touched, at the base and at the head, exempt
 files included, without editing `biome.json` or anything else in the tree. `!`
-is over the threshold, `~` within three of it. Quote those numbers in a
-finding. Never measure by editing `biome.json` in the tree under review.
+is over the threshold, `~` within three of it. A function that moved to
+another file is joined to its old self and reads `(from <file>)`, so an
+extracted module shows as a move rather than as new code. Quote those
+numbers in a finding. Never measure by editing `biome.json` in the tree under review.
 
 ## Criteria
 
