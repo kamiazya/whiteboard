@@ -22,6 +22,8 @@ import { getDataDir } from '../../config.js'
 import { databaseIsInsideDataDir, resolveDatabaseLocation } from './location.js'
 import { writeDatabaseLocationRecord } from './location-record.js'
 import type { DatabaseSchema } from './schema.js'
+import { type TenantDatabase, tenantDatabase } from './tenant-database.js'
+import { SELF_HOST_TENANT_ID } from './tenant-scope.js'
 
 export type Database = Kysely<DatabaseSchema>
 
@@ -105,7 +107,30 @@ async function buildDb(dataDir: string): Promise<Database> {
   return db
 }
 
-export function getDb(dataDir: string = getDataDir()): Promise<Database> {
+/**
+ * The database as a store sees it: bound to the self-host tenant, so every
+ * query on a tenant-scoped table is filtered and stamped (`tenant-database.ts`).
+ * A keeper with one tenant is the only keeper today; a many-tenant one binds
+ * per request instead, and nothing below this line changes.
+ */
+export async function getDb(dataDir: string = getDataDir()): Promise<TenantDatabase> {
+  const raw = await getRawDb(dataDir)
+  let bound = tenantBound.get(raw)
+  if (!bound) {
+    bound = tenantDatabase(raw, SELF_HOST_TENANT_ID)
+    tenantBound.set(raw, bound)
+  }
+  return bound
+}
+
+const tenantBound = new WeakMap<Database, TenantDatabase>()
+
+/**
+ * The unscoped database, for what works across every tenant — today only the
+ * migrations. Every other caller takes `getDb`; `raw-database-callers.test.ts`
+ * holds the list of who may call this.
+ */
+export function getRawDb(dataDir: string = getDataDir()): Promise<Database> {
   const existing = cache.get(dataDir)
   if (existing) return existing
   const pending = buildDb(dataDir)

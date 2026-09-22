@@ -92,7 +92,8 @@ it('is absent before 0030, and backfills one row per distinct workspaceMembershi
 
   const rows = await handle.db
     .selectFrom('workspaceMembersOnly')
-    .selectAll()
+    // 0030's own columns: later migrations add more (0031's tenant).
+    .select(['workspaceId', 'since'])
     .orderBy('workspaceId', 'asc')
     .execute()
   expect(rows).toEqual([{ workspaceId: 'ws-a', since: 10 }])

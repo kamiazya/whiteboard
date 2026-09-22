@@ -37,6 +37,10 @@ async function importModule() {
   }
 }
 
+// Loaded once at collection, not per test: an import inside a test body is
+// charged to that test's timeout.
+const { extractPackJsonText, main, verifyPackContents } = await importModule()
+
 const VALID_ENTRY = {
   size: 1024,
   files: [
@@ -65,8 +69,7 @@ function makeSink() {
 }
 
 describe('verifyPackContents (pure core)', () => {
-  it('accepts a valid pack document with all required files and nothing forbidden', async () => {
-    const { verifyPackContents } = await importModule()
+  it('accepts a valid pack document with all required files and nothing forbidden', () => {
     const result = verifyPackContents([VALID_ENTRY]) as Extract<VerifyResult, { missing: string[] }>
     expect(result.ok).toBe(true)
     expect(result.missing).toEqual([])
@@ -87,8 +90,7 @@ describe('verifyPackContents (pure core)', () => {
     'dist/assets/fonts/Roboto/Roboto-Italic.ttf',
     'dist/assets/fonts/Roboto/Roboto-BoldItalic.ttf',
   ]) {
-    it(`flags ${required} as missing when it is absent`, async () => {
-      const { verifyPackContents } = await importModule()
+    it(`flags ${required} as missing when it is absent`, () => {
       const entry = {
         ...VALID_ENTRY,
         files: VALID_ENTRY.files.filter((f) => f.path !== required),
@@ -108,8 +110,7 @@ describe('verifyPackContents (pure core)', () => {
     ['.DS_Store', 'dist/.DS_Store'],
   ]
   for (const [label, path] of forbiddenCases) {
-    it(`flags a forbidden file: ${label}`, async () => {
-      const { verifyPackContents } = await importModule()
+    it(`flags a forbidden file: ${label}`, () => {
       const entry = { ...VALID_ENTRY, files: [...VALID_ENTRY.files, { path }] }
       const result = verifyPackContents([entry]) as Extract<VerifyResult, { missing: string[] }>
       expect(result.ok).toBe(false)
@@ -117,8 +118,7 @@ describe('verifyPackContents (pure core)', () => {
     })
   }
 
-  it('does not flag .map files — the pack legitimately ships source maps', async () => {
-    const { verifyPackContents } = await importModule()
+  it('does not flag .map files — the pack legitimately ships source maps', () => {
     const entry = {
       ...VALID_ENTRY,
       files: [...VALID_ENTRY.files, { path: 'dist/server/index.js.map' }],
@@ -128,8 +128,7 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.forbidden).toEqual([])
   })
 
-  it('regex fidelity: a .test.ts SOURCE file is not flagged (only shipped .test.js/.test.d.ts artifacts are)', async () => {
-    const { verifyPackContents } = await importModule()
+  it('regex fidelity: a .test.ts SOURCE file is not flagged (only shipped .test.js/.test.d.ts artifacts are)', () => {
     const entry = {
       ...VALID_ENTRY,
       files: [...VALID_ENTRY.files, { path: 'src/server/foo.test.ts' }],
@@ -139,24 +138,21 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.forbidden).toEqual([])
   })
 
-  it('regex fidelity: foo.tests.js (plural, unrelated) is not flagged', async () => {
-    const { verifyPackContents } = await importModule()
+  it('regex fidelity: foo.tests.js (plural, unrelated) is not flagged', () => {
     const entry = { ...VALID_ENTRY, files: [...VALID_ENTRY.files, { path: 'dist/foo.tests.js' }] }
     const result = verifyPackContents([entry]) as Extract<VerifyResult, { missing: string[] }>
     expect(result.ok).toBe(true)
     expect(result.forbidden).toEqual([])
   })
 
-  it('rejects a non-array root', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects a non-array root', () => {
     expect(verifyPackContents({ not: 'an array' })).toEqual({
       ok: false,
       reason: expect.stringContaining('array'),
     })
   })
 
-  it('rejects an empty array', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects an empty array', () => {
     const result = verifyPackContents([]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/empty/)
@@ -172,53 +168,46 @@ describe('verifyPackContents (pure core)', () => {
    * green. It read as dead code too, because a JSDoc cast asserted
    * `Record<string, unknown>` before anything had checked.
    */
-  it('rejects a null entry rather than throwing on it', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects a null entry rather than throwing on it', () => {
     const result = verifyPackContents([null]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/object/)
   })
 
-  it('rejects an entry missing files', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects an entry missing files', () => {
     const result = verifyPackContents([{ size: 1 }]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/files/)
   })
 
-  it('rejects an entry whose files is not an array', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects an entry whose files is not an array', () => {
     const result = verifyPackContents([{ size: 1, files: 'nope' }]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/files/)
   })
 
-  it('rejects a file entry without a string path', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects a file entry without a string path', () => {
     const entry = { ...VALID_ENTRY, files: [...VALID_ENTRY.files, { notPath: 'x' }] }
     const result = verifyPackContents([entry]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/path/)
   })
 
-  it('rejects a missing size', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects a missing size', () => {
     const { size: _size, ...rest } = VALID_ENTRY
     const result = verifyPackContents([rest]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/size/)
   })
 
-  it('rejects a non-finite size', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects a non-finite size', () => {
     const entry = { ...VALID_ENTRY, size: Number.POSITIVE_INFINITY }
     const result = verifyPackContents([entry]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/size/)
   })
 
-  it('rejects a negative size', async () => {
-    const { verifyPackContents } = await importModule()
+  it('rejects a negative size', () => {
     const entry = { ...VALID_ENTRY, size: -1 }
     const result = verifyPackContents([entry]) as { ok: false; reason: string }
     expect(result.ok).toBe(false)
@@ -231,34 +220,29 @@ describe('extractPackJsonText', () => {
   // `[` alone on its own line — real output confirmed by running the command
   // locally. That is the anchor extractPackJsonText looks for, rather than a
   // global first-`[`/last-`]` scan.
-  it('extracts the JSON array even with prepack lifecycle noise before it', async () => {
-    const { extractPackJsonText } = await importModule()
+  it('extracts the JSON array even with prepack lifecycle noise before it', () => {
     const raw =
       'prepack gate: dist/web-app/index.html present — OK\n[\n  {"size":1,"files":[]}\n]\n'
     expect(JSON.parse(extractPackJsonText(raw))).toEqual([{ size: 1, files: [] }])
   })
 
-  it('extracts the JSON array when prelude noise itself contains brackets', async () => {
-    const { extractPackJsonText } = await importModule()
+  it('extracts the JSON array when prelude noise itself contains brackets', () => {
     const raw =
       '[warn] prepack gate: skipped optional check [dist/web-app/index.html]\n' +
       '[\n  {"size":1,"files":[]}\n]\n'
     expect(JSON.parse(extractPackJsonText(raw))).toEqual([{ size: 1, files: [] }])
   })
 
-  it('throws when no JSON array is present', async () => {
-    const { extractPackJsonText } = await importModule()
+  it('throws when no JSON array is present', () => {
     expect(() => extractPackJsonText('no json here')).toThrow()
   })
 
-  it('extracts the JSON array when trailing output follows it (post-pack script logging)', async () => {
-    const { extractPackJsonText } = await importModule()
+  it('extracts the JSON array when trailing output follows it (post-pack script logging)', () => {
     const raw = '[\n  {"size":1,"files":[]}\n]\npostpack: cleanup complete\n'
     expect(JSON.parse(extractPackJsonText(raw))).toEqual([{ size: 1, files: [] }])
   })
 
-  it('extracts the JSON array when a file path inside it contains bracket characters', async () => {
-    const { extractPackJsonText } = await importModule()
+  it('extracts the JSON array when a file path inside it contains bracket characters', () => {
     const raw = '[\n  {"size":1,"files":[{"path":"dist/[locale]/page.js"}]}\n]\ntrailing noise\n'
     expect(JSON.parse(extractPackJsonText(raw))).toEqual([
       { size: 1, files: [{ path: 'dist/[locale]/page.js' }] },
@@ -266,9 +250,18 @@ describe('extractPackJsonText', () => {
   })
 })
 
+describe('extractPackJsonText and escaped quotes', () => {
+  it('does not end a path at an escaped quote followed by a bracket', () => {
+    // `\"]` inside a string is text: a scanner that ignored the escape would
+    // close the string there and read the `]` as the end of the array.
+    const path = 'dist/odd\\"]name.js'
+    const raw = `[\n  {"size":1,"files":[{"path":${JSON.stringify(path)}}]}\n]\ntrailing noise\n`
+    expect(JSON.parse(extractPackJsonText(raw))).toEqual([{ size: 1, files: [{ path }] }])
+  })
+})
+
 describe('main() CLI', () => {
-  it('--stdin mode reads the document from stdin instead of spawning npm', async () => {
-    const { main } = await importModule()
+  it('--stdin mode reads the document from stdin instead of spawning npm', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     const spawn = () => {
@@ -285,8 +278,7 @@ describe('main() CLI', () => {
     expect(stdout.chunks.join('')).toMatch(/OK/)
   })
 
-  it('default mode self-spawns `npm pack --dry-run --json` in cwd', async () => {
-    const { main } = await importModule()
+  it('default mode self-spawns `npm pack --dry-run --json` in cwd', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     let spawnedWith: { cmd: string; args: string[]; opts: Record<string, unknown> } | null = null
@@ -303,8 +295,7 @@ describe('main() CLI', () => {
     })
   })
 
-  it('spawns npm.cmd (not npm) on win32, where the bare npm binary is not on PATH', async () => {
-    const { main } = await importModule()
+  it('spawns npm.cmd (not npm) on win32, where the bare npm binary is not on PATH', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     let spawnedCmd: string | null = null
@@ -317,8 +308,7 @@ describe('main() CLI', () => {
     expect(spawnedCmd).toBe('npm.cmd')
   })
 
-  it('fails loudly when the npm spawn itself errors', async () => {
-    const { main } = await importModule()
+  it('fails loudly when the npm spawn itself errors', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     const spawn = () => ({ status: null, error: new Error('ENOENT') })
@@ -327,8 +317,7 @@ describe('main() CLI', () => {
     expect(stderr.chunks.join('')).toMatch(/ENOENT/)
   })
 
-  it('fails loudly when npm pack exits non-zero', async () => {
-    const { main } = await importModule()
+  it('fails loudly when npm pack exits non-zero', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     const spawn = () => ({ status: 1, stdout: '' })
@@ -337,8 +326,7 @@ describe('main() CLI', () => {
     expect(stderr.chunks.join('')).toMatch(/status 1|exit/i)
   })
 
-  it('fails loudly when stdout is not parseable as JSON', async () => {
-    const { main } = await importModule()
+  it('fails loudly when stdout is not parseable as JSON', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     const spawn = () => ({ status: 0, stdout: 'not json at all' })
@@ -347,8 +335,7 @@ describe('main() CLI', () => {
     expect(stderr.chunks.length).toBeGreaterThan(0)
   })
 
-  it('fails loudly and reports missing/forbidden files on a content violation', async () => {
-    const { main } = await importModule()
+  it('fails loudly and reports missing/forbidden files on a content violation', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     const badEntry = {
@@ -363,8 +350,7 @@ describe('main() CLI', () => {
     expect(errText).toMatch(/foo\.test\.js/)
   })
 
-  it('writes success summary (file count + size) to stdout, not stderr', async () => {
-    const { main } = await importModule()
+  it('writes success summary (file count + size) to stdout, not stderr', () => {
     const stdout = makeSink()
     const stderr = makeSink()
     const spawn = () => ({ status: 0, stdout: JSON.stringify([VALID_ENTRY]) })

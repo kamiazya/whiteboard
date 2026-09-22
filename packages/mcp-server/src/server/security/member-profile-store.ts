@@ -42,7 +42,11 @@
 
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import type { Database } from '../store/db/index.js'
+import {
+  inTenantTransaction,
+  type TenantDatabase,
+  type TenantScoped,
+} from '../store/db/tenant-database.js'
 
 const memberProfileRowSchema = z
   .object({
@@ -117,9 +121,9 @@ export interface MemberProfileStore {
 // Inserts the membership row and, on a workspace's FIRST membership ever,
 // its `workspaceMembersOnly` marker — in one transaction so the two can
 // never disagree about whether a workspace has had a member.
-async function insertMembership(db: Database, workspaceId: string, profileId: string) {
+async function insertMembership(db: TenantScoped, workspaceId: string, profileId: string) {
   const now = Date.now()
-  await db.transaction().execute(async (trx) => {
+  await inTenantTransaction(db, async (trx) => {
     await trx
       .insertInto('workspaceMemberships')
       .values({ workspaceId, profileId, createdAt: now })
@@ -135,7 +139,7 @@ async function insertMembership(db: Database, workspaceId: string, profileId: st
 
 // Deletes the membership row only — `workspaceMembersOnly` is never cleared
 // here (see the file header).
-async function deleteMembership(db: Database, workspaceId: string, profileId: string) {
+async function deleteMembership(db: TenantScoped, workspaceId: string, profileId: string) {
   return db
     .deleteFrom('workspaceMemberships')
     .where('workspaceId', '=', workspaceId)
@@ -145,7 +149,7 @@ async function deleteMembership(db: Database, workspaceId: string, profileId: st
 }
 
 // `db` may be a transaction: Kysely's Transaction is a Kysely.
-async function loadProfile(db: Database, profileId: string): Promise<MemberProfile | null> {
+async function loadProfile(db: TenantScoped, profileId: string): Promise<MemberProfile | null> {
   const row = await db
     .selectFrom('memberProfiles')
     .selectAll()
@@ -160,7 +164,7 @@ async function loadProfile(db: Database, profileId: string): Promise<MemberProfi
   return memberProfileSchema.parse({ ...row, credentials })
 }
 
-export function createMemberProfileStore(db: Database): MemberProfileStore {
+export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore {
   return {
     async profileForCredential(origin, credentialId) {
       const pin = await db
@@ -174,7 +178,7 @@ export function createMemberProfileStore(db: Database): MemberProfileStore {
     },
 
     async ensureProfile({ origin, credentialId, displayName }) {
-      return db.transaction().execute(async (trx) => {
+      return inTenantTransaction(db, async (trx) => {
         const existing = await trx
           .selectFrom('profileCredentials')
           .select('profileId')
