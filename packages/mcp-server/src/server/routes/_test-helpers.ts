@@ -55,9 +55,9 @@ export async function seedWorkspaceRow(dataDir: string, workspaceId: string): Pr
   const { getDb } = await import('../store/db/index.js')
   const { prepareDataDir } = await import('../store/db/prepare.js')
   const { createContainer, resolveServerDeps } = await import('../../di/container.js')
-  const { createStoreLocalModule } = await import('../../di/store-local.module.js')
+  const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
   await prepareDataDir(dataDir)
   const db = await getDb(dataDir)
-  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: dataDir })))
+  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, dataDir)))
   await deps.documentIndex.createWorkspace({ workspaceId })
 }

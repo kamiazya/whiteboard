@@ -45,7 +45,7 @@ const { createWorkspacesRouter } = await import('./workspaces.js')
 const { createDocumentRouter } = await import('../document.js')
 const { getDb } = await import('../../store/db/index.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
-const { createStoreLocalModule } = await import('../../../di/store-local.module.js')
+const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 
 // These routes are adapters over the document index (ADR-0018), so forcing
 // one to fail means making the OPERATION fail, not stubbing a store function
@@ -54,7 +54,7 @@ const { createStoreLocalModule } = await import('../../../di/store-local.module.
 // its prototype.
 async function depsWithFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
   const db = await getDb(tmp.dir)
-  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   // A Proxy that binds every untouched method to the REAL instance:
   // Object.create is not enough for the tree index, whose private fields
   // reject a detached receiver ("Receiver must be an instance of class").
@@ -106,9 +106,7 @@ describe('GET /api/workspaces', () => {
   // null/undefined — the same "absent, not invented" contract the port uses.
   it('serves segment/displayName for a workspace that has them, and omits the keys for one that does not', async () => {
     const db = await getDb(tmp.dir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
     await deps.documentIndex.createWorkspace({
       workspaceId: 'workspace-named',
       segment: 'team-notes',
@@ -144,9 +142,7 @@ describe('GET /api/workspaces', () => {
   // under listWorkspacesResponseSchema exactly as before this field existed.
   it('echoes tier per row when a resolver is threaded, and omits it otherwise', async () => {
     const db = await getDb(tmp.dir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
     await deps.documentIndex.createWorkspace({ workspaceId: 'workspace-tiered' })
 
     const withResolver = createWorkspacesRouter({
@@ -176,9 +172,7 @@ describe('GET /api/workspaces', () => {
   // peak concurrency to the row count and fails the last assertion.
   it('counts each workspace sequentially — the per-row listings never overlap', async () => {
     const db = await getDb(tmp.dir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
     for (const workspaceId of ['workspace-a', 'workspace-b', 'workspace-c']) {
       await deps.documentIndex.createWorkspace({ workspaceId })
     }

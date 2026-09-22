@@ -19,6 +19,8 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -62,7 +64,7 @@ function canvasDoc(text: string): LoroDoc {
 function treeIndex() {
   return new CacheCoherentDocumentIndex(
     cacheBackedWorkspaceDocs(),
-    new FsBlobStore(tempDir),
+    new FsBlobStore(blobsRoot(tempDir, SELF_HOST_TENANT_ID), tempDir),
     workspaceRegistry(),
   )
 }

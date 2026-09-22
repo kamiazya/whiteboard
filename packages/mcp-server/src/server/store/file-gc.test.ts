@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { workspaceFilesDir } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
 
@@ -61,7 +63,7 @@ async function seedFile(
   ext: string,
   bytes: number,
 ): Promise<void> {
-  const dir = join(tempDir, workspaceId, 'files')
+  const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId)
   await mkdir(dir, { recursive: true })
   const path = join(dir, `${fileId}${ext}`)
   await writeFile(path, Buffer.alloc(bytes, 0xab))
@@ -79,7 +81,7 @@ async function seedFreshFile(
   ext: string,
   bytes: number,
 ): Promise<void> {
-  const dir = join(tempDir, workspaceId, 'files')
+  const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId)
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, `${fileId}${ext}`), Buffer.alloc(bytes, 0xcd))
 }
@@ -123,7 +125,9 @@ describe('purgeDanglingFiles', () => {
     const result = await purgeDanglingFiles('ws_nodes')
 
     expect(result.purgedCount).toBe(0)
-    const remaining = (await readdir(join(tempDir, 'ws_nodes', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_nodes'))
+    ).sort()
     expect(remaining).toEqual(['asset-x.png'])
   })
 
@@ -143,7 +147,9 @@ describe('purgeDanglingFiles', () => {
     expect(result.purgedCount).toBe(2)
     expect(result.purgedBytes).toBe(1500)
 
-    const remaining = (await readdir(join(tempDir, 'ws_a', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_a'))
+    ).sort()
     expect(remaining).toEqual(['used-a.png', 'used-b.png'])
   })
 
@@ -158,7 +164,9 @@ describe('purgeDanglingFiles', () => {
     const result = await purgeDanglingFiles('ws_legacy')
 
     expect(result.purgedCount).toBe(0)
-    const remaining = (await readdir(join(tempDir, 'ws_legacy', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_legacy'))
+    ).sort()
     expect(remaining).toEqual(['legacy-image.png'])
   })
 
@@ -203,7 +211,9 @@ describe('purgeDanglingFiles', () => {
 
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(30)
-    const remaining = (await readdir(join(tempDir, 'ws_mixed', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_mixed'))
+    ).sort()
     expect(remaining).toEqual(['legacy-ref.png', 'nodes-ref.png'])
   })
 
@@ -251,7 +261,9 @@ describe('purgeDanglingFiles', () => {
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(100)
 
-    const remaining = (await readdir(join(tempDir, 'ws_v', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_v'))
+    ).sort()
     expect(remaining).toEqual(['live-now.png', 'version-only.png'])
   })
 
@@ -301,7 +313,9 @@ describe('purgeDanglingFiles', () => {
 
     // Crucially: nothing was deleted, even though only-by-broken-version
     // would have been classified as dangling under the old behaviour.
-    const remaining = (await readdir(join(tempDir, 'ws_brk', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_brk'))
+    ).sort()
     expect(remaining).toEqual(['only-by-broken-version.png', 'really-dangling.png'])
 
     try {
@@ -333,7 +347,9 @@ describe('purgeDanglingFiles', () => {
     // old-orphan is past the grace window, gone. pending is fresh —
     // preserved this round.
     expect(result.purgedCount).toBe(1)
-    const remaining = (await readdir(join(tempDir, 'ws_grace', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_grace'))
+    ).sort()
     expect(remaining).toEqual(['pending.png'])
   })
 
@@ -345,7 +361,7 @@ describe('purgeDanglingFiles', () => {
     await seedFreshFile('ws_grace0', 'fresh-orphan', '.png', 16)
     const result = await purgeDanglingFiles('ws_grace0', { graceMs: 0 })
     expect(result.purgedCount).toBe(1)
-    const remaining = await readdir(join(tempDir, 'ws_grace0', 'files'))
+    const remaining = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_grace0'))
     expect(remaining).toEqual([])
   })
 
@@ -427,7 +443,9 @@ describe('purgeDanglingFiles', () => {
     const [, purgeResult] = await Promise.all([savePromise, purgePromise])
 
     expect(purgeResult.purgedCount).toBe(0)
-    const remaining = (await readdir(join(tempDir, 'ws_race', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_race'))
+    ).sort()
     expect(remaining).toEqual(['about-to-reference.png'])
   })
 
@@ -486,7 +504,9 @@ describe('purgeDanglingFiles', () => {
       purgeDanglingFiles('ws_nullver', { versionStore: fakeStore as any, graceMs: 0 }),
     ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
 
-    const remaining = (await readdir(join(tempDir, 'ws_nullver', 'files'))).sort()
+    const remaining = (
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_nullver'))
+    ).sort()
     expect(remaining).toEqual(['only-by-null-version.png', 'really-dangling-3.png'])
   })
 })
@@ -521,7 +541,9 @@ describe('purgeDanglingFiles across instances', () => {
     expect((await listDocuments(workspaceId)).map((entry) => entry.path)).not.toContain('theirs')
 
     await purgeDanglingFiles(workspaceId, { graceMs: 0 })
-    expect(await readdir(join(tempDir, workspaceId, 'files'))).toContain('theirs.png')
+    expect(await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId))).toContain(
+      'theirs.png',
+    )
   })
 
   it('still deletes a blob nothing references, after catching up', async () => {
@@ -538,7 +560,9 @@ describe('purgeDanglingFiles across instances', () => {
 
     const result = await purgeDanglingFiles(workspaceId, { graceMs: 0 })
     expect(result.purgedCount).toBe(1)
-    expect(await readdir(join(tempDir, workspaceId, 'files'))).not.toContain('orphan.png')
+    expect(
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId)),
+    ).not.toContain('orphan.png')
   })
 })
 
@@ -598,7 +622,7 @@ it('stands down when another instance writes while the pass is deciding', async 
   expect(result.purgedCount).toBe(0)
   // Nothing was unlinked — not even the file that really was dangling. A
   // stood-down pass acts on nothing, and the next pass decides again.
-  const files = await readdir(join(tempDir, workspaceId, 'files'))
+  const files = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId))
   expect(files).toContain('orphan.png')
   expect(files).toContain('kept.png')
 })
@@ -628,7 +652,7 @@ it('stands down while a backup is assembling this data directory', async () => {
   expect(result.skippedReason).toBe('backup-in-progress')
   expect(result.purgedCount).toBe(0)
   // Nothing unlinked — not even the file that really was dangling.
-  const files = await readdir(join(tempDir, workspaceId, 'files'))
+  const files = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId))
   expect(files).toContain('orphan.png')
   expect(files).toContain('kept.png')
 })
@@ -644,7 +668,7 @@ it('collects again once the backup has finished', async () => {
 
   expect(result.skippedReason).toBeUndefined()
   expect(result.purgedCount).toBe(1)
-  const files = await readdir(join(tempDir, workspaceId, 'files'))
+  const files = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId))
   expect(files).not.toContain('orphan.png')
   expect(files).toContain('kept.png')
 })

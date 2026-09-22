@@ -130,48 +130,64 @@ function renderBackdrop(run: TextRunNode): SvgChild {
   })
 }
 
-function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
-  // The substitution is the PAINTER's alone — see `paints` on TextRunNode
-  // for why the run stays a run. Same attribute order and the same
-  // `<title>` accessible name as the block image below, so the two kinds
-  // describe themselves identically. `meet` rather than `slice`: an inline
-  // picture is sized to the line, and cropping it to fill a text box would
-  // cut the thing the author put there.
-  if (run.paints?.kind === 'image') {
+type RunPaint = NonNullable<TextRunNode['paints']>
+type PaintOf<K extends RunPaint['kind']> = Extract<RunPaint, { kind: K }>
+type PaintFns = {
+  readonly [K in RunPaint['kind']]: (
+    run: TextRunNode,
+    paint: PaintOf<K>,
+    tables?: ResolveTables,
+  ) => SvgChild | undefined
+}
+
+/**
+ * What a run that PAINTS something instead of its text draws, by kind — or
+ * `undefined` to draw the text after all. The substitution is the PAINTER's
+ * alone — see `paints` on TextRunNode for why the run stays a run.
+ */
+const PAINT_BY_KIND = {
+  // Same attribute order and the same `<title>` accessible name as the block
+  // image below, so the two kinds describe themselves identically. `meet`
+  // rather than `slice`: an inline picture is sized to the line, and cropping
+  // it to fill a text box would cut the thing the author put there.
+  image: (run: TextRunNode, paint: PaintOf<'image'>): SvgChild => {
     const alt = run.text.trim()
     return el(
       'image',
       {
         ...rectAttrs(run.bbox),
-        href: run.paints.src,
+        href: paint.src,
         preserveAspectRatio: 'xMidYMid meet',
         role: alt === '' ? PRESENTATION : undefined,
       },
       alt === '' ? [] : [el('title', undefined, [alt])],
     )
-  }
-  if (run.paints?.kind === 'icon') {
-    // A body run names no fill of its own so it INHERITS the host's (see
-    // `Appearance.fillOpacity`), and an icon is stroked where prose is
-    // filled — no host sets a stroke, so asking for `currentColor` is what
-    // makes the icon the colour the prose beside it resolved to rather than
-    // the SVG default, black, on every theme. A run that DOES name a fill
-    // (a link) hands it over instead, so the icon follows what it sits in.
-    //
-    // Falling through to the text is not a degradation to tidy away: a
-    // deployment supplies its own icon table, so a name this one cannot
-    // draw has to say something, and the source the author typed is the
-    // most useful thing it can say.
-    const use = renderIconUse(
-      run.paints.name,
+  },
+  // A body run names no fill of its own so it INHERITS the host's (see
+  // `Appearance.fillOpacity`), and an icon is stroked where prose is
+  // filled — no host sets a stroke, so asking for `currentColor` is what
+  // makes the icon the colour the prose beside it resolved to rather than
+  // the SVG default, black, on every theme. A run that DOES name a fill
+  // (a link) hands it over instead, so the icon follows what it sits in.
+  //
+  // Falling through to the text is not a degradation to tidy away: a
+  // deployment supplies its own icon table, so a name this one cannot
+  // draw has to say something, and the source the author typed is the
+  // most useful thing it can say.
+  icon: (run: TextRunNode, paint: PaintOf<'icon'>, tables?: ResolveTables) =>
+    renderIconUse(
+      paint.name,
       run.bbox,
       run.appearance,
       tables?.icons,
       glowOf(run.appearance, tables),
       run.appearance?.fill ?? 'currentColor',
-    )
-    if (use !== undefined) return use
-  }
+    ),
+} satisfies PaintFns
+
+function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
+  const painted = run.paints === undefined ? undefined : paintRun(run, run.paints, tables)
+  if (painted !== undefined) return painted
   const halo = run.appearance?.halo
   const glow = glowOf(run.appearance, tables)
   // A surface-colored pill under the whole text box (a glyph-outline halo
@@ -212,6 +228,15 @@ function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
   const href =
     run.link.kind === 'link' ? sanitizeHref(run.link.href) : trustedHref(run.link.documentId)
   return el('a', { href }, [content])
+}
+
+function paintRun<K extends RunPaint['kind']>(
+  run: TextRunNode,
+  paint: PaintOf<K>,
+  tables: ResolveTables | undefined,
+): SvgChild | undefined {
+  const draw: PaintFns[K] = PAINT_BY_KIND[paint.kind]
+  return draw(run, paint, tables)
 }
 
 function renderListItem(item: ListItemNode, tables?: ResolveTables): SvgChild {

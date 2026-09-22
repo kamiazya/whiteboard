@@ -19,6 +19,8 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/p
 import { dirname, join, posix, relative, sep } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 const log = getLogger('backup-blob-mirror')
 
@@ -122,7 +124,9 @@ export async function mirrorBlobsIntoBackup(
   backupRoot: string,
   options: MirrorBlobsOptions = {},
 ): Promise<BackupBlobReferences> {
-  const sourceRoot = join(dataDir, 'blobs')
+  // One tenant's blobs. A many-tenant keeper mirrors each tenant in turn; the
+  // mirror itself stays flat, because a blob's path there IS its digest.
+  const sourceRoot = blobsRoot(dataDir, SELF_HOST_TENANT_ID)
   const blobs = new Set<string>()
   const files: Record<string, string> = {}
 

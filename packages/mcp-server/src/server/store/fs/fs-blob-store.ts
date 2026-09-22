@@ -37,7 +37,7 @@ function digestHex(bytes: Uint8Array): string {
 
 /**
  * Filesystem-backed, content-addressed `BlobStore`. Bytes are stored under
- * `<baseDir>/blobs/<first2Hex>/<remaining62Hex>` — sharding by hash prefix
+ * `<blobsDir>/<first2Hex>/<remaining62Hex>` — sharding by hash prefix
  * keeps any single directory from accumulating one entry per distinct blob
  * ever stored. Identical bytes always resolve to the same path, so `put`
  * is naturally idempotent/deduplicating.
@@ -46,9 +46,16 @@ export class FsBlobStore implements BlobStore {
   private readonly blobsDir: string
   private readonly baseDir: string
 
-  constructor(baseDir: string) {
-    this.baseDir = baseDir
-    this.blobsDir = join(baseDir, 'blobs')
+  /**
+   * `blobsDir` is where this store's shards live — one tenant's, chosen by
+   * `data-layout.ts`, never joined here. `stagingDir` is the root
+   * `writeFileAtomic` stages under: the data directory, so a staged file is on
+   * the same filesystem as its target and inside the one `.pending-writes`
+   * directory a backup already excludes.
+   */
+  constructor(blobsDir: string, stagingDir: string) {
+    this.baseDir = stagingDir
+    this.blobsDir = blobsDir
   }
 
   private shardDirForRef(ref: BlobRef): string {

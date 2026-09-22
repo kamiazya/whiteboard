@@ -43,10 +43,3 @@ export const TENANT_SCOPED_TABLES: ReadonlySet<string> = new Set(
 export function isTenantScoped(table: string): table is TenantScopedTable {
   return TENANT_SCOPED_TABLES.has(table)
 }
-
-/**
- * The one tenant a self-hosted keeper holds. Its row is created by the
- * migration that introduced tenants, so a self-host is a keeper with one
- * row in `tenants` and SaaS is the same shape with more.
- */
-export const SELF_HOST_TENANT_ID = 'self-host'

@@ -63,7 +63,7 @@ describe('documentWritten', () => {
   // throughout the entire time agent writes triggered no compaction.
   it('a real wb_canvas_edit through the real container schedules one', async () => {
     const { createContainer, resolveServerDeps } = await import('../../di/container.js')
-    const { createStoreLocalModule } = await import('../../di/store-local.module.js')
+    const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
     const { wbDocumentCreate, createCanvasEditTool } = await import(
       '@kamiazya/whiteboard-server-core'
     )
@@ -72,9 +72,7 @@ describe('documentWritten', () => {
     // this one talks to the container directly, so it has to migrate first.
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-    const deps = resolveServerDeps(
-      createContainer(createStoreLocalModule({ db, blobDir: tempDir })),
-    )
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
     // Registered explicitly: `createWorkspace: true` is ADR-0019's MINT
     // boundary, and a mint would key the workspace by a fresh ULID with
     // `ws-1` as its segment — leaving the store reads below naming nothing.

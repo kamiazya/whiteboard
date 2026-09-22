@@ -4,8 +4,19 @@ import { join } from 'node:path'
 import { setImmediate as realSetImmediate, setTimeout as realSetTimeout } from 'node:timers'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  workspaceDir as tenantWorkspaceDir,
+  workspaceFilesDir,
+  workspacesRoot,
+} from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
+
+// This file names a lot of paths; the layout itself is `data-layout.ts`'s.
+const wsRoot = (): string => workspacesRoot(tempDir, SELF_HOST_TENANT_ID)
+const wsDir = (id: string): string => tenantWorkspaceDir(tempDir, SELF_HOST_TENANT_ID, id)
+const wsFiles = (id: string): string => workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, id)
 
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
@@ -696,7 +707,7 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
     live.commit()
     await saveDocument('ws_v', 'evolving', live, { overwrite: true })
 
-    const filesDir = join(tempDir, 'ws_v', 'files')
+    const filesDir = wsFiles('ws_v')
     await mkdir(filesDir, { recursive: true })
     await writeFile(join(filesDir, 'version-only.png'), Buffer.alloc(10, 1))
     // Age the file past the default grace window so this test isolates the
@@ -725,7 +736,7 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
 
 describe('discoverFsWorkspaces (default, via real filesystem)', () => {
   it('finds an upload-only workspace dir with no DB row and purges its dangling file after grace elapses', async () => {
-    const filesDir = join(tempDir, 'ws_upload_only', 'files')
+    const filesDir = wsFiles('ws_upload_only')
     await mkdir(filesDir, { recursive: true })
     await writeFile(join(filesDir, 'orphan.png'), Buffer.alloc(10, 2))
     // Age the file past the default grace window.
@@ -753,7 +764,8 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
         m.utimes(join(outsideFilesDir, 'secret.png'), past, past),
       )
 
-      await symlink(outsideDir, join(tempDir, 'evil'), 'dir')
+      await mkdir(wsRoot(), { recursive: true })
+      await symlink(outsideDir, wsDir('evil'), 'dir')
 
       const sweeper = createFileGcSweeper({
         listWorkspaces: async () => [],
@@ -783,7 +795,8 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
       // dir, but the DB still lists it as a workspace -- unlike the
       // filesystem-discovery path, this is not filtered by
       // discoverFsWorkspaces()'s own containment check.
-      await symlink(outsideDir, join(tempDir, 'evil_db_ws'), 'dir')
+      await mkdir(wsRoot(), { recursive: true })
+      await symlink(outsideDir, wsDir('evil_db_ws'), 'dir')
 
       const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
       const sweeper = createFileGcSweeper({
@@ -822,7 +835,7 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     // -- this is exactly the upload-only-workspace case the sweeper exists
     // to cover, and it must not be excluded just because the name is
     // 'blobs'.
-    const filesDir = join(tempDir, 'blobs', 'files')
+    const filesDir = wsFiles('blobs')
     await mkdir(filesDir, { recursive: true })
     await writeFile(join(filesDir, 'orphan.png'), Buffer.alloc(10, 6))
     const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
@@ -852,7 +865,7 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
       // own), but its files/ CHILD is a symlink pointing outside the data
       // dir. purgeDanglingFiles() only lexically joins <dir>/files and
       // follows whatever that resolves to.
-      const workspaceDir = join(tempDir, 'ws_files_symlink')
+      const workspaceDir = wsDir('ws_files_symlink')
       await mkdir(workspaceDir, { recursive: true })
       await symlink(outsideDir, join(workspaceDir, 'files'), 'dir')
 
@@ -889,13 +902,17 @@ describe('createFileGcSweeper per-workspace containment revalidation', () => {
       await mkdir(outsideFilesDir, { recursive: true })
       await writeFile(join(outsideFilesDir, 'secret.png'), Buffer.alloc(10, 7))
 
-      await mkdir(join(tempDir, 'ws_first', 'files'), { recursive: true })
-      await mkdir(join(tempDir, 'ws_second', 'files'), { recursive: true })
+      await mkdir(wsFiles('ws_first'), { recursive: true })
+      await mkdir(wsFiles('ws_second'), { recursive: true })
 
       const purge = vi.fn(async (workspaceId: string) => {
         if (workspaceId === 'ws_first') {
-          await rm(join(tempDir, 'ws_second'), { recursive: true, force: true })
-          await symlink(outsideDir, join(tempDir, 'ws_second'), 'dir')
+          await rm(wsDir('ws_second'), {
+            recursive: true,
+            force: true,
+          })
+          await mkdir(wsRoot(), { recursive: true })
+          await symlink(outsideDir, wsDir('ws_second'), 'dir')
         }
         return { purgedCount: 0, purgedBytes: 0 }
       })
@@ -920,7 +937,7 @@ describe('isDbWorkspaceDirSafe generic (non-ENOENT) stat/realpath failures', () 
   it('fails closed and logs a warning when stat rejects with a permission error', async () => {
     const cap = captureLogsForTests('debug')
     try {
-      const workspaceDir = join(tempDir, 'ws_locked')
+      const workspaceDir = wsDir('ws_locked')
       await mkdir(workspaceDir, { recursive: true })
       const boom = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
       fsFailureOverrides.lstat = { path: workspaceDir, err: boom }
@@ -953,7 +970,7 @@ describe('isDbWorkspaceDirSafe generic (non-ENOENT) stat/realpath failures', () 
   it('fails closed and logs a warning when realpath rejects with a non-ENOENT error', async () => {
     const cap = captureLogsForTests('debug')
     try {
-      const workspaceDir = join(tempDir, 'ws_unresolvable')
+      const workspaceDir = wsDir('ws_unresolvable')
       await mkdir(workspaceDir, { recursive: true })
       const boom = Object.assign(new Error('EIO: i/o error'), { code: 'EIO' })
       fsFailureOverrides.realpath = { path: workspaceDir, err: boom }

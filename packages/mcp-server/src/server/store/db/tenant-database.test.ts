@@ -4,8 +4,9 @@ import { join } from 'node:path'
 import { sql } from 'kysely'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../../shared/test-utils/fast-check.js'
+import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { tenantDatabase } from './tenant-database.js'
-import { SELF_HOST_TENANT_ID, TENANT_SCOPED_TABLES } from './tenant-scope.js'
+import { TENANT_SCOPED_TABLES } from './tenant-scope.js'
 import { createIsolatedDb } from './test-helpers.js'
 
 let root: string

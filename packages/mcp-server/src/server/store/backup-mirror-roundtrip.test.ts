@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { restoreDataDir } from '../backup-restore.js'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { performBackup } from './backup-pass.js'
 import { closeDb, getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -25,14 +27,18 @@ afterEach(async () => {
 
 async function putBlob(contents: string): Promise<string> {
   const digest = createHash('sha256').update(contents).digest('hex')
-  const dir = join(dataDir, 'blobs', digest.slice(0, 2))
+  const dir = join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), digest.slice(0, 2))
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, digest.slice(2)), contents)
   return digest
 }
 
 async function putThumbnail(version: string, contents: string): Promise<void> {
-  const dir = join(dataDir, 'blobs', '01JWORKSPACE00000000000000', 'versions')
+  const dir = join(
+    blobsRoot(dataDir, SELF_HOST_TENANT_ID),
+    '01JWORKSPACE00000000000000',
+    'versions',
+  )
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, `${version}.png`), contents)
 }
@@ -81,11 +87,19 @@ describe('a mirrored backup restores what it captured', () => {
 
     const restored = await restoreInto(backupDir)
     expect(
-      await readFile(join(restored, 'blobs', digest.slice(0, 2), digest.slice(2)), 'utf8'),
+      await readFile(
+        join(blobsRoot(restored, SELF_HOST_TENANT_ID), digest.slice(0, 2), digest.slice(2)),
+        'utf8',
+      ),
     ).toBe('an uploaded image')
     expect(
       await readFile(
-        join(restored, 'blobs', '01JWORKSPACE00000000000000', 'versions', 'v1.png'),
+        join(
+          blobsRoot(restored, SELF_HOST_TENANT_ID),
+          '01JWORKSPACE00000000000000',
+          'versions',
+          'v1.png',
+        ),
         'utf8',
       ),
     ).toBe('a version thumbnail')
@@ -115,7 +129,10 @@ describe('a mirrored backup restores what it captured', () => {
 
     const restored = await restoreInto(moved)
     expect(
-      await readFile(join(restored, 'blobs', digest.slice(0, 2), digest.slice(2)), 'utf8'),
+      await readFile(
+        join(blobsRoot(restored, SELF_HOST_TENANT_ID), digest.slice(0, 2), digest.slice(2)),
+        'utf8',
+      ),
     ).toBe('a one-off')
   })
 
@@ -145,7 +162,10 @@ describe('a mirrored backup restores what it captured', () => {
       [second, 'from the second night'],
     ] as const) {
       expect(
-        await readFile(join(restored, 'blobs', digest.slice(0, 2), digest.slice(2)), 'utf8'),
+        await readFile(
+          join(blobsRoot(restored, SELF_HOST_TENANT_ID), digest.slice(0, 2), digest.slice(2)),
+          'utf8',
+        ),
       ).toBe(contents)
     }
   })

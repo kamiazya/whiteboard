@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { blobsRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { mirrorBlobsIntoBackup, readBackupBlobManifest } from './backup-blob-mirror.js'
 
 let root: string
@@ -22,7 +24,7 @@ afterEach(async () => {
 /** Write a blob where `FsBlobStore` would put it: `blobs/<2hex>/<62hex>`. */
 async function putBlob(contents: string): Promise<string> {
   const digest = createHash('sha256').update(contents).digest('hex')
-  const dir = join(dataDir, 'blobs', digest.slice(0, 2))
+  const dir = join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), digest.slice(0, 2))
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, digest.slice(2)), contents)
   return digest
@@ -102,7 +104,7 @@ describe('the backup blob mirror', () => {
       await mirrorBlobsIntoBackup(dataDir, backupRoot)
     }
 
-    const store = await dirBytes(join(dataDir, 'blobs'))
+    const store = await dirBytes(blobsRoot(dataDir, SELF_HOST_TENANT_ID))
     const mirrored = await dirBytes(join(backupRoot, 'blobs'))
     expect(mirrored / store).toBeLessThan(1.1)
   })
@@ -120,7 +122,11 @@ describe('the backup blob mirror', () => {
    */
   it('leaves what is not content-addressed alone', async () => {
     await putBlob('real blob')
-    const thumbs = join(dataDir, 'blobs', '01JTESTWORKSPACE0000000000', 'versions')
+    const thumbs = join(
+      blobsRoot(dataDir, SELF_HOST_TENANT_ID),
+      '01JTESTWORKSPACE0000000000',
+      'versions',
+    )
     await mkdir(thumbs, { recursive: true })
     await writeFile(join(thumbs, 'v1.png'), 'not a blob')
 
@@ -163,7 +169,7 @@ describe('the backup blob mirror', () => {
    */
   describe('files addressed by name', () => {
     async function putThumbnail(workspaceId: string, version: string, contents: string) {
-      const dir = join(dataDir, 'blobs', workspaceId, 'versions')
+      const dir = join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), workspaceId, 'versions')
       await mkdir(dir, { recursive: true })
       await writeFile(join(dir, `${version}.png`), contents)
       return createHash('sha256').update(contents).digest('hex')

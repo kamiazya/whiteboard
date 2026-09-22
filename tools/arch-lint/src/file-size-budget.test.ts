@@ -831,7 +831,11 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/ws.test.ts': 980,
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 881,
   'packages/mcp-server/src/server/store/document-store.test.ts': 861,
-  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 985,
+  // +17 for the tenant layout: this file's subject IS filesystem paths, so
+  // every seed now names a tenant's workspaces root, and three symlink seeds
+  // gained the parent mkdir that root needs. Splitting it instead would have
+  // duplicated ~148 lines of vi.mock/hoisted setup into the second file.
+  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 1002,
   // 3143 -> 3176: the agent-activity summary's only assertion was
   // `toMatch(/\S/)`, which a mutation proved vacuous. Raised for a case
   // pinning its wording and order.
