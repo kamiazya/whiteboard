@@ -1,11 +1,12 @@
 # ADR-0045: An account is who logs in; a user is who a tenant knows
 
-**Status:** Draft — the SHAPE is recorded while the conversation that produced
-it is fresh (owner, 2026-09-23), and three questions are deliberately left
-open below. Nothing in this ADR is implemented, and
-[ADR-0041](0041-profile-and-authority.md)'s Member/profile remains what ships.
-This record exists so the tenant work does not foreclose the split, and so the
-decisions it still needs arrive as amendments rather than as a rewrite.
+**Status:** Draft — the shape and its open forks were recorded on 2026-09-23
+while the conversation was fresh, and the owner answered all of them the same
+day (see **Decisions taken** below). Nothing here is implemented, and
+[ADR-0041](0041-profile-and-authority.md)'s Member/profile remains what ships;
+the draft stays a draft until the first increment is built, so that increment
+can correct it rather than inherit a record nobody tested. This exists so the
+tenant work does not foreclose the split.
 
 ## Context
 
@@ -70,9 +71,11 @@ change**.
    nothing to choose between. The split must not add a step to the local
    daemon's pairing flow.
 
-## What is NOT decided
+## The forks, as they were posed
 
-These need the owner, and each one is a real fork rather than a detail:
+Each needed the owner, and each was a real fork rather than a detail. All three
+are answered under **Decisions taken**; they are kept as posed because the
+alternatives are what the answers were chosen against.
 
 1. **How a request picks its tenant.** By subdomain, by a path prefix, or from
    the account's session (the account names its tenants and one is current).
@@ -86,8 +89,48 @@ These need the owner, and each one is a real fork rather than a detail:
    showing two entries for the same face is a UX question that may yet argue
    for naming accounts.
 
+## Decisions taken (owner, 2026-09-23)
+
+7. **A request's tenant is its SUBDOMAIN** — `acme.example.com`, one origin per
+   tenant. Chosen over a path prefix and over a session-carried current tenant,
+   and the reason is that this codebase already decides trust by ORIGIN: a
+   pairing grant is an origin the user approved, a passkey pin is keyed by
+   origin, and a credential's rpId is the origin it was registered at. Under a
+   path prefix every tenant shares one origin, so the browser-side boundary
+   disappears and only the server's own check is left; under a session, a
+   mistake in that check IS the leak. A subdomain makes the browser enforce
+   what the server also enforces. It costs DNS and certificate work for each
+   tenant, which is an operator's cost rather than a user's.
+
+   Consequence for `authMode`: `'local-daemon'` vs `'server-mode'` is NOT the
+   tenant discriminator. It stays what it is — how the daemon authenticates —
+   and the tenant comes from the request's host.
+
+8. **The file-backed stores are partitioned per tenant too**: pairing grants
+   and passkey pins move under the tenant's directory, beside its blobs. With
+   decision 7 this is the same boundary twice over, since an origin now names
+   one tenant. Left keeper-wide they would mean "an origin this KEEPER trusts",
+   and a grant one tenant gave would answer for another.
+
+9. **An existing member of a tenant invites an account into it**, and the
+   invitation is what creates that tenant's user. Not the keeper's operator:
+   authority comes from owning the resource (ADR-0035 decision 4), and an
+   operator who could add people to any tenant would be an issuer of identity
+   in all of them. The first member comes with the tenant's creation.
+
+10. **An account carries a display name for ITS OWN picker** — "work",
+    "private" — shown where a person chooses a passkey, and never shown to a
+    tenant. Decision 4 says nothing joins two accounts; without a name the
+    person is left telling two identical-looking entries apart from memory,
+    which is a usability answer rather than a change to the model. A tenant
+    still reads only the user's name (decision 1).
+
 ## Consequences
 
+- **The subdomain decision reaches further than this ADR.** Every origin-keyed
+  store (grants, pins) gains a tenant, the daemon's CORS and cookie scope
+  follow the host, and a deployment needs a wildcard certificate. None of that
+  is work this ADR does; it is what decision 7 commits to.
 - **Easier:** a tenant's member list cannot leak that a person exists
   elsewhere, because it is a list of users and a user belongs to one tenant.
   Attribution stays stable when an account is deleted, since a user is not the
