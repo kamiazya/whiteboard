@@ -145,37 +145,49 @@ const round2 = (n: number) => Math.round(n * 100) / 100
 const distinct = (values: readonly number[]): number =>
   new Set(values.map((v) => Math.round(v / SAME_PX))).size
 
-export function scoreComposition(canvas: SpatialCanvas, scene: Scene): CompositionScore {
-  const nodes = canvas.nodes
-  const boxes = nodes.filter((n) => !isFrame(n))
+/**
+ * How far a declared group's members sit from each other, against how far
+ * they sit from everything outside it — or `undefined` when nothing is
+ * outside. An outside gap of zero means a non-member is touching the group;
+ * the ratio is unbounded, and the group is as contradicted as it gets.
+ */
+function groupSpreadRatio(
+  members: readonly SpatialNode[],
+  boxes: readonly SpatialNode[],
+): number | undefined {
+  const outsiders = boxes.filter((b) => !members.some((m) => m.id === b.id)).map(rectOf)
+  if (outsiders.length === 0) return undefined
+  let inside = 0
+  let outside = Number.POSITIVE_INFINITY
+  for (const member of members) {
+    const rect = rectOf(member)
+    const fellows = members.filter((m) => m.id !== member.id).map(rectOf)
+    inside = Math.max(inside, nearestGap(rect, fellows))
+    outside = Math.min(outside, nearestGap(rect, outsiders))
+  }
+  return outside === 0 ? Number.POSITIVE_INFINITY : inside / outside
+}
 
-  // C1 — proximity.
-  const groups = declaredGroups(canvas, boxes)
+/** C1 — proximity. */
+function proximity(groups: readonly SpatialNode[][], boxes: readonly SpatialNode[]) {
   let apart = 0
   let worstRatio = 0
   for (const members of groups) {
-    const outsiders = boxes.filter((b) => !members.some((m) => m.id === b.id)).map(rectOf)
-    if (outsiders.length === 0) continue
-    let inside = 0
-    let outside = Number.POSITIVE_INFINITY
-    for (const member of members) {
-      const rect = rectOf(member)
-      const fellows = members.filter((m) => m.id !== member.id).map(rectOf)
-      inside = Math.max(inside, nearestGap(rect, fellows))
-      outside = Math.min(outside, nearestGap(rect, outsiders))
-    }
-    // An outside gap of zero means a non-member is touching the group; the
-    // ratio is unbounded, and the group is as contradicted as it gets.
-    const ratio = outside === 0 ? Number.POSITIVE_INFINITY : inside / outside
+    const ratio = groupSpreadRatio(members, boxes)
+    if (ratio === undefined) continue
     if (ratio >= 1) apart++
     worstRatio = Math.max(worstRatio, Number.isFinite(ratio) ? ratio : 999)
   }
+  return { apart, worstRatio }
+}
 
-  // C2 — alignment.
-  const anchorsOf = (r: Rect) => ({
-    x: [r.x, r.x + r.w / 2, r.x + r.w],
-    y: [r.y, r.y + r.h / 2, r.y + r.h],
-  })
+const anchorsOf = (r: Rect) => ({
+  x: [r.x, r.x + r.w / 2, r.x + r.w],
+  y: [r.y, r.y + r.h / 2, r.y + r.h],
+})
+
+/** C2 — alignment: the guide lines two or more nodes share an anchor on. */
+function alignment(nodes: readonly SpatialNode[]) {
   const lineKey = (v: number) => Math.round(v / ANCHOR_TOLERANCE_PX)
   const sharedOn = (axis: 'x' | 'y'): Map<number, Set<string>> => {
     const holders = new Map<number, Set<string>>()
@@ -187,12 +199,46 @@ export function scoreComposition(canvas: SpatialCanvas, scene: Scene): Compositi
     }
     return holders
   }
-  const onX = sharedOn('x')
-  const onY = sharedOn('y')
-  const shared = [...onX.values(), ...onY.values()].filter((ids) => ids.size >= 2)
+  const shared = [...sharedOn('x').values(), ...sharedOn('y').values()].filter(
+    (ids) => ids.size >= 2,
+  )
   const guides = shared.length
   const held = new Set(shared.flatMap((ids) => [...ids]))
-  const offGuide = nodes.filter((n) => !held.has(n.id)).length
+  return {
+    guides,
+    offGuide: nodes.filter((n) => !held.has(n.id)).length,
+    perGuide: guides === 0 ? 0 : round2(shared.reduce((sum, ids) => sum + ids.size, 0) / guides),
+  }
+}
+
+const roleOf = (d: { out: number; in: number }): string => {
+  if (d.out + d.in === 0) return 'alone'
+  if (d.out + d.in >= 3) return 'hub'
+  if (d.in === 0) return 'source'
+  if (d.out === 0) return 'sink'
+  return 'through'
+}
+
+/** How many distinct graph roles (source, sink, hub, …) the boxes play. */
+function distinctRoles(canvas: SpatialCanvas, boxes: readonly SpatialNode[]): number {
+  const degree = new Map<string, { out: number; in: number }>()
+  for (const box of boxes) degree.set(box.id, { out: 0, in: 0 })
+  for (const edge of canvas.edges) {
+    const from = nodeAtEnd(edge.from, degree)
+    const to = nodeAtEnd(edge.to, degree)
+    if (from !== undefined) from.out++
+    if (to !== undefined) to.in++
+  }
+  return new Set([...degree.values()].map(roleOf)).size
+}
+
+export function scoreComposition(canvas: SpatialCanvas, scene: Scene): CompositionScore {
+  const nodes = canvas.nodes
+  const boxes = nodes.filter((n) => !isFrame(n))
+
+  const groups = declaredGroups(canvas, boxes)
+  const { apart, worstRatio } = proximity(groups, boxes)
+  const { guides, offGuide, perGuide } = alignment(nodes)
 
   // C3 — repetition.
   const boxRects = boxes.map(rectOf)
@@ -209,22 +255,6 @@ export function scoreComposition(canvas: SpatialCanvas, scene: Scene): Compositi
     if (shape.kind !== 'shape') continue
     treatments.add(`${shape.appearance?.fill ?? ''}|${shape.appearance?.stroke ?? ''}`)
   }
-  const degree = new Map<string, { out: number; in: number }>()
-  for (const box of boxes) degree.set(box.id, { out: 0, in: 0 })
-  for (const edge of canvas.edges) {
-    const from = nodeAtEnd(edge.from, degree)
-    const to = nodeAtEnd(edge.to, degree)
-    if (from !== undefined) from.out++
-    if (to !== undefined) to.in++
-  }
-  const roleOf = (d: { out: number; in: number }): string => {
-    if (d.out + d.in === 0) return 'alone'
-    if (d.out + d.in >= 3) return 'hub'
-    if (d.in === 0) return 'source'
-    if (d.out === 0) return 'sink'
-    return 'through'
-  }
-  const roles = new Set([...degree.values()].map(roleOf))
 
   return {
     groups: groups.length,
@@ -232,11 +262,11 @@ export function scoreComposition(canvas: SpatialCanvas, scene: Scene): Compositi
     worstRatio: Number.isFinite(worstRatio) ? round2(worstRatio) : 999,
     guides,
     offGuide,
-    perGuide: guides === 0 ? 0 : round2(shared.reduce((sum, ids) => sum + ids.size, 0) / guides),
+    perGuide,
     widths: distinct(boxRects.map((r) => r.w)),
     heights: distinct(boxRects.map((r) => r.h)),
     gaps: distinct(gapValues.filter(Number.isFinite)),
     treatments: treatments.size,
-    roles: roles.size,
+    roles: distinctRoles(canvas, boxes),
   }
 }
