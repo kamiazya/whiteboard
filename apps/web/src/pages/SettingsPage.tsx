@@ -34,6 +34,7 @@ import { MembersCard } from '../components/settings/MembersCard.js'
 import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspaceSection.js'
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
 import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
+import { TransferToKeeperSection } from '../components/settings/TransferToKeeperSection.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -257,6 +258,7 @@ function ConnectionsSection({
         {/* Discoverable while disabled: the move exists before its
             precondition is met, so its condition can be read here. */}
         <PromoteWorkspaceSection settingsStore={settingsStore} />
+        <TransferToKeeperSection />
         {/* Rendered without a daemon too, and that is exactly when it matters
             most: with none connected every copy here is browser-kept, so a
             card hidden in this branch would hide the whole list. */}
@@ -284,6 +286,7 @@ function ConnectionsSection({
           settingsStore={settingsStore}
           workspaceId={workspaceId}
         />
+        <TransferToKeeperSection />
         <LocalCopiesCard settingsStore={settingsStore} workspaceId={workspaceId} />
         {/* Hidden without a known workspace id: a cold load with a daemon
             merely detected names none yet, and the card would have nothing
