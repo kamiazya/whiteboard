@@ -413,10 +413,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pwa/register-sw.ts#setupSwRegistration.register': 58,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 101,
   'packages/canvas-render/src/layout/comments.ts#composeComments': 159,
-  // Moved out of `spatial-canvas.ts` unchanged. `composeNode` reads 96 here
-  // against 93 there only because gaining `export` wrapped its signature
-  // onto four lines; the body is byte-identical.
-  'packages/canvas-render/src/layout/compose-node.ts#composeNode': 96,
   'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 94,
