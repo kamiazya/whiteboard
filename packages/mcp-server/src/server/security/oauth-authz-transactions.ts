@@ -220,6 +220,23 @@ export interface OAuthTransactionStore {
   size(): { transactions: number; codes: number; attempts: number; grants: number }
 }
 
+/**
+ * Why a redeemed code is refused, or null when it checks out. Read AFTER the
+ * compare-and-swap above: the code is spent either way, so these answer what
+ * the caller is told rather than whether the code survives.
+ */
+function redemptionRefusal(
+  record: { codeExpiresAt?: number; clientId: string; redirectUri: string; codeChallenge: string },
+  input: RedeemAuthorizationCodeInput,
+  at: number,
+): 'invalid_grant' | 'redirect_uri_mismatch' | 'pkce_verification_failed' | null {
+  if (record.codeExpiresAt === undefined || record.codeExpiresAt < at) return 'invalid_grant'
+  if (record.clientId !== input.clientId) return 'invalid_grant'
+  if (record.redirectUri !== input.redirectUri) return 'redirect_uri_mismatch'
+  if (!verifyPkce(record.codeChallenge, input.codeVerifier)) return 'pkce_verification_failed'
+  return null
+}
+
 export function createOAuthTransactionStore(options?: {
   now?: () => number
 }): OAuthTransactionStore {
@@ -393,18 +410,8 @@ export function createOAuthTransactionStore(options?: {
     transactions.set(transactionId, { ...record, status: 'redeemed' })
     codeHashIndex.delete(codeHash)
 
-    if (record.codeExpiresAt === undefined || record.codeExpiresAt < now()) {
-      return { ok: false, reason: 'invalid_grant' }
-    }
-    if (record.clientId !== input.clientId) {
-      return { ok: false, reason: 'invalid_grant' }
-    }
-    if (record.redirectUri !== input.redirectUri) {
-      return { ok: false, reason: 'redirect_uri_mismatch' }
-    }
-    if (!verifyPkce(record.codeChallenge, input.codeVerifier)) {
-      return { ok: false, reason: 'pkce_verification_failed' }
-    }
+    const refusal = redemptionRefusal(record, input, now())
+    if (refusal !== null) return { ok: false, reason: refusal }
 
     return { ok: true, transactionId, scopes: record.scopes, clientId: record.clientId }
   }
