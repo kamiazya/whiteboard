@@ -32,7 +32,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // leave the list. Lowering `composeNode` under 15 is real work on its logic
 // and belongs in its own change, not inside a move whose review rests on
 // the body being unchanged.
-const EXEMPT_COUNT = 131
+const EXEMPT_COUNT = 128
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {

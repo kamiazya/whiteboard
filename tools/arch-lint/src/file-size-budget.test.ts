@@ -284,7 +284,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +22 on the merge: a node's stored fields are written once as a
   // resource (ADR-0038 decision 3) beside the tag write ADR-0040 added,
   // and the kind switch the resource replaced was the shorter of the two.
-  'packages/loro-adapter/src/loro-bridge.ts': 1126,
+  // 1126 -> 1141: the three id-keyed collections and two optional fields
+  // that `reconcileSpatialCanvas` and the resync each spelled out became five
+  // named helpers, each carrying the measured reason its behaviour has (op
+  // order is part of the bytes; a delete only when present spares the log).
+  'packages/loro-adapter/src/loro-bridge.ts': 1141,
   // 948 -> 857: the ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it.
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 857,
@@ -892,7 +896,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
   'packages/canvas-render/src/tidy.test.ts': 1176,
   'packages/canvas-viewer/src/widget-entry.test.tsx': 1266,
-  'packages/loro-adapter/src/loro-bridge.test.ts': 1308,
+  // 1308 -> 1324: an unchanged canvas reconciling to no ops, which the
+  // "writes only what changed" test above it could not see.
+  'packages/loro-adapter/src/loro-bridge.test.ts': 1324,
   'packages/mcp-server/src/server/app.server-mode.test.ts': 815,
   'packages/mcp-server/src/server/app.test.ts': 1339,
   // 963 -> 976 at the merge with main. Both sides moved the same totals and
