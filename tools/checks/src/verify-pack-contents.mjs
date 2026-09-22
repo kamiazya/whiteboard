@@ -133,24 +133,23 @@ export function verifyPackContents(doc) {
 // artifact), which a naive bracket count would miscount.
 function findMatchingArrayEnd(text, startIndex) {
   let depth = 0
-  let inString = false
-  let escaped = false
   for (let i = startIndex; i < text.length; i++) {
     const ch = text[i]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (ch === '\\') escaped = true
-      else if (ch === '"') inString = false
-      continue
-    }
-    if (ch === '"') inString = true
+    if (ch === '"') i = closingQuote(text, i)
     else if (ch === '[') depth++
-    else if (ch === ']') {
-      depth--
-      if (depth === 0) return i + 1
-    }
+    else if (ch === ']' && --depth === 0) return i + 1
   }
   return -1
+}
+
+// Index of the `"` that closes the JSON string opened at `openIndex`, honouring
+// backslash escapes; `text.length` when the string never closes.
+function closingQuote(text, openIndex) {
+  for (let i = openIndex + 1; i < text.length; i++) {
+    if (text[i] === '\\') i++
+    else if (text[i] === '"') return i
+  }
+  return text.length
 }
 
 // `npm pack --dry-run --json` output can be preceded by lifecycle-script
@@ -206,6 +205,42 @@ export function parseArgs(argv) {
 }
 
 /**
+ * `npm pack --dry-run --json`'s raw stdout, or why it could not be had.
+ * @param {NonNullable<MainOptions['spawn']>} spawn
+ * @param {string} platform
+ * @param {string} cwd
+ * @returns {{ raw: string } | { error: string }}
+ */
+function runNpmPack(spawn, platform, cwd) {
+  // Windows has no bare `npm` executable on PATH — only `npm.cmd` — so
+  // spawning 'npm' directly (without shell: true) fails with ENOENT there.
+  const npmCommand = platform === 'win32' ? 'npm.cmd' : 'npm'
+  const result = spawn(npmCommand, ['pack', '--dry-run', '--json'], { cwd, encoding: 'utf-8' })
+  if (result.error) return { error: `npm pack could not start: ${result.error.message}` }
+  if (result.status !== 0) return { error: `npm pack exited with status ${result.status}` }
+  return { raw: result.stdout ?? '' }
+}
+
+/**
+ * The pack document inside `raw`, or why it could not be read.
+ * @param {string} raw
+ * @returns {{ doc: unknown } | { error: string }}
+ */
+function packDocument(raw) {
+  let jsonText
+  try {
+    jsonText = extractPackJsonText(raw)
+  } catch (err) {
+    return { error: /** @type {Error} */ (err).message }
+  }
+  try {
+    return { doc: JSON.parse(jsonText) }
+  } catch (err) {
+    return { error: `npm pack output is not valid JSON: ${/** @type {Error} */ (err).message}` }
+  }
+}
+
+/**
  * @param {MainOptions} [options]
  * @typedef {{
  *   argv?: string[],
@@ -240,56 +275,21 @@ export function main(options = {}) {
     return 1
   }
 
-  let raw
-  if (parsed.stdin) {
-    raw = readStdin()
-  } else {
-    // Windows has no bare `npm` executable on PATH — only `npm.cmd` — so
-    // spawning 'npm' directly (without shell: true) fails with ENOENT there.
-    const npmCommand = platform === 'win32' ? 'npm.cmd' : 'npm'
-    const result = spawn(npmCommand, ['pack', '--dry-run', '--json'], { cwd, encoding: 'utf-8' })
-    if (result.error) {
-      stderr.write(`[verify-pack-contents] npm pack could not start: ${result.error.message}\n`)
-      return 1
-    }
-    if (result.status !== 0) {
-      stderr.write(`[verify-pack-contents] npm pack exited with status ${result.status}\n`)
-      return 1
-    }
-    raw = result.stdout ?? ''
-  }
-
-  let jsonText
-  try {
-    jsonText = extractPackJsonText(raw)
-  } catch (err) {
-    stderr.write(`[verify-pack-contents] ${/** @type {Error} */ (err).message}\n`)
+  const fail = (/** @type {string} */ message) => {
+    stderr.write(`[verify-pack-contents] ${message}\n`)
     return 1
   }
+  const output = parsed.stdin ? { raw: readStdin() } : runNpmPack(spawn, platform, cwd)
+  if ('error' in output) return fail(output.error)
+  const parsedDoc = packDocument(output.raw)
+  if ('error' in parsedDoc) return fail(parsedDoc.error)
 
-  let doc
-  try {
-    doc = JSON.parse(jsonText)
-  } catch (err) {
-    stderr.write(
-      `[verify-pack-contents] npm pack output is not valid JSON: ${/** @type {Error} */ (err).message}\n`,
-    )
-    return 1
-  }
-
-  const result = verifyPackContents(doc)
-  if (!('missing' in result)) {
-    stderr.write(`[verify-pack-contents] ${result.reason}\n`)
-    return 1
-  }
+  const result = verifyPackContents(parsedDoc.doc)
+  if (!('missing' in result)) return fail(result.reason)
   if (!result.ok) {
-    if (result.missing.length > 0) {
-      stderr.write(`[verify-pack-contents] missing required files: ${result.missing.join(', ')}\n`)
-    }
+    if (result.missing.length > 0) fail(`missing required files: ${result.missing.join(', ')}`)
     if (result.forbidden.length > 0) {
-      stderr.write(
-        `[verify-pack-contents] forbidden files in tarball: ${result.forbidden.join(', ')}\n`,
-      )
+      fail(`forbidden files in tarball: ${result.forbidden.join(', ')}`)
     }
     return 1
   }

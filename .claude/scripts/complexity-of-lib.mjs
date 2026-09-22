@@ -8,6 +8,14 @@
 // say what a function scores, which is the number a review of "did this diff
 // make it harder to follow?" needs.
 
+/** `--base <ref>`, `--changed`, and the files named — every other argument. */
+export function argsFrom(argv) {
+  const baseAt = argv.indexOf('--base')
+  const base = baseAt === -1 ? null : argv[baseAt + 1]
+  const files = argv.filter((a, i) => !a.startsWith('--') && (baseAt === -1 || i !== baseAt + 1))
+  return { base, changed: argv.includes('--changed'), files }
+}
+
 /** The threshold `biome.json` enforces, read from the config rather than restated. */
 export function thresholdFrom(biomeJson) {
   const match = /"maxAllowedComplexity"\s*:\s*(\d+)/.exec(biomeJson)
@@ -61,8 +69,21 @@ export function compare(baseRows, headRows) {
     seen.add(key(h))
     return { ...h, base: b ? b.score : null, delta: b ? h.score - b.score : null }
   })
-  for (const b of baseRows) {
-    if (!seen.has(key(b))) out.push({ ...b, score: null, base: b.score, delta: null })
+  const gone = baseRows.filter((b) => !seen.has(key(b)))
+  // A function that left one file for another — a module extraction — is
+  // joined across files by name, but only when the name is unique on both
+  // sides: two `helper`s are not guessed between.
+  const onlyOne = (rows, name) => rows.filter((r) => r.name === name).length === 1
+  const arrived = out.filter((h) => h.base === null && IDENTIFIER.test(h.name))
+  const moved = new Set()
+  for (const h of arrived) {
+    const b = gone.find((g) => g.name === h.name)
+    if (b === undefined || !onlyOne(gone, h.name) || !onlyOne(arrived, h.name)) continue
+    Object.assign(h, { base: b.score, delta: h.score - b.score, from: b.file })
+    moved.add(b)
+  }
+  for (const b of gone) {
+    if (!moved.has(b)) out.push({ ...b, score: null, base: b.score, delta: null })
   }
   return out
 }
@@ -70,14 +91,14 @@ export function compare(baseRows, headRows) {
 /**
  * The table. Shows what a reader has to act on: anything over the threshold,
  * anything within `near` of it, anything whose score moved — and, against a
- * base, every function that is NEW or GONE whatever it scores. Those two are
+ * base, every function that is NEW, GONE or MOVED whatever it scores. Those two are
  * how complexity MOVES: a function that dropped from 25 to 4 says nothing
  * until the 21 that left can be seen arriving somewhere, which is the
  * difference between removing branches and relocating them.
  */
 export function formatTable(rows, threshold, near = 3) {
   const floor = threshold - near
-  const isNewOrGone = (r) => 'base' in r && (r.base === null || r.score === null)
+  const isNewOrGone = (r) => 'base' in r && (r.base === null || r.score === null || r.from !== undefined)
   const worth = rows.filter(
     (r) =>
       (r.score ?? 0) >= floor || (r.base ?? 0) >= floor || (r.delta ?? 0) !== 0 || isNewOrGone(r),
@@ -90,7 +111,7 @@ export function formatTable(rows, threshold, near = 3) {
   for (const r of worth) {
     const flag = (r.score ?? 0) > threshold ? '!' : (r.score ?? 0) >= threshold - near ? '~' : ' '
     const score = r.score === null ? '   -' : String(r.score).padStart(4)
-    const where = `${r.file}:${r.line}  ${r.name}`
+    const where = `${r.file}:${r.line}  ${r.name}${r.from ? `  (from ${r.from})` : ''}`
     if (!hasBase) {
       lines.push(`${flag}${score}  ${where}`)
       continue
