@@ -31,7 +31,7 @@ import {
   type ReplicaTier,
   replicaTierSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
-import type { Database } from '../store/db/index.js'
+import type { TenantDatabase } from '../store/db/tenant-database.js'
 import { cloneBytes } from '../store/inmemory/clone-bytes.js'
 
 const KEY_BYTES = 32
@@ -99,7 +99,7 @@ export interface WorkspaceReplicaKeyStore {
 }
 
 export function createWorkspaceReplicaKeyStore(
-  db: Database,
+  db: TenantDatabase,
   { defaultTier }: WorkspaceReplicaKeyStoreOptions,
 ): WorkspaceReplicaKeyStore {
   async function tierFor(workspaceId: string): Promise<ReplicaTier | null> {

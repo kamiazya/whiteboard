@@ -21,6 +21,7 @@ import LibsqlNativeDatabase from 'libsql'
 import {
   type Database,
   DB_FILENAME,
+  getDb,
   injectCachedDb,
   removeCachedDb,
   runDbDisposeHooks,
@@ -28,6 +29,7 @@ import {
 import { runMigrations } from './migrator.js'
 import { clearPrepareCache } from './prepare.js'
 import type { DatabaseSchema } from './schema.js'
+import type { TenantDatabase } from './tenant-database.js'
 
 export interface CreateIsolatedDbOptions {
   // Real filesystem path the rest of the store still uses for blobs / exports
@@ -41,24 +43,19 @@ export interface CreateIsolatedDbOptions {
 }
 
 export interface IsolatedDbHandle {
-  db: Database
+  /** What a store is handed in production: bound to the self-host tenant. */
+  db: TenantDatabase
+  /** The unscoped database, for a test that inspects physical tables. */
+  rawDb: Database
   dispose(): Promise<void>
 }
 
-export async function createIsolatedDb(
-  options: CreateIsolatedDbOptions,
-): Promise<IsolatedDbHandle> {
-  const { dataDir, memory = true } = options
-
-  // Ensure the dataDir exists either way: store code writes blobs into it
-  // even when the DB itself is in memory.
-  await mkdir(dataDir, { recursive: true })
-
-  // For file-backed mode keep the production dialect so we exercise the same
-  // adapter / driver path. For memory mode swap to Kysely's SqliteDialect on
-  // the libsql native binding — single Database instance, single connection,
-  // `:memory:` actually retains state.
-  const db = memory
+// For file-backed mode keep the production dialect so we exercise the same
+// adapter / driver path. For memory mode swap to Kysely's SqliteDialect on
+// the libsql native binding — single Database instance, single connection,
+// `:memory:` actually retains state.
+function openIsolated(dataDir: string, memory: boolean): Database {
+  return memory
     ? new Kysely<DatabaseSchema>({
         dialect: new SqliteDialect({
           // The Database class libsql exports is better-sqlite3-shaped; the
@@ -72,6 +69,18 @@ export async function createIsolatedDb(
     : new Kysely<DatabaseSchema>({
         dialect: new LibsqlDialect({ url: `file:${join(dataDir, DB_FILENAME)}` }),
       })
+}
+
+export async function createIsolatedDb(
+  options: CreateIsolatedDbOptions,
+): Promise<IsolatedDbHandle> {
+  const { dataDir, memory = true } = options
+
+  // Ensure the dataDir exists either way: store code writes blobs into it
+  // even when the DB itself is in memory.
+  await mkdir(dataDir, { recursive: true })
+
+  const db = openIsolated(dataDir, memory)
 
   // Same `PRAGMA foreign_keys = ON` belt-and-suspenders as production
   // `buildDb`. Memory-mode libsql defaults to ON in the version we ship, but
@@ -82,7 +91,9 @@ export async function createIsolatedDb(
   injectCachedDb(dataDir, db)
 
   return {
-    db,
+    // From getDb, so a store reaching for `getDb(dataDir)` finds this very handle.
+    db: await getDb(dataDir),
+    rawDb: db,
     async dispose() {
       // Drain registered dispose hooks (e.g. document-store's pending
       // auto-compact timers/in-flight compactions) before removing the cache

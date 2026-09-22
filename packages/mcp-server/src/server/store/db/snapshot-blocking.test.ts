@@ -95,7 +95,7 @@ describe('the hot snapshot', () => {
     // from a slower local run — a green local suite and a red CI job over the
     // same code. Raising the constant only moves the cliff to the next faster
     // runner; measuring until the subject is reached has no cliff.
-    await sql`create table bulk (id integer primary key, payload blob)`.execute(handle.db)
+    await sql`create table bulk (id integer primary key, payload blob)`.execute(handle.rawDb)
     const payload = Buffer.alloc(64 * 1024, 7)
     let availability: Awaited<ReturnType<typeof measureLoopAvailability<void>>>['availability'] =
       undefined as never
@@ -113,7 +113,7 @@ describe('the hot snapshot', () => {
       // which is a fixture cost reported as a blocking-behaviour failure.
       // Batching removes it without touching the floor, the growth loop or
       // the assertion.
-      await handle.db.transaction().execute(async (trx) => {
+      await handle.rawDb.transaction().execute(async (trx) => {
         for (let i = 0; i < 64 * 2 ** attempt; i++) {
           await sql`insert into bulk (payload) values (${payload})`.execute(trx)
         }
