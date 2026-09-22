@@ -43,7 +43,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
  * considered instead. Lower the ceiling when a paydown leaves an obvious gap
  * — nothing forces it, which is the honest cost.
  */
-const EXEMPT_CEILING = 117
+const EXEMPT_CEILING = 114
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
