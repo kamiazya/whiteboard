@@ -164,7 +164,6 @@
         "!packages/canvas-render/src/layout/nodes/node-outline.ts",
         "!packages/canvas-render/src/layout/passage-highlight.ts",
         "!packages/canvas-render/src/layout/proposals.ts",
-        "!packages/canvas-render/src/layout/spatial-canvas.ts",
         "!packages/canvas-render/src/quality/composition-score.ts",
         "!packages/canvas-render/src/quality/facet-score.ts",
         "!packages/canvas-render/src/quality/polyline-geometry.ts",

@@ -29,9 +29,12 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // `spatial-canvas.ts` carrying `composeNode` (22), and left it when that was
 // paid down: the kind `switch` became a `satisfies Record<NodeKind, …>` table
 // and the file node's four early returns became a ranked list of
-// representations. The count is stated here and nowhere else, because several
-// sessions pay the list down concurrently and a number in a comment goes stale.
-const EXEMPT_COUNT = 128
+// representations. `layout/spatial-canvas.ts` left the same way: an edge's two
+// ends became one operation over `PATH_ENDS`, and the canvas theme's resolve
+// and apply were split. The count is stated here and nowhere else, because
+// several sessions pay the list down concurrently and a number in a comment
+// goes stale.
+const EXEMPT_COUNT = 127
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {

@@ -43,6 +43,11 @@ export type {
 } from '@kamiazya/whiteboard-scene'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
+export {
+  resolveCanvasPalette,
+  resolveCanvasThemeFontFamily,
+  resolveThemeTable,
+} from './layout/canvas-theme.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
 export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-anchor.js'
@@ -117,10 +122,7 @@ export {
   layoutSpatialEdges,
   naturalNodeContentSize,
   paintOrderOf,
-  resolveCanvasPalette,
-  resolveCanvasThemeFontFamily,
   resolveShapeTable,
-  resolveThemeTable,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
