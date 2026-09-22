@@ -64,15 +64,7 @@ export function useTransferHandshake({
   const [stage, setStage] = useState<TransferStage>(() =>
     openTransferSession(hash) === null ? { kind: 'not-a-transfer' } : { kind: 'waiting' },
   )
-  // Every request this page makes is to its OWN keeper, and the credential
-  // reaches it through the one seam that attaches it — never a header here.
-  const keeperFetch = useMemo(
-    () =>
-      daemonToken === undefined
-        ? null
-        : createDaemonFetch(globalThis.location.origin, daemonToken, fetchFn),
-    [daemonToken, fetchFn],
-  )
+  const keeperFetch = useKeeperFetch(daemonToken, fetchFn)
   const { targets, targetId, setTargetId } = useKeeperWorkspaceTargets({
     enabled: session !== null,
     keeperFetch,
@@ -180,4 +172,23 @@ function useKeeperWorkspaceTargets({
       .catch(() => setTargets([]))
   }, [enabled, keeperFetch])
   return { targets, targetId, setTargetId }
+}
+
+/**
+ * Every request this page makes is to its OWN keeper, and the credential
+ * reaches it through the one seam that attaches it (`createDaemonFetch`,
+ * daemon-auth-seam.test.ts) — never a header set here. Null when the page is
+ * not served by a keeper: there is then nothing it may ask.
+ */
+function useKeeperFetch(
+  daemonToken: string | undefined,
+  fetchFn: typeof globalThis.fetch,
+): typeof globalThis.fetch | null {
+  return useMemo(
+    () =>
+      daemonToken === undefined
+        ? null
+        : createDaemonFetch(globalThis.location.origin, daemonToken, fetchFn),
+    [daemonToken, fetchFn],
+  )
 }
