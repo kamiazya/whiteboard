@@ -11,12 +11,10 @@
  * A nested canvas — a file embed, a body's `![[canvas]]` — is laid out by the
  * composer's own entry, taken as `options.layoutNestedCanvas` rather than
  * imported: `spatial-canvas.ts` imports this module, so importing it back
- * would close a value cycle. `comments.ts` and `proposals.ts` take the body
- * typesetter the same way.
+ * would close a value cycle (as `comments.ts` and `proposals.ts` avoid it).
  */
 
 import { resolveReferences } from '@kamiazya/whiteboard-codec'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   frameBackground,
   frameBackgroundStyle,
@@ -28,6 +26,8 @@ import {
   nodeSubpath,
   nodeText,
   nodeUrl,
+  type SpatialCanvas,
+  type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type {
