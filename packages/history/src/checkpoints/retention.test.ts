@@ -47,6 +47,17 @@ describe('sandwichedAutoVersionIds', () => {
     ).toEqual(['a2', 'a3'])
   })
 
+  it('never removes a manual save that sits inside the sandwich', () => {
+    expect(
+      sandwichedAutoVersionIds([
+        row('m1', 'main', false),
+        row('a1', 'main', true),
+        row('m2', 'main', false),
+        row('m3', 'main', false),
+      ]),
+    ).toEqual(['a1'])
+  })
+
   it('leaves a branch with fewer than two manual saves alone', () => {
     expect(sandwichedAutoVersionIds([row('a1', 'main', true), row('m1', 'main', false)])).toEqual(
       [],

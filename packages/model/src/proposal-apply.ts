@@ -39,80 +39,105 @@ export function applyCanvasChange(
   canvas: SpatialCanvas,
   change: SpatialProposedChange,
 ): SpatialCanvas {
-  switch (change.op) {
-    case 'node.add':
-      if (canvas.nodes.some((node) => node.id === change.node.id)) return canvas
-      return { ...canvas, nodes: [...canvas.nodes, change.node] }
-    case 'node.patch': {
-      if (!canvas.nodes.some((node) => node.id === change.nodeId)) return canvas
-      return {
-        ...canvas,
-        nodes: canvas.nodes.map((node) =>
-          // A node patch goes through `applyNodePatch`: its content keys are
-          // the published vocabulary and the node stores a resource, so a
-          // plain spread would write a shape `spatialNodeSchema` refuses.
-          node.id === change.nodeId ? applyNodePatch(node, change.patch) : node,
-        ),
-      }
-    }
-    case 'node.remove': {
-      if (!canvas.nodes.some((node) => node.id === change.nodeId)) return canvas
-      // An edge to a node that is gone is not a canvas anything can render,
-      // and `spatialCanvasSchema` refuses it — so adopting the removal takes
-      // the edges that would dangle with it, the way the editor's own delete
-      // does. Silently leaving them would make the adopted board unsavable.
-      return {
-        ...canvas,
-        nodes: canvas.nodes.filter((node) => node.id !== change.nodeId),
-        edges: canvas.edges.filter(
-          (edge) => endNode(edge.from) !== change.nodeId && endNode(edge.to) !== change.nodeId,
-        ),
-        // Ink anchored to the node goes with it for the same reason, and ink
-        // anchored to nothing stays: a line's free end names no node, so there
-        // is nothing for the removal to dangle (ADR-0038 decision 2).
-        ...(canvas.lines === undefined
-          ? {}
-          : {
-              lines: canvas.lines.filter(
-                (line) =>
-                  endNode(line.from) !== change.nodeId && endNode(line.to) !== change.nodeId,
-              ),
-            }),
-      }
-    }
-    case 'edge.add':
-      if (canvas.edges.some((edge) => edge.id === change.edge.id)) return canvas
-      return { ...canvas, edges: [...canvas.edges, change.edge] }
-    case 'edge.patch':
-      if (!canvas.edges.some((edge) => edge.id === change.edgeId)) return canvas
-      return {
-        ...canvas,
-        edges: canvas.edges.map((edge) =>
-          edge.id === change.edgeId ? patchedInto(edge, change.patch as Fields) : edge,
-        ),
-      }
-    case 'edge.remove':
-      return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== change.edgeId) }
-    case 'line.add':
-      if ((canvas.lines ?? []).some((line) => line.id === change.line.id)) return canvas
-      return { ...canvas, lines: [...(canvas.lines ?? []), change.line] }
-    case 'line.patch':
-      if (!(canvas.lines ?? []).some((line) => line.id === change.lineId)) return canvas
-      return {
-        ...canvas,
-        lines: (canvas.lines ?? []).map((line) =>
-          line.id === change.lineId ? patchedInto(line, change.patch as Fields) : line,
-        ),
-      }
-    case 'line.remove':
-      // The collection is left ABSENT rather than emptied when the last line
-      // goes, because absence is what the canvas carried before any ink did
-      // and `spatialCanvasSchema` makes `lines` optional — an empty array
-      // would be a second spelling of the same board.
-      return withLines(
-        canvas,
-        (canvas.lines ?? []).filter((line) => line.id !== change.lineId),
-      )
+  // The table is keyed by the op it handles, so each entry takes exactly its
+  // own arm; TypeScript cannot correlate `APPLY[change.op]` with `change`
+  // across a union, which is all this cast says.
+  const apply = APPLY[change.op] as (
+    canvas: SpatialCanvas,
+    change: SpatialProposedChange,
+  ) => SpatialCanvas
+  return apply(canvas, change)
+}
+
+type ChangeOf<Op extends SpatialProposedChange['op']> = Extract<SpatialProposedChange, { op: Op }>
+
+const hasId = (elements: readonly { readonly id: string }[], id: string) =>
+  elements.some((element) => element.id === id)
+
+/** What each op does to a canvas; a new op is a missing key, which does not compile. */
+const APPLY: {
+  readonly [Op in SpatialProposedChange['op']]: (
+    canvas: SpatialCanvas,
+    change: ChangeOf<Op>,
+  ) => SpatialCanvas
+} = {
+  'node.add': (canvas, change) =>
+    hasId(canvas.nodes, change.node.id)
+      ? canvas
+      : { ...canvas, nodes: [...canvas.nodes, change.node] },
+  'node.patch': (canvas, change) =>
+    hasId(canvas.nodes, change.nodeId)
+      ? {
+          ...canvas,
+          nodes: canvas.nodes.map((node) =>
+            // A node patch goes through `applyNodePatch`: its content keys are
+            // the published vocabulary and the node stores a resource, so a
+            // plain spread would write a shape `spatialNodeSchema` refuses.
+            node.id === change.nodeId ? applyNodePatch(node, change.patch) : node,
+          ),
+        }
+      : canvas,
+  'node.remove': (canvas, change) =>
+    hasId(canvas.nodes, change.nodeId) ? removeNode(canvas, change.nodeId) : canvas,
+  'edge.add': (canvas, change) =>
+    hasId(canvas.edges, change.edge.id)
+      ? canvas
+      : { ...canvas, edges: [...canvas.edges, change.edge] },
+  'edge.patch': (canvas, change) =>
+    hasId(canvas.edges, change.edgeId)
+      ? {
+          ...canvas,
+          edges: canvas.edges.map((edge) =>
+            edge.id === change.edgeId ? patchedInto(edge, change.patch as Fields) : edge,
+          ),
+        }
+      : canvas,
+  'edge.remove': (canvas, change) => ({
+    ...canvas,
+    edges: canvas.edges.filter((edge) => edge.id !== change.edgeId),
+  }),
+  'line.add': (canvas, change) =>
+    hasId(canvas.lines ?? [], change.line.id)
+      ? canvas
+      : { ...canvas, lines: [...(canvas.lines ?? []), change.line] },
+  'line.patch': (canvas, change) =>
+    hasId(canvas.lines ?? [], change.lineId)
+      ? {
+          ...canvas,
+          lines: (canvas.lines ?? []).map((line) =>
+            line.id === change.lineId ? patchedInto(line, change.patch as Fields) : line,
+          ),
+        }
+      : canvas,
+  // The collection is left ABSENT rather than emptied when the last line
+  // goes, because absence is what the canvas carried before any ink did
+  // and `spatialCanvasSchema` makes `lines` optional — an empty array
+  // would be a second spelling of the same board.
+  'line.remove': (canvas, change) =>
+    withLines(
+      canvas,
+      (canvas.lines ?? []).filter((line) => line.id !== change.lineId),
+    ),
+}
+
+/**
+ * An edge to a node that is gone is not a canvas anything can render, and
+ * `spatialCanvasSchema` refuses it — so removing a node takes the edges that
+ * would dangle with it, the way the editor's own delete does. Silently
+ * leaving them would make the adopted board unsavable.
+ *
+ * Ink anchored to the node goes with it for the same reason, and ink
+ * anchored to nothing stays: a line's free end names no node, so there is
+ * nothing for the removal to dangle (ADR-0038 decision 2).
+ */
+function removeNode(canvas: SpatialCanvas, nodeId: string): SpatialCanvas {
+  const touches = (element: CanvasEdge | CanvasLine) =>
+    endNode(element.from) === nodeId || endNode(element.to) === nodeId
+  return {
+    ...canvas,
+    nodes: canvas.nodes.filter((node) => node.id !== nodeId),
+    edges: canvas.edges.filter((edge) => !touches(edge)),
+    ...(canvas.lines === undefined ? {} : { lines: canvas.lines.filter((line) => !touches(line)) }),
   }
 }
 
