@@ -175,6 +175,18 @@ export function unlinkedNameSpans(
   }
 }
 
+/** How many snippets a mention carries — enough to judge it, few enough to read. */
+const MENTION_CONTEXTS = 3
+
+/** A snippet around every unlinked occurrence of `name`, across `texts`. */
+function* unlinkedContexts(texts: readonly string[], name: string): Iterable<string> {
+  for (const text of texts) {
+    for (const span of unlinkedNameSpans(text, name)) {
+      yield snippetAround(text, span.index, span.length)
+    }
+  }
+}
+
 /**
  * Sources whose TEXT names `documentId`'s display name without a resolving
  * reference — the seeding half of the linking loop: the system finds the
@@ -191,12 +203,9 @@ export function mentionsOfIn(
   for (const [sourceId, facts] of sources) {
     if (sourceId === target.documentId) continue
     const contexts: string[] = []
-    for (const text of facts.texts) {
-      for (const span of unlinkedNameSpans(text, target.name)) {
-        contexts.push(snippetAround(text, span.index, span.length))
-        if (contexts.length >= 3) break
-      }
-      if (contexts.length >= 3) break
+    for (const context of unlinkedContexts(facts.texts, target.name)) {
+      contexts.push(context)
+      if (contexts.length >= MENTION_CONTEXTS) break
     }
     if (contexts.length === 0) continue
     mentions.push({
