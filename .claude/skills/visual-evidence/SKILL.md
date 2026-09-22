@@ -170,38 +170,28 @@ same face, or do not make the figure.
 **Read the PNG before uploading.** Half the failures above are invisible in
 the SVG text and obvious in the image.
 
-Reference it under a `## Visual repro` heading with plain markdown image
-syntax, pointing at the local file:
+Upload it with `gh image`, which prints the markdown to paste:
+
+```bash
+gh image check-token                      # the browser-cookie session is valid
+gh image tmp/screenshots/figure.png
+# ![figure.png](https://github.com/user-attachments/assets/<uuid>)
+```
+
+Put that line under a `## Visual repro` heading in the body file, with the alt
+text rewritten to say what the figure shows, and pass the body with
+`--body-file` to `gh pr create` (or `gh pr edit` on an existing PR):
 
 ```markdown
 ## Visual repro
-![before — 170px through B / after — clean path](tmp/screenshots/figure.png)
+![before — 170px through B / after — clean path](https://github.com/user-attachments/assets/<uuid>)
 ```
 
-Then pass it to `gh pr create` (or `gh pr comment`/`gh pr edit` on an
-existing PR) with `--attach`, which gh added in v2.99.0 (GitHub Changelog,
-2026-09-01) specifically to replace hand-uploading a screenshot and pasting
-its markdown back in:
-
-```bash
-gh pr create --title "…" --body-file body.md --attach tmp/screenshots/figure.png
-```
-
-`--attach` uploads the file, rewrites any local-path reference already in the
-body in place (alt text preserved), and appends the markdown for anything
-left unmatched. It is repeatable for more than one image, accepts
-`--attach 'path#alt text'` for custom alt text, and covers PNG/JPEG/GIF/WebP/
-SVG plus MP4/MOV/WebM (10 MB cap on images/GIFs). Confirm `gh --version` is
-2.99.0+ before relying on it — an older gh silently has no such flag.
-
-On an older gh (this machine's is 2.97.0), push the PNGs to the figures-only
-branch `pr-figures` with plumbing — `git hash-object -w`, `git mktree`,
-`git commit-tree -p <its tip>`, `git push origin <commit>:refs/heads/pr-figures`
-— and reference them as
-`https://raw.githubusercontent.com/kamiazya/whiteboard/pr-figures/<pr>/<name>.png`.
-Nothing checks that branch out and no workflow runs on it (every `push`
-trigger in `.github/workflows` is `branches: [main]`, checked 2026-09-21);
-it is never merged. Say in the body that the figure is hosted there.
+The upload is an ordinary GitHub attachment: there is no branch to keep and
+nothing to explain in the body. It replaced both earlier routes — gh's
+`--attach` (v2.99+, absent on this machine's gh) and pushing PNGs to a
+figures-only `pr-figures` branch with git plumbing — and neither is used any
+more (user decision, 2026-09-23).
 
 One sentence naming what to look at, and say what the figure CANNOT show (a
 case only reachable behind a flag, a panel state supplied through a seam

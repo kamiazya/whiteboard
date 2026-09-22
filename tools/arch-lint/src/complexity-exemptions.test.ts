@@ -34,7 +34,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // and apply were split. The count is stated here and nowhere else, because
 // several sessions pay the list down concurrently and a number in a comment
 // goes stale.
-const EXEMPT_COUNT = 127
+const EXEMPT_COUNT = 126
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
