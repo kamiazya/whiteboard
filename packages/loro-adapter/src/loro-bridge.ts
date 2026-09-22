@@ -313,14 +313,8 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
   // COMMENTS_KEY for why they must not ride the whole-value LWW write.
   const canvasMap = doc.getMap(CANVAS_KEY)
   const { comments } = canvas
-  if (canvas.facets !== undefined) canvasMap.set(FACETS_FIELD, canvas.facets)
-  // Deleted only when there is something to delete. A canvas that returned to
-  // the default must stop rendering a preference the author turned off, but a
-  // canvas that never had one should not pay an oplog op per save for it —
-  // measured on the growth scoreboard, which is the only thing that says so.
-  else if (canvasMap.get(FACETS_FIELD) !== undefined) canvasMap.delete(FACETS_FIELD)
-  if (canvas.tags !== undefined) canvasMap.set(TAGS_FIELD, canvas.tags)
-  else if (canvasMap.get(TAGS_FIELD) !== undefined) canvasMap.delete(TAGS_FIELD)
+  writeOptionalField(canvasMap, FACETS_FIELD, canvas.facets)
+  writeOptionalField(canvasMap, TAGS_FIELD, canvas.tags)
   // A write converges the record — but only when there is something to
   // converge. An unconditional delete is one oplog op per save forever, on
   // every document that never had the old key: measured at +10000 bytes on
@@ -341,49 +335,63 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
   // A resync states the whole truth, comments included.
   for (const id of existingCommentIds) threadsMap.delete(id)
 
-  const existingNodeIds = new Set<string>(nodesMap.keys())
-  const existingEdgeIds = new Set<string>(edgesMap.keys())
-  const incomingNodeIds = new Set<string>()
-  const incomingEdgeIds = new Set<string>()
-
-  for (const node of canvas.nodes) {
-    incomingNodeIds.add(node.id)
-    nodesMap.set(node.id, nodeToFields(node))
-  }
-
-  for (const edge of canvas.edges) {
-    incomingEdgeIds.add(edge.id)
-    edgesMap.set(edge.id, edgeToFields(edge))
-  }
-
+  // Two phases, in this order, because the op order is part of the bytes:
+  // every collection's writes first, then every collection's removals.
   const linesMap = doc.getMap(LINES_KEY)
-  const existingLineIds = new Set<string>(linesMap.keys())
-  const incomingLineIds = new Set<string>()
-
-  for (const line of canvas.lines ?? []) {
-    incomingLineIds.add(line.id)
-    linesMap.set(line.id, lineToFields(line))
-  }
+  const staleNodes = setEvery(nodesMap, canvas.nodes, nodeToFields)
+  const staleEdges = setEvery(edgesMap, canvas.edges, edgeToFields)
+  const staleLines = setEvery(linesMap, canvas.lines ?? [], lineToFields)
 
   // A resync is the second removal path, alongside deleteSpatialNode/Edge —
-  // so it owes the same lock cascade.
-  for (const id of existingNodeIds) {
-    if (incomingNodeIds.has(id)) continue
-    nodesMap.delete(id)
-    dropLockInto(doc, NODE_LOCKS_KEY, id)
+  // so it owes the same lock cascade. Lines share the EDGE lock plane rather
+  // than getting one of their own: a lock is keyed by element id, ids are
+  // unique across both collections, and a second plane would be a second
+  // place for a lock to be orphaned.
+  dropEvery(doc, nodesMap, staleNodes, NODE_LOCKS_KEY)
+  dropEvery(doc, edgesMap, staleEdges, EDGE_LOCKS_KEY)
+  dropEvery(doc, linesMap, staleLines, EDGE_LOCKS_KEY)
+}
+
+/**
+ * A canvas field set when present, and removed when absent — but only when
+ * there is something to remove. A canvas that returned to the default must
+ * stop rendering a preference the author turned off, while one that never had
+ * it should not pay an oplog op per save: measured on the growth scoreboard,
+ * which is the only thing that says so.
+ */
+function writeOptionalField(map: CanvasMap, field: string, value: unknown): void {
+  if (value !== undefined) map.set(field, value as Parameters<CanvasMap['set']>[1])
+  else if (map.get(field) !== undefined) map.delete(field)
+}
+
+/**
+ * Set every incoming element, answering the ids that were there before and
+ * are not incoming — read BEFORE the writes, and in the map's own order, so
+ * the removals that follow happen in the order they always have.
+ */
+function setEvery<T extends { readonly id: string }>(
+  map: CanvasMap,
+  items: readonly T[],
+  toFields: (item: T) => unknown,
+): Set<string> {
+  const stale = new Set<string>(map.keys())
+  for (const item of items) {
+    stale.delete(item.id)
+    map.set(item.id, toFields(item) as Parameters<CanvasMap['set']>[1])
   }
-  for (const id of existingEdgeIds) {
-    if (incomingEdgeIds.has(id)) continue
-    edgesMap.delete(id)
-    dropLockInto(doc, EDGE_LOCKS_KEY, id)
-  }
-  // Lines share the EDGE lock plane rather than getting one of their own: a
-  // lock is keyed by element id, ids are unique across both collections, and a
-  // second plane would be a second place for a lock to be orphaned.
-  for (const id of existingLineIds) {
-    if (incomingLineIds.has(id)) continue
-    linesMap.delete(id)
-    dropLockInto(doc, EDGE_LOCKS_KEY, id)
+  return stale
+}
+
+/** Remove each stale element, and the lock that named it. */
+function dropEvery(
+  doc: DocumentContainers,
+  map: CanvasMap,
+  stale: ReadonlySet<string>,
+  locksKey: string,
+): void {
+  for (const id of stale) {
+    map.delete(id)
+    dropLockInto(doc, locksKey, id)
   }
 }
 
@@ -537,6 +545,41 @@ export function deleteSpatialEdge(doc: DocumentContainers, edgeId: string): void
   if (deleteEdgeInto(doc, edgeId)) doc.commit()
 }
 
+/** Equal as stored: the same reference, or the same JSON. */
+const sameValue = (a: unknown, b: unknown): boolean =>
+  a === b || JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * Make an id-keyed collection in the doc equal `next`, given it currently
+ * equals `prev`: write what is new or changed, delete what is gone. An
+ * unchanged element writes nothing, which is what keeps an identical
+ * reconcile from committing.
+ */
+function reconcileById<T extends { readonly id: string }>(
+  prev: readonly T[],
+  next: readonly T[],
+  write: (item: T) => void,
+  remove: (id: string) => void,
+): void {
+  const before = new Map(prev.map((item) => [item.id, item]))
+  const kept = new Set(next.map((item) => item.id))
+  for (const item of next) {
+    const was = before.get(item.id)
+    // An early-out, not the guarantee: Loro records no op for a `set` of an
+    // identical value on its own. This skips the field projection work.
+    if (was === undefined || !sameValue(was, item)) write(item)
+  }
+  for (const id of before.keys()) if (!kept.has(id)) remove(id)
+}
+
+/** A canvas field set to `value`, or removed when there is none. */
+function setOrDelete(map: CanvasMap, field: string, value: unknown): void {
+  if (value === undefined) map.delete(field)
+  else map.set(field, value as Parameters<CanvasMap['set']>[1])
+}
+
+type CanvasMap = ReturnType<DocumentContainers['getMap']>
+
 /**
  * Applies `next` to the stored canvas as a VISIBLE-diff against `prev`:
  * writes only entries that changed, deletes only ids the caller could SEE
@@ -558,54 +601,26 @@ export function reconcileSpatialCanvas(
   prev: SpatialCanvas,
   next: SpatialCanvas,
 ): void {
-  const same = (a: unknown, b: unknown): boolean =>
-    a === b || JSON.stringify(a) === JSON.stringify(b)
-
+  // Order is load-bearing: a node's delete cascades to its edges, so the
+  // node pass runs before the edge pass exactly as it always has.
   withSpatialBatch(doc, (writer) => {
-    const prevNodes = new Map(prev.nodes.map((node) => [node.id, node]))
-    const nextNodeIds = new Set(next.nodes.map((node) => node.id))
-    for (const node of next.nodes) {
-      const before = prevNodes.get(node.id)
-      if (before === undefined || !same(before, node)) writer.writeNode(node)
-    }
-    for (const id of prevNodes.keys()) if (!nextNodeIds.has(id)) writer.deleteNode(id)
-
-    const prevEdges = new Map(prev.edges.map((edge) => [edge.id, edge]))
-    const nextEdgeIds = new Set(next.edges.map((edge) => edge.id))
-    for (const edge of next.edges) {
-      const before = prevEdges.get(edge.id)
-      if (before === undefined || !same(before, edge)) writer.writeEdge(edge)
-    }
-    for (const id of prevEdges.keys()) if (!nextEdgeIds.has(id)) writer.deleteEdge(id)
-
-    const prevComments = new Map((prev.comments ?? []).map((comment) => [comment.id, comment]))
-    const nextComments = next.comments ?? []
-    const nextCommentIds = new Set(nextComments.map((comment) => comment.id))
-    for (const comment of nextComments) {
-      const before = prevComments.get(comment.id)
-      if (before === undefined || !same(before, comment)) writer.writeComment(comment)
-    }
-    for (const id of prevComments.keys()) {
-      if (!nextCommentIds.has(id)) writer.deleteComment(id)
-    }
+    reconcileById(prev.nodes, next.nodes, writer.writeNode, writer.deleteNode)
+    reconcileById(prev.edges, next.edges, writer.writeEdge, writer.deleteEdge)
+    reconcileById(
+      prev.comments ?? [],
+      next.comments ?? [],
+      writer.writeComment,
+      writer.deleteComment,
+    )
   })
 
-  const nextFacets = next.facets
-  const nextTags = next.tags
-  const facetsMoved = !same(prev.facets, nextFacets)
-  const tagsMoved = !same(prev.tags, nextTags)
-  if (facetsMoved || tagsMoved) {
-    const canvasMap = doc.getMap(CANVAS_KEY)
-    if (facetsMoved) {
-      if (nextFacets === undefined) canvasMap.delete(FACETS_FIELD)
-      else canvasMap.set(FACETS_FIELD, nextFacets)
-    }
-    if (tagsMoved) {
-      if (nextTags === undefined) canvasMap.delete(TAGS_FIELD)
-      else canvasMap.set(TAGS_FIELD, nextTags)
-    }
-    doc.commit()
-  }
+  const facetsMoved = !sameValue(prev.facets, next.facets)
+  const tagsMoved = !sameValue(prev.tags, next.tags)
+  if (!facetsMoved && !tagsMoved) return
+  const canvasMap = doc.getMap(CANVAS_KEY)
+  if (facetsMoved) setOrDelete(canvasMap, FACETS_FIELD, next.facets)
+  if (tagsMoved) setOrDelete(canvasMap, TAGS_FIELD, next.tags)
+  doc.commit()
 }
 
 /** Uncommitted spatial writes scoped to one `withSpatialBatch` call. */
