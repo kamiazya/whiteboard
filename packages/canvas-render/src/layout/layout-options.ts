@@ -28,7 +28,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { BoundingBox, EdgeRouter, RenderContribution } from '@kamiazya/whiteboard-scene'
+import type { BoundingBox, EdgeRouter, RenderContribution, Scene } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import type { MeasureText } from '../measure.js'
 import type { ReferenceSeams } from '../references/seams.js'
@@ -445,6 +445,17 @@ export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
    * per canvas from these plus that canvas's facets and the theme default.
    */
   readonly explicitNodeOutlines: Readonly<Record<string, string>> | undefined
+  /**
+   * How a NESTED canvas is laid out — the composer's own entry point,
+   * settled here once rather than imported by the code that needs it.
+   *
+   * A file embed and a markdown body's `![[canvas]]` both lay out a child
+   * canvas from `compose-node.ts`, which `spatial-canvas.ts` imports — so
+   * importing the entry back would close a value cycle. Passing it keeps the
+   * dependency pointing one way, exactly as `comments.ts` and `proposals.ts`
+   * take the body typesetter rather than importing it.
+   */
+  readonly layoutNestedCanvas: (canvas: SpatialCanvas, options: ResolvedLayoutOptions) => Scene
   /** Document references on the CURRENT recursion path, plus its depth. */
   readonly activeEmbedPath: ReadonlySet<string>
   readonly embedDepth: number

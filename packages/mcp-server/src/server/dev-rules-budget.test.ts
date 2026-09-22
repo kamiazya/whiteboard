@@ -407,7 +407,14 @@ const ALWAYS_ON_TOTAL_BUDGET = 25
 // introduced for. The measurements that justified the split are in the PR;
 // what stays is the rule, plus which instrument re-reads it
 // (`tidy-quality.test.ts`, whose columns are pinned exactly).
-const CANVAS_RENDER_BUDGET = 143
+//
+// 143 -> 144 (node composition leaves `spatial-canvas.ts`): the file sat 38
+// characters under the boundary, so ANY accurate update crossed it. What a
+// session here has to be told is where one node's drawing lives now, why it
+// sits beside the composer and not in `nodes/`, and that it reaches the
+// entry through a seam — plus two sentences that named the old file for
+// code that moved. Written as the minimum that keeps the rule true.
+const CANVAS_RENDER_BUDGET = 144
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

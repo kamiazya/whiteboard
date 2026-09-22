@@ -15,8 +15,9 @@ the code that serves them shares nothing:
   has no idea what is drawn inside one.
 - `layout/nodes/` — how a node's box is drawn and filled: outline shape,
   appearance resolution, the markdown body typesetter, truncation.
-- `layout/` itself — `spatial-canvas.ts`, the composer that draws on both,
-  plus the kind-agnostic scene transforms it uses.
+- `layout/` itself — the composer that draws on both (`spatial-canvas.ts`
+  walks a canvas, `compose-node.ts` draws one node's box), plus the
+  kind-agnostic scene transforms it uses.
 
 **The composer's own file is not the composer's only file.** Two
 independently-featured OVERLAYS and the options vocabulary have their own
@@ -38,7 +39,8 @@ Both overlays take the body typesetter as a SEAM (`BodyLayoutSeam`) rather
 than importing it. The markdown options a bubble is laid out with are built
 by the composer, which recurses back into `layoutSpatialCanvas` for an
 embedded canvas — importing it would close a cycle, and passing it keeps
-the dependency pointing one way.
+the dependency pointing one way. `compose-node.ts` takes that entry the same
+way, as `ResolvedLayoutOptions.layoutNestedCanvas`.
 
 `spatial-canvas.ts` re-exports what it used to declare, so no importer had
 to change. That is deliberate: a move that also rewrote every call site
@@ -787,7 +789,7 @@ the table alone.
       test. The property catches it now.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
-      (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,
+      (`layout/compose-node.ts`) — synchronous, optional, caller-supplied,
       total (a throw or `undefined` degrades to the plain chrome+label
       rendering rather than aborting layout).
       `FacetCardData` (`{ title?: string; rows: ReadonlyArray<{ label:
@@ -971,7 +973,7 @@ the table alone.
     whole-block, their children not being lines. Whole-block alone leaves the
     commonest body unbounded — a single long paragraph is ONE block, measured
     at 112px in a 60px node before lines were reachable. Keep-first ("a text
-    node never renders empty") stays in `spatial-canvas.ts`, being a
+    node never renders empty") stays in `compose-node.ts`, being a
     spatial-node policy rather than a block one.
     `layout/frame-containment-quality.test.ts` counts what the law hides —
     a bound says nothing about how often its escape is taken.

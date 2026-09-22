@@ -540,7 +540,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +22 on the merge: the content seam's accessors and the reasons the
   // dispatch asks what a node HOLDS, landing in the file the overlay and
   // options extraction had just cut to 1560.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 1582,
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 811,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
