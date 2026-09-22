@@ -221,9 +221,17 @@ describe('the mutation lane covers what it says it covers', () => {
     //
     // 86 and 19 since `edge-ink.ts` came out of `edge-rules.ts` the same way
     // — the ink TERMS — and is in the lane for the same reason.
+    //
+    // 87 and 19 since `layout/compose-node.ts` came out of `spatial-canvas.ts`
+    // — how one node's box is drawn and filled, 47% of that file. OUTSIDE the
+    // lane, because the file it left was: splitting it changes nothing the
+    // lane saw, which is the opposite case from `edge-ink.ts` and
+    // `tidy-units.ts`. What pins it is the scene and SVG suites, which are
+    // examples, so a mutation report over it would be survivors nobody can
+    // act on — the reasoning `svg/paint.ts` left under.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 19,
-      production: 86,
+      production: 87,
     })
   })
 
