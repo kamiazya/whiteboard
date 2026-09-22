@@ -108,26 +108,27 @@ function addInlineImages(body: string, add: (url: string) => void): void {
     // makes rather than a picture nobody sees.
     const close = body.indexOf('](', bang + 2)
     if (close === -1) return
-    const open = close + 2
-    let end: number
-    let url: string
-    if (body[open] === '<') {
-      // `![a](<asset:two words>)`. The parser strips the brackets, so a scan
-      // that kept them asked for a target nothing holds — and they are the
-      // only destination syntax in which a SPACE is legal, so the plain stop
-      // set below would cut one in half.
-      const shut = body.indexOf('>', open + 1)
-      if (shut === -1) return
-      url = body.slice(open + 1, shut)
-      end = shut + 1
-    } else {
-      end = open
-      while (end < body.length && !')\t\n\r '.includes(body[end] as string)) end += 1
-      url = body.slice(open, end)
-    }
-    if (isImageRef(url)) add(url)
-    at = end
+    const destination = destinationAt(body, close + 2)
+    if (destination === undefined) return
+    if (isImageRef(destination.url)) add(destination.url)
+    at = destination.end
   }
+}
+
+/** The link destination starting at `open`, and the index just past it. */
+function destinationAt(body: string, open: number): { url: string; end: number } | undefined {
+  if (body[open] === '<') {
+    // `![a](<asset:two words>)`. The parser strips the brackets, so a scan
+    // that kept them asked for a target nothing holds — and they are the
+    // only destination syntax in which a SPACE is legal, so the plain stop
+    // set below would cut one in half.
+    const shut = body.indexOf('>', open + 1)
+    if (shut === -1) return undefined
+    return { url: body.slice(open + 1, shut), end: shut + 1 }
+  }
+  let end = open
+  while (end < body.length && !')\t\n\r '.includes(body[end] as string)) end += 1
+  return { url: body.slice(open, end), end }
 }
 
 /**

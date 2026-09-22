@@ -12,12 +12,13 @@
 import type {
   EdgeEnd,
   LineEnd,
+  ProposedChange,
   SpatialCanvas,
   SpatialNode,
   SpatialProposedChange,
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts, endNode, isFrame } from '@kamiazya/whiteboard-model'
-import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { BoundingBox, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { layoutCommentBody, PROPOSAL_TEXT_MAX_WIDTH_PX } from './comment-body.js'
 import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
 import {
@@ -27,6 +28,7 @@ import {
   type EdgePathLookup,
 } from './comments.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
+import type { SpatialProposalAppearance } from './nodes/spatial-appearance.js'
 import { contentExtent } from './scene-extent.js'
 import { translateScene } from './translate-scene.js'
 
@@ -66,70 +68,152 @@ export function composeProposals(
   for (const proposal of proposals) {
     const open = proposal.changes.filter((change) => change.status === 'open')
     if (open.length === 0) continue
-    let anchor: { x: number; y: number } | undefined
-    let conflicts = 0
-
-    for (const change of open) {
-      if (change.op === 'body.replace') continue
-      if (canvasChangeConflicts(change, canvas)) conflicts += 1
-      const box = proposedBox(change, canvas)
-      if (box !== undefined) {
-        out.push({
-          kind: 'shape',
-          id: `${change.id}/outline`,
-          proposalChrome: { proposalId: proposal.id },
-          bbox: box,
-          radius: COMMENT_BUBBLE_RADIUS_PX,
-          ...paint,
-        })
-        obstacles.push(box)
-        anchor ??= { x: box.x + box.w, y: box.y }
-        continue
-      }
-      const path = proposedEdgePath(change, canvas, edgePathOf)
-      if (path === undefined) continue
-      out.push({
-        kind: 'edge',
-        id: `${change.id}/outline`,
-        path,
-        fromSide: 'right',
-        toSide: 'left',
-        fromEnd: 'none',
-        toEnd: 'none',
-        ...paint,
-      })
-      anchor ??= path[Math.floor(path.length / 2)]
-    }
-    if (anchor === undefined) continue
-
+    const outlined = outlineChanges(proposal.id, open, canvas, edgePathOf, paint)
+    out.push(...outlined.nodes)
+    obstacles.push(...outlined.boxes)
+    if (outlined.anchor === undefined) continue
     const changed = `${open.length} proposed change${open.length === 1 ? '' : 's'}`
-    const label = conflicts === 0 ? changed : `${changed}, ${conflicts} needs a look`
-    // Through the comment body's own producer, so the label WRAPS instead of
-    // being truncated at the bubble's width — "2 proposed changes - 1 needs
-    // a look" does not fit on one line, and a truncated count is worse than
-    // no count. This bubble borrows the comment layer's grammar throughout;
-    // borrowing its producer is what keeps that true.
-    const laid = layoutCommentBody(label, {
-      ...bodyLayout(PROPOSAL_TEXT_MAX_WIDTH_PX, options),
-      density: 'compact',
-      parseBody: options.parseBody,
-      onParseFailure: (err) =>
-        options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err }),
-    })
-    const { right: contentRight, bottom: contentBottom } = contentExtent(laid.nodes)
-    const bubble = placeCommentBubble(
-      anchor,
-      {
-        w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
-        h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
-      },
-      obstacles,
+    const label =
+      outlined.conflicts === 0 ? changed : `${changed}, ${outlined.conflicts} needs a look`
+    out.push(
+      ...proposalBubble(
+        proposal.id,
+        label,
+        outlined.anchor,
+        obstacles,
+        chrome,
+        options,
+        bodyLayout,
+      ),
     )
-    obstacles.push(bubble)
+  }
+  return out
+}
 
-    out.push({
+type Point = { readonly x: number; readonly y: number }
+type OutlinePaint = { readonly appearance?: SpatialProposalAppearance['outline'] }
+
+/** A proposal's open changes outlined, where its bubble anchors, and how many conflict. */
+function outlineChanges(
+  proposalId: string,
+  open: readonly ProposedChange[],
+  canvas: SpatialCanvas,
+  edgePathOf: EdgePathLookup,
+  paint: OutlinePaint,
+): { nodes: SceneNode[]; boxes: BoundingBox[]; anchor: Point | undefined; conflicts: number } {
+  const nodes: SceneNode[] = []
+  const boxes: BoundingBox[] = []
+  let anchor: Point | undefined
+  let conflicts = 0
+  for (const change of open) {
+    if (change.op === 'body.replace') continue
+    if (canvasChangeConflicts(change, canvas)) conflicts += 1
+    const outline = changeOutline(proposalId, change, canvas, edgePathOf, paint)
+    if (outline === undefined) continue
+    nodes.push(outline.node)
+    if (outline.box !== undefined) boxes.push(outline.box)
+    anchor ??= outline.anchor
+  }
+  return { nodes, boxes, anchor, conflicts }
+}
+
+/**
+ * One change's outline: the box it concerns, else the route it traces — and
+ * the point a bubble would anchor to (a box's top-right corner, a route's
+ * middle point).
+ */
+function changeOutline(
+  proposalId: string,
+  change: SpatialProposedChange,
+  canvas: SpatialCanvas,
+  edgePathOf: EdgePathLookup,
+  paint: OutlinePaint,
+): { node: SceneNode; box?: BoundingBox; anchor: Point } | undefined {
+  const id = `${change.id}/outline`
+  const box = proposedBox(change, canvas)
+  if (box !== undefined) {
+    return {
+      node: {
+        kind: 'shape',
+        id,
+        proposalChrome: { proposalId },
+        bbox: box,
+        radius: COMMENT_BUBBLE_RADIUS_PX,
+        ...paint,
+      },
+      box,
+      anchor: { x: box.x + box.w, y: box.y },
+    }
+  }
+  const path = proposedEdgePath(change, canvas, edgePathOf)
+  if (path === undefined) return undefined
+  const middle = path[Math.floor(path.length / 2)] as Point
+  return {
+    node: {
       kind: 'edge',
-      id: `${proposal.id}/leader`,
+      id,
+      path,
+      fromSide: 'right',
+      toSide: 'left',
+      fromEnd: 'none',
+      toEnd: 'none',
+      ...paint,
+    },
+    anchor: middle,
+  }
+}
+
+/**
+ * The bubble saying what a proposal would do: its leader, its box, and its
+ * label — placed clear of `obstacles`, which it then joins so the next
+ * proposal's bubble avoids it.
+ */
+function proposalBubble(
+  proposalId: string,
+  label: string,
+  anchor: Point,
+  obstacles: BoundingBox[],
+  chrome: SpatialProposalAppearance | undefined,
+  options: ResolvedLayoutOptions,
+  bodyLayout: BodyLayoutSeam,
+): SceneNode[] {
+  // Through the comment body's own producer, so the label WRAPS instead of
+  // being truncated at the bubble's width — "2 proposed changes - 1 needs
+  // a look" does not fit on one line, and a truncated count is worse than
+  // no count. This bubble borrows the comment layer's grammar throughout;
+  // borrowing its producer is what keeps that true.
+  const laid = layoutCommentBody(label, {
+    ...bodyLayout(PROPOSAL_TEXT_MAX_WIDTH_PX, options),
+    density: 'compact',
+    parseBody: options.parseBody,
+    onParseFailure: (err) =>
+      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposalId, err }),
+  })
+  const { right: contentRight, bottom: contentBottom } = contentExtent(laid.nodes)
+  const bubble = placeCommentBubble(
+    anchor,
+    {
+      w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
+      h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
+    },
+    obstacles,
+  )
+  obstacles.push(bubble)
+  return bubbleNodes(proposalId, anchor, bubble, laid, chrome)
+}
+
+/** The leader from the anchor, the bubble's box, and its label inside it. */
+function bubbleNodes(
+  proposalId: string,
+  anchor: Point,
+  bubble: BoundingBox,
+  laid: Scene,
+  chrome: SpatialProposalAppearance | undefined,
+): SceneNode[] {
+  return [
+    {
+      kind: 'edge',
+      id: `${proposalId}/leader`,
       path: [
         { x: anchor.x, y: anchor.y },
         commentLeaderEnd(anchor, bubble, COMMENT_BUBBLE_RADIUS_PX),
@@ -139,24 +223,21 @@ export function composeProposals(
       fromEnd: 'none',
       toEnd: 'none',
       ...(chrome === undefined ? {} : { appearance: chrome.leader }),
-    })
-    out.push({
+    },
+    {
       kind: 'shape',
-      id: `${proposal.id}/bubble`,
-      proposalChrome: { proposalId: proposal.id },
+      id: `${proposalId}/bubble`,
+      proposalChrome: { proposalId },
       bbox: bubble,
       radius: COMMENT_BUBBLE_RADIUS_PX,
       ...(chrome === undefined ? {} : { appearance: chrome.bubble }),
-    })
-    out.push(
-      ...translateScene(
-        laid,
-        bubble.x + COMMENT_BUBBLE_PADDING_PX,
-        bubble.y + COMMENT_BUBBLE_PADDING_PX,
-      ).nodes,
-    )
-  }
-  return out
+    },
+    ...translateScene(
+      laid,
+      bubble.x + COMMENT_BUBBLE_PADDING_PX,
+      bubble.y + COMMENT_BUBBLE_PADDING_PX,
+    ).nodes,
+  ]
 }
 
 /**

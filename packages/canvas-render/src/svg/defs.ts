@@ -13,27 +13,41 @@ function isVNode(child: SvgChild): child is SvgVNode {
   return typeof child === 'object' && child !== null && 'tag' in child
 }
 
-export function collectDefs(children: ReadonlyArray<SvgChild>): ReadonlyArray<SvgDef> {
-  const seen = new Set<string>()
-  const collected: SvgDef[] = []
-  const visit = (child: SvgChild): void => {
-    if (Array.isArray(child)) {
-      for (const inner of child) visit(inner)
-      return
-    }
-    if (!isVNode(child)) return
-    for (const def of child.defs ?? []) {
-      if (seen.has(def.id)) continue
-      seen.add(def.id)
-      // A definition's own node may declare the definitions IT depends on
-      // (a mask carrying its gradient). Visit it before pushing so a
-      // dependency is emitted ahead of its dependent; `seen` is marked
-      // first, so mutually dependent definitions terminate.
-      visit(def.node)
-      collected.push(def)
-    }
-    for (const inner of child.children ?? []) visit(inner)
+/** The VNodes a child holds at its top level: itself, or those in its nested arrays. */
+function* vnodesIn(child: SvgChild): Iterable<SvgVNode> {
+  if (Array.isArray(child)) {
+    for (const inner of child) yield* vnodesIn(inner)
+  } else if (isVNode(child)) {
+    yield child
   }
-  for (const child of children) visit(child)
-  return collected
+}
+
+/** The definitions hoisted so far, in emission order, and the ids among them. */
+interface Hoisted {
+  readonly seen: Set<string>
+  readonly collected: SvgDef[]
+}
+
+function visit(child: SvgChild, into: Hoisted): void {
+  for (const node of vnodesIn(child)) {
+    for (const def of node.defs ?? []) hoist(def, into)
+    for (const inner of node.children ?? []) visit(inner, into)
+  }
+}
+
+function hoist(def: SvgDef, into: Hoisted): void {
+  if (into.seen.has(def.id)) return
+  into.seen.add(def.id)
+  // A definition's own node may declare the definitions IT depends on (a
+  // mask carrying its gradient). Visit it before pushing so a dependency is
+  // emitted ahead of its dependent; `seen` is marked first, so mutually
+  // dependent definitions terminate.
+  visit(def.node, into)
+  into.collected.push(def)
+}
+
+export function collectDefs(children: ReadonlyArray<SvgChild>): ReadonlyArray<SvgDef> {
+  const into: Hoisted = { seen: new Set(), collected: [] }
+  for (const child of children) visit(child, into)
+  return into.collected
 }
