@@ -304,7 +304,13 @@ function aliasedSpecifiers(): { packageDir: string; specifier: string; file: str
  * arrives next all surface the same way — a bare specifier naming no declared
  * dependency — and one probe covers a list of mechanisms nobody has to keep.
  */
-describe('path aliases the cycle scan has to be told about', () => {
+// A ceiling sized on a measurement, not a delay: the block walks every
+// scanned package's source, which costs ~800ms on a quiet tree (3 runs:
+// 806/795/862ms) and 7072ms during a `git push`, where lefthook runs it
+// beside `pnpm -r typecheck` and the rest of this project. The 5000ms
+// default sits between the two, so the gate failed twice on a timeout that
+// said nothing about the repo.
+describe('path aliases the cycle scan has to be told about', { timeout: 30_000 }, () => {
   const aliased = aliasedSpecifiers()
 
   it('reads the scanned trees and finds ordinary package imports', () => {
