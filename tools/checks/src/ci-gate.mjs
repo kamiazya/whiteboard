@@ -48,6 +48,24 @@ export function baseJobName(name) {
 }
 
 /**
+ * What is wrong with one job's outcome, or `undefined` when it counts as a pass.
+ * @param {{name: string, status: string, conclusion: string | null}} job
+ * @returns {string | undefined}
+ */
+function jobProblem(job) {
+  if (job.status !== 'completed') return `${job.name}: still ${job.status} when the gate ran`
+  if (job.conclusion === 'success') return undefined
+  if (job.conclusion === 'skipped') {
+    if (baseJobName(job.name) in SKIPPABLE_JOBS) return undefined
+    return (
+      `${job.name}: skipped, which is not a declared outcome for it — a job that fails to start ` +
+      'also reports skipped. Add it to SKIPPABLE_JOBS with the reason if the skip is deliberate.'
+    )
+  }
+  return `${job.name}: ${job.conclusion ?? 'no conclusion'}`
+}
+
+/**
  * @param {{
  *   jobs: {name: string, status: string, conclusion: string | null}[],
  *   needed: string[],
@@ -77,20 +95,8 @@ export function gateFailures({ jobs, needed, gateJobName }) {
   }
 
   for (const job of others) {
-    if (job.status !== 'completed') {
-      problems.push(`${job.name}: still ${job.status} when the gate ran`)
-      continue
-    }
-    if (job.conclusion === 'success') continue
-    if (job.conclusion === 'skipped' && baseJobName(job.name) in SKIPPABLE_JOBS) continue
-    if (job.conclusion === 'skipped') {
-      problems.push(
-        `${job.name}: skipped, which is not a declared outcome for it — a job that fails to start ` +
-          'also reports skipped. Add it to SKIPPABLE_JOBS with the reason if the skip is deliberate.',
-      )
-      continue
-    }
-    problems.push(`${job.name}: ${job.conclusion ?? 'no conclusion'}`)
+    const problem = jobProblem(job)
+    if (problem !== undefined) problems.push(problem)
   }
   return problems
 }
