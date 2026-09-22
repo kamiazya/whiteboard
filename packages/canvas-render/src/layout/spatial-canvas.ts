@@ -163,8 +163,8 @@ const PATH_ENDS = {
     replace: (path, terminal) => [terminal, ...path.slice(1)],
   },
   to: {
-    terminal: (path) => path[path.length - 1],
-    inward: (path) => path[path.length - 2],
+    terminal: (path) => path.at(-1),
+    inward: (path) => path.at(-2),
     replace: (path, terminal) => [...path.slice(0, -1), terminal],
   },
 } satisfies Record<'from' | 'to', PathEnd>
