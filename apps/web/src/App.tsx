@@ -45,6 +45,13 @@ const PairConsentPage = lazy(() =>
   import('./pages/PairConsentPage.js').then((m) => ({ default: m.PairConsentPage })),
 )
 
+// Lazy for the same reason as /pair, and one more: this page decodes an
+// arriving workspace record, so it reaches loro — which must stay off the
+// entry chunk (entry-graph-loro-free.test.ts).
+const ReceiveTransferPage = lazy(() =>
+  import('./pages/ReceiveTransferPage.js').then((m) => ({ default: m.ReceiveTransferPage })),
+)
+
 // Lazy for the same reason as the other secondary surfaces above: /settings
 // is a rare, dedicated navigation (not part of the canvas critical path).
 const SettingsPage = lazy(() =>
@@ -182,6 +189,12 @@ export function App({ providerState }: AppProps) {
   // dropping the origin/challenge/state query and dumping the user on the
   // gallery instead of the consent prompt.
   const isPairRoute = location.pathname === '/pair'
+
+  // The keeper-served transfer receiver, for the same reason /pair needs a
+  // guard: `parseWorkspaceRoute('/receive-transfer')` is null, so without
+  // this the daemonView -> URL sync effect below navigates to '/' and drops
+  // the fragment the sender put there — which is the whole handshake.
+  const isReceiveTransferRoute = location.pathname === '/receive-transfer'
 
   // Pairing-grant return leg: a `#wb-grant=<code>&state=` fragment from the
   // daemon's /pair consent page. The exchange is async (a direct POST — the
@@ -521,6 +534,17 @@ export function App({ providerState }: AppProps) {
       cancelled = true
     }
   }, [settingsDaemon?.baseUrl, settingsDaemon?.token])
+
+  // The keeper-served /receive-transfer surface — rendered in place of every
+  // other view, and before the pair branch for no reason other than reading
+  // order. Accepting needs the R3-injected token, same as /pair.
+  if (isReceiveTransferRoute) {
+    return (
+      <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
+        <ReceiveTransferPage daemonToken={daemonToken} />
+      </Suspense>
+    )
+  }
 
   // The daemon-served /pair consent page (pairing-grant flow) — rendered
   // in place of every other view; approving needs the R3-injected token.

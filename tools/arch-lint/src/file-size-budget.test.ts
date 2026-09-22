@@ -806,7 +806,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1859 -> 1956 for S10's awaitingDaemonRenewal derivation cases (the
   // renewal-outstanding gate is App's own, so its success and failure paths are
   // pinned here, not only in the hook's test).
-  'apps/web/src/App.test.tsx': 1956,
+  // 1956 -> 1997 for the /receive-transfer route case: the fragment carries
+  // the whole handshake, so it is pinned here beside /pair's same guard.
+  'apps/web/src/App.test.tsx': 1997,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,
