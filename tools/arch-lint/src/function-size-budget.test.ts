@@ -306,6 +306,12 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-image-urls.ts#useImageUrls': 67,
   'apps/web/src/hooks/use-reference-seams.ts#useReferenceSeams': 69,
   'apps/web/src/hooks/use-shell-workspaces.ts#useShellWorkspaces': 107,
+  // The receiving half of a cross-origin transfer, as one sequence: announce,
+  // listen, accept, report. The workspace list is already split out
+  // (`useKeeperWorkspaceTargets`) because it is a different question; what
+  // remains reads top to bottom as the handshake, and splitting it further
+  // would scatter one protocol across hooks.
+  'apps/web/src/hooks/use-transfer-handshake.ts#useTransferHandshake': 92,
   // 196 -> 199 (ADR-0042 S10): the awaitingDaemonRenewal guard — a daemon
   // deep link is undecided, not foreign, while its silent renewal is outstanding.
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 199,
@@ -377,6 +383,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // three action states now share ONE `ReplicaActionPanel` instead of a
   // near-identical block each, which is where 26 of the added lines went.
   'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 416,
+  // Presentation only — the logic is `useTransferHandshake`. Six stages, each
+  // a short branch, and the offer and the report already live in their own
+  // components; the page is the switch between them.
+  'apps/web/src/pages/ReceiveTransferPage.tsx#ReceiveTransferPage': 70,
+  // The offer's JSX: the sender's CLAIM, the sentence saying images do not
+  // travel, the target choice and the accept control. Each is a line a person
+  // needs before pressing, so none can move after the press.
+  'apps/web/src/pages/ReceiveTransferPage.tsx#OfferPanel': 66,
   // 89 -> 94: the Copies-on-this-device card mounts in BOTH branches, and
   // the disconnected one is where it matters most — with no daemon every
   // copy is browser-kept, so a card hidden there would hide the whole list.
