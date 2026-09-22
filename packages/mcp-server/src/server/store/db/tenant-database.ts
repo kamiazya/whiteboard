@@ -16,6 +16,7 @@ import {
   PrimitiveValueListNode,
   QueryNode,
   type QueryResult,
+  RawNode,
   ReferenceNode,
   type RootOperationNode,
   type SelectQueryNode,
@@ -74,6 +75,10 @@ class TenantScopePlugin implements KyselyPlugin {
   }
 
   transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
+    // `sql\`...\`.execute(db)` arrives here as one RawNode: text, with no
+    // tree to add a filter to. A raw FRAGMENT inside a builder is not the root
+    // and is scoped with the query around it.
+    if (RawNode.is(args.node)) throw refusal('a raw statement, which it cannot scope')
     return this.#transformer.transformNode(args.node)
   }
 
@@ -168,6 +173,11 @@ class TenantScopeTransformer extends OperationNodeTransformer {
     const inner = super.transformInsertQuery(node)
     const target = inner.into ? scopedTable(inner.into) : null
     if (!target) return inner
+    // SQLite resolves OR REPLACE by DELETING whichever row holds the key,
+    // whoever's it is; no filter the handle adds can reach that delete.
+    if (inner.replace || inner.orAction?.action === 'replace') {
+      throw refusal(`an INSERT OR REPLACE into ${target.table}`)
+    }
     if (inner.columns?.some((c) => c.column.name === 'tenantId')) {
       throw refusal('an insert that names tenantId itself')
     }

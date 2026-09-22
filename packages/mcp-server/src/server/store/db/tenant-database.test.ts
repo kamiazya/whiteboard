@@ -228,6 +228,27 @@ describe('what a tenant-bound handle refuses rather than guessing', () => {
     ).rejects.toThrow(/tenantId/)
   })
 
+  it('a whole raw statement, which it has no tree to scope', async () => {
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    await expect(sql`select * from workspaceMembersOnly`.execute(a)).rejects.toThrow(
+      /raw statement/,
+    )
+  })
+
+  it('an INSERT OR REPLACE, which would delete another tenant row on a key collision', async () => {
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    await expect(
+      a.replaceInto('workspaceMembersOnly').values({ workspaceId: 'w', since: 1 }).execute(),
+    ).rejects.toThrow(/OR REPLACE/)
+    await expect(
+      a
+        .insertInto('workspaceMembersOnly')
+        .orReplace()
+        .values({ workspaceId: 'w', since: 1 })
+        .execute(),
+    ).rejects.toThrow(/OR REPLACE/)
+  })
+
   it('an insert from a select into a tenant-scoped table', async () => {
     const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
     await expect(
