@@ -26,35 +26,41 @@ export type Rect = {
 
 export const segmentLength = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
 
+/**
+ * One Liang–Barsky slab applied to the open interval `[t0, t1]`: the part of
+ * it inside the slab, or `undefined` when nothing is.
+ */
+function narrowBySlab(
+  p: number,
+  q: number,
+  [t0, t1]: [number, number],
+): [number, number] | undefined {
+  if (p === 0) {
+    // Parallel to this slab. `q > 0` is strictly within it; `q === 0` puts
+    // the whole segment ON the boundary, which is border ink, not interior.
+    return q <= 0 ? undefined : [t0, t1]
+  }
+  const t = q / p
+  if (p < 0) return t > t1 ? undefined : [Math.max(t0, t), t1]
+  return t < t0 ? undefined : [t0, Math.min(t1, t)]
+}
+
 /** Parameters of the part of `a`→`b` strictly inside `rect`, if any (Liang–Barsky). */
 function clipOpen(a: Point, b: Point, rect: Rect): [number, number] | undefined {
   const dx = b.x - a.x
   const dy = b.y - a.y
-  let t0 = 0
-  let t1 = 1
   const slabs: readonly [number, number][] = [
     [-dx, a.x - rect.x],
     [dx, rect.x + rect.w - a.x],
     [-dy, a.y - rect.y],
     [dy, rect.y + rect.h - a.y],
   ]
+  let span: [number, number] | undefined = [0, 1]
   for (const [p, q] of slabs) {
-    if (p === 0) {
-      // Parallel to this slab. `q > 0` is strictly within it; `q === 0` puts
-      // the whole segment ON the boundary, which is border ink, not interior.
-      if (q <= 0) return undefined
-      continue
-    }
-    const t = q / p
-    if (p < 0) {
-      if (t > t1) return undefined
-      if (t > t0) t0 = t
-    } else {
-      if (t < t0) return undefined
-      if (t < t1) t1 = t
-    }
+    span = narrowBySlab(p, q, span)
+    if (span === undefined) return undefined
   }
-  return t1 > t0 ? [t0, t1] : undefined
+  return span[1] > span[0] ? span : undefined
 }
 
 /**
