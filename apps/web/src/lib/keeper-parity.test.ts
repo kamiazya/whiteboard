@@ -132,6 +132,12 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'both-keepers',
     browser: 'src/pages/BrowserIndexPage.tsx',
   },
+  'src/pages/daemon-index-actions.ts': {
+    reach: 'gap',
+    missing:
+      'the browser index row has no Duplicate: BrowserIndexPage never passes onDuplicateDocument to WorkspaceFilesPanel, which renders the action only when it is handed one. Delete is mirrored; duplicate is not',
+    followUp: 'issues/browser-index-row-cannot-duplicate',
+  },
   'src/pages/PairConsentPage.tsx': {
     reach: 'daemon-itself',
     why: 'the screen where a person grants a web origin access to their daemon — it exists only because there is a daemon to pair with',

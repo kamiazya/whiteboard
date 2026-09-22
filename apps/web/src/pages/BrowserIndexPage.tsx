@@ -63,6 +63,72 @@ const defaultLoroStore = /* @__PURE__ */ new LoroStore()
 const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
 const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
 
+/**
+ * What the confirm dialog is asking about.
+ *
+ * A LIST, so one confirmation and one handler serve both the single delete
+ * and the selection's bulk delete. A single delete is a list of one, and
+ * keeps naming its document.
+ */
+interface PendingDelete {
+  readonly paths: readonly string[]
+  readonly displayName: string
+  readonly kind?: DocumentKind
+}
+
+/**
+ * Delete each path, recording rather than throwing on the ones that will not
+ * go.
+ *
+ * Sequential and failure-tolerant on purpose: one path that cannot be deleted
+ * must not abandon the rest, and the person has to be told how many did not
+ * go. The POINTER is resolved by the caller before any of this, because
+ * afterwards there is nothing left to compare it against — and a pointer
+ * still naming a deleted document does not degrade gracefully, it hands the
+ * user 'The canvas data could not be read.' the next time they open the
+ * editor.
+ */
+async function deleteEach(
+  index: DocumentIndex,
+  pointer: DefaultDocumentPointer,
+  paths: readonly string[],
+  pointed: string | null,
+): Promise<string[]> {
+  const failed: string[] = []
+  const workspaceId = getBrowserWorkspaceId()
+  for (const path of paths) {
+    try {
+      const target = await index.resolveDocument({ workspaceId, path })
+      await index.deleteDocument({ workspaceId, path })
+      if (pointed !== null && target !== null && pointed === target.documentId) {
+        await pointer.clear()
+      }
+    } catch {
+      failed.push(path)
+    }
+  }
+  return failed
+}
+
+/**
+ * What the confirm dialog offers after a partial delete: exactly the ones
+ * that did not go, so pressing Delete again retries those and nothing else.
+ *
+ * A lone survivor gets its NAME back — `Delete "2 documents"?` would be the
+ * count of the ATTEMPT, not of what the dialog now offers to do.
+ */
+function reofferFailures(
+  failed: readonly string[],
+  snapshots: readonly DocumentSnapshot[] | null,
+): PendingDelete {
+  const only = failed.length === 1 ? snapshots?.find((s) => s.path === failed[0]) : undefined
+  return {
+    paths: [...failed],
+    displayName: only?.name ?? (failed[0] as string),
+    ...(only?.kind === undefined ? {} : { kind: only.kind }),
+  }
+}
+
 export function BrowserIndexPage({
   // Safe as a parameter default (unlike the clocks below): the shared
   // accessor memoizes, so every render sees the same identity. The concrete
@@ -184,14 +250,7 @@ export function BrowserIndexPage({
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
-  const [pendingDelete, setPendingDelete] = useState<{
-    // A LIST, so one confirmation and one handler serve both the single
-    // delete and the selection's bulk delete. A single delete is a list of
-    // one, and keeps naming its document.
-    paths: readonly string[]
-    displayName: string
-    kind?: DocumentKind
-  } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -206,25 +265,7 @@ export function BrowserIndexPage({
       // reports 'The canvas data could not be read.', so an ordinary delete
       // would hand the user an error screen the next time they open the
       // editor.
-      const pointed = await pointer.get()
-      // Sequential, and each failure recorded rather than thrown: one path
-      // that cannot be deleted must not abandon the rest, and the person has
-      // to be told how many did not go.
-      const failed: string[] = []
-      for (const path of pendingDelete.paths) {
-        try {
-          const target = await index.resolveDocument({
-            workspaceId: getBrowserWorkspaceId(),
-            path,
-          })
-          await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path })
-          if (pointed !== null && target !== null && pointed === target.documentId) {
-            await pointer.clear()
-          }
-        } catch {
-          failed.push(path)
-        }
-      }
+      const failed = await deleteEach(index, pointer, pendingDelete.paths, await pointer.get())
       setSnapshots(await listLocalDocuments(index, clock))
       // The delete just moved a document INTO the trash — re-count so the
       // onboarding decision below sees it before choosing what to render.
@@ -245,14 +286,7 @@ export function BrowserIndexPage({
         // re-send would be harmless here — but the daemon page answers 404
         // and its retry genuinely diverged, and one operation should not
         // converge differently per keeper.
-        const only = failed.length === 1 ? snapshots?.find((s) => s.path === failed[0]) : undefined
-        setPendingDelete({
-          paths: failed,
-          // A lone survivor gets its NAME back: `Delete "2 documents"?` would
-          // be the count of the attempt, not of what it now offers to do.
-          displayName: only?.name ?? (failed[0] as string),
-          ...(only?.kind === undefined ? {} : { kind: only.kind }),
-        })
+        setPendingDelete(reofferFailures(failed, snapshots))
         setDeleteError(
           failed.length === attempted
             ? 'Failed to delete the document from this browser.'
