@@ -150,7 +150,11 @@ const BY_KEY = new Map(MEASURED.map((row) => [row.key, row.lines]))
  */
 const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/App.tsx#App': 763,
-  'apps/web/src/components/AppShell.tsx#AppShell': 299,
+  // 299 -> 130, and under a new name: `AppShell` is the MODE choice now (8
+  // lines), and this is the chrome row it picks. Still over budget because
+  // it is a row of controls and their rationale; the four that could stand
+  // alone (the mark's frame, the alpha badge, fullscreen, settings) did.
+  'apps/web/src/components/AppShell.tsx#ShellBar': 130,
   'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
   'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
@@ -185,7 +189,18 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/document-properties/DocumentProperties.tsx#DocumentProperties': 110,
   'apps/web/src/components/markdown-editor/EditorToolbar.tsx#EditorToolbar': 135,
   'apps/web/src/components/markdown-editor/LinkPickerDialog.tsx#LinkPickerDialog': 160,
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 786,
+  // Lowered 786 -> 700: the two COLUMNS left for `editor-columns.tsx` and
+  // the split's drag for `split-divider.tsx`. What is left is the editor's
+  // own state and the frame it hangs the columns in — still the largest
+  // component in the app, and the next cut is a further layer rather than
+  // another slot (measured: lifting a slot moves the complexity by about
+  // one, because the condition that decides whether to render it stays).
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 700,
+  // Both are the editor's own JSX, one level out: a column is a frame plus
+  // the branches that decide what it draws, and those branches were the
+  // editor's complexity rather than its structure.
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 80,
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 53,
   'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 88,
   'apps/web/src/components/markdown-editor/MinimapRail.tsx#MinimapRail': 80,
   'apps/web/src/components/markdown-editor/PassageProposalCard.tsx#PassageProposalCard': 63,

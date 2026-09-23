@@ -118,9 +118,7 @@
         "!**/*.test.ts",
         "!**/*.test.tsx",
         "!**/*.test.mjs",
-        "!**/test-utils/**",
-        "!apps/web/src/components/AppShell.tsx",
-        "!apps/web/src/components/markdown-editor/MarkdownEditor.tsx"
+        "!**/test-utils/**"
       ],
       "linter": {
         "rules": {
