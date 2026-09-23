@@ -19,15 +19,17 @@
  * spec says to check it (§6.1.1: only meaningful when either count is
  * non-zero; synced passkeys report 0 for life).
  */
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import type { TenantDir } from '../tenant/data-layout.js'
+import { writeTenantJsonFile } from './tenant-json-file.js'
 import { p256PublicKeyJwkSchema } from './webauthn-assertion.js'
 
 const log = getLogger('webauthn-credentials')
 
-const CREDENTIALS_FILENAME = 'webauthn-credentials.json'
+export const CREDENTIALS_FILENAME = 'webauthn-credentials.json'
 
 const pinnedCredentialSchema = z
   .object({
@@ -66,8 +68,10 @@ export interface WebAuthnCredentialStore {
   revoke(origin: string, credentialId: string): boolean
 }
 
-export function createWebAuthnCredentialStore(dataDir: string): WebAuthnCredentialStore {
-  const filePath = join(dataDir, CREDENTIALS_FILENAME)
+/** `dir` is the tenant's own directory (`tenant/data-layout.ts`), not the data directory: an
+ * origin this tenant trusts must not answer for another (user decision 2026-09-23). */
+export function createWebAuthnCredentialStore(dir: TenantDir): WebAuthnCredentialStore {
+  const filePath = join(dir, CREDENTIALS_FILENAME)
 
   function load(): PinnedCredential[] {
     try {
@@ -88,10 +92,7 @@ export function createWebAuthnCredentialStore(dataDir: string): WebAuthnCredenti
   let credentials: PinnedCredential[] = load()
 
   function persist(): void {
-    const payload = JSON.stringify({ version: 1, credentials }, null, 2)
-    const tmpPath = `${filePath}.tmp`
-    writeFileSync(tmpPath, payload, { mode: 0o600 })
-    renameSync(tmpPath, filePath)
+    writeTenantJsonFile(dir, filePath, { version: 1, credentials })
   }
 
   const same = (pin: PinnedCredential, origin: string, credentialId: string) =>

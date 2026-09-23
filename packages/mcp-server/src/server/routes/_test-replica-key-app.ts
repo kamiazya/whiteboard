@@ -42,6 +42,8 @@ import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createWorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
+import { tenantRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createDaemonAuthMiddleware } from './auth.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
@@ -79,11 +81,11 @@ export async function makeApp(options: MakeAppOptions = {}) {
   dir = mkdtempSync(join(tmpdir(), 'replica-key-routes-'))
   const { createIsolatedDb } = await import('../store/db/test-helpers.js')
   dbHandle = await createIsolatedDb({ dataDir: dir })
-  const grants = createPairingGrantStore(dir)
+  const grants = createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID))
   const codes = createPairingCodeStore()
   const tokens = createPairingTokenStore()
   const identity = createDaemonIdentity({ dataDir: dir })
-  const credentials = createWebAuthnCredentialStore(dir)
+  const credentials = createWebAuthnCredentialStore(tenantRoot(dir, SELF_HOST_TENANT_ID))
   const members = createMemberProfileStore(dbHandle.db)
   const keys = createWorkspaceReplicaKeyStore(dbHandle.db, {
     defaultTier: options.defaultTier ?? 'offline',

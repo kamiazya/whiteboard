@@ -40,9 +40,8 @@ import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
-import { createPairingGrantStore } from './security/pairing-grant-store.js'
+import { createSelfHostOriginTrustStores } from './security/origin-trust-stores.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
-import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import { membershipRefusal, workspaceAccess } from './security/workspace-access.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
@@ -129,6 +128,33 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
 // idle-timeout-triggered close() could make the daemon appear to hang
 // instead of shutting down promptly.
 const FILE_GC_STOP_TIMEOUT_MS = 5_000
+
+/**
+ * One tenant's origin trust, as the pairing composition reads it.
+ *
+ * Called only AFTER `prepareDataDir`: both stores read their file once, at
+ * construction, and that file is what the boot move puts under the tenant on
+ * this very start. Built before it they hold nothing — the daemon refuses an
+ * origin the user had already paired, and the next write persists that empty
+ * set over the migrated file.
+ */
+function originTrustFor(dataDir: string, envOrigins: readonly string[] | undefined) {
+  const originTrust = createSelfHostOriginTrustStores(dataDir)
+  const envWebOrigins = envOrigins ?? []
+  return {
+    pairing: {
+      grants: originTrust.grants,
+      codes: createPairingCodeStore(),
+      tokens: createPairingTokenStore(),
+      credentials: originTrust.credentials,
+    },
+    allowedWebOrigins: (): readonly string[] => {
+      const grantOrigins = originTrust.grants.origins()
+      if (grantOrigins.length === 0 && Array.isArray(envWebOrigins)) return envWebOrigins
+      return [...envWebOrigins, ...grantOrigins]
+    },
+  }
+}
 
 /**
  * The membership decision the HTTP middleware gates individual routes with,
@@ -324,19 +350,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // but two call sites is two places for one to be forgotten — and a
   // forgotten one does not fail loudly, it refuses every macaroon.
   const macaroonRootKey = createMacaroonRootKey({ dataDir: getDataDir() }).rootKey
-  const pairingGrants = createPairingGrantStore(getDataDir())
-  const pairing = {
-    grants: pairingGrants,
-    codes: createPairingCodeStore(),
-    tokens: createPairingTokenStore(),
-    credentials: createWebAuthnCredentialStore(getDataDir()),
-  }
-  const envWebOrigins = options.allowedWebOrigins ?? []
-  const allowedWebOrigins = () => {
-    const grantOrigins = pairingGrants.origins()
-    if (grantOrigins.length === 0 && Array.isArray(envWebOrigins)) return envWebOrigins
-    return [...envWebOrigins, ...grantOrigins]
-  }
 
   // /api/v1 document surface: same libSQL database as the MCP tools
   // (getDb memoizes per dataDir, so this container shares the connection
@@ -357,6 +370,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // a state the document browser can select out of. Memoized per data dir, so
   // the per-request MCP callers below share this one resolve.
   await ensureWorkspaceId(dataDir)
+  const { pairing, allowedWebOrigins } = originTrustFor(dataDir, options.allowedWebOrigins)
   const db = await getDb(dataDir)
   const resolvedDeps = resolveServerDeps(
     createContainer(createSelfHostStoreLocalModule(db, dataDir)),

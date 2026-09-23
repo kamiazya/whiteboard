@@ -31,6 +31,8 @@ import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
+import { tenantRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -154,10 +156,10 @@ async function mountedApiRoutes(): Promise<string[]> {
     shutdown: () => Promise.resolve(),
     identity: createDaemonIdentity({ dataDir: pairingDir }),
     pairing: {
-      grants: createPairingGrantStore(pairingDir),
+      grants: createPairingGrantStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
       codes: createPairingCodeStore(),
       tokens: createPairingTokenStore(),
-      credentials: createWebAuthnCredentialStore(pairingDir),
+      credentials: createWebAuthnCredentialStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
     },
     members: createMemberProfileStore(dbHandle.db),
     serverDeps: resolveServerDeps(createContainer()),

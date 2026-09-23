@@ -17,6 +17,8 @@ import {
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { tenantRoot } from '../../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
@@ -132,7 +134,7 @@ function attest(
 }
 
 function harness() {
-  const credentials = createWebAuthnCredentialStore(tempDir)
+  const credentials = createWebAuthnCredentialStore(tenantRoot(tempDir, SELF_HOST_TENANT_ID))
   const app = createDocumentRouter({ autoVersionQuietMs: 60_000, credentials })
   const key = passkey()
   credentials.register({

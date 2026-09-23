@@ -1,7 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { tenantRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createPairingGrantStore } from './pairing-grant-store.js'
 
 let dir: string | null = null
@@ -17,25 +19,25 @@ afterEach(() => {
 
 describe('pairing grant store', () => {
   it('persists a grant and lists its origin', () => {
-    const store = createPairingGrantStore(tempDir())
+    const store = createPairingGrantStore(tenantRoot(tempDir(), SELF_HOST_TENANT_ID))
     const grant = store.addGrant('https://latest.kamiazya-whiteboard.pages.dev')
     expect(grant.origin).toBe('https://latest.kamiazya-whiteboard.pages.dev')
     expect(store.origins()).toEqual(['https://latest.kamiazya-whiteboard.pages.dev'])
 
     // A fresh store instance over the same dir sees the persisted grant.
-    const reloaded = createPairingGrantStore(dir as string)
+    const reloaded = createPairingGrantStore(tenantRoot(dir as string, SELF_HOST_TENANT_ID))
     expect(reloaded.origins()).toEqual(['https://latest.kamiazya-whiteboard.pages.dev'])
   })
 
   it('normalizes to the URL origin and deduplicates', () => {
-    const store = createPairingGrantStore(tempDir())
+    const store = createPairingGrantStore(tenantRoot(tempDir(), SELF_HOST_TENANT_ID))
     store.addGrant('https://Example.COM/some/path?q=1')
     store.addGrant('https://example.com')
     expect(store.origins()).toEqual(['https://example.com'])
   })
 
   it('rejects non-http(s) origins', () => {
-    const store = createPairingGrantStore(tempDir())
+    const store = createPairingGrantStore(tenantRoot(tempDir(), SELF_HOST_TENANT_ID))
     expect(() => store.addGrant('javascript:alert(1)')).toThrow()
     expect(() => store.addGrant('not a url')).toThrow()
     expect(store.origins()).toEqual([])
@@ -44,7 +46,7 @@ describe('pairing grant store', () => {
   it('origins() returns a NEW array instance per mutation generation', () => {
     // The array-identity pattern cache in web-origin-allowlist.ts depends
     // on this: an in-place append would serve stale compiled patterns.
-    const store = createPairingGrantStore(tempDir())
+    const store = createPairingGrantStore(tenantRoot(tempDir(), SELF_HOST_TENANT_ID))
     const before = store.origins()
     expect(store.origins()).toBe(before) // stable while unchanged
     store.addGrant('https://example.com')
@@ -53,22 +55,39 @@ describe('pairing grant store', () => {
   })
 
   it('revoke removes the grant and its origin', () => {
-    const store = createPairingGrantStore(tempDir())
+    const store = createPairingGrantStore(tenantRoot(tempDir(), SELF_HOST_TENANT_ID))
     const grant = store.addGrant('https://example.com')
     expect(store.revoke(grant.grantId)).toBe(true)
     expect(store.origins()).toEqual([])
     expect(store.revoke('missing')).toBe(false)
   })
 
+  it('does not answer one tenant with an origin another tenant trusts', () => {
+    const dirPath = tempDir()
+    const mine = createPairingGrantStore(tenantRoot(dirPath, SELF_HOST_TENANT_ID))
+    mine.addGrant('https://app.example.com')
+    const theirs = createPairingGrantStore(tenantRoot(dirPath, 'tenant-two'))
+    expect(theirs.origins()).toEqual([])
+    expect(theirs.list()).toEqual([])
+    // And the one that gave it still has it.
+    expect(mine.origins()).toEqual(['https://app.example.com'])
+  })
+
   it('degrades a corrupt file to an empty store instead of throwing', () => {
     const dirPath = tempDir()
-    writeFileSync(join(dirPath, 'pairing-grants.json'), '{not json')
-    const store = createPairingGrantStore(dirPath)
+    mkdirSync(tenantRoot(dirPath, SELF_HOST_TENANT_ID), { recursive: true })
+    writeFileSync(
+      join(tenantRoot(dirPath, SELF_HOST_TENANT_ID), 'pairing-grants.json'),
+      '{not json',
+    )
+    const store = createPairingGrantStore(tenantRoot(dirPath, SELF_HOST_TENANT_ID))
     expect(store.origins()).toEqual([])
     // And it can still write after the corrupt load.
     store.addGrant('https://example.com')
     expect(
-      JSON.parse(readFileSync(join(dirPath, 'pairing-grants.json'), 'utf8')).grants,
+      JSON.parse(
+        readFileSync(join(tenantRoot(dirPath, SELF_HOST_TENANT_ID), 'pairing-grants.json'), 'utf8'),
+      ).grants,
     ).toHaveLength(1)
   })
 })
