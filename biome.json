@@ -149,8 +149,6 @@
         "!packages/canvas-render/src/scene-digest.ts",
         "!packages/canvas-viewer/scripts/smoke-widget.mjs",
         "!packages/canvas-viewer/src/widget-entry.ts",
-        "!packages/daemon-client/src/daemon-backend.ts",
-        "!packages/daemon-client/src/sse-stream-hub.ts",
         "!packages/mcp-server/scripts/eval/mcp-tool-surface-eval.mjs",
         "!packages/mcp-server/scripts/eval/tasks.mjs",
         "!packages/mcp-server/scripts/measure/chunking-spike.mjs",
