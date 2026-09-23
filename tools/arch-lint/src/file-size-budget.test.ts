@@ -715,6 +715,14 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
 // record. `gestures.test` and this file itself are new entries rather than
 // raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
+  // The function-size ledger's own file crossed 800 while paying DOWN the
+  // complexity exemption list: decomposing a JSX-heavy component turns one
+  // over-budget function into several smaller ones, and each is an entry
+  // here with a reason. It is a DATA table with a header, which is the same
+  // reason its own comment gives for the list being 400-odd entries rather
+  // than 17 — so it is recorded rather than split, and splitting it would
+  // put half the ledger where a reader does not look for it.
+  'tools/arch-lint/src/function-size-budget.test.ts': 814,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
