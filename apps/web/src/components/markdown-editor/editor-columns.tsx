@@ -18,7 +18,7 @@ import { SourcePane, type SourcePaneApi } from './SourcePane.js'
  */
 
 /** What the preview's gutter draws one conversation from. */
-export interface PreviewColumnMarker {
+interface PreviewColumnMarker {
   readonly threadId: string
   readonly status: string
   readonly messages: number
@@ -27,7 +27,7 @@ export interface PreviewColumnMarker {
 }
 
 /** One conversation, in the preview column's left padding. */
-export function PreviewCommentMarker({
+function PreviewCommentMarker({
   marker,
   onSelect,
 }: {
