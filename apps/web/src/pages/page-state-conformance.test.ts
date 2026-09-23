@@ -15,10 +15,34 @@ const PAGES = import.meta.glob('./{Browser,Daemon}DocumentPage.tsx', {
   eager: true,
 }) as Record<string, string>
 
+/**
+ * A page's own module PLUS the sibling module it answers through. Each
+ * page's terminal screens moved into its `*-document-slots.tsx` so the
+ * page's own hook stays under the complexity budget; every rule below is
+ * about what the PAGE does, and it does it there too — so a rule that read
+ * one file and not the other would report a re-inlined cascade as clean, or
+ * a shared view as missing.
+ */
+const PAGE_PARTS = import.meta.glob('./{browser,daemon}-document-slots.tsx', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>
+
+const PARTS_OF: Record<'BrowserDocumentPage' | 'DaemonDocumentPage', readonly string[]> = {
+  BrowserDocumentPage: ['./browser-document-slots.tsx'],
+  DaemonDocumentPage: ['./daemon-document-slots.tsx'],
+}
+
 function readPage(name: 'BrowserDocumentPage' | 'DaemonDocumentPage'): string {
   const source = PAGES[`./${name}.tsx`]
   if (source === undefined) throw new Error(`page source not found: ${name}`)
-  return source
+  const parts = PARTS_OF[name].map((path) => {
+    const part = PAGE_PARTS[path]
+    if (part === undefined) throw new Error(`page part not found: ${path}`)
+    return part
+  })
+  return [source, ...parts].join('\n')
 }
 
 function countOf(source: string, needle: string): number {

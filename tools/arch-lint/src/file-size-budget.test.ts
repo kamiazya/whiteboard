@@ -433,7 +433,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // PARSES — a fresh object every render re-arms the favicon's debounce on
   // every render instead of on a change to the document — and a `useMemo`
   // is two lines a call site cannot avoid paying.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1035,
+  // 1035 -> 811: the terminal screens, the kind-decided model slots and the
+  // address-bar effect each became a named piece in a sibling module, which
+  // is what took the page's own hook under the complexity budget. Recorded
+  // at the measurement rather than left at the old ceiling, so the next
+  // change spends headroom deliberately.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 811,
   // +1 for a task list's checkbox, which is one import and one branch here:
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
