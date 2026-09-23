@@ -521,25 +521,20 @@ export function BrowserIndexPage({
       setError(null)
       try {
         await duplicateBrowserDocument({ index, loro, clock, sourcePath })
-        // Past this line the copy EXISTS, so a failed re-read is a stale
-        // LIST and not a failed duplicate. Reporting the refusal over a copy
-        // that is really there is the worse of the two wrong answers: it
-        // invites a second press, and the second copy is real too.
-        try {
-          setSnapshots(await listLocalDocuments(index, clock))
-          // The tree view keeps its own copy of the list; this is its signal
-          // to re-read, the same contract a delete uses above.
-          setFilesRevision((n) => n + 1)
-        } catch {
-          setError('The copy was made, but this list could not be re-read. Reload to see it.')
-        }
+        // ONLY the duplicate itself is under this catch. The bump is what
+        // re-reads the list (the load effect follows it) and that effect owns
+        // its own refusal — so a re-read that fails after the copy exists is
+        // reported as a list that could not be read, never as a duplicate
+        // that did not happen. The wrong answer there invites a second press,
+        // and the second copy is real too.
+        setFilesRevision((n) => n + 1)
       } catch {
         setError('Failed to duplicate the document in this browser.')
       } finally {
         setDuplicating(false)
       }
     },
-    [index, loro, clock, duplicating, setError, setSnapshots, setFilesRevision],
+    [index, loro, clock, duplicating, setError, setFilesRevision],
   )
 
   const handleCreate = useCallback(

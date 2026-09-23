@@ -89,9 +89,11 @@ it('offers Duplicate on a row and shows the copy in the list', async () => {
 
 /**
  * A copy that was really made must never be reported as a failed duplicate:
- * that reading invites a second press, and the second copy is real too.
+ * that reading invites a second press, and the second copy is real too. What
+ * the page says instead is the LIST's own refusal, which is whose failure it
+ * actually is.
  */
-it('says the list could not be re-read rather than that the duplicate failed', async () => {
+it('reports a refusing list as a list failure, not as a failed duplicate', async () => {
   const store = await seedOne()
   // Listing refuses from the moment the row is on screen: the page's own
   // re-read is what fails, while the duplicate itself does not — both reads
@@ -120,7 +122,7 @@ it('says the list could not be re-read rather than that the duplicate failed', a
   await duplicateTheOnlyRow()
 
   const alert = await screen.findByRole('alert', undefined, { timeout: 15_000 })
-  expect(alert.textContent).toContain('could not be re-read')
+  expect(alert.textContent).toContain('Failed to load documents')
   expect(alert.textContent).not.toContain('Failed to duplicate')
   // And the copy really is there, which is what makes that wording the right
   // one. Read straight off the index, not through the refusing proxy.
