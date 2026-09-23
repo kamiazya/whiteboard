@@ -60,6 +60,34 @@ function hasWasmMagic(bytes: Uint8Array): boolean {
 }
 
 /**
+ * Whether the custom section starting at `contentStart` is the one that
+ * names a source map.
+ *
+ * A name length that runs past the section's own end, or a length prefix
+ * that will not parse, means this is not a section this tool understands —
+ * which is `false`, never a throw: the caller is a build plugin, and a
+ * parse surprise must not break the build.
+ */
+function namesSourceMappingUrl(
+  bytes: Uint8Array,
+  contentStart: number,
+  contentEnd: number,
+): boolean {
+  try {
+    const nameInfo = readULEB128(bytes, contentStart)
+    const nameStart = contentStart + nameInfo.bytesRead
+    const nameEnd = nameStart + nameInfo.value
+    if (nameEnd > contentEnd) return false
+    return (
+      Buffer.from(bytes.subarray(nameStart, nameEnd)).toString('utf8') ===
+      SOURCE_MAPPING_URL_SECTION_NAME
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
  * Removes any custom section named `sourceMappingURL` from a wasm module.
  * Byte-identical to the input for every other section, in original order.
  * Non-wasm or truncated/malformed input is returned unchanged rather than
@@ -103,20 +131,8 @@ export function stripWasmSourceMap(bytes: Uint8Array): Uint8Array {
       break
     }
 
-    let isSourceMappingUrlSection = false
-    if (id === CUSTOM_SECTION_ID) {
-      try {
-        const nameInfo = readULEB128(bytes, contentStart)
-        const nameStart = contentStart + nameInfo.bytesRead
-        const nameEnd = nameStart + nameInfo.value
-        if (nameEnd <= contentEnd) {
-          const name = Buffer.from(bytes.subarray(nameStart, nameEnd)).toString('utf8')
-          isSourceMappingUrlSection = name === SOURCE_MAPPING_URL_SECTION_NAME
-        }
-      } catch {
-        isSourceMappingUrlSection = false
-      }
-    }
+    const isSourceMappingUrlSection =
+      id === CUSTOM_SECTION_ID && namesSourceMappingUrl(bytes, contentStart, contentEnd)
 
     if (isSourceMappingUrlSection) {
       changed = true
