@@ -184,6 +184,68 @@ export const linkedFrom = (board, a, b) =>
   board.edges.some((e) => endNode(e.from) === a.id && endNode(e.to) === b.id)
 export const centreX = (n) => n.x + n.width / 2
 
+/**
+ * The participant boxes, left to right and with their heads lined up — or
+ * the first thing wrong with them.
+ */
+const participantColumns = (board, names) => {
+  const participants = names.map((p) => byText(board, p))
+  if (participants.some((p) => p === undefined)) return { detail: 'a participant is missing' }
+  for (let i = 1; i < participants.length; i++) {
+    if (centreX(participants[i - 1]) >= centreX(participants[i])) {
+      return { detail: 'participants are not left to right' }
+    }
+  }
+  const headY = participants.map((p) => p.y)
+  if (Math.max(...headY) - Math.min(...headY) > 2) {
+    return { detail: `participant heads not lined up (y ${headY.join(', ')})` }
+  }
+  return { participants, headY }
+}
+
+/**
+ * One node per step, the closest match FIRST and each claimed exclusively.
+ *
+ * A node reading "renders rows" contains both "rows" and "render", so a
+ * substring search that let two steps share it would grade the wrong
+ * geometry.
+ */
+export const claimMessageNodes = (board, steps, participantNames) => {
+  const pool = board.nodes.filter((n) => n.type !== 'group' && !participantNames.includes(text(n)))
+  return steps.map(([label]) => {
+    const wanted = label.toLowerCase()
+    const candidates = pool
+      .filter((n) => text(n).toLowerCase().includes(wanted))
+      .sort((a, b) => text(a).length - text(b).length)
+    const chosen = candidates[0]
+    if (chosen !== undefined) pool.splice(pool.indexOf(chosen), 1)
+    return chosen
+  })
+}
+
+/**
+ * The first thing wrong with where the messages sit: horizontally outside
+ * the pair they connect, out of top-to-bottom order, or above the heads.
+ */
+const messagePlacementFault = (board, steps, messages, headY) => {
+  for (let i = 0; i < steps.length; i++) {
+    const [label, from, to] = steps[i]
+    const a = centreX(byText(board, from))
+    const b = centreX(byText(board, to))
+    const m = centreX(messages[i])
+    if (m < Math.min(a, b) || m > Math.max(a, b)) {
+      return `"${label}" is not between ${from} and ${to}`
+    }
+    if (i > 0 && messages[i].y <= messages[i - 1].y) {
+      return `"${label}" is not below "${steps[i - 1][0]}"`
+    }
+    if (messages[0].y <= Math.max(...headY)) {
+      return 'first message is not below the participant heads'
+    }
+  }
+  return undefined
+}
+
 /** @type {readonly Task[]} */
 export const TASKS = [
   {
@@ -694,60 +756,21 @@ export const TASKS = [
     verify: async (wb) => {
       const board = await boardAt(wb, 'boards/open-flow')
       if (board === undefined) return { ok: false, detail: 'no board at boards/open-flow' }
-      const participants = ['Browser', 'Daemon', 'SQLite'].map((p) => byText(board, p))
-      if (participants.some((p) => p === undefined)) {
-        return { ok: false, detail: 'a participant is missing' }
-      }
-      const centre = (n) => n.x + n.width / 2
-      for (let i = 1; i < participants.length; i++) {
-        if (centre(participants[i - 1]) >= centre(participants[i])) {
-          return { ok: false, detail: 'participants are not left to right' }
-        }
-      }
-      const headY = participants.map((p) => p.y)
-      if (Math.max(...headY) - Math.min(...headY) > 2) {
-        return { ok: false, detail: `participant heads not lined up (y ${headY.join(', ')})` }
-      }
+      const columns = participantColumns(board, ['Browser', 'Daemon', 'SQLite'])
+      if ('detail' in columns) return { ok: false, detail: columns.detail }
+      const { headY } = columns
       const steps = [
         ['open document', 'Browser', 'Daemon'],
         ['load snapshot', 'Daemon', 'SQLite'],
         ['rows', 'SQLite', 'Daemon'],
         ['render', 'Daemon', 'Browser'],
       ]
-      // Each step claims ONE distinct node, the closest match first: a
-      // node reading "renders rows" contains both "rows" and "render", and
-      // a substring search that let two steps share it would grade the
-      // wrong geometry.
-      const pool = board.nodes.filter(
-        (n) => n.type !== 'group' && !['Browser', 'Daemon', 'SQLite'].includes(text(n)),
-      )
-      const messages = steps.map(([label]) => {
-        const wanted = label.toLowerCase()
-        const candidates = pool
-          .filter((n) => text(n).toLowerCase().includes(wanted))
-          .sort((a, b) => text(a).length - text(b).length)
-        const chosen = candidates[0]
-        if (chosen !== undefined) pool.splice(pool.indexOf(chosen), 1)
-        return chosen
-      })
+      const messages = claimMessageNodes(board, steps, ['Browser', 'Daemon', 'SQLite'])
       const missing = steps.filter((_, i) => messages[i] === undefined).map((s) => s[0])
       if (missing.length > 0)
         return { ok: false, detail: `missing messages: ${missing.join(', ')}` }
-      for (let i = 0; i < steps.length; i++) {
-        const [label, from, to] = steps[i]
-        const a = centre(byText(board, from))
-        const b = centre(byText(board, to))
-        const m = centre(messages[i])
-        if (m < Math.min(a, b) || m > Math.max(a, b)) {
-          return { ok: false, detail: `"${label}" is not between ${from} and ${to}` }
-        }
-        if (i > 0 && messages[i].y <= messages[i - 1].y) {
-          return { ok: false, detail: `"${label}" is not below "${steps[i - 1][0]}"` }
-        }
-        if (messages[0].y <= Math.max(...headY)) {
-          return { ok: false, detail: 'first message is not below the participant heads' }
-        }
-      }
+      const placement = messagePlacementFault(board, steps, messages, headY)
+      if (placement !== undefined) return { ok: false, detail: placement }
       const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
       if (collision !== undefined) {
         return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
