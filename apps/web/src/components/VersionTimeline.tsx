@@ -77,6 +77,92 @@ interface Props {
   headerActions?: ReactNode
 }
 
+/** A version's title, or `null` when the row it names is not in this list. */
+function versionTitleOrNull(version: VersionEntry | undefined): string | null {
+  return version === undefined ? null : versionTitle(version)
+}
+
+/**
+ * One saved point, as a row.
+ *
+ * The second line repeats the TIME only when the title is a label —
+ * otherwise the time already IS the title. `verified` is ADR-0039 decision
+ * 9's fourth state: a passkey assertion sits beside this row, so
+ * "You · verified" is a person AND their proof, where a human row without it
+ * is still a person.
+ *
+ * The `restored from` arc exists because the SHAPE of the lineage is
+ * derivable from the rows on their own, and what no amount of that can say
+ * is that these two points met because somebody went back — the same reason
+ * a merge commit carries a message. It is named by what the row it points at
+ * is CALLED, so the label and the arc's far end read as the same thing.
+ */
+function VersionRow({
+  version,
+  current,
+  restoredFromTitle,
+  onOpen,
+}: {
+  version: VersionEntry
+  current: boolean
+  restoredFromTitle: string | null
+  onOpen: () => void
+}) {
+  const parts = [
+    version.label ? versionTime(version.createdAt) : null,
+    versionAuthor(version.operator),
+    version.attestation === undefined ? null : 'verified',
+    `${version.elementCount} els`,
+  ].filter((part) => part !== null)
+
+  return (
+    <div data-testid="version-row" className="flex items-stretch gap-1.5">
+      <RowShell interactive current={current} onActivate={onOpen}>
+        <CardContent className="px-3 flex items-center justify-between gap-2">
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-medium truncate">{versionTitle(version)}</span>
+            <span className="text-[11px] text-muted-foreground">
+              {parts.join(' · ')}
+              {restoredFromTitle !== null ? (
+                <>
+                  {' · '}
+                  <span data-testid="version-restored-from" className="text-primary">
+                    restored from {restoredFromTitle}
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </div>
+        </CardContent>
+      </RowShell>
+    </div>
+  )
+}
+
+/**
+ * Record why a versions read failed, and answer whether the list itself has
+ * to be dropped.
+ *
+ * Only a SCHEMA failure means the rows on screen cannot be trusted: a
+ * transport error leaves the last true answer standing, which is why the
+ * caller marks it stale rather than clearing it.
+ */
+function reportVersionsFailure(
+  err: unknown,
+  where: { workspaceId: string; path: string },
+): boolean {
+  if (err instanceof VersionsRequestError) {
+    log.error('versions request failed', { status: err.status, ...where })
+    return false
+  }
+  if (err instanceof Error && err.message.includes('schema validation')) {
+    log.error('versions response failed schema validation', where)
+    return true
+  }
+  log.error('versions request threw', err)
+  return false
+}
+
 /**
  * This surface's two knobs on the shared formatter, bound once.
  *
@@ -218,14 +304,7 @@ export default function VersionTimeline({
       // a current list. The rows stay (they are still the last true answer)
       // and stop claiming to be up to date.
       setStale(true)
-      if (err instanceof VersionsRequestError) {
-        log.error('versions request failed', { status: err.status, workspaceId, path })
-      } else if (err instanceof Error && err.message.includes('schema validation')) {
-        log.error('versions response failed schema validation', { workspaceId, path })
-        setVersions([])
-      } else {
-        log.error('versions request threw', err)
-      }
+      if (reportVersionsFailure(err, { workspaceId, path })) setVersions([])
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false)
     }
@@ -434,68 +513,21 @@ export default function VersionTimeline({
               button above, or ⌘/Ctrl+S.
             </div>
           ) : (
-            versions.map((v) => {
-              const author = versionAuthor(v.operator)
-              const restoredSource =
-                v.restoredFrom === undefined ? undefined : versionsById.get(v.restoredFrom)
-              const restoredFromTitle =
-                restoredSource === undefined ? null : versionTitle(restoredSource)
-              return (
-                <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
-                  <RowShell
-                    interactive
-                    current={previewing?.id === v.id}
-                    onActivate={() => {
-                      void openPreview(v)
-                    }}
-                  >
-                    <CardContent className="px-3 flex items-center justify-between gap-2">
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-medium truncate">{versionTitle(v)}</span>
-                        {/* Only on the lanes HEAD is NOT on. A ring says "not
-                            yours" and colour is not a name, so without this a
-                            reader with two variations open has a row of
-                            history and no way to tell whose. The lane you ARE
-                            on is the frame the whole panel is read in —
-                            repeating it on every row states the obvious and
-                            makes the exceptions harder to see. */}
-                        <span className="text-[11px] text-muted-foreground">
-                          {/* The time is only repeated here when the TITLE is
-                              a label — otherwise it is already the title. */}
-                          {[
-                            v.label ? versionTime(v.createdAt) : null,
-                            author,
-                            // ADR-0039 decision 9: the fourth state. A
-                            // passkey assertion sits beside this row, so
-                            // "You · verified" is a person AND their proof;
-                            // a human row without it is still a person.
-                            v.attestation === undefined ? null : 'verified',
-                            `${v.elementCount} els`,
-                          ]
-                            .filter((part) => part !== null)
-                            .join(' · ')}
-                          {/* Why the arc exists. The SHAPE of the lineage is
-                              derivable from the rows on their own; what no
-                              amount of that can say is that these two points
-                              met because somebody went back — the same reason
-                              a merge commit carries a message. Named by what
-                              the row it points at is CALLED, so the label and
-                              the arc's far end read as the same thing. */}
-                          {restoredFromTitle !== null ? (
-                            <>
-                              {' · '}
-                              <span data-testid="version-restored-from" className="text-primary">
-                                restored from {restoredFromTitle}
-                              </span>
-                            </>
-                          ) : null}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </RowShell>
-                </div>
-              )
-            })
+            versions.map((v) => (
+              <VersionRow
+                key={v.id}
+                version={v}
+                current={previewing?.id === v.id}
+                restoredFromTitle={
+                  v.restoredFrom === undefined
+                    ? null
+                    : versionTitleOrNull(versionsById.get(v.restoredFrom))
+                }
+                onOpen={() => {
+                  void openPreview(v)
+                }}
+              />
+            ))
           )}
         </div>
       </ScrollArea>
