@@ -93,6 +93,30 @@ export interface BackupPassOptions {
 }
 
 /**
+ * One step of an assembling backup: run it, and on failure take the staging
+ * directory down before answering false.
+ *
+ * Every step cleans up the SAME way for the same reason — a pass that died
+ * partway used to leave a directory whose name says backup and whose contents
+ * are a fragment, and three readers took it at its name. Sharing the cleanup
+ * is what stops a later step being added without one.
+ */
+async function stagedStep(
+  staging: string,
+  run: () => Promise<unknown>,
+  onError?: (err: unknown) => void,
+): Promise<boolean> {
+  try {
+    await run()
+    return true
+  } catch (err) {
+    await rm(staging, { recursive: true, force: true }).catch(() => {})
+    onError?.(err)
+    return false
+  }
+}
+
+/**
  * One backup, from an already-resolved pair of directories.
  *
  * Shared rather than duplicated, because ADR-0021 decision 4 makes the
@@ -229,8 +253,10 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // every future attempt.
     await rm(staging, { recursive: true, force: true }).catch(() => {})
 
-    try {
-      await doBackup(dataDir, staging, {
+    const failed = { kind: 'error', message: 'backup failed' } as const
+
+    const copied = await stagedStep(staging, () =>
+      doBackup(dataDir, staging, {
         // dirname is non-tautological: the helper's assertWithinAllowed verifies
         // outputDir against its parent, not against itself.
         allowedRoots: [dataDir, dirname(outputDir)],
@@ -247,57 +273,51 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
         // Copying them here as well would put back exactly the per-backup
         // duplication the mirror exists to remove.
         excludeBlobs: true,
-      })
-    } catch {
-      await rm(staging, { recursive: true, force: true }).catch(() => {})
-      return { kind: 'error', message: 'backup failed' }
-    }
+      }),
+    )
+    if (!copied) return failed
 
     // Ordered after the copy because the copy requires an empty destination,
     // and `VACUUM INTO` refuses to overwrite. Neither can go first twice.
-    if (configuredInside) {
-      try {
-        await doSnapshot(dataDir, join(staging, DB_FILENAME))
-      } catch {
-        await rm(staging, { recursive: true, force: true }).catch(() => {})
-        // A snapshot that failed must fail the BACKUP. Reporting success over a
-        // directory holding blobs and no rows is precisely the defect this area
-        // exists to remove, and it would arrive by simply not checking.
-        return { kind: 'error', message: 'backup failed' }
-      }
-    }
+    // A snapshot that failed must fail the BACKUP. Reporting success over a
+    // directory holding blobs and no rows is precisely the defect this area
+    // exists to remove, and it would arrive by simply not checking.
+    const snapshotted =
+      !configuredInside ||
+      (await stagedStep(staging, () => doSnapshot(dataDir, join(staging, DB_FILENAME))))
+    if (!snapshotted) return failed
 
     // After the copy: `backupDataDir` requires an empty destination, and for a
     // self-contained backup the mirror writes inside that same directory.
-    try {
-      // A self-contained backup keeps its mirror inside itself, so while the
-      // pass runs that is the staging directory — the rename carries it.
-      await doMirror(dataDir, mirrorRoot === outputDir ? staging : mirrorRoot, {
-        manifestInto: staging,
-        mirror: mirrorRoot === outputDir ? 'self' : 'parent',
-      })
-    } catch (err) {
-      await rm(staging, { recursive: true, force: true }).catch(() => {})
+    // A self-contained backup keeps its mirror inside itself, so while the
+    // pass runs that is the staging directory — the rename carries it.
+    const mirrored = await stagedStep(
+      staging,
+      () =>
+        doMirror(dataDir, mirrorRoot === outputDir ? staging : mirrorRoot, {
+          manifestInto: staging,
+          mirror: mirrorRoot === outputDir ? 'self' : 'parent',
+        }),
       // A backup whose blobs did not travel is not a backup, however complete
       // the rows are — restoring it gives documents that point at nothing.
-      log.error({ err }, 'could not mirror the blobs; the backup is not usable')
-      return { kind: 'error', message: 'backup failed' }
-    }
+      (err) => log.error({ err }, 'could not mirror the blobs; the backup is not usable'),
+    )
+    if (!mirrored) return failed
 
     // The seal. Every store has answered, so this is a backup now.
-    try {
-      await rename(staging, outputDir)
-    } catch (err) {
-      await rm(staging, { recursive: true, force: true }).catch(() => {})
+    const sealed = await stagedStep(
+      staging,
+      () => rename(staging, outputDir),
       // The code, never the error: `rename` puts BOTH paths in its message,
       // and this package does not write filesystem paths to its log — the
       // packaged smoke asserts stderr carries none.
-      log.error(
-        { code: (err as NodeJS.ErrnoException).code ?? 'unknown' },
-        'could not put the finished backup in place',
-      )
-      return { kind: 'error', message: 'backup failed' }
-    }
+      (err) =>
+        log.error(
+          { code: (err as NodeJS.ErrnoException).code ?? 'unknown' },
+          'could not put the finished backup in place',
+        ),
+    )
+    if (!sealed) return failed
 
     return {
       kind: 'ok',
