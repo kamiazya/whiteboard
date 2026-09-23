@@ -5,6 +5,13 @@
  * profile holds no key material; a credential id is only a public handle
  * (decision 1).
  *
+ * ADR-0045 splits that person in two. The profile is the USER — who they are
+ * inside this store's tenant — and the credential resolves to an ACCOUNT, the
+ * keeper-wide login identity, through `accountBindings`. A user row names its
+ * account; nothing keeper-wide names a tenant, so a lookup always goes
+ * binding -> account -> this tenant's user, and an account with no user here
+ * is nobody here.
+ *
  * `workspaceMemberships` is a plain DB row, deliberately OUTSIDE the
  * CRDT-synced workspace record (ADR-0019), so a sync merge cannot resurrect a
  * row this store deleted. Revocation (`revokeL1Membership`) is a plain
@@ -52,25 +59,27 @@ const memberProfileRowSchema = z
   .object({
     id: z.string().min(1),
     displayName: z.string().min(1),
+    accountId: z.string().min(1),
     createdAt: z.number(),
     updatedAt: z.number(),
   })
   .strict()
 
-const profileCredentialRowSchema = z
-  .object({
-    credentialId: z.string().min(1),
-    origin: z.string().min(1),
-    profileId: z.string().min(1),
-  })
+const profileCredentialSchema = z
+  .object({ origin: z.string().min(1), credentialId: z.string().min(1) })
   .strict()
 
-const profileCredentialSchema = profileCredentialRowSchema.pick({
-  origin: true,
-  credentialId: true,
-})
+// The built-in authenticator (ADR-0045 decision 15). Its subject is the pin's
+// own identity, so a credential under two origins stays two claims — the
+// passkey's rpId is its hostname, and two ports on one host share it.
+const PASSKEY_AUTHENTICATOR = 'passkey'
+const passkeySubjectSchema = z.tuple([z.string().min(1), z.string().min(1)])
 
-const memberProfileSchema = memberProfileRowSchema.extend({
+function passkeySubject(origin: string, credentialId: string): string {
+  return JSON.stringify([origin, credentialId])
+}
+
+const memberProfileSchema = memberProfileRowSchema.omit({ accountId: true }).extend({
   credentials: z.array(profileCredentialSchema),
 })
 
@@ -148,76 +157,109 @@ async function deleteMembership(db: TenantScoped, workspaceId: string, profileId
     .execute()
 }
 
+// `accountBindings` is keeper-wide, so this reads every passkey the account
+// holds — the tenant's own pins (webauthn-credential-store.ts) are what say
+// which of them this tenant accepts.
+async function passkeysOf(db: TenantScoped, accountId: string) {
+  const rows = await db
+    .selectFrom('accountBindings')
+    .select('subject')
+    .where('accountId', '=', accountId)
+    .where('authenticator', '=', PASSKEY_AUTHENTICATOR)
+    .orderBy('createdAt', 'asc')
+    .orderBy('subject', 'asc')
+    .execute()
+  return rows.map(({ subject }) => {
+    const [origin, credentialId] = passkeySubjectSchema.parse(JSON.parse(subject))
+    return { origin, credentialId }
+  })
+}
+
+async function accountForPasskey(db: TenantScoped, origin: string, credentialId: string) {
+  const binding = await db
+    .selectFrom('accountBindings')
+    .select('accountId')
+    .where('authenticator', '=', PASSKEY_AUTHENTICATOR)
+    .where('subject', '=', passkeySubject(origin, credentialId))
+    .executeTakeFirst()
+  return binding?.accountId ?? null
+}
+
+function toProfile(
+  row: z.infer<typeof memberProfileRowSchema>,
+  credentials: z.infer<typeof profileCredentialSchema>[],
+): MemberProfile {
+  const { accountId: _accountId, ...user } = memberProfileRowSchema.parse(row)
+  return memberProfileSchema.parse({ ...user, credentials })
+}
+
 // `db` may be a transaction: Kysely's Transaction is a Kysely.
-async function loadProfile(db: TenantScoped, profileId: string): Promise<MemberProfile | null> {
+async function loadProfileWhere(
+  db: TenantScoped,
+  column: 'id' | 'accountId',
+  value: string,
+): Promise<MemberProfile | null> {
   const row = await db
     .selectFrom('memberProfiles')
     .selectAll()
-    .where('id', '=', profileId)
+    .where(column, '=', value)
     .executeTakeFirst()
   if (row === undefined) return null
-  const credentials = await db
-    .selectFrom('profileCredentials')
-    .select(['origin', 'credentialId'])
-    .where('profileId', '=', profileId)
+  return toProfile(row, await passkeysOf(db, row.accountId))
+}
+
+// Creates this tenant's user for an account (ADR-0045 decision 3: at most one
+// per account per tenant, which the unique index also holds).
+async function insertUser(db: TenantScoped, accountId: string, displayName: string) {
+  const now = Date.now()
+  const id = generateDocumentId()
+  await db
+    .insertInto('memberProfiles')
+    .values({ id, displayName, accountId, createdAt: now, updatedAt: now })
     .execute()
-  return memberProfileSchema.parse({ ...row, credentials })
+  return { id, now }
 }
 
 export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore {
   return {
     async profileForCredential(origin, credentialId) {
-      const pin = await db
-        .selectFrom('profileCredentials')
-        .select('profileId')
-        .where('origin', '=', origin)
-        .where('credentialId', '=', credentialId)
-        .executeTakeFirst()
-      if (pin === undefined) return null
-      return loadProfile(db, pin.profileId)
+      const accountId = await accountForPasskey(db, origin, credentialId)
+      return accountId === null ? null : loadProfileWhere(db, 'accountId', accountId)
     },
 
     async ensureProfile({ origin, credentialId, displayName }) {
       return inTenantTransaction(db, async (trx) => {
-        const existing = await trx
-          .selectFrom('profileCredentials')
-          .select('profileId')
-          .where('origin', '=', origin)
-          .where('credentialId', '=', credentialId)
-          .executeTakeFirst()
-
-        // A claimed credential names its person; the display name given here
-        // does not rename them, and nothing here ever merges two profiles —
-        // linking is an explicit operation (ADR-0041 decision 7), not a side
+        // A claimed credential names its account, and the account's user here
+        // is the person; the display name given here does not rename them, and
+        // nothing here ever merges two accounts — linking is an explicit
+        // operation (ADR-0041 decision 7, ADR-0045 decision 4), not a side
         // effect of registering.
-        if (existing !== undefined) {
-          const profile = await loadProfile(trx, existing.profileId)
-          if (profile === null) {
-            throw new Error(
-              `profileCredentials row points at a missing profile: ${existing.profileId}`,
-            )
-          }
-          return profile
+        const known = await accountForPasskey(trx, origin, credentialId)
+        if (known !== null) {
+          const user = await loadProfileWhere(trx, 'accountId', known)
+          if (user !== null) return user
+          const { id, now } = await insertUser(trx, known, displayName)
+          return toProfile(
+            { id, displayName, accountId: known, createdAt: now, updatedAt: now },
+            await passkeysOf(trx, known),
+          )
         }
 
-        const now = Date.now()
-        const id = generateDocumentId()
+        const accountId = generateDocumentId()
+        const { id, now } = await insertUser(trx, accountId, displayName)
+        await trx.insertInto('accounts').values({ id: accountId, createdAt: now }).execute()
         await trx
-          .insertInto('memberProfiles')
-          .values({ id, displayName, createdAt: now, updatedAt: now })
+          .insertInto('accountBindings')
+          .values({
+            authenticator: PASSKEY_AUTHENTICATOR,
+            subject: passkeySubject(origin, credentialId),
+            accountId,
+            createdAt: now,
+          })
           .execute()
-        await trx
-          .insertInto('profileCredentials')
-          .values({ credentialId, origin, profileId: id })
-          .execute()
-
-        return memberProfileSchema.parse({
-          id,
-          displayName,
-          createdAt: now,
-          updatedAt: now,
-          credentials: [{ origin, credentialId }],
-        })
+        return toProfile({ id, displayName, accountId, createdAt: now, updatedAt: now }, [
+          { origin, credentialId },
+        ])
       })
     },
 
@@ -232,7 +274,7 @@ export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore
         .execute()
       const profiles: MemberProfile[] = []
       for (const row of rows) {
-        const profile = await loadProfile(db, row.id)
+        const profile = await loadProfileWhere(db, 'id', row.id)
         if (profile !== null) profiles.push(profile)
       }
       return profiles
@@ -243,11 +285,7 @@ export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore
     },
 
     async revokeL1Membership(workspaceId, profileId) {
-      const credentials = await db
-        .selectFrom('profileCredentials')
-        .select(['origin', 'credentialId'])
-        .where('profileId', '=', profileId)
-        .execute()
+      const credentials = (await loadProfileWhere(db, 'id', profileId))?.credentials ?? []
       const deleted = await deleteMembership(db, workspaceId, profileId)
       return { removed: deleted.length > 0, credentials }
     },

@@ -2,7 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 
 let root: string
@@ -305,5 +307,43 @@ describe('isWorkspaceMember', () => {
     })
     await store.addMember('ws-a', profile.id)
     expect(await store.isWorkspaceMember('ws-b', profile.id)).toBe('not-a-member')
+  })
+})
+
+// ADR-0045: an ACCOUNT is the keeper-wide login identity, a USER (this
+// store's profile) is who that account is inside one tenant.
+describe('accounts and users', () => {
+  const claim = { origin: 'https://a.example', credentialId: 'cred-1' }
+
+  function storeFor(tenantId: string): MemberProfileStore {
+    return createMemberProfileStore(tenantDatabase(handle.rawDb, tenantId))
+  }
+
+  async function count(table: 'accounts' | 'accountBindings'): Promise<number> {
+    const rows = await handle.rawDb.selectFrom(table).selectAll().execute()
+    return rows.length
+  }
+
+  it('one credential in two tenants is one account and a separate user in each', async () => {
+    const [home, other] = [storeFor(SELF_HOST_TENANT_ID), storeFor('tenant-two')]
+    const inHome = await home.ensureProfile({ ...claim, displayName: 'Ada at home' })
+    const inOther = await other.ensureProfile({ ...claim, displayName: 'Ada at work' })
+
+    expect(inOther.id).not.toBe(inHome.id)
+    expect((await home.profileForCredential(claim.origin, claim.credentialId))?.displayName).toBe(
+      'Ada at home',
+    )
+    expect((await other.profileForCredential(claim.origin, claim.credentialId))?.displayName).toBe(
+      'Ada at work',
+    )
+    expect(await count('accounts')).toBe(1)
+    expect(await count('accountBindings')).toBe(1)
+  })
+
+  it('an account with no user in a tenant is nobody there', async () => {
+    await storeFor(SELF_HOST_TENANT_ID).ensureProfile({ ...claim, displayName: 'Ada' })
+    expect(
+      await storeFor('tenant-two').profileForCredential(claim.origin, claim.credentialId),
+    ).toBeNull()
   })
 })
