@@ -73,6 +73,16 @@ describe('providerAuthenticator', () => {
   // resolve that provider's subjects to the old provider's accounts.
   it('names the authenticator by the issuer, never by the operator-chosen id', () => {
     const [provider] = signInConfigSchema.parse({ providers: [google] }).providers
-    expect(provider && providerAuthenticator(provider)).toBe('oidc:https://accounts.google.com')
+    const key = provider && providerAuthenticator(provider)
+    expect(key).toBe(providerAuthenticator({ issuer: 'https://accounts.google.com' }))
+    expect(key).not.toBe(providerAuthenticator({ issuer: 'https://accounts.google.com/' }))
+  })
+
+  // It travels through auth decisions a handler may log; the provider's URL
+  // stays out of it.
+  it('does not spell the issuer', () => {
+    const key = providerAuthenticator({ issuer: 'https://accounts.google.com' })
+    expect(key.startsWith('oidc:')).toBe(true)
+    expect(key).not.toContain('google')
   })
 })

@@ -36,8 +36,8 @@ const strategy: AsyncAuthStrategy = {
         kind: 'oauth-resource-server',
         subject: sub,
         scopes: ALL_AUTH_SCOPES,
-        ...(sub === 'anonymous' ? {} : { person: { authenticator: ISSUER, subject: sub } }),
       },
+      ...(sub === 'anonymous' ? {} : { person: { authenticator: ISSUER, subject: sub } }),
     }
   },
 }

@@ -74,15 +74,7 @@ export function hasRequiredScopes(
 type AuthContext =
   | { kind: 'anonymous' }
   | { kind: 'local-token' }
-  | {
-      kind: 'oauth-resource-server'
-      subject: string
-      scopes: readonly AuthScope[]
-      /** Who the token names, as an account binding (ADR-0045 d15). Absent for
-       *  a token that names no person. For resolving a person only — not a
-       *  field to serialise, since it spells the issuer. */
-      person?: AuthenticatorBinding
-    }
+  | { kind: 'oauth-resource-server'; subject: string; scopes: readonly AuthScope[] }
   | { kind: 'pat'; subject: string; scopes: readonly AuthScope[] }
   | { kind: 'session'; subject: string; scopes: readonly AuthScope[] }
 
@@ -105,7 +97,15 @@ export interface AuthAuthorizeInput {
 // (and any future server-mode strategy) cannot accidentally drift
 // from the contract.
 export type AuthDecision =
-  | { ok: true; context: AuthContext }
+  | {
+      ok: true
+      context: AuthContext
+      /** Who the credential names, as an account binding (ADR-0045 d15) —
+       *  absent for one that names no person. Kept BESIDE the context, not in
+       *  it: it spells the issuer, and the context is what downstream code
+       *  may log or serialise. It exists to resolve a person, nothing else. */
+      person?: AuthenticatorBinding
+    }
   | {
       ok: false
       status: 401

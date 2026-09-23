@@ -19,7 +19,7 @@ import {
 import { createCompleteSignInDeps } from '../security/complete-sign-in.js'
 import { createRelyingParty } from '../security/oidc-relying-party.js'
 import { createSignInAttemptStore } from '../security/sign-in-attempt-store.js'
-import { signInConfigSchema } from '../security/sign-in-config.js'
+import { providerAuthenticator, signInConfigSchema } from '../security/sign-in-config.js'
 import { SESSION_COOKIE } from '../security/sign-in-session-store.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createSignInRoutes } from './sign-in.js'
@@ -108,7 +108,7 @@ describe('sign-in through an OIDC provider', () => {
     const session = cookieFrom(res, SESSION_COOKIE)
     expect(session).toBeTruthy()
     expect(await signIn.sessions.resolve(session as string, Date.now())).toEqual({
-      authenticator: `oidc:${ISSUER}`,
+      authenticator: providerAuthenticator({ issuer: ISSUER }),
       subject: 'ada-1',
     })
   })

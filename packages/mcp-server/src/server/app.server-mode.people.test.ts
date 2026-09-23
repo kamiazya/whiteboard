@@ -49,8 +49,8 @@ const bearerNamesItsSubject: AsyncAuthStrategy = {
         kind: 'oauth-resource-server',
         subject: sub,
         scopes: ALL_AUTH_SCOPES,
-        person: { authenticator: ISSUER, subject: sub },
       },
+      person: { authenticator: ISSUER, subject: sub },
     }
   },
 }

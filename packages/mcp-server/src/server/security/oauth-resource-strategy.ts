@@ -161,13 +161,14 @@ export function createOAuthResourceServerAuthStrategy(options: {
           // serialises `decision.context`) would publish IdP URLs
           // and internal resource ids onto operator-facing surfaces.
           scopes: result.scopes,
-          // The one exception, and not for display: the account binding
-          // a sign-in through the same issuer would resolve to (ADR-0046
-          // decision 1), so a bearer and a session name the same person.
-          person: {
-            authenticator: providerAuthenticator({ issuer: result.issuer }),
-            subject: result.subject,
-          },
+        },
+        // The account binding a sign-in through the same issuer would
+        // resolve to (ADR-0046 decision 1), so a bearer and a session name
+        // the same person. Beside the context rather than in it — see
+        // AuthDecision.
+        person: {
+          authenticator: providerAuthenticator({ issuer: result.issuer }),
+          subject: result.subject,
         },
       }
     },

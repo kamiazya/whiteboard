@@ -5,6 +5,7 @@
  * never written inline, so the configuration can be read and versioned
  * without handing anyone the credential.
  */
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 // A bare lowercase domain. An `@`, a scheme or a wildcard is refused rather
@@ -83,11 +84,16 @@ export type OidcProvider = SignInConfig['providers'][number]
 export type ProviderAdmission = z.infer<typeof providerAdmissionSchema>
 
 /**
- * The authenticator an account binding names for this provider. It is the
- * ISSUER, because OIDC Core 1.0 section 2 makes `sub` unique only within its
- * issuer: keyed on the operator's id, a provider re-pointed at another issuer
- * would resolve that issuer's subjects to the first one's accounts.
+ * The authenticator an account binding names for this provider. It is keyed
+ * on the ISSUER, because OIDC Core 1.0 section 2 makes `sub` unique only
+ * within its issuer: keyed on the operator's id, a provider re-pointed at
+ * another issuer would resolve that issuer's subjects to the first one's
+ * accounts.
+ *
+ * A digest of the issuer rather than the issuer itself: the same issuer
+ * always yields the same key, while the name travels through auth decisions
+ * and rows without spelling out the provider's URL.
  */
 export function providerAuthenticator(provider: Pick<OidcProvider, 'issuer'>): string {
-  return `oidc:${provider.issuer}`
+  return `oidc:${createHash('sha256').update(provider.issuer).digest('base64url')}`
 }

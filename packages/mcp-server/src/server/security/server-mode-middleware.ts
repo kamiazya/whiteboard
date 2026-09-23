@@ -59,8 +59,7 @@ async function serverModeGrant(
     requiredScopes,
   })
   if (!decision.ok) return { refusal: decision }
-  const context = decision.context
-  const person = context.kind === 'oauth-resource-server' ? context.person : undefined
+  const { context, person } = decision
   const scopes = 'scopes' in context ? context.scopes : ALL_AUTH_SCOPES
   return { grant: { kind: 'external-bearer', scopes, ...(person === undefined ? {} : { person }) } }
 }
