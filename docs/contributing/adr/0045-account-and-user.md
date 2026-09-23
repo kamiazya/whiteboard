@@ -48,8 +48,9 @@ change**.
    Everything a workspace names keeps pointing here, which is what makes the
    constraint above hold: adding accounts moves nothing a workspace can see.
 
-2. **An ACCOUNT is the login identity: what a passkey authenticates.** It is
-   keeper-wide, belongs to no tenant, and holds credentials. It carries no
+2. **An ACCOUNT is the login identity: what an authenticator vouches for.**
+   A passkey is the built-in authenticator, not the only one (decision 15).
+   It is keeper-wide, belongs to no tenant, and holds credentials. It carries no
    display name a tenant reads, no membership, and no authority of its own —
    authority reaches a resource through a user
    ([ADR-0043](0043-authority-as-keys.md)), never through an account.
@@ -176,6 +177,39 @@ remove, so the first round could not stand as written.
     The tenant list lives in the browser, not the keeper, so decision 13
     holds: nothing keeper-wide learns which tenants a person uses. Per
     decision 6, a self-host keeper with one account shows no menu.
+
+## Decisions taken, third round (owner, 2026-09-23)
+
+15. **How an account is authenticated is a seam, not a decision this ADR
+    makes.** The owner's framing: for a self-host keeper, being able to plug
+    in one's own authentication is itself a reason to choose it, so the
+    model must not be bound to the passkey.
+
+    An account is therefore identified by a pair — which authenticator
+    vouched, and the subject it vouched for — and an account may hold
+    several such pairs (a passkey and an organisation's identity provider,
+    say). The built-in passkey is one authenticator; an external identity
+    provider, a header set by a reverse proxy the operator trusts, or a
+    directory are others, supplied by whoever deploys the keeper. The
+    server-mode bearer-token seam that already takes an external validator
+    returning an issuer and a subject is the same shape, and becomes one
+    authenticator rather than a parallel path.
+
+    What stays fixed whatever the authenticator: an account is not a user
+    (decision 1), authority reaches a resource only through a user
+    (ADR-0043), and nothing joins two accounts (decision 4) — an
+    authenticator that reports the same subject for two people is the
+    deployment's error, not a merge this model performs. Decisions 11 and
+    14's no-gesture switch are about the passkey authenticator and bind
+    only it.
+
+    Scope, and why: this is the part of the ADR worth building BEFORE a
+    many-tenant keeper exists, because it pays at one tenant — a self-host
+    operator can bring their own sign-in — and because splitting today's
+    profile into account plus user is the migration a later SaaS would
+    otherwise have to run over real data. Per-request tenant binding
+    (decision 7) and the switcher (decision 14) wait for a keeper with more
+    than one tenant.
 
 ## Consequences
 
