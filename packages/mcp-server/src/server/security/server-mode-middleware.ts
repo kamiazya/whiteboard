@@ -1,9 +1,14 @@
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import type { MiddlewareHandler } from 'hono'
-import type { AuthScope } from './auth-strategy.js'
+import type { Context, MiddlewareHandler } from 'hono'
+import { getCookie } from 'hono/cookie'
+import { ALL_AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
+import type { ResolvedGrant } from './credential-resolver.js'
+import type { MemberProfileStore } from './member-profile-store.js'
+import { membershipRefusalFor, rememberGrant } from './membership-gate.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
 import { resolveApiRouteScope } from './route-scope-registry.js'
+import { SESSION_COOKIE, type SignInSessionStore } from './sign-in-session-store.js'
 
 function buildServerModeAuthFailResponse(decision: {
   status: 401 | 403
@@ -20,8 +25,49 @@ function buildServerModeAuthFailResponse(decision: {
   })
 }
 
+/**
+ * ADR-0046: who a server-mode request is, and whether they reach the
+ * workspace it addresses. Absent, no person is resolved and no membership is
+ * checked — the bearer's scopes alone decide, as before sign-in existed.
+ */
+export interface ServerModePeople {
+  readonly members: MemberProfileStore
+  readonly sessions: SignInSessionStore
+  readonly now?: () => number
+}
+
+type Refusal = { status: 401 | 403; code: string; wwwAuthenticate?: string }
+
+// A session opened at this host comes first: it is a person already, and a
+// browser that has one should not also need a bearer. Only when there is none
+// (or it has expired) does the bearer decide.
+async function serverModeGrant(
+  c: Context,
+  authStrategy: AsyncAuthStrategy,
+  requiredScopes: readonly AuthScope[],
+  people: ServerModePeople | undefined,
+): Promise<{ grant: ResolvedGrant } | { refusal: Refusal }> {
+  const session = people === undefined ? undefined : getCookie(c, SESSION_COOKIE)
+  if (people !== undefined && session !== undefined) {
+    const person = await people.sessions.resolve(session, (people.now ?? Date.now)())
+    if (person !== null) return { grant: { kind: 'signed-in', scopes: ALL_AUTH_SCOPES, person } }
+  }
+  const decision = await authStrategy.authorize({
+    method: c.req.method.toUpperCase(),
+    path: c.req.path,
+    authorizationHeader: c.req.header('authorization'),
+    requiredScopes,
+  })
+  if (!decision.ok) return { refusal: decision }
+  const context = decision.context
+  const person = context.kind === 'oauth-resource-server' ? context.person : undefined
+  const scopes = 'scopes' in context ? context.scopes : ALL_AUTH_SCOPES
+  return { grant: { kind: 'external-bearer', scopes, ...(person === undefined ? {} : { person }) } }
+}
+
 export function createServerModeApiAuthMiddleware(
   authStrategy: AsyncAuthStrategy,
+  people?: ServerModePeople,
 ): MiddlewareHandler {
   return async (c, next) => {
     const method = c.req.method.toUpperCase()
@@ -45,14 +91,14 @@ export function createServerModeApiAuthMiddleware(
     if (routeScope.kind === 'daemon-token-only') {
       return c.json({ error: 'forbidden' }, 403)
     }
-    const decision = await authStrategy.authorize({
-      method,
-      path: c.req.path,
-      authorizationHeader: c.req.header('authorization'),
-      requiredScopes: routeScope.scopes,
+    const resolved = await serverModeGrant(c, authStrategy, routeScope.scopes, people)
+    if ('refusal' in resolved) return buildServerModeAuthFailResponse(resolved.refusal)
+    if (people === undefined) return next()
+    rememberGrant(c, resolved.grant)
+    const refused = await membershipRefusalFor(c, resolved.grant, people.members, {
+      membersOnlyByDefault: true,
     })
-    if (decision.ok) return next()
-    return buildServerModeAuthFailResponse(decision)
+    return refused ?? next()
   }
 }
 

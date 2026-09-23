@@ -36,6 +36,8 @@
 // vocabulary (Zod schemas, OAuth scope-request parsing) needs a value to
 // check membership against, not only a compile-time union. `AuthScope`
 // is derived from this array so the two can never drift apart.
+import type { AuthenticatorBinding } from './member-profile-store.js'
+
 export const AUTH_SCOPES = [
   'canvas:read',
   'canvas:write',
@@ -72,7 +74,15 @@ export function hasRequiredScopes(
 type AuthContext =
   | { kind: 'anonymous' }
   | { kind: 'local-token' }
-  | { kind: 'oauth-resource-server'; subject: string; scopes: readonly AuthScope[] }
+  | {
+      kind: 'oauth-resource-server'
+      subject: string
+      scopes: readonly AuthScope[]
+      /** Who the token names, as an account binding (ADR-0045 d15). Absent for
+       *  a token that names no person. For resolving a person only — not a
+       *  field to serialise, since it spells the issuer. */
+      person?: AuthenticatorBinding
+    }
   | { kind: 'pat'; subject: string; scopes: readonly AuthScope[] }
   | { kind: 'session'; subject: string; scopes: readonly AuthScope[] }
 

@@ -81,3 +81,25 @@ export function membershipAdmit(
   return (c, workspaceId) =>
     workspaceAccess(grantOf(c) ?? NO_GRANT_RESOLVED, workspaceId, members, options)
 }
+
+/**
+ * ADR-0046 decision 10: on a keeper where every workspace is members-only
+ * from the start, the person creating one is its first member — otherwise
+ * nobody could open what they just made.
+ */
+export interface FirstMember {
+  /** This tenant's user behind the request, or null when there is none to make a member. */
+  profileFor(c: Context): Promise<string | null>
+  add(workspaceId: string, profileId: string): Promise<void>
+}
+
+export function creatorAsFirstMember(members: MemberProfileStore): FirstMember {
+  return {
+    async profileFor(c) {
+      const person = grantOf(c)?.person
+      if (person === undefined) return null
+      return (await members.profileForBinding(person))?.id ?? null
+    },
+    add: (workspaceId, profileId) => members.addMember(workspaceId, profileId),
+  }
+}

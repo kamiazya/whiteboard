@@ -2,7 +2,7 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
-import type { WorkspaceAdmit } from '../security/membership-gate.js'
+import type { FirstMember, WorkspaceAdmit } from '../security/membership-gate.js'
 import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
@@ -61,6 +61,8 @@ export interface DocumentRouterOptions {
   replicaTier?: (workspaceId: string) => Promise<ReplicaTier>
   /** S8 slice 2: threaded to `createWorkspacesRouter` — see its own doc. */
   admit?: WorkspaceAdmit
+  /** Threaded to `createWorkspacesRouter` — see its own doc. */
+  firstMember?: FirstMember
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -104,6 +106,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
       serverDeps: options.serverDeps,
       ...(options.replicaTier === undefined ? {} : { replicaTier: options.replicaTier }),
       ...(options.admit === undefined ? {} : { admit: options.admit }),
+      ...(options.firstMember === undefined ? {} : { firstMember: options.firstMember }),
     }),
   )
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))

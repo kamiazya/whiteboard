@@ -18,11 +18,10 @@ import { type CompleteSignInDeps, completeSignIn } from '../security/complete-si
 import type { RelyingParty, ResolvedProvider } from '../security/oidc-relying-party.js'
 import type { VerifiedClaims } from '../security/sign-in-admission.js'
 import type { SignInAttemptStore } from '../security/sign-in-attempt-store.js'
+import { SESSION_COOKIE } from '../security/sign-in-session-store.js'
 
 const log = getLogger('sign-in')
 
-/** Host-only (`__Host-`): the browser sends it back to exactly this origin. */
-export const SESSION_COOKIE = '__Host-wb_session'
 const ATTEMPT_COOKIE = '__Host-wb_signin'
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
 

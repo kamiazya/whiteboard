@@ -9,6 +9,7 @@ import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import type { PairingGrantStore } from './security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from './security/pairing-session.js'
+import type { ServerModePeople } from './security/server-mode-middleware.js'
 import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
 import type { WebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import type { WorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
@@ -137,6 +138,10 @@ export interface ServerModeAppOptions {
   /** ADR-0046: sign-in through the configured external providers. Absent
    *  when none is configured, and then no `/auth/*` route exists. */
   signIn?: SignInRoutesDeps
+  /** ADR-0046: resolve each request's person and gate every workspace on
+   *  membership, members-only from the start. Absent (ad-hoc and older test
+   *  compositions), the bearer's scopes alone decide. */
+  people?: ServerModePeople
 }
 
 export type AppOptions = LocalDaemonAppOptions | ServerModeAppOptions
