@@ -279,20 +279,38 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/DocumentPreview.tsx#DocumentPreview': 167,
   'apps/web/src/components/workspace-files/DocumentThumbnail.tsx#DocumentThumbnail': 83,
   'apps/web/src/components/workspace-files/EmptyWorkspaceState.tsx#EmptyWorkspaceState': 146,
-  'apps/web/src/components/workspace-files/FolderContentsList.tsx#FolderContentsList': 205,
+  // 205 -> 79: a document's card, and the picture with the two things drawn
+  // ON it, are their own components. The two below are those.
+  'apps/web/src/components/workspace-files/FolderContentsList.tsx#FolderContentsList': 79,
+  'apps/web/src/components/workspace-files/FolderContentsList.tsx#CardThumbnail': 68,
+  'apps/web/src/components/workspace-files/FolderContentsList.tsx#DocumentCard': 102,
   'apps/web/src/components/workspace-files/NewDocumentDialog.tsx#NewDocumentDialog': 165,
   'apps/web/src/components/workspace-files/NewDocumentMenu.tsx#NewDocumentMenu': 139,
   'apps/web/src/components/workspace-files/RecentLane.tsx#RecentLane': 53,
   'apps/web/src/components/workspace-files/RenameDocumentDialog.tsx#RenameDocumentDialog': 103,
-  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 262,
+  // 262 -> 114: the two layouts were two trees saying the same thing, and
+  // are ONE card with a `layout` now. The entry below is that card — the
+  // whole of what both copies drew, counted once instead of twice.
+  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 114,
+  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#DocumentRow': 57,
   'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#TreeItem': 80,
   // Raised 992 -> 1008: the two list effects stopped repeating one another on
   // a mount, and the lines are the guard plus the paragraph saying which run
   // it skips and which it must not.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 1008,
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 167,
+  // 1008 -> 779 and 167 -> 91: the toolbar, the refusals, the object pane,
+  // the card menu's items and each column view moved to
+  // `workspace-files-panel-parts.tsx`. The four entries there are those —
+  // every one a block of JSX or a table of menu rows, which is the shape a
+  // LINE budget cannot tell from logic and the complexity budget can: all
+  // four are under the complexity threshold.
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 779,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 91,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 92,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 81,
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,
   'apps/web/src/components/workspace-files/WorkspaceFolderTree.tsx#FolderItem': 68,
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 60,
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
