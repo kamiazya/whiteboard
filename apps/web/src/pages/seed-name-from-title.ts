@@ -5,7 +5,7 @@ import {
   setWorkspaceDocumentName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { Loro } from 'loro-crdt'
-import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
+import { isGeneratedDocumentPath } from '../lib/new-document-path.js'
 import { titleFromMarkdownBody } from '../lib/title-from-body.js'
 
 /**

@@ -10,6 +10,8 @@ import {
   getBrowserWorkspaceId,
   subscribeBrowserWorkspaceIdentity,
 } from '../lib/browser-workspace-id.js'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
+import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import {
@@ -24,7 +26,7 @@ import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
-import { createSeededDocument, type LoroStoreLike } from './use-browser-document-controller.js'
+import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 export interface BrowserIndexPageProps {
   /** Defaults to the shared production index; injected by tests. */
@@ -343,6 +345,7 @@ interface BrowserIndexBodyProps {
   onOpenDocument: BrowserIndexPageProps['onOpenDocument']
   filesRevision: number
   onCreate: (kind: DocumentKind) => void | Promise<void>
+  onDuplicate: (path: string) => void | Promise<void>
   onRequestDelete: (pending: PendingDelete) => void
 }
 
@@ -407,6 +410,9 @@ function BrowserFilesSection(props: BrowserIndexBodyProps) {
       initialFolder={props.routedFolder}
       onFolderChange={props.setRoutedFolder}
       onOpenDocument={props.onOpenDocument}
+      // Duplicating does NOT open the copy, matching the daemon row: the
+      // person is working in the list, and the copy appears there.
+      onDuplicateDocument={(path) => void props.onDuplicate(path)}
       onRequestDelete={(path, displayName, kind) =>
         props.onRequestDelete({ paths: [path], displayName, kind })
       }
@@ -505,6 +511,29 @@ export function BrowserIndexPage({
 
   const { folder: routedFolder, setFolder: setRoutedFolder } = useRoutedFolder()
 
+  // One at a time, for the reason the daemon row gives: two duplicates of the
+  // same source race on the name the copy is given.
+  const [duplicating, setDuplicating] = useState(false)
+  const handleDuplicate = useCallback(
+    async (sourcePath: string) => {
+      if (duplicating) return
+      setDuplicating(true)
+      setError(null)
+      try {
+        await duplicateBrowserDocument({ index, loro, clock, sourcePath })
+        setSnapshots(await listLocalDocuments(index, clock))
+        // The tree view keeps its own copy of the list; this is its signal to
+        // re-read, the same contract a delete uses above.
+        setFilesRevision((n) => n + 1)
+      } catch {
+        setError('Failed to duplicate the document in this browser.')
+      } finally {
+        setDuplicating(false)
+      }
+    },
+    [index, loro, clock, duplicating, setError, setSnapshots, setFilesRevision],
+  )
+
   const handleCreate = useCallback(
     async (kind: DocumentKind) => {
       setCreating(true)
@@ -562,6 +591,7 @@ export function BrowserIndexPage({
         onOpenDocument={onOpenDocument}
         filesRevision={filesRevision}
         onCreate={handleCreate}
+        onDuplicate={handleDuplicate}
         onRequestDelete={setPendingDelete}
       />
       <DeleteDocumentDialog

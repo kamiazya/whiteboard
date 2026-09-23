@@ -1,26 +1,21 @@
-import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
-import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { deriveCopyName } from '../lib/derive-copy-name.js'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
+import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
-  ensureLocalWorkspace,
   IdbDefaultDocumentPointer,
   idbContentClock,
   listLocalDocuments,
   loadLocalDocument,
 } from '../lib/local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
-import { mergeToSnapshot } from '../lib/merge-to-snapshot.js'
 import { trackIndexWrite } from '../lib/pending-index-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from '../lib/workspace-content.js'
 
 // Re-exported so the many page-side consumers keep their import path; the
 // type itself lives beside the concrete store.
@@ -54,67 +49,6 @@ export interface BrowserDocumentController {
   // the copy reflects the latest state) under a derived "<name> (copy)" name,
   // then switches to it — matching the create-then-open flow the UI expects.
   duplicateDocument(): Promise<DocumentSnapshot>
-}
-
-/**
- * Create a document AND seed its content record, as one operation.
- *
- * The seed is not optional bookkeeping. `updatedAt` now comes from the content
- * record's own envelope — the metadata row has no timestamp of its own, and
- * the port's `DocumentEntry` carries none — so a document created without one
- * has no last-edited time to report. It is also what lets a switch onto a
- * never-edited document find something to load.
- *
- * Three of the five create paths used to skip it (first boot, startFresh, and
- * the list page) while `createDocument` did it and said why. Routing them all
- * through here is what makes that inconsistency unrepresentable rather than
- * merely fixed.
- *
- * The index row is rolled back if the content write fails, so a failed create
- * never leaves a document with nothing behind it.
- */
-export async function createSeededDocument(
-  index: DocumentIndex,
-  loro: LoroStoreLike,
-  clock: ContentClock,
-  name?: string,
-  kind: DocumentSnapshot['kind'] = 'spatial',
-  content?: Uint8Array,
-): Promise<DocumentSnapshot> {
-  await ensureLocalWorkspace(index)
-  const taken = (await listLocalDocuments(index, clock).catch(() => [])).map((row) => row.path)
-  const trimmed = name?.trim()
-  const entry = await index.createDocument({
-    workspaceId: getBrowserWorkspaceId(),
-    path: newDocumentPathIn('', taken),
-    kind,
-    ...(trimmed ? { name: trimmed } : {}),
-  })
-  try {
-    // Tree-backed index: the node the create just made IS the content record
-    // (its containers are the empty document), so a seed with content copies
-    // into it and an empty create only stamps the clock. The legacy branch
-    // keeps the per-document record for an index without a workspace
-    // document behind it — injected test doubles included.
-    const seededInTree =
-      content !== undefined
-        ? await seedWorkspaceDocumentContent(entry.documentId, content)
-        : await touchIfWorkspaceBacked(entry.documentId)
-    if (!seededInTree) {
-      await loro.save(entry.documentId, content ?? loro.createEmptySnapshot())
-    }
-  } catch (err) {
-    try {
-      await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: entry.path })
-    } catch {
-      // Rollback is best-effort; a stray index row is harmless next to
-      // reporting a create that did not happen.
-    }
-    throw err
-  }
-  const snap = await loadLocalDocument(index, entry.documentId, clock)
-  if (snap === null) throw new Error('created document vanished before it could be read')
-  return snap
 }
 
 /**
@@ -584,49 +518,21 @@ export function useBrowserDocumentController(
     [flushSave],
   )
 
-  // Reads the source canvas's Loro record through mergeToSnapshot (the
-  // snapshot+delta-log -> single-snapshot collapse) so the duplicate is a
-  // true deep copy: a fresh Uint8Array with no shared reference to the
-  // source's bytes, deltas, or underlying LoroDoc.
+  // What a duplicate IS lives in one place for both surfaces (the index row
+  // has only a path); this side adds what only an open document owes —
+  // flushing its pending save first, and moving the editor onto the copy.
   const duplicateDocument = useCallback(async (): Promise<DocumentSnapshot> => {
     const flushed = await flushSave()
     if (!flushed) throw new Error('Failed to save pending changes before duplicating.')
     const source = snapshotRef.current
     if (source === null) throw new Error('No canvas is open to duplicate.')
 
-    // The workspace document is where an edited document's current state
-    // lives; the per-document record is the pre-fold copy and goes stale the
-    // moment the editor commits. Projection first, old record as the fallback
-    // for a document nothing has folded yet (and for jsdom tests, whose
-    // injected store is the only storage there is).
-    const workspace = await openWorkspaceOrNull(new BrowserWorkspaceDocs())
-    const projected =
-      workspace === null ? null : projectWorkspaceDocument(workspace, source.documentId)
-    let mergedSnapshot: Uint8Array
-    if (projected !== null) {
-      mergedSnapshot = new Uint8Array(projected.export({ mode: 'snapshot' }))
-    } else {
-      const loroResult = await loroRef.current.load(source.documentId)
-      if (loroResult.kind !== 'ok') {
-        throw new Error('The canvas data could not be read for duplication.')
-      }
-      mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
-    }
-
-    const existingNames = new Set(
-      (await listLocalDocuments(indexRef.current, clockRef.current)).map((row) => row.name),
-    )
-    const fresh = await createSeededDocument(
-      indexRef.current,
-      loroRef.current,
-      clockRef.current,
-      deriveCopyName(source.name, existingNames),
-      source.kind,
-      // The copy is seeded with the SOURCE's merged bytes rather than an empty
-      // document — that is the whole point of a duplicate, and the seeding
-      // helper takes content for exactly this caller.
-      mergedSnapshot,
-    )
+    const fresh = await duplicateBrowserDocument({
+      index: indexRef.current,
+      loro: loroRef.current,
+      clock: clockRef.current,
+      sourcePath: source.path,
+    })
 
     await switchDocument(fresh.documentId)
     return fresh
