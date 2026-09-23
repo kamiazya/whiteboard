@@ -467,14 +467,18 @@ describe('createDaemonFilesSource tag reads', () => {
   })
 
   // What `useTagsInUse` promises: the chips count the tags that came back
-  // with the rows they are drawn beside. So a second list read — every write
-  // the panel makes triggers one — must not be answered from the first.
-  it('reads the tags again for a second list read', async () => {
+  // with the rows they are drawn beside. A write changes those rows, so the
+  // list read after it — and the tags riding with it — must not be answered
+  // from before.
+  it('reads the tags again with the list read that follows a write', async () => {
     const { asked, fetchLike } = countingTagFetch()
     const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
 
     await source.listDocuments()
     await source.listTagsInUse?.()
+    // The fixture refuses the pin; a refused write still forgets the list,
+    // since a write's first half may have landed.
+    await source.setPinned?.({ documentId: 'id', path: 'p' } as never, true).catch(() => {})
     await source.listDocuments()
     await source.listTagsInUse?.()
 
@@ -492,5 +496,109 @@ describe('createDaemonFilesSource tag reads', () => {
     await expect(source.readTagLibrary?.()).rejects.toThrow()
 
     expect(asked).toHaveLength(3)
+  })
+})
+
+describe('createDaemonFilesSource list and trash reads', () => {
+  /** Counts each route this source reads, and answers them all plausibly. */
+  function countingFetch() {
+    const counts = { documents: 0, names: 0, tags: 0, trash: 0, writes: 0 }
+    const fetchLike = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      const method = init?.method ?? 'GET'
+      if (method !== 'GET') {
+        counts.writes += 1
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      }
+      if (url.endsWith('/document-tags')) {
+        counts.tags += 1
+        return Promise.resolve(
+          jsonResponse({ documents: [], contents: [], library: {}, inUse: [] }),
+        )
+      }
+      if (url.endsWith('/names')) {
+        counts.names += 1
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      }
+      if (url.endsWith('/trash')) {
+        counts.trash += 1
+        return Promise.resolve(
+          jsonResponse({
+            entries: [{ documentId: 'id-gone', path: 'old/plan', deletedAt: 1_700_000 }],
+          }),
+        )
+      }
+      if (url.endsWith('/documents')) {
+        counts.documents += 1
+        return Promise.resolve(
+          jsonResponse({
+            documents: [
+              {
+                path: 'notes',
+                id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+                updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'markdown',
+              },
+            ],
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    return { counts, fetchLike }
+  }
+
+  // The addressed cold load: the page refreshes, then the panel it renders
+  // lists and counts the trash. One read of each route, not two.
+  it("answers the panel's reads from the page's refresh", async () => {
+    const { counts, fetchLike } = countingFetch()
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    const { entries, trash } = await source.refresh()
+    const listed = await source.listDocuments()
+    const trashed = await source.listTrash?.()
+
+    expect(listed).toEqual(entries)
+    expect(trashed).toEqual(trash)
+    expect(counts).toMatchObject({ documents: 1, names: 1, tags: 1, trash: 1 })
+  })
+
+  // Whether or not the write landed: a refused rename's first half may
+  // already have, so the list is never trusted across one.
+  it('asks again after a write through the source, landed or refused', async () => {
+    const { counts, fetchLike } = countingFetch()
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await source.refresh()
+    await source.createDocument('fresh', 'markdown').catch(() => {})
+    await source.listDocuments()
+
+    expect(counts.writes).toBe(1)
+    expect(counts.documents).toBe(2)
+  })
+
+  // A restore moves a document out of the trash AND into the list.
+  it('asks again for both the list and the trash after a restore', async () => {
+    const { counts, fetchLike } = countingFetch()
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await source.refresh()
+    await source.restoreFromTrash?.('id-gone').catch(() => {})
+    await source.listDocuments()
+    await source.listTrash?.()
+
+    expect(counts).toMatchObject({ documents: 2, trash: 2 })
+  })
+
+  // The page's refresh is what it calls after its OWN writes (a create or a
+  // delete it makes directly), so it must never answer from the hold.
+  it('reads afresh on every refresh', async () => {
+    const { counts, fetchLike } = countingFetch()
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await source.refresh()
+    await source.refresh()
+
+    expect(counts).toMatchObject({ documents: 2, trash: 2 })
   })
 })
