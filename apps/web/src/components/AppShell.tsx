@@ -1,20 +1,28 @@
 import { Maximize2, Minimize2, Settings } from 'lucide-react'
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  lazy,
+  type RefObject,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
+import { useShellWorkspaceRows } from '../hooks/use-shell-workspace-rows.js'
 import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
-import { parseWorkspaceRoute, settingsPath } from '../lib/app-routes.js'
+import { settingsPath } from '../lib/app-routes.js'
 import { browserWorkspaceIdOrNull } from '../lib/browser-workspace-id.js'
 import { isSyncOff } from '../lib/connection-state.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { getShellConnection, subscribeShellStatus } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
-import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
-import type { KeeperWorkspaces, WorkspaceRow } from '../lib/workspace-switcher-source.js'
+import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
 import { formatRelative } from './workspace-files/format-relative.js'
@@ -139,7 +147,121 @@ export interface AppShellProps {
  * session are things about the workspace, so they belong on the thing that
  * names it rather than on a second widget at the other end of the row.
  */
-export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps) {
+/**
+ * The way back out of fullscreen.
+ *
+ * Both chrome rows are gone — the extra space is what fullscreen is
+ * FOR — so the way back has to float. Escape still works natively.
+ *
+ * It floats at the BOTTOM, because rotating puts the device's camera edge
+ * on a SIDE of the screen and never its bottom. The web exposes the safe
+ * area only as a uniform band per edge, never the cutout's position along
+ * it, so a control on the top edge must either collide with the punch-hole
+ * or step back from the whole band on every device that has one — both
+ * were seen on a phone. What is left down here is the home indicator, a
+ * band that genuinely IS the full width. Left, since the canvas keeps its
+ * overview at bottom-right.
+ *
+ * The corner is the default, and the lift is the exception, because the
+ * bottom edge is also where the editing surfaces keep a strip. The canvas
+ * dock is centred, so its left edge walks toward the corner only as the
+ * viewport narrows: below 407px it reaches this control, and above it the
+ * dock is nowhere near — where a control floating a strip's height up,
+ * with empty space beneath it, reads as unanchored rather than as placed.
+ *
+ * 445 is arithmetic, not taste. The dock is centred at 333px, so its left
+ * edge is (vw - 333) / 2; this control spans 12..44; 8px of clearance
+ * wants vw >= 333 + 112. `declares a corner breakpoint that still clears
+ * the dock` reads the number back out of this class and re-measures it
+ * against the real dock, so widening the dock fails there rather than on
+ * someone's phone — which is exactly how the pen's tool button moved it
+ * from 407.
+ *
+ * Narrower than 357 the dock stops growing (it is capped to the editor's
+ * width less a gutter, and its tools scroll), so its left edge parks at
+ * 12 and this control's horizontal clearance is gone for good — which is
+ * the band the 70px lift below covers.
+ *
+ * 70px is that strip: the dock's own 0.75rem offset, its 46px, and the gap
+ * again. It clears the markdown formatting bar (44px) too, so no page has
+ * to say anything about either.
+ */
+function ExitFullscreenControl({
+  buttonRef,
+  onExit,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>
+  onExit: () => void
+}) {
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-label="Exit fullscreen"
+      data-testid="shell-exit-fullscreen"
+      onClick={onExit}
+      className={cn(
+        HEADER_BUTTON_CLASS,
+        'fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-[445px]:bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
+      )}
+    >
+      <Minimize2 aria-hidden="true" className="size-4" />
+    </button>
+  )
+}
+
+/**
+ * Hands focus to whichever control replaced the one that was just activated.
+ *
+ * The toggle UNMOUNTS it — entering removes the shell row, exiting removes
+ * the floating control — and a removed focused element drops focus to
+ * `<body>`, leaving a keyboard user to tab back from nothing.
+ */
+function useFullscreenFocusHandoff(isFullscreen: boolean) {
+  const toggleRef = useRef<HTMLButtonElement | null>(null)
+  const exitRef = useRef<HTMLButtonElement | null>(null)
+  const wasFullscreenRef = useRef(false)
+  useEffect(() => {
+    if (isFullscreen) {
+      wasFullscreenRef.current = true
+      exitRef.current?.focus()
+      return
+    }
+    if (!wasFullscreenRef.current) return
+    wasFullscreenRef.current = false
+    toggleRef.current?.focus()
+  }, [isFullscreen])
+  return { toggleRef, exitRef }
+}
+
+/**
+ * The shell's MODE, and nothing else.
+ *
+ * Fullscreen is a whole different presentation rather than a row with pieces
+ * missing — both chrome rows are gone, which is what fullscreen is FOR — so
+ * it is its own component and this is the one place that chooses between
+ * them. The focus handoff spans both, which is why it sits here.
+ */
+export function AppShell(props: AppShellProps) {
+  const fullscreen = useFullscreen()
+  const { toggleRef, exitRef } = useFullscreenFocusHandoff(fullscreen.isFullscreen)
+  if (fullscreen.isFullscreen) {
+    return <ExitFullscreenControl buttonRef={exitRef} onExit={fullscreen.toggle} />
+  }
+  return <ShellBar {...props} fullscreen={fullscreen} toggleRef={toggleRef} />
+}
+
+/** The chrome row: the mark, the alpha badge, and the two controls. */
+function ShellBar({
+  daemon,
+  onWorkInBrowser,
+  workspaces,
+  fullscreen,
+  toggleRef,
+}: AppShellProps & {
+  fullscreen: ReturnType<typeof useFullscreen>
+  toggleRef: RefObject<HTMLButtonElement | null>
+}) {
   const navigate = useNavigate()
   const location = useLocation()
   // Read fresh rather than cached in state: the store is a thin localStorage
@@ -153,112 +275,14 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   // reconnect does not — it recovers on its own.
   const nudge = useSettingsNudge(daemon && !(connection !== null && isSyncOff(connection.state)))
   const daemonBaseUrl = connection?.daemonBaseUrl
-  // The rows live HERE rather than in the menu, because the popover's head
-  // names the current workspace and the head is the shell's. One fetch, two
-  // readers.
-  const [rows, setRows] = useState<readonly WorkspaceRow[]>([])
-  const source = workspaces?.source
-  useEffect(() => {
-    if (source === undefined) return
-    let cancelled = false
-    source
-      .list()
-      .then((loaded) => {
-        if (!cancelled) setRows(loaded)
-      })
-      // A list that will not load leaves the mark naming the handle the
-      // address carries, which is still true. Failing the whole shell over
-      // it would take the settings gear down with it.
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [source])
-  const workspaceHandleInAddress = parseWorkspaceRoute(location.pathname)?.workspace ?? null
-  // The handle until the row lands: a true statement about where you are,
-  // and better than a blank in an accessible name.
-  const activeRow =
-    workspaceHandleInAddress === null
-      ? undefined
-      : rows.find((w) => workspaceHandle(w) === workspaceHandleInAddress)
-  const activeName =
-    workspaceHandleInAddress === null
-      ? undefined
-      : activeRow === undefined
-        ? workspaceHandleInAddress
-        : workspaceLabel(activeRow)
-
-  const fullscreen = useFullscreen()
-  const fullscreenToggleRef = useRef<HTMLButtonElement | null>(null)
-  const exitFullscreenRef = useRef<HTMLButtonElement | null>(null)
-  const wasFullscreenRef = useRef(false)
-  // The toggle unmounts the element that was just activated (entering
-  // removes this row, exiting removes the floating control), and a removed
-  // focused element drops focus to <body> — a keyboard user would have to
-  // tab back from nothing. Hand focus to whichever control replaced it.
-  useEffect(() => {
-    if (fullscreen.isFullscreen) {
-      wasFullscreenRef.current = true
-      exitFullscreenRef.current?.focus()
-      return
-    }
-    if (!wasFullscreenRef.current) return
-    wasFullscreenRef.current = false
-    fullscreenToggleRef.current?.focus()
-  }, [fullscreen.isFullscreen])
-
-  if (fullscreen.isFullscreen) {
-    // Both chrome rows are gone — the extra space is what fullscreen is
-    // FOR — so the way back has to float. Escape still works natively.
-    //
-    // It floats at the BOTTOM, because rotating puts the device's camera edge
-    // on a SIDE of the screen and never its bottom. The web exposes the safe
-    // area only as a uniform band per edge, never the cutout's position along
-    // it, so a control on the top edge must either collide with the punch-hole
-    // or step back from the whole band on every device that has one — both
-    // were seen on a phone. What is left down here is the home indicator, a
-    // band that genuinely IS the full width. Left, since the canvas keeps its
-    // overview at bottom-right.
-    //
-    // The corner is the default, and the lift is the exception, because the
-    // bottom edge is also where the editing surfaces keep a strip. The canvas
-    // dock is centred, so its left edge walks toward the corner only as the
-    // viewport narrows: below 407px it reaches this control, and above it the
-    // dock is nowhere near — where a control floating a strip's height up,
-    // with empty space beneath it, reads as unanchored rather than as placed.
-    //
-    // 445 is arithmetic, not taste. The dock is centred at 333px, so its left
-    // edge is (vw - 333) / 2; this control spans 12..44; 8px of clearance
-    // wants vw >= 333 + 112. `declares a corner breakpoint that still clears
-    // the dock` reads the number back out of this class and re-measures it
-    // against the real dock, so widening the dock fails there rather than on
-    // someone's phone — which is exactly how the pen's tool button moved it
-    // from 407.
-    //
-    // Narrower than 357 the dock stops growing (it is capped to the editor's
-    // width less a gutter, and its tools scroll), so its left edge parks at
-    // 12 and this control's horizontal clearance is gone for good — which is
-    // the band the 70px lift below covers.
-    //
-    // 70px is that strip: the dock's own 0.75rem offset, its 46px, and the gap
-    // again. It clears the markdown formatting bar (44px) too, so no page has
-    // to say anything about either.
-    return (
-      <button
-        ref={exitFullscreenRef}
-        type="button"
-        aria-label="Exit fullscreen"
-        data-testid="shell-exit-fullscreen"
-        onClick={fullscreen.toggle}
-        className={cn(
-          HEADER_BUTTON_CLASS,
-          'fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-[445px]:bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
-        )}
-      >
-        <Minimize2 aria-hidden="true" className="size-4" />
-      </button>
-    )
-  }
+  const {
+    rows,
+    handleInAddress: workspaceHandleInAddress,
+    activeRow,
+    activeName,
+    applyRename,
+    applyCounts,
+  } = useShellWorkspaceRows(workspaces, location.pathname)
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-chrome pointer-coarse:h-12">
@@ -292,31 +316,8 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
               source={workspaces.source}
               onSwitch={workspaces.onSwitch}
               sessionLabel={connectionLabel(connection?.state ?? null)}
-              // MERGED, not replaced. A rename answers with a WorkspaceEntry —
-              // the three identity layers and nothing else — while the row it
-              // lands on is a WorkspaceRow that also carries what the keeper
-              // counted. Replacing dropped that count until something else
-              // reloaded the list.
-              onRenamed={(entry) =>
-                setRows((current) =>
-                  current.map((row) =>
-                    row.workspaceId === entry.workspaceId ? { ...row, ...entry } : row,
-                  ),
-                )
-              }
-              // Kept HERE rather than in the menu, because the menu is the
-              // popover's content and Radix unmounts it on close. Holding the
-              // counts beside the rows is what makes the second open free —
-              // the browser keeper buys them by loading loro-crdt's WASM, and
-              // paying that once per session is the whole design.
-              onCounted={(counted) =>
-                setRows((current) =>
-                  current.map((row) => {
-                    const count = counted.get(row.workspaceId)
-                    return count === undefined ? row : { ...row, documentCount: count }
-                  }),
-                )
-              }
+              onRenamed={applyRename}
+              onCounted={applyCounts}
             />
           ) : undefined
         }
@@ -357,84 +358,125 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
           </>
         )}
       </ConnectionStatus>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="Alpha preview notes"
-            className="shrink-0 rounded-full border border-amber-600/55 px-1.5 font-mono text-[10px] leading-4 tracking-wide text-amber-600 hover:bg-amber-600/10 dark:border-amber-500/55 dark:text-amber-500"
-          >
-            ALPHA
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 text-sm">
-          <p className="font-medium">Alpha preview</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Data durability is not guaranteed yet. Browser storage can be evicted by the device —
-            export what matters, or protect it with persistent storage and a daemon.
-          </p>
-          <Link
-            to={settingsPath('data')}
-            className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
-          >
-            Protect your data
-          </Link>
-        </PopoverContent>
-      </Popover>
+      <AlphaBadge />
       <span className="min-w-0 flex-1" />
       {/* Hidden rather than disabled where the browser has no element
           fullscreen (iPhone Safari — video-only): a disabled control still
           claims row space and invites a tap that can never work, and there
           is nothing the user could change to enable it. */}
+      {/* Hidden rather than disabled where the browser has no element
+          fullscreen (iPhone Safari — video-only): a disabled control still
+          claims row space and invites a tap that can never work, and there
+          is nothing the user could change to enable it. */}
       {fullscreen.supported && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              ref={fullscreenToggleRef}
-              type="button"
-              aria-label="Fullscreen"
-              data-testid="shell-fullscreen"
-              onClick={fullscreen.toggle}
-              className={HEADER_BUTTON_CLASS}
-            >
-              <Maximize2 aria-hidden="true" className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Fullscreen</TooltipContent>
-        </Tooltip>
+        <FullscreenButton buttonRef={toggleRef} onEnter={fullscreen.toggle} />
       )}
-      <button
-        type="button"
-        // The dot is the only thing on the shell that can read as an alarm.
-        // Naming its cause turns it from "did I break something?" into a
-        // task the user can choose to do.
-        aria-label={nudge ? 'Settings — a setup step is waiting' : 'Settings'}
-        title={nudge ? 'Settings — a setup step is waiting' : 'Settings'}
-        data-testid="shell-settings"
-        onClick={() =>
+      <SettingsButton
+        nudge={nudge}
+        onOpen={() =>
           navigate(settingsPath(), {
             state: { from: `${location.pathname}${location.search}` },
           })
         }
-        className={HEADER_BUTTON_CLASS}
-      >
-        {/* The dot hangs off the GLYPH, not off the button. The button is
-            32px on a mouse and 44px on a finger while the gear stays 16px,
-            so a dot pinned to the button's corner drifts away from the
-            thing it is about as the button grows — on a phone it sat 4px
-            clear of the gear and 3.5px from the row's top edge, reading as
-            a badge on the corner of the screen. */}
-        <span className="relative inline-flex">
-          <Settings className="size-4" />
-          {nudge && (
-            <span
-              data-testid="settings-nudge"
-              aria-hidden="true"
-              className="absolute -right-1 -top-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
-            />
-          )}
-        </span>
-      </button>
+      />
     </header>
+  )
+}
+
+/**
+ * The gear, and the dot that can read as an alarm.
+ *
+ * Naming the dot's cause turns it from "did I break something?" into a task
+ * the user can choose to do — so the label carries it rather than the dot
+ * standing alone.
+ */
+function SettingsButton({ nudge, onOpen }: { nudge: boolean; onOpen: () => void }) {
+  const label = nudge ? 'Settings — a setup step is waiting' : 'Settings'
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      data-testid="shell-settings"
+      onClick={onOpen}
+      className={HEADER_BUTTON_CLASS}
+    >
+      {/* The dot hangs off the GLYPH, not off the button. The button is
+          32px on a mouse and 44px on a finger while the gear stays 16px,
+          so a dot pinned to the button's corner drifts away from the
+          thing it is about as the button grows — on a phone it sat 4px
+          clear of the gear and 3.5px from the row's top edge, reading as
+          a badge on the corner of the screen. */}
+      <span className="relative inline-flex">
+        <Settings className="size-4" />
+        {nudge && (
+          <span
+            data-testid="settings-nudge"
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
+          />
+        )}
+      </span>
+    </button>
+  )
+}
+
+/** What the product is still promising, and what it is not. */
+function AlphaBadge() {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Alpha preview notes"
+          className="shrink-0 rounded-full border border-amber-600/55 px-1.5 font-mono text-[10px] leading-4 tracking-wide text-amber-600 hover:bg-amber-600/10 dark:border-amber-500/55 dark:text-amber-500"
+        >
+          ALPHA
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 text-sm">
+        <p className="font-medium">Alpha preview</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Data durability is not guaranteed yet. Browser storage can be evicted by the device —
+          export what matters, or protect it with persistent storage and a daemon.
+        </p>
+        <Link
+          to={settingsPath('data')}
+          className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
+        >
+          Protect your data
+        </Link>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/**
+ * Enter fullscreen. The way back out is `ExitFullscreenControl`, which
+ * replaces the whole row rather than sitting in it.
+ */
+function FullscreenButton({
+  buttonRef,
+  onEnter,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>
+  onEnter: () => void
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-label="Fullscreen"
+          data-testid="shell-fullscreen"
+          onClick={onEnter}
+          className={HEADER_BUTTON_CLASS}
+        >
+          <Maximize2 aria-hidden="true" className="size-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Fullscreen</TooltipContent>
+    </Tooltip>
   )
 }
