@@ -12,14 +12,14 @@ function entry(documentId: string, kind: DocumentEntry['kind'] = 'markdown'): Do
 }
 
 /**
- * A keeper reduced to what the cache asks of it: frontier bytes per document
+ * A keeper reduced to what the cache asks of it: version bytes per document
  * (null = nothing stored), and a count of how often it had to load one.
  */
 function fakeSource(frontiers: Map<string, Uint8Array | null>) {
   const loads: string[] = []
   const source: DocumentContentSource = {
-    async readFrontier(_workspaceId, documentId) {
-      return frontiers.get(documentId) ?? null
+    async readVersions(_workspaceId, documentIds) {
+      return new Map(documentIds.map((id) => [id, frontiers.get(id) ?? null]))
     },
     async loadDocument(_workspaceId, documentId) {
       loads.push(documentId)

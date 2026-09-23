@@ -14,23 +14,33 @@ const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], bearers: [] }
  */
 export interface DocumentContentSource {
   /**
-   * The document's persisted frontier, or null when nothing is stored for it
-   * yet. Only its BYTES matter: the cache compares them for identity and
-   * makes no ordering claim about them.
+   * An opaque VERSION per document, asked for a whole listing at once: equal
+   * bytes mean the content has not changed, and null means nothing is stored
+   * for that document yet. A missing id reads as null.
+   *
+   * Batched because the two keepers find versions at opposite granularities.
+   * The daemon holds a live document per path and reads each one's frontier;
+   * the browser holds ONE workspace record and learns which documents moved
+   * from a single diff of it. A per-document call would make the browser
+   * reopen that record once per document.
+   *
+   * A keeper that cannot tell may answer a version that differs every time.
+   * That only over-invalidates — the facts are re-read — and never serves a
+   * stale answer, which is the direction this contract allows.
    */
-  readFrontier(
+  readVersions(
     workspaceId: string,
-    documentId: DocumentEntry['documentId'],
-  ): Promise<Uint8Array | null>
-  /** The stored document. Asked only after `readFrontier` answered non-null. */
+    documentIds: readonly DocumentEntry['documentId'][],
+  ): Promise<ReadonlyMap<string, Uint8Array | null>>
+  /** The stored document. Asked only for a document whose version is non-null. */
   loadDocument(workspaceId: string, documentId: DocumentEntry['documentId']): Promise<LoroDoc>
 }
 
 /**
  * Content-derived facts per document, kept between requests and validated
- * by the document's FRONTIER — the Loro version vector every persisting
- * writer updates (tools, WS sync, restore, import alike), because it is
- * what the sync protocol itself runs on.
+ * by the document's VERSION as its keeper reports it — on the daemon, the
+ * Loro frontier every persisting writer updates (tools, WS sync, restore,
+ * import alike), because it is what the sync protocol itself runs on.
  *
  * That is the load-bearing design choice: correctness does not depend on
  * enumerating write paths and hooking each one (the risk ADR-0014 deferred
@@ -54,8 +64,8 @@ export class ContentFactsCache {
   /**
    * Facts for exactly `entries` of one workspace, loading only documents
    * whose stamp moved (or were never seen) and evicting ids that
-   * workspace's listing no longer contains. A document with no snapshot
-   * yet (frontier null) is empty facts without a load.
+   * workspace's listing no longer contains. A document with nothing stored
+   * yet (version null) is empty facts without a load.
    */
   async factsFor(
     workspaceId: string,
@@ -69,10 +79,14 @@ export class ContentFactsCache {
     const wanted = new Set(entries.map((entry) => entry.documentId))
     for (const id of held.keys()) if (!wanted.has(id)) held.delete(id)
 
+    const versions = await this.source.readVersions(
+      workspaceId,
+      entries.map((entry) => entry.documentId),
+    )
     const result = new Map<string, ContentFacts>()
     for (const entry of entries) {
-      const frontier = await this.source.readFrontier(workspaceId, entry.documentId)
-      if (frontier === null) {
+      const version = versions.get(entry.documentId) ?? null
+      if (version === null) {
         held.delete(entry.documentId)
         result.set(entry.documentId, EMPTY_FACTS)
         continue
@@ -81,7 +95,7 @@ export class ContentFactsCache {
       // are only valid FOR the kind they were extracted under. No
       // listing-only kind mutation exists today — this closes the latent
       // trap rather than a reachable bug.
-      const stamp = `${entry.kind ?? '?'}:${hexOf(frontier)}`
+      const stamp = `${entry.kind ?? '?'}:${hexOf(version)}`
       const cached = held.get(entry.documentId)
       if (cached !== undefined && cached.stamp === stamp) {
         result.set(entry.documentId, cached.facts)
@@ -108,11 +122,11 @@ export class ContentFactsCache {
   }
 }
 
-function hexOf(frontier: Uint8Array): string {
-  // Byte identity is the whole contract: ports makes no ordering claim
-  // about frontiers, and none is needed — any persisted change produces
+function hexOf(version: Uint8Array): string {
+  // Byte identity is the whole contract: the port makes no ordering claim
+  // about versions, and none is needed — any persisted change produces
   // different bytes.
   let out = ''
-  for (const byte of frontier) out += byte.toString(16).padStart(2, '0')
+  for (const byte of version) out += byte.toString(16).padStart(2, '0')
   return out
 }

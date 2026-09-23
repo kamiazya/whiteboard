@@ -15,14 +15,15 @@ paths:
   `unlinkedNameSpans`): backlinks and unlinked mentions, computed from those
   facts. The aggregate is the one query engine; an event feed, if one lands,
   fills the same structure rather than becoming a second answer.
-- **The frontier-stamped cache** (`ContentFactsCache`): facts kept between
-  reads and re-extracted only for a document whose persisted frontier moved.
-  Correctness does not depend on hooking every write path — any writer moves
-  the frontier, and the next read catches it.
+- **The version-stamped cache** (`ContentFactsCache`): facts kept between
+  reads and re-extracted only for a document whose version moved.
+  Correctness does not depend on hooking every write path — any persisted
+  write moves the version, and the next read catches it.
 - **One port, `DocumentContentSource`** — the two reads the cache cannot do
-  itself (a document's frontier bytes, and the document). Each keeper writes
-  one: the daemon over its document store (`server-core`'s
-  `contentSourceFromDeps`), the browser over IndexedDB.
+  itself: a version per document, read for a whole listing at once, and the
+  document. The daemon's is `server-core`'s `factsCacheFor(deps)` (a live
+  document's frontier per path); the browser's comes from one diff of its
+  workspace record, which is why the version read is batched.
 
 ## What does NOT belong here
 
