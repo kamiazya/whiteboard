@@ -153,6 +153,22 @@ are at the end.
    XML signing and its endpoints. The providers self-hosters use today speak
    OIDC. It can arrive later as an authenticator in code (decision 8).
 
+10. **On a server-mode keeper, every workspace is members-only from the
+    start** (owner, 2026-09-24). The local daemon's rule — a workspace closes
+    once it has a member — was right for a keeper only one browser reaches,
+    and wrong for one many people sign in to: there, a workspace nobody closed
+    would be readable by everyone the providers admit. So on server mode the
+    person who creates a workspace is its first member, and everyone else
+    reaches it through membership.
+
+    The first member of a workspace that already exists — data moved in, or a
+    keeper that ran before sign-in was configured — is granted by the
+    operator from the command line, on the machine that holds the data
+    directory. That is the same party ADR-0041 already trusts to reopen a
+    workspace, and it keeps the web surface from having an "adopt this
+    workspace" door anyone signed in could walk through. The local daemon
+    keeps its rule unchanged.
+
 ## Consequences
 
 - **Server mode gains the membership gate the local daemon has.** Once a
