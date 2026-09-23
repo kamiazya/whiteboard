@@ -54,6 +54,32 @@ export interface FilesRouterOptions {
   versionStore?: VersionStore
 }
 
+/**
+ * One stored file by its stem, or `null` when this document has none —
+ * which is a refusal for the caller to shape, not an error.
+ *
+ * Matched on basename + extname equality rather than `startsWith`: a prefix
+ * match would answer `a1` with `a12`'s bytes.
+ */
+async function storedFileFor(
+  dir: string,
+  fileId: string,
+): Promise<{ data: Uint8Array; contentType: string } | null> {
+  const files = await readStoredFileNames(dir)
+  if (!files) return null
+  const match = files.find((f) => basename(f, extname(f)) === fileId)
+  if (!match) return null
+
+  const filePath = join(dir, match)
+  let data: Uint8Array
+  try {
+    data = await readFile(filePath)
+  } catch (error) {
+    throw corruptStoredData(filePath, `failed to read stored file (${errorMessage(error)})`)
+  }
+  return { data, contentType: EXT_TO_MIME[extname(match)] ?? 'application/octet-stream' }
+}
+
 export function createFilesRouter(options: FilesRouterOptions = {}) {
   const app = new Hono()
 
@@ -128,31 +154,16 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
       throw err
     }
     try {
-      const dir = workspaceFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId)
-      const files = await readStoredFileNames(dir)
+      const found = await storedFileFor(
+        workspaceFilesDir(getDataDir(), SELF_HOST_TENANT_ID, workspaceId),
+        fileId,
+      )
       // JSON like every other refusal here: `c.notFound()` is plain text,
       // which the browser client cannot read.
-      const notFound = () =>
-        c.json({ error: 'not_found', message: `No file ${fileId} on this document.` }, 404)
-      if (!files) return notFound()
-
-      // startsWith(fileId) would allow prefix matches and can return the wrong file,
-      // so check basename + extname for exact equality.
-      const match = files.find((f) => basename(f, extname(f)) === fileId)
-      if (!match) return notFound()
-
-      const filePath = join(dir, match)
-      let data: Uint8Array
-      try {
-        data = await readFile(filePath)
-      } catch (error) {
-        throw corruptStoredData(filePath, `failed to read stored file (${errorMessage(error)})`)
+      if (found === null) {
+        return c.json({ error: 'not_found', message: `No file ${fileId} on this document.` }, 404)
       }
-
-      const fileExt = extname(match)
-      return c.body(data.buffer as ArrayBuffer, 200, {
-        'Content-Type': EXT_TO_MIME[fileExt] ?? 'application/octet-stream',
-      })
+      return c.body(found.data.buffer as ArrayBuffer, 200, { 'Content-Type': found.contentType })
     } catch (error) {
       const body = corruptStoredDataBody(error)
       if (body) return c.json(body, 500)

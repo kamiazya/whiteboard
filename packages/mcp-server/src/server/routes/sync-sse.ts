@@ -211,6 +211,23 @@ async function firstMembershipRefusal(
   return null
 }
 
+/**
+ * Apply one subscribe/unsubscribe batch to a stream's document set, and
+ * answer with what it now holds, sorted.
+ *
+ * A subscribe never resets readiness a `client_ready` already recorded, and
+ * one delete takes the readiness with it.
+ */
+function applySubscriptions(
+  docs: Map<string, { ready: boolean }>,
+  subscribe: readonly string[],
+  unsubscribe: readonly string[],
+): string[] {
+  for (const key of subscribe) if (!docs.has(key)) docs.set(key, { ready: false })
+  for (const key of unsubscribe) docs.delete(key)
+  return [...docs.keys()].sort()
+}
+
 export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
   const app = new Hono()
 
@@ -252,7 +269,10 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     const parsed = syncSubscribeRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) return c.json({ error: 'invalid_request' }, 400)
 
-    const refusal = await firstMembershipRefusal(c, options.admit, parsed.data.subscribe ?? [])
+    const subscribe = parsed.data.subscribe ?? []
+    const unsubscribe = parsed.data.unsubscribe ?? []
+
+    const refusal = await firstMembershipRefusal(c, options.admit, subscribe)
     if (refusal) return c.json(refusal, 403)
 
     const stream = streams.get(parsed.data.streamId)
@@ -261,12 +281,7 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     // believing it is subscribed and waiting forever for updates.
     if (!stream) return c.json({ error: 'unknown_stream' }, 404)
 
-    for (const key of parsed.data.subscribe ?? []) {
-      if (!stream.docs.has(key)) stream.docs.set(key, { ready: false })
-    }
-    // One delete takes the readiness with it.
-    for (const key of parsed.data.unsubscribe ?? []) stream.docs.delete(key)
-    const docs = [...stream.docs.keys()].sort()
+    const docs = applySubscriptions(stream.docs, subscribe, unsubscribe)
     // A stream that reaches zero documents is the state worth seeing: the
     // client stops reconnecting there, so a gap between "the last tab
     // unsubscribed" and "a tab subscribed again" is a window with no stream
@@ -274,8 +289,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     log.info(
       {
         streamId: parsed.data.streamId,
-        subscribed: parsed.data.subscribe ?? [],
-        unsubscribed: parsed.data.unsubscribe ?? [],
+        subscribed: subscribe,
+        unsubscribed: unsubscribe,
         docCount: docs.length,
       },
       'sync subscriptions changed',
