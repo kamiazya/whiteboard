@@ -232,6 +232,46 @@ function isErrorResult(payload: unknown): boolean {
  */
 const WIDGET_THEME_MODE = 'light'
 
+/**
+ * The delivery half (ADR-0024 decision 5): where the host accepts
+ * `ui/message`, inject the comment into the conversation as a user-role
+ * message so the model responds to the feedback NOW.
+ *
+ * Fire-and-forget with its own catch — the comment is already in the
+ * document, and a host that refuses the wake-up only delays the model to
+ * its next read.
+ */
+function announceComment(
+  app: {
+    getHostCapabilities: () => { message?: unknown } | undefined
+    sendMessage: (message: {
+      role: 'user'
+      content: { type: 'text'; text: string }[]
+    }) => Promise<unknown>
+  },
+  anchor: { x: number; y: number; targetNodeId?: string },
+  text: string,
+): void {
+  if (app.getHostCapabilities()?.message === undefined) return
+  const where =
+    anchor.targetNodeId === undefined
+      ? `at (${anchor.x}, ${anchor.y})`
+      : `on node "${anchor.targetNodeId}" at (${anchor.x}, ${anchor.y})`
+  void app
+    .sendMessage({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `The user pinned a comment on the canvas ${where}: "${text}". Please take a look at the canvas and respond to the comment.`,
+        },
+      ],
+    })
+    .catch((err) => {
+      console.error('[whiteboard-widget] comment sendMessage failed:', err)
+    })
+}
+
 /** Counts applied results, so a late font load can tell whether it is stale. */
 let appliedGeneration = 0
 
@@ -461,31 +501,7 @@ async function mountFromHost(
         commentControl?.clear()
         commentControl?.setAnchor(undefined)
         pendingAnchor = undefined
-        // The delivery half (ADR-0024 decision 5): where the host accepts
-        // ui/message, inject the comment into the conversation as a
-        // user-role message so the model responds to the feedback now.
-        // Fire-and-forget with its own catch — the comment is already in
-        // the document, and a host that refuses the wake-up only delays the
-        // model to its next read.
-        if (app.getHostCapabilities()?.message !== undefined) {
-          const where =
-            anchor.targetNodeId === undefined
-              ? `at (${anchor.x}, ${anchor.y})`
-              : `on node "${anchor.targetNodeId}" at (${anchor.x}, ${anchor.y})`
-          void app
-            .sendMessage({
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `The user pinned a comment on the canvas ${where}: "${text}". Please take a look at the canvas and respond to the comment.`,
-                },
-              ],
-            })
-            .catch((err) => {
-              console.error('[whiteboard-widget] comment sendMessage failed:', err)
-            })
-        }
+        announceComment(app, anchor, text)
         await performRefresh()
       } catch (err) {
         console.error('[whiteboard-widget] comment via host failed:', err)

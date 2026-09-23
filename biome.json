@@ -119,8 +119,6 @@
         "!**/*.test.tsx",
         "!**/*.test.mjs",
         "!**/test-utils/**",
-        "!apps/web/scripts/smoke-bundle-size.mjs",
-        "!apps/web/scripts/strip-wasm-sourcemap.ts",
         "!apps/web/src/App.tsx",
         "!apps/web/src/components/AppShell.tsx",
         "!apps/web/src/components/StorageReportCard.tsx",
@@ -129,12 +127,9 @@
         "!apps/web/src/components/markdown-editor/MarkdownEditor.tsx",
         "!apps/web/src/components/spatial-editor/SpatialEditor.tsx",
         "!packages/canvas-render/src/layout/nodes/mdast-blocks.ts",
-        "!packages/canvas-viewer/scripts/smoke-widget.mjs",
-        "!packages/canvas-viewer/src/widget-entry.ts",
         "!packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs",
         "!packages/mcp-server/scripts/smoke/mcp-http-convergence-smoke.mjs",
-        "!packages/mcp-server/scripts/smoke/mcp-read-plane-smoke.mjs",
-        "!tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs"
+        "!packages/mcp-server/scripts/smoke/mcp-read-plane-smoke.mjs"
       ],
       "linter": {
         "rules": {
