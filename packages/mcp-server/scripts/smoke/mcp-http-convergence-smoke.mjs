@@ -273,12 +273,39 @@ async function waitForReadyAndInitialize() {
   }
 }
 
-async function main() {
-  await waitForReadyAndInitialize()
-  log(`[e2e] daemon ready → ${mcpUrl}`)
-  await notify('notifications/initialized', {})
+const WORKSPACE_DISPLAY_NAME = 'Convergence E2E'
 
-  // ── Step 2: real MCP tool calls create a spatial document with known content ──
+/** The three writers' nodes, in the FORMAT shape `wb_document_get` echoes. */
+const NODE_A = {
+  id: 'node-a',
+  type: 'text',
+  x: 0,
+  y: 0,
+  width: 200,
+  height: 100,
+  text: 'node A — created via MCP',
+}
+const NODE_B = {
+  id: 'node-b',
+  type: 'text',
+  x: 400,
+  y: 400,
+  width: 200,
+  height: 100,
+  text: 'node B — added over WS (web-edit shape)',
+}
+const NODE_C = {
+  id: 'node-c',
+  type: 'text',
+  x: 800,
+  y: 800,
+  width: 200,
+  height: 100,
+  text: 'node C — added via MCP while the WS session is open',
+}
+
+/** Step 2: a real MCP tool call creates the spatial document this run reads. */
+async function createDocument() {
   const batch = await callTool('wb_workspace_edit', {
     workspaceId: WORKSPACE_ID,
     createWorkspace: true,
@@ -288,27 +315,31 @@ async function main() {
   if (typeof created.documentId !== 'string') {
     throw new Error(`wb_workspace_edit returned unexpected shape: ${JSON.stringify(batch)}`)
   }
-  const documentId = created.documentId
   // ADR-0019's mint: the server chose this workspace's canonical id, and
   // `WORKSPACE_ID` is now its SEGMENT. Everything below keeps addressing it
   // by that segment — only a lookup that compares against a served row needs
-  // the canonical id, which is why it is captured here.
-  const workspaceId = created.workspaceId
-  log(`[e2e] document.create → ${documentId} in ${workspaceId} (segment ${WORKSPACE_ID})`)
+  // the canonical id, which is why it is returned here.
+  log(
+    `[e2e] document.create → ${created.documentId} in ${created.workspaceId} (segment ${WORKSPACE_ID})`,
+  )
+  return { documentId: created.documentId, workspaceId: created.workspaceId }
+}
 
-  // ── Step 2b: ADR-0019 — GET /api/workspaces serves the displayName a
-  //    plain HTTP PUT set, through the published listWorkspacesResponseSchema.
-  //    (segment has no accepting MCP/HTTP input surface yet — that half is
-  //    verified at the store/route-test level, not here.) ──
-  const WORKSPACE_DISPLAY_NAME = 'Convergence E2E'
+/**
+ * Step 2b: ADR-0019 — GET /api/workspaces serves the displayName a plain
+ * HTTP PUT set, through the published `listWorkspacesResponseSchema`.
+ *
+ * (`segment` has no accepting MCP/HTTP input surface yet — that half is
+ * verified at the store/route-test level, not here.)
+ */
+async function workspaceNameSurvivesTheRoundTrip(workspaceId) {
   const putNameRes = await fetch(`http://127.0.0.1:${port}/api/workspaces/${WORKSPACE_ID}/name`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify({ name: WORKSPACE_DISPLAY_NAME }),
   })
-  if (!putNameRes.ok) {
-    throw new Error(`PUT workspace name failed: HTTP ${putNameRes.status}`)
-  }
+  if (!putNameRes.ok) throw new Error(`PUT workspace name failed: HTTP ${putNameRes.status}`)
+
   const listWorkspacesRes = await fetch(`http://127.0.0.1:${port}/api/workspaces`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   })
@@ -330,48 +361,49 @@ async function main() {
     )
   }
   log('[e2e] GET /api/workspaces → displayName and segment echoed through the published schema')
+}
 
-  const NODE_A = {
-    id: 'node-a',
-    type: 'text',
-    x: 0,
-    y: 0,
-    width: 200,
-    height: 100,
-    text: 'node A — created via MCP',
-  }
-  const addedA = await callTool('wb_canvas_edit', {
+/** One MCP write of `node`, asserting the tool names it back. */
+async function addNodeViaMcp(documentId, node, note) {
+  const added = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
     mode: 'apply',
-    ops: [{ op: 'node.add', node: NODE_A }],
+    ops: [{ op: 'node.add', node }],
   })
-  if (!addedA.touched?.nodes.includes('node-a')) {
-    throw new Error(`wb_canvas_edit(A) returned unexpected shape: ${JSON.stringify(addedA)}`)
+  if (!added.touched?.nodes.includes(node.id)) {
+    throw new Error(
+      `wb_canvas_edit(${node.id}) returned unexpected shape: ${JSON.stringify(added)}`,
+    )
   }
-  log('[e2e] wb_canvas_edit → node A')
+  log(`[e2e] wb_canvas_edit → ${note}`)
+}
 
-  // ── Step 3: read the SAME document with no mocks through the HTTP path-
-  //    snapshot route and the WS route — the exact shape of the drift bug ──
+/**
+ * Step 3a: read the document through the HTTP path-snapshot route — with no
+ * mocks, which is the exact shape of the drift bug this script exists for.
+ */
+async function nodeAThroughTheHttpSnapshot() {
   const snapshotRes = await fetch(
     `http://127.0.0.1:${port}${documentApiUrl(WORKSPACE_ID, DOCUMENT_PATH, 'snapshot')}`,
     { headers: { Authorization: `Bearer ${TOKEN}` } },
   )
-  if (!snapshotRes.ok) {
-    throw new Error(`HTTP path-snapshot failed: HTTP ${snapshotRes.status}`)
-  }
-  const httpSnapshotBytes = new Uint8Array(await snapshotRes.arrayBuffer())
+  if (!snapshotRes.ok) throw new Error(`HTTP path-snapshot failed: HTTP ${snapshotRes.status}`)
   const httpDoc = new LoroDoc()
-  httpDoc.import(httpSnapshotBytes)
-  const httpCanvas = readSpatialCanvas(httpDoc)
-  const nodeAViaHttp = httpCanvas.nodes.find((n) => n.id === 'node-a')
+  httpDoc.import(new Uint8Array(await snapshotRes.arrayBuffer()))
+  const nodeAViaHttp = readSpatialCanvas(httpDoc).nodes.find((n) => n.id === NODE_A.id)
   if (nodeAViaHttp === undefined || nodeText(nodeAViaHttp) !== NODE_A.text) {
     throw new Error(`HTTP path-snapshot missing/mismatched node A: ${JSON.stringify(nodeAViaHttp)}`)
   }
   log('[e2e] HTTP path-snapshot → node A present with exact content')
+}
 
-  // The socket serves the WORKSPACE document — the only binary contract —
-  // so the read below resolves this document's containers inside it.
+/**
+ * Step 3b: the same read over the socket, which serves the WORKSPACE document
+ * — the only binary contract — so this resolves the document's containers
+ * inside it.
+ */
+async function openWorkspaceSocket() {
   const wsUrl = buildWhiteboardWsUrl(mcpUrl, WORKSPACE_ID, DOCUMENT_PATH)
   const ws = new WebSocket(wsUrl, buildWhiteboardWsProtocols(TOKEN))
   // Long-lived for the whole WS lifetime (initial snapshot, the later push,
@@ -392,45 +424,25 @@ async function main() {
   const wsDoc = new LoroDoc()
   wsDoc.import(wsSnapshotBytes)
   const wsEntry = resolveWorkspaceDocument(wsDoc, DOCUMENT_PATH)
-  if (!wsEntry) {
-    throw new Error(`WS workspace snapshot has no document at "${DOCUMENT_PATH}"`)
-  }
+  if (!wsEntry) throw new Error(`WS workspace snapshot has no document at "${DOCUMENT_PATH}"`)
   const nodeAViaWs = readSpatialCanvas(documentContainers(wsDoc, wsEntry.documentId)).nodes.find(
-    (n) => n.id === 'node-a',
+    (n) => n.id === NODE_A.id,
   )
   if (nodeAViaWs === undefined || nodeText(nodeAViaWs) !== NODE_A.text) {
     throw new Error(`WS initial snapshot missing/mismatched node A: ${JSON.stringify(nodeAViaWs)}`)
   }
   log('[e2e] WS connect → workspace snapshot contains node A inside this document')
+  return { ws, wsSnapshotBytes }
+}
 
-  // ── Step 4: merge-before-save — one more MCP write (store-direct) lands
-  //    while the WS session's doc-cache entry is still pinned to the doc it
-  //    had at connect time, THEN the WS session pushes its own edit ──
-  const NODE_C = {
-    id: 'node-c',
-    type: 'text',
-    x: 800,
-    y: 800,
-    width: 200,
-    height: 100,
-    text: 'node C — added via MCP while the WS session is open',
-  }
-  const addedC = await callTool('wb_canvas_edit', {
-    workspaceId: WORKSPACE_ID,
-    documentId,
-    mode: 'apply',
-    ops: [{ op: 'node.add', node: NODE_C }],
-  })
-  if (!addedC.touched?.nodes.includes('node-c')) {
-    throw new Error(`wb_canvas_edit(C) returned unexpected shape: ${JSON.stringify(addedC)}`)
-  }
-  log('[e2e] wb_canvas_edit → node C (while WS session stays open)')
-
-  // web-edit shape: import the connect-time WORKSPACE snapshot into a fresh
-  // LoroDoc, write a node into this document's containers through
-  // loro-adapter's writeSpatialNode (the same bridge apps/web's session
-  // calls via contentDocumentId), commit, export an incremental update
-  // relative to the pre-edit version, and push it as one binary frame.
+/**
+ * Step 4b, the web-edit shape: import the connect-time WORKSPACE snapshot
+ * into a fresh LoroDoc, write a node into this document's containers through
+ * loro-adapter's `writeSpatialNode` (the same bridge apps/web's session calls
+ * via contentDocumentId), commit, export an incremental update relative to
+ * the pre-edit version, and push it as one binary frame.
+ */
+function pushNodeBOverTheSocket(ws, wsSnapshotBytes) {
   const clientDoc = new LoroDoc()
   clientDoc.import(wsSnapshotBytes)
   const preEditVersion = clientDoc.version()
@@ -438,22 +450,13 @@ async function main() {
   if (!clientEntry) {
     throw new Error(`client workspace replica has no document at "${DOCUMENT_PATH}"`)
   }
-  const NODE_B = {
-    id: 'node-b',
-    type: 'text',
-    x: 400,
-    y: 400,
-    width: 200,
-    height: 100,
-    text: 'node B — added over WS (web-edit shape)',
-  }
-  // NODE_B above is the FORMAT shape — it is what the JSON Canvas assertion
-  // below compares against, where `type` + `text` are correct and unmoved.
+  // NODE_B is the FORMAT shape — what the JSON Canvas assertion below
+  // compares against, where `type` + `text` are correct and unmoved.
   // `writeSpatialNode` takes the MODEL, where the same text is shown through
   // a RESOURCE. Handed the format shape it stored no resource at all and the
-  // node came back a frame; the text was not mismatched, it was never written.
-  // One source of truth for the string, and the boundary spelled out, because
-  // this script sits on both sides of it.
+  // node came back a frame; the text was not mismatched, it was never
+  // written. One source of truth for the string, and the boundary spelled
+  // out, because this script sits on both sides of it.
   writeSpatialNode(documentContainers(clientDoc, clientEntry.documentId), {
     id: NODE_B.id,
     x: NODE_B.x,
@@ -463,14 +466,17 @@ async function main() {
     resource: { mimeType: RESOURCE_KINDS.text.mimeType, content: NODE_B.text },
   })
   clientDoc.commit()
-  const update = clientDoc.export({ mode: 'update', from: preEditVersion })
-  ws.send(Buffer.from(update))
+  ws.send(Buffer.from(clientDoc.export({ mode: 'update', from: preEditVersion })))
   log('[e2e] WS push → node B (writeSpatialNode + incremental workspace update frame)')
+}
 
-  // ── Step 5: acceptance — MCP read-back names and contains all three
-  //    writers' content. wb_canvas_snapshot is polled because the WS push
-  //    above is fire-and-forget from the client's perspective. ──
-  const expectedIds = ['node-a', 'node-b', 'node-c']
+/**
+ * Step 5a: every writer's node is named by id.
+ *
+ * Polled, because the WS push is fire-and-forget from the client's side.
+ */
+async function waitForEveryWriterToConverge(documentId) {
+  const expectedIds = [NODE_A.id, NODE_B.id, NODE_C.id]
   const readDeadline = Date.now() + CONVERGENCE_TIMEOUT_MS
   for (;;) {
     const read = await callTool('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId })
@@ -485,7 +491,10 @@ async function main() {
     await new Promise((r) => setTimeout(r, CONVERGENCE_POLL_INTERVAL_MS))
   }
   log('[e2e] wb_canvas_snapshot → nodes A, B, C all named by id')
+}
 
+/** Step 5b: and every writer's CONTENT survives the export, byte for byte. */
+async function everyWriterSurvivesTheExport(documentId) {
   const got = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
     documentIds: [documentId],
@@ -505,6 +514,28 @@ async function main() {
   log(
     '[e2e] wb_document_get → all three writers survive byte-level (MCP write, WS write, MCP write)',
   )
+}
+
+async function main() {
+  await waitForReadyAndInitialize()
+  log(`[e2e] daemon ready → ${mcpUrl}`)
+  await notify('notifications/initialized', {})
+
+  const { documentId, workspaceId } = await createDocument()
+  await workspaceNameSurvivesTheRoundTrip(workspaceId)
+  await addNodeViaMcp(documentId, NODE_A, 'node A')
+  await nodeAThroughTheHttpSnapshot()
+
+  const { ws, wsSnapshotBytes } = await openWorkspaceSocket()
+
+  // Step 4: merge-before-save — one more MCP write (store-direct) lands while
+  // the WS session's doc-cache entry is still pinned to the doc it had at
+  // connect time, THEN the WS session pushes its own edit.
+  await addNodeViaMcp(documentId, NODE_C, 'node C (while WS session stays open)')
+  pushNodeBOverTheSocket(ws, wsSnapshotBytes)
+
+  await waitForEveryWriterToConverge(documentId)
+  await everyWriterSurvivesTheExport(documentId)
 
   ws.close()
   log('\n[e2e] ALL OK')
