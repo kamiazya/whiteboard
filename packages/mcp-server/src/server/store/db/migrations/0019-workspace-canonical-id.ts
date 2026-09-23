@@ -94,6 +94,89 @@ function workspaceDirs(workspaceId: string): string[] {
   return [join(dataDir, workspaceId), join(dataDir, 'blobs', workspaceId)]
 }
 
+/**
+ * Rows first: a renamed tree with an un-renamed row is an outage, while a row
+ * that moved ahead of its files is recoverable.
+ *
+ * Nothing references `workspaces.id` any more (0016 dropped the last foreign
+ * key onto it, 0017 dropped the table that carried it), so these are plain
+ * statements in any order rather than 0008's insert-new / repoint-children /
+ * delete-old dance.
+ *
+ * `operatorWorkspaceId` is attribution — which workspace the operator was
+ * acting in — and is matched by exact equality against an id THIS daemon is
+ * re-keying, so a value naming somebody else's workspace is left exactly as
+ * recorded.
+ */
+async function rekeyRows(
+  db: Kysely<unknown>,
+  oldId: string,
+  newId: string,
+  segment: string | null,
+): Promise<void> {
+  await sql`
+    update "workspaces" set "id" = ${sql.lit(newId)}, "segment" = ${
+      segment === null ? sql.lit(null) : sql.lit(segment)
+    } where "id" = ${sql.lit(oldId)}
+  `.execute(db)
+  await sql`update "branches" set "workspaceId" = ${sql.lit(newId)} where "workspaceId" = ${sql.lit(oldId)}`.execute(
+    db,
+  )
+  await sql`update "versions" set "workspaceId" = ${sql.lit(newId)} where "workspaceId" = ${sql.lit(oldId)}`.execute(
+    db,
+  )
+  await sql`update "versions" set "operatorWorkspaceId" = ${sql.lit(newId)} where "operatorWorkspaceId" = ${sql.lit(oldId)}`.execute(
+    db,
+  )
+  await sql`
+    update "runtime" set "value" = ${sql.lit(newId)}
+    where "key" = 'currentWorkspaceId' and "value" = ${sql.lit(oldId)}
+  `.execute(db)
+}
+
+/**
+ * Move this workspace's directories onto the new id, recording each rename
+ * that completed so the caller can unwind them. A source that is not there is
+ * a no-op: a workspace may legitimately have no `files/`.
+ */
+async function renameWorkspaceDirs(
+  oldId: string,
+  newId: string,
+  completed: { from: string; to: string }[],
+): Promise<void> {
+  for (const [i, from] of workspaceDirs(oldId).entries()) {
+    const to = workspaceDirs(newId)[i] as string
+    try {
+      await rename(from, to)
+      completed.push({ from, to })
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
+  }
+}
+
+/**
+ * Put every completed rename back, in reverse, so the disk matches the
+ * database the migrator is about to roll back — best effort, and loud about
+ * whatever it could not undo, because that is the one thing here a person
+ * has to reconcile by hand.
+ */
+async function unwindRenames(
+  completed: { from: string; to: string }[],
+  log: ReturnType<typeof getLogger>,
+): Promise<void> {
+  for (const done of completed.reverse()) {
+    try {
+      await rename(done.to, done.from)
+    } catch (undoErr) {
+      log.error(
+        { from: done.to, to: done.from, err: undoErr },
+        'could not undo a directory rename while unwinding — reconcile by hand',
+      )
+    }
+  }
+}
+
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
     const tdb = db as Kysely<{ workspaces: WorkspaceRow }>
@@ -116,60 +199,16 @@ export const migration: Migration = {
         const newId = generateDocumentId()
         const segment = segmentFor(oldId)
 
-        // Rows first: a renamed tree with an un-renamed row is an outage,
-        // while a row that moved ahead of its files is recoverable.
-        //
-        // Nothing references `workspaces.id` any more (0016 dropped the last
-        // foreign key onto it, 0017 dropped the table that carried it), so
-        // these are plain statements in any order rather than 0008's
-        // insert-new / repoint-children / delete-old dance.
-        await sql`
-          update "workspaces" set "id" = ${sql.lit(newId)}, "segment" = ${
-            segment === null ? sql.lit(null) : sql.lit(segment)
-          } where "id" = ${sql.lit(oldId)}
-        `.execute(db)
-        await sql`update "branches" set "workspaceId" = ${sql.lit(newId)} where "workspaceId" = ${sql.lit(oldId)}`.execute(
-          db,
-        )
-        await sql`update "versions" set "workspaceId" = ${sql.lit(newId)} where "workspaceId" = ${sql.lit(oldId)}`.execute(
-          db,
-        )
-        // Attribution — which workspace the operator was acting in. Matched by
-        // exact equality against an id THIS daemon is re-keying, so a value
-        // naming somebody else's workspace is left exactly as recorded.
-        await sql`update "versions" set "operatorWorkspaceId" = ${sql.lit(newId)} where "operatorWorkspaceId" = ${sql.lit(oldId)}`.execute(
-          db,
-        )
-        await sql`
-          update "runtime" set "value" = ${sql.lit(newId)}
-          where "key" = 'currentWorkspaceId' and "value" = ${sql.lit(oldId)}
-        `.execute(db)
+        await rekeyRows(db, oldId, newId, segment)
 
         await moveSnapshotTree(db, oldId, newId)
 
-        for (const [i, from] of workspaceDirs(oldId).entries()) {
-          const to = workspaceDirs(newId)[i] as string
-          try {
-            await rename(from, to)
-            completed.push({ from, to })
-          } catch (err) {
-            if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
-          }
-        }
+        await renameWorkspaceDirs(oldId, newId, completed)
 
         log.info({ oldId, newId, segment }, 're-keyed workspace onto a canonical id')
       }
     } catch (err) {
-      for (const done of completed.reverse()) {
-        try {
-          await rename(done.to, done.from)
-        } catch (undoErr) {
-          log.error(
-            { from: done.to, to: done.from, err: undoErr },
-            'could not undo a directory rename while unwinding — reconcile by hand',
-          )
-        }
-      }
+      await unwindRenames(completed, log)
       throw err
     }
   },

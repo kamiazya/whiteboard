@@ -61,6 +61,70 @@ function resolveIntervalMs(explicit: number | undefined): number {
   return DEFAULT_INTERVAL_MS
 }
 
+/**
+ * Whether one entry under the workspaces root is a workspace this sweep may
+ * touch, and its id if so.
+ *
+ * Every refusal here is a SAFETY refusal, not a tidiness one: discovery feeds
+ * a destructive unlink pass, so this is a TOCTOU-sensitive choke point.
+ *
+ * - `lstat` comes BEFORE any further inspection, because a symlinked
+ *   top-level entry could point outside the data dir entirely.
+ * - Lexical containment (`assertPathWithinDir`) is insufficient, because it
+ *   cannot see through a symlink further down the tree; `realpath` resolves
+ *   the actual target, so a directory that LOOKS like a plain workspace dir
+ *   and ultimately resolves outside `dataDir` is still caught.
+ * - A workspace dir is one with a `files/` child. Since the tenant layout
+ *   puts workspaces under their own root, a workspace named `blobs` is no
+ *   longer confusable with the blob root.
+ */
+async function admittedWorkspaceDir(
+  name: string,
+  dataDir: string,
+  realDataDir: string,
+): Promise<string | null> {
+  const entryPath = join(workspacesRoot(dataDir, SELF_HOST_TENANT_ID), name)
+
+  let stats: Awaited<ReturnType<typeof lstat>>
+  try {
+    stats = await lstat(entryPath)
+  } catch {
+    return null
+  }
+  if (stats.isSymbolicLink()) {
+    log.warning({ name }, 'file-gc sweep: skipped symlinked top-level entry')
+    return null
+  }
+  if (!stats.isDirectory()) return null
+
+  let workspaceId: string
+  try {
+    workspaceId = validateWorkspaceId(name)
+  } catch {
+    return null
+  }
+
+  let realEntryPath: string
+  try {
+    realEntryPath = await realpath(entryPath)
+  } catch {
+    return null
+  }
+  if (realEntryPath !== realDataDir && !realEntryPath.startsWith(realDataDir + sep)) {
+    log.warning({ workspaceId }, 'file-gc sweep: skipped workspace dir escaping data dir')
+    return null
+  }
+
+  try {
+    const filesStat = await lstat(workspaceFilesDir(dataDir, SELF_HOST_TENANT_ID, name))
+    if (!filesStat.isDirectory()) return null
+  } catch {
+    return null
+  }
+
+  return workspaceId
+}
+
 async function discoverFsWorkspaces(): Promise<string[]> {
   const dataDir = getDataDir()
   let entries: Dirent<string>[]
@@ -83,58 +147,8 @@ async function discoverFsWorkspaces(): Promise<string[]> {
 
   const result: string[] = []
   for (const entry of entries) {
-    const name = entry.name
-    const entryPath = join(workspacesRoot(dataDir, SELF_HOST_TENANT_ID), name)
-
-    // lstat BEFORE any further inspection: a symlinked top-level entry could
-    // point outside the data dir entirely, and discovery feeds a destructive
-    // unlink pass downstream, so this is a TOCTOU-sensitive choke point, not
-    // a cosmetic check.
-    let stats: Awaited<ReturnType<typeof lstat>>
-    try {
-      stats = await lstat(entryPath)
-    } catch {
-      continue
-    }
-    if (stats.isSymbolicLink()) {
-      log.warning({ name }, 'file-gc sweep: skipped symlinked top-level entry')
-      continue
-    }
-    if (!stats.isDirectory()) continue
-
-    let workspaceId: string
-    try {
-      workspaceId = validateWorkspaceId(name)
-    } catch {
-      continue
-    }
-
-    // Lexical containment (assertPathWithinDir) is insufficient here: it
-    // cannot see through a symlink further down the tree. realpath resolves
-    // the actual target so a directory that *looks* like a plain workspace
-    // dir but ultimately resolves outside dataDir is still caught.
-    let realEntryPath: string
-    try {
-      realEntryPath = await realpath(entryPath)
-    } catch {
-      continue
-    }
-    if (realEntryPath !== realDataDir && !realEntryPath.startsWith(realDataDir + sep)) {
-      log.warning({ workspaceId }, 'file-gc sweep: skipped workspace dir escaping data dir')
-      continue
-    }
-
-    // A workspace dir is one with a `files/` child. Since the tenant layout
-    // (`data-layout.ts`) puts workspaces under their own `workspaces/` root,
-    // a workspace named `blobs` is no longer confusable with the blob root.
-    try {
-      const filesStat = await lstat(workspaceFilesDir(dataDir, SELF_HOST_TENANT_ID, name))
-      if (!filesStat.isDirectory()) continue
-    } catch {
-      continue
-    }
-
-    result.push(workspaceId)
+    const workspaceId = await admittedWorkspaceDir(entry.name, dataDir, realDataDir)
+    if (workspaceId !== null) result.push(workspaceId)
   }
   return result
 }
@@ -279,6 +293,25 @@ export interface FileGcSweeper {
   stop(options?: FileGcSweeperStopOptions): Promise<void>
 }
 
+/**
+ * Every workspace this pass should visit, in one set.
+ *
+ * `fsWorkspaces` already passed containment inside `discoverFs`; a DB row
+ * has not, so it gets its own check before joining.
+ */
+async function workspacesToSweep(
+  listWs: () => Promise<{ workspaceId: string }[]>,
+  discoverFs: () => Promise<string[]>,
+): Promise<Set<string>> {
+  const [dbWorkspaces, fsWorkspaces] = await Promise.all([listWs(), discoverFs()])
+  const ids = new Set<string>(fsWorkspaces)
+  for (const w of dbWorkspaces) {
+    if (ids.has(w.workspaceId)) continue
+    if (await isDbWorkspaceDirSafe(w.workspaceId)) ids.add(w.workspaceId)
+  }
+  return ids
+}
+
 export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcSweeper {
   const intervalMs = resolveIntervalMs(options.intervalMs)
   const sweeperVersionStore = options.versionStore ?? new FileVersionStore()
@@ -294,15 +327,7 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
   let stopped = false
 
   async function runPass(): Promise<void> {
-    const [dbWorkspaces, fsWorkspaces] = await Promise.all([listWs(), discoverFs()])
-    const ids = new Set<string>()
-    for (const id of fsWorkspaces) ids.add(id)
-    // fsWorkspaces already passed containment checks inside discoverFs();
-    // a DB row has not, so it gets its own check before joining the set.
-    for (const w of dbWorkspaces) {
-      if (ids.has(w.workspaceId)) continue
-      if (await isDbWorkspaceDirSafe(w.workspaceId)) ids.add(w.workspaceId)
-    }
+    const ids = await workspacesToSweep(listWs, discoverFs)
 
     // Sequential, not parallel: purgeDanglingFiles holds a per-workspace
     // write lock and forks Loro docs internally, so running every workspace
@@ -310,23 +335,20 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
     // benefit at a 24h-default cadence.
     for (const workspaceId of ids) {
       try {
-        // Revalidate containment again, immediately before the destructive
-        // call, rather than trusting the check done once above while
-        // building `ids`. A pass over every workspace can take a while (a
-        // full canvas scan per workspace), and re-running the check here
-        // narrows the window in which a workspace dir (or its files/
-        // child) could have been swapped for a symlink between discovery
-        // and this specific workspace's purge -- for BOTH fs-discovered and
-        // DB-listed ids, since either could still be re-pointed after its
-        // one-time check above. This does not make the check atomic with
+        // Revalidate containment immediately before the destructive call,
+        // rather than trusting the check done once while building `ids`. A
+        // pass over every workspace can take a while (a full canvas scan
+        // each), and re-running the check here narrows the window in which a
+        // workspace dir (or its files/ child) could have been swapped for a
+        // symlink between discovery and this workspace's purge — for BOTH
+        // fs-discovered and DB-listed ids, since either could be re-pointed
+        // after its one-time check. This does not make the check ATOMIC with
         // purgeDanglingFiles' own readdir/unlink (that would need
-        // directory-handle/no-follow semantics purgeDanglingFiles does not
-        // have), but it meaningfully shrinks the exposure from "the whole
-        // pass" to "this one iteration".
-        // isDbWorkspaceDirSafe() already logs the specific reason (symlinked
-        // dir, symlinked files/ child, unresolvable realpath, ...) when it
-        // returns false, so there is nothing more to log here beyond
-        // skipping the purge.
+        // directory-handle/no-follow semantics it does not have), but it
+        // shrinks the exposure from "the whole pass" to "this one iteration".
+        //
+        // `isDbWorkspaceDirSafe` already logs the specific reason it refused,
+        // so there is nothing more to log here beyond skipping the purge.
         if (!(await isDbWorkspaceDirSafe(workspaceId))) continue
         await purge(workspaceId)
       } catch (err) {
