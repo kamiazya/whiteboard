@@ -21,7 +21,15 @@ import { LoroStore, touchContentTimestamp } from './loro-store.js'
 /**
  * A document's CURRENT content as a standalone Loro document (a value
  * projection — fresh oplog, current state), or null when neither the
- * workspace tree nor the legacy store holds it readably.
+ * workspace tree nor the legacy store HOLDS it.
+ *
+ * A store read that THROWS is a different answer and now propagates: it used
+ * to be caught here and reported as "not found", which every caller above
+ * reads as "this document has no content" — a verdict about the document
+ * made from a fact about the database. One transient IndexedDB failure
+ * therefore blanked a body's embed permanently (the prefetch caches
+ * "nothing here" as terminal) with nothing logged anywhere, because this
+ * catch was silent.
  */
 export async function loadDocumentContent(
   documentId: string,
@@ -29,9 +37,7 @@ export async function loadDocumentContent(
 ): Promise<LoroDoc | null> {
   const projected = await loadWorkspaceDocumentProjection(documentId, dbName)
   if (projected !== null) return projected
-  const result = await new LoroStore(dbName)
-    .load(documentId)
-    .catch(() => ({ kind: 'not-found' }) as const)
+  const result = await new LoroStore(dbName).load(documentId)
   if (result.kind !== 'ok') return null
   const doc = new Loro()
   doc.import(result.snapshot)

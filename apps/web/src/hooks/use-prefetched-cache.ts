@@ -10,11 +10,19 @@
  * Written twice before this existed, and the duplicated half was not the easy
  * half. Each of the three rules below was a bug first:
  *
- * - A failure OCCUPIES its cache slot rather than being left absent. Absent
- *   means "not fetched yet", so a target that does not exist would be
+ * - "Nothing here" OCCUPIES its cache slot rather than being left absent.
+ *   Absent means "not fetched yet", so a target that does not exist would be
  *   re-fetched on every render for the lifetime of the component. What makes
  *   it terminal is that the loop tests `cache.has`, not the value — `null`
  *   is only how a value-typed map holds "nothing here".
+ * - A REJECTION is the same terminal answer BY DEFAULT, and a request that
+ *   knows better says so with `attempts`. Whether asking again can help is
+ *   a property of what is being fetched, not of this hook: a store read
+ *   that threw is transient (one such throw left an embed on its
+ *   placeholder for the life of the page — unrecoverable, and unlogged,
+ *   because the throw was swallowed below this hook), while a fragment that
+ *   failed to RENDER fails the same way every time and retrying it is waste
+ *   per keystroke.
  * - `inflight` is what keeps a re-render from starting a second fetch for a
  *   key the first pass is still loading.
  * - Completion is scoped to UNMOUNT, never to the effect. A keystroke re-runs
@@ -31,6 +39,13 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+/**
+ * What a request asks for when its rejections are worth re-asking: three
+ * attempts, because the failure it answers is a transient store read and the
+ * cost of being wrong in the other direction is a permanently blank embed.
+ */
+export const TRANSIENT_LOAD_ATTEMPTS = 3
+
 /** One thing to fetch, and how. The key is also the seam's lookup key. */
 export interface PrefetchRequest<V> {
   readonly key: string
@@ -41,6 +56,13 @@ export interface PrefetchRequest<V> {
    * catch inside its own loader, where it has the context to say what failed.
    */
   readonly load: () => Promise<V | undefined>
+  /**
+   * How many times to ask when the load REJECTS. One (the default) makes a
+   * rejection terminal, which is right for anything that fails the same way
+   * every time; `TRANSIENT_LOAD_ATTEMPTS` is for a read that can fail once
+   * and answer the next time.
+   */
+  readonly attempts?: number
 }
 
 /**
@@ -59,6 +81,7 @@ export function usePrefetchedEntries<V>(
 ): ReadonlyMap<string, V | null> {
   const [cache, setCache] = useState<ReadonlyMap<string, V | null>>(new Map())
   const inflight = useRef<Set<string>>(new Set())
+  const attempts = useRef<Map<string, number>>(new Map())
   const unmounted = useRef(false)
   useEffect(() => {
     unmounted.current = false
@@ -70,16 +93,26 @@ export function usePrefetchedEntries<V>(
   useEffect(() => {
     const loaded = new Map<string, V>()
     for (const [key, value] of cache) if (value !== null) loaded.set(key, value)
-    for (const { key, load } of collect(loaded)) {
+    for (const { key, load, attempts: allowed = 1 } of collect(loaded)) {
       if (cache.has(key) || inflight.current.has(key)) continue
       inflight.current.add(key)
-      void load()
-        .catch(() => undefined)
-        .then((value) => {
+      void load().then(
+        (value) => {
           inflight.current.delete(key)
           if (unmounted.current) return
           setCache((prev) => new Map(prev).set(key, value ?? null))
-        })
+        },
+        () => {
+          inflight.current.delete(key)
+          if (unmounted.current) return
+          const tried = (attempts.current.get(key) ?? 0) + 1
+          attempts.current.set(key, tried)
+          // A fresh map with the same entries: the effect keys on the cache's
+          // IDENTITY, so this is what asks again without writing an answer
+          // this load never gave.
+          setCache((prev) => (tried >= allowed ? new Map(prev).set(key, null) : new Map(prev)))
+        },
+      )
     }
   }, [cache, collect])
 

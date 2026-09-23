@@ -10,9 +10,10 @@ import 'fake-indexeddb/auto'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { loadBrowserReference, resetEmbedIndexForTests } from './document-embed-content.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
@@ -57,6 +58,38 @@ describe('loadBrowserReference', () => {
 
     const source = await loadBrowserReference(entry.documentId)
     expect(source).toEqual({ documentId: entry.documentId, body: 'legacy body', name: 'Old Note' })
+  })
+
+  it('re-throws a store read that FAILED, rather than answering "no content"', async () => {
+    // The two answers are opposite instructions to the prefetch above:
+    // `undefined` is the document's own ("nothing here", cached as
+    // terminal), a rejection is the database's ("could not read", asked
+    // again). Reporting a failed read as the first is what left an embed
+    // blank for the life of the page, with nothing logged.
+    // A legacy record, so the read under test is the per-document store's:
+    // a tree-held document answers from the projection and never reaches it.
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'notes/unreadable',
+      kind: 'markdown',
+      name: 'Unreadable',
+    })
+    const doc = new Loro()
+    doc.getText('body').insert(0, 'a body the caller never gets to see')
+    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    const failing = vi
+      .spyOn(LoroStore.prototype, 'load')
+      .mockRejectedValue(new Error('the store could not be read'))
+    try {
+      await expect(loadBrowserReference(entry.documentId)).rejects.toThrow(
+        'the store could not be read',
+      )
+      await expectLoggedFailure('referenced document load failed')
+    } finally {
+      failing.mockRestore()
+    }
   })
 
   it('answers a spatial document with its canvas rather than an empty body', async () => {
