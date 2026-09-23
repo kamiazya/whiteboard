@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { FsBlobStore } from '../store/fs/fs-blob-store.js'
 import {
   blobsRoot,
+  isAnyTenantBlobsPath,
+  listTenants,
   moveLegacyDataDirUnderTenant,
   tenantRoot,
   workspaceFilesDir,
@@ -121,5 +123,23 @@ describe('moving a data directory written before tenants existed', () => {
     // look at rather than merged blindly.
     expect(await readdir(workspaceFilesDir(dataDir, SELF, 'ws-1'))).toEqual(['kept.png'])
     expect(await readdir(join(dataDir, 'ws-1', 'files'))).toEqual(['a.png'])
+  })
+})
+
+describe('what a keeper-wide pass has to walk', () => {
+  it('lists the tenants on disk, and nothing when there are none', async () => {
+    expect(await listTenants(dataDir)).toEqual([])
+    await mkdir(blobsRoot(dataDir, SELF), { recursive: true })
+    await mkdir(blobsRoot(dataDir, OTHER), { recursive: true })
+    expect((await listTenants(dataDir)).sort()).toEqual([SELF, OTHER].sort())
+  })
+
+  it('knows any tenant blob path, which a backup mirrors rather than copies', () => {
+    expect(isAnyTenantBlobsPath(dataDir, join(blobsRoot(dataDir, OTHER), 'ab', 'cd'))).toBe(true)
+    // The root itself too: the copy skips the whole directory, not its files.
+    expect(isAnyTenantBlobsPath(dataDir, blobsRoot(dataDir, SELF))).toBe(true)
+    expect(
+      isAnyTenantBlobsPath(dataDir, join(workspaceFilesDir(dataDir, SELF, 'ws-1'), 'a.png')),
+    ).toBe(false)
   })
 })

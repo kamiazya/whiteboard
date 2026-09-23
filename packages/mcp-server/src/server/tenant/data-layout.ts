@@ -1,5 +1,5 @@
 import { mkdir, readdir, rename, stat } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { getLogger } from '../log.js'
 
@@ -61,6 +61,26 @@ export function workspaceDir(dataDir: string, tenantId: string, workspaceId: str
 
 export function workspaceFilesDir(dataDir: string, tenantId: string, workspaceId: string): string {
   return join(workspaceDir(dataDir, tenantId, workspaceId), FILES_DIRNAME)
+}
+
+/**
+ * Every tenant this data directory holds, from the directories under
+ * `tenants/`. What a keeper-wide pass — a backup, its mirror, a sweep — has to
+ * walk, since nothing else records the list on disk.
+ */
+export async function listTenants(dataDir: string): Promise<string[]> {
+  const entries = await readdir(join(dataDir, TENANTS_DIRNAME), { withFileTypes: true }).catch(
+    () => [],
+  )
+  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+}
+
+/** Whether a path is some tenant's blob store, which a backup mirrors rather than copies. */
+export function isAnyTenantBlobsPath(dataDir: string, path: string): boolean {
+  const tenants = join(dataDir, TENANTS_DIRNAME)
+  if (!path.startsWith(tenants + sep)) return false
+  const rest = path.slice(tenants.length + 1).split(sep)
+  return rest[1] === BLOBS_DIRNAME
 }
 
 const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, 'models'])

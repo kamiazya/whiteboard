@@ -275,7 +275,11 @@ describe('the blob manifest', () => {
       manifestInto: backupDir,
       mirror,
     })
-    expect(references).toEqual({ blobs: digests, files: {}, mirror })
+    // A one-tenant keeper records one tenant; an empty store records none at
+    // all, since the tenant's blob directory is what the walk finds it by.
+    const expected =
+      digests.size === 0 ? {} : { [SELF_HOST_TENANT_ID]: { blobs: digests, files: {} } }
+    expect(references).toEqual({ tenants: expected, mirror })
     expect(await readBackupBlobManifest(backupDir)).toEqual(references)
   })
 })
