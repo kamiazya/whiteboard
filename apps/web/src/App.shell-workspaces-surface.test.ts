@@ -16,10 +16,18 @@
  * it, which is the same forgetting that caused the defect; a new render site
  * shows up here whether or not anyone thought of this file.
  *
- * What it pins: every `<AppShellLazy>` site passes a `workspaces` source.
- * What it does NOT pin: that the source resolves to anything, or that the
- * popover is non-empty at runtime — App.test.tsx's own /settings case covers
- * the rendered outcome for that route.
+ * The subject moved one level when App's render tail became a screen per
+ * mode: `<AppShellLazy>` is rendered in exactly ONE place now — `ShellFrame`,
+ * the frame every full-window screen shares — and what a screen can forget is
+ * the `workspaces` it hands THAT. Both halves are pinned, because the
+ * one-place claim is what makes reading `<ShellFrame>` sites sufficient:
+ * a screen that rendered the shell directly would be invisible to the second
+ * scan while the first one goes red.
+ *
+ * What it pins: exactly one `<AppShellLazy>` site, and a `workspaces` source
+ * at every `<ShellFrame>`. What it does NOT pin: that the source resolves to
+ * anything, or that the popover is non-empty at runtime — App.test.tsx's own
+ * /settings case covers the rendered outcome for that route.
  *
  * There is deliberately no exemption list. Every site can supply one today,
  * so a mechanism for skipping would be machinery for a case that does not
@@ -28,44 +36,76 @@
  */
 import { describe, expect, it } from 'vitest'
 
-const SOURCES = import.meta.glob('./App.tsx', {
+const SOURCES = import.meta.glob(['./App.tsx', './app-screens.tsx'], {
   query: '?raw',
   import: 'default',
   eager: true,
 }) as Record<string, string>
 
-/** Each `<AppShellLazy … />` element, as the text between the tag and its close. */
-function shellRenderSites(source: string): string[] {
+/**
+ * Each `<Tag …>` opening element in `source`, as its text.
+ *
+ * Brace depth rather than a first `>`: an attribute value is an expression,
+ * and one holding a comparison would otherwise cut the element in half and
+ * hide whatever came after it.
+ */
+function openingElements(source: string, tag: string): string[] {
   const sites: string[] = []
-  const TAG = '<AppShellLazy'
   let from = 0
   for (;;) {
-    const start = source.indexOf(TAG, from)
+    const start = source.indexOf(`<${tag}`, from)
     if (start === -1) break
-    const end = source.indexOf('/>', start)
+    let depth = 0
+    let end = -1
+    for (let i = start; i < source.length; i += 1) {
+      const char = source[i]
+      if (char === '{') depth += 1
+      else if (char === '}') depth -= 1
+      else if (char === '>' && depth === 0) {
+        end = i
+        break
+      }
+    }
     // An unterminated element means the matcher is wrong, not that the file
     // is — say so rather than silently taking the rest of the file.
-    expect(end, `unterminated ${TAG} at index ${start}`).toBeGreaterThan(start)
-    sites.push(source.slice(start, end + 2))
-    from = end + 2
+    expect(end, `unterminated <${tag} at index ${start}`).toBeGreaterThan(start)
+    sites.push(source.slice(start, end + 1))
+    from = end + 1
   }
   return sites
 }
 
 const APP = SOURCES['./App.tsx'] ?? ''
-const SITES = shellRenderSites(APP)
+const SCREENS = SOURCES['./app-screens.tsx'] ?? ''
+const SHELL_SITES = [
+  ...openingElements(APP, 'AppShellLazy'),
+  ...openingElements(SCREENS, 'AppShellLazy'),
+]
+const FRAME_SITES = [
+  ...openingElements(APP, 'ShellFrame'),
+  ...openingElements(SCREENS, 'ShellFrame'),
+]
 
 describe('every shell render site supplies a workspace source', () => {
-  it('found App.tsx and a plausible number of render sites', () => {
-    // Both halves, because a regex that stops matching would otherwise report
-    // itself as "every site is fine" — the failure mode this whole file
-    // exists to refuse, one level up.
+  it('found both sources and a plausible number of render sites', () => {
+    // Every half, because a matcher that stops matching would otherwise
+    // report itself as "every site is fine" — the failure mode this whole
+    // file exists to refuse, one level up.
     expect(APP.length).toBeGreaterThan(1000)
-    expect(SITES.length).toBeGreaterThanOrEqual(4)
+    expect(SCREENS.length).toBeGreaterThan(1000)
+    expect(FRAME_SITES.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('passes `workspaces` at every one of them', () => {
-    const missing = SITES.filter((site) => !/\bworkspaces=\{/.test(site))
+  it('renders the shell in exactly one place, so the frame below is the whole surface', () => {
+    expect(
+      SHELL_SITES.length,
+      'a second AppShellLazy site is a screen that bypasses ShellFrame — and the ' +
+        'workspaces check below cannot see it',
+    ).toBe(1)
+  })
+
+  it('passes `workspaces` at every frame', () => {
+    const missing = FRAME_SITES.filter((site) => !/\bworkspaces=\{/.test(site))
     expect(
       missing,
       'a shell rendered without a workspace source opens a popover onto nothing — ' +
@@ -74,7 +114,7 @@ describe('every shell render site supplies a workspace source', () => {
   })
 
   it('never passes a literal undefined, which would satisfy the check and not the reader', () => {
-    const hollow = SITES.filter((site) => /\bworkspaces=\{\s*undefined\s*\}/.test(site))
+    const hollow = FRAME_SITES.filter((site) => /\bworkspaces=\{\s*undefined\s*\}/.test(site))
     expect(hollow).toEqual([])
   })
 })

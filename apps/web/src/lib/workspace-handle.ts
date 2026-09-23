@@ -48,3 +48,15 @@ export function workspaceHandle(workspace: WorkspaceIdentity): string {
 export function workspaceLabel(workspace: WorkspaceIdentity): string {
   return workspace.displayName ?? workspace.segment ?? workspace.workspaceId
 }
+
+/**
+ * The same address for a workspace that may not have resolved yet.
+ *
+ * Its one caller subscribes to an identity that is `null` until the browser's
+ * own record settles (`boot.ts` bounds that resolve at 3s and renders
+ * degraded past it), and a URL builder that cannot name its workspace
+ * declines to navigate rather than sending the session somewhere wrong.
+ */
+export function workspaceHandleOrNull(workspace: WorkspaceIdentity | null): string | null {
+  return workspace === null ? null : workspaceHandle(workspace)
+}
