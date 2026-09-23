@@ -8,8 +8,7 @@ import type { BackupBlobReferences } from './store/backup-blob-mirror.js'
 import { mirrorRootFor, readBackupBlobManifest } from './store/backup-blob-mirror.js'
 import { BACKUP_MARKER_FILENAME } from './store/backup-in-progress.js'
 import { DB_FILENAME } from './store/db/location.js'
-import { blobsRoot } from './tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from './tenant/id.js'
+import { blobsRoot, isAnyTenantBlobsPath } from './tenant/data-layout.js'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
@@ -238,8 +237,10 @@ export const NEVER_COPIED_FOR_TESTS: readonly string[] = NEVER_COPIED
  * SQLite replays a `-wal` into any database later placed beside it.
  */
 function isUnderBlobs(dataDir: string, path: string): boolean {
-  const blobs = blobsRoot(dataDir, SELF_HOST_TENANT_ID)
-  return path === blobs || path.startsWith(`${blobs}${sep}`)
+  // ANY tenant's: the copy skips what the mirror holds, and the mirror holds
+  // every tenant's blobs. Skipping one tenant's would copy the others whole
+  // into each backup — the cost ADR-0021 decision 5 exists to avoid.
+  return isAnyTenantBlobsPath(dataDir, path)
 }
 
 function isDatabaseFile(dataDir: string, path: string): boolean {
@@ -397,17 +398,22 @@ async function materialiseMirroredBlobs(
 ): Promise<void> {
   const mirrorRoot = mirrorRootFor(backupDir, references)
   const wanted: Array<{ from: string; to: string }> = []
-  for (const digest of references.blobs) {
-    wanted.push({
-      from: join(mirrorRoot, 'blobs', digest.slice(0, 2), digest.slice(2)),
-      to: join(blobsRoot(targetDataDir, SELF_HOST_TENANT_ID), digest.slice(0, 2), digest.slice(2)),
-    })
-  }
-  for (const [relativePath, digest] of Object.entries(references.files)) {
-    wanted.push({
-      from: join(mirrorRoot, 'files', digest.slice(0, 2), digest.slice(2)),
-      to: join(blobsRoot(targetDataDir, SELF_HOST_TENANT_ID), ...relativePath.split('/')),
-    })
+  // The mirror is flat and the manifest says whose each blob is, so every
+  // tenant's bytes go back under that tenant rather than into one of them.
+  for (const [tenantId, refs] of Object.entries(references.tenants)) {
+    const into = blobsRoot(targetDataDir, tenantId)
+    for (const digest of refs.blobs) {
+      wanted.push({
+        from: join(mirrorRoot, 'blobs', digest.slice(0, 2), digest.slice(2)),
+        to: join(into, digest.slice(0, 2), digest.slice(2)),
+      })
+    }
+    for (const [relativePath, digest] of Object.entries(refs.files)) {
+      wanted.push({
+        from: join(mirrorRoot, 'files', digest.slice(0, 2), digest.slice(2)),
+        to: join(into, ...relativePath.split('/')),
+      })
+    }
   }
 
   const missing = (

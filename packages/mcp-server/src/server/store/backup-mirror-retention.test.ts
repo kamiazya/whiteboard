@@ -70,6 +70,32 @@ async function mirroredDigests(store: 'blobs' | 'files'): Promise<string[]> {
  * written and unreachable since; this is what calls it.
  */
 describe('collecting from the blob mirror', () => {
+  it('keeps a blob only a SECOND tenant references', async () => {
+    // The mirror is one flat store for the whole keeper, so a blob is
+    // collectable only when no tenant of any retained backup wants it. A pass
+    // that read the first tenant alone would delete the others' bytes and say
+    // it had collected them.
+    const ours = await mirrorBlob('the first tenant image')
+    const theirs = await mirrorBlob('the second tenant image')
+    const dir = join(backupRoot, '2026-03-04T00-00-00.000Z')
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'blobs.json'),
+      JSON.stringify({
+        schemaVersion: 3,
+        tenants: {
+          'self-host': { blobs: [ours], files: {} },
+          'tenant-two': { blobs: [theirs], files: {} },
+        },
+        mirror: 'parent',
+      }),
+    )
+
+    await collectMirroredBlobs(backupRoot)
+
+    expect((await mirroredDigests('blobs')).sort()).toEqual([ours, theirs].sort())
+  })
+
   it('keeps what a retained backup still references', async () => {
     const kept = await mirrorBlob('still referenced')
     await backupReferencing('2026-03-04T00-00-00.000Z', [kept])

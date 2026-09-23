@@ -28,12 +28,24 @@ const log = getLogger('backup-mirror-retention')
  */
 const BACKUP_DIR_NAME = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/
 
+type Manifest = Awaited<ReturnType<typeof readBackupBlobManifest>>
+
+// Across every tenant: the mirror is one flat store for the whole keeper, so
+// a blob is collectable only when NO tenant of any retained backup wants it.
 const STORES = [
-  { dir: 'blobs', of: (refs: Awaited<ReturnType<typeof readBackupBlobManifest>>) => refs?.blobs },
+  {
+    dir: 'blobs',
+    of: (refs: Manifest) =>
+      refs
+        ? new Set(Object.values(refs.tenants).flatMap((tenant) => [...tenant.blobs]))
+        : undefined,
+  },
   {
     dir: 'files',
-    of: (refs: Awaited<ReturnType<typeof readBackupBlobManifest>>) =>
-      refs ? new Set(Object.values(refs.files)) : undefined,
+    of: (refs: Manifest) =>
+      refs
+        ? new Set(Object.values(refs.tenants).flatMap((tenant) => Object.values(tenant.files)))
+        : undefined,
   },
 ] as const
 
