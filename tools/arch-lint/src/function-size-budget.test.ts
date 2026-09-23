@@ -706,7 +706,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 169,
   'packages/server-core/src/tools/document-set.ts#createDocumentSetTool': 110,
   'packages/server-core/src/tools/facet-list.ts#createFacetListTool': 87,
-  'packages/server-core/src/tools/linkify-mentions.ts#linkifyMentions': 56,
   'packages/server-core/src/tools/version-restore.ts#createVersionRestoreTool': 64,
   // 93 -> 99: no new logic. The one exported chunk-size constant is 18
   // characters longer than the local `MAX_CHUNK_BYTES` it replaced, so the
