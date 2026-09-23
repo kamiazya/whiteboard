@@ -51,6 +51,7 @@ type Layer = (typeof LAYERS)[number]
 const ROOT_MODULES: Record<string, Layer> = {
   './runtime-config.ts': 'lib',
   './App.tsx': 'app',
+  './app-screens.tsx': 'app',
   './boot.ts': 'app',
   './boot-splash.ts': 'app',
   './main.tsx': 'app',

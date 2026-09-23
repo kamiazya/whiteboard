@@ -119,7 +119,6 @@
         "!**/*.test.tsx",
         "!**/*.test.mjs",
         "!**/test-utils/**",
-        "!apps/web/src/App.tsx",
         "!apps/web/src/components/AppShell.tsx",
         "!apps/web/src/components/markdown-editor/MarkdownEditor.tsx",
         "!apps/web/src/components/spatial-editor/SpatialEditor.tsx",
