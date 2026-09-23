@@ -45,8 +45,11 @@ import { setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
-import { createCredentialResolver } from './security/credential-resolver.js'
-import { createDaemonIdentity } from './security/daemon-identity.js'
+import {
+  type CredentialResolver,
+  createCredentialResolver,
+} from './security/credential-resolver.js'
+import { createDaemonIdentity, type DaemonIdentity } from './security/daemon-identity.js'
 import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
@@ -61,6 +64,7 @@ import {
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
+import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
 import { OFFICIAL_HOSTED_APP_URL } from './security/web-origin-allowlist.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { FileVersionStore } from './store/version-store.js'
@@ -107,15 +111,278 @@ function membershipWiring(options: AppOptions): {
   return { gate: { members: options.members }, admit: membershipAdmit(options.members) }
 }
 
-export function createApp(options: AppOptions) {
-  const membership = membershipWiring(options)
-  if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
-    throw new Error('local-daemon mode must not receive authStrategy')
+/**
+ * Server-mode serves only a static placeholder: no build artifact, no
+ * runtime-config or token injection, no static asset roots.
+ */
+function mountServerModeUi(app: Hono): void {
+  app.get('*', (c) => {
+    if (isReservedUiPath(c.req.path)) return c.notFound()
+    return c.html(SERVER_MODE_PLACEHOLDER_HTML)
+  })
+}
+
+/**
+ * Hosted-first end state (supersedes ADR-0001's optional full-UI serving,
+ * see the ADR addendum): the daemon serves exactly ONE page — `/pair`, the
+ * pairing consent trust anchor that must come from the daemon's own origin —
+ * plus the assets it needs. Every other UI path redirects to the official
+ * hosted app, which reaches this daemon through its default origin admission
+ * plus a pairing grant. Accepted tradeoff: a fully-offline FIRST run has no
+ * canvas UI; the installed PWA is the offline path.
+ *
+ * `daemonPort` is captured by the caller rather than read from `getStatus()`
+ * in here: the port is fixed for the app instance's lifetime, while
+ * `getStatus()` also computes `app.buildPresent` via a synchronous
+ * `existsSync` (see http-server.ts) that must run fresh per real status
+ * check, not on every SPA page load.
+ */
+function mountPairPageUi(app: Hono, daemonPort: number, token: string | undefined): void {
+  for (const pattern of ['/fonts/*', '/assets/*']) {
+    app.use(pattern, serveStatic({ root: DIST_WEB_APP_DIR }))
   }
 
-  const app = new Hono()
+  app.get('*', async (c) => {
+    if (isReservedUiPath(c.req.path)) return c.notFound()
+    if (c.req.path !== '/pair') return c.redirect(OFFICIAL_HOSTED_APP_URL, 302)
+    try {
+      const html = await readFile(join(DIST_WEB_APP_DIR, 'index.html'), 'utf-8')
+      return c.html(...injectRuntimeConfig(html, daemonPort, token))
+    } catch {
+      return c.text('Not found. Run `pnpm build` first.', 404)
+    }
+  })
+}
 
-  const instanceId = options.instanceId ?? randomUUID()
+/**
+ * The pair page's HTML with this daemon's runtime config inlined, and the CSP
+ * whose nonce admits exactly those scripts.
+ *
+ * The daemon token is deliberately NOT part of
+ * `__WHITEBOARD_RUNTIME_CONFIG__` (see shared/token-store.ts) — it ships in
+ * its own global so it never rides along inside an object that logging or
+ * error reporting could serialize wholesale.
+ */
+function injectRuntimeConfig(
+  html: string,
+  daemonPort: number,
+  token: string | undefined,
+): [string, 200, Record<string, string>] {
+  const runtimeConfigJson = toInlineScriptJson({
+    // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the value
+    // is always a loopback origin, even when the daemon binds 0.0.0.0.
+    daemonBaseUrl: `http://127.0.0.1:${daemonPort}`,
+  })
+  const nonce = createCspNonce()
+  const runtimeConfigScript = `<script nonce="${nonce}">window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
+  const tokenScript = token
+    ? `<script nonce="${nonce}">window.__WHITEBOARD_DAEMON_TOKEN__ = ${toInlineScriptJson(token)}</script>`
+    : ''
+  const injected = `${runtimeConfigScript}${tokenScript}`
+  const withRuntimeConfig = html.includes('</head>')
+    ? html.replace('</head>', `${injected}</head>`)
+    : `${injected}${html}`
+  return [withRuntimeConfig, 200, { 'Content-Security-Policy': pairPageCsp(nonce) }]
+}
+
+/**
+ * The `/api/*` chain, whose ORDER is the security property.
+ *
+ * Both modes put the host guard first, ahead of CORS, so a spoofed
+ * non-loopback Host (DNS rebinding) is rejected before the OPTIONS
+ * short-circuit can hand out a 204 — otherwise a preflight would bypass the
+ * guard entirely.
+ *
+ * Server-mode takes no membership gate (S8 slice 2 is local-daemon only): it
+ * authorizes through its own `AsyncAuthStrategy` (external-IdP oauth-jwt),
+ * not `credential-resolver.ts`'s `ResolvedGrant` — the type `workspaceAccess`
+ * and its ADR-0041 L1/pairing membership model apply to. There is no
+ * person-vs-pairing distinction to gate there.
+ */
+function mountApiAuth(
+  app: Hono,
+  options: AppOptions,
+  credentialResolver: CredentialResolver,
+  gate: { members: MemberProfileStore } | undefined,
+): void {
+  app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
+  if (options.authMode === 'server-mode') {
+    app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
+    return
+  }
+  // Cross-origin loopback requests (the apps/web dev server on
+  // localhost:5173 reaching the daemon on 127.0.0.1:3099) are allowed, and
+  // CORS runs BEFORE the auth guard so an OPTIONS preflight short-circuits
+  // to 204 without a bearer token, while every other method — GET included,
+  // see auth.js — falls through to the auth chain unchanged.
+  app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
+  // Every credential this daemon accepts is resolved in ONE place, and the
+  // resolver is a required argument — see `security/credential-resolver.ts`
+  // for why that is load-bearing rather than tidy. What stays here is the
+  // route-scope policy and the refusal shape, which are this surface's.
+  app.use('/api/*', createDaemonAuthMiddleware(credentialResolver, gate))
+}
+
+type OAuthAuthzWiring = {
+  store: ReturnType<typeof createOAuthTransactionStore>
+  registry: NonNullable<Extract<AppOptions, { authMode: 'local-daemon' }>['oauthClientRegistry']>
+  allowedWebOrigins: AllowedWebOrigins | readonly string[]
+}
+
+/**
+ * The hosted-origin OAuth 2.1 authorization-server surface (ADR-0005).
+ *
+ * Attached per explicit PATH, not via a sub-app: Hono merges a sub-app's
+ * `use('*')` into the parent as `/*`, so a sub-app mounted at '/' would run
+ * this host guard and CORS ahead of every other route's own policy — an
+ * OPTIONS preflight for `/mcp` would be answered here before
+ * `createMcpHttpOriginMiddleware` ever ran.
+ *
+ * CORS covers only `OAUTH_AUTHZ_CORS_PATHS` — the metadata documents and
+ * `/token` — never the `/authorize` pair. Reflecting an allowed web origin on
+ * the approval endpoints would let the requesting page read the approval
+ * screen and script its POST cross-site, which is the whole thing the
+ * approval step exists to prevent (see oauth-authz.ts).
+ */
+function mountOAuthAuthz(
+  app: Hono,
+  authMode: AppOptions['authMode'],
+  oauthAuthz: OAuthAuthzWiring,
+): void {
+  // Host guard on EVERY path of the surface, including /authorize: a spoofed
+  // non-loopback Host is a DNS-rebinding vector here exactly as on /api/*,
+  // and it must be rejected before an OPTIONS preflight could short-circuit
+  // past it.
+  for (const path of OAUTH_AUTHZ_PATHS) {
+    app.use(path, createApiHostGuardMiddleware(authMode))
+  }
+  for (const path of OAUTH_AUTHZ_CORS_PATHS) {
+    app.use(path, createApiLoopbackCorsMiddleware(oauthAuthz.allowedWebOrigins))
+  }
+  app.route('/', createOAuthAuthzRouter({ store: oauthAuthz.store, registry: oauthAuthz.registry }))
+}
+
+/**
+ * `/mcp`'s own chain: origin policy (server-mode checks `allowedOrigins`,
+ * local-daemon allows loopback only), auth (server-mode's
+ * `AsyncAuthStrategy` with the `mcp:call` scope, local-daemon's daemon
+ * token), and a body limit so an oversized JSON-RPC payload cannot OOM the
+ * daemon.
+ */
+function mountMcpMiddleware(
+  app: Hono,
+  options: AppOptions,
+  mcpAuth: ReturnType<typeof createLocalTokenMcpHttpAuthStrategy> | undefined,
+): void {
+  if (options.authMode === 'server-mode') {
+    const plan = planServerModeAuth({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: options.publicBaseUrl,
+      allowedOrigins: [...options.allowedOrigins],
+    })
+    if (plan.ok && plan.kind === 'server-mode') {
+      app.use('/mcp', createServerModeOriginMiddleware(plan.allowedOrigins))
+    }
+    app.use('/mcp', createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call']))
+  } else {
+    app.use('/mcp', createMcpHttpOriginMiddleware(options.allowedWebOrigins ?? []))
+    app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
+  }
+  app.use(
+    '/mcp',
+    bodyLimit({
+      maxSize: 4 * 1024 * 1024,
+      onError: (c) =>
+        c.json(
+          {
+            jsonrpc: '2.0',
+            error: { code: -32600, message: 'Request body too large (max 4 MiB)' },
+            id: null,
+          },
+          413,
+        ),
+    }),
+  )
+}
+
+/**
+ * The routers that exist only in local-daemon mode, each with the condition
+ * that decides whether it can answer at all.
+ *
+ * Pairing is local-daemon by design: the consent model assumes the daemon's
+ * own served UI and loopback reachability. Membership (ADR-0041 S0-4) needs
+ * the workspace-existence check only `ServerDeps`' `workspaceDocuments`
+ * answers, so unlike pairing it also requires `serverDeps`. The read plane's
+ * workspace-key route (ADR-0042 decisions 1/3/5) has membership's condition
+ * plus `replicaKeys`, since a member's session is what it hands the key to.
+ *
+ * The ws-ticket bridge is mounted even with no OAuth registry configured:
+ * the resolver then has no OAuth branch, so nothing presented can resolve to
+ * an `oauth-grant` and the route always 401s — the same "declared but
+ * always-refuses when unconfigured" shape as the rest of this surface.
+ */
+function mountLocalDaemonRouters(
+  app: Hono,
+  options: AppOptions,
+  identity: DaemonIdentity,
+  credentialResolver: CredentialResolver,
+): void {
+  if (options.authMode !== 'local-daemon') return
+
+  if (options.pairing !== undefined) {
+    app.route('/', createPairingRouter({ ...options.pairing, identity, members: options.members }))
+  }
+  const { members, pairing, serverDeps, replicaKeys } = options
+  if (pairing !== undefined && members !== undefined && serverDeps !== undefined) {
+    app.route(
+      '/',
+      createMembershipRouter({
+        members,
+        tokens: pairing.tokens,
+        credentials: pairing.credentials,
+        workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
+      }),
+    )
+    if (replicaKeys !== undefined) {
+      app.route(
+        '/',
+        createReplicaKeyRouter({
+          keys: replicaKeys,
+          members,
+          leaseTtlMs: options.replicaLeaseTtlMs ?? DEFAULT_REPLICA_LEASE_TTL_MS,
+          workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
+          credentialResolver,
+        }),
+      )
+    }
+  }
+
+  app.route(
+    '/',
+    createWsTicketRouter({
+      credentialResolver,
+      ticketStore: options.wsTicketStore ?? createWsTicketStore(),
+    }),
+  )
+}
+
+/**
+ * What `wb_pairing_link_create` reads about this daemon.
+ *
+ * There is no context in server-mode (no single daemon origin to embed the
+ * way local-daemon has) nor in a local-daemon caller that supplies no
+ * `daemonBaseUrl` (an ad-hoc or test caller with no real HTTP listener); the
+ * tool treats "no context" as the standalone case, and the REASON tells the
+ * two apart. The stdio-entrypoint reason lives in mcp/index.ts's own
+ * default, since this module is never on that path.
+ */
+function pairingToolWiring(options: AppOptions): {
+  pairingLinkContext:
+    | { daemonBaseUrl: string; allowedWebOrigins: AllowedWebOrigins | undefined }
+    | undefined
+  pairingUnavailableReason: PairingUnavailableReason
+} {
   // wb_pairing_link_create's daemon context — undefined in server-mode (no
   // single daemon origin to embed the way local-daemon has) and in any
   // local-daemon caller that supplies no daemonBaseUrl (ad-hoc/test
@@ -142,38 +409,20 @@ export function createApp(options: AppOptions) {
   // module is never on that path.
   const pairingUnavailableReason: PairingUnavailableReason =
     options.authMode === 'server-mode' ? 'server-mode' : 'no-daemon-base-url'
-  // The signing identity behind /api/runtime/ping's `identity`,
-  // /api/runtime/verify, and pairing-token response signatures.
-  const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
-  const token = options.authMode === 'local-daemon' ? options.token : undefined
 
-  let serverModeGetStatus: (() => RuntimeStatusResponse) | undefined
-  if (options.authMode === 'server-mode') {
-    const plan = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: options.publicBaseUrl,
-      allowedOrigins: [...options.allowedOrigins],
-    })
-    if (!plan.ok) throw new Error('invalid server-mode config')
-    serverModeGetStatus = sanitizeServerModeStatus(options.getStatus, options.publicBaseUrl)
-  }
+  return { pairingLinkContext, pairingUnavailableReason }
+}
 
-  // Tracing middleware first so the request span wraps every other
-  // middleware (auth, headers, route handler). When OTel is disabled the
-  // tracer is a no-op so the wrapping cost is negligible.
-  app.use('*', tracingMiddleware())
-
-  app.use('*', async (_c, next) => {
-    options.touch()
-    await next()
-  })
-
-  app.use('*', async (c, next) => {
-    await next()
-    setBaselineSecurityHeaders(c.res.headers)
-  })
-
+/**
+ * The three things a credential check needs, built in the one order they can
+ * be built in.
+ *
+ * The OAuth store has to exist before the `/api/*` auth middleware: the same
+ * store both mints an access grant (at `/token`) and is the only thing that
+ * can later recognize the token that grant issued, so two instances would
+ * mean tokens minted by one and unknown to the other.
+ */
+function credentialWiring(options: AppOptions, token: string | undefined) {
   // The hosted-origin OAuth surface is mounted below, but its store has to
   // exist before the /api/* auth middleware is built: the same store both
   // mints an access grant (at /token) and is the only thing that can later
@@ -212,65 +461,85 @@ export function createApp(options: AppOptions) {
         })
       : undefined
 
+  return { oauthAuthz, credentialResolver, mcpAuth }
+}
+
+/**
+ * Everything `createApp` DERIVES from its options before a single route is
+ * mounted — one place to read what this composition actually has, so the
+ * mounting below is a list of surfaces rather than a list of conditions.
+ */
+function appWiring(options: AppOptions) {
+  const instanceId = options.instanceId ?? randomUUID()
+  const { pairingLinkContext, pairingUnavailableReason } = pairingToolWiring(options)
+
+  // The signing identity behind /api/runtime/ping's `identity`,
+  // /api/runtime/verify, and pairing-token response signatures.
+  const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
+  const token = options.authMode === 'local-daemon' ? options.token : undefined
+
+  let serverModeGetStatus: (() => RuntimeStatusResponse) | undefined
   if (options.authMode === 'server-mode') {
-    // No membership gate here (S8 slice 2 is local-daemon only): this branch
-    // authorizes through its own `AsyncAuthStrategy` (external-IdP
-    // oauth-jwt), not `credential-resolver.ts`'s `ResolvedGrant` — the type
-    // `workspaceAccess` and its ADR-0041 L1/pairing membership model apply
-    // to. There is no person-vs-pairing distinction to gate here.
-    app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
-    app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
-  } else {
-    // Host guard runs first, ahead of CORS, so a spoofed non-loopback Host
-    // (DNS rebinding) is rejected before the OPTIONS short-circuit below can
-    // hand out a 204 — otherwise a preflight would bypass the guard entirely.
-    app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
-    // In local-daemon mode, allow cross-origin loopback requests (e.g. apps/web
-    // dev server on localhost:5173 → daemon on 127.0.0.1:3099).
-    // The CORS middleware is applied BEFORE the auth guard so that
-    // OPTIONS preflights short-circuit to 204 without needing a bearer token,
-    // while every other method (GET included — see auth.js) falls through to
-    // the auth chain unchanged.
-    app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
-    // Every credential this daemon accepts is resolved in ONE place, and the
-    // resolver is a required argument — see `security/credential-resolver.ts`
-    // for why that is load-bearing rather than tidy. What stays here is the
-    // route-scope policy and the refusal shape, which are this surface's.
-    app.use('/api/*', createDaemonAuthMiddleware(credentialResolver, membership.gate))
+    const plan = planServerModeAuth({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: options.publicBaseUrl,
+      allowedOrigins: [...options.allowedOrigins],
+    })
+    if (!plan.ok) throw new Error('invalid server-mode config')
+    serverModeGetStatus = sanitizeServerModeStatus(options.getStatus, options.publicBaseUrl)
   }
+
+  const { oauthAuthz, credentialResolver, mcpAuth } = credentialWiring(options, token)
+
+  return {
+    instanceId,
+    pairingLinkContext,
+    pairingUnavailableReason,
+    identity,
+    token,
+    oauthAuthz,
+    credentialResolver,
+    mcpAuth,
+    serverModeGetStatus,
+  }
+}
+
+export function createApp(options: AppOptions) {
+  const membership = membershipWiring(options)
+  if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
+    throw new Error('local-daemon mode must not receive authStrategy')
+  }
+
+  const app = new Hono()
+
+  const wiring = appWiring(options)
+  const { instanceId, pairingLinkContext, pairingUnavailableReason } = wiring
+  const { identity, token, oauthAuthz, credentialResolver, mcpAuth, serverModeGetStatus } = wiring
+
+  // Tracing middleware first so the request span wraps every other
+  // middleware (auth, headers, route handler). When OTel is disabled the
+  // tracer is a no-op so the wrapping cost is negligible.
+  app.use('*', tracingMiddleware())
+
+  app.use('*', async (_c, next) => {
+    options.touch()
+    await next()
+  })
+
+  app.use('*', async (c, next) => {
+    await next()
+    setBaselineSecurityHeaders(c.res.headers)
+  })
+
+  mountApiAuth(app, options, credentialResolver, membership.gate)
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
   // daemon mode only — server-mode has its own external-IdP oauth-jwt
   // resource-server strategy and is not itself an authorization server.
   // Unmounted entirely unless an operator configures at least one
   // redirect_uri registry entry (empty-by-default, like allowedWebOrigins).
-  if (oauthAuthz) {
-    const oauthAuthzRoutes = createOAuthAuthzRouter({
-      store: oauthAuthz.store,
-      registry: oauthAuthz.registry,
-    })
-    // Attached per explicit path, NOT via a sub-app: Hono merges a sub-app's
-    // `use('*')` into the parent as `/*`, so a sub-app mounted at '/' would
-    // run this host guard and CORS ahead of every other route's own policy —
-    // an OPTIONS preflight for /mcp would be answered here before
-    // createMcpHttpOriginMiddleware ever ran.
-    for (const path of OAUTH_AUTHZ_PATHS) {
-      // Host guard on EVERY path of the surface, including /authorize: a
-      // spoofed non-loopback Host is a DNS-rebinding vector here exactly as
-      // on /api/*, and it must be rejected before an OPTIONS preflight could
-      // short-circuit past it.
-      app.use(path, createApiHostGuardMiddleware(options.authMode))
-    }
-    // CORS covers only OAUTH_AUTHZ_CORS_PATHS — the metadata documents and
-    // /token — never the /authorize pair. Reflecting an allowed web origin on
-    // the approval endpoints would let the requesting page read the approval
-    // screen and script its POST cross-site, which is the whole thing the
-    // approval step exists to prevent. See oauth-authz.ts.
-    for (const path of OAUTH_AUTHZ_CORS_PATHS) {
-      app.use(path, createApiLoopbackCorsMiddleware(oauthAuthz.allowedWebOrigins))
-    }
-    app.route('/', oauthAuthzRoutes)
-  }
+  if (oauthAuthz) mountOAuthAuthz(app, options.authMode, oauthAuthz)
 
   if (mcpAuth) {
     app.get('/.well-known/oauth-protected-resource', (c) => {
@@ -285,40 +554,7 @@ export function createApp(options: AppOptions) {
     })
   }
 
-  // /mcp middleware:
-  // - origin policy: server-mode checks allowedOrigins; local-daemon allows loopback only
-  // - auth: server-mode uses AsyncAuthStrategy with mcp:call scope; local-daemon uses daemon token
-  // - bodyLimit: prevent OOM from oversized JSON-RPC payloads (4 MiB)
-  if (options.authMode === 'server-mode') {
-    const serverModePlan = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: options.publicBaseUrl,
-      allowedOrigins: [...options.allowedOrigins],
-    })
-    if (serverModePlan.ok && serverModePlan.kind === 'server-mode') {
-      app.use('/mcp', createServerModeOriginMiddleware(serverModePlan.allowedOrigins))
-    }
-    app.use('/mcp', createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call']))
-  } else {
-    app.use('/mcp', createMcpHttpOriginMiddleware(options.allowedWebOrigins ?? []))
-    app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
-  }
-  app.use(
-    '/mcp',
-    bodyLimit({
-      maxSize: 4 * 1024 * 1024,
-      onError: (c) =>
-        c.json(
-          {
-            jsonrpc: '2.0',
-            error: { code: -32600, message: 'Request body too large (max 4 MiB)' },
-            id: null,
-          },
-          413,
-        ),
-    }),
-  )
+  mountMcpMiddleware(app, options, mcpAuth)
 
   // The modern (2026-07-28) serving entry: per-request factory, no protocol
   // session — the same stateless idiom this endpoint has always used, now
@@ -342,58 +578,11 @@ export function createApp(options: AppOptions) {
     createMcpRouter({ modernMcpHandler, pairingLinkContext, pairingUnavailableReason }),
   )
 
-  // Passkey pins exist only where pairing does (ADR-0039): the promote route
-  // below verifies against them, and a composition without any refuses an
+  // Passkey pins exist only where pairing does (ADR-0039): the promote
+  // route verifies against them, and a composition without any refuses an
   // attestation as naming an unknown credential.
   const credentials = options.authMode === 'local-daemon' ? options.pairing?.credentials : undefined
-  if (options.authMode === 'local-daemon' && options.pairing !== undefined) {
-    // Pairing-grant routes are local-daemon only by design (the consent
-    // model assumes the daemon's own served UI and loopback reachability).
-    app.route('/', createPairingRouter({ ...options.pairing, identity, members: options.members }))
-  }
-  // Membership routes (ADR-0041 S0-4) need the workspace-existence check
-  // that only ServerDeps' workspaceDocuments answers — so, unlike the
-  // pairing router above, they also require serverDeps.
-  if (
-    options.authMode === 'local-daemon' &&
-    options.pairing !== undefined &&
-    options.members !== undefined &&
-    options.serverDeps !== undefined
-  ) {
-    const { members, pairing, serverDeps } = options
-    app.route(
-      '/',
-      createMembershipRouter({
-        members,
-        tokens: pairing.tokens,
-        credentials: pairing.credentials,
-        workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
-      }),
-    )
-  }
-  // The read plane's workspace-key route (ADR-0042 decisions 1/3/5). Same
-  // mount condition as membership above, plus `replicaKeys` — a member's
-  // session is what this route hands the key to, so it needs the same
-  // membership lookup and workspace-existence check.
-  if (
-    options.authMode === 'local-daemon' &&
-    options.pairing !== undefined &&
-    options.members !== undefined &&
-    options.serverDeps !== undefined &&
-    options.replicaKeys !== undefined
-  ) {
-    const { members, serverDeps, replicaKeys } = options
-    app.route(
-      '/',
-      createReplicaKeyRouter({
-        keys: replicaKeys,
-        members,
-        leaseTtlMs: options.replicaLeaseTtlMs ?? DEFAULT_REPLICA_LEASE_TTL_MS,
-        workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
-        credentialResolver,
-      }),
-    )
-  }
+  mountLocalDaemonRouters(app, options, identity, credentialResolver)
 
   // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
@@ -433,22 +622,6 @@ export function createApp(options: AppOptions) {
   app.route('/', createSyncSseRouter(admit === undefined ? {} : { admit }))
   app.route('/', createDebugRouter({ credentialResolver }))
   app.route('/', createStatusRouter())
-  // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
-  // OAuth grant to a WS upgrade — server-mode's WS auth goes through its own
-  // AsyncAuthStrategy and never needs this. Mounted even when no OAuth
-  // registry is configured (oauthAuthz undefined): the resolver then has no
-  // OAuth branch, so nothing presented can resolve to an `oauth-grant` and
-  // the route always 401s — the same "declared but always-refuses when
-  // unconfigured" shape as the rest of this surface.
-  if (options.authMode === 'local-daemon') {
-    app.route(
-      '/',
-      createWsTicketRouter({
-        credentialResolver,
-        ticketStore: options.wsTicketStore ?? createWsTicketStore(),
-      }),
-    )
-  }
   app.route(
     '/',
     createRuntimeRouter({
@@ -460,14 +633,7 @@ export function createApp(options: AppOptions) {
     }),
   )
   if (options.authMode === 'server-mode') {
-    // Server-mode serves only the static placeholder above — no build
-    // artifact, no runtime-config / token injection, no static asset roots.
-    app.get('*', (c) => {
-      if (isReservedUiPath(c.req.path)) {
-        return c.notFound()
-      }
-      return c.html(SERVER_MODE_PLACEHOLDER_HTML)
-    })
+    mountServerModeUi(app)
     // Same shape as the local-daemon return below, so callers see one type
     // rather than a union. Server-mode does not consult this resolver — its
     // `/api/*` goes through `createServerModeApiAuthMiddleware` over the
@@ -475,58 +641,7 @@ export function createApp(options: AppOptions) {
     return Object.assign(app, { credentialResolver })
   }
 
-  for (const pattern of ['/fonts/*', '/assets/*']) {
-    app.use(pattern, serveStatic({ root: DIST_WEB_APP_DIR }))
-  }
-
-  // Captured once here, not read from getStatus() inside the request handler
-  // below: the port is fixed for the app instance's lifetime, but getStatus()
-  // also computes app.buildPresent via a synchronous existsSync() (see
-  // http-server.ts) that must run fresh per real status check, not on every
-  // SPA page load.
-  const daemonPort = options.getStatus().port
-
-  // Hosted-first end state (supersedes ADR-0001's optional full-UI serving,
-  // see the ADR addendum): the daemon serves exactly ONE page — /pair, the
-  // pairing consent trust anchor that must come from the daemon's own
-  // origin — plus the assets it needs. Every other UI path redirects to the
-  // official hosted app, which reaches this daemon through its default
-  // origin admission + a pairing grant. Accepted tradeoff: a fully-offline
-  // FIRST run has no canvas UI; the installed PWA is the offline path.
-  app.get('*', async (c) => {
-    if (isReservedUiPath(c.req.path)) {
-      return c.notFound()
-    }
-    if (c.req.path !== '/pair') {
-      return c.redirect(OFFICIAL_HOSTED_APP_URL, 302)
-    }
-    try {
-      const html = await readFile(join(DIST_WEB_APP_DIR, 'index.html'), 'utf-8')
-      // The daemon token is deliberately NOT part of __WHITEBOARD_RUNTIME_CONFIG__
-      // (see shared/token-store.ts) — it ships in its own global so it never
-      // rides along inside an object that logging / error-reporting could
-      // serialize wholesale.
-      const runtimeConfigJson = toInlineScriptJson({
-        // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the
-        // value is always a loopback origin, even when the daemon binds 0.0.0.0.
-        daemonBaseUrl: `http://127.0.0.1:${daemonPort}`,
-      })
-      const nonce = createCspNonce()
-      const runtimeConfigScript = `<script nonce="${nonce}">window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
-      const tokenScript = token
-        ? `<script nonce="${nonce}">window.__WHITEBOARD_DAEMON_TOKEN__ = ${toInlineScriptJson(token)}</script>`
-        : ''
-      const injected = `${runtimeConfigScript}${tokenScript}`
-      const withRuntimeConfig = html.includes('</head>')
-        ? html.replace('</head>', `${injected}</head>`)
-        : `${injected}${html}`
-      return c.html(withRuntimeConfig, 200, {
-        'Content-Security-Policy': pairPageCsp(nonce),
-      })
-    } catch {
-      return c.text('Not found. Run `pnpm build` first.', 404)
-    }
-  })
+  mountPairPageUi(app, options.getStatus().port, token)
 
   // Returned alongside the app so the WEBSOCKET UPGRADE shares this exact
   // instance. `http-server.ts` owns that surface and is outside the Hono app,

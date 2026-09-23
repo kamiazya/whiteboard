@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
+import type { IncomingMessage } from 'node:http'
 import type { Socket } from 'node:net'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
@@ -58,6 +59,47 @@ import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/st
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
 import { resolveWorkspaceHandleToId } from './workspace-handle.js'
+
+/**
+ * Answer an upgrade the daemon will not accept, and close the socket.
+ *
+ * A half-open socket with no response is the worst outcome here — the client
+ * hangs — so every refusal path writes a status line before destroying.
+ */
+function refuseUpgrade(socket: Duplex, statusCode: number, body = ''): void {
+  const statusText = WS_UPGRADE_REFUSAL_TEXT[statusCode] ?? 'Unauthorized'
+  const bodyHeaders =
+    body === ''
+      ? ''
+      : `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n`
+  socket.write(
+    `HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n${bodyHeaders}\r\n${body}`,
+  )
+  socket.destroy()
+}
+
+const WS_UPGRADE_REFUSAL_TEXT: Record<number, string> = {
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+}
+
+/**
+ * The workspace and path this upgrade names, or `null` once the socket has
+ * been refused for naming an unusable one.
+ */
+function wsUpgradeTarget(
+  req: IncomingMessage,
+  socket: Duplex,
+): { workspaceId: string; path: string } | null {
+  try {
+    return parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
+  } catch (error) {
+    const issue = validationErrorBody(error)
+    refuseUpgrade(socket, 400, issue ? JSON.stringify(issue) : '')
+    return null
+  }
+}
 
 export type RuntimeStatus = RuntimeStatusResponse
 
@@ -565,24 +607,11 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         allowedWebOrigins,
       )
       if (!decision.accept) {
-        const statusCode = decision.statusCode ?? 401
-        const statusText = statusCode === 403 ? 'Forbidden' : 'Unauthorized'
-        socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`)
-        socket.destroy()
+        refuseUpgrade(socket, decision.statusCode ?? 401)
         return
       }
-      let target: { workspaceId: string; path: string }
-      try {
-        target = parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
-      } catch (error) {
-        const issue = validationErrorBody(error)
-        const body = issue ? JSON.stringify(issue) : ''
-        socket.write(
-          `HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
-        )
-        socket.destroy()
-        return
-      }
+      const target = wsUpgradeTarget(req, socket)
+      if (target === null) return
       if (await refuseWsUpgradeUnlessMember(decision.grant, target.workspaceId, members, socket)) {
         return
       }
