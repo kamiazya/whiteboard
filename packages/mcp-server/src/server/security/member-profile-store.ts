@@ -231,7 +231,7 @@ async function insertUser(db: TenantScoped, accountId: string, displayName: stri
   return { id, now }
 }
 
-export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore {
+export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     async profileForBinding(binding) {
       const accountId = await accountFor(db, binding)

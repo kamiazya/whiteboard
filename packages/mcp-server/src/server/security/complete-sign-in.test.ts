@@ -8,13 +8,16 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { tenantDatabase } from '../store/db/tenant-database.js'
+import { inTenantTransaction, tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
-import { type CompleteSignInDeps, completeSignIn } from './complete-sign-in.js'
+import {
+  type CompleteSignInDeps,
+  completeSignIn,
+  createCompleteSignInDeps,
+} from './complete-sign-in.js'
 import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore } from './member-profile-store.js'
 import { type OidcProvider, providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
-import { createSignInSessionStore } from './sign-in-session-store.js'
 
 const HOUR = 60 * 60 * 1000
 const T0 = 1_800_000_000_000
@@ -44,12 +47,7 @@ let deps: CompleteSignInDeps
 
 function depsFor(tenantId?: string): CompleteSignInDeps {
   const db = tenantId === undefined ? handle.db : tenantDatabase(handle.rawDb, tenantId)
-  return {
-    members: createMemberProfileStore(db),
-    invitations: createInvitationStore(db),
-    sessions: createSignInSessionStore(db),
-    sessionTtlMs: HOUR,
-  }
+  return createCompleteSignInDeps(db, HOUR)
 }
 
 async function accountCount(): Promise<number> {
@@ -215,6 +213,42 @@ describe('completeSignIn — somebody new', () => {
     })
     expect(done.ok).toBe(true)
     expect(await accountCount()).toBe(1)
+  })
+})
+
+describe('completeSignIn — a user that cannot be created', () => {
+  // Spending the invitation and creating the user commit together: a failure
+  // in between must not leave the link spent and nobody created.
+  it('leaves the link unspent when creating the user fails', async () => {
+    const { token } = await deps.invitations.createLink({
+      invitedBy: 'p-bob',
+      now: T0,
+      ttlMs: HOUR,
+    })
+    const failing: CompleteSignInDeps = {
+      ...deps,
+      atomically: (fn) =>
+        inTenantTransaction(handle.db, (trx) =>
+          fn({
+            invitations: createInvitationStore(trx),
+            members: {
+              ...createMemberProfileStore(trx),
+              ensureProfile: async () => {
+                throw new Error('disk full')
+              },
+            },
+          }),
+        ),
+    }
+    await expect(
+      completeSignIn(failing, {
+        provider: provider(),
+        claims: ada,
+        invitationToken: token,
+        now: T0 + 1,
+      }),
+    ).rejects.toThrow('disk full')
+    expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(true)
   })
 })
 

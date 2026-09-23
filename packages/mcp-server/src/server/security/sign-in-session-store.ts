@@ -22,6 +22,10 @@ function hashToken(token: string): string {
 export function createSignInSessionStore(db: TenantDatabase): SignInSessionStore {
   return {
     async create(person, now, ttlMs) {
+      // Nothing else removes an expired session, so opening one sheds them —
+      // without a background worker to declare, and bounded by the rate of
+      // sign-ins rather than by the table's age.
+      await db.deleteFrom('signInSessions').where('expiresAt', '<=', now).execute()
       const token = randomBytes(32).toString('base64url')
       await db
         .insertInto('signInSessions')
