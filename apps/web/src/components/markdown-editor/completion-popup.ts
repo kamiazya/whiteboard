@@ -23,6 +23,28 @@ import type { Command } from '@codemirror/view'
 import { EditorView, keymap, ViewPlugin } from '@codemirror/view'
 
 /**
+ * Where the `occurrence`-th option carrying `label` sits, or -1.
+ *
+ * By OCCURRENCE rather than by label alone because a refresh can reorder the
+ * list and two sources can offer the same text: the tap recorded which of
+ * the identically-labelled rows was under the finger, and accepting a
+ * different one would insert something the person never saw highlighted.
+ */
+function indexOfOccurrence(
+  options: readonly { label: string }[],
+  label: string,
+  occurrence: number,
+): number {
+  let seen = 0
+  for (let i = 0; i < options.length; i++) {
+    if (options[i]?.label !== label) continue
+    seen += 1
+    if (seen === occurrence) return i
+  }
+  return -1
+}
+
+/**
  * Deterministic tap-commit for the completion popup. Upstream accepts on
  * the SYNTHESIZED mousedown and separately closes the popup when the
  * contenteditable blurs (with a 10ms grace) — on touch devices the tap
@@ -117,16 +139,7 @@ export const completionTouchAccept = ViewPlugin.define((view) => {
       }
       const { label, occurrence } = deferred
       deferred = null
-      let seen = 0
-      let index = -1
-      for (let i = 0; i < options.length; i++) {
-        if (options[i]?.label !== label) continue
-        seen += 1
-        if (seen === occurrence) {
-          index = i
-          break
-        }
-      }
+      const index = indexOfOccurrence(options, label, occurrence)
       if (index === -1) return
       // A ViewPlugin's own update() cannot dispatch synchronously; queue for
       // right after CodeMirror finishes applying this one.

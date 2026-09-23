@@ -97,6 +97,18 @@ describe('a finished shortcode is drawn as its emoji', () => {
   })
 
   /**
+   * The other end of the same rule. A caret resting just before the opening
+   * colon is about to type INTO the shortcode — backspacing the name starts
+   * there — so it counts as inside too, and the pair is inclusive at both
+   * ends rather than at one.
+   */
+  it('stays text with the caret just before the opening colon', () => {
+    const target = open('ship it :rocket: today', 8)
+    expect(shown(target)).toEqual([])
+    expect(reads(target)).toBe('ship it :rocket: today')
+  })
+
+  /**
    * Inside a code span the shortcode is the SUBJECT, and the renderer says
    * so too — `mdast-blocks.ts` expands text nodes and never `inlineCode`.
    * The editor showing an emoji where the render shows text would make the

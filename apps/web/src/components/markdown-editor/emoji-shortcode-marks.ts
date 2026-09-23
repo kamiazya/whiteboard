@@ -85,9 +85,37 @@ function inCode(view: EditorView, from: number, to: number): boolean {
   return found
 }
 
+/**
+ * The shortcodes on ONE line that should be drawn as their emoji.
+ *
+ * Two are skipped. A shortcode the caret is inside — inclusive at BOTH ends,
+ * because the caret sits just past the closing colon the instant the name is
+ * finished, and revealing there is what stops the emoji appearing under the
+ * cursor mid-word. And one inside code, where a colon-name-colon is text the
+ * author meant literally.
+ */
+function lineMarks(
+  view: EditorView,
+  lineNumber: number,
+  caret: { from: number; to: number },
+): Array<Range<Decoration>> {
+  const line = view.state.doc.line(lineNumber)
+  const out: Array<Range<Decoration>> = []
+  for (const range of emojiShortcodeRanges(line.text)) {
+    const from = line.from + range.from
+    const to = line.from + range.to
+    if (caret.to >= from && caret.from <= to) continue
+    if (inCode(view, from, to)) continue
+    const name = line.text.slice(range.from + 1, range.to - 1)
+    out.push(Decoration.replace({ widget: new EmojiWidget(range.char, name) }).range(from, to))
+  }
+  return out
+}
+
 function marks(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>()
-  const { from: caretFrom, to: caretTo } = view.state.selection.main
+  const { from, to } = view.state.selection.main
+  const caret = { from, to }
   const pending: Array<Range<Decoration>> = []
   for (const visible of view.visibleRanges) {
     // Whole lines, so a shortcode straddling the viewport edge is scanned
@@ -95,20 +123,7 @@ function marks(view: EditorView): DecorationSet {
     const first = view.state.doc.lineAt(visible.from)
     const last = view.state.doc.lineAt(visible.to)
     for (let n = first.number; n <= last.number; n += 1) {
-      const line = view.state.doc.line(n)
-      for (const range of emojiShortcodeRanges(line.text)) {
-        const from = line.from + range.from
-        const to = line.from + range.to
-        // Inclusive at both ends: the caret sits just past the closing colon
-        // the instant the name is finished, and revealing there is what
-        // stops the emoji appearing under the cursor mid-word.
-        if (caretTo >= from && caretFrom <= to) continue
-        if (inCode(view, from, to)) continue
-        const name = line.text.slice(range.from + 1, range.to - 1)
-        pending.push(
-          Decoration.replace({ widget: new EmojiWidget(range.char, name) }).range(from, to),
-        )
-      }
+      pending.push(...lineMarks(view, n, caret))
     }
   }
   // `visibleRanges` is ordered, and so is each line's scan — but a builder
