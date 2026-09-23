@@ -4,11 +4,13 @@
 while the conversation was fresh, and the owner answered all of them the same
 day (see **Decisions taken** below). A second round, forced by what the
 first round's implementation exposed, added decisions 11-14 the same day,
-and a third added decision 15, which makes authentication a seam. Of the
-account/user model itself only decision 8's tenant partitioning is built —
-the origin-keyed stores live under their tenant. The external-token
-validation seam decision 15 cites already exists, but it does not yet
-resolve anything to an account; and
+and a third added decision 15, which makes authentication a seam. Built so far:
+decision 8's tenant partitioning (the origin-keyed stores live under their
+tenant), and decisions 1-5's account/user split with the migration that
+turned each profile into one account plus one user. What plugs into the
+seam decision 15 opened is [ADR-0046](0046-external-sign-in.md); the
+external-token validation seam it cites still resolves nothing to an
+account; and
 [ADR-0041](0041-profile-and-authority.md)'s Member/profile remains what ships;
 the draft stays a draft until the first increment is built, so that increment
 can correct it rather than inherit a record nobody tested. This exists so the
