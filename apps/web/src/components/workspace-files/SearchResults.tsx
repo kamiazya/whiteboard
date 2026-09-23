@@ -70,6 +70,119 @@ export interface SearchResultsProps {
 }
 
 /**
+ * One result, in either layout. The two differ in exactly three things — the
+ * button's own class, the thumbnail's size, and nothing else — so they are
+ * one card with a `layout` rather than two trees that have to be kept
+ * saying the same thing. They had already drifted: the grid carried a
+ * comment the list did not, and every other line was duplicated verbatim.
+ *
+ * The path stays on the card in BOTH forms. Dropping it from the grid would
+ * reintroduce the Finder/Figma gap the list avoids.
+ */
+function SearchResultCard({
+  row: { document: entry, contexts, lexicalRank, semanticRank },
+  layout,
+  query,
+  selectedPath,
+  onSelect,
+  onActivate,
+  onDocumentContextMenu,
+  thumbnail,
+}: {
+  row: SearchResultRow
+  layout: 'list' | 'grid'
+  query: string
+  selectedPath: string | undefined
+  onSelect: SearchResultsProps['onSelect']
+  onActivate: SearchResultsProps['onActivate']
+  onDocumentContextMenu: SearchResultsProps['onDocumentContextMenu']
+  thumbnail: (entry: WorkspaceDocumentEntry, sizeClass: string) => ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      data-doc-path={entry.path}
+      aria-current={entry.path === selectedPath ? 'true' : undefined}
+      onClick={() => onSelect(entry)}
+      onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
+      onKeyDown={
+        onActivate === undefined
+          ? undefined
+          : (event) => {
+              if (event.key === 'Enter') {
+                // Without this the keydown ALSO fires the native button
+                // click, selecting after the open.
+                event.preventDefault()
+                onActivate(entry)
+              }
+            }
+      }
+      onContextMenu={
+        onDocumentContextMenu === undefined
+          ? undefined
+          : (event) => {
+              event.preventDefault()
+              onDocumentContextMenu(entry, event.clientX, event.clientY)
+            }
+      }
+      className={cn(
+        'hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 rounded-md border text-left aria-[current]:ring-1',
+        layout === 'list' ? 'items-center gap-2 p-1.5' : 'flex-col gap-1.5 p-2',
+      )}
+    >
+      {/* In the list, 80x44 and not smaller: measured on a real document, a
+          faithful render is a smear below roughly this and only here do the
+          heading and the blocks separate. Recognising the document is the
+          whole job of a search result, so this is the one list that pays for
+          the height. */}
+      {thumbnail(entry, layout === 'list' ? 'h-11 w-20' : 'aspect-[16/9] w-full')}
+      <span className="flex min-w-0 flex-col">
+        <span data-testid="result-title" className="truncate text-sm">
+          <Highlighted text={titleOf(entry)} query={query} />
+        </span>
+        <span className="text-muted-foreground truncate font-mono text-xs">
+          <Highlighted text={entry.path} query={query} />
+        </span>
+        {(entry.tags?.length ?? 0) > 0 && (
+          /* A #tag query matches nothing visible in title or path, so the
+             row must show the tag that put it here. */
+          <span className="text-muted-foreground truncate text-[11px]">
+            {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+          </span>
+        )}
+        {lexicalRank === undefined && semanticRank !== undefined && (
+          /* Why the row is here, when no word in it is. The excerpt below is
+             the document's opening rather than a match window, so without
+             this the row is indistinguishable from one nothing matched at
+             all. */
+          <span
+            data-testid="semantic-hit"
+            className="text-muted-foreground text-[10px] uppercase tracking-wide"
+          >
+            Matched by meaning
+          </span>
+        )}
+        {(contexts?.length ?? 0) > 0 && (
+          /* The match itself, when it was in the CONTENT: neither the title
+             nor the path shows it, so without this the row cannot say why it
+             is here. */
+          <span
+            data-testid="result-excerpt"
+            className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
+          >
+            {lexicalRank === undefined ? (
+              (contexts?.[0] ?? '')
+            ) : (
+              <Highlighted text={contexts?.[0] ?? ''} query={query} />
+            )}
+          </span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+/**
  * The text with its first case-insensitive match marked. First only: one
  * highlight answers "why is this row here", and a title that matches four
  * times painted four times reads as damage rather than emphasis.
@@ -183,176 +296,28 @@ export function SearchResults({
           </Tooltip>
         </div>
       </div>
-      {layout === 'list' ? (
-        <ul {...longPress} data-testid="search-results-list" className="space-y-1 p-0.5">
-          {results.map(({ document: entry, contexts, lexicalRank, semanticRank }) => (
-            <li key={entry.documentId}>
-              <button
-                type="button"
-                data-doc-path={entry.path}
-                aria-current={entry.path === selectedPath ? 'true' : undefined}
-                onClick={() => onSelect(entry)}
-                onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
-                onKeyDown={
-                  onActivate === undefined
-                    ? undefined
-                    : (event) => {
-                        if (event.key === 'Enter') {
-                          // Without this the keydown ALSO fires the native
-                          // button click, selecting after the open.
-                          event.preventDefault()
-                          onActivate(entry)
-                        }
-                      }
-                }
-                onContextMenu={
-                  onDocumentContextMenu === undefined
-                    ? undefined
-                    : (event) => {
-                        event.preventDefault()
-                        onDocumentContextMenu(entry, event.clientX, event.clientY)
-                      }
-                }
-                className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 items-center gap-2 rounded-md border p-1.5 text-left aria-[current]:ring-1"
-              >
-                {/* 80x44, not smaller: measured on a real document, a faithful
-                    render is a smear below roughly this and only here do the
-                    heading and the blocks separate. Recognising the document is
-                    the whole job of a search result, so this is the one list that
-                    pays for the height. */}
-                {thumbnail(entry, 'h-11 w-20')}
-                <span className="flex min-w-0 flex-col">
-                  <span data-testid="result-title" className="truncate text-sm">
-                    <Highlighted text={titleOf(entry)} query={query} />
-                  </span>
-                  <span className="text-muted-foreground truncate font-mono text-xs">
-                    <Highlighted text={entry.path} query={query} />
-                  </span>
-                  {(entry.tags?.length ?? 0) > 0 && (
-                    /* A #tag query matches nothing visible in title or path,
-                       so the row must show the tag that put it here. */
-                    <span className="text-muted-foreground truncate text-[11px]">
-                      {entry.tags?.map((tag) => `#${tag}`).join(' ')}
-                    </span>
-                  )}
-                  {lexicalRank === undefined && semanticRank !== undefined && (
-                    /* Why the row is here, when no word in it is. The excerpt
-                       below is the document's opening rather than a match
-                       window, so without this the row is indistinguishable
-                       from one nothing matched at all. */
-                    <span
-                      data-testid="semantic-hit"
-                      className="text-muted-foreground text-[10px] uppercase tracking-wide"
-                    >
-                      Matched by meaning
-                    </span>
-                  )}
-                  {(contexts?.length ?? 0) > 0 && (
-                    /* The match itself, when it was in the CONTENT: neither
-                       the title nor the path shows it, so without this the
-                       row cannot say why it is here. */
-                    <span
-                      data-testid="result-excerpt"
-                      className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
-                    >
-                      {lexicalRank === undefined ? (
-                        (contexts?.[0] ?? '')
-                      ) : (
-                        <Highlighted text={contexts?.[0] ?? ''} query={query} />
-                      )}
-                    </span>
-                  )}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <ul
-          {...longPress}
-          data-testid="search-results-grid"
-          className="grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3"
-        >
-          {results.map(({ document: entry, contexts, lexicalRank, semanticRank }) => (
-            <li key={entry.documentId}>
-              <button
-                type="button"
-                data-doc-path={entry.path}
-                aria-current={entry.path === selectedPath ? 'true' : undefined}
-                onClick={() => onSelect(entry)}
-                onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
-                onKeyDown={
-                  onActivate === undefined
-                    ? undefined
-                    : (event) => {
-                        if (event.key === 'Enter') {
-                          // Without this the keydown ALSO fires the native
-                          // button click, selecting after the open.
-                          event.preventDefault()
-                          onActivate(entry)
-                        }
-                      }
-                }
-                onContextMenu={
-                  onDocumentContextMenu === undefined
-                    ? undefined
-                    : (event) => {
-                        event.preventDefault()
-                        onDocumentContextMenu(entry, event.clientX, event.clientY)
-                      }
-                }
-                className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 flex-col gap-1.5 rounded-md border p-2 text-left aria-[current]:ring-1"
-              >
-                {thumbnail(entry, 'aspect-[16/9] w-full')}
-                <span className="flex min-w-0 flex-col">
-                  <span data-testid="result-title" className="truncate text-sm">
-                    <Highlighted text={titleOf(entry)} query={query} />
-                  </span>
-                  {/* The path stays on the card. Dropping it here would
-                      reintroduce the Finder/Figma gap the list avoids. */}
-                  <span className="text-muted-foreground truncate font-mono text-xs">
-                    <Highlighted text={entry.path} query={query} />
-                  </span>
-                  {(entry.tags?.length ?? 0) > 0 && (
-                    /* A #tag query matches nothing visible in title or path,
-                       so the row must show the tag that put it here. */
-                    <span className="text-muted-foreground truncate text-[11px]">
-                      {entry.tags?.map((tag) => `#${tag}`).join(' ')}
-                    </span>
-                  )}
-                  {lexicalRank === undefined && semanticRank !== undefined && (
-                    /* Why the row is here, when no word in it is. The excerpt
-                       below is the document's opening rather than a match
-                       window, so without this the row is indistinguishable
-                       from one nothing matched at all. */
-                    <span
-                      data-testid="semantic-hit"
-                      className="text-muted-foreground text-[10px] uppercase tracking-wide"
-                    >
-                      Matched by meaning
-                    </span>
-                  )}
-                  {(contexts?.length ?? 0) > 0 && (
-                    /* The match itself, when it was in the CONTENT: neither
-                       the title nor the path shows it, so without this the
-                       row cannot say why it is here. */
-                    <span
-                      data-testid="result-excerpt"
-                      className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
-                    >
-                      {lexicalRank === undefined ? (
-                        (contexts?.[0] ?? '')
-                      ) : (
-                        <Highlighted text={contexts?.[0] ?? ''} query={query} />
-                      )}
-                    </span>
-                  )}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul
+        {...longPress}
+        data-testid={layout === 'list' ? 'search-results-list' : 'search-results-grid'}
+        className={
+          layout === 'list' ? 'space-y-1 p-0.5' : 'grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3'
+        }
+      >
+        {results.map((row) => (
+          <li key={row.document.documentId}>
+            <SearchResultCard
+              row={row}
+              layout={layout}
+              query={query}
+              selectedPath={selectedPath}
+              onSelect={onSelect}
+              onActivate={onActivate}
+              onDocumentContextMenu={onDocumentContextMenu}
+              thumbnail={thumbnail}
+            />
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
