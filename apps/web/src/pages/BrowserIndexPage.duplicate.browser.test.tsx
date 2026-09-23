@@ -30,7 +30,7 @@ afterEach(cleanup)
 
 const titles = () => screen.getAllByTestId('card-title').map((each) => each.textContent)
 
-it('offers Duplicate on a row and shows the copy in the list', async () => {
+async function seedOne() {
   const workspaceId = getBrowserWorkspaceId()
   const store = new LocalStoreDouble()
   const documentId = '0CFJNRVY147ADGKPSWZ258BEHM'
@@ -47,11 +47,14 @@ it('offers Duplicate on a row and shows the copy in the list', async () => {
   // rather than the wiring this test is about.
   await store.loro.save(documentId, new Loro().export({ mode: 'snapshot' }))
   await new IdbDocumentIndex().createWorkspace({ workspaceId, segment: 'default' })
+  return store
+}
 
+function renderPage(store: LocalStoreDouble, index = store.index) {
   render(
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
-        index={store.index}
+        index={index}
         loro={store.loro}
         pointer={store.pointer}
         clock={store.clock}
@@ -60,17 +63,67 @@ it('offers Duplicate on a row and shows the copy in the list', async () => {
     </MemoryRouter>,
     { container: document.body },
   )
-  await waitFor(() => expect(titles()).toEqual(['Alpha']))
+}
 
+async function duplicateTheOnlyRow() {
   const card = (await screen.findByTestId('card-title')).closest('button')
   if (card === null) throw new Error('no button around the card')
   await userEvent.click(card, { button: 'right' })
   const menu = await screen.findByRole('menu', { name: 'Document actions' })
   await userEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate' }))
+}
+
+it('offers Duplicate on a row and shows the copy in the list', async () => {
+  const store = await seedOne()
+  renderPage(store)
+  await waitFor(() => expect(titles()).toEqual(['Alpha']))
+
+  await duplicateTheOnlyRow()
 
   await waitFor(() => expect(titles().sort()).toEqual(['Alpha', 'Alpha (copy)']), {
     timeout: 15_000,
   })
   // The copy is a second document, not a rename of the first.
   expect(screen.queryByRole('alert')).toBeNull()
+})
+
+/**
+ * A copy that was really made must never be reported as a failed duplicate:
+ * that reading invites a second press, and the second copy is real too.
+ */
+it('says the list could not be re-read rather than that the duplicate failed', async () => {
+  const store = await seedOne()
+  // Listing refuses from the moment the row is on screen: the page's own
+  // re-read is what fails, while the duplicate itself does not — both reads
+  // inside `duplicateBrowserDocument` are already tolerant of a listing that
+  // refuses (they only number the copy's name and path).
+  let refuseListing = false
+  const flaky = new Proxy(store.index, {
+    get(target, prop) {
+      if (prop !== 'listDocuments') {
+        const held = Reflect.get(target, prop)
+        // BOUND to the target: the index keeps private fields, and a method
+        // invoked with the proxy as `this` cannot read them — which fails
+        // the first render rather than the read this case is about.
+        return typeof held === 'function' ? held.bind(target) : held
+      }
+      return async (...args: Parameters<typeof store.index.listDocuments>) => {
+        if (refuseListing) throw new Error('the listing refused')
+        return target.listDocuments(...args)
+      }
+    },
+  })
+  renderPage(store, flaky)
+  await waitFor(() => expect(titles()).toEqual(['Alpha']))
+  refuseListing = true
+
+  await duplicateTheOnlyRow()
+
+  const alert = await screen.findByRole('alert', undefined, { timeout: 15_000 })
+  expect(alert.textContent).toContain('could not be re-read')
+  expect(alert.textContent).not.toContain('Failed to duplicate')
+  // And the copy really is there, which is what makes that wording the right
+  // one. Read straight off the index, not through the refusing proxy.
+  refuseListing = false
+  expect(await store.index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toHaveLength(2)
 })
