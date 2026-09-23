@@ -9,6 +9,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import type { Insertable } from 'kysely'
 import { sql } from 'kysely'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -24,6 +25,7 @@ import {
 import { corruptStoredData } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
+import type { DatabaseSchema } from './db/schema.js'
 import { DocumentNotFoundError } from './document-not-found-error.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -204,6 +206,94 @@ function parseStoredAttestation(
   }
 }
 
+/** What `save` takes beyond the document itself. */
+type SaveVersionOpts = Parameters<FileVersionStore['save']>[3]
+
+/**
+ * The row a saved version becomes. Every optional field is written as NULL
+ * rather than omitted, because the column exists either way.
+ */
+function versionRow({
+  id,
+  documentId,
+  workspaceId,
+  branchName,
+  opts,
+  operator,
+  elementCount,
+  frontiers,
+  contentDigest,
+  createdAt,
+}: {
+  id: string
+  documentId: string
+  workspaceId: string
+  branchName: string
+  opts: SaveVersionOpts
+  operator: SaveVersionOpts['operator']
+  elementCount: number
+  frontiers: string
+  contentDigest: string
+  createdAt: number
+}): Insertable<DatabaseSchema['versions']> {
+  return {
+    id,
+    documentId,
+    workspaceId,
+    branchName,
+    auto: opts.auto ? 1 : 0,
+    label: opts.label ?? null,
+    operatorKind: operator?.kind ?? '',
+    operatorActor: operator?.actor ?? '',
+    operatorDisplayName: operator?.displayName ?? null,
+    operatorAgentId: operator?.agentId ?? null,
+    operatorWorkspaceId: operator?.workspaceId ?? null,
+    elementCount,
+    frontiers,
+    contentDigest,
+    createdAt,
+    restoredFrom: opts.restoredFrom ?? null,
+    attestation: opts.attestation === undefined ? null : JSON.stringify(opts.attestation),
+  }
+}
+
+/**
+ * What the caller is told it saved. Spread-or-nothing on every optional
+ * field, so a version with no label carries no `label` key at all rather
+ * than an explicit `undefined` — the published shape says absent, and
+ * `exactOptionalPropertyTypes` holds that.
+ */
+function savedVersion({
+  id,
+  path,
+  createdAt,
+  elementCount,
+  branchName,
+  operator,
+  opts,
+}: {
+  id: string
+  path: string
+  createdAt: number
+  elementCount: number
+  branchName: string
+  operator: SaveVersionOpts['operator']
+  opts: SaveVersionOpts
+}): VersionEntry {
+  return {
+    id,
+    path,
+    createdAt: new Date(createdAt).toISOString(),
+    elementCount,
+    auto: opts.auto,
+    branchName,
+    ...(opts.label !== undefined ? { label: opts.label } : {}),
+    ...(operator !== undefined ? { operator } : {}),
+    ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
+    ...(opts.attestation !== undefined ? { attestation: opts.attestation } : {}),
+  }
+}
+
 export class FileVersionStore implements VersionStore {
   async save(
     workspaceId: string,
@@ -266,43 +356,27 @@ export class FileVersionStore implements VersionStore {
       const frontiers = bytesToBase64(encodeFrontiers(storedWorkspace.frontiers()))
       await db
         .insertInto('versions')
-        .values({
-          id,
-          documentId,
-          workspaceId,
-          branchName,
-          auto: opts.auto ? 1 : 0,
-          label: opts.label ?? null,
-          operatorKind: operator?.kind ?? '',
-          operatorActor: operator?.actor ?? '',
-          operatorDisplayName: operator?.displayName ?? null,
-          operatorAgentId: operator?.agentId ?? null,
-          operatorWorkspaceId: operator?.workspaceId ?? null,
-          elementCount,
-          frontiers,
-          // Free: `entry` is the resolve this save already did, and the
-          // digest is derived on that same read of the tree node.
-          contentDigest: entry.contentDigest,
-          createdAt,
-          restoredFrom: opts.restoredFrom ?? null,
-          attestation: opts.attestation === undefined ? null : JSON.stringify(opts.attestation),
-        })
+        .values(
+          versionRow({
+            id,
+            documentId,
+            workspaceId,
+            branchName,
+            opts,
+            operator,
+            elementCount,
+            frontiers,
+            // Free: `entry` is the resolve this save already did, and the
+            // digest is derived on that same read of the tree node.
+            contentDigest: entry.contentDigest,
+            createdAt,
+          }),
+        )
         .execute()
 
       await this.prune(documentId)
 
-      return {
-        id,
-        path,
-        createdAt: new Date(createdAt).toISOString(),
-        elementCount,
-        auto: opts.auto,
-        branchName,
-        ...(opts.label !== undefined ? { label: opts.label } : {}),
-        ...(operator !== undefined ? { operator } : {}),
-        ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
-        ...(opts.attestation !== undefined ? { attestation: opts.attestation } : {}),
-      }
+      return savedVersion({ id, path, createdAt, elementCount, branchName, operator, opts })
     })
   }
 

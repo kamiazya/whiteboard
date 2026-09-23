@@ -527,6 +527,53 @@ async function documentStoreReady(): Promise<LibsqlDocumentStore> {
   return new LibsqlDocumentStore(await dbReady())
 }
 
+/**
+ * Put this document's content in the workspace tree, creating its node when
+ * the path is new.
+ *
+ * A save that names no kind and finds none on the tree or in the doc's own
+ * bytes is a lazy-create of an empty document (the WS/update path on an
+ * unknown path); the spatial editor is what opens those, so `'spatial'` is
+ * the honest default — not a guess about someone else's data.
+ *
+ * An EXPLICIT kind is an intentional sync request (restore reconciling a
+ * different-kind source's content onto an existing target); a plain re-save
+ * omits it and must never touch the value.
+ *
+ * The write answers false when the tree already gave this path to a
+ * DIFFERENT document. With no legacy plane to fall back to, writing anywhere
+ * else would fork storage silently, so it refuses loudly instead.
+ */
+function placeDocumentInTree({
+  workspaceDoc,
+  workspaceId,
+  path,
+  documentId,
+  existingEntry,
+  requestedKind,
+  doc,
+}: {
+  workspaceDoc: LoroDoc
+  workspaceId: string
+  path: string
+  documentId: string
+  existingEntry: ReturnType<typeof resolveWorkspaceDocument>
+  requestedKind: DocumentKind | undefined
+  doc: LoroDoc
+}): void {
+  const kindForTree = requestedKind ?? existingEntry?.kind ?? readDocumentKind(doc) ?? 'spatial'
+  if (existingEntry === null) {
+    createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
+  } else if (requestedKind !== undefined && existingEntry.kind !== requestedKind) {
+    updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: requestedKind })
+  }
+  if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, doc)) {
+    throw new ConflictError(
+      `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
+    )
+  }
+}
+
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
 //    upserting the matching DB rows. ──
 // overwrite defaults to false so canvas_create does not destroy existing
@@ -594,27 +641,15 @@ export async function saveDocument(
     // so a second minting policy here would keep producing documents the
     // agent surface has to skip. One tree, one id space.
     const documentId = existingDocumentId ?? generateDocumentId()
-    // A save that names no kind and finds none on the tree or in the doc's
-    // own bytes is a lazy-create of an empty document (the WS/update path on
-    // an unknown path); the spatial editor is what opens those, so 'spatial'
-    // is the honest default — not a guess about someone else's data.
-    const kindForTree = options.kind ?? existingEntry?.kind ?? readDocumentKind(doc) ?? 'spatial'
-    if (existingEntry === null) {
-      createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
-    } else if (options.kind !== undefined && existingEntry.kind !== options.kind) {
-      // An explicit kind is an intentional sync request (e.g. restore
-      // reconciling a different-kind source's content onto an existing
-      // target); a plain re-save omits it and must never touch the value.
-      updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: options.kind })
-    }
-    // The create answers null when the tree already gave this path to a
-    // DIFFERENT document — with no legacy plane to fall back to, writing
-    // anywhere else would fork storage silently, so refuse loudly instead.
-    if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, doc)) {
-      throw new ConflictError(
-        `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
-      )
-    }
+    placeDocumentInTree({
+      workspaceDoc,
+      workspaceId,
+      path,
+      documentId,
+      existingEntry,
+      requestedKind: options.kind,
+      doc,
+    })
     await saveWorkspaceDoc(workspaceId, workspaceDoc)
     // A caller may hand this function a doc that is NOT the cached
     // projection (a fresh import, a checkout clone) — the cached one is then
@@ -954,31 +989,53 @@ export async function renameDocumentPath(
             .map((node) => node.path)
             .filter((path) => path === oldPath || path.startsWith(`${oldPath}/`))
 
-    // The index's move owns the collision rules (occupied destination,
-    // move-into-self, folder promotion) — one definition, not a second
-    // rows-shaped copy of it.
-    const index = await workspaceTreeIndex()
-    try {
-      await index.moveDocument({ workspaceId, from: oldPath, to: newPath })
-    } catch (err) {
-      if (err instanceof DocumentPathTakenError) {
-        throw new ConflictError(`Canvas "${workspaceId}/${err.path}" already exists`)
-      }
-      throw err
-    }
-
-    // Force the next getDoc() to reload under every key the move touched.
-    // A source path: a caller still reading through it should lazily create
-    // a fresh canvas rather than resurrect the moved doc's cached instance.
-    // A destination path: a WS connect or update-route call against it
-    // before this move can lazily cache an empty phantom doc there — leaving
-    // that phantom cached would shadow the just-moved canvas's real content.
-    for (const from of movedPaths) {
-      evictDoc(workspaceId, from)
-      evictDoc(workspaceId, from === oldPath ? newPath : `${newPath}${from.slice(oldPath.length)}`)
-    }
+    await moveThroughIndex(workspaceId, oldPath, newPath)
+    evictMovedPaths(workspaceId, movedPaths, oldPath, newPath)
     return { documentId }
   })
+}
+
+/**
+ * The index's move owns the collision rules (occupied destination,
+ * move-into-self, folder promotion) — one definition, not a second
+ * rows-shaped copy of it. Only the taken-path refusal is translated, because
+ * that one has a wire shape of its own.
+ */
+async function moveThroughIndex(
+  workspaceId: string,
+  oldPath: string,
+  newPath: string,
+): Promise<void> {
+  const index = await workspaceTreeIndex()
+  try {
+    await index.moveDocument({ workspaceId, from: oldPath, to: newPath })
+  } catch (err) {
+    if (err instanceof DocumentPathTakenError) {
+      throw new ConflictError(`Canvas "${workspaceId}/${err.path}" already exists`)
+    }
+    throw err
+  }
+}
+
+/**
+ * Force the next `getDoc()` to reload under every key the move touched.
+ *
+ * A SOURCE path: a caller still reading through it should lazily create a
+ * fresh canvas rather than resurrect the moved doc's cached instance. A
+ * DESTINATION path: a WS connect or update-route call against it before this
+ * move can lazily cache an empty phantom doc there, and leaving that phantom
+ * cached would shadow the just-moved canvas's real content.
+ */
+function evictMovedPaths(
+  workspaceId: string,
+  movedPaths: readonly string[],
+  oldPath: string,
+  newPath: string,
+): void {
+  for (const from of movedPaths) {
+    evictDoc(workspaceId, from)
+    evictDoc(workspaceId, from === oldPath ? newPath : `${newPath}${from.slice(oldPath.length)}`)
+  }
 }
 
 // ── list documents from the workspace record ──
