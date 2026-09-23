@@ -54,10 +54,11 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // root, 26 -> 25 with the spatial edge router, 25 -> 23 with the connection
 // chip and the shell mark, 23 -> 19 with four of its own scripts, 19 -> 14
 // with the build and smoke leftovers, 14 -> 13 with the markdown block
-// layout, 13 -> 12 with the storage report card, and 12 -> 11 with the
-// spatial editor: the comment asks for the ceiling to follow an obvious gap,
-// and a paydown that leaves slack is exactly one.
-const EXEMPT_CEILING = 11
+// layout, 13 -> 12 with the storage report card, 12 -> 10 with the version
+// timeline and the comments panel, and 10 -> 9 with the spatial editor: the
+// comment asks for the ceiling to follow an obvious gap, and a paydown that
+// leaves slack is exactly one.
+const EXEMPT_CEILING = 9
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {

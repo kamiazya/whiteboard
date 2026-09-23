@@ -161,7 +161,18 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 69,
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 578,
+  // Lowered 578 -> 311: the thread row moved to `thread-row.tsx`.
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 311,
+  // The row the panel's list is made of, split three ways: the row and its
+  // verbs, the open conversation, and the messages inside it. Each is a
+  // block of JSX rather than a branch — the shape a size budget cannot tell
+  // from logic and a complexity budget can, and all three are now UNDER the
+  // complexity threshold, which is what this increment was for. Splitting
+  // further would cut a single visual unit in half without a reader gaining
+  // anything.
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 155,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 57,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 92,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 165,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
