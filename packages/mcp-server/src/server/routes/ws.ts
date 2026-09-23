@@ -85,6 +85,17 @@ export function setRuntimeTouchFn(fn: () => void): void {
   runtimeTouch = fn
 }
 
+/**
+ * A `ws` RawData frame as bytes. The library hands over a Buffer, an
+ * ArrayBuffer or a LIST of Buffers depending on how the frame arrived, and
+ * all three are the same update to everything downstream.
+ */
+function frameBytes(data: RawData): Uint8Array {
+  if (Buffer.isBuffer(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+  if (data instanceof ArrayBuffer) return new Uint8Array(data)
+  return new Uint8Array(Buffer.concat(data as Buffer[]))
+}
+
 function omitUndefined<T extends object>(o: T): Partial<T> {
   const out: Partial<T> = {}
   for (const [k, v] of Object.entries(o) as Array<[keyof T, T[keyof T]]>) {
@@ -339,59 +350,60 @@ export async function handleWsUpgrade(
     closeSocket(1008, 'Insufficient scope')
   }
 
-  ws.on('message', async (data: RawData, isBinary: boolean) => {
-    if (isClosing) return
-    runtimeTouch()
-    if (!isBinary) {
-      // text frame = JSON（viewport_response / ws_trace / client_ready）. An
-      // export_response frame still parses and passes scope checks, but is
-      // otherwise inert — the daemon stopped sending export_request in the
-      // headless-only export slice (see shared/ws-messages.ts).
-      const text = Buffer.isBuffer(data) ? data.toString() : String(data)
-      const msg = parseWsClientTextMessage(text)
-      if (msg === null) return
-      if (!hasRequiredScopes(scopes, requiredScopesForClientTextMessage(msg.type))) {
-        getLogger('ws').warning(
-          { workspaceId, path, messageType: msg.type },
-          'ws message rejected: insufficient scope',
-        )
-        closeForInsufficientScope()
-        return
-      }
-      if (msg.type === 'client_ready') {
-        if (!readyConnections.has(key)) {
-          readyConnections.set(key, new Set())
-        }
-        readyConnections.get(key)!.add(ws)
-        // Replay the latest viewport_request to just-now-ready clients so
-        // late joiners (Playwright tab opening after viewport_set fired,
-        // reload, reconnect after WS hiccup) inherit the same fit / scroll
-        // / zoom intent the daemon-Chromium tab already received.
-        const cachedViewport = lastViewportRequestByDocument.get(key)
-        if (cachedViewport !== undefined) ws.send(cachedViewport)
-        return
-      }
-      if (msg.type === 'ws_trace') {
-        // Extract the W3C trace-context the client just announced. The
-        // value lives until the next binary frame consumes it; if the
-        // client sends another ws_trace before any binary frame, the
-        // newer one wins.
-        pendingTraceContext = extractContextFromHeaders({
-          traceparent: msg.traceparent,
-          tracestate: msg.tracestate,
-        })
-        return
-      }
-      if (msg.type === 'viewport_response') {
-        resolveViewportFn?.(msg.requestId)
-      }
+  /**
+   * Register this socket as ready, and replay the latest viewport_request to
+   * it — so a late joiner (a tab opening after viewport_set fired, a reload,
+   * a reconnect after a WS hiccup) inherits the same fit / scroll / zoom
+   * intent the daemon-Chromium tab already received.
+   */
+  function onClientReady(): void {
+    if (!readyConnections.has(key)) readyConnections.set(key, new Set())
+    readyConnections.get(key)!.add(ws)
+    const cachedViewport = lastViewportRequestByDocument.get(key)
+    if (cachedViewport !== undefined) ws.send(cachedViewport)
+  }
+
+  /**
+   * A text frame is JSON: `client_ready`, `ws_trace` or `viewport_response`.
+   * An `export_response` frame still parses and passes the scope check but
+   * is otherwise inert — the daemon stopped sending `export_request` in the
+   * headless-only export slice (see shared/ws-messages.ts).
+   */
+  function onTextFrame(text: string): void {
+    const msg = parseWsClientTextMessage(text)
+    if (msg === null) return
+    if (!hasRequiredScopes(scopes, requiredScopesForClientTextMessage(msg.type))) {
+      getLogger('ws').warning(
+        { workspaceId, path, messageType: msg.type },
+        'ws message rejected: insufficient scope',
+      )
+      closeForInsufficientScope()
       return
     }
+    if (msg.type === 'client_ready') {
+      onClientReady()
+      return
+    }
+    if (msg.type === 'ws_trace') {
+      // The value lives until the next binary frame consumes it; a second
+      // ws_trace before any binary frame simply wins.
+      pendingTraceContext = extractContextFromHeaders({
+        traceparent: msg.traceparent,
+        tracestate: msg.tracestate,
+      })
+      return
+    }
+    if (msg.type === 'viewport_response') resolveViewportFn?.(msg.requestId)
+  }
 
-    // binary frame = Loro update = a canvas mutation. Enforced here, not just
-    // at upgrade: a socket authorized with only canvas:read must not be able
-    // to import, persist, or broadcast a CRDT update just because it already
-    // completed the handshake.
+  /**
+   * A binary frame is a Loro update — a canvas mutation.
+   *
+   * The scope is enforced HERE, not only at upgrade: a socket authorized
+   * with `canvas:read` alone must not be able to import, persist or
+   * broadcast a CRDT update just because it completed the handshake.
+   */
+  async function onBinaryFrame(data: RawData): Promise<void> {
     if (!hasRequiredScopes(scopes, WS_BINARY_UPDATE_REQUIRED_SCOPES)) {
       getLogger('ws').warning(
         { workspaceId, path },
@@ -401,15 +413,11 @@ export async function handleWsUpgrade(
       return
     }
 
-    const bytes = Buffer.isBuffer(data)
-      ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-      : data instanceof ArrayBuffer
-        ? new Uint8Array(data)
-        : new Uint8Array(Buffer.concat(data as Buffer[]))
+    const bytes = frameBytes(data)
 
-    // If the client announced a traceparent ahead of this frame, parent
-    // the span on it so a UI-driven edit stitches end-to-end. Otherwise
-    // open a parentless span so we still get a per-update timeline.
+    // If the client announced a traceparent ahead of this frame, parent the
+    // span on it so a UI-driven edit stitches end-to-end. Otherwise open a
+    // parentless span so there is still a per-update timeline.
     const parentCtx = pendingTraceContext
     pendingTraceContext = null
     const spanStartOptions = {
@@ -424,66 +432,7 @@ export async function handleWsUpgrade(
       ? getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions, parentCtx)
       : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
     try {
-      // Import into the live workspace document under the same lock every
-      // other mutation path holds — the operation owns the lock, the
-      // import, the persist and the projection eviction (ADR-0018); this
-      // surface supplies only what is socket-shaped:
-      //
-      // abortIf: a second (or later) frame's handler can pass the
-      // `isClosing` check above before this frame's await resolves — both
-      // were still false at the top when they started. Rechecked inside the
-      // lock so a frame that lost that race does not import, persist, or
-      // close a socket the earlier frame already tore down.
-      //
-      // onMalformed: a write-scope credential is real authorization to send
-      // edits, not a guarantee the bytes are well-formed CRDT data, so this
-      // boundary must not crash the daemon on one bad frame. Close 1003
-      // (Unsupported Data) INSIDE the lock — the socket was authorized,
-      // only this frame's payload was not decodable, and closing while the
-      // lock still excludes other writers stops a queued valid frame from
-      // persisting onto a closing socket.
-      const result = await applyWorkspaceDocumentUpdate(
-        resolvedDeps,
-        { workspaceId, update: bytes },
-        {
-          abortIf: () => isClosing,
-          onMalformed: () => {
-            // The socket-shaped half of the refusal: the operation logged the
-            // seam-level rejection, but only this surface knows the PATH the
-            // socket is registered under, and only it may close. Never log
-            // the frame bytes themselves.
-            getLogger('ws').warning(
-              { workspaceId, path, updateBytes: bytes.byteLength },
-              'ws binary update rejected: malformed Loro import data',
-            )
-            closeSocket(1003, 'Malformed workspace update')
-          },
-        },
-      )
-      if (result !== 'applied') return
-      // Isolated in its own try/catch: this hook exists only so tests can
-      // await a deterministic "persisted" signal instead of polling. A
-      // callback throwing must never be able to make an already-successful
-      // save look like a persistence failure to real clients.
-      try {
-        onPersistedForTests?.(workspaceId, path)
-      } catch (err: unknown) {
-        getLogger('ws').warning(
-          { workspaceId, path, err },
-          'onPersistedForTests test hook threw; ignoring',
-        )
-      }
-      // Signal the socket's own path as edited. The checkpoint itself lands
-      // once the document goes quiet, and the trigger broadcasts it then —
-      // there is no entry to answer with here.
-      resolvedDeps.liveDocuments
-        .get(workspaceId, path)
-        .then((doc) => {
-          currentAutoVersionSignal()(workspaceId, path, doc)
-        })
-        .catch((err: unknown) => {
-          getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
-        })
+      await persistUpdate(bytes)
     } catch (err: unknown) {
       // A failure here is a server-side/state problem rather than client
       // misbehavior. The import above already mutated the cached live
@@ -500,6 +449,88 @@ export async function handleWsUpgrade(
     } finally {
       wsSpan.end()
     }
+  }
+
+  /**
+   * Import, persist and project one update's bytes.
+   */
+  async function persistUpdate(bytes: Uint8Array): Promise<void> {
+    // Import into the live workspace document under the same lock every
+    // other mutation path holds — the operation owns the lock, the
+    // import, the persist and the projection eviction (ADR-0018); this
+    // surface supplies only what is socket-shaped:
+    //
+    // abortIf: a second (or later) frame's handler can pass the
+    // `isClosing` check above before this frame's await resolves — both
+    // were still false at the top when they started. Rechecked inside the
+    // lock so a frame that lost that race does not import, persist, or
+    // close a socket the earlier frame already tore down.
+    //
+    // onMalformed: a write-scope credential is real authorization to send
+    // edits, not a guarantee the bytes are well-formed CRDT data, so this
+    // boundary must not crash the daemon on one bad frame. Close 1003
+    // (Unsupported Data) INSIDE the lock — the socket was authorized,
+    // only this frame's payload was not decodable, and closing while the
+    // lock still excludes other writers stops a queued valid frame from
+    // persisting onto a closing socket.
+    const result = await applyWorkspaceDocumentUpdate(
+      resolvedDeps,
+      { workspaceId, update: bytes },
+      {
+        abortIf: () => isClosing,
+        onMalformed: () => {
+          // The socket-shaped half of the refusal: the operation logged the
+          // seam-level rejection, but only this surface knows the PATH the
+          // socket is registered under, and only it may close. Never log
+          // the frame bytes themselves.
+          getLogger('ws').warning(
+            { workspaceId, path, updateBytes: bytes.byteLength },
+            'ws binary update rejected: malformed Loro import data',
+          )
+          closeSocket(1003, 'Malformed workspace update')
+        },
+      },
+    )
+    if (result === 'applied') signalPersisted()
+  }
+
+  /**
+   * The two things that follow a persisted update, neither of which may
+   * affect whether the save is reported as one.
+   *
+   * The test hook is isolated in its own try/catch: it exists only so tests
+   * can await a deterministic "persisted" signal instead of polling, and a
+   * callback throwing must never make an already-successful save look like a
+   * persistence failure to real clients.
+   *
+   * The auto-version trigger signals this socket's own path as edited. The
+   * checkpoint lands once the document goes quiet and the trigger broadcasts
+   * it then, so there is no entry to answer with here.
+   */
+  function signalPersisted(): void {
+    try {
+      onPersistedForTests?.(workspaceId, path)
+    } catch (err: unknown) {
+      getLogger('ws').warning(
+        { workspaceId, path, err },
+        'onPersistedForTests test hook threw; ignoring',
+      )
+    }
+    resolvedDeps.liveDocuments
+      .get(workspaceId, path)
+      .then((doc) => {
+        currentAutoVersionSignal()(workspaceId, path, doc)
+      })
+      .catch((err: unknown) => {
+        getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
+      })
+  }
+
+  ws.on('message', async (data: RawData, isBinary: boolean) => {
+    if (isClosing) return
+    runtimeTouch()
+    if (isBinary) await onBinaryFrame(data)
+    else onTextFrame(Buffer.isBuffer(data) ? data.toString() : String(data))
   })
 
   ws.on('close', () => {

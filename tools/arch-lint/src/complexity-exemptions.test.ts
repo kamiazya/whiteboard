@@ -48,10 +48,10 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // 65 -> 60 with mcp-server's CLI, 60 -> 58 with the two keeper document
 // pages, 58 -> 55 with the markdown editor's three pure modules, 55 -> 52
 // with the workspace-files panel and its two lists, 52 -> 48 with the
-// settings and migration surfaces, and 48 -> 42 with the daemon's store:
-// the comment asks for the ceiling to follow an obvious gap, and a paydown
-// that leaves slack is exactly one.
-const EXEMPT_CEILING = 42
+// settings and migration surfaces, 48 -> 42 with the daemon's store, and
+// 42 -> 40 with its two transports: the comment asks for the ceiling to
+// follow an obvious gap, and a paydown that leaves slack is exactly one.
+const EXEMPT_CEILING = 40
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
