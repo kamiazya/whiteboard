@@ -43,7 +43,7 @@ describe('signInConfigSchema', () => {
   it.for([
     ['a plain-http issuer', { ...google, issuer: 'http://accounts.google.com' }],
     ['an inline client secret', { ...google, clientSecret: 'hunter2' }],
-    ['an id that is not a lowercase slug', { ...google, id: 'Google Corp' }],
+    ['an id with spaces or capitals', { ...google, id: 'Google Corp' }],
     ['an unknown admission key', { ...google, admission: { allowdEmailDomains: ['x.example'] } }],
     ['a domain with an @', { ...google, admission: { allowedEmailDomains: ['@corp.example'] } }],
     [
