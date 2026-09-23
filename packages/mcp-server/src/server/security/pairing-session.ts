@@ -67,7 +67,7 @@ export function createPairingCodeStore({ ttlMs = CODE_TTL_MS }: { ttlMs?: number
  *  over a daemon-minted challenge (ADR-0041 S0-2). Identifies the credential
  *  a session is bound to, never the person — mapping to a MemberProfile is
  *  S0-4's job. */
-export interface PasskeyBinding {
+interface PasskeyBinding {
   readonly origin: string
   readonly credentialId: string
 }
