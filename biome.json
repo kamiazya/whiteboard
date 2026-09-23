@@ -123,7 +123,6 @@
         "!apps/web/scripts/strip-wasm-sourcemap.ts",
         "!apps/web/src/App.tsx",
         "!apps/web/src/components/AppShell.tsx",
-        "!apps/web/src/components/StorageReportCard.tsx",
         "!apps/web/src/components/VersionTimeline.tsx",
         "!apps/web/src/components/annotations/CommentsPanel.tsx",
         "!apps/web/src/components/markdown-editor/MarkdownEditor.tsx",
