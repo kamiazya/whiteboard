@@ -36,10 +36,11 @@ import {
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
+import type { ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
 import type { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../tools/document-io.js'
-import { ContentFactsCache } from './content-facts-cache.js'
+import { factsCacheFor } from './content-source.js'
 
 export interface FollowRenameInput {
   readonly workspaceId: string
@@ -70,7 +71,7 @@ export interface FollowRenameResult {
 export async function followReferencesAfterRename(
   deps: ServerDeps,
   input: FollowRenameInput,
-  cache: ContentFactsCache = new ContentFactsCache(),
+  cache: ContentFactsCache = factsCacheFor(deps),
 ): Promise<FollowRenameResult> {
   const plan = planReferenceRewrite({
     entries: input.entriesBefore.map((entry) => ({
@@ -82,7 +83,7 @@ export async function followReferencesAfterRename(
   if (plan.size === 0) return { updatedDocumentIds: [], failedDocumentIds: [] }
 
   const entries = await deps.documentIndex.listDocuments({ workspaceId: input.workspaceId })
-  const facts = await cache.factsFor(deps, input.workspaceId, entries)
+  const facts = await cache.factsFor(input.workspaceId, entries)
 
   const updated: string[] = []
   const failed: string[] = []
