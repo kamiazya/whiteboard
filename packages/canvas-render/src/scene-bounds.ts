@@ -116,6 +116,73 @@ export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] |
   }
 }
 
+const inkReach = (ink: SceneInk | undefined): number =>
+  ink?.style === 'sketch' ? SKETCH_INK_REACH_PX : 0
+
+/**
+ * How far a node's DECORATION reaches beyond its own geometry: ink is
+ * bounded by a declared constant (ADR-0038 decision #10) and a glow by its
+ * radius, so an inked or glowing node widens the envelope by exactly that
+ * much and a derived viewBox never clips either. Nothing else moves.
+ */
+function decorationReachPx(node: SceneWalkNode): number {
+  return Math.max(
+    node.kind === 'edge' || node.kind === 'shape' ? inkReach(node.ink) : 0,
+    'appearance' in node ? glowReachPx(node.appearance?.glow?.radiusPx ?? 0) : 0,
+  )
+}
+
+/**
+ * What an EDGE contributes: its polyline, plus the arrowhead wings, which
+ * reach beyond the polyline's own envelope. The wings come from the shared
+ * geometry helper so this walk agrees with what the SVG backend draws, and
+ * they take no reach of their own — the stroke's does not apply to a filled
+ * polygon's own points.
+ */
+function widenByEdgePath(
+  extent: Extent | null,
+  node: Extract<SceneNode, { kind: 'edge' }>,
+  offsetX: number,
+  reach: number,
+): Extent | null {
+  let next = extent
+  for (const p of node.path) {
+    if (!isFinitePoint(p.x, p.y)) continue
+    const x = p.x + offsetX
+    next = widen(next, x - reach, p.y - reach, x + reach, p.y + reach)
+  }
+  for (const arrow of edgeArrowPolygons(node)) {
+    for (const p of arrow.points) {
+      if (!isFinitePoint(p.x, p.y)) continue
+      const x = p.x + offsetX
+      next = widen(next, x, p.y, x, p.y)
+    }
+  }
+  return next
+}
+
+/**
+ * What a BOXED node contributes: its own bbox, widened by its decoration.
+ * An edge is excluded by TYPE rather than by a guard — it is the one variant
+ * with no bbox, and its points are `widenByEdgePath`'s.
+ */
+function widenByNodeBox(
+  extent: Extent | null,
+  node: Exclude<SceneWalkNode, { kind: 'edge' }>,
+  offsetX: number,
+  reach: number,
+): Extent | null {
+  const edges = bboxEdges(node.bbox)
+  if (!edges) return extent
+  return widen(
+    extent,
+    edges.x0 + offsetX - reach,
+    edges.y0 - reach,
+    edges.x1 + offsetX + reach,
+    edges.y1 + reach,
+  )
+}
+
 /**
  * Computes the union bbox of every resolved node bbox in the scene,
  * including edge polyline points, walked at every depth (not just
@@ -127,9 +194,6 @@ export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] |
  * rather than NaN/Infinity/a zero-area box — see MIN_SCENE_EXTENT_PX and
  * FALLBACK_BOUNDS.
  */
-const inkReach = (ink: SceneInk | undefined): number =>
-  ink?.style === 'sketch' ? SKETCH_INK_REACH_PX : 0
-
 export function sceneBounds(scene: Scene): BoundingBox {
   let extent: Extent | null = null
   // Each frame carries the accumulated x-shift of its ancestors' transforms,
@@ -141,44 +205,11 @@ export function sceneBounds(scene: Scene): BoundingBox {
 
   while (stack.length > 0) {
     const { node, offsetX } = stack.pop()!
-
-    // Ink is decoration bounded by a declared constant (decision #10): an
-    // inked node or edge widens the envelope by exactly that much, so a
-    // derived viewBox never clips a pencil stroke, and nothing else moves.
-    const reach = Math.max(
-      node.kind === 'edge' || node.kind === 'shape' ? inkReach(node.ink) : 0,
-      'appearance' in node ? glowReachPx(node.appearance?.glow?.radiusPx ?? 0) : 0,
-    )
-    if (node.kind === 'edge') {
-      for (const p of node.path) {
-        if (isFinitePoint(p.x, p.y)) {
-          const x = p.x + offsetX
-          extent = widen(extent, x - reach, p.y - reach, x + reach, p.y + reach)
-        }
-      }
-      // Arrowhead wings reach beyond the polyline's own envelope; the
-      // shared geometry helper keeps this walk agreeing with what the SVG
-      // backend actually draws.
-      for (const arrow of edgeArrowPolygons(node)) {
-        for (const p of arrow.points) {
-          if (isFinitePoint(p.x, p.y)) {
-            const x = p.x + offsetX
-            extent = widen(extent, x, p.y, x, p.y)
-          }
-        }
-      }
-    } else {
-      const edges = bboxEdges(node.bbox)
-      if (edges) {
-        extent = widen(
-          extent,
-          edges.x0 + offsetX - reach,
-          edges.y0 - reach,
-          edges.x1 + offsetX + reach,
-          edges.y1 + reach,
-        )
-      }
-    }
+    const reach = decorationReachPx(node)
+    extent =
+      node.kind === 'edge'
+        ? widenByEdgePath(extent, node, offsetX, reach)
+        : widenByNodeBox(extent, node, offsetX, reach)
 
     const children = sceneChildrenOf(node)
     if (children) {

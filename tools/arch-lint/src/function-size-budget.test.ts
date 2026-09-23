@@ -478,8 +478,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
   'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 121,
   'packages/canvas-render/src/references/seams.ts#referenceSeams': 73,
-  'packages/canvas-render/src/scene-bounds.ts#sceneBounds': 63,
-  'packages/canvas-render/src/scene-digest.ts#computeFreeRegions': 52,
   'packages/canvas-render/src/svg/backend.ts#buildSvgDocumentParts': 61,
   'packages/canvas-render/src/svg/backend.ts#renderNode': 97,
   'packages/canvas-render/src/svg/legend.ts#renderLegend': 75,

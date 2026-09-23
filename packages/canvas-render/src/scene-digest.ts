@@ -209,20 +209,34 @@ function computeClusters(entries: readonly DigestEntry[]): string[][] {
     .sort((a, b) => byCodeUnit(a[0], b[0]))
 }
 
-/** Maximal empty axis-aligned rectangles over the union bounding box, on a fixed grid. */
-function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
-  if (entries.length === 0) return []
-
+/**
+ * The grid a free-region scan runs on: the entries' union box, quantised to
+ * `FREE_REGION_GRID_PX`. `null` when the box would need more cells than the
+ * budget allows — a scan that large is not worth its cost, and the caller
+ * answers with no regions rather than with a partial picture.
+ */
+function freeRegionGrid(entries: readonly DigestEntry[]): {
+  readonly minX: number
+  readonly minY: number
+  readonly cols: number
+  readonly rows: number
+} | null {
   const minX = Math.min(...entries.map((e) => e.bbox.x))
   const minY = Math.min(...entries.map((e) => e.bbox.y))
   const maxX = Math.max(...entries.map((e) => e.bbox.x + e.bbox.w))
   const maxY = Math.max(...entries.map((e) => e.bbox.y + e.bbox.h))
-
   const cols = Math.max(1, Math.ceil((maxX - minX) / FREE_REGION_GRID_PX))
   const rows = Math.max(1, Math.ceil((maxY - minY) / FREE_REGION_GRID_PX))
-  if (cols * rows > FREE_REGION_MAX_CELLS) return []
-  const occupied: boolean[][] = Array.from({ length: rows }, () => Array<boolean>(cols).fill(false))
+  return cols * rows > FREE_REGION_MAX_CELLS ? null : { minX, minY, cols, rows }
+}
 
+/** Which cells any entry covers. */
+function occupiedCells(
+  entries: readonly DigestEntry[],
+  grid: NonNullable<ReturnType<typeof freeRegionGrid>>,
+): boolean[][] {
+  const { minX, minY, cols, rows } = grid
+  const occupied: boolean[][] = Array.from({ length: rows }, () => Array<boolean>(cols).fill(false))
   for (const entry of entries) {
     const c0 = Math.floor((entry.bbox.x - minX) / FREE_REGION_GRID_PX)
     // The right/bottom edges are exclusive, so a box ending exactly on a
@@ -232,33 +246,53 @@ function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
     const c1 = Math.ceil((entry.bbox.x + entry.bbox.w - minX) / FREE_REGION_GRID_PX) - 1
     const r0 = Math.floor((entry.bbox.y - minY) / FREE_REGION_GRID_PX)
     const r1 = Math.ceil((entry.bbox.y + entry.bbox.h - minY) / FREE_REGION_GRID_PX) - 1
-    for (let r = r0; r <= Math.min(r1, rows - 1); r++) {
-      for (let c = c0; c <= Math.min(c1, cols - 1); c++) {
-        if (r >= 0 && c >= 0) occupied[r][c] = true
+    for (let r = Math.max(r0, 0); r <= Math.min(r1, rows - 1); r++) {
+      for (let c = Math.max(c0, 0); c <= Math.min(c1, cols - 1); c++) {
+        occupied[r][c] = true
       }
     }
   }
+  return occupied
+}
 
+/**
+ * The maximal free RUN in each row, as a rectangle one cell tall. Scanning
+ * one past the last column is what closes a run that reaches the right edge,
+ * so the sentinel is the loop bound rather than a branch after it.
+ */
+function freeRunsIn(
+  occupied: readonly (readonly boolean[])[],
+  grid: NonNullable<ReturnType<typeof freeRegionGrid>>,
+): BoundingBox[] {
+  const { minX, minY, cols, rows } = grid
   const regions: BoundingBox[] = []
   for (let r = 0; r < rows; r++) {
     let runStart = -1
     for (let c = 0; c <= cols; c++) {
       const isFree = c < cols && !occupied[r][c]
-      if (isFree && runStart === -1) {
-        runStart = c
-      } else if (!isFree && runStart !== -1) {
-        regions.push({
-          x: minX + runStart * FREE_REGION_GRID_PX,
-          y: minY + r * FREE_REGION_GRID_PX,
-          w: (c - runStart) * FREE_REGION_GRID_PX,
-          h: FREE_REGION_GRID_PX,
-        })
-        runStart = -1
+      if (isFree) {
+        if (runStart === -1) runStart = c
+        continue
       }
+      if (runStart === -1) continue
+      regions.push({
+        x: minX + runStart * FREE_REGION_GRID_PX,
+        y: minY + r * FREE_REGION_GRID_PX,
+        w: (c - runStart) * FREE_REGION_GRID_PX,
+        h: FREE_REGION_GRID_PX,
+      })
+      runStart = -1
     }
   }
+  return regions
+}
 
-  return regions.sort((a, b) =>
+/** Maximal empty axis-aligned rectangles over the union bounding box, on a fixed grid. */
+function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
+  if (entries.length === 0) return []
+  const grid = freeRegionGrid(entries)
+  if (grid === null) return []
+  return freeRunsIn(occupiedCells(entries, grid), grid).sort((a, b) =>
     a.y === b.y ? (a.x === b.x ? (a.w === b.w ? a.h - b.h : a.w - b.w) : a.x - b.x) : a.y - b.y,
   )
 }
