@@ -708,7 +708,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/workspace-index/src/document-store-workspace-docs.ts#save': 99,
   'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 53,
   'tools/arch-lint/src/scanner.ts#collectModuleSpecifiers': 61,
-  'tools/arch-lint/src/source-scan.ts#stripCommentsAndStrings': 54,
 }
 
 /**

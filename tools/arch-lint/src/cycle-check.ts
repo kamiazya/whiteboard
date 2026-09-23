@@ -66,6 +66,33 @@ function candidatePaths(resolved: string): string[] {
   return [`${resolved}.ts`, `${resolved}.tsx`, `${resolved}/index.ts`, `${resolved}/index.tsx`]
 }
 
+/**
+ * Everything above `root` on the stack, inclusive — one strongly connected
+ * component, by Tarjan's construction.
+ */
+function popComponent(stack: string[], onStack: Set<string>, root: string): string[] {
+  const component: string[] = []
+  let w: string
+  do {
+    w = stack.pop() as string
+    onStack.delete(w)
+    component.push(w)
+  } while (w !== root)
+  return component
+}
+
+/**
+ * A strongly connected component is a cycle when it holds more than one
+ * vertex, OR when its single vertex points at itself — a module importing
+ * its own path, which Tarjan reports as a one-vertex component exactly like
+ * an ordinary acyclic node.
+ */
+function isCycle(graph: ReadonlyMap<string, readonly string[]>, component: string[]): boolean {
+  if (component.length > 1) return true
+  const only = component[0] as string
+  return (graph.get(only) ?? []).includes(only)
+}
+
 function resolveSpecifier(
   fromPath: string,
   specifier: string,
@@ -140,20 +167,10 @@ export function findImportCycles(graph: ReadonlyMap<string, readonly string[]>):
       }
     }
 
+    // Not a root: this vertex's component is still being built above it.
     if (lowlink.get(v) !== indices.get(v)) return
-    const component: string[] = []
-    let w: string
-    do {
-      w = stack.pop() as string
-      onStack.delete(w)
-      component.push(w)
-    } while (w !== v)
-    const isSelfLoop =
-      component.length === 1 &&
-      (graph.get(component[0] as string) ?? []).includes(component[0] as string)
-    if (component.length > 1 || isSelfLoop) {
-      result.push(component.sort())
-    }
+    const component = popComponent(stack, onStack, v)
+    if (isCycle(graph, component)) result.push(component.sort())
   }
 
   for (const node of [...graph.keys()].sort()) {
