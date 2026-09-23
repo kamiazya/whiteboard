@@ -60,7 +60,7 @@ beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'member-profiles-'))
 })
 
-it('creates the three membership tables, absent before and empty at head with no foreign keys', async () => {
+it('creates the three membership tables, absent before and empty after it with no foreign keys', async () => {
   const handle = await openDb()
   await handle.migrateTo(PRE_0028)
   const before = await tableNames(handle.db)
@@ -68,7 +68,9 @@ it('creates the three membership tables, absent before and empty at head with no
   expect(before).not.toContain('profileCredentials')
   expect(before).not.toContain('workspaceMemberships')
 
-  await handle.migrateTo('head')
+  // 0032 replaced profileCredentials with the account tables (ADR-0045), so
+  // this migration's own shape is read at its own point in the log.
+  await handle.migrateTo('0028-member-profiles')
 
   const after = await tableNames(handle.db)
   expect(after).toContain('memberProfiles')
