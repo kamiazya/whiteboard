@@ -63,6 +63,7 @@ const sources = import.meta.glob(
     './pages/use-daemon-connections.ts',
     './pages/use-daemon-document-backend.ts',
     './pages/DocumentPage.tsx',
+    './pages/document-page-inspector.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
   ],
@@ -124,6 +125,10 @@ const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
 // history column, the armed bookmark and the version being looked at moved
 // HERE from both keeper pages, not away; the two hooks below moved with them.
 const DOCUMENT_PAGE = './pages/DocumentPage.tsx'
+// The inspector column, extracted from that page so its body stays under the
+// complexity budget: `inspector` — which panel is open — moved THERE, not
+// away, by the same rule as the hooks below.
+const DOCUMENT_PAGE_INSPECTOR = './pages/document-page-inspector.tsx'
 // The save-a-version guard extracted to its own hook: part of the same
 // SCREEN by the same rule the panel's search/columns hooks are — its state
 // moved there, not away.
@@ -539,7 +544,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    files: [DOCUMENT_PAGE, DOCUMENT_PAGE_INSPECTOR, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
     ledger: DOCUMENT_PAGE_STATE,
     label: 'DocumentPage',
     scanRefs: true,

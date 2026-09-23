@@ -142,8 +142,6 @@
         "!apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx",
         "!apps/web/src/pages/BrowserDocumentPage.tsx",
         "!apps/web/src/pages/DaemonDocumentPage.tsx",
-        "!apps/web/src/pages/DocumentPage.tsx",
-        "!apps/web/src/pages/ReplicaReadPage.tsx",
         "!packages/canvas-render/src/layout/comments.ts",
         "!packages/canvas-render/src/layout/edges/spatial-edges.ts",
         "!packages/canvas-render/src/layout/nodes/mdast-blocks.ts",

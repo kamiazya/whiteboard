@@ -1,6 +1,8 @@
 import {
+  type ComponentProps,
   lazy,
   type ReactNode,
+  type RefObject,
   Suspense,
   useCallback,
   useEffect,
@@ -8,28 +10,16 @@ import {
   useRef,
   useState,
 } from 'react'
-import { CommentsRailAside } from '../components/annotations/CommentsRailChrome.js'
-import { ConnectionsPanel } from '../components/connections/ConnectionsPanel.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
-import { InspectorPanel } from '../components/document-editor/InspectorPanel.js'
-import { InspectorSegment } from '../components/document-editor/InspectorSegment.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
-import {
-  DocumentFacetsEditor,
-  DocumentProperties,
-} from '../components/document-properties/DocumentProperties.js'
-import { ProposalsPanel } from '../components/proposals/ProposalsPanel.js'
-import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
+import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { VersionPreview } from '../components/VersionPreview.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
-import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
-import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
-import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
@@ -37,15 +27,20 @@ import { useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
-import type { InspectorKind } from '../lib/inspector.js'
 import { fileRefOptions } from '../lib/link-entries.js'
-import { openProposals } from '../lib/open-proposals.js'
 import { applyCommand } from '../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
+import type { ResolvedTheme } from '../lib/theme.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
+import {
+  DocumentInspectorSegment,
+  DocumentRowActions,
+  inspectorPanelsFor,
+  useInspectorSlot,
+} from './document-page-inspector.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
@@ -109,6 +104,193 @@ export function DocumentPage<Props>({
  * surface and the comments rail from a `DocumentPageModel`. Nothing in here
  * asks which keeper built the model.
  */
+/**
+ * The page's own hold on the spatial editor, so an inspector row can reach
+ * back into the board (ADR-0029 decision 1: the panel is an index, and a row
+ * press takes you to where the change is already drawn).
+ *
+ * Merged with whatever ref the keeper supplied rather than replacing it: the
+ * daemon page holds one for MCP viewport requests, and both want the same
+ * handle.
+ */
+function useMergedSpatialHandle(keeperEditorRef: DocumentPageModel['spatial']['editorRef']) {
+  const spatialHandle = useRef<SpatialEditorHandle | null>(null)
+  const attachSpatialHandle = useCallback(
+    (node: SpatialEditorHandle | null) => {
+      spatialHandle.current = node
+      if (typeof keeperEditorRef === 'function') keeperEditorRef(node)
+      else if (keeperEditorRef !== null && keeperEditorRef !== undefined) {
+        keeperEditorRef.current = node
+      }
+    },
+    [keeperEditorRef],
+  )
+  return { spatialHandle, attachSpatialHandle }
+}
+
+/**
+ * The merged header row, or nothing while the document is maximised:
+ * fullscreen means the DOCUMENT, so the whole row — back, title, menus —
+ * steps aside with the shell's row above it.
+ */
+function DocumentHeader({
+  topBar,
+  isFullscreen,
+  model,
+  rowActions,
+  documentKey,
+  preview,
+}: {
+  topBar: NonNullable<DocumentPageModel['topBar']> | null
+  isFullscreen: boolean
+  model: DocumentPageModel
+  rowActions: ReactNode
+  documentKey: string
+  preview: VersionPreviewSession | null
+}) {
+  return (
+    <>
+      {topBar !== null && !isFullscreen && (
+        <Suspense
+          fallback={
+            <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
+          }
+        >
+          <WorkspaceTopBar
+            // The merged header row's flexible middle: document identity
+            // (title, core facets, display settings) lives in the SAME
+            // row as workspace context. The NAME is the workspace's
+            // (ADR-0009 decision 2): the keeper either names documents
+            // through its own store or takes the identity the bar hands
+            // down from `/names` — never a `title` read out of the
+            // content, which `storedCoreFacetsSchema` has no room for.
+            titleSlot={(identity) => (
+              <>
+                {model.properties.ready ? (
+                  <DocumentProperties
+                    inline
+                    key={documentKey}
+                    title={model.title === 'top-bar' ? identity.name : model.title.value}
+                    onTitleChange={
+                      model.title === 'top-bar' ? identity.onRename : model.title.onChange
+                    }
+                    // No save state in the row: the shell mark answers
+                    // for the keeper, and only when there is a condition.
+                    {...(model.properties.status === undefined
+                      ? {}
+                      : { status: model.properties.status })}
+                    actions={rowActions}
+                  />
+                ) : null}
+              </>
+            )}
+            workspaceId={topBar.workspaceId}
+            path={topBar.path}
+            {...(topBar.dataMode === undefined ? {} : { dataMode: topBar.dataMode })}
+            {...(topBar.onNavigateBack === undefined
+              ? {}
+              : { onNavigateBack: topBar.onNavigateBack })}
+            {...(preview === null ? {} : { preview })}
+          />
+        </Suspense>
+      )}
+      {model.slots.headerExtras}
+    </>
+  )
+}
+
+/**
+ * The History column's own save door. The top bar's dot and ⌘/Ctrl+S are the
+ * other two routes; on a phone the shortcut is nothing and the dot is small,
+ * so the column a finger opens has to carry one too.
+ *
+ * Both halves refuse a keeper with no history, and the outer one is what
+ * makes the inner unreachable — it never calls `run`, so the throw below is
+ * the narrowing rather than a case a caller can reach.
+ */
+function useVersionSavePanel(
+  currentScopeRef: RefObject<DocumentPageModel['scopeKey'] | null>,
+  scopeKey: DocumentPageModel['scopeKey'],
+  versions: DocumentPageModel['versions'],
+) {
+  const {
+    saving: savingVersion,
+    outcome: saveVersionOutcome,
+    run: runVersionSave,
+  } = useVersionSaveFlow(currentScopeRef, scopeKey, async (label) => {
+    if (!versions.enabled) {
+      throw new Error('saveVersionFromPanel: this keeper has no history for the document')
+    }
+    await versions.save(label)
+    // Returned rather than fired here: `useVersionSaveFlow` runs it only
+    // once it has confirmed the saved document is still the one on screen,
+    // so a save that lands after the reader moved on refreshes nothing.
+    return () => {
+      versions.announceRefresh()
+      versions.announceOnce?.()
+    }
+  })
+  const saveVersionFromPanel = async (label: string): Promise<void> => {
+    if (!versions.enabled) return
+    await runVersionSave(label)
+  }
+  return { savingVersion, saveVersionOutcome, saveVersionFromPanel }
+}
+
+/**
+ * What the markdown pane is handed. A builder rather than inline JSX because
+ * the optional fields are spread-or-nothing (the props are `exactOptionalPropertyTypes`,
+ * so `undefined` is not the same as absent), and a column of those inside a
+ * render reads as branching the page does not do.
+ *
+ * `hydrating` is the one real branch: a body that has not arrived is `null`
+ * rather than an empty document, so the editor draws a waiting pane instead
+ * of one a keystroke would commit over.
+ */
+function markdownPaneProps({
+  model,
+  resolvedTheme,
+  references,
+  files,
+  threads,
+  commentsRail,
+  sync,
+  decidePassage,
+}: {
+  model: DocumentPageModel
+  resolvedTheme: ResolvedTheme
+  references: ReturnType<typeof useReferenceSeams>
+  files: DocumentPageModel['files']
+  threads: DocumentPageModel['threads']
+  commentsRail: ReturnType<typeof useCommentsRail>
+  sync: DocumentPageModel['sync']
+  decidePassage: (proposalId: string, changeId: string, decision: 'adopted' | 'dismissed') => void
+}): ComponentProps<typeof DocumentEditorSurface>['markdown'] {
+  const { markdown } = model
+  if (markdown.hydrating) return { body: null, setBody: markdown.setBody }
+  return {
+    body: markdown.body,
+    setBody: markdown.setBody,
+    ...(markdown.sourceExtensions === undefined
+      ? {}
+      : { sourceExtensions: markdown.sourceExtensions }),
+    ...(markdown.autoFocus === undefined ? {} : { autoFocus: markdown.autoFocus }),
+    theme: resolvedTheme,
+    meta: markdown.meta,
+    ...(markdown.title === undefined ? {} : { title: markdown.title }),
+    references,
+    linkTargets: files.pickerTargets,
+    onOpenDocument: model.openDocument,
+    threads: threads.annotations,
+    threadMarks: threads.threadMarks,
+    selectedThreadId: commentsRail.selectedThreadId,
+    onSelectThread: commentsRail.revealThread,
+    onComposeThread: commentsRail.composeThread,
+    proposals: sync.proposals,
+    onDecidePassage: decidePassage,
+  }
+}
+
 function DocumentPageBody({
   model,
   versionRefreshSignal,
@@ -132,10 +314,7 @@ function DocumentPageBody({
   // survives a document switch: everything a panel SAYS is document-scoped
   // and reset below or by the hook that owns it, and every panel reads the
   // document on screen.
-  const [inspector, setInspector] = useState<InspectorKind | null>(null)
-  const toggleInspector = (kind: InspectorKind) =>
-    setInspector((open) => (open === kind ? null : kind))
-  const setCommentsOpen = useCallback((open: boolean) => setInspector(open ? 'comments' : null), [])
+  const { inspector, setInspector, toggleInspector, setCommentsOpen } = useInspectorSlot()
 
   /**
    * The page's own hold on the spatial editor, so an inspector row can reach
@@ -147,18 +326,8 @@ function DocumentPageBody({
    * the daemon page holds one for MCP viewport requests, and both want the
    * same handle.
    */
-  const spatialHandle = useRef<SpatialEditorHandle | null>(null)
-  const keeperEditorRef = model.spatial.editorRef
-  const attachSpatialHandle = useCallback(
-    (node: SpatialEditorHandle | null) => {
-      spatialHandle.current = node
-      if (typeof keeperEditorRef === 'function') keeperEditorRef(node)
-      else if (keeperEditorRef !== null && keeperEditorRef !== undefined) {
-        keeperEditorRef.current = node
-      }
-    },
-    [keeperEditorRef],
-  )
+  const { spatialHandle, attachSpatialHandle } = useMergedSpatialHandle(model.spatial.editorRef)
+
   // Bumped by whoever asks for a bookmark (see requestBookmark below), which
   // opens the column with its naming field ready. Nothing here takes one.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
@@ -192,32 +361,11 @@ function DocumentPageBody({
   const currentScopeRef = useRef(model.scopeKey)
   currentScopeRef.current = model.scopeKey
 
-  // A save the History column itself offers. The top bar's dot and ⌘/Ctrl+S
-  // are the other two routes; on a phone the shortcut is nothing and the dot
-  // is small, so the column a finger opens has to carry one too.
-  const {
-    saving: savingVersion,
-    outcome: saveVersionOutcome,
-    run: runVersionSave,
-  } = useVersionSaveFlow(currentScopeRef, model.scopeKey, async (label) => {
-    // Narrowed by the precondition in `saveVersionFromPanel` below, which
-    // never calls `run` (so never reaches this body) while history is off.
-    if (!versions.enabled) {
-      throw new Error('saveVersionFromPanel: this keeper has no history for the document')
-    }
-    await versions.save(label)
-    // Returned rather than fired here: `useVersionSaveFlow` runs it only
-    // once it has confirmed the saved document is still the one on screen,
-    // so a save that lands after the reader moved on refreshes nothing.
-    return () => {
-      versions.announceRefresh()
-      versions.announceOnce?.()
-    }
-  })
-  const saveVersionFromPanel = async (label: string): Promise<void> => {
-    if (!versions.enabled) return
-    await runVersionSave(label)
-  }
+  const { savingVersion, saveVersionOutcome, saveVersionFromPanel } = useVersionSavePanel(
+    currentScopeRef,
+    model.scopeKey,
+    versions,
+  )
 
   // Only a markdown document has a body for a mark to live in; the spatial
   // side answers with nothing rather than with a body it is not showing.
@@ -320,68 +468,26 @@ function DocumentPageBody({
   // `InspectorSegment`. What a KIND decides is which members it offers;
   // never their order, which is why a canvas and a note read the same now.
   const inspectorSegment = (
-    <InspectorSegment
-      open={inspector}
-      onToggle={toggleInspector}
-      tabs={{
-        // Facets are OKF frontmatter, so only a markdown document has any
-        // (ADR-0009 decision 3); the keeper answers none for a spatial one.
-        ...(model.properties.facets === undefined ? {} : { properties: {} }),
-        // The spatial document's own attributes, in the place the markdown
-        // document's frontmatter takes: a canvas has no frontmatter and a
-        // note has no canvas, so the two never appear together and the
-        // segment reads the same length either way.
-        //
-        // No `preview === null` guard, and that is checked rather than
-        // assumed: this panel writes the LIVE document, so drawing it over
-        // a past state would be a write against a canvas nobody is looking
-        // at — but the state cannot arise. `WorkspaceTopBar` replaces the
-        // whole row while previewing, so no opener renders, and `preview`
-        // is set only by `VersionPanel`, which needs the slot to be holding
-        // `history`. Pinned in versions.browser.test.tsx.
-        ...(documentKind === 'spatial' ? { display: {} } : {}),
-        comments: { count: commentsRail.openThreadCount },
-        // Always offered, and pressable at nought (user decision,
-        // 2026-09-07): a document with no proposals is a fact worth being
-        // able to check, and a member that comes and goes is a control that
-        // moves under the finger reaching for its neighbour.
-        proposals: { count: openProposals(threads.proposals).length },
-        // `null` until the backlinks fetch answers: the member waits rather
-        // than claiming zero, which is what the chip did before it moved.
-        ...(model.connections === undefined
-          ? {}
-          : { connections: { count: model.connections.backlinks?.length ?? null } }),
-        ...(versions.enabled ? { history: {} } : {}),
-      }}
+    <DocumentInspectorSegment
+      inspector={inspector}
+      toggleInspector={toggleInspector}
+      model={model}
+      documentKind={documentKind}
+      openThreadCount={commentsRail.openThreadCount}
+      proposals={threads.proposals}
+      versionsEnabled={versions.enabled}
     />
   )
 
   const rowActions = (
-    <>
-      {inspectorSegment}
-      {/* The one divider in the row: inspect on the left of it, act on the
-          right. Before this the act menu sat BETWEEN two inspect toggles.
-          Its margin is what makes the segment read as one group now that
-          the segment draws no box: 2px between its members, 6px out to
-          here, so proximity does the work the outline used to. */}
-      <span aria-hidden="true" className="bg-border mx-1.5 h-4 w-px shrink-0" />
-      {model.slots.rowAlerts}
-      {exportError && (
-        <div role="alert" aria-live="assertive" className="text-destructive text-xs">
-          {exportError}
-        </div>
-      )}
-      <DocumentMenu
-        onExport={(format) => void handleExport(format)}
-        {...(versions.enabled ? { onBookmark: requestBookmark } : {})}
-        {...(model.slots.menuTriggerRef === undefined
-          ? {}
-          : { triggerRef: model.slots.menuTriggerRef })}
-      >
-        {model.slots.menuItems}
-      </DocumentMenu>
-      {model.slots.afterMenu}
-    </>
+    <DocumentRowActions
+      inspectorSegment={inspectorSegment}
+      model={model}
+      exportError={exportError}
+      onExport={handleExport}
+      onBookmark={requestBookmark}
+      versionsEnabled={versions.enabled}
+    />
   )
 
   const topBar = model.topBar
@@ -417,170 +523,37 @@ function DocumentPageBody({
    * show there", which is what the guards in the chain meant: the slot then
    * stays empty rather than falling through to another panel.
    */
-  const inspectorPanels: Record<InspectorKind, () => ReactNode> = {
-    history: () =>
-      versions.enabled ? (
-        <VersionPanel
-          workspaceId={versions.workspaceId}
-          path={versions.path}
-          onRestored={sync.clearLocalUndo}
-          onPreview={setPreview}
-          refreshSignal={versionRefreshSignal}
-          onClose={() => setInspector(null)}
-          headerActions={
-            <BookmarkAction
-              saving={savingVersion}
-              outcome={saveVersionOutcome}
-              armed={bookmarkArmed}
-              onSave={(label) => void saveVersionFromPanel(label)}
-            />
-          }
-        />
-      ) : undefined,
-    comments: () => (
-      /* The annotation layer's document-level surface (ADR-0026
-         decision 5) sits BESIDE the editor rather than inside it,
-         because one panel serves both document kinds and a markdown
-         document has no canvas chrome to host one. Its opener lives in
-         the document actions row, in flow.
-
-         Not writable while a past state is on screen: the editor is
-         replaced by VersionPreview but this rail is not, and its
-         writes go to the LIVE document. */
-      <CommentsRailAside
-        rail={commentsRail}
-        threads={threads.annotations}
-        writable={preview === null}
-      />
-    ),
-    proposals: () => (
-      <InspectorPanel kind="proposals" onClose={() => setInspector(null)}>
-        <ProposalsPanel
-          proposals={threads.proposals}
-          // Two ways to have no viewport to move, and the panel wants
-          // the same answer for both. A markdown body draws its
-          // passages where they are already; and while a past state is
-          // on screen the live editor is UNMOUNTED (`preview ?
-          // VersionPreview : DocumentEditorSurface` below), so the
-          // handle is null and a row would be a button that does
-          // nothing. The index still counts either way — it just has
-          // nowhere to send you, which the panel draws as a row that is
-          // not a button rather than a dead one.
-          {...(documentKind === 'spatial' && preview === null
-            ? { onOpen: (id: string) => spatialHandle.current?.openProposal(id) }
-            : {})}
-        />
-      </InspectorPanel>
-    ),
-    connections: () =>
-      model.connections !== undefined && model.connections.backlinks !== null ? (
-        <InspectorPanel kind="connections" onClose={() => setInspector(null)}>
-          <ConnectionsPanel
-            backlinks={model.connections.backlinks}
-            {...(model.connections.mentions === undefined
-              ? {}
-              : { mentions: model.connections.mentions })}
-            // Following a row leaves for the source document, which is
-            // the panel's job done — so the slot is released with it.
-            onOpen={(entry) => {
-              setInspector(null)
-              model.connections?.onOpen(entry)
-            }}
-            {...(model.connections.onLinkify === undefined
-              ? {}
-              : { onLinkify: model.connections.onLinkify })}
-          />
-        </InspectorPanel>
-      ) : undefined,
-    properties: () =>
-      model.properties.facets !== undefined ? (
-        <InspectorPanel kind="properties" onClose={() => setInspector(null)}>
-          <DocumentFacetsEditor
-            facets={model.properties.facets}
-            {...(model.properties.onFacetsChange === undefined
-              ? {}
-              : { onChange: model.properties.onFacetsChange })}
-            {...(model.tags === undefined
-              ? {}
-              : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
-          />
-        </InspectorPanel>
-      ) : undefined,
-    display: () =>
-      documentKind === 'spatial' ? (
-        /* Canvas-wide display settings, in the slot the other panels
-         share. They were a popover off the ⋯ kebab until this, which
-         on a phone had no way out at all: Radix dismisses a popover on
-         an outside click or Escape, and at 424px of panel against a
-         390px screen there was neither a keyboard nor much outside.
-         Here the sheet brings its own close, and opening any other
-         panel takes the slot back. */
-        <InspectorPanel kind="display" onClose={() => setInspector(null)}>
-          <div className="p-3">
-            <CanvasDisplaySettings
-              canvas={sync.canvas}
-              onChange={sync.onChange}
-              {...(model.tags === undefined
-                ? {}
-                : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
-            />
-          </div>
-        </InspectorPanel>
-      ) : undefined,
-  }
+  const inspectorPanels = inspectorPanelsFor({
+    versions,
+    sync,
+    setPreview,
+    versionRefreshSignal,
+    setInspector,
+    savingVersion,
+    saveVersionOutcome,
+    bookmarkArmed,
+    saveVersionFromPanel,
+    commentsRail,
+    threads,
+    preview,
+    documentKind,
+    model,
+    spatialHandle,
+  })
 
   return (
     <DocumentPageShell
       srTitle={model.srTitle}
       aside={inspector === null ? undefined : inspectorPanels[inspector]()}
       header={
-        <>
-          {topBar !== null && !isFullscreen && (
-            <Suspense
-              fallback={
-                <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
-              }
-            >
-              <WorkspaceTopBar
-                // The merged header row's flexible middle: document identity
-                // (title, core facets, display settings) lives in the SAME
-                // row as workspace context. The NAME is the workspace's
-                // (ADR-0009 decision 2): the keeper either names documents
-                // through its own store or takes the identity the bar hands
-                // down from `/names` — never a `title` read out of the
-                // content, which `storedCoreFacetsSchema` has no room for.
-                titleSlot={(identity) => (
-                  <>
-                    {model.properties.ready ? (
-                      <DocumentProperties
-                        inline
-                        key={documentKey}
-                        title={model.title === 'top-bar' ? identity.name : model.title.value}
-                        onTitleChange={
-                          model.title === 'top-bar' ? identity.onRename : model.title.onChange
-                        }
-                        // No save state in the row: the shell mark answers
-                        // for the keeper, and only when there is a condition.
-                        {...(model.properties.status === undefined
-                          ? {}
-                          : { status: model.properties.status })}
-                        actions={rowActions}
-                      />
-                    ) : null}
-                  </>
-                )}
-                workspaceId={topBar.workspaceId}
-                path={topBar.path}
-                {...(topBar.dataMode === undefined ? {} : { dataMode: topBar.dataMode })}
-                {...(topBar.onNavigateBack === undefined
-                  ? {}
-                  : { onNavigateBack: topBar.onNavigateBack })}
-                {...(preview === null ? {} : { preview })}
-              />
-            </Suspense>
-          )}
-          {model.slots.headerExtras}
-        </>
+        <DocumentHeader
+          topBar={topBar}
+          isFullscreen={isFullscreen}
+          model={model}
+          rowActions={rowActions}
+          documentKey={documentKey}
+          preview={preview}
+        />
       }
     >
       {model.slots.replaceEditor ?? (
@@ -591,35 +564,16 @@ function DocumentPageBody({
             <DocumentEditorSurface
               kind={documentKind}
               documentKey={documentKey}
-              markdown={
-                model.markdown.hydrating
-                  ? { body: null, setBody: model.markdown.setBody }
-                  : {
-                      body: model.markdown.body,
-                      setBody: model.markdown.setBody,
-                      ...(model.markdown.sourceExtensions === undefined
-                        ? {}
-                        : { sourceExtensions: model.markdown.sourceExtensions }),
-                      ...(model.markdown.autoFocus === undefined
-                        ? {}
-                        : { autoFocus: model.markdown.autoFocus }),
-                      theme: resolvedTheme,
-                      meta: model.markdown.meta,
-                      ...(model.markdown.title === undefined
-                        ? {}
-                        : { title: model.markdown.title }),
-                      references,
-                      linkTargets: files.pickerTargets,
-                      onOpenDocument: model.openDocument,
-                      threads: threads.annotations,
-                      threadMarks: threads.threadMarks,
-                      selectedThreadId: commentsRail.selectedThreadId,
-                      onSelectThread: commentsRail.revealThread,
-                      onComposeThread: commentsRail.composeThread,
-                      proposals: sync.proposals,
-                      onDecidePassage: decidePassage,
-                    }
-              }
+              markdown={markdownPaneProps({
+                model,
+                resolvedTheme,
+                references,
+                files,
+                threads,
+                commentsRail,
+                sync,
+                decidePassage,
+              })}
               spatial={() => (
                 <SpatialEditorPane
                   className="relative h-full min-h-0"

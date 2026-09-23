@@ -371,13 +371,43 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the old ceiling, so the next change spends headroom deliberately.
   'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 583,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 684,
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 562,
+  // 562 -> 334: the inspector column, the merged header row and the markdown
+  // pane's props each became a named piece, which is what took the page's
+  // cognitive complexity under the threshold. Recorded at the measurement
+  // rather than left at the old ceiling, so the next change spends headroom
+  // deliberately. The four entries below are those pieces; each is a TABLE or
+  // a block of JSX rather than a branch, which is the shape a size budget
+  // cannot tell from logic and a complexity budget can.
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 334,
+  // The merged row: the top bar, its title slot, and the row actions the
+  // slot carries. Long because every optional prop is spread-or-nothing
+  // (`exactOptionalPropertyTypes`), and splitting it further would cut the
+  // row a reader sees as one thing.
+  'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 65,
+  'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
+  // A `Record<InspectorKind, () => ReactNode>`, one short thunk per panel.
+  // The exhaustiveness is the point — a seventh kind used to compile and show
+  // nothing — so the arms belong in one table, not in seven files.
+  'apps/web/src/pages/document-page-inspector.tsx#inspectorPanelsFor': 146,
   'apps/web/src/pages/PairConsentPage.tsx#PairConsentPage': 119,
   // 393 -> 416: ADR-0042 decision 6's sixth state — an unlock attempt, the
   // remembered-blob read, and one more render branch. Paid for first: the
   // three action states now share ONE `ReplicaActionPanel` instead of a
   // near-identical block each, which is where 26 of the added lines went.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 416,
+  // 416 -> 148: the save queue, the record load, the reference seams, the
+  // editing drafts and the reader's own chrome each became a named piece.
+  // That is what took the page from a cognitive complexity of 42 to under
+  // the threshold; the three entries below are the pieces still over the
+  // line budget, and each is one concern rather than several.
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 148,
+  // One load: attempt, unlock, the remembered blob, and what each outcome
+  // leaves on screen. The states are ADR-0042 decision 6's and they share
+  // the same `setState`, so splitting them would split one transition.
+  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 81,
+  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 57,
+  // The read surface: the banner, the tree and the editor. JSX, and the
+  // three are what a replica IS to a reader.
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 80,
   // Presentation only — the logic is `useTransferHandshake`. Six stages, each
   // a short branch, and the offer and the report already live in their own
   // components; the page is the switch between them.
