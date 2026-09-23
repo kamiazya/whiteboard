@@ -341,29 +341,123 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
     } catch {
       return
     }
-    // Only what the replica did not already have travels onward. Two things
-    // depend on this rather than on it being an optimisation: a tab
-    // re-pushing work a sibling already delivered costs no broadcast, and the
-    // daemon's echo of a tab's OWN push diffs to nothing — which is what stops
-    // the round trip from looping back out as authority state.
     // Tab-originated work goes on to the daemon; daemon-originated work is
     // already there. WHAT gets written is decided against the acknowledged
     // version rather than against the delta computed here — those are
     // different questions, and answering them with one value is what silently
     // dropped an edit the daemon refused.
     if (from !== null) scheduleWrite(baseUrl, doc)
+    // Only what the replica did not already have travels onward. Two things
+    // depend on this rather than on it being an optimisation: a tab
+    // re-pushing work a sibling already delivered costs no broadcast, and the
+    // daemon's echo of a tab's OWN push diffs to nothing — which is what stops
+    // the round trip from looping back out as authority state.
     const merged = replica.export({ mode: 'update', from: before })
     if (merged.byteLength === 0) return
-    const encoded = toBase64(merged)
-    for (const [target, state] of ports) {
-      if (target === from) continue
-      // Two daemons can mint the same document id, so a tab paired with one of
-      // them must never be handed the other's edits.
-      if (state.baseUrl !== baseUrl) continue
-      if (!state.subscriptions.has(doc)) continue
-      postWorkerEvent(target, { type: 'authority-update', doc, update: encoded })
-    }
+    fanOutUpdate(baseUrl, doc, toBase64(merged), from)
   })
+}
+
+/** Every subscribed port on this origin except the one the frame came from. */
+function fanOutUpdate(
+  baseUrl: string,
+  doc: string,
+  encoded: string,
+  from: MessagePort | null,
+): void {
+  for (const [target, state] of ports) {
+    if (target === from) continue
+    // Two daemons can mint the same document id, so a tab paired with one of
+    // them must never be handed the other's edits.
+    if (state.baseUrl !== baseUrl) continue
+    if (!state.subscriptions.has(doc)) continue
+    postWorkerEvent(target, { type: 'authority-update', doc, update: encoded })
+  }
+}
+
+type WorkerRequest = ReturnType<typeof sseWorkerRequestSchema.parse>
+type RequestOf<Kind extends WorkerRequest['type']> = Extract<WorkerRequest, { type: Kind }>
+
+/**
+ * A re-init is also how a rotated token arrives, so an existing port keeps its
+ * subscription handles: replacing them would strand the claims it already
+ * holds with nothing left able to release them.
+ *
+ * Re-pointing a port at a DIFFERENT origin is the other case, and the old
+ * record's claims have to be released before it is dropped: the handles live
+ * in the map about to be replaced, so anything still held there could never be
+ * released again — a document subscribed on the daemon and a replica fed
+ * forever, for a port that has moved on.
+ */
+function handleInit(port: MessagePort, msg: RequestOf<'init'>): void {
+  tokens.set(msg.baseUrl, msg.token)
+  const existing = ports.get(port)
+  if (existing?.baseUrl === msg.baseUrl) {
+    hubFor(msg.baseUrl)
+    return
+  }
+  if (existing) {
+    for (const [doc, off] of existing.subscriptions) {
+      off()
+      releaseReplicaFeed(existing.baseUrl, doc)
+    }
+  }
+  ports.set(port, { baseUrl: msg.baseUrl, subscriptions: new Map() })
+  hubFor(msg.baseUrl)
+}
+
+function handleSnapshotRequest(
+  port: MessagePort,
+  msg: RequestOf<'snapshot-request'>,
+  state: PortState,
+): void {
+  // Seed first: a request can arrive before any subscribe (the backend
+  // snapshots, then subscribes), and the replica queue serialises the seed
+  // ahead of the answer below, so the reply carries the document's real
+  // pre-existing state rather than only what this worker has seen.
+  ensureSeeded(state.baseUrl, msg.doc)
+  queueReplicaWork(() => {
+    // An empty snapshot for a document the daemon does not know is the right
+    // answer, not an error: forking from empty and letting updates fill it in
+    // is the same path a first-ever open already takes.
+    const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
+    if (snapshot === undefined) return
+    postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
+  })
+}
+
+function handleSubscribe(
+  port: MessagePort,
+  msg: RequestOf<'subscribe'>,
+  state: PortState,
+  hub: SseStreamHub,
+): void {
+  if (state.subscriptions.has(msg.doc)) return
+  retainReplicaFeed(hub, state.baseUrl, msg.doc)
+  const off = hub.subscribe(msg.doc, {
+    // No raw relay: a daemon frame reaches this port as an
+    // `authority-update`, after the replica has ordered and deduplicated it
+    // against everything else the worker knows. One inbound channel means
+    // every tab observes the SAME sequence — the raw per-port relay was the
+    // transition path while clients moved, and delivering both meant every
+    // daemon frame crossed each port twice.
+    onUpdate: () => {},
+    onMessage: (text) => {
+      postWorkerEvent(port, { type: 'message', doc: msg.doc, raw: text })
+    },
+    onConnectionChange: (connected) => {
+      postWorkerEvent(port, { type: 'status', doc: msg.doc, connected })
+    },
+  })
+  state.subscriptions.set(msg.doc, off)
+}
+
+function handleUnsubscribe(msg: RequestOf<'unsubscribe'>, state: PortState): void {
+  const off = state.subscriptions.get(msg.doc)
+  if (!off) return
+  off()
+  state.subscriptions.delete(msg.doc)
+  releaseReplicaFeed(state.baseUrl, msg.doc)
 }
 
 function handle(port: MessagePort, raw: unknown): void {
@@ -372,28 +466,7 @@ function handle(port: MessagePort, raw: unknown): void {
   const msg = parsed.data
 
   if (msg.type === 'init') {
-    tokens.set(msg.baseUrl, msg.token)
-    // Re-init is also how a rotated token arrives, so an existing port keeps
-    // its subscription handles: replacing them would strand the claims it
-    // already holds with nothing left able to release them.
-    const existing = ports.get(port)
-    if (existing?.baseUrl === msg.baseUrl) {
-      hubFor(msg.baseUrl)
-      return
-    }
-    // Re-pointing a port at a DIFFERENT origin is the other case, and the old
-    // record's claims have to be released before it is dropped: the handles
-    // live in the map about to be replaced, so anything still held there could
-    // never be released again — a document subscribed on the daemon and a
-    // replica fed forever, for a port that has moved on.
-    if (existing) {
-      for (const [doc, off] of existing.subscriptions) {
-        off()
-        releaseReplicaFeed(existing.baseUrl, doc)
-      }
-    }
-    ports.set(port, { baseUrl: msg.baseUrl, subscriptions: new Map() })
-    hubFor(msg.baseUrl)
+    handleInit(port, msg)
     return
   }
 
@@ -404,63 +477,25 @@ function handle(port: MessagePort, raw: unknown): void {
   const hub = hubs.get(state.baseUrl)
   if (!hub) return
 
-  if (msg.type === 'control') {
-    hub.sendMessage(msg.doc, msg.message)
-    return
+  switch (msg.type) {
+    case 'control':
+      hub.sendMessage(msg.doc, msg.message)
+      return
+    case 'snapshot-request':
+      handleSnapshotRequest(port, msg, state)
+      return
+    case 'push':
+      // Excluded from its own fan-out: echoing an edit back to the tab that
+      // made it would turn every stroke into a round trip through the tab
+      // that drew it, which is the cost the fork model exists to avoid.
+      ingest(state.baseUrl, msg.doc, fromBase64(msg.update), port)
+      return
+    case 'subscribe':
+      handleSubscribe(port, msg, state, hub)
+      return
+    default:
+      handleUnsubscribe(msg, state)
   }
-
-  if (msg.type === 'snapshot-request') {
-    // Seed first: a request can arrive before any subscribe (the backend
-    // snapshots, then subscribes), and the replica queue serialises the seed
-    // ahead of the answer below, so the reply carries the document's real
-    // pre-existing state rather than only what this worker has seen.
-    ensureSeeded(state.baseUrl, msg.doc)
-    queueReplicaWork(() => {
-      // An empty snapshot for a document the daemon does not know is the
-      // right answer, not an error: forking from empty and letting updates
-      // fill it in is the same path a first-ever open already takes.
-      const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
-      if (snapshot === undefined) return
-      postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
-    })
-    return
-  }
-
-  if (msg.type === 'push') {
-    // Excluded from its own fan-out: echoing an edit back to the tab that made
-    // it would turn every stroke into a round trip through the tab that drew
-    // it, which is the cost the fork model exists to avoid.
-    ingest(state.baseUrl, msg.doc, fromBase64(msg.update), port)
-    return
-  }
-
-  if (msg.type === 'subscribe') {
-    if (state.subscriptions.has(msg.doc)) return
-    retainReplicaFeed(hub, state.baseUrl, msg.doc)
-    const off = hub.subscribe(msg.doc, {
-      // No raw relay: a daemon frame reaches this port as an
-      // `authority-update`, after the replica has ordered and deduplicated it
-      // against everything else the worker knows. One inbound channel means
-      // every tab observes the SAME sequence — the raw per-port relay was the
-      // transition path while clients moved, and delivering both meant every
-      // daemon frame crossed each port twice.
-      onUpdate: () => {},
-      onMessage: (text) => {
-        postWorkerEvent(port, { type: 'message', doc: msg.doc, raw: text })
-      },
-      onConnectionChange: (connected) => {
-        postWorkerEvent(port, { type: 'status', doc: msg.doc, connected })
-      },
-    })
-    state.subscriptions.set(msg.doc, off)
-    return
-  }
-
-  const off = state.subscriptions.get(msg.doc)
-  if (!off) return
-  off()
-  state.subscriptions.delete(msg.doc)
-  releaseReplicaFeed(state.baseUrl, msg.doc)
 }
 
 // Typed locally rather than via `/// <reference lib="webworker" />`: that

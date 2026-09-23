@@ -212,7 +212,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // guard they share, and `endInkCommand` joining the id-picking family. It
   // is the first verb the matrix reported missing from BOTH collections
   // rather than from one, which is why one increment adds two writes.
-  'apps/web/src/lib/spatial/commands.ts': 1597,
+  // 1597 -> 1626: `setLineEnd` and `reorderNodes` each became a named
+  // decision plus its helper, which is what took both under the complexity
+  // threshold. The bodies did not grow; the signatures and their doc comments
+  // are the added lines.
+  'apps/web/src/lib/spatial/commands.ts': 1626,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -777,7 +781,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // not hold), a stroke end dropped in empty space and one dropped on a box,
   // and the collection-picking sibling that answers nothing for a relation
   // aimed at empty space.
-  'apps/web/src/lib/spatial/commands.test.ts': 2042,
+  // 2042 -> 2075: two rules of `set-line-end` that nothing pinned (a stale
+  // box id, and both ends on one box) now have tests.
+  'apps/web/src/lib/spatial/commands.test.ts': 2075,
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.

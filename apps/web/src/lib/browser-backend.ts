@@ -63,6 +63,41 @@ export interface BrowserBackendTarget {
  * chain (_writeQueue) so concurrent pushLocalUpdate calls import and save in
  * order.
  */
+/**
+ * A record this session must not place an empty node over. The first three
+ * know the record is unreadable; `read-unavailable` refuses from the opposite
+ * knowledge — it knows NOTHING, and falling through would take the "there is
+ * no old record" branch and shadow a document that may be sitting on disk
+ * intact, reached by a transient IndexedDB failure.
+ */
+function isUnreadableLegacyRecord(
+  kind: string,
+): kind is 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version' | 'read-unavailable' {
+  return (
+    kind === 'corrupt-snapshot' ||
+    kind === 'corrupt-delta' ||
+    kind === 'unsupported-version' ||
+    kind === 'read-unavailable'
+  )
+}
+
+/** The node for this document: adopted from a readable legacy record, or empty. */
+function placeDocumentNode(
+  workspaceDoc: LoroDoc,
+  target: { documentId: string; path: string; kind: DocumentKind; name?: string },
+  legacy: { kind: string; snapshot?: Uint8Array; deltas?: readonly Uint8Array[] },
+): ReturnType<typeof createWorkspaceDocumentAtPath> {
+  const { documentId, path, kind, name } = target
+  const placement = { path, documentId, kind, ...(name === undefined ? {} : { name }) }
+  if (legacy.kind !== 'ok' || legacy.snapshot === undefined) {
+    return createWorkspaceDocumentAtPath(workspaceDoc, placement)
+  }
+  const source = new Loro()
+  source.import(legacy.snapshot)
+  for (const delta of legacy.deltas ?? []) source.import(delta)
+  return adoptWorkspaceDocument(workspaceDoc, placement, source)
+}
+
 export class BrowserBackend implements DocumentBackend {
   private readonly target: BrowserBackendTarget
   private readonly docs: WorkspaceDocs
@@ -390,41 +425,12 @@ export class BrowserBackend implements DocumentBackend {
     workspaceDoc: LoroDoc,
     handlers: DocumentBackendHandlers,
   ): Promise<boolean> {
-    const { documentId, path, kind, name } = this.target
-    const legacy = await this.legacy.load(documentId)
-    if (
-      legacy.kind === 'corrupt-snapshot' ||
-      legacy.kind === 'corrupt-delta' ||
-      legacy.kind === 'unsupported-version' ||
-      // Refuses for the SAME reason the three above do, from the opposite
-      // knowledge: they know the record is unreadable, this one knows
-      // nothing. Falling through would take the "there is no old record"
-      // branch below and place an empty node over a document that may be
-      // sitting on disk intact — the shadowing this method exists to avoid,
-      // reached by a transient IndexedDB failure.
-      legacy.kind === 'read-unavailable'
-    ) {
+    const legacy = await this.legacy.load(this.target.documentId)
+    if (isUnreadableLegacyRecord(legacy.kind)) {
       if (!this.isStale(handlers)) handlers.onError?.(legacy.kind)
       return false
     }
-    let placed: ReturnType<typeof createWorkspaceDocumentAtPath>
-    if (legacy.kind === 'ok') {
-      const source = new Loro()
-      source.import(legacy.snapshot)
-      for (const delta of legacy.deltas ?? []) source.import(delta)
-      placed = adoptWorkspaceDocument(
-        workspaceDoc,
-        { path, documentId, kind, ...(name === undefined ? {} : { name }) },
-        source,
-      )
-    } else {
-      placed = createWorkspaceDocumentAtPath(workspaceDoc, {
-        path,
-        documentId,
-        kind,
-        ...(name === undefined ? {} : { name }),
-      })
-    }
+    const placed = placeDocumentNode(workspaceDoc, this.target, legacy)
     if (placed === null) {
       // Neither helper placed the target: a DIFFERENT document already owns
       // `path` (the id itself is absent, or this method was not reached).
@@ -439,8 +445,8 @@ export class BrowserBackend implements DocumentBackend {
       // is a reason of its own once a collision has a product answer (open
       // the document that IS there, or number this one around it).
       getAppLogger('browser-backend').warn('another document owns the target path; not placing', {
-        documentId,
-        path,
+        documentId: this.target.documentId,
+        path: this.target.path,
       })
       if (!this.isStale(handlers)) handlers.onError?.('read-unavailable')
       return false
