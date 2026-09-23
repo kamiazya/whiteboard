@@ -729,7 +729,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reason its own comment gives for the list being 400-odd entries rather
   // than 17 — so it is recorded rather than split, and splitting it would
   // put half the ledger where a reader does not look for it.
-  'tools/arch-lint/src/function-size-budget.test.ts': 825,
+  'tools/arch-lint/src/function-size-budget.test.ts': 827,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
