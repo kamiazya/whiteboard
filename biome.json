@@ -121,7 +121,6 @@
         "!**/test-utils/**",
         "!apps/web/src/components/AppShell.tsx",
         "!apps/web/src/components/markdown-editor/MarkdownEditor.tsx",
-        "!apps/web/src/components/spatial-editor/SpatialEditor.tsx",
         "!packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs",
         "!packages/mcp-server/scripts/smoke/mcp-http-convergence-smoke.mjs",
         "!packages/mcp-server/scripts/smoke/mcp-read-plane-smoke.mjs"
