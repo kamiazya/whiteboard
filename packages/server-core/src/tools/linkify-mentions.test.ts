@@ -1,3 +1,4 @@
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -6,7 +7,9 @@ import { backlinksOutputSchema } from './backlinks.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool } from './document-get.js'
+import { loadDocument } from './document-io.js'
 import { createDocumentSetTool } from './document-set.js'
+import { createFacetSetTool } from './facet-set.js'
 import { linkifyMentionsOutputSchema } from './linkify-mentions.js'
 
 const WS = 'ws-1'
@@ -149,6 +152,46 @@ describe('POST /linkify-mentions', () => {
     // A [[link]] in a label would render as literal brackets, so labels are
     // mention-detected but never rewritten.
     expect(parsed.edges[0].label).toBe('Redis link')
+  })
+
+  // Linkify changes node TEXT. Everything else the board holds is not its to
+  // touch — and the canvas write it goes through is a full resync, which
+  // deletes whatever the canvas it is handed leaves out.
+  it('keeps everything on a board but the rewritten text', async () => {
+    const deps = makeDeps()
+    const h = await harness(deps)
+    const target = await h.create('target', 'markdown', 'Redis')
+    const board = await h.create('board', 'spatial')
+    await createCanvasEditTool(deps).execute({
+      workspaceId: WS,
+      documentId: board.documentId,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'a', type: 'text', text: 'we depend on Redis heavily' } },
+        {
+          op: 'line.add',
+          line: {
+            id: 'l1',
+            from: { kind: 'point', point: { x: 10, y: 10 } },
+            to: { kind: 'point', point: { x: 90, y: 90 } },
+          },
+        },
+      ],
+    })
+    await createFacetSetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [board.documentId],
+      tags: { add: ['architecture'] },
+    })
+
+    expect((await h.linkify(board.documentId, target.documentId)).body).toEqual({ linked: 1 })
+
+    const { canvas } = await loadDocument(deps, WS, board.documentId)
+    expect(nodeText(canvas.nodes.find((n) => n.id === 'a') ?? canvas.nodes[0]!)).toBe(
+      'we depend on [[target|Redis]] heavily',
+    )
+    expect(canvas.lines?.map((line) => line.id)).toEqual(['l1'])
+    expect(canvas.tags).toEqual(['architecture'])
   })
 
   it('refuses a nameless target and unknown documents', async () => {

@@ -609,7 +609,7 @@ function useBrowserDocument(
   )
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)
-  const { connections } = useBrowserConnections({
+  const { connections, linkify } = useBrowserConnections({
     index: store,
     loro: resolvedLoro,
     documentId: documentId ?? undefined,
@@ -672,7 +672,7 @@ function useBrowserDocument(
       registryKey: documentId,
     },
     versions: browserVersionsSlot({ backend: versionsBackend, workspaceId, path: loadedPath }),
-    ...browserConnectionsSlot(connections, navigateToDocument),
+    ...browserConnectionsSlot(connections, navigateToDocument, linkify),
     topBar: {
       // Local mode names documents through its own store, not through the
       // daemon's `/names`, so the identity the bar offers is unused here and

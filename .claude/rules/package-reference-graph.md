@@ -20,6 +20,13 @@ paths:
   moved. The digest is a hash of the MERGED content, computed at read time by
   the same function on both keepers, so correctness depends neither on
   hooking every write path nor on any replica's word about when it wrote.
+- **What Link does to a source** (`linkifyMentionsIn`, `linkMarkupFor`):
+  turning a document's unlinked mentions of another into links, over
+  `DocumentContentSource`'s sibling seam `DocumentContainers`, so the same
+  code edits a standalone document on the daemon and a node of the browser's
+  workspace record. Saving stays the keeper's. A board is written back WHOLE
+  with only its nodes replaced: the canvas write is a full resync, and
+  handing it `{ nodes, edges }` once deleted every line and tag on the board.
 - **One port, `DocumentContentSource`** — what the listing cannot give the
   cache: the document itself (`loadDocument`, null when nothing is stored),
   and OPTIONALLY a version per document for a listing entry with no digest.

@@ -157,7 +157,7 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/pages/use-daemon-connections.ts': {
     reach: 'both-keepers',
     browser: 'src/pages/use-browser-connections.ts',
-    note: 'both halves hand a read to one keeper-agnostic hook (`use-connections.ts`); the browser answers from the same reference graph the daemon does. Linkify is the daemon half only: the browser has no operation that rewrites another document yet, and the panel hides the button without one',
+    note: 'both halves hand a read to one keeper-agnostic hook (`use-connections.ts`) and answer from the same reference graph. Link runs the same `linkifyMentionsIn` on both; only where the source is saved differs',
   },
   'src/pages/use-daemon-document-controller.ts': {
     reach: 'both-keepers',
