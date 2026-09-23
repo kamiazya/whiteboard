@@ -7,8 +7,9 @@
  *     same state as applying it in order (per-document last-seq-wins);
  *   - a remove is a tombstone: a late (stale-seq) upsert cannot resurrect.
  */
+
+import { fc, fcTest, withDefaults } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
-import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { DocumentReferenceFacts } from './reference-aggregate.js'
 import { ReferenceAggregate } from './reference-aggregate.js'
 

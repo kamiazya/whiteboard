@@ -1,5 +1,9 @@
-import { ContentFactsCache } from '../references/content-facts-cache.js'
-import { mentionsOfIn, ReferenceAggregate } from '../references/reference-aggregate.js'
+import {
+  type ContentFactsCache,
+  mentionsOfIn,
+  ReferenceAggregate,
+} from '@kamiazya/whiteboard-reference-graph'
+import { factsCacheFor } from '../references/content-source.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { BacklinksInput, BacklinksOutput } from './backlinks.schemas.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
@@ -25,14 +29,14 @@ export {
 export async function computeBacklinks(
   deps: ServerDeps,
   input: BacklinksInput,
-  cache: ContentFactsCache = new ContentFactsCache(),
+  cache: ContentFactsCache = factsCacheFor(deps),
 ): Promise<BacklinksOutput> {
   const entries = await deps.documentIndex.listDocuments({ workspaceId: input.workspaceId })
   if (!entries.some((entry) => entry.documentId === input.documentId)) {
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.documentId)
   }
 
-  const content = await cache.factsFor(deps, input.workspaceId, entries)
+  const content = await cache.factsFor(input.workspaceId, entries)
   const aggregate = new ReferenceAggregate()
   for (const entry of entries) {
     const facts = content.get(entry.documentId)

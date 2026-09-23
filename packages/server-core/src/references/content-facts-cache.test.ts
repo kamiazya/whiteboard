@@ -3,7 +3,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
-import { ContentFactsCache } from './content-facts-cache.js'
+import { factsCacheFor } from './content-source.js'
 
 const WS = 'ws-1'
 
@@ -50,25 +50,25 @@ describe('ContentFactsCache', () => {
       documentId: c.documentId,
       markdown: '---\ntype: note\n---\ngamma body',
     })
-    const cache = new ContentFactsCache()
+    const cache = factsCacheFor(deps)
     const ws1 = await deps.documentIndex.listDocuments({ workspaceId: WS })
     const ws2 = await deps.documentIndex.listDocuments({ workspaceId: OTHER })
-    await cache.factsFor(deps, WS, ws1)
-    await cache.factsFor(deps, OTHER, ws2)
+    await cache.factsFor(WS, ws1)
+    await cache.factsFor(OTHER, ws2)
 
     const loads = vi.spyOn(deps.documentStore, 'loadSnapshot')
-    await cache.factsFor(deps, WS, ws1)
-    await cache.factsFor(deps, OTHER, ws2)
-    await cache.factsFor(deps, WS, ws1)
+    await cache.factsFor(WS, ws1)
+    await cache.factsFor(OTHER, ws2)
+    await cache.factsFor(WS, ws1)
     expect(loads).not.toHaveBeenCalled()
   })
 
   it('a kind flip without a content change re-extracts (the kind is part of the stamp)', async () => {
     const deps = makeDeps()
     const { a } = await seedTwo(deps)
-    const cache = new ContentFactsCache()
+    const cache = factsCacheFor(deps)
     const entries = await deps.documentIndex.listDocuments({ workspaceId: WS })
-    const first = await cache.factsFor(deps, WS, entries)
+    const first = await cache.factsFor(WS, entries)
     expect(first.get(a.documentId)?.texts[0]).toContain('alpha body')
 
     // No listing-only kind mutation exists today; hand a re-kinded entry to
@@ -77,7 +77,7 @@ describe('ContentFactsCache', () => {
     const flipped = entries.map((entry) =>
       entry.documentId === a.documentId ? { ...entry, kind: 'spatial' as const } : entry,
     )
-    const second = await cache.factsFor(deps, WS, flipped)
+    const second = await cache.factsFor(WS, flipped)
     // A markdown doc read as spatial has no text nodes: facts must change.
     expect(second.get(a.documentId)?.texts).toEqual([])
   })
@@ -86,15 +86,15 @@ describe('ContentFactsCache', () => {
     const deps = makeDeps()
     await seedTwo(deps)
     const loads = vi.spyOn(deps.documentStore, 'loadSnapshot')
-    const cache = new ContentFactsCache()
+    const cache = factsCacheFor(deps)
 
     const entries = await deps.documentIndex.listDocuments({ workspaceId: WS })
-    const first = await cache.factsFor(deps, WS, entries)
+    const first = await cache.factsFor(WS, entries)
     expect(first.size).toBe(2)
     expect(loads).toHaveBeenCalledTimes(2)
 
     loads.mockClear()
-    const second = await cache.factsFor(deps, WS, entries)
+    const second = await cache.factsFor(WS, entries)
     expect(second.get(entries[0]?.documentId ?? '')?.texts[0]).toContain('alpha body one')
     expect(loads).not.toHaveBeenCalled()
   })
@@ -102,13 +102,13 @@ describe('ContentFactsCache', () => {
   it('reloads exactly the edited document', async () => {
     const deps = makeDeps()
     const { b, write } = await seedTwo(deps)
-    const cache = new ContentFactsCache()
+    const cache = factsCacheFor(deps)
     const entries = await deps.documentIndex.listDocuments({ workspaceId: WS })
-    await cache.factsFor(deps, WS, entries)
+    await cache.factsFor(WS, entries)
 
     await write(b.documentId, 'beta body two')
     const loads = vi.spyOn(deps.documentStore, 'loadSnapshot')
-    const facts = await cache.factsFor(deps, WS, entries)
+    const facts = await cache.factsFor(WS, entries)
     expect(loads).toHaveBeenCalledTimes(1)
     expect(facts.get(b.documentId)?.texts[0]).toContain('beta body two')
   })
@@ -124,17 +124,16 @@ describe('ContentFactsCache', () => {
       path: 'empty',
       kind: 'markdown',
     })
-    const cache = new ContentFactsCache()
+    const cache = factsCacheFor(deps)
     const loads = vi.spyOn(deps.documentStore, 'loadSnapshot')
     const all = await deps.documentIndex.listDocuments({ workspaceId: WS })
-    const facts = await cache.factsFor(deps, WS, all)
+    const facts = await cache.factsFor(WS, all)
     expect(facts.get(empty.documentId)).toEqual({ refs: [], texts: [], bearers: [] })
     // Two seeded documents loaded; the snapshotless one never was.
     expect(loads).toHaveBeenCalledTimes(2)
 
     await deps.documentIndex.deleteDocument({ workspaceId: WS, path: 'a' })
     const after = await cache.factsFor(
-      deps,
       WS,
       await deps.documentIndex.listDocuments({ workspaceId: WS }),
     )
@@ -154,9 +153,8 @@ describe('ContentFactsCache', () => {
       documentId: doc.documentId,
       markdown: '---\ntype: note\ntags:\n  - release\n---\nbody',
     })
-    const cache = new ContentFactsCache()
+    const cache = factsCacheFor(deps)
     const facts = await cache.factsFor(
-      deps,
       WS,
       await deps.documentIndex.listDocuments({ workspaceId: WS }),
     )

@@ -1,9 +1,9 @@
 {
-  "name": "@kamiazya/whiteboard-server-core",
+  "name": "@kamiazya/whiteboard-reference-graph",
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Server core: /api/v1 Hono routes and MCP tool definitions, exposed as createServer(deps).",
+  "description": "What the documents of a workspace point at, as a graph: the facts one document contributes (its references, its searchable texts, its tag bearers), the aggregate that answers backlinks and unlinked mentions from them, and the frontier-stamped cache that keeps those facts between reads. Pure and runtime-agnostic, so both keepers answer the same questions the same way.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -12,18 +12,6 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./contracts": {
-      "types": "./src/contracts.ts",
-      "import": "./src/contracts.ts"
-    },
-    "./api-errors": {
-      "types": "./src/api-errors.ts",
-      "import": "./src/api-errors.ts"
-    },
-    "./versions/version-entry": {
-      "types": "./src/versions/version-entry.ts",
-      "import": "./src/versions/version-entry.ts"
-    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -31,16 +19,11 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
-    "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
-    "@kamiazya/whiteboard-facet-engine": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
-    "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
-    "@kamiazya/whiteboard-reference-graph": "workspace:*",
     "@kamiazya/whiteboard-search": "workspace:*",
-    "hono": "^4.12.34",
     "loro-crdt": "catalog:",
     "zod": "catalog:"
   },

@@ -9,7 +9,7 @@ import {
   spatialCanvasSchema,
   withNodeText,
 } from '@kamiazya/whiteboard-model'
-import { unlinkedNameSpans } from '../references/reference-aggregate.js'
+import { unlinkedNameSpans } from '@kamiazya/whiteboard-reference-graph'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { loadDocument, saveDocumentBodySnapshot, saveDocumentSnapshot } from './document-io.js'
