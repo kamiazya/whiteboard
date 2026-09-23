@@ -13,7 +13,7 @@
 import { type EdgeEnd, edgeEndSchema } from '@kamiazya/whiteboard-model'
 import { applyStencil } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
-import { endNode, linked, linkedFrom, TASKS } from './tasks.mjs'
+import { claimMessageNodes, endNode, linked, linkedFrom, TASKS } from './tasks.mjs'
 
 const KINDS = TASKS.find((t) => t.name === 'draw a flow whose kinds are told apart at a glance')
 
@@ -504,5 +504,55 @@ describe('the shared link helpers', () => {
     const ragged = { edges: [{ id: 'e0', from: undefined, to: at('b') }] }
     expect(endNode(undefined)).toBeUndefined()
     expect(linked(ragged, a, b)).toBe(false)
+  })
+})
+
+// The one rule in the sequence-diagram verifier that has been got wrong
+// before, and the reason it is stated in the source: a node reading
+// "renders rows" contains BOTH "rows" and "render", so a substring search
+// that let two steps share it grades the wrong geometry. The rest of that
+// verifier stays uncovered by this file's standing rule — a case is earned,
+// not written on principle.
+describe('the sequence-diagram message claim', () => {
+  const box = (id: string, text: string) => ({
+    id,
+    type: 'text',
+    text,
+    x: 0,
+    y: 0,
+    width: 10,
+    height: 10,
+  })
+
+  it('gives each step its own node, closest match first', () => {
+    const board = {
+      nodes: [
+        box('p1', 'Browser'),
+        box('n1', 'renders rows'),
+        box('n2', 'rows'),
+        box('n3', 'render'),
+      ],
+    }
+
+    const claimed = claimMessageNodes(board, [['rows'], ['render']], ['Browser'])
+
+    expect(claimed.map((n: { id: string }) => n.id)).toEqual(['n2', 'n3'])
+  })
+
+  it('leaves a step unclaimed rather than reusing a node', () => {
+    const board = { nodes: [box('n1', 'renders rows')] }
+
+    const claimed = claimMessageNodes(board, [['rows'], ['render']], [])
+
+    expect(claimed[0]?.id).toBe('n1')
+    expect(claimed[1]).toBeUndefined()
+  })
+
+  it('never claims a participant box', () => {
+    const board = { nodes: [box('p1', 'Daemon'), box('n1', 'Daemon ready')] }
+
+    const claimed = claimMessageNodes(board, [['daemon']], ['Daemon'])
+
+    expect(claimed[0]?.id).toBe('n1')
   })
 })
