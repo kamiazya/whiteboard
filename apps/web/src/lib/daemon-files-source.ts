@@ -22,6 +22,40 @@ import {
 } from './files-source.js'
 
 /**
+ * One tag read per LIST read, shared by everyone who asks about tags.
+ *
+ * Three callers want the same route in one breath: the list (rows carry their
+ * tags), the panel's chip count, and the page's vocabulary hook. The first two
+ * are SEQUENTIAL — the chips are reloaded once the list has landed — so an
+ * in-flight-only dedupe could not see them, and an addressed cold load paid
+ * for the vocabulary twice.
+ *
+ * `read` answers from what is held; `refresh` is what the list calls, since a
+ * list read is this source's one reason to ask again. That is exactly the
+ * freshness `useTagsInUse` documents ("reloaded with the list"): the chips
+ * count the tags that came back with the rows they are drawn beside.
+ *
+ * A rejection is NOT held. Holding one would leave a source that failed once
+ * answering from that failure for as long as it lives.
+ */
+function heldTagRead(
+  daemonFetch: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+) {
+  let held: ReturnType<typeof getWorkspaceDocumentTags> | null = null
+  const refresh = () => {
+    const asked = getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId)
+    held = asked
+    void asked.catch(() => {
+      if (held === asked) held = null
+    })
+    return asked
+  }
+  return { read: () => held ?? refresh(), refresh }
+}
+
+/**
  * `WorkspaceFilesSource` over the daemon's HTTP API — the same five client
  * calls `WorkspaceFilesPanel` used to make itself, moved behind the seam so
  * the panel stops being daemon-only.
@@ -35,24 +69,13 @@ export function createDaemonFilesSource(
   daemonBaseUrl: string,
   workspaceId: string,
 ): WorkspaceFilesSource {
-  // Both tag readers are one route; a caller asking for both in one breath
-  // (the vocabulary hook) pays one round trip, and the next ask after they
-  // settle fetches afresh.
-  let tagsInFlight: ReturnType<typeof getWorkspaceDocumentTags> | null = null
-  const documentTags = () => {
-    tagsInFlight ??= getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId).finally(
-      () => {
-        tagsInFlight = null
-      },
-    )
-    return tagsInFlight
-  }
+  const tags = heldTagRead(daemonFetch, daemonBaseUrl, workspaceId)
   return {
     async listTagsInUse() {
-      return (await documentTags()).inUse
+      return (await tags.read()).inUse
     },
     async readTagLibrary() {
-      return (await documentTags()).library
+      return (await tags.read()).library
     },
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       try {
@@ -66,7 +89,7 @@ export function createDaemonFilesSource(
         const [res, names, tagRes] = await Promise.all([
           listDocuments(daemonFetch, daemonBaseUrl, workspaceId),
           getWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
-          getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
+          tags.refresh().catch(() => null),
         ])
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
         const tagsById = new Map((tagRes?.documents ?? []).map((doc) => [doc.documentId, doc.tags]))

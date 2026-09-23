@@ -99,28 +99,31 @@ const NAVIGATION_CEILING = 8
  * settle that rewrites the address once while asking for the same document
  * list ten times is a storm that the ceiling reports as fine.
  *
- * Read the numbers before trusting them, because they are not 1:
+ * Read the numbers before trusting them, because they are not 1. What the
+ * addressed path has cost, as each change lowered it:
  *
- * | endpoint  | addressed (`/w/default`) | settled from `/` |
- * |-----------|--------------------------|------------------|
- * | workspaces| 1-2 (varies by timing)   | 2                |
- * | documents | 3                        | 1                |
- * | names     | 3                        | 1                |
- * | tags      | 4                        | 0                |
- * | trash     | 2                        | 1                |
+ * | endpoint  | 2026-09-21 | panel's two asks closed  | tag read held | settled from `/` |
+ * |-----------|-----------|--------------------------|---------------|------------------|
+ * | workspaces| 1-2       | 1-2                      | 1-2           | 2                |
+ * | documents | 3         | 2                        | 2             | 1                |
+ * | names     | 3         | 2                        | 2             | 1                |
+ * | tags      | 4         | 2                        | **1**         | 0                |
+ * | trash     | 2         | 2                        | 2             | 1                |
  *
- * The addressed path asks for ONE workspace's documents THREE times, and
- * for its tag vocabulary four times. That is duplicate work, it is stable,
- * and it is not what this file was opened to fix — so it is pinned here as
- * what IS rather than what should be, and reducing it is its own change
- * with its own before/after. Pinning it is what makes that change legible:
- * whoever lowers these numbers will see them move.
+ * Pinning them is what makes each change legible: whoever lowers these
+ * numbers sees them move, and whoever adds a round pays for it here.
+ *
+ * `documents`/`names` at 2 is the page's own load beside the panel's list,
+ * and closing it means the page reading the panel's list instead of its own
+ * — a bigger change that wants its own before/after. `trash` at 2 is two
+ * readers of one route: the page reads the COUNT to decide whether
+ * onboarding may replace the panel, and `TrashSection` reads the entries.
  *
  * A ceiling AND a floor, because a fixture that answers nothing also
  * reports zero, which is the failure these numbers are meant to catch.
  */
 const COLD_LOAD_BUDGET = {
-  addressed: { workspaces: 2, documents: 2, names: 2, tags: 2, trash: 2 },
+  addressed: { workspaces: 2, documents: 2, names: 2, tags: 1, trash: 2 },
   settled: { workspaces: 2, documents: 1, names: 1, tags: 0, trash: 1 },
 } as const
 
@@ -221,8 +224,15 @@ function installDaemonFetch() {
     // as soon as it has a target, and a refusal there is a REPORTED failure
     // the jsdom guard would fail this file for. Nothing here is about fonts.
     if (url.endsWith('/api/fonts')) return Promise.resolve(jsonResponse({ fonts: [] }))
-    // `names` and `document-tags` land here too: both answer 404 and always have
-    // (the page treats each as optional), and both are counted above.
+    // ANSWERED, schema-valid, and empty. It used to 404 like `names` still
+    // does, which made this budget unable to see the thing it counts: a
+    // rejected tag read is deliberately not held for the next asker, so
+    // every dedupe measured here read as no dedupe at all.
+    if (url.includes('/document-tags')) {
+      return Promise.resolve(jsonResponse({ documents: [], contents: [], inUse: [], library: {} }))
+    }
+    // `names` lands here: it answers 404 and always has (the page treats it
+    // as optional), and it is counted above.
     return Promise.resolve(jsonResponse({}, 404))
   })
   vi.stubGlobal('fetch', fetchMock)
