@@ -37,7 +37,7 @@ import {
 } from '../../shared/test-utils/webauthn-fixtures.js'
 import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
-import { createMemberProfileStore } from '../security/member-profile-store.js'
+import { createMemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
@@ -234,8 +234,7 @@ export async function bindSession(fixture: Awaited<ReturnType<typeof makeApp>>) 
  *  without this, a workspace with zero members admits everyone (S8). */
 export async function addGatingMember(fixture: Awaited<ReturnType<typeof makeApp>>) {
   const profile = await fixture.members.ensureProfile({
-    origin: HOSTED,
-    credentialId: 'gating-member-cred',
+    binding: passkeyBinding(HOSTED, 'gating-member-cred'),
     displayName: 'Gating Member',
   })
   await fixture.members.addMember(WS, profile.id)

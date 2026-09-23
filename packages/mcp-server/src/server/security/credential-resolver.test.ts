@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ALL_AUTH_SCOPES } from './auth-strategy.js'
 import { createCredentialResolver } from './credential-resolver.js'
 import { mintMacaroon } from './macaroon.js'
+import { passkeyBinding } from './member-profile-store.js'
 import * as timingSafe from './timing-safe.js'
 
 const DAEMON_TOKEN = 'the-daemon-token'
@@ -94,7 +95,7 @@ describe('createCredentialResolver — what each credential carries', () => {
     expect(await bound.resolve(bearer('paired', ORIGIN))).toEqual({
       kind: 'pairing',
       scopes: ALL_AUTH_SCOPES,
-      passkey: { origin: ORIGIN, credentialId: 'cred-1' },
+      person: passkeyBinding(ORIGIN, 'cred-1'),
     })
 
     const unbound = createCredentialResolver({

@@ -14,7 +14,11 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
-import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
+import {
+  createMemberProfileStore,
+  type MemberProfileStore,
+  passkeyBinding,
+} from './member-profile-store.js'
 
 const WORKSPACES = ['ws-1', 'ws-2'] as const
 const PROFILE_KEYS = ['p1', 'p2', 'p3'] as const
@@ -57,8 +61,7 @@ describe('membership seam', () => {
       const profileIds = new Map<string, string>()
       for (const key of PROFILE_KEYS) {
         const profile = await store.ensureProfile({
-          origin: 'https://a.example',
-          credentialId: `cred-${key}`,
+          binding: passkeyBinding('https://a.example', `cred-${key}`),
           displayName: key,
         })
         profileIds.set(key, profile.id)
