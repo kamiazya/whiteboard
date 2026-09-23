@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import { getDb } from '../server/store/db/index.js'
@@ -26,14 +27,20 @@ export type GrantMemberOutcome =
  */
 export async function grantMember(
   db: TenantDatabase,
-  { workspaceId, user }: { workspaceId: string; user: string },
+  { workspaceId: workspaceHandle, user }: { workspaceId: string; user: string },
 ): Promise<GrantMemberOutcome> {
-  const workspace = await db
-    .selectFrom('workspaces')
-    .select('id')
-    .where('id', '=', workspaceId)
-    .executeTakeFirst()
-  if (workspace === undefined) return { kind: 'unknown-workspace', workspaceId }
+  // A handle, as every other surface reads one (ADR-0019): the segment an
+  // operator sees in a URL, or the canonical id.
+  const rows = await db.selectFrom('workspaces').select(['id', 'segment']).execute()
+  const workspace = resolveWorkspaceHandle(
+    rows.map((row) => ({
+      workspaceId: row.id,
+      ...(row.segment === null ? {} : { segment: row.segment }),
+    })),
+    workspaceHandle,
+  )
+  if (workspace === null) return { kind: 'unknown-workspace', workspaceId: workspaceHandle }
+  const { workspaceId } = workspace
 
   const members = createMemberProfileStore(db)
   const users = await members.listUsers()
@@ -48,7 +55,7 @@ export async function grantMember(
 }
 
 const USAGE =
-  'Re-run with: whiteboard server grant-member --json --workspace=<id> --user=<id|name> [--data-dir=<path>]'
+  'Re-run with: whiteboard server grant-member --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]'
 
 const REFUSAL: Record<Exclude<GrantMemberOutcome['kind'], 'ok'>, string> = {
   'unknown-workspace': 'grant refused: this data directory holds no workspace with that id.',
@@ -81,7 +88,8 @@ export async function runServerGrantMember(
   if (scan.kind === 'usage-error') return usageError(io, scan.message)
   const { workspaceId, user, dataDir } = scan.values
   if (!scan.seen.has('--json')) return usageError(io, `Only --json is supported for now. ${USAGE}`)
-  if (workspaceId === undefined) return usageError(io, `--workspace=<id> is required. ${USAGE}`)
+  if (workspaceId === undefined)
+    return usageError(io, `--workspace=<id|segment> is required. ${USAGE}`)
   if (user === undefined) return usageError(io, `--user=<id|name> is required. ${USAGE}`)
 
   const dir = resolve(dataDir ?? resolveDefaultDataDir(env))

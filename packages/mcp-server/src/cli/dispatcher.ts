@@ -49,7 +49,7 @@ whiteboard server stop           --json [--data-dir=<path>]
 whiteboard server run            --json --dry-run [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [options...]
 whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
-whiteboard server grant-member   --json --workspace=<id> --user=<id|name> [--data-dir=<path>]
+whiteboard server grant-member   --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
 `

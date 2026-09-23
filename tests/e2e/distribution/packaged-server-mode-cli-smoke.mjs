@@ -227,6 +227,7 @@ function makeJwt(priv, scope) {
     { alg: 'ES256', typ: 'at+jwt', kid: 'cli-smoke-key' },
     {
       sub: 'cli-smoke-user',
+      azp: 'cli-smoke-client',
       scope,
       iss: SMOKE_ISSUER,
       aud: SMOKE_AUDIENCE,
@@ -443,8 +444,29 @@ try {
   }
 
   // ── Scenario 5: restored server-mode can boot and serve seeded canvas ──────
+  //
+  // Also the upgrade path the self-host guide gives a bearer-only deployment:
+  // the JWT issuer declared as a provider whose `bearerClients` names this
+  // client, so the bearer becomes a user; then the restored workspace, which
+  // has no member, granted one from the CLI.
 
   {
+    const signInConfig = join(tmpRoot, 'sign-in.json')
+    writeFileSync(
+      signInConfig,
+      JSON.stringify({
+        providers: [
+          {
+            id: 'smoke',
+            kind: 'oidc',
+            issuer: SMOKE_ISSUER,
+            clientId: 'wb-smoke',
+            clientSecret: { env: 'SMOKE_CLIENT_SECRET' },
+            admission: { createAccounts: true, bearerClients: ['cli-smoke-client'] },
+          },
+        ],
+      }),
+    )
     serverMode = spawn(
       process.execPath,
       [
@@ -466,6 +488,8 @@ try {
           ...scrubDevEnv(process.env),
           WHITEBOARD_SERVER_PORT: String(SERVER_PORT),
           NODE_EXTRA_CA_CERTS: tlsCertFile,
+          WHITEBOARD_SIGN_IN_CONFIG: signInConfig,
+          SMOKE_CLIENT_SECRET: 'smoke-client-secret',
         },
       },
     )
@@ -477,12 +501,34 @@ try {
     }
     assertNoLeak('scenario 5 ready JSON', JSON.stringify(ready))
 
-    // Verify the seeded canvas is accessible via the protected API.
+    // Verify the seeded canvas is accessible via the protected API — once the
+    // bearer's person is a member of the restored workspace.
     const jwt = makeJwt(privateKey, 'workspace:read canvas:read')
-    const listRes = await fetch(
-      `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`,
-      { headers: { Authorization: `Bearer ${jwt}` } },
-    )
+    const listDocuments = () =>
+      fetch(`http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      })
+    const beforeGrant = await listDocuments()
+    if (beforeGrant.status !== 403) {
+      fail(`scenario 5: expected 403 before a member is granted, got ${beforeGrant.status}`)
+    }
+    const refusal = await beforeGrant.json()
+    if (refusal?.error !== 'not_a_member') {
+      fail('scenario 5: the refusal before a grant is not not_a_member', { error: refusal?.error })
+    }
+    const grant = cli([
+      'server',
+      'grant-member',
+      '--json',
+      `--workspace=${WORKSPACE_ID}`,
+      '--user=cli-smoke-user',
+      `--data-dir=${restoredDir}`,
+    ])
+    if (grant.status !== 0) {
+      fail('scenario 5: grant-member failed', { stdout: grant.stdout.trim() })
+    }
+    assertNoLeak('scenario 5 grant-member stdout', grant.stdout, SMOKE_LITERALS)
+    const listRes = await listDocuments()
     if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status}`)
     const list = await listRes.json()
     if (!(list?.documents ?? []).some((c) => c.path === CANVAS_PATH)) {

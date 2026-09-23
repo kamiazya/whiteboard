@@ -54,6 +54,15 @@ describe('grantMember', () => {
     expect(await members.membersOnly(WS)).toBe(true)
   })
 
+  // What an operator sees is the address in the URL, which is the segment.
+  it('finds the workspace by its segment, the handle in its URL', async () => {
+    await upsertWorkspaceRow(handle.db, 'ws-01HX', { segment: 'plans' })
+    const ada = await userNamed('Ada', 'ada-1')
+    const outcome = await grantMember(handle.db, { workspaceId: 'plans', user: ada.id })
+    expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('ws-01HX')
+    expect(await members.isWorkspaceMember('ws-01HX', ada.id)).toBe('member')
+  })
+
   it('finds a user by their exact display name', async () => {
     const ada = await userNamed('Ada', 'ada-1')
     await userNamed('Bob', 'bob-1')
@@ -120,6 +129,6 @@ describe('whiteboard server grant-member', () => {
   it('exits 64 without --workspace', async () => {
     const res = await run(['--json', '--user=Ada'])
     expect(res.code).toBe(64)
-    expect(res.stderr).toMatch(/--workspace=<id> is required/)
+    expect(res.stderr).toContain('--workspace=<id|segment> is required')
   })
 })

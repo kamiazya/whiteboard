@@ -118,7 +118,7 @@ before sign-in was configured — has no member, so nobody can open it until
 the operator grants one from the machine that holds the data directory:
 
 ```sh
-whiteboard server grant-member --json --workspace=<workspace id> --user=<user id or display name>
+whiteboard server grant-member --json --workspace=<workspace segment or id> --user=<user id or display name>
 ```
 
 The person must have become a user first (by signing in, or by a bearer as
