@@ -4,8 +4,9 @@ import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createMemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
+import { membershipAdmit } from '../security/membership-gate.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
-import { membershipAdmit, requiresDaemonAuth } from './auth.js'
+import { requiresDaemonAuth } from './auth.js'
 
 describe('requiresDaemonAuth', () => {
   it('default-requires bearer auth for every /api method, not just mutations', () => {

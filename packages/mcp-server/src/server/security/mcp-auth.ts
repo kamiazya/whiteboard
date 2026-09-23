@@ -151,6 +151,11 @@ function admitsMcp(grant: ResolvedGrant): boolean {
     // switch stays exhaustive if that ever changes.
     case 'ws-ticket':
       return false
+    // Server mode's kinds: this resolver never produces them, and server
+    // mode's `/mcp` is authorized by its own middleware.
+    case 'signed-in':
+    case 'external-bearer':
+      return false
   }
 }
 

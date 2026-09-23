@@ -2,10 +2,10 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
+import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import type { WorkspaceAdmit } from './auth.js'
 import {
   type AutoVersionTrigger,
   createAutoVersionTrigger,

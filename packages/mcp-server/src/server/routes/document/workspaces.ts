@@ -30,9 +30,9 @@ import { Hono } from 'hono'
 import type { z } from 'zod'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
+import type { WorkspaceAdmit } from '../../security/membership-gate.js'
 import { validateDocumentPath, validateWorkspaceId } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
-import type { WorkspaceAdmit } from '../auth.js'
 import {
   corruptStored,
   firstOwned,

@@ -27,8 +27,8 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import type { WorkspaceAdmit } from '../security/membership-gate.js'
 import { membershipRefusal } from '../security/workspace-access.js'
-import type { WorkspaceAdmit } from './auth.js'
 
 const log = getLogger('sync-sse')
 

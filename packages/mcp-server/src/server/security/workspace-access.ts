@@ -42,14 +42,22 @@ export const OPERATOR_ISSUED_KINDS = [
 export type WorkspaceAccessDecision = 'admitted' | 'requires_person_session' | 'not_a_member'
 type MembershipDenial = Exclude<WorkspaceAccessDecision, 'admitted'>
 
+export interface WorkspaceAccessOptions {
+  /** ADR-0046 decision 10: on a keeper many people sign in to, a workspace
+   *  that has never had a member is closed rather than open — nobody forgot
+   *  to close it, because it was never open. */
+  readonly membersOnlyByDefault?: boolean
+}
+
 export async function workspaceAccess(
   grant: ResolvedGrant,
   workspaceId: string,
   members: MemberProfileStore,
+  { membersOnlyByDefault = false }: WorkspaceAccessOptions = {},
 ): Promise<WorkspaceAccessDecision> {
   if ((OPERATOR_ISSUED_KINDS as readonly string[]).includes(grant.kind)) return 'admitted'
 
-  if (!(await members.membersOnly(workspaceId))) return 'admitted'
+  if (!membersOnlyByDefault && !(await members.membersOnly(workspaceId))) return 'admitted'
 
   if (grant.person === undefined) return 'requires_person_session'
 

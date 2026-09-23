@@ -28,13 +28,14 @@ import { captureLogsForTests } from '../log.js'
 import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
 import { createMemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
+import { membershipAdmit } from '../security/membership-gate.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
 import { tenantRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { createDaemonAuthMiddleware, membershipAdmit } from './auth.js'
+import { createDaemonAuthMiddleware } from './auth.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
@@ -314,7 +315,7 @@ describe('the middleware logs a refusal with fields, and nothing on admission', 
       const res = await fixture.app.request(`/api/workspaces/${WS}`, { headers: bearer(token) })
       expect(res.status).toBe(403)
       const refusal = capture.records.find(
-        (r) => r.msg === 'membership refused' && r.scope === 'daemon-auth',
+        (r) => r.msg === 'membership refused' && r.scope === 'membership-gate',
       )
       expect(refusal?.data).toMatchObject({
         workspaceId: WS,
