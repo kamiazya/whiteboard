@@ -49,11 +49,17 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // pages, 58 -> 55 with the markdown editor's three pure modules, 55 -> 52
 // with the workspace-files panel and its two lists, 52 -> 48 with the
 // settings and migration surfaces, 48 -> 42 with the daemon's store,
+// Lowered from 114 with codec's six files, then 72 -> 70 with the two
+// document pages, 70 -> 67 with canvas-render, 67 -> 65 with daemon-client,
+// 65 -> 60 with mcp-server's CLI, 60 -> 58 with the two keeper document
+// pages, 58 -> 55 with the markdown editor's three pure modules, 55 -> 52
+// with the workspace-files panel and its two lists, 52 -> 48 with the
+// settings and migration surfaces, 48 -> 42 with the daemon's store,
 // 42 -> 38 with its document routes, 38 -> 33 with five more of its HTTP
-// routes, and 33 -> 32 with the markdown block layout: the comment asks for
-// the ceiling to follow an obvious gap, and a paydown that leaves slack is
-// exactly one.
-const EXEMPT_CEILING = 32
+// routes, 33 -> 31 with its two transports, and 31 -> 30 with the markdown
+// block layout: the comment asks for the ceiling to follow an obvious gap,
+// and a paydown that leaves slack is exactly one.
+const EXEMPT_CEILING = 30
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {

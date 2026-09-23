@@ -25,6 +25,7 @@ import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-a
 import type { DocumentId } from '@kamiazya/whiteboard-model'
 import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect } from 'vitest'
+import { DocumentVectorCache } from '../search/document-vector-cache.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -35,7 +36,7 @@ import { loadOrCreateDocument } from '../tools/document-io.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import { computeDocumentTags } from '../tools/document-tags.js'
-import { ContentFactsCache } from './content-facts-cache.js'
+import { factsCacheFor } from './content-source.js'
 import { followReferencesAfterRename } from './follow-rename.js'
 
 const WS = 'ws-pbt'
@@ -272,8 +273,8 @@ describe('reference semantics under command sequences', () => {
       // ONE cache across the whole command sequence — the differential half:
       // stamp-validated incremental answers must match a fresh full scan
       // after every command, whatever interleaving of writes produced it.
-      const cache = new ContentFactsCache()
-      const cachedSearch = createDocumentSearchTool(deps, cache)
+      const cache = factsCacheFor(deps)
+      const cachedSearch = createDocumentSearchTool(deps, new DocumentVectorCache(cache))
       // slot -> documentId of the doc created into it (dead ids stay, model ignores)
       const slots: (string | null)[] = [null, null, null]
       let nodeSeq = 0
