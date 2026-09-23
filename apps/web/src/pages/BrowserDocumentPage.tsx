@@ -35,10 +35,7 @@ import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
-import {
-  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
-  dispatchIdentityEvent,
-} from '../lib/document-sync-types.js'
+import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
@@ -50,7 +47,9 @@ import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import {
+  browserConnectionsSlot,
   browserTerminalAnswer,
+  browserVersionsSlot,
   conversationReads,
   documentLabels,
   documentPropertiesSlot,
@@ -68,6 +67,7 @@ import type {
 import type { DocumentPageModel } from './document-page-model.js'
 import { mergePersistence } from './merge-persistence.js'
 import { useAutoCheckpoint } from './use-auto-checkpoint.js'
+import { useBrowserConnections } from './use-browser-connections.js'
 import {
   type LoroStoreLike,
   useBrowserDocumentController,
@@ -456,7 +456,6 @@ function useBrowserDocument(
           }),
     [versionsRecord, versionStore, documentKind],
   )
-  const versionsEnabled = versionsBackend !== null
 
   // Built on the backend, because a branch is a frontier of the record the
   // backend holds and a branch write goes through the same queue its edits
@@ -610,6 +609,12 @@ function useBrowserDocument(
   )
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)
+  const { connections } = useBrowserConnections({
+    index: store,
+    loro: resolvedLoro,
+    documentId: documentId ?? undefined,
+    path: documentPath,
+  })
   if ('answer' in resolved) return resolved.answer
   const editing = resolved.editing
 
@@ -666,30 +671,8 @@ function useBrowserDocument(
       canvas: labels.commandCanvas,
       registryKey: documentId,
     },
-    versions: {
-      enabled: versionsEnabled,
-      workspaceId,
-      path: loadedPath,
-      save: async (label) => {
-        if (versionsBackend === null) {
-          throw new Error('saveVersionFromPanel: no versions backend')
-        }
-        try {
-          const saved = await versionsBackend.save(workspaceId, loadedPath, { label })
-          return { workspaceId, path: loadedPath, versionId: saved.id }
-        } catch (err) {
-          log.warn('save version from the History panel failed', err)
-          throw err
-        }
-      },
-      // The top bar addresses this document as `local`/path (its
-      // `dataMode="local"` placeholder), so the dot listens under that id.
-      announceRefresh: () =>
-        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
-          workspaceId: 'local',
-          path: loadedPath,
-        }),
-    },
+    versions: browserVersionsSlot({ backend: versionsBackend, workspaceId, path: loadedPath }),
+    ...browserConnectionsSlot(connections, navigateToDocument),
     topBar: {
       // Local mode names documents through its own store, not through the
       // daemon's `/names`, so the identity the bar offers is unused here and
