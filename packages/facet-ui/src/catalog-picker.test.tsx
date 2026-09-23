@@ -407,3 +407,58 @@ describe('what was picked here comes back on top', () => {
     )
   })
 })
+
+describe('a result band says what it is not showing', () => {
+  // More rows than the picker draws, all matching one term: the count under
+  // the grid is the only thing that says the rest exist.
+  const many = Array.from({ length: 120 }, (_, i) => ({
+    payload: { kind: 'emoji', char: String.fromCodePoint(0x1f600 + i) },
+    label: `face ${i}`,
+    keywords: ['face'],
+    glyph: { kind: 'char' as const, value: String.fromCodePoint(0x1f600 + i) },
+  }))
+  const bigRegistry = createFacetRegistry([
+    definePlugin({
+      id: 'demo',
+      displayName: 'Demo',
+      facets: [
+        defineFacet({
+          name: 'symbol',
+          displayName: 'Symbol',
+          version: 'v0',
+          targets: ['node'],
+          schema: symbolSchema,
+          editor: {
+            picker: {
+              options: [
+                { payload: null, label: 'No symbol', glyph: { kind: 'shape', name: 'none' } },
+              ],
+              catalog: {
+                label: 'Search symbols',
+                load: async () => [{ label: 'Faces', options: many }],
+              },
+            },
+          },
+        }),
+      ],
+    }),
+  ])
+
+  it('counts the matches it left off the grid', async () => {
+    render(
+      <DerivedFacetForm
+        facetKey={SYMBOL_KEY}
+        title="Symbol"
+        stored={undefined}
+        registry={bigRegistry}
+        onWrite={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
+    await screen.findByRole('radio', { name: 'face 0' })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search symbols' }), {
+      target: { value: 'face' },
+    })
+    expect(screen.getByRole('status').textContent).toBe('96 of 120 matches')
+  })
+})

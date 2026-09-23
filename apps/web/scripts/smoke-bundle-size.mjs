@@ -160,17 +160,9 @@ function gzipSize(path) {
   return gzipSync(readFileSync(path)).length
 }
 
-// Guarded behind the import.meta.url check below so importing this module
-// (e.g. from smoke-bundle-size.test.ts to exercise extractCriticalPathFiles)
-// never runs the gate or calls process.exit as an import side effect.
-function main() {
+/** Each declared budget against the chunks that match its pattern. */
+function perChunkFailures() {
   let failures = 0
-
-  if (!existsSync(ASSETS)) {
-    console.error(`  FAIL  dist/assets not found at ${ASSETS} — run \`pnpm build\` first`)
-    process.exit(1)
-  }
-
   const files = readdirSync(ASSETS)
   for (const { label, pattern, limit, required } of BUDGETS) {
     const matches = files.filter((f) => pattern.test(f))
@@ -195,6 +187,63 @@ function main() {
       }
     }
   }
+  return failures
+}
+
+/**
+ * The entry script plus every modulepreloaded JS chunk, as listed in
+ * `dist/index.html`.
+ *
+ * This is what actually determines first-paint transfer size, and the
+ * per-file entry-JS budget cannot catch a regression here — a statically
+ * imported loro-crdt page would inflate this total without ever growing
+ * `index-*.js` itself.
+ */
+function criticalPathFailures() {
+  const indexHtmlPath = join(DIST, 'index.html')
+  if (!existsSync(indexHtmlPath)) {
+    console.error(
+      `  FAIL  dist/index.html not found at ${indexHtmlPath} — run \`pnpm build\` first`,
+    )
+    return 1
+  }
+
+  let failures = 0
+  const criticalPathFiles = extractCriticalPathFiles(readFileSync(indexHtmlPath, 'utf8'))
+  if (criticalPathFiles.length === 0) {
+    console.error(
+      '  FAIL  no entry <script src> or <link rel="modulepreload"> JS found in dist/index.html — the parser is broken or the build output changed shape; refusing to pass a vacuous budget',
+    )
+    failures++
+  }
+
+  let bytes = 0
+  for (const href of criticalPathFiles) {
+    bytes += gzipSize(join(DIST, href.replace(/^\//, '')))
+  }
+  const kb = (bytes / KB).toFixed(1)
+  const what = `critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files)`
+  if (bytes > CRITICAL_PATH_BUDGET_KB * KB) {
+    console.error(`  FAIL  ${what}: ${kb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`)
+    failures++
+  } else {
+    console.log(`  pass  ${what}: ${kb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`)
+  }
+  return failures
+}
+
+// Guarded behind the import.meta.url check below so importing this module
+// (e.g. from smoke-bundle-size.test.ts to exercise extractCriticalPathFiles)
+// never runs the gate or calls process.exit as an import side effect.
+function main() {
+  let failures = 0
+
+  if (!existsSync(ASSETS)) {
+    console.error(`  FAIL  dist/assets not found at ${ASSETS} — run \`pnpm build\` first`)
+    process.exit(1)
+  }
+
+  failures += perChunkFailures()
 
   // Critical-path total: entry script + every modulepreloaded JS chunk, as
   // listed in dist/index.html. This is what actually determines first-paint
@@ -202,37 +251,7 @@ function main() {
   // entry-JS budget above cannot catch a regression here (e.g. a statically
   // imported loro-crdt page would inflate this total without ever growing
   // index-*.js itself).
-  const indexHtmlPath = join(DIST, 'index.html')
-  if (!existsSync(indexHtmlPath)) {
-    console.error(
-      `  FAIL  dist/index.html not found at ${indexHtmlPath} — run \`pnpm build\` first`,
-    )
-    failures++
-  } else {
-    const html = readFileSync(indexHtmlPath, 'utf8')
-    const criticalPathFiles = extractCriticalPathFiles(html)
-    if (criticalPathFiles.length === 0) {
-      console.error(
-        '  FAIL  no entry <script src> or <link rel="modulepreload"> JS found in dist/index.html — the parser is broken or the build output changed shape; refusing to pass a vacuous budget',
-      )
-      failures++
-    }
-    let criticalPathBytes = 0
-    for (const href of criticalPathFiles) {
-      criticalPathBytes += gzipSize(join(DIST, href.replace(/^\//, '')))
-    }
-    const criticalPathKb = (criticalPathBytes / KB).toFixed(1)
-    if (criticalPathBytes > CRITICAL_PATH_BUDGET_KB * KB) {
-      console.error(
-        `  FAIL  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
-      )
-      failures++
-    } else {
-      console.log(
-        `  pass  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
-      )
-    }
-  }
+  failures += criticalPathFailures()
 
   if (failures > 0) {
     console.error(`\nbundle-size gate: ${failures} failure(s)`)

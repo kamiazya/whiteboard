@@ -10,15 +10,17 @@
  * unreadable file degrades to an empty store — losing grants means
  * re-consenting, never a dead daemon.
  */
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import type { TenantDir } from '../tenant/data-layout.js'
+import { writeTenantJsonFile } from './tenant-json-file.js'
 
 const log = getLogger('pairing-grants')
 
-const PAIRING_GRANTS_FILENAME = 'pairing-grants.json'
+export const PAIRING_GRANTS_FILENAME = 'pairing-grants.json'
 
 const pairingGrantSchema = z
   .object({
@@ -57,8 +59,10 @@ export interface PairingGrantStore {
   revoke(grantId: string): boolean
 }
 
-export function createPairingGrantStore(dataDir: string): PairingGrantStore {
-  const filePath = join(dataDir, PAIRING_GRANTS_FILENAME)
+/** `dir` is the tenant's own directory (`tenant/data-layout.ts`), not the data directory: an
+ * origin this tenant trusts must not answer for another (user decision 2026-09-23). */
+export function createPairingGrantStore(dir: TenantDir): PairingGrantStore {
+  const filePath = join(dir, PAIRING_GRANTS_FILENAME)
 
   function load(): PairingGrant[] {
     try {
@@ -81,12 +85,7 @@ export function createPairingGrantStore(dataDir: string): PairingGrantStore {
   let originsSnapshot: readonly string[] = grants.map((grant) => grant.origin)
 
   function persist(): void {
-    const payload = JSON.stringify({ version: 1, grants }, null, 2)
-    // Write-then-rename so a crash mid-write never leaves a truncated file
-    // that would silently drop every grant on the next load.
-    const tmpPath = `${filePath}.tmp`
-    writeFileSync(tmpPath, payload, { mode: 0o600 })
-    renameSync(tmpPath, filePath)
+    writeTenantJsonFile(dir, filePath, { version: 1, grants })
   }
 
   return {

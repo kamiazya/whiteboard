@@ -238,21 +238,18 @@ export interface EdgeAnchorOverride extends EdgeSides {
 type SidePair = EdgeSides
 
 /**
- * The heuristic side choice per edge — authored sides applied, self-edges
- * pinned to their loop side, crowd-aware pair ranking for the rest. This
- * is the INITIAL configuration; `optimizeSideChoices` may re-side edges
- * whose guesses produce crossings or overlaps.
+ * A crowding estimate per (node, side), plus the prospective side pair each
+ * edge contributed to it.
+ *
+ * The prospective side is the AUTHORED one, or the plain dominant-axis
+ * facing side — deliberately NOT the crowd-aware derivation, which would
+ * recurse. That is what lets a departure prefer a side other edges have not
+ * already claimed, deterministically and independent of edge order.
  */
-function initialSideChoices(
-  nodes: readonly SpatialNode[],
+function prospectiveSideCrowding(
   edges: readonly RoutableElement[],
-): Map<string, SidePair> {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
-  // Crowding estimate per (node, side): every edge end's PROSPECTIVE side
-  // (authored, or the plain dominant-axis facing side — deliberately NOT
-  // the crowd-aware derivation, which would recurse) — so a departure can
-  // prefer a side other edges have not already claimed, deterministically
-  // and independent of edge order.
+  byId: ReadonlyMap<string, SpatialNode>,
+): { crowdCounts: Map<string, number>; prospective: Map<string, SidePair> } {
   const crowdCounts = new Map<string, number>()
   const prospective = new Map<string, SidePair>()
   for (const edge of edges) {
@@ -268,15 +265,33 @@ function initialSideChoices(
       toSide: endSide(edge.to) ?? oppositeSide(primary),
     }
     prospective.set(edge.id, sides)
-    crowdCounts.set(
+    for (const key of [
       `${endNode(edge.from)} ${sides.fromSide}`,
-      (crowdCounts.get(`${endNode(edge.from)} ${sides.fromSide}`) ?? 0) + 1,
-    )
-    crowdCounts.set(
       `${endNode(edge.to)} ${sides.toSide}`,
-      (crowdCounts.get(`${endNode(edge.to)} ${sides.toSide}`) ?? 0) + 1,
-    )
+    ]) {
+      crowdCounts.set(key, (crowdCounts.get(key) ?? 0) + 1)
+    }
   }
+  return { crowdCounts, prospective }
+}
+
+/**
+ * The heuristic side choice per edge — authored sides applied, self-edges
+ * pinned to their loop side, crowd-aware pair ranking for the rest. This
+ * is the INITIAL configuration; `optimizeSideChoices` may re-side edges
+ * whose guesses produce crossings or overlaps.
+ */
+function initialSideChoices(
+  nodes: readonly SpatialNode[],
+  edges: readonly RoutableElement[],
+): Map<string, SidePair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  // Crowding estimate per (node, side): every edge end's PROSPECTIVE side
+  // (authored, or the plain dominant-axis facing side — deliberately NOT
+  // the crowd-aware derivation, which would recurse) — so a departure can
+  // prefer a side other edges have not already claimed, deterministically
+  // and independent of edge order.
+  const { crowdCounts, prospective } = prospectiveSideCrowding(edges, byId)
   const choices = new Map<string, SidePair>()
   for (const edge of edges) {
     const fromNode = nodeAtEnd(edge.from, byId)
@@ -545,6 +560,76 @@ export function patchAnchorGroups(
   return { groups, entries }
 }
 
+/**
+ * Both anchors of a facing opposing pair slid to ONE tangent coordinate
+ * inside the shared lane, or `undefined` when this edge is not such a pair.
+ *
+ * This realizes the straight segment the zero-bend rank promised, which the
+ * per-side fraction placement only delivers when the two side midpoints
+ * happen to align. Multi-edge sides keep their fan-out fractions:
+ * collapsing two corridors onto one lane is worse than a jog — so an end
+ * sharing its side with anything else disqualifies the pair.
+ */
+function slidFacingPair(
+  entry: AnchorEntry,
+  chosen: SidePair | undefined,
+  geom: { fromRect: Rect; toRect: Rect } | undefined,
+  edge: RoutableElement,
+  groups: ReadonlyMap<string, readonly AnchorEnd[]>,
+): { from: Point; to: Point } | undefined {
+  if (chosen === undefined || entry.from === undefined || entry.to === undefined) return undefined
+  if (chosen.toSide !== oppositeSide(chosen.fromSide)) return undefined
+  if (geom === undefined) return undefined
+  if ((groups.get(`${endNode(edge.from)} ${chosen.fromSide}`)?.length ?? 0) > 1) return undefined
+  if ((groups.get(`${endNode(edge.to)} ${chosen.toSide}`)?.length ?? 0) > 1) return undefined
+
+  const { fromRect, toRect } = geom
+  const axis = chosen.fromSide === 'left' || chosen.fromSide === 'right' ? 'h' : 'v'
+  if (!facesForward(chosen.fromSide, axis, fromRect, toRect)) return undefined
+  const lane = facingLaneWindow(fromRect, toRect, axis)
+  if (lane === undefined) return undefined
+
+  const natural = (axis === 'h' ? entry.from.y + entry.to.y : entry.from.x + entry.to.x) / 2
+  const t = Math.min(lane[1], Math.max(lane[0], natural))
+  return {
+    from: axis === 'h' ? { x: entry.from.x, y: t } : { x: t, y: entry.from.y },
+    to: axis === 'h' ? { x: entry.to.x, y: t } : { x: t, y: entry.to.y },
+  }
+}
+
+/**
+ * Whether the two boxes are actually clear of each other in the chosen
+ * direction. Interpenetrating boxes — authored sides can force them — have
+ * no forward-facing lane to slide into.
+ */
+function facesForward(fromSide: Side, axis: 'h' | 'v', fromRect: Rect, toRect: Rect): boolean {
+  if (axis === 'h') {
+    return fromSide === 'right'
+      ? fromRect.x + fromRect.w <= toRect.x
+      : toRect.x + toRect.w <= fromRect.x
+  }
+  return fromSide === 'bottom'
+    ? fromRect.y + fromRect.h <= toRect.y
+    : toRect.y + toRect.h <= fromRect.y
+}
+
+/**
+ * One entry with whatever the pin committed written over it, field by field.
+ *
+ * A pin is PARTIAL by design — a live drag commits the end it moved and
+ * leaves the other to be placed — so an absent field keeps what the fan-out
+ * pass computed rather than clearing it.
+ */
+function pinnedEntry(entry: AnchorEntry, pin: EdgeAnchorOverride): AnchorEntry {
+  return {
+    ...entry,
+    ...(pin.from !== undefined ? { from: pin.from } : {}),
+    ...(pin.fromLaneDepth !== undefined ? { fromLaneDepth: pin.fromLaneDepth } : {}),
+    ...(pin.to !== undefined ? { to: pin.to } : {}),
+    ...(pin.toLaneDepth !== undefined ? { toLaneDepth: pin.toLaneDepth } : {}),
+  }
+}
+
 /** Grouping, anchor fan-out and lane depths for a FIXED side configuration. */
 function computeAnchorsFor(
   ctx: AnchorContext,
@@ -575,14 +660,7 @@ function computeAnchorsFor(
     if (pins === undefined) return
     for (const [id, pin] of pins) {
       const entry = anchors.get(id)
-      if (entry === undefined) continue
-      anchors.set(id, {
-        ...entry,
-        ...(pin.from !== undefined ? { from: pin.from } : {}),
-        ...(pin.fromLaneDepth !== undefined ? { fromLaneDepth: pin.fromLaneDepth } : {}),
-        ...(pin.to !== undefined ? { to: pin.to } : {}),
-        ...(pin.toLaneDepth !== undefined ? { toLaneDepth: pin.toLaneDepth } : {}),
-      })
+      if (entry !== undefined) anchors.set(id, pinnedEntry(entry, pin))
     }
   }
 
@@ -601,36 +679,10 @@ function computeAnchorsFor(
     const edge = edges[edgeIndex] as RoutableElement
     // A pinned edge holds its committed anchors; alignment must not move it.
     if (pins?.get(edge.id)?.from !== undefined || pins?.get(edge.id)?.to !== undefined) continue
-    const chosen = sides.get(edge.id)
     const entry = anchors.get(edge.id)
-    if (chosen === undefined || entry?.from === undefined || entry.to === undefined) continue
-    if (chosen.toSide !== oppositeSide(chosen.fromSide)) continue
-    const geom = edgeEnds[edgeIndex]
-    if (geom === undefined) continue
-    if ((groups.get(`${endNode(edge.from)} ${chosen.fromSide}`)?.length ?? 0) > 1) continue
-    if ((groups.get(`${endNode(edge.to)} ${chosen.toSide}`)?.length ?? 0) > 1) continue
-    const { fromRect, toRect } = geom
-    const axis = chosen.fromSide === 'left' || chosen.fromSide === 'right' ? 'h' : 'v'
-    // Interpenetrating boxes (authored sides can force them) have no
-    // forward-facing lane to slide into.
-    const gapOk =
-      axis === 'h'
-        ? chosen.fromSide === 'right'
-          ? fromRect.x + fromRect.w <= toRect.x
-          : toRect.x + toRect.w <= fromRect.x
-        : chosen.fromSide === 'bottom'
-          ? fromRect.y + fromRect.h <= toRect.y
-          : toRect.y + toRect.h <= fromRect.y
-    if (!gapOk) continue
-    const lane = facingLaneWindow(fromRect, toRect, axis)
-    if (lane === undefined) continue
-    const natural = (axis === 'h' ? entry.from.y + entry.to.y : entry.from.x + entry.to.x) / 2
-    const t = Math.min(lane[1], Math.max(lane[0], natural))
-    anchors.set(edge.id, {
-      ...entry,
-      from: axis === 'h' ? { x: entry.from.x, y: t } : { x: t, y: entry.from.y },
-      to: axis === 'h' ? { x: entry.to.x, y: t } : { x: t, y: entry.to.y },
-    })
+    if (entry === undefined) continue
+    const slid = slidFacingPair(entry, sides.get(edge.id), edgeEnds[edgeIndex], edge, groups)
+    if (slid !== undefined) anchors.set(edge.id, { ...entry, ...slid })
   }
   applyPins()
   return anchors
@@ -963,6 +1015,102 @@ function createConfigScore(
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
+  /**
+   * Re-score every touched edge against ITS OWN boxes and borders, swapping
+   * the cached term for the new one in place.
+   */
+  const applySelfCosts = (
+    cost: number[],
+    touched: readonly number[],
+    trialPaths: (readonly Point[])[],
+  ): Map<number, ConfigCost> => {
+    const selfUpdates = new Map<number, ConfigCost>()
+    for (const i of touched) {
+      const next = selfPenalty(
+        trialPaths[i]!,
+        foreignBodiesFor[i]!,
+        nodeBorders,
+        endpointRectsFor[i],
+      )
+      accumulateCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
+      accumulateCost(cost, next, 1)
+      selfUpdates.set(i, next)
+    }
+    return selfUpdates
+  }
+
+  /**
+   * Swap one pair's cached cost term for its new one, in place.
+   *
+   * Two boxes that do not overlap score ZERO, so the prior term is
+   * subtracted and the key left absent — every reader already zero-defaults
+   * an absent key — rather than paying for the segment sweep and two cost
+   * tuples to arrive at the same answer.
+   */
+  const rescorePairInto = (
+    cost: number[],
+    key: number,
+    lo: number,
+    hi: number,
+    trialPaths: (readonly Point[])[],
+    trialBounds: Rect[],
+    updates: Map<number, ConfigCost>,
+  ): void => {
+    if (!boundsOverlap(trialBounds[lo]!, trialBounds[hi]!)) {
+      const prior = matrix.get(key)
+      if (prior !== undefined) {
+        accumulateCost(cost, prior, -1)
+        updates.set(key, zeroPenalty())
+      }
+      return
+    }
+    const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
+    accumulateCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
+    accumulateCost(cost, next, 1)
+    updates.set(key, next)
+  }
+
+  /**
+   * Re-score every pair edge `i` belongs to.
+   *
+   * Each unordered pair is visited ONCE: the updates map covers a pair
+   * between two touched edges, and `j < i` skips the second visit. A pair
+   * with an untouched edge reuses that edge's cached path.
+   */
+  const rescorePairsOf = (
+    cost: number[],
+    i: number,
+    touchedSet: ReadonlySet<number>,
+    trialPaths: (readonly Point[])[],
+    trialBounds: Rect[],
+    updates: Map<number, ConfigCost>,
+  ): void => {
+    for (let j = 0; j < edges.length; j++) {
+      if (j === i) continue
+      const [lo, hi] = i < j ? [i, j] : [j, i]
+      const key = pairKey(lo, hi)
+      if (updates.has(key)) continue
+      if (touchedSet.has(j) && j < i) continue
+      rescorePairInto(cost, key, lo, hi, trialPaths, trialBounds, updates)
+    }
+  }
+
+  /**
+   * Re-score every PAIR a touched edge belongs to, swapping each cached term
+   * for the new one in place.
+   */
+  const applyPairCosts = (
+    cost: number[],
+    touched: readonly number[],
+    trialPaths: (readonly Point[])[],
+    trialBounds: Rect[],
+  ): Map<number, ConfigCost> => {
+    const touchedSet = new Set(touched)
+    const updates = new Map<number, ConfigCost>()
+    for (const i of touched) rescorePairsOf(cost, i, touchedSet, trialPaths, trialBounds, updates)
+    return updates
+  }
+
   const evaluateTrial = (
     trialSides: ReadonlyMap<string, SidePair>,
     // Which edge `trialSides` re-sided. Every trial here differs from the
@@ -991,49 +1139,11 @@ function createConfigScore(
       trialPaths[i] = routeCached(edges[i]!, i, trialAnchors.get(edges[i]!.id))
       trialBounds[i] = boundingBoxOf(trialPaths[i]!)
     }
-    const touchedSet = new Set(touched)
     // Summed in place into a scratch copy: every term below is added exactly once.
     const cost = currentCost.slice()
-    const updates = new Map<number, ConfigCost>()
-    const selfUpdates = new Map<number, ConfigCost>()
-    for (const i of touched) {
-      const next = selfPenalty(
-        trialPaths[i]!,
-        foreignBodiesFor[i]!,
-        nodeBorders,
-        endpointRectsFor[i],
-      )
-      accumulateCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
-      accumulateCost(cost, next, 1)
-      selfUpdates.set(i, next)
-    }
-    for (const i of touched) {
-      for (let j = 0; j < edges.length; j++) {
-        if (j === i) continue
-        const [lo, hi] = i < j ? [i, j] : [j, i]
-        const key = pairKey(lo, hi)
-        if (updates.has(key)) continue
-        // A pair between two touched edges is visited once thanks to the
-        // updates map; a pair with an untouched edge reuses its cached path.
-        if (touchedSet.has(j) && j < i) continue
-        if (!boundsOverlap(trialBounds[lo]!, trialBounds[hi]!)) {
-          // Scores zero. Subtract whatever this pair used to cost and leave
-          // the key absent — every reader already zero-defaults an absent
-          // key — rather than paying for the segment sweep and two cost
-          // tuples to arrive at the same answer.
-          const prior = matrix.get(key)
-          if (prior !== undefined) {
-            accumulateCost(cost, prior, -1)
-            updates.set(key, zeroPenalty())
-          }
-          continue
-        }
-        const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
-        accumulateCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
-        accumulateCost(cost, next, 1)
-        updates.set(key, next)
-      }
-    }
+    const selfUpdates = applySelfCosts(cost, touched, trialPaths)
+    const updates = applyPairCosts(cost, touched, trialPaths, trialBounds)
+
     return {
       cost,
       anchors: trialAnchors,
@@ -1150,34 +1260,133 @@ function optimizeSideChoices(
     return ranked.map((r) => r.edge)
   }
 
+  /**
+   * Try every candidate side pair for one edge, adopting the first that is a
+   * STRICT improvement.
+   *
+   * Incumbent-wins-ties (edge-rules.ts), so a tie never triggers churn and
+   * the lexicographic loop cannot oscillate.
+   */
+  const improveEdge = (edge: RoutableElement): boolean => {
+    const chosen = score.sideOf(edge.id)
+    if (chosen === undefined) return false
+    const index = edgeIndexById.get(edge.id) ?? -1
+    const forced =
+      endSide(edge.from) !== undefined && endSide(edge.to) !== undefined && score.selfThrough(index)
+    for (const candidate of sideCandidatesFor(edge, byId, forced)) {
+      if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
+      const trial = new Map(score.sides())
+      trial.set(edge.id, candidate)
+      const evaluated = score.evaluateTrial(trial, index)
+      if (shouldAdoptCandidate(evaluated.cost, score.cost(), lessCost)) {
+        score.adopt(trial, evaluated)
+        return true
+      }
+    }
+    return false
+  }
+
   for (let pass = 0; pass < CROSSING_OPT_MAX_PASSES; pass++) {
     let improved = false
     for (const edge of trialEdgesForPass()) {
       if (locked?.has(edge.id)) continue
-      const chosen = score.sideOf(edge.id)
-      if (chosen === undefined) continue
-      const forced =
-        endSide(edge.from) !== undefined &&
-        endSide(edge.to) !== undefined &&
-        score.selfThrough(edgeIndexById.get(edge.id) ?? -1)
-      for (const candidate of sideCandidatesFor(edge, byId, forced)) {
-        if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
-        const trial = new Map(score.sides())
-        trial.set(edge.id, candidate)
-        const evaluated = score.evaluateTrial(trial, edgeIndexById.get(edge.id) ?? -1)
-        // incumbent-wins-ties: adopt only on a strict decrease (edge-rules.ts),
-        // so a tie never triggers churn and the lexicographic loop cannot oscillate.
-        if (shouldAdoptCandidate(evaluated.cost, score.cost(), lessCost)) {
-          score.adopt(trial, evaluated)
-          improved = true
-          break
-        }
-      }
+      if (improveEdge(edge)) improved = true
       if (!hasRepairableProblem(score.cost())) return score.sides()
     }
     if (!improved) break
   }
   return score.sides()
+}
+
+interface RepairScore {
+  pair: SidePair
+  tier: number
+  bends: number
+  length: number
+}
+
+/**
+ * The best side pair among `candidates` for a collided edge, or `undefined`
+ * when none reaches it at all.
+ *
+ * EVERY candidate is scored, not just the first that qualifies: two
+ * predicates are needed and neither alone is enough — "not coincident" alone
+ * accepted a pair that reached the far side straight THROUGH the target, and
+ * "first clean one" alone accepted a four-bend loop around both boxes when a
+ * short hop up the shared side was available. Clean is the requirement;
+ * shortest-and-straightest picks among the clean.
+ *
+ * Three TIERS, because they are not equally important and treating them as
+ * one filter made an edge vanish: clean with runway is best, clean without
+ * runway still beats an ugly route, and ANY visible route beats the collided
+ * pair. Visibility is the requirement; the rest is preference.
+ */
+function bestRepairedPair(
+  candidates: readonly SidePair[],
+  ctx: {
+    edge: RoutableElement
+    nodes: readonly SpatialNode[]
+    ctx: AnchorContext
+    repaired: ReadonlyMap<string, SidePair>
+    align: boolean
+    pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined
+    styleOf: EdgeStyleOf
+    fromRect: Rect
+    toRect: Rect
+    coincides: (anchors: ReadonlyMap<string, EdgeAnchorPair>, id: string) => boolean
+  },
+): RepairScore | undefined {
+  const { edge, nodes, repaired, align, pins, styleOf, fromRect, toRect, coincides } = ctx
+  let best: RepairScore | undefined
+  for (const pair of candidates) {
+    const sided: SidePair = {
+      fromSide: endSide(edge.from) ?? pair.fromSide,
+      toSide: endSide(edge.to) ?? pair.toSide,
+    }
+    const trial = new Map(repaired)
+    trial.set(edge.id, sided)
+    const trialAnchors = computeAnchorsFor(ctx.ctx, trial, align, pins)
+    if (coincides(trialAnchors, edge.id)) continue
+    const { path } = routeEdge(nodes, edge, styleOf(edge), trialAnchors.get(edge.id))
+    const scored = scoreRepairedRoute(sided, path, fromRect, toRect)
+    if (best === undefined || betterRepair(scored, best)) best = scored
+  }
+  return best
+}
+
+/**
+ * One candidate route's tier, bends and length.
+ *
+ * The arrowhead is drawn ON the final segment, so a route that arrives with
+ * no runway paints an arrow with no line under it. Re-siding is choosing
+ * this route from scratch, so it can decline those.
+ */
+function scoreRepairedRoute(
+  pair: SidePair,
+  path: readonly Point[],
+  fromRect: Rect,
+  toRect: Rect,
+): RepairScore {
+  const tail = path[path.length - 1]
+  const beforeTail = path[path.length - 2]
+  const runway =
+    tail === undefined || beforeTail === undefined
+      ? 0
+      : Math.hypot(tail.x - beforeTail.x, tail.y - beforeTail.y)
+  const clean = interiorInkThrough(path, [fromRect, toRect]) === 0
+  return {
+    pair,
+    tier: clean && runway >= ARROW_RUNWAY_PX ? 0 : clean ? 1 : 2,
+    bends: bendCount(path),
+    length: pathLength(path),
+  }
+}
+
+/** Tier first, then fewer bends, then shorter. */
+function betterRepair(a: RepairScore, b: RepairScore): boolean {
+  if (a.tier !== b.tier) return a.tier < b.tier
+  if (a.bends !== b.bends) return a.bends < b.bends
+  return a.length < b.length
 }
 
 /**
@@ -1247,49 +1456,56 @@ function anchorsWithoutCoincidentEnds(
     // runway is best, a clean one without runway still beats an ugly one, and
     // ANY visible route beats the collided pair. Visibility is the
     // requirement; the rest is preference.
-    let best: { pair: SidePair; tier: number; bends: number; length: number } | undefined
-    for (const pair of candidates) {
-      const sided: SidePair = {
-        fromSide: endSide(edge.from) ?? pair.fromSide,
-        toSide: endSide(edge.to) ?? pair.toSide,
-      }
-      const trial = new Map(repaired)
-      trial.set(edge.id, sided)
-      const trialAnchors = computeAnchorsFor(ctx, trial, align, pins)
-      if (coincides(trialAnchors, edge.id)) continue
-      const { path } = routeEdge(nodes, edge, styleOf(edge), trialAnchors.get(edge.id))
-      // The arrowhead is drawn ON the final segment; a shorter one paints an
-      // arrow with no line under it. Re-siding is choosing this route from
-      // scratch, so it can decline the ones that arrive with no runway.
-      const tail = path[path.length - 1]
-      const beforeTail = path[path.length - 2]
-      const runway =
-        tail === undefined || beforeTail === undefined
-          ? 0
-          : Math.hypot(tail.x - beforeTail.x, tail.y - beforeTail.y)
-      const clean = interiorInkThrough(path, [fromRect, toRect]) === 0
-      const scored = {
-        pair: sided,
-        tier: clean && runway >= ARROW_RUNWAY_PX ? 0 : clean ? 1 : 2,
-        bends: bendCount(path),
-        length: pathLength(path),
-      }
-      if (
-        best === undefined ||
-        scored.tier < best.tier ||
-        (scored.tier === best.tier &&
-          (scored.bends < best.bends ||
-            (scored.bends === best.bends && scored.length < best.length)))
-      ) {
-        best = scored
-      }
-    }
+    const best = bestRepairedPair(candidates, {
+      edge,
+      nodes,
+      ctx,
+      repaired,
+      align,
+      pins,
+      styleOf,
+      fromRect,
+      toRect,
+      coincides,
+    })
     if (best !== undefined) repaired.set(edge.id, best.pair)
     // No candidate reaches it cleanly: keep the collided pair. routeOrthogonal
     // draws the shared point rather than a spike, so the worst case is an
     // invisible edge, never a wrong one.
   }
   return computeAnchorsFor(ctx, repaired, align, pins)
+}
+
+/**
+ * The extent the Morton keys are computed against.
+ *
+ * A degenerate extent — every midpoint on one point, or none finite — leaves
+ * every key 0; the sort then falls back to document order, which is still a
+ * total, deterministic grouping.
+ */
+function midpointExtent(midpoints: readonly Point[]): {
+  spanX: number
+  spanY: number
+  originX: number
+  originY: number
+} {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const m of midpoints) {
+    if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) continue
+    minX = Math.min(minX, m.x)
+    minY = Math.min(minY, m.y)
+    maxX = Math.max(maxX, m.x)
+    maxY = Math.max(maxY, m.y)
+  }
+  return {
+    spanX: Number.isFinite(minX) ? Math.max(maxX - minX, 1) : 1,
+    spanY: Number.isFinite(minY) ? Math.max(maxY - minY, 1) : 1,
+    originX: Number.isFinite(minX) ? minX : 0,
+    originY: Number.isFinite(minY) ? minY : 0,
+  }
 }
 
 /**
@@ -1372,24 +1588,7 @@ function optimizeAcrossRegions(
     const b = centerOf(rectOf(to))
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
   })
-  let minX = Number.POSITIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-  for (const m of midpoints) {
-    if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) continue
-    minX = Math.min(minX, m.x)
-    minY = Math.min(minY, m.y)
-    maxX = Math.max(maxX, m.x)
-    maxY = Math.max(maxY, m.y)
-  }
-  // A degenerate extent (every midpoint on one point, or none finite) leaves
-  // every key 0; the sort then falls back to document order, which is still
-  // a total, deterministic grouping.
-  const spanX = Number.isFinite(minX) ? Math.max(maxX - minX, 1) : 1
-  const spanY = Number.isFinite(minY) ? Math.max(maxY - minY, 1) : 1
-  const originX = Number.isFinite(minX) ? minX : 0
-  const originY = Number.isFinite(minY) ? minY : 0
+  const { spanX, spanY, originX, originY } = midpointExtent(midpoints)
   const GRID = 1024
   const interleave = (v: number) => {
     // Spread 10 bits so x and y can be woven into one 20-bit key.
@@ -1798,6 +1997,78 @@ function windowObstacles(
   return near
 }
 
+/**
+ * An arrowhead is ARROW_LENGTH long and is drawn ON the final segment, so an
+ * approach shorter than this leaves the arrow with no line behind it — it
+ * reads as a marker stuck to the box rather than an edge arriving at it. Two
+ * arrow-lengths gives the head its own run plus the same again of plain line.
+ */
+const MIN_APPROACH_PX = 20
+
+/**
+ * The departure anchor slid along its OWN side so a perpendicular pair has
+ * runway to arrive on.
+ *
+ * A perpendicular pair takes its corner from the departure anchor's tangent
+ * coordinate, so the approach is only as long as that anchor is far from the
+ * arrival side. Sliding lengthens it without adding a corner; a side with no
+ * room to slide keeps the anchor and falls through to the stub-and-elbow
+ * path.
+ */
+function slidForApproach(
+  start: Point,
+  end: Point,
+  fromSide: Side,
+  toSide: Side,
+  fromRect: Rect,
+  toNormal: Point,
+): Point {
+  if (fromSide === toSide || fromSide === oppositeSide(toSide)) return start
+  const approach = toNormal.x * (start.x - end.x) + toNormal.y * (start.y - end.y)
+  if (approach <= 0 || approach >= MIN_APPROACH_PX) return start
+  const shortfall = MIN_APPROACH_PX - approach
+  return (
+    slideAlongSide(start, fromRect, fromSide, {
+      x: start.x + toNormal.x * shortfall,
+      y: start.y + toNormal.y * shortfall,
+    }) ?? start
+  )
+}
+
+/**
+ * A same-side pair's shared corridor, deepened just enough to clear the
+ * arrival anchor by a full approach.
+ *
+ * The approach is measured from the DEPARTURE anchor, so an arrival box that
+ * reaches further out than the departure box eats into it, and one that
+ * reaches further than the stub is deep leaves the corridor arriving from
+ * inside. Deepening is the same-side analogue of the departure slide: it
+ * buys the runway without adding a bend, because the corridor is a segment
+ * the route already draws.
+ *
+ * Only the band where the corridor clears the arrival anchor but by less
+ * than an approach. Deeper than that (`approach <= 0`) the corridor arrives
+ * from inside, the arrival stub is kept, and that stub IS the runway —
+ * deepening those turns a sound route into a long detour around the outside
+ * of a box that reaches far further out than its partner. Inside the band
+ * the correction is bounded by MIN_APPROACH_PX, so the corridor never moves
+ * more than one approach.
+ */
+function deepenedCorridor(
+  start: Point,
+  end: Point,
+  fromSide: Side,
+  toSide: Side,
+  fromDepth: number,
+  toNormal: Point,
+): number {
+  if (fromSide !== toSide) return fromDepth
+  const arrivalOvershoot = toNormal.x * (end.x - start.x) + toNormal.y * (end.y - start.y)
+  const approach = fromDepth - arrivalOvershoot
+  if (approach <= 0 || approach >= MIN_APPROACH_PX) return fromDepth
+  return arrivalOvershoot + MIN_APPROACH_PX
+}
+
 function routeOrthogonal(
   startAnchor: Point,
   end: Point,
@@ -1826,50 +2097,9 @@ function routeOrthogonal(
   const zeroBend = tryZeroBendSlide(start, end, fromSide, toSide, fromRect, toRect, inflated)
   if (zeroBend !== undefined) return zeroBend
   const toNormal = outwardNormal(toSide)
-  // An arrowhead is ARROW_LENGTH long and is drawn ON the final segment, so
-  // an approach shorter than this leaves the arrow with no line behind it —
-  // it reads as a marker stuck to the box rather than an edge arriving at
-  // it. Two arrow-lengths gives the head its own run plus the same again of
-  // plain line.
-  const MIN_APPROACH_PX = 20
-  // Perpendicular pairs take their corner from the DEPARTURE anchor's
-  // tangent coordinate, so the approach is only as long as that anchor is
-  // far from the arrival side. Sliding the departure along its own side
-  // lengthens it without adding a corner; a side with no room to slide
-  // keeps the anchor and falls through to the stub-and-elbow path.
-  if (fromSide !== toSide && fromSide !== oppositeSide(toSide)) {
-    const approach = toNormal.x * (start.x - end.x) + toNormal.y * (start.y - end.y)
-    if (approach > 0 && approach < MIN_APPROACH_PX) {
-      const shortfall = MIN_APPROACH_PX - approach
-      const slid = slideAlongSide(start, fromRect, fromSide, {
-        x: start.x + toNormal.x * shortfall,
-        y: start.y + toNormal.y * shortfall,
-      })
-      if (slid !== undefined) start = slid
-    }
-  }
-  // Same-side pairs get their approach from the depth of the SHARED corridor,
-  // which is measured from the departure anchor — so an arrival box that
-  // reaches further out than the departure box eats into it, and one that
-  // reaches further than the stub is deep leaves the corridor arriving from
-  // inside. Deepening the corridor to clear the arrival anchor by a full
-  // approach is the same-side analogue of the departure slide above: it buys
-  // the runway without adding a bend, because the corridor is a segment the
-  // route already draws.
-  if (fromSide === toSide) {
-    const arrivalOvershoot = toNormal.x * (end.x - start.x) + toNormal.y * (end.y - start.y)
-    const approach = fromDepth - arrivalOvershoot
-    // Only the band where the corridor clears the arrival anchor but by less
-    // than an approach. Deeper than that (`approach <= 0`) the corridor
-    // arrives from inside, the arrival stub is kept below, and that stub IS
-    // the runway — deepening those turns a sound route into a long detour
-    // around the outside of a box that reaches far further out than its
-    // partner. Inside the band the correction is bounded by MIN_APPROACH_PX,
-    // so the corridor never moves more than one approach.
-    if (approach > 0 && approach < MIN_APPROACH_PX) {
-      fromDepth = arrivalOvershoot + MIN_APPROACH_PX
-    }
-  }
+  start = slidForApproach(start, end, fromSide, toSide, fromRect, toNormal)
+  fromDepth = deepenedCorridor(start, end, fromSide, toSide, fromDepth, toNormal)
+
   const exit = stubFrom(start, fromSide, fromDepth)
   const entry = stubFrom(end, toSide, toDepth)
   // The arrival stub exists so the last segment reaches the anchor from
@@ -2011,6 +2241,171 @@ function rectAtEnd(nodes: readonly SpatialNode[], end: LineEnd | EdgeEnd): Rect 
   return node === undefined ? undefined : rectOf(node)
 }
 
+/**
+ * The stored path, when the person drawing this edge already gave one.
+ *
+ * Bends come FIRST, before the self-edge shape and before any computed
+ * routing: the stored path is not one routing among the others, it is the
+ * answer to "where does this edge go" that the author already gave, and a
+ * computed route that ignored it would drop authored geometry while leaving
+ * it in the record.
+ *
+ * The style still says how it is DRAWN, and the two are independent — the
+ * same as the computed branch, where 'curved' is 'orthogonal' asking for
+ * rounded corners. Freehand ink is what made that omission visible: a stroke
+ * is all bends, so it came back as a chain of straight runs with a corner at
+ * every sample the simplification kept.
+ */
+function authoredBendRoute(
+  edge: RoutableElement,
+  fromRect: Rect,
+  toRect: Rect,
+  anchors: EdgeAnchorPair | undefined,
+  style: EdgeRoutingStyle,
+  fromEnd: 'none' | 'arrow',
+  toEnd: 'none' | 'arrow',
+): ResolvedEdgeNode | undefined {
+  const namedFromSide = anchors?.fromSide ?? endSide(edge.from)
+  const namedToSide = anchors?.toSide ?? endSide(edge.to)
+  const bent = bendRoute(edge, fromRect, toRect, {
+    ...(anchors?.from === undefined ? {} : { from: anchors.from }),
+    ...(anchors?.to === undefined ? {} : { to: anchors.to }),
+    ...(namedFromSide === undefined ? {} : { fromSide: namedFromSide }),
+    ...(namedToSide === undefined ? {} : { toSide: namedToSide }),
+  })
+  if (bent === undefined) return undefined
+  return {
+    kind: 'edge',
+    id: edge.id,
+    path: [...bent],
+    ...(style === 'curved' ? { rounded: true as const } : {}),
+    fromSide: namedFromSide ?? 'right',
+    toSide: namedToSide ?? 'left',
+    fromEnd,
+    toEnd,
+  }
+}
+
+/**
+ * A self-edge has no meaningful "other node" direction, so it takes a stable
+ * loop shape — right side out, right side back — rather than deriving one
+ * from a zero centre offset.
+ */
+function selfLoopRoute(
+  edge: RoutableElement,
+  fromRect: Rect,
+  toRect: Rect,
+  anchors: EdgeAnchorPair | undefined,
+  fromEnd: 'none' | 'arrow',
+  toEnd: 'none' | 'arrow',
+): ResolvedEdgeNode {
+  const fromSide: Side = endSide(edge.from) ?? 'right'
+  const toSide: Side = endSide(edge.to) ?? 'right'
+  const start = anchors?.from ?? sidePoint(fromRect, fromSide)
+  const [loopOut, loopBack] = selfEdgeLoopControlPoints(start, fromSide)
+  const end = anchors?.to ?? sidePoint(toRect, toSide)
+  return {
+    kind: 'edge',
+    id: edge.id,
+    path: [start, loopOut, loopBack, end],
+    fromSide,
+    toSide,
+    fromEnd,
+    toEnd,
+  }
+}
+
+/**
+ * What this edge has to route around, raw and margin-inflated.
+ *
+ * A rect that CONTAINS an endpoint can never be routed around — every detour
+ * still has to reach the point inside it — so it is not an obstacle. That is
+ * what lets an edge between two members of a group run inside the group's
+ * frame instead of detouring around it.
+ *
+ * Containment is tested on RAW bounds: a node whose margin band merely
+ * brushes an anchor must still block the route from crossing its body.
+ * Routing then tests the margin-inflated rects so a route keeps visible
+ * clearance from foreign borders; when an anchor is boxed inside a
+ * neighbour's margin band, `bestCandidate`'s second tier accepts a band
+ * crossing to escape rather than tunnelling through the node itself.
+ *
+ * `others` is the caller's O(nodes) list handed over intact — the
+ * side-choice search routes each edge many times per layout, and the ends do
+ * not change inside it.
+ */
+function routeObstacles(
+  nodes: readonly SpatialNode[],
+  edge: RoutableElement,
+  start: Point,
+  end: Point,
+  others: readonly Rect[] | undefined,
+): { obstacles: Rect[]; rawObstacles: Rect[] } {
+  const fromId = endNode(edge.from)
+  const toId = endNode(edge.to)
+  const rawObstacles = (
+    others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
+  ).filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
+  return {
+    rawObstacles,
+    obstacles: rawObstacles.map((rect) => ({
+      x: rect.x - ROUTE_MARGIN_PX,
+      y: rect.y - ROUTE_MARGIN_PX,
+      w: rect.w + 2 * ROUTE_MARGIN_PX,
+      h: rect.h + 2 * ROUTE_MARGIN_PX,
+    })),
+  }
+}
+
+/**
+ * An edge whose ends name no node this canvas holds. It still has to RESOLVE
+ * — the layout is total — so it collapses to a zero-length path at the
+ * origin rather than being dropped.
+ */
+function unplacedEdge(
+  edge: RoutableElement,
+  fromEnd: 'none' | 'arrow',
+  toEnd: 'none' | 'arrow',
+): ResolvedEdgeNode {
+  const origin = { x: 0, y: 0 }
+  return {
+    kind: 'edge',
+    id: edge.id,
+    path: [origin, origin],
+    fromSide: endSide(edge.from) ?? 'right',
+    toSide: endSide(edge.to) ?? 'left',
+    fromEnd,
+    toEnd,
+  }
+}
+
+/**
+ * Which side each end leaves from, in precedence order.
+ *
+ * The anchor pass resolves sides with whole-edge-set crowding knowledge a
+ * single call lacks, so when it spoke, follow it — it applies a named side
+ * itself, and differs from one only where the search overruled a pair routed
+ * through its own box, which has to reach the adopting trial and the render
+ * alike.
+ *
+ * Deriving is an occlusion scan over every node, so it is deferred behind a
+ * memo and runs only when a side is actually missing.
+ */
+function resolvedSides(
+  nodes: readonly SpatialNode[],
+  edge: RoutableElement,
+  fromRect: Rect,
+  toRect: Rect,
+  anchors: EdgeAnchorPair | undefined,
+): SidePair {
+  let derived: SidePair | undefined
+  const derive = () => (derived ??= deriveDefaultSides(nodes, edge, fromRect, toRect))
+  return {
+    fromSide: anchors?.fromSide ?? endSide(edge.from) ?? derive().fromSide,
+    toSide: anchors?.toSide ?? endSide(edge.to) ?? derive().toSide,
+  }
+}
+
 export function routeEdge(
   nodes: readonly SpatialNode[],
   edge: RoutableElement,
@@ -2031,108 +2426,19 @@ export function routeEdge(
   const toEnd = edge.to.end ?? 'arrow'
 
   if (fromRect === undefined || toRect === undefined) {
-    const origin = { x: 0, y: 0 }
-    return {
-      kind: 'edge',
-      id: edge.id,
-      path: [origin, origin],
-      fromSide: endSide(edge.from) ?? 'right',
-      toSide: endSide(edge.to) ?? 'left',
-      fromEnd,
-      toEnd,
-    }
+    return unplacedEdge(edge, fromEnd, toEnd)
   }
 
-  // Bends come FIRST, before the self-edge shape and before any computed
-  // routing: the stored path is not one routing among the others, it is the
-  // answer to "where does this edge go" that the person drawing it already
-  // gave. A computed route that ignored it would drop authored geometry
-  // while leaving it in the record.
-  const namedFromSide = anchors?.fromSide ?? endSide(edge.from)
-  const namedToSide = anchors?.toSide ?? endSide(edge.to)
-  const bent = bendRoute(edge, fromRect, toRect, {
-    ...(anchors?.from === undefined ? {} : { from: anchors.from }),
-    ...(anchors?.to === undefined ? {} : { to: anchors.to }),
-    ...(namedFromSide === undefined ? {} : { fromSide: namedFromSide }),
-    ...(namedToSide === undefined ? {} : { toSide: namedToSide }),
-  })
-  if (bent !== undefined) {
-    return {
-      kind: 'edge',
-      id: edge.id,
-      path: [...bent],
-      // The stored path answers WHERE this goes; the style still says how it
-      // is DRAWN, and the two are independent — same as the computed branch
-      // below, where 'curved' is 'orthogonal' asking for rounded corners.
-      // Freehand ink is what made the omission visible: a stroke is all
-      // bends, so it came back as a chain of straight runs with a corner at
-      // every sample the simplification kept.
-      ...(style === 'curved' ? { rounded: true as const } : {}),
-      fromSide: namedFromSide ?? 'right',
-      toSide: namedToSide ?? 'left',
-      fromEnd,
-      toEnd,
-    }
-  }
+  const authored = authoredBendRoute(edge, fromRect, toRect, anchors, style, fromEnd, toEnd)
+  if (authored !== undefined) return authored
 
-  // Self-edge: no meaningful "other node" direction, so fix a stable loop
-  // shape (right side out, right side back) rather than deriving from a
-  // zero center-offset.
-  if (isSelfLoop(edge)) {
-    const fromSide: Side = endSide(edge.from) ?? 'right'
-    const toSide: Side = endSide(edge.to) ?? 'right'
-    const start = anchors?.from ?? sidePoint(fromRect, fromSide)
-    const [loopOut, loopBack] = selfEdgeLoopControlPoints(start, fromSide)
-    const end = anchors?.to ?? sidePoint(toRect, toSide)
-    return {
-      kind: 'edge',
-      id: edge.id,
-      path: [start, loopOut, loopBack, end],
-      fromSide,
-      toSide,
-      fromEnd,
-      toEnd,
-    }
-  }
+  if (isSelfLoop(edge)) return selfLoopRoute(edge, fromRect, toRect, anchors, fromEnd, toEnd)
 
-  // The anchor pass resolves sides with whole-edge-set crowding knowledge a
-  // single call lacks; when it spoke, follow it — it applies a named side
-  // itself, and differs from one only where the search overruled a pair
-  // routed through its own box, which has to reach the adopting trial and
-  // the render alike. Deriving is an occlusion scan over every node, so it
-  // only runs when a side is actually missing.
-  let derived: SidePair | undefined
-  const derive = () => (derived ??= deriveDefaultSides(nodes, edge, fromRect, toRect))
-  const fromSide = anchors?.fromSide ?? endSide(edge.from) ?? derive().fromSide
-  const toSide = anchors?.toSide ?? endSide(edge.to) ?? derive().toSide
+  const { fromSide, toSide } = resolvedSides(nodes, edge, fromRect, toRect, anchors)
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
-  // A rect that contains an endpoint can never be routed around — every
-  // detour still has to reach the point inside it — so it is not an
-  // obstacle. This is what lets an edge between two members of a group run
-  // inside the group's frame instead of detouring around it.
-  // Endpoint containment excludes an obstacle on its RAW bounds — a node
-  // whose margin band merely brushes an anchor must still block the route
-  // from crossing its body. Routing then tests the margin-inflated rects
-  // so a route keeps visible clearance from foreign borders; when an
-  // anchor is boxed inside a neighbour's margin band, `bestCandidate`'s
-  // second tier accepts a band crossing to escape rather than tunnelling
-  // through the node itself.
-  // Hoisted for the same reason as `deriveDefaultSides`: this filter is the
-  // O(nodes) pass `routeEdge` runs on every call, and the ends do not change
-  // inside it.
-  const fromId = endNode(edge.from)
-  const toId = endNode(edge.to)
-  const rawObstacles = (
-    others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
-  ).filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
-  const obstacles = rawObstacles.map((rect) => ({
-    x: rect.x - ROUTE_MARGIN_PX,
-    y: rect.y - ROUTE_MARGIN_PX,
-    w: rect.w + 2 * ROUTE_MARGIN_PX,
-    h: rect.h + 2 * ROUTE_MARGIN_PX,
-  }))
+  const { obstacles, rawObstacles } = routeObstacles(nodes, edge, start, end, others)
 
   return {
     kind: 'edge',

@@ -95,95 +95,133 @@ export interface CredentialResolverConfig {
   macaroonRootKey?: Uint8Array
 }
 
-export function createCredentialResolver(config: CredentialResolverConfig): CredentialResolver {
-  return {
-    async resolve({ secret, carrier, origin, now = Date.now() }) {
-      // A ticket is its own lane in both directions: only tried when offered
-      // as one, and never falling through to the other credentials when it
-      // fails. A secret offered as a ticket is a claim about what it is, and a
-      // failed claim is a malformed offer rather than something to keep
-      // guessing at.
-      //
-      // Tried BEFORE the open-daemon shortcut below, which is not arbitrary:
-      // on a daemon with no token configured, `authorizeWsUpgrade` redeems an
-      // offered ticket and the socket carries the ticket's own NARROWER
-      // scopes. Answering `anonymous` first would widen that to everything and
-      // leave the ticket unburned.
-      if (carrier === 'ws-ticket') {
-        if (secret === null) return null
-        const redeemed = config.redeemTicket?.(secret) ?? null
-        if (redeemed === null) return null
-        return { kind: 'ws-ticket', scopes: redeemed.scopes, subject: redeemed.clientId }
-      }
+/** What one attempt is given: the secret, and the request's own context. */
+interface AttemptContext {
+  readonly config: CredentialResolverConfig
+  readonly origin?: string
+  readonly now: number
+}
 
-      if (secret !== null) {
-        // Order is a cost decision: the credential that authorizes everything
-        // comes first so it never pays for the verification of the ones that
-        // do not, and the macaroon is last because its check is the only one
-        // that computes an HMAC chain.
-        //
-        // Guarded on `daemonToken` being set, because `isAuthorized` answers
-        // TRUE for any secret when no token is configured — which would make
-        // an open daemon report every bearer as the daemon token.
-        if (
-          config.daemonToken !== undefined &&
-          isAuthorized(`Bearer ${secret}`, config.daemonToken)
-        ) {
-          return { kind: 'daemon-token', scopes: ALL_AUTH_SCOPES }
-        }
+/** One credential family's verification: the grant it establishes, or null. */
+type CredentialAttempt = (
+  secret: string,
+  context: AttemptContext,
+) => ResolvedGrant | null | Promise<ResolvedGrant | null>
 
-        if (config.grantStore !== undefined) {
-          const grant = config.grantStore.verifyAccessToken(secret)
-          if (grant !== null) {
-            return { kind: 'oauth-grant', scopes: grant.scopes, subject: grant.clientId }
-          }
-        }
+const daemonTokenAttempt: CredentialAttempt = (secret, { config }) => {
+  // Guarded on `daemonToken` being set, because `isAuthorized` answers TRUE
+  // for any secret when no token is configured — which would make an open
+  // daemon report every bearer as the daemon token.
+  if (config.daemonToken === undefined) return null
+  return isAuthorized(`Bearer ${secret}`, config.daemonToken)
+    ? { kind: 'daemon-token', scopes: ALL_AUTH_SCOPES }
+    : null
+}
 
-        if (config.pairingTokens !== undefined && origin !== undefined) {
-          let normalized: string | null = null
-          try {
-            normalized = new URL(origin).origin
-          } catch {
-            normalized = null
-          }
-          if (normalized !== null && config.pairingTokens.validate(secret, normalized)) {
-            const passkey = config.pairingTokens.bindingOf(secret, normalized)
-            return passkey === null
-              ? { kind: 'pairing', scopes: ALL_AUTH_SCOPES }
-              : { kind: 'pairing', scopes: ALL_AUTH_SCOPES, passkey }
-          }
-        }
+const oauthGrantAttempt: CredentialAttempt = (secret, { config }) => {
+  const grant = config.grantStore?.verifyAccessToken(secret) ?? null
+  return grant === null
+    ? null
+    : { kind: 'oauth-grant', scopes: grant.scopes, subject: grant.clientId }
+}
 
-        if (config.macaroonRootKey !== undefined) {
-          // No `requiredScopes` here: what a holder may do is the surface's
-          // question, and this one only establishes that the token is genuine,
-          // unexpired, and carries the scopes it claims.
-          const verdict = await verifyMacaroon({
-            token: secret,
-            rootKey: config.macaroonRootKey,
-            context: { requiredScopes: [], now },
-          })
-          if (verdict.ok) {
-            return { kind: 'macaroon', scopes: verdict.scopes }
-          }
-        }
-      }
+const pairingAttempt: CredentialAttempt = (secret, { config, origin }) => {
+  if (config.pairingTokens === undefined || origin === undefined) return null
+  const normalized = normalizedOrigin(origin)
+  if (normalized === null || !config.pairingTokens.validate(secret, normalized)) return null
+  const passkey = config.pairingTokens.bindingOf(secret, normalized)
+  return passkey === null
+    ? { kind: 'pairing', scopes: ALL_AUTH_SCOPES }
+    : { kind: 'pairing', scopes: ALL_AUTH_SCOPES, passkey }
+}
 
-      // Nothing identified the secret. A daemon with no token configured
-      // requires no credential at all, so the caller holds everything — this
-      // is `isAuthorized`'s own "no token configured → true", said once.
-      //
-      // It is a FALLBACK rather than a shortcut, and that ordering is
-      // load-bearing: answering `anonymous` first would have shadowed a
-      // credential that was presented and does verify. Measured — the
-      // `/api/ws-ticket` mint route needs to know WHICH OAuth grant is
-      // asking, and on an open daemon (the configuration its own end-to-end
-      // test uses) an early `anonymous` made every real access token
-      // unidentifiable and the route answered 401.
-      if (config.daemonToken === undefined) {
-        return { kind: 'anonymous', scopes: ALL_AUTH_SCOPES }
-      }
-      return null
-    },
+const macaroonAttempt: CredentialAttempt = async (secret, { config, now }) => {
+  if (config.macaroonRootKey === undefined) return null
+  // No `requiredScopes` here: what a holder may do is the surface's question,
+  // and this one only establishes that the token is genuine, unexpired, and
+  // carries the scopes it claims.
+  const verdict = await verifyMacaroon({
+    token: secret,
+    rootKey: config.macaroonRootKey,
+    context: { requiredScopes: [], now },
+  })
+  return verdict.ok ? { kind: 'macaroon', scopes: verdict.scopes } : null
+}
+
+/**
+ * The order is a cost decision, which is why it is a list rather than a chain
+ * of branches: the credential that authorizes everything comes first so it
+ * never pays for the verification of the ones that do not, and the macaroon is
+ * last because its check is the only one that computes an HMAC chain.
+ */
+const BEARER_ATTEMPTS: readonly CredentialAttempt[] = [
+  daemonTokenAttempt,
+  oauthGrantAttempt,
+  pairingAttempt,
+  macaroonAttempt,
+]
+
+function normalizedOrigin(origin: string): string | null {
+  try {
+    return new URL(origin).origin
+  } catch {
+    return null
   }
+}
+
+/**
+ * A ticket is its own lane in both directions: only tried when offered as one,
+ * and never falling through to the other credentials when it fails. A secret
+ * offered as a ticket is a claim about what it is, and a failed claim is a
+ * malformed offer rather than something to keep guessing at.
+ */
+function redeemedTicket(
+  secret: string | null,
+  config: CredentialResolverConfig,
+): ResolvedGrant | null {
+  if (secret === null) return null
+  const redeemed = config.redeemTicket?.(secret) ?? null
+  return redeemed === null
+    ? null
+    : { kind: 'ws-ticket', scopes: redeemed.scopes, subject: redeemed.clientId }
+}
+
+async function resolvePresented(
+  config: CredentialResolverConfig,
+  { secret, carrier, origin, now = Date.now() }: PresentedCredential,
+): Promise<ResolvedGrant | null> {
+  // Tried BEFORE the open-daemon fallback below, which is not arbitrary:
+  // on a daemon with no token configured, `authorizeWsUpgrade` redeems an
+  // offered ticket and the socket carries the ticket's own NARROWER
+  // scopes. Answering `anonymous` first would widen that to everything and
+  // leave the ticket unburned.
+  if (carrier === 'ws-ticket') return redeemedTicket(secret, config)
+
+  if (secret !== null) {
+    const context: AttemptContext = { config, ...(origin === undefined ? {} : { origin }), now }
+    for (const attempt of BEARER_ATTEMPTS) {
+      const grant = await attempt(secret, context)
+      if (grant !== null) return grant
+    }
+  }
+
+  // Nothing identified the secret. A daemon with no token configured
+  // requires no credential at all, so the caller holds everything — this
+  // is `isAuthorized`'s own "no token configured → true", said once.
+  //
+  // It is a FALLBACK rather than a shortcut, and that ordering is
+  // load-bearing: answering `anonymous` first would have shadowed a
+  // credential that was presented and does verify. Measured — the
+  // `/api/ws-ticket` mint route needs to know WHICH OAuth grant is
+  // asking, and on an open daemon (the configuration its own end-to-end
+  // test uses) an early `anonymous` made every real access token
+  // unidentifiable and the route answered 401.
+  if (config.daemonToken === undefined) {
+    return { kind: 'anonymous', scopes: ALL_AUTH_SCOPES }
+  }
+  return null
+}
+
+export function createCredentialResolver(config: CredentialResolverConfig): CredentialResolver {
+  return { resolve: (presented) => resolvePresented(config, presented) }
 }

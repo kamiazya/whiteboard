@@ -54,15 +54,17 @@ const sources = import.meta.glob(
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
+    './pages/use-browser-route-sync.ts',
     './pages/use-auto-checkpoint.ts',
     './pages/use-document-list-refresh.ts',
     './pages/use-duplicate-document.ts',
     './pages/use-delete-document.ts',
     './pages/use-document-actions.tsx',
     './pages/DaemonDocumentPage.tsx',
-    './pages/use-daemon-connections.ts',
+    './pages/use-connections.ts',
     './pages/use-daemon-document-backend.ts',
     './pages/DocumentPage.tsx',
+    './pages/document-page-inspector.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
   ],
@@ -108,6 +110,9 @@ const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
+// The address-bar half of that page, extracted so the page's own hook stays
+// under the complexity budget: `lastKnownCanvasIdRef` moved THERE, not away.
+const BROWSER_ROUTE_SYNC = './pages/use-browser-route-sync.ts'
 // The page's automatic-checkpoint wiring, extracted when its file-size budget
 // said so; same SCREEN by the same rule the panel's hooks are.
 const AUTO_CHECKPOINT_HOOK = './pages/use-auto-checkpoint.ts'
@@ -124,6 +129,10 @@ const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
 // history column, the armed bookmark and the version being looked at moved
 // HERE from both keeper pages, not away; the two hooks below moved with them.
 const DOCUMENT_PAGE = './pages/DocumentPage.tsx'
+// The inspector column, extracted from that page so its body stays under the
+// complexity budget: `inspector` — which panel is open — moved THERE, not
+// away, by the same rule as the hooks below.
+const DOCUMENT_PAGE_INSPECTOR = './pages/document-page-inspector.tsx'
 // The save-a-version guard extracted to its own hook: part of the same
 // SCREEN by the same rule the panel's search/columns hooks are — its state
 // moved there, not away.
@@ -219,6 +228,8 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
   selectedWorkspaceRef:
     'no subject: mirrors the selection, written during render so it is current within the very render that changes it',
   addressedWorkspaceRef: 'no subject: mirrors the addressed workspace, written during render',
+  filesSourceRef:
+    'no subject: mirrors the memoized source during render, and carries the workspace it belongs to, which `sourceFor` checks before using it',
   listGeneration:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-answer race it exists to close',
   reportedWorkspaceRef:
@@ -539,7 +550,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    files: [DOCUMENT_PAGE, DOCUMENT_PAGE_INSPECTOR, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
     ledger: DOCUMENT_PAGE_STATE,
     label: 'DocumentPage',
     scanRefs: true,
@@ -547,6 +558,7 @@ const CASES = [
   {
     files: [
       BROWSER_DOCUMENT_PAGE,
+      BROWSER_ROUTE_SYNC,
       AUTO_CHECKPOINT_HOOK,
       DUPLICATE_DOCUMENT_HOOK,
       DOCUMENT_LIST_HOOK,
@@ -558,10 +570,11 @@ const CASES = [
   {
     // The connections hook is part of this screen's scan surface, not a
     // separate one: its state moved THERE rather than away, so the ledger
-    // below still has to account for it.
+    // below still has to account for it. It is both keepers' hook now; the
+    // daemon's half only supplies the read.
     files: [
       DAEMON_DOCUMENT_PAGE,
-      './pages/use-daemon-connections.ts',
+      './pages/use-connections.ts',
       // The duplicate hook is BOTH keepers' now, so it is part of this
       // screen's scan surface as well as the browser page's — a screen that
       // holds the state has to account for it, whoever else also does.

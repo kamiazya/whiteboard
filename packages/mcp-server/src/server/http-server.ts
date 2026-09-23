@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
+import type { IncomingMessage } from 'node:http'
 import type { Socket } from 'node:net'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
@@ -40,9 +41,8 @@ import type { McpProtectedResourceMetadataConfig } from './security/mcp-auth.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
-import { createPairingGrantStore } from './security/pairing-grant-store.js'
+import { createSelfHostOriginTrustStores } from './security/origin-trust-stores.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
-import { createWebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import { membershipRefusal, workspaceAccess } from './security/workspace-access.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
@@ -59,6 +59,47 @@ import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/st
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
 import { resolveWorkspaceHandleToId } from './workspace-handle.js'
+
+/**
+ * Answer an upgrade the daemon will not accept, and close the socket.
+ *
+ * A half-open socket with no response is the worst outcome here — the client
+ * hangs — so every refusal path writes a status line before destroying.
+ */
+function refuseUpgrade(socket: Duplex, statusCode: number, body = ''): void {
+  const statusText = WS_UPGRADE_REFUSAL_TEXT[statusCode] ?? 'Unauthorized'
+  const bodyHeaders =
+    body === ''
+      ? ''
+      : `Content-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n`
+  socket.write(
+    `HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n${bodyHeaders}\r\n${body}`,
+  )
+  socket.destroy()
+}
+
+const WS_UPGRADE_REFUSAL_TEXT: Record<number, string> = {
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+}
+
+/**
+ * The workspace and path this upgrade names, or `null` once the socket has
+ * been refused for naming an unusable one.
+ */
+function wsUpgradeTarget(
+  req: IncomingMessage,
+  socket: Duplex,
+): { workspaceId: string; path: string } | null {
+  try {
+    return parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
+  } catch (error) {
+    const issue = validationErrorBody(error)
+    refuseUpgrade(socket, 400, issue ? JSON.stringify(issue) : '')
+    return null
+  }
+}
 
 export type RuntimeStatus = RuntimeStatusResponse
 
@@ -129,6 +170,33 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
 // idle-timeout-triggered close() could make the daemon appear to hang
 // instead of shutting down promptly.
 const FILE_GC_STOP_TIMEOUT_MS = 5_000
+
+/**
+ * One tenant's origin trust, as the pairing composition reads it.
+ *
+ * Called only AFTER `prepareDataDir`: both stores read their file once, at
+ * construction, and that file is what the boot move puts under the tenant on
+ * this very start. Built before it they hold nothing — the daemon refuses an
+ * origin the user had already paired, and the next write persists that empty
+ * set over the migrated file.
+ */
+function originTrustFor(dataDir: string, envOrigins: readonly string[] | undefined) {
+  const originTrust = createSelfHostOriginTrustStores(dataDir)
+  const envWebOrigins = envOrigins ?? []
+  return {
+    pairing: {
+      grants: originTrust.grants,
+      codes: createPairingCodeStore(),
+      tokens: createPairingTokenStore(),
+      credentials: originTrust.credentials,
+    },
+    allowedWebOrigins: (): readonly string[] => {
+      const grantOrigins = originTrust.grants.origins()
+      if (grantOrigins.length === 0 && Array.isArray(envWebOrigins)) return envWebOrigins
+      return [...envWebOrigins, ...grantOrigins]
+    },
+  }
+}
 
 /**
  * The membership decision the HTTP middleware gates individual routes with,
@@ -324,19 +392,6 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // but two call sites is two places for one to be forgotten — and a
   // forgotten one does not fail loudly, it refuses every macaroon.
   const macaroonRootKey = createMacaroonRootKey({ dataDir: getDataDir() }).rootKey
-  const pairingGrants = createPairingGrantStore(getDataDir())
-  const pairing = {
-    grants: pairingGrants,
-    codes: createPairingCodeStore(),
-    tokens: createPairingTokenStore(),
-    credentials: createWebAuthnCredentialStore(getDataDir()),
-  }
-  const envWebOrigins = options.allowedWebOrigins ?? []
-  const allowedWebOrigins = () => {
-    const grantOrigins = pairingGrants.origins()
-    if (grantOrigins.length === 0 && Array.isArray(envWebOrigins)) return envWebOrigins
-    return [...envWebOrigins, ...grantOrigins]
-  }
 
   // /api/v1 document surface: same libSQL database as the MCP tools
   // (getDb memoizes per dataDir, so this container shares the connection
@@ -357,6 +412,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // a state the document browser can select out of. Memoized per data dir, so
   // the per-request MCP callers below share this one resolve.
   await ensureWorkspaceId(dataDir)
+  const { pairing, allowedWebOrigins } = originTrustFor(dataDir, options.allowedWebOrigins)
   const db = await getDb(dataDir)
   const resolvedDeps = resolveServerDeps(
     createContainer(createSelfHostStoreLocalModule(db, dataDir)),
@@ -551,24 +607,11 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         allowedWebOrigins,
       )
       if (!decision.accept) {
-        const statusCode = decision.statusCode ?? 401
-        const statusText = statusCode === 403 ? 'Forbidden' : 'Unauthorized'
-        socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`)
-        socket.destroy()
+        refuseUpgrade(socket, decision.statusCode ?? 401)
         return
       }
-      let target: { workspaceId: string; path: string }
-      try {
-        target = parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
-      } catch (error) {
-        const issue = validationErrorBody(error)
-        const body = issue ? JSON.stringify(issue) : ''
-        socket.write(
-          `HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
-        )
-        socket.destroy()
-        return
-      }
+      const target = wsUpgradeTarget(req, socket)
+      if (target === null) return
       if (await refuseWsUpgradeUnlessMember(decision.grant, target.workspaceId, members, socket)) {
         return
       }

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { ExportErrorBody, ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
@@ -20,6 +21,58 @@ import { onDocumentAction } from './path-route.js'
 // persisted doc. 1 MiB is a generous ceiling for that shape while still
 // bounding an adversarial request.
 const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
+
+/**
+ * An empty body is a valid export request — every option has a default — so
+ * only a body that is PRESENT and unreadable refuses.
+ */
+function parseExportSvgBody(
+  rawText: string,
+): { body: ExportSvgRequest } | { error: ExportErrorBody } {
+  if (rawText.length === 0) return { body: {} }
+  let json: unknown
+  try {
+    json = JSON.parse(rawText)
+  } catch {
+    return { error: { error: 'invalid_request', message: 'malformed JSON' } }
+  }
+  const parsed = exportSvgRequestSchema.safeParse(json)
+  if (!parsed.success) {
+    return { error: { error: 'invalid_request', message: 'invalid export options' } }
+  }
+  return { body: parsed.data }
+}
+
+/**
+ * `undefined` means "the caller named no path", which is not a refusal — the
+ * handler then writes to `defaultSvgExportPath`. A path that IS named is
+ * validated against the workspace's own exports directory, and anything
+ * `validateOutputPath` refuses becomes this route's error shape.
+ */
+async function resolveSvgOutputPath(
+  body: ExportSvgRequest,
+  workspaceId: string,
+): Promise<
+  { outputPath: string | undefined } | { error: ExportErrorBody; status: ContentfulStatusCode }
+> {
+  if (typeof body.outputPath !== 'string' || body.outputPath.length === 0) {
+    return { outputPath: undefined }
+  }
+  try {
+    await validateOutputPath(
+      body.outputPath,
+      body.overwrite === true,
+      join(getDataDir(), workspaceId, 'exports'),
+    )
+  } catch (err) {
+    if (err instanceof OutputPathError) {
+      const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
+      return { error: errBody as ExportErrorBody, status }
+    }
+    throw err
+  }
+  return { outputPath: body.outputPath }
+}
 
 // POST /api/w/:workspaceId/document/<path>/export-svg
 //
@@ -48,44 +101,13 @@ export function createDocumentSvgExportRouter() {
         return c.json(errBody, 404)
       }
 
-      const rawText = await c.req.text()
-      let body: ExportSvgRequest = {}
-      if (rawText.length > 0) {
-        let json: unknown
-        try {
-          json = JSON.parse(rawText)
-        } catch {
-          const errBody: ExportErrorBody = { error: 'invalid_request', message: 'malformed JSON' }
-          return c.json(errBody, 400)
-        }
-        const parsed = exportSvgRequestSchema.safeParse(json)
-        if (!parsed.success) {
-          const errBody: ExportErrorBody = {
-            error: 'invalid_request',
-            message: 'invalid export options',
-          }
-          return c.json(errBody, 400)
-        }
-        body = parsed.data
-      }
+      const parsedBody = parseExportSvgBody(await c.req.text())
+      if ('error' in parsedBody) return c.json(parsedBody.error, 400)
+      const body = parsedBody.body
 
-      let outputPath: string | undefined
-      if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
-        try {
-          await validateOutputPath(
-            body.outputPath,
-            body.overwrite === true,
-            join(getDataDir(), workspaceId, 'exports'),
-          )
-        } catch (err) {
-          if (err instanceof OutputPathError) {
-            const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
-            return c.json(errBody as ExportErrorBody, status)
-          }
-          throw err
-        }
-        outputPath = body.outputPath
-      }
+      const resolved = await resolveSvgOutputPath(body, workspaceId)
+      if ('error' in resolved) return c.json(resolved.error as ExportErrorBody, resolved.status)
+      const outputPath = resolved.outputPath
 
       let svg: string
       let undrawable: readonly string[]

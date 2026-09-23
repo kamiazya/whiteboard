@@ -3,22 +3,13 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
-import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
-import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
-import {
-  createDaemonFetch,
-  createDocument,
-  DaemonApiError,
-  getWorkspaceNames,
-  listDocuments,
-  listTrash,
-  listWorkspaces,
-} from '../lib/daemon-api-client.js'
+import { createDaemonFetch, createDocument, listWorkspaces } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
+import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 
@@ -81,6 +72,14 @@ import {
   reofferFailures,
 } from './daemon-index-actions.js'
 
+/**
+ * What the list shows: a failed load with the recovery that is actually
+ * available, the transient loading state, onboarding, or the panel. Split out
+ * of the page body — each arm is a different screen, and the page above is
+ * about deciding WHICH, not about drawing them.
+ */
+import { DaemonIndexBody } from './daemon-index-body.js'
+
 export function DaemonIndexPage({
   daemonBaseUrl,
   token,
@@ -106,6 +105,20 @@ export function DaemonIndexPage({
         ? createDaemonFilesSource(daemonFetch, daemonBaseUrl, selectedWorkspace)
         : null,
     [daemonFetch, daemonBaseUrl, selectedWorkspace],
+  )
+  // The page's own reads go through the panel's source whenever they are
+  // about the workspace on screen, so the two share one read. A load for any
+  // other workspace (a stale callback) gets a source of its own.
+  const filesSourceRef = useRef({ workspaceId: selectedWorkspace, source: filesSource })
+  filesSourceRef.current = { workspaceId: selectedWorkspace, source: filesSource }
+  const sourceFor = useCallback(
+    (workspaceId: string) => {
+      const current = filesSourceRef.current
+      return current.workspaceId === workspaceId && current.source !== null
+        ? current.source
+        : createDaemonFilesSource(daemonFetch, daemonBaseUrl, workspaceId)
+    },
+    [daemonFetch, daemonBaseUrl],
   )
   const [rows, setRows] = useState<DocumentRow[]>([])
   // Consulted only for the onboarding decision: a workspace whose list is
@@ -318,33 +331,26 @@ export function DaemonIndexPage({
     async (workspaceId: string, isStale: () => boolean) => {
       setLoadError(null)
       try {
-        const [documentsRes, names, trashEntries] = await Promise.all([
-          listDocuments(daemonFetch, daemonBaseUrl, workspaceId),
-          // Failure degrades to "nothing named, nothing pinned", never to a
-          // failed list.
-          getWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
-          // Loaded HERE because this runs after every delete too (the dialog
-          // dismiss re-invokes it), which is exactly when the count decides
-          // whether onboarding may replace the panel.
-          listTrash(daemonFetch, daemonBaseUrl, workspaceId)
-            .then((res) => res.entries.length)
-            .catch(() => 0),
-        ])
+        // Through the SAME source the panel reads, and as a refresh: this runs
+        // on load and after every create, duplicate and delete, which is
+        // exactly when the data moved. The panel's own read then answers from
+        // what this one holds instead of asking again. The trash is read here
+        // because the count decides whether onboarding may replace the panel.
+        const { entries, trash } = await sourceFor(workspaceId).refresh()
         if (isStale()) return
-        const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
-        const nextRows: DocumentRow[] = documentsRes.documents.map((c) => {
-          const pinOrder = pinIndex.get(c.path)
-          return {
-            path: c.path,
-            displayName: names?.documents?.[c.path] ?? c.path,
-            updatedAt: c.updatedAt,
-            kind: c.kind,
-            pinned: pinOrder !== undefined,
-            pinOrder: pinOrder ?? Number.POSITIVE_INFINITY,
-          }
-        })
-        setRows(sortRows(nextRows))
-        setTrashCount(trashEntries)
+        setRows(
+          sortRows(
+            entries.map((entry) => ({
+              path: entry.path,
+              displayName: entry.name ?? entry.path,
+              updatedAt: entry.updatedAt,
+              ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+              pinned: entry.pinOrder !== undefined,
+              pinOrder: entry.pinOrder ?? Number.POSITIVE_INFINITY,
+            })),
+          ),
+        )
+        setTrashCount(trash?.length ?? 0)
         setLoaded(true)
       } catch (err) {
         if (isStale()) return
@@ -361,7 +367,7 @@ export function DaemonIndexPage({
         // anomaly, and a create issued against a workspace that no longer
         // exists would silently make a DIFFERENT one (the route passes
         // `createWorkspace: true`).
-        if (err instanceof DaemonApiError && err.status === 404) {
+        if (err instanceof WorkspaceMissingError) {
           // Deliberately NOT `setLoaded(true)` here. The load is not over —
           // the page is still deciding what it is showing. Marking it
           // complete renders the onboarding empty state for the workspace
@@ -376,7 +382,7 @@ export function DaemonIndexPage({
         setLoadError('Failed to load documents for this workspace.')
       }
     },
-    [daemonFetch, daemonBaseUrl, reselectAfterStale],
+    [sourceFor, reselectAfterStale],
   )
 
   // SCOPE RESET — see scoped-screen-state.test.ts
@@ -569,125 +575,24 @@ export function DaemonIndexPage({
           </div>
         )}
 
-        {loadError ? (
-          // A failed list load must not dead-end the page: the POST needs no
-          // rows and success navigates away, so creating remains a recovery
-          // path around the broken list. The transient loading state below
-          // deliberately has no create control — deriving a path from rows
-          // that are still in flight invites a collision the loaded states
-          // cannot produce.
-          //
-          // Which failed decides which recovery is real. Creating needs a
-          // workspace to create INTO, so when the WORKSPACE list is what
-          // failed there is nothing selected and `handleCreate` returns at its
-          // first line — the button would sit there doing nothing. Offer the
-          // request that failed instead.
-          <div className="flex flex-col items-start gap-3">
-            <div role="alert" className="text-sm text-destructive">
-              {loadError}
-            </div>
-            {selectedWorkspace ? (
-              <button
-                type="button"
-                disabled={creating}
-                onClick={() => void handleCreate('spatial')}
-                className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-              >
-                Create a canvas
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void loadWorkspaces()}
-                className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-              >
-                Try again
-              </button>
-            )}
-          </div>
-        ) : workspacesLoaded && workspaces.length === 0 ? (
-          // A daemon that holds no workspaces at all. Nothing is selected, so
-          // the documents fetch that ends the loading state never runs and the
-          // skeleton below would spin for as long as the page stays open.
-          //
-          // Creation is offered by the SWITCHER, not here — one carrier, the
-          // same one every other page uses. This state points at it rather
-          // than growing a second create control beside it.
-          //
-          // It used to say the write was someone else's, and that was true
-          // while every create path addressed a (workspace, path) pair this
-          // page could not name. `POST /api/workspaces` retired that: the
-          // daemon mints the id and derives the address from a display name,
-          // so the client no longer has to guess an identifier the daemon
-          // would agree with.
-          <div className="flex flex-col items-start gap-3">
-            <div>
-              <p className="text-sm font-medium">This daemon has no workspaces.</p>
-              <p className="text-sm text-muted-foreground">
-                Create one from the workspace menu in the header — or one appears on its own once an
-                agent over MCP, or the whiteboard CLI, writes a document.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void loadWorkspaces()}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-            >
-              Check again
-            </button>
-          </div>
-        ) : !loaded ? (
-          <div
-            role="status"
-            aria-label="Loading documents"
-            className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-          >
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse rounded-lg border p-2">
-                <div className="aspect-[4/3] rounded-md bg-muted" />
-                <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
-              </div>
-            ))}
-          </div>
-        ) : rows.length === 0 && trashCount === 0 ? (
-          // The onboarding state renders INSTEAD of the panel: a three-pane
-          // browser of nothing teaches less than one sentence and one
-          // button, and this button also OPENS what it creates (ADR-0006 —
-          // naming happens in the opened document's own top bar).
-          <EmptyWorkspaceState
-            onCreate={(kind) => void handleCreate(kind)}
-            disabled={creating}
-            subtitle="Documents live in this workspace, kept by your local daemon."
-          />
-        ) : selectedWorkspace && filesSource ? (
-          // Mounts when the skeleton unmounts: the fade carries the
-          // skeleton-to-content handoff instead of an instant swap.
-          <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
-            <WorkspaceFilesPanel
-              source={filesSource}
-              // The handle the address carries, which is exactly what a
-              // document's URL under this workspace is built from.
-              workspace={selectedWorkspace}
-              initialFolder={routedFolder}
-              onFolderChange={setRoutedFolder}
-              onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
-              onDuplicateDocument={(path) => void handleDuplicate(path)}
-              onRequestDelete={(path, displayName, kind) =>
-                setPendingDelete({ paths: [path], displayName, kind })
-              }
-              onRequestDeleteMany={(paths) =>
-                setPendingDelete({ paths, displayName: `${paths.length} documents` })
-              }
-              // A new array on every successful read, which is exactly the
-              // signal the panel needs: the page reloads this list after a
-              // duplicate and after a delete, both of which it performs on
-              // the panel's behalf.
-              revision={rows}
-            />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">No workspace selected.</p>
-        )}
+        <DaemonIndexBody
+          loadError={loadError}
+          loaded={loaded}
+          rows={rows}
+          trashCount={trashCount}
+          creating={creating}
+          selectedWorkspace={selectedWorkspace}
+          filesSource={filesSource}
+          routedFolder={routedFolder}
+          setRoutedFolder={setRoutedFolder}
+          onOpenDocument={onOpenDocument}
+          workspacesLoaded={workspacesLoaded}
+          workspaceCount={workspaces.length}
+          onCreate={handleCreate}
+          onDuplicate={handleDuplicate}
+          onRequestDelete={setPendingDelete}
+          onRetryWorkspaces={loadWorkspaces}
+        />
         <DeleteDocumentDialog
           pending={
             pendingDelete === null

@@ -37,6 +37,8 @@ import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
+import { tenantRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createDaemonAuthMiddleware } from './auth.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
@@ -52,11 +54,11 @@ let dbHandle: IsolatedDbHandle
 async function makeApp(known: readonly string[] = [WS]) {
   dir = mkdtempSync(join(tmpdir(), 'membership-routes-'))
   dbHandle = await createIsolatedDb({ dataDir: dir })
-  const grants = createPairingGrantStore(dir)
+  const grants = createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID))
   const codes = createPairingCodeStore()
   const tokens = createPairingTokenStore()
   const identity = createDaemonIdentity({ dataDir: dir })
-  const credentials = createWebAuthnCredentialStore(dir)
+  const credentials = createWebAuthnCredentialStore(tenantRoot(dir, SELF_HOST_TENANT_ID))
   const members = createMemberProfileStore(dbHandle.db)
   const workspaceExists = async (id: string) => known.includes(id)
 

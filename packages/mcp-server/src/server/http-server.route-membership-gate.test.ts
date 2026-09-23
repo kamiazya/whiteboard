@@ -16,6 +16,8 @@ import { type RunningServer, startHttpServer } from './http-server.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { getDb } from './store/db/index.js'
+import { tenantRoot } from './tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from './tenant/id.js'
 
 const _FLAGS = WEBAUTHN_FLAG_UP | WEBAUTHN_FLAG_UV | WEBAUTHN_FLAG_BE
 
@@ -50,7 +52,7 @@ describe('startHttpServer route membership gate — app.ts admit wiring (S8 slic
   const bindSession = (port: number) => bindPasskeySessionOverHttp(port, HOSTED)
 
   it('GET /api/workspaces filters a member-gated workspace, and POST /api/sync/subscribe refuses on it, over a real daemon', async () => {
-    createPairingGrantStore(dir).addGrant(HOSTED)
+    createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID)).addGrant(HOSTED)
     const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1', token: DAEMON_TOKEN })
 

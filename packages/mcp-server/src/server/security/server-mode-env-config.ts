@@ -200,12 +200,16 @@ function checkAllowedOrigins(origins: readonly string[]): ServerModeEnvConfigFai
   return null
 }
 
-export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvConfigResult {
-  const externalUrl = required(env, ENV_KEYS.EXTERNAL_URL)
-  if (externalUrl === null) {
-    return fail('server_mode_env.external_url_required', ENV_KEYS.EXTERNAL_URL)
-  }
-
+/**
+ * What the JWT surface REQUIRES: absent or wrong is a refusal, not a default.
+ * Split from the tuning below because the two halves fail differently — these
+ * stop the daemon starting, those only narrow how it behaves.
+ */
+function parseRequiredAuth(
+  env: NodeJS.ProcessEnv,
+):
+  | { ok: true; jwtIssuer: string; jwtAudience: string[]; jwksUri: string }
+  | ServerModeEnvConfigResult {
   const authStrategyRaw = required(env, ENV_KEYS.AUTH_STRATEGY)
   if (authStrategyRaw === null) {
     return fail('server_mode_env.auth_strategy_required', ENV_KEYS.AUTH_STRATEGY)
@@ -213,7 +217,6 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
   if (authStrategyRaw !== 'oauth-jwt') {
     return fail('server_mode_env.unknown_auth_strategy', ENV_KEYS.AUTH_STRATEGY)
   }
-  const authStrategy: ServerModeAuthStrategy = 'oauth-jwt'
 
   const jwtIssuer = required(env, ENV_KEYS.JWT_ISSUER)
   if (jwtIssuer === null) {
@@ -231,14 +234,13 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
   const jwksFailure = checkJwksUri(jwksUri)
   if (jwksFailure !== null) return fail(jwksFailure, ENV_KEYS.JWKS_URI)
 
-  const allowedOriginsRaw = optional(env, ENV_KEYS.ALLOWED_ORIGINS)
-  const allowedOrigins =
-    allowedOriginsRaw === undefined ? [externalUrl] : splitComma(allowedOriginsRaw)
-  if (allowedOriginsRaw !== undefined) {
-    const originsFailure = checkAllowedOrigins(allowedOrigins)
-    if (originsFailure !== null) return fail(originsFailure, ENV_KEYS.ALLOWED_ORIGINS)
-  }
+  return { ok: true, jwtIssuer, jwtAudience, jwksUri }
+}
 
+/** The transport knobs: a port and whether a proxy in front is trusted. */
+function parseTransportTuning(
+  env: NodeJS.ProcessEnv,
+): { ok: true; port: number; trustedProxy: boolean } | ServerModeEnvConfigResult {
   const portRaw = env[ENV_KEYS.PORT]
   const port = portRaw === undefined ? 3099 : parsePort(portRaw)
   if (port === null) return fail('server_mode_env.port_out_of_range', ENV_KEYS.PORT)
@@ -247,7 +249,18 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
   if (trustedProxy === null) {
     return fail('server_mode_env.trusted_proxy_invalid', ENV_KEYS.TRUSTED_PROXY)
   }
+  return { ok: true, port, trustedProxy }
+}
 
+/** The JWT knobs that have a default: present-but-invalid refuses, absent does not. */
+function parseJwtTuning(env: NodeJS.ProcessEnv):
+  | {
+      ok: true
+      jwtClockSkewSeconds: number
+      jwtScopeClaim: 'scope' | 'scp'
+      jwtAllowUntypedAccessTokens: boolean
+    }
+  | ServerModeEnvConfigResult {
   const clockSkewRaw = optional(env, ENV_KEYS.JWT_CLOCK_SKEW_SECONDS)
   const jwtClockSkewSeconds = clockSkewRaw === undefined ? 60 : parseNonNegativeInt(clockSkewRaw)
   if (jwtClockSkewSeconds === null) {
@@ -270,22 +283,47 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
       ENV_KEYS.JWT_ALLOW_UNTYPED_ACCESS_TOKENS,
     )
   }
+  return { ok: true, jwtClockSkewSeconds, jwtScopeClaim, jwtAllowUntypedAccessTokens }
+}
+
+export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvConfigResult {
+  const externalUrl = required(env, ENV_KEYS.EXTERNAL_URL)
+  if (externalUrl === null) {
+    return fail('server_mode_env.external_url_required', ENV_KEYS.EXTERNAL_URL)
+  }
+
+  const auth = parseRequiredAuth(env)
+  if (!('jwtIssuer' in auth)) return auth
+
+  const allowedOriginsRaw = optional(env, ENV_KEYS.ALLOWED_ORIGINS)
+  const allowedOrigins =
+    allowedOriginsRaw === undefined ? [externalUrl] : splitComma(allowedOriginsRaw)
+  if (allowedOriginsRaw !== undefined) {
+    const originsFailure = checkAllowedOrigins(allowedOrigins)
+    if (originsFailure !== null) return fail(originsFailure, ENV_KEYS.ALLOWED_ORIGINS)
+  }
+
+  const transport = parseTransportTuning(env)
+  if (!('port' in transport)) return transport
+
+  const jwt = parseJwtTuning(env)
+  if (!('jwtScopeClaim' in jwt)) return jwt
 
   return {
     ok: true,
     config: {
       externalUrl,
       allowedOrigins,
-      authStrategy,
-      jwtIssuer,
-      jwtAudience,
-      jwksUri,
-      jwtClockSkewSeconds,
-      jwtScopeClaim,
-      jwtAllowUntypedAccessTokens,
+      authStrategy: 'oauth-jwt',
+      jwtIssuer: auth.jwtIssuer,
+      jwtAudience: auth.jwtAudience,
+      jwksUri: auth.jwksUri,
+      jwtClockSkewSeconds: jwt.jwtClockSkewSeconds,
+      jwtScopeClaim: jwt.jwtScopeClaim,
+      jwtAllowUntypedAccessTokens: jwt.jwtAllowUntypedAccessTokens,
       host: optional(env, ENV_KEYS.HOST) ?? '0.0.0.0',
-      port,
-      trustedProxy,
+      port: transport.port,
+      trustedProxy: transport.trustedProxy,
       dataDir: optional(env, ENV_KEYS.DATA_DIR),
     },
   }

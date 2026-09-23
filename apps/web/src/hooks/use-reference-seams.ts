@@ -24,7 +24,11 @@ import { useCallback, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { loadBrowserReference } from '../lib/document-embed-content.js'
 import { type LoadImageUrl, useImageUrls } from './use-image-urls.js'
-import { type PrefetchRequest, usePrefetchedEntries } from './use-prefetched-cache.js'
+import {
+  type PrefetchRequest,
+  TRANSIENT_LOAD_ATTEMPTS,
+  usePrefetchedEntries,
+} from './use-prefetched-cache.js'
 
 const log = getAppLogger('reference-seams')
 
@@ -60,6 +64,24 @@ export interface UseReferenceSeamsOptions {
   readonly loadImage?: LoadImageUrl
 }
 
+/**
+ * What this body points at, as prefetch requests. `attempts` is the whole
+ * reason these are declared rather than inlined: a reference's load reaches
+ * a store, and a store read can fail transiently — the one answer the cache
+ * above must not make terminal.
+ */
+function referenceRequests(
+  body: string,
+  loaded: ReadonlyMap<string, LoadedReference>,
+  loadEntry: (target: string) => Promise<LoadedReference | undefined>,
+): readonly PrefetchRequest<LoadedReference>[] {
+  return referenceTargets({ bodies: [body], loaded }).map((target) => ({
+    key: target,
+    load: () => loadEntry(target),
+    attempts: TRANSIENT_LOAD_ATTEMPTS,
+  }))
+}
+
 export function useReferenceSeams({
   body,
   resolveAlias,
@@ -88,24 +110,18 @@ export function useReferenceSeams({
           ? loaded
           : { ...loaded, documentId }
       } catch (err) {
+        // Re-thrown for the reason `loadBrowserReference` re-throws: the
+        // prefetch treats a resolved `undefined` as the document's own
+        // answer and never asks again, while a rejection is asked again.
         log.warn('reference load failed', { target, err })
-        return undefined
+        throw err
       }
     },
     [documentIdOf, load],
   )
 
   const cache = usePrefetchedEntries<LoadedReference>(
-    useCallback(
-      (loaded) =>
-        referenceTargets({ bodies: [body], loaded }).map(
-          (target): PrefetchRequest<LoadedReference> => ({
-            key: target,
-            load: () => loadEntry(target),
-          }),
-        ),
-      [body, loadEntry],
-    ),
+    useCallback((loaded) => referenceRequests(body, loaded, loadEntry), [body, loadEntry]),
   )
 
   // The pictures this body draws, from the same definition the board uses —

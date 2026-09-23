@@ -43,9 +43,21 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
  * considered instead. Lower the ceiling when a paydown leaves an obvious gap
  * — nothing forces it, which is the honest cost.
  */
-// Lowered from 114 with this paydown: codec's six files leave the list, and
-// the comment above asks for the ceiling to follow an obvious gap.
-const EXEMPT_CEILING = 108
+// Lowered from 114 with codec's six files, then 72 -> 70 with the two
+// document pages, 70 -> 67 with canvas-render, 67 -> 65 with daemon-client,
+// 65 -> 60 with mcp-server's CLI, 60 -> 58 with the two keeper document
+// pages, 58 -> 55 with the markdown editor's three pure modules, 55 -> 52
+// with the workspace-files panel and its two lists, 52 -> 48 with the
+// settings and migration surfaces, 48 -> 42 with the daemon's store,
+// 42 -> 38 with its document routes, 38 -> 33 with five more of its HTTP
+// routes, 33 -> 31 with its two transports, 31 -> 26 with its composition
+// root, 26 -> 25 with the spatial edge router, 25 -> 23 with the connection
+// chip and the shell mark, 23 -> 19 with four of its own scripts, 19 -> 14
+// with the build and smoke leftovers, 14 -> 13 with the markdown block
+// layout, and 13 -> 12 with the storage report card: the comment asks for
+// the ceiling to follow an obvious gap, and a paydown that leaves slack is
+// exactly one.
+const EXEMPT_CEILING = 12
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
@@ -75,8 +87,13 @@ describe('the cognitive-complexity exemption list', () => {
   it('names only files that still exceed the threshold — a paid-down file leaves the list', () => {
     const paths = exemptions().map((glob) => glob.slice(1))
     // The list is the subject: an empty one would pass every assertion below
-    // while measuring nothing.
-    expect(paths.length).toBeGreaterThan(50)
+    // while measuring nothing. The floor was 50 while the list was in the
+    // hundreds, then 20 as the paydown passed 48. It moves again for the
+    // same reason and by the same rule — to a number that still means "not
+    // vacuous" rather than one the programme has to stop at. Lower it again
+    // when it is in the way; never delete it, or the guard stops measuring
+    // the moment the list empties.
+    expect(paths.length).toBeGreaterThan(5)
     const over = filesOverThreshold(paths)
     expect(paths.filter((path) => !over.has(path))).toEqual([])
   })

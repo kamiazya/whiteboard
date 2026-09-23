@@ -1,4 +1,26 @@
 /**
+ * A caught read failure, as one of TWO answers: what the port can attribute
+ * to the RECORD (the caller names it, since a snapshot and a delta are
+ * damaged differently), and `read-unavailable` for everything else, because
+ * the port names every failure it can attribute and anything left is the
+ * read itself.
+ *
+ * One function rather than the same `if` at both reads: the kinds it picks
+ * between are not interchangeable. `corrupt-snapshot` and `corrupt-delta`
+ * are what the page offers `Start fresh` for, which DELETES the record, and
+ * `read-unavailable` exists so a blocked read is never offered that.
+ */
+function readFailure(
+  err: unknown,
+  attributed: (
+    code: string | undefined,
+  ) => 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version',
+): LoroLoadResult {
+  if (!isStoredDocumentUnreadableError(err)) return { kind: 'read-unavailable' }
+  return { kind: attributed(err.code) }
+}
+
+/**
  * The browser's Loro persistence, as a thin layer over the `DocumentStore`
  * port.
  *
@@ -200,17 +222,9 @@ export class LoroStore {
     try {
       stored = await this.#store.loadSnapshot({ docRef })
     } catch (err) {
-      // The port names this failure instead of folding it into "absent", so
-      // the two stay two answers here as well: one tells a user their build
-      // is old, the other that their document is damaged.
-      if (isStoredDocumentUnreadableError(err)) {
-        return {
-          kind: err.code === 'unsupported-version' ? 'unsupported-version' : 'corrupt-snapshot',
-        }
-      }
-      // Unclassified: the port names every failure it can attribute to the
-      // record, so anything left is the read itself failing.
-      return { kind: 'read-unavailable' }
+      return readFailure(err, (code) =>
+        code === 'unsupported-version' ? 'unsupported-version' : 'corrupt-snapshot',
+      )
     }
     if (stored === null) return { kind: 'not-found' }
 
@@ -228,8 +242,8 @@ export class LoroStore {
     let updates: Uint8Array[]
     try {
       updates = (await this.#store.loadDeltas({ docRef, afterSeq: null })).updates
-    } catch {
-      return { kind: 'corrupt-delta' }
+    } catch (err) {
+      return readFailure(err, () => 'corrupt-delta')
     }
     for (const delta of updates) {
       if (!isValidLoroBytes(delta)) return { kind: 'corrupt-delta' }

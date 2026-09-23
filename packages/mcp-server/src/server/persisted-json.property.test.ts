@@ -40,7 +40,7 @@ import {
   writeDatabaseLocationRecord,
 } from './store/db/location-record.js'
 import { FsBlobStore } from './store/fs/fs-blob-store.js'
-import { blobsRoot } from './tenant/data-layout.js'
+import { blobsRoot, tenantRoot } from './tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from './tenant/id.js'
 
 const viaJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
@@ -140,13 +140,13 @@ describe('the pairing grants file', () => {
     withDefaults({ numRuns: 100 }),
   )('lists after a restart exactly the grants it listed before', async (inputs, revokeSeed) => {
     const dataDir = await freshDir('grants')
-    const store = createPairingGrantStore(dataDir)
+    const store = createPairingGrantStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
     const granted = inputs.map((input) => store.addGrant(input))
     // A grant survives a restart, and a revocation does too.
     const revoked = granted[revokeSeed % granted.length]
     if (revoked !== undefined && revokeSeed % 2 === 0) store.revoke(revoked.grantId)
 
-    const reopened = createPairingGrantStore(dataDir)
+    const reopened = createPairingGrantStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
     expect(reopened.list()).toEqual(store.list())
     expect(reopened.origins()).toEqual(store.origins())
     for (const origin of reopened.origins()) {
@@ -183,7 +183,7 @@ describe('the webauthn credentials file', () => {
     withDefaults({ numRuns: 60 }),
   )('lists after a restart exactly the pins it listed before', async (inputs, seed) => {
     const dataDir = await freshDir('credentials')
-    const store = createWebAuthnCredentialStore(dataDir)
+    const store = createWebAuthnCredentialStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
     for (const input of inputs) store.register(input)
     const pin = store.list()[seed % store.list().length]
     if (pin !== undefined && seed % 3 === 0) store.revoke(pin.origin, pin.credentialId)
@@ -191,7 +191,7 @@ describe('the webauthn credentials file', () => {
       store.recordSignCount(pin.origin, pin.credentialId, pin.signCount + 1)
     }
 
-    const reopened = createWebAuthnCredentialStore(dataDir)
+    const reopened = createWebAuthnCredentialStore(tenantRoot(dataDir, SELF_HOST_TENANT_ID))
     expect(reopened.list()).toEqual(store.list())
     for (const listed of reopened.list()) {
       expect(reopened.find(listed.origin, listed.credentialId)).toEqual(listed)
@@ -275,7 +275,11 @@ describe('the blob manifest', () => {
       manifestInto: backupDir,
       mirror,
     })
-    expect(references).toEqual({ blobs: digests, files: {}, mirror })
+    // A one-tenant keeper records one tenant; an empty store records none at
+    // all, since the tenant's blob directory is what the walk finds it by.
+    const expected =
+      digests.size === 0 ? {} : { [SELF_HOST_TENANT_ID]: { blobs: digests, files: {} } }
+    expect(references).toEqual({ tenants: expected, mirror })
     expect(await readBackupBlobManifest(backupDir)).toEqual(references)
   })
 })

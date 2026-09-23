@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
 import {
@@ -22,6 +23,87 @@ import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
 // while still bounding an adversarial request.
 const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 
+/**
+ * An empty body is a valid export request — every option has a default — so
+ * only a body that is PRESENT and unreadable refuses.
+ */
+function parseExportBody(
+  rawText: string,
+): { body: z.infer<typeof exportRequestSchema> } | { error: ExportErrorBody } {
+  if (rawText.length === 0) return { body: {} }
+  let json: unknown
+  try {
+    json = JSON.parse(rawText)
+  } catch {
+    return { error: { error: 'invalid_request', message: 'malformed JSON' } }
+  }
+  const parsed = exportRequestSchema.safeParse(json)
+  if (!parsed.success) {
+    return { error: { error: 'invalid_request', message: 'invalid export options' } }
+  }
+  return { body: parsed.data }
+}
+
+/**
+ * `undefined` means the caller named no path, which is not a refusal — the
+ * handler then writes to the workspace's default exports directory. A path
+ * that IS named is checked before anything is rendered: relative paths and
+ * pre-existing files (unless `overwrite`) refuse here rather than after the
+ * render they would have wasted.
+ */
+async function resolveExportOutputPath(
+  body: { outputPath?: string; overwrite?: boolean },
+  workspaceId: string,
+): Promise<
+  { outputPath: string | undefined } | { error: ExportErrorBody; status: ContentfulStatusCode }
+> {
+  if (typeof body.outputPath !== 'string' || body.outputPath.length === 0) {
+    return { outputPath: undefined }
+  }
+  try {
+    await validateOutputPath(
+      body.outputPath,
+      body.overwrite === true,
+      join(getDataDir(), workspaceId, 'exports'),
+    )
+  } catch (err) {
+    if (err instanceof OutputPathError) {
+      const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
+      return { error: errBody, status }
+    }
+    throw err
+  }
+  return { outputPath: body.outputPath }
+}
+
+/**
+ * The render, with the one failure that belongs to the REQUEST rather than
+ * to the renderer separated out: a positive scale can still size the target
+ * below one pixel, and the size came from the caller — so that is a 400,
+ * while everything else here is a 500.
+ */
+async function renderedExport(
+  workspaceId: string,
+  path: string,
+  body: z.infer<typeof exportRequestSchema>,
+): Promise<
+  | Awaited<ReturnType<typeof renderHeadless>>
+  | { error: ExportErrorBody; status: ContentfulStatusCode }
+> {
+  try {
+    return await renderHeadless(workspaceId, path, body)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (/target size is zero/i.test(message)) {
+      return {
+        error: { error: 'invalid_request', message: `invalid export options: ${message}` },
+        status: 400,
+      }
+    }
+    return { error: { error: 'headless_export_failed', message }, status: 500 }
+  }
+}
+
 export function createExportRouter() {
   const app = new Hono()
 
@@ -31,50 +113,15 @@ export function createExportRouter() {
     'post',
     'export',
     async (c, workspaceId, path) => {
-      // The body is optional. Empty body is fine; malformed JSON or
-      // schema-invalid payloads are rejected with 400 instead of being
-      // silently dropped.
-      const rawText = await c.req.text()
-      let body: z.infer<typeof exportRequestSchema> = {}
-      if (rawText.length > 0) {
-        let json: unknown
-        try {
-          json = JSON.parse(rawText)
-        } catch {
-          const errBody: ExportErrorBody = { error: 'invalid_request', message: 'malformed JSON' }
-          return c.json(errBody, 400)
-        }
-        const parsed = exportRequestSchema.safeParse(json)
-        if (!parsed.success) {
-          const errBody: ExportErrorBody = {
-            error: 'invalid_request',
-            message: 'invalid export options',
-          }
-          return c.json(errBody, 400)
-        }
-        body = parsed.data
-      }
+      const parsedBody = parseExportBody(await c.req.text())
+      if ('error' in parsedBody) return c.json(parsedBody.error, 400)
+      const body = parsedBody.body
 
-      // Validate outputPath up front, before rendering. Reject relative
-      // paths and pre-existing files (unless overwrite=true) so the caller
-      // does not waste a render on a write that will fail.
-      let outputPath: string | undefined
-      if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
-        try {
-          await validateOutputPath(
-            body.outputPath,
-            body.overwrite === true,
-            join(getDataDir(), workspaceId, 'exports'),
-          )
-        } catch (err) {
-          if (err instanceof OutputPathError) {
-            const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
-            return c.json(errBody, status)
-          }
-          throw err
-        }
-        outputPath = body.outputPath
-      }
+      // Validated up front, before rendering, so the caller does not waste a
+      // render on a write that will fail.
+      const resolved = await resolveExportOutputPath(body, workspaceId)
+      if ('error' in resolved) return c.json(resolved.error, resolved.status)
+      const outputPath = resolved.outputPath
 
       // The headless path operates directly on the LoroDoc and does NOT
       // verify that the canvas actually exists — getDoc / loadDocument return
@@ -89,29 +136,9 @@ export function createExportRouter() {
         return c.json(errBody, 404)
       }
 
-      let pngBuffer: Buffer
-      let undrawable: readonly string[]
-      let unresolvedFamilies: readonly string[]
-      try {
-        ;({
-          png: pngBuffer,
-          undrawable,
-          unresolvedFamilies,
-        } = await renderHeadless(workspaceId, path, body))
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        // A positive scale can still size the target below one pixel; the
-        // renderer refuses that, and the size came from the request.
-        if (/target size is zero/i.test(message)) {
-          const errBody: ExportErrorBody = {
-            error: 'invalid_request',
-            message: `invalid export options: ${message}`,
-          }
-          return c.json(errBody, 400)
-        }
-        const errBody: ExportErrorBody = { error: 'headless_export_failed', message }
-        return c.json(errBody, 500)
-      }
+      const rendered = await renderedExport(workspaceId, path, body)
+      if ('error' in rendered) return c.json(rendered.error, rendered.status)
+      const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
 
       const filePath =
         outputPath !== undefined

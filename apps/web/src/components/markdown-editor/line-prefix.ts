@@ -204,48 +204,71 @@ function markerWidth(line: LinePrefix): number {
 }
 
 /**
- * The indent a list line moves to, or null when the tree has no such move.
- * Nesting is the one verb whose meaning comes from the lines ABOVE: a
- * child must start at its parent's content column, so indenting means
- * "become a child of the sibling above" and the width is that sibling's,
- * not a fixed unit (`1. ` is three wide, `- ` two). With no sibling above
- * — the line is its parent's first child, or the first item of all — there
- * is nothing to nest under, and a unit of indent would be whitespace the
- * parser ignores. Outdenting is the same question asked downwards: it moves
- * to the indent of the line this one is a child OF, so the two verbs are
- * inverses over every shape either can produce. At the top there is nowhere
- * shallower to go.
+ * The list lines above `lineNumber`, nearest first, stopping where the list
+ * this line belongs to does: a blank line is skipped, a non-list line or a
+ * different quote depth ends the walk. Both verbs read the same sequence and
+ * differ only in what they are looking for.
  */
-function nestingIndent(
+function* listLinesAbove(
   state: EditorState,
   lineNumber: number,
   current: LinePrefix,
-  direction: 1 | -1,
-): number | null {
-  const depth = current.indent.length
-  if (direction < 0 && depth === 0) return null
+): Generator<LinePrefix> {
   for (let n = lineNumber - 1; n >= 1; n--) {
     const text = state.doc.line(n).text
     if (text.trim() === '') continue
     const above = parseLinePrefix(text)
-    if (above.marker === 'none' || above.quote !== current.quote) break
-    const aboveDepth = above.indent.length
-    if (direction > 0) {
-      if (aboveDepth > depth) continue
-      return aboveDepth === depth ? aboveDepth + markerWidth(above) : null
-    }
-    // Outdent lands on the line this one is a CHILD of, which is the
-    // nearest line above whose content column its indent reaches — not
-    // merely the nearest shallower line. The two differ exactly when a line
-    // sits strictly between the child and its parent, and then the nearest
-    // shallower line is a sibling's child rather than an ancestor: outdent
-    // landed on it and Tab, Shift-Tab stopped being the identity it reads
-    // as. Reachable only by hand-typed ragged indentation (depths 4, 6, 4),
-    // since a well-formed child starts at its parent's content column.
-    if (aboveDepth + markerWidth(above) <= depth) return aboveDepth
+    if (above.marker === 'none' || above.quote !== current.quote) return
+    yield above
   }
-  // Outdenting a nested line with nothing shallower above it lands at the margin.
-  return direction < 0 ? 0 : null
+}
+
+/**
+ * Indent: become a child of the SIBLING above, so the width is that
+ * sibling's rather than a fixed unit (`1. ` is three wide, `- ` two). A
+ * deeper line above is that sibling's own subtree and is walked past. With
+ * no sibling above — the line is its parent's first child, or the first item
+ * of all — there is nothing to nest under, and a unit of indent would be
+ * whitespace the parser ignores.
+ */
+function indentUnderSibling(
+  state: EditorState,
+  lineNumber: number,
+  current: LinePrefix,
+): number | null {
+  const depth = current.indent.length
+  for (const above of listLinesAbove(state, lineNumber, current)) {
+    const aboveDepth = above.indent.length
+    if (aboveDepth > depth) continue
+    return aboveDepth === depth ? aboveDepth + markerWidth(above) : null
+  }
+  return null
+}
+
+/**
+ * Outdent: land on the line this one is a CHILD of, which is the nearest
+ * line above whose content column its indent reaches — not merely the
+ * nearest shallower line. The two differ exactly when a line sits strictly
+ * between the child and its parent, and then the nearest shallower line is a
+ * sibling's child rather than an ancestor: outdent landed on it and
+ * Tab, Shift-Tab stopped being the identity it reads as. Reachable only by
+ * hand-typed ragged indentation (depths 4, 6, 4), since a well-formed child
+ * starts at its parent's content column.
+ *
+ * At the margin there is nowhere shallower to go; a nested line with nothing
+ * shallower above it lands at the margin.
+ */
+function outdentToParent(
+  state: EditorState,
+  lineNumber: number,
+  current: LinePrefix,
+): number | null {
+  const depth = current.indent.length
+  if (depth === 0) return null
+  for (const above of listLinesAbove(state, lineNumber, current)) {
+    if (above.indent.length + markerWidth(above) <= depth) return above.indent.length
+  }
+  return 0
 }
 
 /**
@@ -264,7 +287,9 @@ export function changeIndent(direction: 1 | -1): StateCommand {
     const to =
       parsed.marker === 'none'
         ? Math.max(0, parsed.indent.length + direction * INDENT_UNIT)
-        : nestingIndent(state, first.number, parsed, direction)
+        : direction > 0
+          ? indentUnderSibling(state, first.number, parsed)
+          : outdentToParent(state, first.number, parsed)
     if (to === null) return false
     const delta = to - parsed.indent.length
     if (delta === 0) return false

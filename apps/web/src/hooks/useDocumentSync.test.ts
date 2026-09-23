@@ -349,6 +349,19 @@ describe('useDocumentSync', () => {
 
     expect(dispatchCtrlZ).not.toThrow()
     expect(result.current.canvas).toEqual(emptyCanvas())
+    // And handed back rather than swallowed: with nothing to undo the
+    // keystroke is the browser's, and claiming it would break undo in
+    // whatever this page is embedded beside.
+    const event = new KeyboardEvent('keydown', {
+      key: 'z',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => {
+      window.dispatchEvent(event)
+    })
+    expect(event.defaultPrevented).toBe(false)
   })
 
   it('undo republishes the canvas after a keyboard undo', async () => {
@@ -362,6 +375,29 @@ describe('useDocumentSync', () => {
     act(dispatchCtrlZ)
 
     expect(result.current.canvas.nodes[0]).toMatchObject({ x: 0, y: 0 })
+  })
+
+  it('leaves Ctrl+Z alone while a text field has it', async () => {
+    // The keystroke belongs to whatever is being typed in. Taking it here
+    // would undo the CANVAS under someone editing a label, which is a step
+    // they never asked for and cannot see coming.
+    const backend = makeFakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+
+    await hydrate(backend, TEXT_CANVAS)
+    await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
+    expect(result.current.canvas.nodes[0]).toMatchObject({ x: 10, y: 20 })
+
+    const field = document.createElement('input')
+    document.body.append(field)
+    field.focus()
+    act(() => {
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
+      )
+    })
+    expect(result.current.canvas.nodes[0]).toMatchObject({ x: 10, y: 20 })
+    field.remove()
   })
 
   it('connects when backend changes from null to a real backend', () => {

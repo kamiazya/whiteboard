@@ -52,6 +52,37 @@ function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string)
  * extension storage is scoped to the extension ID, not to a web origin that
  * another process can take over by claiming the port.
  */
+/**
+ * A preconstructed Request rebuilt against the resolved URL, carrying its own
+ * semantics through: losing `signal` in particular would break
+ * abort-on-unmount for callers that pass one. `mode` is deliberately NOT
+ * copied — a Request can carry mode 'navigate', which is invalid as a fetch
+ * init value and throws.
+ */
+function rebuiltRequestInit(
+  input: Request,
+  init: RequestInit | undefined,
+  headers: Headers,
+): RequestInit {
+  const body =
+    init?.body ?? (input.method === 'GET' || input.method === 'HEAD' ? undefined : input.body)
+  return {
+    method: input.method,
+    body,
+    signal: input.signal,
+    credentials: input.credentials,
+    referrer: input.referrer,
+    referrerPolicy: input.referrerPolicy,
+    integrity: input.integrity,
+    keepalive: input.keepalive,
+    // Fetch spec: a ReadableStream body requires `duplex: 'half'` or the call
+    // throws (browsers/undici enforce this at runtime).
+    ...(body ? { duplex: 'half' as const } : {}),
+    ...init,
+    headers,
+  }
+}
+
 export function createDaemonFetch(
   daemonBaseUrl: string,
   // A function rather than a value when the credential outlives the wrapper: a
@@ -79,28 +110,7 @@ export function createDaemonFetch(
     }
 
     if (input instanceof Request) {
-      const body =
-        init?.body ?? (input.method === 'GET' || input.method === 'HEAD' ? undefined : input.body)
-      return baseFetch(resolvedUrl, {
-        method: input.method,
-        body,
-        // Carry the Request's own semantics through the rebuild — losing
-        // `signal` in particular would break abort-on-unmount for callers
-        // that pass a preconstructed Request. `mode` is deliberately NOT
-        // copied: a Request can carry mode 'navigate', which is invalid as a
-        // fetch init value and throws.
-        signal: input.signal,
-        credentials: input.credentials,
-        referrer: input.referrer,
-        referrerPolicy: input.referrerPolicy,
-        integrity: input.integrity,
-        keepalive: input.keepalive,
-        // Fetch spec: a ReadableStream body requires `duplex: 'half'` or the
-        // call throws (browsers/undici enforce this at runtime).
-        ...(body ? { duplex: 'half' as const } : {}),
-        ...init,
-        headers,
-      })
+      return baseFetch(resolvedUrl, rebuiltRequestInit(input, init, headers))
     }
 
     return baseFetch(resolvedUrl, { ...init, headers })

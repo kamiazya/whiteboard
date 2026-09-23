@@ -4,8 +4,6 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
-import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +17,6 @@ import {
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
-import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
@@ -27,12 +24,7 @@ import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import {
-  documentPath as documentRoutePath,
-  indexPath,
-  parseWorkspaceRoute,
-  workspacePath,
-} from '../lib/app-routes.js'
+import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
@@ -43,10 +35,7 @@ import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
-import {
-  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
-  dispatchIdentityEvent,
-} from '../lib/document-sync-types.js'
+import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
@@ -57,6 +46,17 @@ import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import {
+  browserConnectionsSlot,
+  browserTerminalAnswer,
+  browserVersionsSlot,
+  conversationReads,
+  documentLabels,
+  documentPropertiesSlot,
+  loadedSnapshotOf,
+  markdownThreadWrite,
+  withLiveSnapshot,
+} from './browser-document-slots.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
 import { DocumentPage } from './DocumentPage.js'
 import type {
@@ -67,10 +67,12 @@ import type {
 import type { DocumentPageModel } from './document-page-model.js'
 import { mergePersistence } from './merge-persistence.js'
 import { useAutoCheckpoint } from './use-auto-checkpoint.js'
+import { useBrowserConnections } from './use-browser-connections.js'
 import {
   type LoroStoreLike,
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
+import { useBrowserRouteSync } from './use-browser-route-sync.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
@@ -156,7 +158,8 @@ function useBrowserDocument(
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
-  const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
+  const loaded = loadedSnapshotOf(pageState)
+  const documentId = loaded.documentId
 
   // Mirrors the scope itself, rewritten every render: an async handler that
   // started under one document has to ask who is on screen NOW, and its own
@@ -184,9 +187,7 @@ function useBrowserDocument(
   // snapshot rather than looked up in the list, so it is known at the same
   // instant the id is, and so this effect does not re-fire every time the list
   // refreshes (which would overwrite a Back the user just performed).
-  const documentPath = pageState.kind === 'editing' ? pageState.snapshot.path : null
-  const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
-  const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
+  const { documentPath, documentName, documentKind } = loaded
   // Called HERE rather than above with the rest of the state: its refusal is
   // worded with `documentKind`, and the handler closed over three consts
   // declared below it — legal only because the body runs later.
@@ -234,7 +235,7 @@ function useBrowserDocument(
           [loroTextSync(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
     [markdownDoc.doc, markdownDoc.bodyTextOf],
   )
-  const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
+  const currentUpdatedAt = loaded.updatedAt
   // Called HERE rather than with the rest of the state above: it reads
   // `currentUpdatedAt`, and it OWNS the enumerated flag the URL -> document
   // effect below reads. The list and its two readers now sit in that order.
@@ -268,14 +269,7 @@ function useBrowserDocument(
   // documents. Both the switcher and the link picker read THIS, or the
   // picker would offer a stale name for the document being edited — or omit
   // it entirely right after it was created.
-  const switcherOptions =
-    pageState.kind === 'editing'
-      ? documents.some((c) => c.documentId === pageState.snapshot.documentId)
-        ? documents.map((c) =>
-            c.documentId === pageState.snapshot.documentId ? pageState.snapshot : c,
-          )
-        : [...documents, pageState.snapshot]
-      : documents
+  const switcherOptions = withLiveSnapshot(documents, pageState)
   // The URL and the file-node reference speak different addresses: a route
   // carries a path (so the hierarchy is visible and it matches the daemon's),
   // while a reference carries the document id (so it survives a move). These
@@ -351,67 +345,15 @@ function useBrowserDocument(
     navigate({ pathname: path, search: location.search }, { replace: isFirstSync })
   }, [documentPath, navigate, location.search])
 
-  // URL -> canvas id: browser Back/Forward (and any other history navigation)
-  // moves location.pathname without any switcher click firing, so this is the
-  // only thing that keeps the loaded canvas in sync with the address bar for
-  // that direction. Runs in an effect (never during render) so it can't race
-  // the editor's own render cycle; switchDocument's generation guard (see the
-  // controller hook) protects against a rapid back-back-back burst landing a
-  // stale canvas.
-  //
-  // lastKnownCanvasIdRef distinguishes the two ways this effect's own
-  // dependencies can change: a switcher-driven switchDocument() updates documentId
-  // before the sibling canvas-id -> URL effect's navigate() call has actually
-  // updated `location`, so this effect would otherwise see a stale pathname
-  // that still names the PREVIOUS canvas and switch straight back to it. When
-  // the URL still names the previously-known canvas id, that's this
-  // component's own pending push catching up, not an external navigation —
-  // skip it and let the other effect finish the sync.
-  const lastKnownCanvasIdRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (documentId === null || documentPath === null) return
-    // Recorded before any early return: a run that finds nothing to do still
-    // establishes which document was loaded, and the guard below reads it to
-    // tell an external navigation from this component's own pending push.
-    const lastKnownDocumentId = lastKnownCanvasIdRef.current
-    lastKnownCanvasIdRef.current = documentId
-
-    const routed = parseWorkspaceRoute(location.pathname)
-    const requestedPath = routed?.kind === 'document' ? routed.path : undefined
-    if (requestedPath === undefined) return
-    // Compared against the loaded snapshot's OWN path rather than against the
-    // list, so this is right before the list has arrived — which is also what
-    // makes the unknown-path branch below safe to treat as genuinely unknown.
-    if (requestedPath === documentPath) return
-
-    const requestedId = documentIdOfPath(requestedPath)
-    if (requestedId === documentId) return
-    if (requestedId !== null && requestedId === lastKnownDocumentId) return
-
-    // Two ways the address bar can name something that is not the loaded
-    // document, and both are the same recoverable miss: keep the document and
-    // repair the URL. The path resolves to nothing (deleted, or hand-typed),
-    // or it resolves and the switch then finds no record.
-    const repairHandle = browserWorkspaceHandleOrNull()
-    const repair = () => {
-      if (repairHandle === null) return
-      navigate(documentRoutePath(repairHandle, documentPath), { replace: true })
-    }
-    if (requestedId === null) {
-      // ...but only once the list has actually been enumerated. Until then it
-      // holds this document alone, so "absent" means "not known yet" and
-      // repairing would overwrite a navigation to a perfectly valid document
-      // with nothing to undo it. Leaving the address bar alone keeps the
-      // user's intent visible; recovering the switch itself once the list
-      // lands needs this effect's own-push guard restructured first, since it
-      // assumes one run per loaded document.
-      if (documentsEnumeratedRef.current) repair()
-      return
-    }
-    void switchDocument(requestedId).then((switched) => {
-      if (!switched) repair()
-    })
-  }, [location.pathname, documentId, documentPath, switchDocument])
+  useBrowserRouteSync({
+    documentId,
+    documentPath,
+    pathname: location.pathname,
+    navigate,
+    documentIdOfPath,
+    switchDocument,
+    documentsEnumeratedRef,
+  })
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
   // re-connecting on re-renders when id is unchanged. A markdown canvas
@@ -514,7 +456,6 @@ function useBrowserDocument(
           }),
     [versionsRecord, versionStore, documentKind],
   )
-  const versionsEnabled = versionsBackend !== null
 
   // Built on the backend, because a branch is a frontier of the record the
   // backend holds and a branch write goes through the same queue its edits
@@ -551,12 +492,7 @@ function useBrowserDocument(
    * the same document-level `threads` plane off the host it already has, and
    * from here down nothing cares which of the two did the reading.
    */
-  const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
-  // Where the CRDT still holds each passage. Only a markdown document has a
-  // body for a mark to live in; the spatial side answers with nothing rather
-  // than with the sync session's map, which is about a body it is not
-  // showing.
-  const threadMarks = documentKind === 'markdown' ? markdownDoc.threadMarks : undefined
+  const conversation = conversationReads(documentKind, markdownDoc, spatialAnnotations, canvas)
 
   /**
    * The rail's write door. A markdown document is given no BrowserBackend
@@ -568,24 +504,7 @@ function useBrowserDocument(
    * precisely because the first is closed on a note.
    */
   const spatialWrite = spatialThreadWrite(() => canvas, onChange)
-  const threadWrite: CommentsRailWrite = {
-    createThread: (thread) => {
-      if (documentKind === 'markdown') markdownDoc.createThread(thread)
-      else spatialWrite.createThread(thread)
-    },
-    replyToThread: (threadId, message) => {
-      if (documentKind === 'markdown') markdownDoc.replyToThread(threadId, message)
-      else spatialWrite.replyToThread(threadId, message)
-    },
-    setThreadStatus: (threadId, status) => {
-      if (documentKind === 'markdown') markdownDoc.setThreadStatus(threadId, status)
-      else spatialWrite.setThreadStatus(threadId, status)
-    },
-    editMessage: (threadId, message, opening) => {
-      if (documentKind === 'markdown') markdownDoc.editMessage(threadId, message)
-      else spatialWrite.editMessage(threadId, message, opening)
-    },
-  }
+  const threadWrite = documentKind === 'markdown' ? markdownThreadWrite(markdownDoc) : spatialWrite
 
   // Staleness stamps for the file seams: an edit made elsewhere shows up on
   // the next refresh because the referenced document's updatedAt moved.
@@ -689,66 +608,17 @@ function useBrowserDocument(
     />
   )
 
-  if (renderState.kind === 'load-degraded') {
-    return {
-      kind: 'terminal',
-      node: (
-        <LoadDegradedView message={renderState.message}>
-          {/* WHICH recovery is offered follows what the failure knows, and
-            getting it wrong is destructive rather than merely unhelpful:
-            `Start fresh` deletes the record, which is the right last resort
-            for a document this build cannot read, and the worst possible
-            button for one whose read was simply blocked — the data is
-            intact and one click removes it. So the retry is what an
-            unavailable read gets, and it is the only affordance there. */}
-          {backendError === 'read-unavailable' ? (
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-            >
-              Try again
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void startFresh()}
-              className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-            >
-              Start fresh
-            </button>
-          )}
-        </LoadDegradedView>
-      ),
-    }
-  }
+  const resolved = browserTerminalAnswer(renderState, backendError, startFresh)
+  const { connections, linkify } = useBrowserConnections({
+    index: store,
+    loro: resolvedLoro,
+    documentId: documentId ?? undefined,
+    path: documentPath,
+  })
+  if ('answer' in resolved) return resolved.answer
+  const editing = resolved.editing
 
-  if (renderState.kind === 'cleanup-completed') {
-    return {
-      kind: 'terminal',
-      node: (
-        <div
-          data-testid="cleanup-completed"
-          className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
-        >
-          <p className="text-sm text-muted-foreground">Canvas removed.</p>
-          <button
-            type="button"
-            onClick={() => void startFresh()}
-            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-          >
-            Start fresh
-          </button>
-        </div>
-      ),
-    }
-  }
-
-  if (renderState.kind === 'loading') {
-    return { kind: 'terminal', node: <DocumentPageSkeleton label="Loading canvas" /> }
-  }
-
-  const loadedPath = renderState.snapshot.path
+  const loadedPath = editing.snapshot.path
   const workspaceId = getBrowserWorkspaceId()
 
   // The name goes to the workspace and NOWHERE else: it is a property of the
@@ -762,12 +632,12 @@ function useBrowserDocument(
     })
   }
   const title = titleOf(documentName, documentPath)
+  const labels = documentLabels(documentId, documentName)
 
   const model: DocumentPageModel = {
     scopeKey: documentId,
-    documentKey: documentId ?? 'no-canvas',
     documentKind,
-    srTitle: renderState.snapshot.name,
+    srTitle: editing.snapshot.name,
     sync,
     markdown: {
       body: markdownDoc.body,
@@ -782,21 +652,10 @@ function useBrowserDocument(
     },
     title: { value: title, onChange: onTitleChange },
     properties: {
-      ready:
-        documentKind !== 'markdown' ||
-        (markdownDoc.body !== null && markdownDoc.coreFacets !== null),
-      ...(documentKind === 'markdown' && markdownDoc.coreFacets !== null
-        ? { facets: markdownDoc.coreFacets, onFacetsChange: markdownDoc.setCoreFacets }
-        : {}),
+      ...documentPropertiesSlot(documentKind, markdownDoc),
       status: persistenceFact,
     },
-    threads: {
-      annotations,
-      proposals,
-      threadMarks,
-      write: threadWrite,
-      railCanvas: documentKind === 'spatial' ? canvas : null,
-    },
+    threads: { ...conversation, proposals, write: threadWrite },
     files: {
       adapter: BROWSER_FILE_ADAPTER,
       stampOf,
@@ -806,37 +665,14 @@ function useBrowserDocument(
       pickerTargets,
     },
     openDocument: navigateToDocument,
-    overlayTitle: documentName ?? 'Untitled',
-    exportFilenameBase: documentName ?? 'canvas',
+    ...labels,
     commands: {
       provider: { kind: 'browser' },
-      canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
+      canvas: labels.commandCanvas,
       registryKey: documentId,
     },
-    versions: {
-      enabled: versionsEnabled,
-      workspaceId,
-      path: loadedPath,
-      save: async (label) => {
-        if (versionsBackend === null) {
-          throw new Error('saveVersionFromPanel: no versions backend')
-        }
-        try {
-          const saved = await versionsBackend.save(workspaceId, loadedPath, { label })
-          return { workspaceId, path: loadedPath, versionId: saved.id }
-        } catch (err) {
-          log.warn('save version from the History panel failed', err)
-          throw err
-        }
-      },
-      // The top bar addresses this document as `local`/path (its
-      // `dataMode="local"` placeholder), so the dot listens under that id.
-      announceRefresh: () =>
-        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
-          workspaceId: 'local',
-          path: loadedPath,
-        }),
-    },
+    versions: browserVersionsSlot({ backend: versionsBackend, workspaceId, path: loadedPath }),
+    ...browserConnectionsSlot(connections, navigateToDocument, linkify),
     topBar: {
       // Local mode names documents through its own store, not through the
       // daemon's `/names`, so the identity the bar offers is unused here and

@@ -399,7 +399,7 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#p
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, history node, scene node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
 pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 pnpm coverage       # every non-browser project with v8 coverage -> tmp/coverage/lcov.info

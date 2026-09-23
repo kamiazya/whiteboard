@@ -110,6 +110,129 @@ function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
   return loaded.config.port
 }
 
+/**
+ * The browser origins this daemon admits, or an abort.
+ *
+ * The DEFAULT hosted-origin admission (env var unset) pairs with the auth
+ * guard: with no token, missing-token auth strategies treat every request as
+ * authenticated, so admitting a hosted origin would expose the daemon
+ * unauthenticated. An operator-SET allowlist refuses to start in that state;
+ * the built-in default must not brick the tokenless local-dev path, so it
+ * drops to loopback-only instead.
+ */
+function checkedWebOrigins(
+  token: string | undefined,
+  log: ReturnType<typeof getLogger>,
+): readonly string[] {
+  // An invalid WHITEBOARD_ALLOWED_WEB_ORIGINS must abort rather than silently
+  // fall back to an empty (loopback-only) allowlist. The failure record is
+  // logged by loadAllowedWebOriginsFromEnv itself, with no raw value echoed.
+  let allowedWebOrigins = loadAllowedWebOriginsFromEnv(process.env)
+  if (allowedWebOrigins === null) process.exit(1)
+
+  // The DEFAULT hosted-origin admission (env var unset) pairs with the auth
+  // guard below: with no token, missing-token auth strategies treat every
+  // request as authenticated, so admitting a hosted origin would expose the
+  // daemon unauthenticated. An operator-SET allowlist refuses to start in
+  // that state; the built-in default must not brick the tokenless local-dev
+  // path, so it drops to loopback-only instead.
+  if (!token && allowedWebOrigins === DEFAULT_ALLOWED_WEB_ORIGINS) {
+    log.notice('no auth token provided; default hosted-origin admission disabled (loopback-only)')
+    allowedWebOrigins = []
+  }
+
+  // A hosted origin in the allowlist widens which browser origins may reach
+  // /api CORS, /mcp and the WS upgrade. Without a Bearer token that would let
+  // an allowlisted hosted page mutate the daemon with no auth barrier at all
+  // — so this refuses to start rather than silently downgrade the
+  // allowlist's promise that it "does not change authentication".
+  if (allowedWebOrigins.length > 0 && !token) {
+    log.error(
+      { allowedOriginCount: allowedWebOrigins.length },
+      'WHITEBOARD_ALLOWED_WEB_ORIGINS is set but no auth token was provided (--token or WHITEBOARD_TOKEN); refusing to start',
+    )
+    process.exit(1)
+  }
+
+  return allowedWebOrigins
+}
+
+/**
+ * Every fail-fast configuration check this entrypoint makes, before any
+ * tracing / store / server wiring exists to be half-built.
+ *
+ * The posture is uniform and deliberate: a setting the process cannot honour
+ * aborts rather than starting on a default. `1h` on a grace window silently
+ * meant one millisecond, and a misspelled log level silently meant `warning`
+ * for someone who asked for `debug` to investigate an incident. Every bad
+ * variable is named at once, so one restart is enough to fix them all.
+ */
+function checkedStartupConfig(token: string | undefined): {
+  allowedWebOrigins: readonly string[]
+  oauthRegistry: Extract<ReturnType<typeof parseOAuthClientRegistryEnv>, { ok: true }>
+} {
+  const log = getLogger('server-index')
+
+  const allowedWebOrigins = checkedWebOrigins(token, log)
+
+  // A malformed registry must abort rather than leave the authorization-server
+  // surface silently unmounted, which would look identical to "the operator
+  // never configured it".
+  const oauthRegistry = parseOAuthClientRegistryEnv(process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY)
+  if (!oauthRegistry.ok) {
+    log.error(
+      { reason: oauthRegistry.error },
+      'WHITEBOARD_OAUTH_CLIENT_REGISTRY could not be parsed; refusing to start',
+    )
+    process.exit(1)
+  }
+
+  const startupIssues = collectStartupEnvIssues(getDataDir(), process.env)
+  if (startupIssues.length > 0) {
+    log.error(
+      { issues: describeEnvIssues(startupIssues) },
+      'configured settings could not be understood; refusing to start',
+    )
+    process.exit(1)
+  }
+
+  return { allowedWebOrigins, oauthRegistry }
+}
+
+/**
+ * Warm the headless renderer in the background so the first export does not
+ * pay the font-parse + resvg-import startup cost. Best-effort by design.
+ *
+ * The dynamic import is inside the try, not just the call: a module
+ * resolution or load failure would reject before the daemon binds, and an
+ * unguarded `await import(...)` would take the whole process down — the
+ * opposite of best-effort, for a warm-up the daemon does not need in order
+ * to serve.
+ *
+ * Only the failure CLASS is logged: an ERR_MODULE_NOT_FOUND message carries
+ * absolute paths, and the distribution smoke asserts the daemon never leaks
+ * one to stderr.
+ */
+async function prewarmExporter(): Promise<void> {
+  try {
+    const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
+    // prewarmHeadlessExporter resolves on failure by contract — it logs its
+    // own sanitized warning — so this catch is a net for a future contract
+    // change, not the handler for a build error.
+    prewarmHeadlessExporter().catch((err) => {
+      getLogger('server-index').warning(
+        { reason: err instanceof Error ? err.name : 'unknown' },
+        'headless exporter pre-warm rejected unexpectedly',
+      )
+    })
+  } catch (err) {
+    getLogger('server-index').warning(
+      { reason: err instanceof Error ? err.name : 'unknown' },
+      'headless exporter module failed to load; export will initialize on first use',
+    )
+  }
+}
+
 export async function main() {
   const configFilePort = applyLoadedConfigFileForServerEntrypoint()
 
@@ -121,71 +244,7 @@ export async function main() {
     10,
   )
 
-  // Fail fast, before any tracing/store/server wiring: an invalid
-  // WHITEBOARD_ALLOWED_WEB_ORIGINS must abort startup rather than silently
-  // fall back to an empty (loopback-only) allowlist. The failure record is
-  // logged by loadAllowedWebOriginsFromEnv itself (no raw value echoed).
-  let allowedWebOrigins = loadAllowedWebOriginsFromEnv(process.env)
-  if (allowedWebOrigins === null) {
-    process.exit(1)
-  }
-
-  // The DEFAULT hosted-origin admission (env var unset) pairs with the auth
-  // guard below: with no token, missing-token auth strategies treat every
-  // request as authenticated, so admitting a hosted origin would expose the
-  // daemon unauthenticated. An operator-set allowlist refuses to start in
-  // that state (guard below), but the built-in default must not brick the
-  // tokenless local-dev path — drop it to loopback-only instead.
-  if (!token && allowedWebOrigins === DEFAULT_ALLOWED_WEB_ORIGINS) {
-    const log = getLogger('server-index')
-    log.notice('no auth token provided; default hosted-origin admission disabled (loopback-only)')
-    allowedWebOrigins = []
-  }
-
-  // Same fail-fast posture: a malformed registry must abort startup rather
-  // than leave the authorization-server surface silently unmounted, which
-  // would look identical to "the operator never configured it".
-  const oauthRegistry = parseOAuthClientRegistryEnv(process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY)
-  if (!oauthRegistry.ok) {
-    const log = getLogger('server-index')
-    log.error(
-      { reason: oauthRegistry.error },
-      'WHITEBOARD_OAUTH_CLIENT_REGISTRY could not be parsed; refusing to start',
-    )
-    process.exit(1)
-  }
-
-  // The same posture, for every remaining setting an operator can configure.
-  // One the process cannot honour must abort rather than start on a default:
-  // `1h` on a grace window silently meant one millisecond, and a misspelled
-  // log level silently meant `warning` for someone who asked for `debug` to
-  // investigate an incident. Every bad variable is named at once, so one
-  // restart is enough to fix them all.
-  const startupIssues = collectStartupEnvIssues(getDataDir(), process.env)
-  if (startupIssues.length > 0) {
-    const log = getLogger('server-index')
-    log.error(
-      { issues: describeEnvIssues(startupIssues) },
-      'configured settings could not be understood; refusing to start',
-    )
-    process.exit(1)
-  }
-
-  // A hosted origin in the allowlist widens which browser origins may reach
-  // /api CORS, /mcp, and WS upgrade. Without a Bearer token, missing-token
-  // auth strategies treat every request as authenticated (local-dev
-  // convenience), so pairing that fallback with a hosted origin would let an
-  // allowlisted hosted page mutate the daemon with no auth barrier at all.
-  // Refuse to start rather than silently downgrade the allowlist's promise
-  // that it "does not change authentication".
-  if (allowedWebOrigins.length > 0 && !token) {
-    const log = getLogger('server-index')
-    log.error(
-      { allowedOriginCount: allowedWebOrigins.length },
-      'WHITEBOARD_ALLOWED_WEB_ORIGINS is set but no auth token was provided (--token or WHITEBOARD_TOKEN); refusing to start',
-    )
-    process.exit(1)
-  }
+  const { allowedWebOrigins, oauthRegistry } = checkedStartupConfig(token)
 
   const daemonMode = hasFlag('daemon')
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
@@ -215,36 +274,7 @@ export async function main() {
     'resolved data dir',
   )
 
-  // Best-effort: warm the headless renderer in the background so the first
-  // export_canvas call does not pay the font-parse + resvg-import startup
-  // cost.
-  //
-  // The dynamic import is inside the guard, not just the call. A module
-  // resolution or load failure here rejects before the daemon binds, and an
-  // unguarded `await import(...)` would take the whole process down — the
-  // opposite of best-effort, and for a warm-up the daemon does not need in
-  // order to serve. Only the failure class is logged: an ERR_MODULE_NOT_FOUND
-  // message carries absolute paths, and the distribution smoke asserts the
-  // daemon never leaks one to stderr.
-  if (daemonMode) {
-    try {
-      const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
-      // prewarmHeadlessExporter resolves on failure by contract — it logs its
-      // own sanitized warning — so this catch is a net for a future contract
-      // change, not the handler for a build error.
-      prewarmHeadlessExporter().catch((err) => {
-        getLogger('server-index').warning(
-          { reason: err instanceof Error ? err.name : 'unknown' },
-          'headless exporter pre-warm rejected unexpectedly',
-        )
-      })
-    } catch (err) {
-      getLogger('server-index').warning(
-        { reason: err instanceof Error ? err.name : 'unknown' },
-        'headless exporter module failed to load; export will initialize on first use',
-      )
-    }
-  }
+  if (daemonMode) await prewarmExporter()
 
   // Read once here, after the startup-issue gate above already validated it
   // — never re-read process.env inside a route.

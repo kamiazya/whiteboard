@@ -38,6 +38,7 @@
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
+    "@kamiazya/whiteboard-reference-graph": "workspace:*",
     "@kamiazya/whiteboard-search": "workspace:*",
     "hono": "^4.12.34",
     "loro-crdt": "catalog:",

@@ -8,6 +8,7 @@
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
+import type { DocumentStore } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -20,6 +21,21 @@ import { LoroStore } from './loro-store.js'
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
 claimIsolatedWhiteboardDb('loro-store')
+
+/** The real store, with its delta read failing the way a blocked one does. */
+function blockedDeltaStore(): DocumentStore {
+  const real = new IdbDocumentStore()
+  return {
+    loadSnapshot: (input) => real.loadSnapshot(input),
+    readSnapshotManifest: (input) => real.readSnapshotManifest(input),
+    saveSnapshot: (input) => real.saveSnapshot(input),
+    saveCompactedSnapshot: (input) => real.saveCompactedSnapshot(input),
+    appendDeltas: (input) => real.appendDeltas(input),
+    loadDeltas: () => Promise.reject(new Error('the delta read was blocked')),
+    readFrontier: (input) => real.readFrontier(input),
+    deleteDoc: (input) => real.deleteDoc(input),
+  }
+}
 
 function makeSnapshot(elements: unknown[]): Uint8Array {
   const doc = new Loro()
@@ -166,6 +182,20 @@ describe('LoroStore (real IndexedDB)', () => {
     const store = new LoroStore()
     const result = await store.load('bad-delta-canvas')
     expect(result.kind).toBe('corrupt-delta')
+  })
+
+  it('a delta read that FAILED is read-unavailable, not a verdict that the history is corrupt', async () => {
+    // `corrupt-delta` is one of the kinds the page answers with `Start
+    // fresh`, which DELETES the record. The snapshot read already tells an
+    // attributable failure from a blocked one; the delta read did not, so a
+    // transaction aborting under load offered to destroy intact work.
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'a' })
+    await seedSyncDocument('blocked-delta-canvas', { snapshot: doc.export({ mode: 'snapshot' }) })
+
+    const store = new LoroStore(undefined, blockedDeltaStore())
+    const result = await store.load('blocked-delta-canvas')
+    expect(result.kind).toBe('read-unavailable')
   })
 
   it('appendDelta before any save is a no-op (no snapshot yet)', async () => {

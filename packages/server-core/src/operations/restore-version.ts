@@ -256,24 +256,7 @@ async function restoreSubtree(
     for (const node of pastDocs) {
       const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
       if (pastDoc === null) continue
-      const liveRow = rowsById.get(node.meta.documentId)
-      if (liveRow !== undefined) {
-        if (liveRow.path !== node.path) {
-          await live.rename(workspaceId, liveRow.path, node.path)
-        }
-        const liveDoc = await live.get(workspaceId, node.path)
-        reconcileDocContent(liveDoc, pastDoc)
-        await live.save(workspaceId, node.path, liveDoc, {
-          overwrite: true,
-          kind: node.meta.kind,
-        })
-      } else {
-        // Deleted since the version: recreated under the SAME
-        // documentId's row lineage as far as the tree is concerned (the
-        // write-through places it by path + kind).
-        await live.save(workspaceId, node.path, pastDoc, { kind: node.meta.kind })
-        live.evict(workspaceId, node.path)
-      }
+      await restoreOneDocument(live, workspaceId, node, pastDoc, rowsById.get(node.meta.documentId))
       // Every document the rollback moved gains the point, not just the
       // one that was addressed: leaving the rest unrecorded would make
       // this the one mode whose history reads as a straight line through
@@ -284,6 +267,33 @@ async function restoreSubtree(
     await progress({ workspaceId, path, phase: 'complete' })
   }
   return { kind: 'restored-subtree', restoredCount: pastDocs.length }
+}
+
+/**
+ * Puts ONE past document back where the version had it: moved into place and
+ * reconciled when its row survived, recreated when it did not.
+ */
+async function restoreOneDocument(
+  live: LiveDocuments,
+  workspaceId: string,
+  node: { readonly path: string; readonly meta: { readonly kind?: DocumentKind } },
+  pastDoc: LoroDoc,
+  liveRow: { readonly path: string } | undefined,
+): Promise<void> {
+  if (liveRow === undefined) {
+    // Deleted since the version: recreated under the SAME documentId's row
+    // lineage as far as the tree is concerned (the write-through places it
+    // by path + kind).
+    await live.save(workspaceId, node.path, pastDoc, { kind: node.meta.kind })
+    live.evict(workspaceId, node.path)
+    return
+  }
+  if (liveRow.path !== node.path) {
+    await live.rename(workspaceId, liveRow.path, node.path)
+  }
+  const liveDoc = await live.get(workspaceId, node.path)
+  reconcileDocContent(liveDoc, pastDoc)
+  await live.save(workspaceId, node.path, liveDoc, { overwrite: true, kind: node.meta.kind })
 }
 
 /**

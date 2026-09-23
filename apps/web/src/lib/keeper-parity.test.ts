@@ -82,6 +82,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",
   },
+  'src/components/storage-maintenance.ts': {
+    reach: 'both-keepers',
+    browser: 'src/lib/persistent-storage.ts',
+    note: "the card's sweep half, extracted from it — same answer, same browser counterpart",
+  },
   'src/components/StorageReportCard.tsx': {
     reach: 'both-keepers',
     browser: 'src/lib/persistent-storage.ts',
@@ -132,15 +137,19 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_PAGE,
     note: 'the per-keeper document pages; what they must offer alike is pinned by file-seam-conformance.test.ts and page-state-conformance.test.ts',
   },
+  'src/pages/daemon-document-slots.tsx': {
+    reach: 'both-keepers',
+    browser: 'src/pages/browser-document-slots.tsx',
+    note: "each keeper page's terminal screens and model slots, extracted so the page's own hook stays under the complexity budget; the browser half answers the same questions without a daemon",
+  },
   'src/pages/DaemonIndexPage.tsx': {
     reach: 'both-keepers',
     browser: 'src/pages/BrowserIndexPage.tsx',
   },
   'src/pages/daemon-index-actions.ts': {
-    reach: 'gap',
-    missing:
-      'the browser index row has no Duplicate: BrowserIndexPage never passes onDuplicateDocument to WorkspaceFilesPanel, which renders the action only when it is handed one. Delete is mirrored; duplicate is not',
-    followUp: 'issues/browser-index-row-cannot-duplicate',
+    reach: 'both-keepers',
+    browser: 'src/lib/duplicate-browser-document.ts',
+    note: "the row actions each index page performs on the panel's behalf. The browser's delete helpers are inline in BrowserIndexPage; its duplicate is one definition for both browser surfaces, since the row has only a path while the open page also owes a flush and a switch",
   },
   'src/pages/PairConsentPage.tsx': {
     reach: 'daemon-itself',
@@ -151,10 +160,9 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     why: 'the Connections screen is where a daemon is found, paired and promoted to — its subject is the connection, so a browser keeper has nothing to mirror',
   },
   'src/pages/use-daemon-connections.ts': {
-    reach: 'gap',
-    missing:
-      'the Connections chip has no browser half at all — BrowserDocumentPage matches neither `connections` nor `Backlink`, so a browser-kept document shows no backlinks and no unlinked mentions',
-    followUp: 'issues/browser-keeper-has-no-connections-panel',
+    reach: 'both-keepers',
+    browser: 'src/pages/use-browser-connections.ts',
+    note: 'both halves hand a read to one keeper-agnostic hook (`use-connections.ts`) and answer from the same reference graph. Link runs the same `linkifyMentionsIn` on both; only where the source is saved differs',
   },
   'src/pages/use-daemon-document-controller.ts': {
     reach: 'both-keepers',

@@ -25,6 +25,7 @@ import {
   placeCommentBubble,
 } from './comment-placement.js'
 import type { RegionChrome, ResolvedLayoutOptions } from './layout-options.js'
+import type { SpatialCommentAppearance } from './nodes/spatial-appearance.js'
 import { contentExtent } from './scene-extent.js'
 import { translateScene } from './translate-scene.js'
 
@@ -156,29 +157,29 @@ export function composeRegionOutlines(options: ResolvedLayoutOptions): readonly 
  * would carry it away from them. Document order decides who yields:
  * a later comment fans out around an earlier one.
  */
-export function composeComments(
+/**
+ * What a bubble must not cover. Nodes and whatever the caller adds, plus
+ * EVERY pin up front — not each one as its comment is drawn. A pin is what
+ * its comment is about, so a bubble covering one hides exactly what a reader
+ * followed the leader to find. Seeding them all is what makes that true for
+ * a comment drawn BEFORE the pin it would have covered; pushing each pin as
+ * it is emitted only protects the ones after it.
+ *
+ * This did not matter while the placer had four candidates a fixed 14px from
+ * the anchor, which clear their own pin and reach no other. It matters now:
+ * measured on the crowded forty-comment board, the ring put 3948 square
+ * pixels of bubble over other comments' pins.
+ *
+ * Group frames are not obstacles — a comment inside a group is about its
+ * members, and pushing the bubble out of the frame would carry it away.
+ */
+function bubbleObstacles(
   canvas: SpatialCanvas,
   options: ResolvedLayoutOptions,
-  edgePathOf: EdgePathLookup,
-  bodyLayout: BodyLayoutSeam,
-): readonly SceneNode[] {
-  const comments = options.comments ?? canvas.comments
-  if (comments === undefined || comments.length === 0) return []
-
-  const chrome = options.appearance.resolveComment?.()
-  const visible = comments.filter(
-    (comment) => comment.resolved !== true || options.showResolved === true,
-  )
-  const anchorOf = (comment: (typeof visible)[number]): { x: number; y: number } => {
-    // A node set's pin stands at the corner of the box its LIVE nodes
-    // occupy, read from the thread: the flat projection's point is where
-    // that box was when it was last projected, and the nodes move.
-    const region = options.regionsByThread.get(comment.id)
-    return region !== undefined
-      ? { x: region.rect.x + region.rect.width, y: region.rect.y }
-      : commentAnchor(comment, canvas, edgePathOf)
-  }
-  const obstacles: BoundingBox[] = [
+  visible: readonly CanvasComment[],
+  anchorOf: (comment: CanvasComment) => { x: number; y: number },
+): BoundingBox[] {
+  return [
     ...canvas.nodes
       .filter((node) => !isFrame(node))
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
@@ -203,6 +204,71 @@ export function composeComments(
       }
     }),
   ]
+}
+
+/**
+ * The digit on a pin, past one message only — the same rule the rail's row,
+ * the source pane's gutter and the preview marker follow: a digit beside
+ * every lone remark is noise, and the number only says something once there
+ * is more than one. `undefined` is "no digit", not "no appearance".
+ */
+function pinCountRun(
+  comment: CanvasComment,
+  anchor: { x: number; y: number },
+  options: ResolvedLayoutOptions,
+  chrome: SpatialCommentAppearance | undefined,
+): SceneNode | undefined {
+  const count = options.messagesByThread.get(comment.id) ?? 1
+  if (count <= 1) return undefined
+  const countAppearance =
+    comment.resolved === true ? chrome?.resolvedOverlay?.pinCount : chrome?.pinCount
+  const text = String(count)
+  // Family from the resolver and size from geometry, the same split the
+  // edge label makes: this package assigns paint, never invents it, and
+  // a size is geometry rather than paint.
+  const metrics = options.measure(text, {
+    family: countAppearance?.fontFamily ?? 'sans-serif',
+    fallbackChain: [],
+    weight: 400,
+    style: 'normal',
+    sizePx: COMMENT_PIN_COUNT_FONT_PX,
+  })
+  const w = metrics.advanceWidth
+  const h = metrics.ascent + metrics.descent
+  return {
+    kind: 'textRun',
+    bbox: { x: anchor.x - w / 2, y: anchor.y - h / 2, w, h },
+    baseline: metrics.ascent,
+    text,
+    ...(countAppearance === undefined
+      ? {}
+      : { appearance: { ...countAppearance, fontSize: COMMENT_PIN_COUNT_FONT_PX } }),
+  }
+}
+
+export function composeComments(
+  canvas: SpatialCanvas,
+  options: ResolvedLayoutOptions,
+  edgePathOf: EdgePathLookup,
+  bodyLayout: BodyLayoutSeam,
+): readonly SceneNode[] {
+  const comments = options.comments ?? canvas.comments
+  if (comments === undefined || comments.length === 0) return []
+
+  const chrome = options.appearance.resolveComment?.()
+  const visible = comments.filter(
+    (comment) => comment.resolved !== true || options.showResolved === true,
+  )
+  const anchorOf = (comment: (typeof visible)[number]): { x: number; y: number } => {
+    // A node set's pin stands at the corner of the box its LIVE nodes
+    // occupy, read from the thread: the flat projection's point is where
+    // that box was when it was last projected, and the nodes move.
+    const region = options.regionsByThread.get(comment.id)
+    return region !== undefined
+      ? { x: region.rect.x + region.rect.width, y: region.rect.y }
+      : commentAnchor(comment, canvas, edgePathOf)
+  }
+  const obstacles = bubbleObstacles(canvas, options, visible, anchorOf)
   const out: SceneNode[] = []
   for (const comment of visible) {
     // Assigned, never invented: a resolved comment's muting comes only from
@@ -265,37 +331,8 @@ export function composeComments(
       ...(appearance !== undefined ? { appearance: appearance.pin } : {}),
     })
 
-    const count = options.messagesByThread.get(comment.id) ?? 1
-    if (count > 1) {
-      // Past one only, the same rule the rail's row, the source pane's
-      // gutter and the preview marker follow: a digit beside every lone
-      // remark is noise, and the number only says something once there is
-      // more than one.
-      const countAppearance =
-        comment.resolved === true ? chrome?.resolvedOverlay?.pinCount : chrome?.pinCount
-      const text = String(count)
-      // Family from the resolver and size from geometry, the same split the
-      // edge label makes: this package assigns paint, never invents it, and
-      // a size is geometry rather than paint.
-      const metrics = options.measure(text, {
-        family: countAppearance?.fontFamily ?? 'sans-serif',
-        fallbackChain: [],
-        weight: 400,
-        style: 'normal',
-        sizePx: COMMENT_PIN_COUNT_FONT_PX,
-      })
-      const w = metrics.advanceWidth
-      const h = metrics.ascent + metrics.descent
-      out.push({
-        kind: 'textRun',
-        bbox: { x: anchor.x - w / 2, y: anchor.y - h / 2, w, h },
-        baseline: metrics.ascent,
-        text,
-        ...(countAppearance === undefined
-          ? {}
-          : { appearance: { ...countAppearance, fontSize: COMMENT_PIN_COUNT_FONT_PX } }),
-      })
-    }
+    const countRun = pinCountRun(comment, anchor, options, chrome)
+    if (countRun !== undefined) out.push(countRun)
 
     out.push({
       kind: 'shape',

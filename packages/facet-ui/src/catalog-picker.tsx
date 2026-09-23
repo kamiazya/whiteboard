@@ -188,6 +188,59 @@ export interface CatalogPickerProps {
   readonly status?: 'loading' | 'failed'
 }
 
+/** The line under the results: what matched, or what typing it would write. */
+function resultCaption(
+  found: readonly FacetPickerOption[],
+  shownCount: number,
+  typed: FacetPickerOption | undefined,
+  query: string,
+): string {
+  if (found.length === 0) {
+    // Not "1 match": what is on screen is the thing typed, and calling it a
+    // match claims the catalog holds it.
+    return typed === undefined
+      ? `No match for \u201c${query}\u201d`
+      : `Not in the list — use \u201c${query}\u201d`
+  }
+  if (found.length > shownCount) return `${shownCount} of ${found.length} matches`
+  return `${found.length} ${found.length === 1 ? 'match' : 'matches'}`
+}
+
+/** One band of pickable options — the same row wherever this picker draws one. */
+function PickerCells({
+  options,
+  name,
+  layout,
+  selectedKey,
+  registry,
+  onPick,
+  keyOf = (option) => facetPayloadKey(option.payload),
+}: {
+  readonly options: readonly FacetPickerOption[]
+  readonly name: string
+  readonly layout: 'chips' | 'cards' | 'grid'
+  readonly selectedKey?: string
+  readonly registry?: FacetRegistry
+  readonly onPick: (option: FacetPickerOption) => void
+  readonly keyOf?: (option: FacetPickerOption) => string
+}) {
+  return (
+    <>
+      {options.map((option) => (
+        <FacetOption
+          key={keyOf(option)}
+          name={name}
+          layout={layout}
+          label={option.label}
+          selected={facetPayloadKey(option.payload) === selectedKey}
+          onSelect={() => onPick(option)}
+          {...glyphProp(option, registry)}
+        />
+      ))}
+    </>
+  )
+}
+
 export function CatalogPicker({
   name,
   title,
@@ -283,17 +336,15 @@ export function CatalogPicker({
     <div style={STACK}>
       {listed !== undefined && listed.length > 0 && (
         <FacetOptionGroup label={title} layout={listedLayout}>
-          {listed.map((option) => (
-            <FacetOption
-              key={option.label}
-              name={name}
-              layout={listedLayout}
-              label={option.label}
-              selected={facetPayloadKey(option.payload) === selectedKey}
-              onSelect={() => pick(option)}
-              {...glyphProp(option, registry)}
-            />
-          ))}
+          <PickerCells
+            options={listed}
+            name={name}
+            layout={listedLayout}
+            selectedKey={selectedKey}
+            registry={registry}
+            onPick={pick}
+            keyOf={(option) => option.label}
+          />
         </FacetOptionGroup>
       )}
 
@@ -325,17 +376,14 @@ export function CatalogPicker({
               a picture cannot say about a picture. */}
           <span style={CAPTION}>Recent</span>
           <FacetOptionGroup label={`${title} recently used`} layout="grid">
-            {recent.map((option) => (
-              <FacetOption
-                key={facetPayloadKey(option.payload)}
-                name={name}
-                layout="grid"
-                label={option.label}
-                selected={facetPayloadKey(option.payload) === selectedKey}
-                onSelect={() => pick(option)}
-                {...glyphProp(option, registry)}
-              />
-            ))}
+            <PickerCells
+              options={recent}
+              name={name}
+              layout="grid"
+              selectedKey={selectedKey}
+              registry={registry}
+              onPick={pick}
+            />
           </FacetOptionGroup>
         </>
       )}
@@ -385,32 +433,22 @@ export function CatalogPicker({
             }
             layout="grid"
           >
-            {cells.map((option) => (
-              <FacetOption
-                key={`${option.label}-${facetPayloadKey(option.payload)}`}
-                name={name}
-                layout="grid"
-                label={option.label}
-                selected={facetPayloadKey(option.payload) === selectedKey}
-                onSelect={() => pick(option)}
-                {...glyphProp(option, registry)}
-              />
-            ))}
+            <PickerCells
+              options={cells}
+              name={name}
+              layout="grid"
+              selectedKey={selectedKey}
+              registry={registry}
+              onPick={pick}
+              keyOf={(option) => `${option.label}-${facetPayloadKey(option.payload)}`}
+            />
           </FacetOptionGroup>
         </div>
       )}
 
       {found !== undefined && (
         <span role="status" style={CAPTION}>
-          {found.length === 0
-            ? typedValue === undefined
-              ? `No match for “${query.trim()}”`
-              : // Not "1 match": what is on screen is the thing typed, and
-                // calling it a match claims the catalog holds it.
-                `Not in the list — use “${query.trim()}”`
-            : found.length > capped.length
-              ? `${capped.length} of ${found.length} matches`
-              : `${found.length} ${found.length === 1 ? 'match' : 'matches'}`}
+          {resultCaption(found, capped.length, typedValue, query.trim())}
         </span>
       )}
     </div>

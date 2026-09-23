@@ -473,6 +473,18 @@ function finerSegments(segment: string): readonly string[] {
  * and nothing else. A non-finite wrap width (wrapping disabled) is passed
  * through unchanged rather than turned into a number.
  */
+/**
+ * Replace `segments[index]` with a finer breakdown of it — phrase -> UAX #14
+ * segments -> code points — answering false when there is no finer level,
+ * which makes the segment irreducible.
+ */
+function splitFiner(segments: string[], index: number, segment: string): boolean {
+  const finer = finerSegments(segment)
+  if (finer.length <= 1) return false
+  segments.splice(index, 1, ...finer)
+  return true
+}
+
 function blockWidth(maxWidth: number, inkWidth: number): number {
   return Number.isFinite(maxWidth) ? Math.max(maxWidth, inkWidth) : maxWidth
 }
@@ -584,6 +596,20 @@ function layoutPhrasing(
     // instead: width is monotone in prefix length, so that is O(log segments)
     // measures per line with no loss of exactness.
     let buffered = ''
+    /**
+     * True once the preceding stretch has been MOVED down to the next line
+     * with this segment. That only happens when nothing of this node has
+     * landed yet and the segment may not open a line: the stretch it is
+     * joined to comes down with it, rather than the pair being split across
+     * the break. `relocateCluster` performs the move, so the order of the
+     * conjuncts is what stops it running when the situation does not call
+     * for it.
+     */
+    const clusterCameDown = (segment: string): boolean =>
+      buffered === '' &&
+      line.x > 0 &&
+      !junction.breakableBefore(headCharacter(segment, extra.paints)) &&
+      junction.relocateCluster()
     const flush = () => {
       // Trailing whitespace is a cursor advance, never glyphs: XML strips a
       // run's boundary whitespace, so a run carrying it would paint a
@@ -598,47 +624,103 @@ function layoutPhrasing(
       if (painted !== '') pushRun(painted, extra, runStyle)
       buffered = ''
     }
-    for (let index = 0; index < segments.length; index++) {
+    /**
+     * Place one segment, answering whether the SAME index must be visited
+     * again — either because the line under it moved, or because the
+     * segment itself was replaced by finer pieces.
+     */
+    const placeSegment = (index: number): 'placed' | 'retry' => {
       const segment = segments[index] ?? ''
       const candidate = buffered + segment
       if (line.x + widthOf(candidate.trimEnd()) <= options.maxWidth) {
         buffered = candidate
-        continue
+        return 'placed'
       }
-      // Nothing of this node has landed yet and it may not open a line: the
-      // stretch it is joined to comes down with it, rather than the pair
-      // being split across the break. Retried on the new line, where it
-      // either fits or falls through to the ordinary break below.
-      if (
-        buffered === '' &&
-        line.x > 0 &&
-        !junction.breakableBefore(headCharacter(segment, extra.paints)) &&
-        junction.relocateCluster()
-      ) {
-        index -= 1
-        continue
-      }
+      // Retried on the new line, where it either fits or falls through to
+      // the ordinary break below.
+      if (clusterCameDown(segment)) return 'retry'
       if (buffered !== '' || line.x > 0) {
         flush()
         junction.startLine()
         // A boundary space at the start of a line is dropped, not advanced.
         segments[index] = segment.trimStart()
-        index -= 1
-        continue
+        return 'retry'
       }
       // Alone at the start of a line and still too wide: step down one level
-      // of granularity (phrase -> UAX #14 segments -> code points). A single
-      // code point wider than maxWidth is irreducible and is left to overflow
-      // rather than dropped.
-      const finer = finerSegments(segment)
-      if (finer.length <= 1) {
-        buffered = candidate
-        continue
-      }
-      segments.splice(index, 1, ...finer)
-      index -= 1
+      // of granularity. What cannot be stepped down is irreducible and is
+      // left to overflow rather than dropped.
+      if (splitFiner(segments, index, segment)) return 'retry'
+      buffered = candidate
+      return 'placed'
+    }
+
+    for (let index = 0; index < segments.length; index++) {
+      if (placeSegment(index) === 'retry') index -= 1
     }
     flush()
+  }
+
+  /**
+   * An atomic run is never SPLIT — an interior space in a code span or an
+   * HTML tag is not a word boundary — so cutting it is the only way left to
+   * keep it inside the box, and the run says so.
+   *
+   * Inline MATH is atomic AND uncuttable, which is why `truncatable` is a
+   * separate answer: `a + b + c` cut to `a + b` reads as a complete formula
+   * that is simply wrong, where cut code or cut markup reads as cut.
+   * Overflowing is the lesser harm.
+   */
+  const emitAtomic = (
+    text: string,
+    extra: Partial<TextRunNode>,
+    runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+    cuttable: boolean,
+    font?: { family: string; sizePx: number },
+  ) => {
+    const atomicFont = font ?? { family: options.fontFamily, sizePx: fontSizePx }
+    // A backdrop's padding is part of what the run occupies, so it comes
+    // out of the fit budget too — otherwise the pill is cut to the wrap
+    // width and its padding paints past it.
+    const padX = isFinitePositive(extra.backdropPadXPx) ? extra.backdropPadXPx : 0
+    const fitted = cuttable
+      ? fitToWidth(
+          text,
+          bodyFont(atomicFont.family, atomicFont.sizePx, runStyle),
+          options.measure,
+          options.maxWidth - line.x - 2 * padX,
+        )
+      : { text }
+    pushRun(
+      fitted.text,
+      {
+        ...extra,
+        ...(fitted.truncated ? { truncated: true } : {}),
+        ...(fitted.overflows ? { overflows: true } : {}),
+      },
+      runStyle,
+      atomicFont,
+    )
+  }
+
+  /**
+   * Place one already-collapsed stretch, whole if it fits on the current
+   * line and through the wrapper if it does not.
+   */
+  const placeCollapsed = (
+    collapsed: string,
+    extra: Partial<TextRunNode>,
+    runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+    canWrap: boolean,
+  ) => {
+    const fullWidth = measureRunWidth(
+      options.measure,
+      options.fontFamily,
+      collapsed,
+      fontSizePx,
+      runStyle,
+    )
+    if (canWrap && line.x + fullWidth > options.maxWidth) wrapAndPush(collapsed, extra, runStyle)
+    else pushRun(collapsed, extra, runStyle)
   }
 
   const emit = (
@@ -661,33 +743,7 @@ function layoutPhrasing(
     const joinedToPrevious = !junction.breakableBefore(headCharacter(text, extra.paints))
     if (!wrappable) {
       if (!joinedToPrevious) junction.allowBreakHere()
-      // Atomic: never SPLIT, because an interior space in a code span or an
-      // HTML tag is not a word boundary. Cutting it is the only way left to
-      // keep it inside the box, and the run says so.
-      const atomicFont = font ?? { family: options.fontFamily, sizePx: fontSizePx }
-      // A backdrop's padding is part of what the run occupies, so it comes
-      // out of the fit budget too — otherwise the pill is cut to the wrap
-      // width and its padding paints past it.
-      const padX = isFinitePositive(extra.backdropPadXPx) ? extra.backdropPadXPx : 0
-      const fitted =
-        canWrap && truncatable
-          ? fitToWidth(
-              text,
-              bodyFont(atomicFont.family, atomicFont.sizePx, runStyle),
-              options.measure,
-              options.maxWidth - line.x - 2 * padX,
-            )
-          : { text }
-      pushRun(
-        fitted.text,
-        {
-          ...extra,
-          ...(fitted.truncated ? { truncated: true } : {}),
-          ...(fitted.overflows ? { overflows: true } : {}),
-        },
-        runStyle,
-        atomicFont,
-      )
+      emitAtomic(text, extra, runStyle, canWrap && truncatable, font)
       return
     }
     // XML — and therefore an SVG <text> element — strips leading/trailing
@@ -711,20 +767,7 @@ function layoutPhrasing(
       line.x += spaceWidth
     }
     if (!joinedToPrevious) junction.allowBreakHere()
-    if (collapsed !== '') {
-      const fullWidth = measureRunWidth(
-        options.measure,
-        options.fontFamily,
-        collapsed,
-        fontSizePx,
-        runStyle,
-      )
-      if (canWrap && line.x + fullWidth > options.maxWidth) {
-        wrapAndPush(collapsed, extra, runStyle)
-      } else {
-        pushRun(collapsed, extra, runStyle)
-      }
-    }
+    if (collapsed !== '') placeCollapsed(collapsed, extra, runStyle, canWrap)
     if (/\s$/.test(text)) {
       line.x += spaceWidth
       junction.allowBreakHere()
@@ -775,6 +818,82 @@ function layoutPhrasing(
       return
     }
     if (at < value.length) emit(expandEmojiShortcodes(value.slice(at)), {}, currentStyle)
+  }
+
+  /**
+   * An image stays a RUN, with `text` as the alt — see `paints` on
+   * TextRunNode.
+   *
+   * An alt-LESS one takes a placeholder ATOMICALLY: the wrappable path
+   * collapses `text.trim()`, which erases a whitespace placeholder and the
+   * run with it (measured). One WITH an alt stays wrappable, because an alt
+   * is prose.
+   *
+   * Where the picture actually loads from is the CALLER's, the same way a
+   * file node's is — a written path may be a workspace attachment. An
+   * unresolved one keeps what the markdown said, so an absolute URL still
+   * works.
+   */
+  const emitImage = (
+    child: { alt?: string | null; url: string },
+    currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+  ) => {
+    const alt =
+      child.alt === undefined || child.alt === null || child.alt === '' ? undefined : child.alt
+    const src =
+      referenceFor(child.url, options.references?.resolveReference)?.image?.href ?? child.url
+    emit(
+      alt ?? IMAGE_PLACEHOLDER,
+      { paints: { kind: 'image', src } },
+      currentStyle,
+      alt !== undefined,
+    )
+  }
+
+  /** A wiki link's label is the alias when written, else the resolved title. */
+  const emitWikiLink = (
+    child: { documentId: string; alias?: string | undefined; fragment?: string | undefined },
+    currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+  ) => {
+    const label =
+      child.alias ??
+      referenceLabel(tryResolveTitle(options, child.documentId) ?? child.documentId, child.fragment)
+    emit(
+      label,
+      {
+        link: {
+          kind: 'wikiLink',
+          documentId: child.documentId,
+          ...(child.alias ? { alias: child.alias } : {}),
+          ...(child.fragment ? { fragment: child.fragment } : {}),
+        },
+      },
+      currentStyle,
+    )
+  }
+
+  /**
+   * Inline — mixed into prose — an embed stays a link run; the resolved
+   * title is a better label than the raw id when known.
+   */
+  const emitEmbed = (
+    child: { documentId: string; fragment?: string | undefined },
+    currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+  ) => {
+    emit(
+      referenceLabel(
+        tryResolveEmbed(options, child.documentId)?.title ?? child.documentId,
+        child.fragment,
+      ),
+      {
+        link: {
+          kind: 'embed',
+          documentId: child.documentId,
+          ...(child.fragment ? { fragment: child.fragment } : {}),
+        },
+      },
+      currentStyle,
+    )
   }
 
   const walk = (
@@ -828,35 +947,12 @@ function layoutPhrasing(
         }
         case 'linkReference': {
           const link: LinkProvenance = { kind: 'link', href: `#${child.identifier}` }
-          if (child.children.length === 0) {
-            emit(child.identifier, { link }, currentStyle)
-          } else {
-            walkLinked(child.children, currentStyle, link)
-          }
+          if (child.children.length === 0) emit(child.identifier, { link }, currentStyle)
+          else walkLinked(child.children, currentStyle, link)
           break
         }
         case 'image':
-          // The run stays a RUN, `text` the alt — see `paints` on
-          // TextRunNode. An alt-less one takes a placeholder ATOMICALLY:
-          // the wrappable path collapses `text.trim()`, which erases a
-          // whitespace placeholder and the run with it (measured). One
-          // WITH an alt stays wrappable, because an alt is prose.
-          {
-            const alt = child.alt === undefined || child.alt === '' ? undefined : child.alt
-            // Where the picture actually loads from is the CALLER's, the
-            // same way a file node's is — a written path may be a
-            // workspace attachment. An unresolved one keeps what the
-            // markdown said, so an absolute URL still works.
-            const src =
-              referenceFor(child.url, options.references?.resolveReference)?.image?.href ??
-              child.url
-            emit(
-              alt ?? IMAGE_PLACEHOLDER,
-              { paints: { kind: 'image', src } },
-              currentStyle,
-              alt !== undefined,
-            )
-          }
+          emitImage(child, currentStyle)
           break
         case 'imageReference':
           emit(child.alt ?? child.identifier, {}, currentStyle)
@@ -865,40 +961,10 @@ function layoutPhrasing(
           emit(child.value, {}, currentStyle, false, false)
           break
         case 'wikiLink':
-          emit(
-            child.alias ??
-              referenceLabel(
-                tryResolveTitle(options, child.documentId) ?? child.documentId,
-                child.fragment,
-              ),
-            {
-              link: {
-                kind: 'wikiLink',
-                documentId: child.documentId,
-                ...(child.alias ? { alias: child.alias } : {}),
-                ...(child.fragment ? { fragment: child.fragment } : {}),
-              },
-            },
-            currentStyle,
-          )
+          emitWikiLink(child, currentStyle)
           break
         case 'embed':
-          // Inline (mixed into prose) an embed stays a link run; the
-          // resolved title is a better label than the raw id when known.
-          emit(
-            referenceLabel(
-              tryResolveEmbed(options, child.documentId)?.title ?? child.documentId,
-              child.fragment,
-            ),
-            {
-              link: {
-                kind: 'embed',
-                documentId: child.documentId,
-                ...(child.fragment ? { fragment: child.fragment } : {}),
-              },
-            },
-            currentStyle,
-          )
+          emitEmbed(child, currentStyle)
           break
       }
     }
@@ -981,6 +1047,254 @@ function tokenizeCode(
   }
   if (!Array.isArray(tokenized) || tokenized.length !== lineCount) return plain
   return tokenized.every((line) => Array.isArray(line)) ? tokenized : plain
+}
+
+/** One highlighted token as a scene run, at a position its line decided. */
+function codeTokenRun(args: {
+  fitted: { text: string; truncated?: boolean; overflows?: boolean }
+  metrics: { advanceWidth: number }
+  fill: string | undefined
+  x: number
+  y: number
+  lineHeight: number
+  baseline: number
+  options: ResolvedMdastOptions
+}): TextRunNode {
+  const { fitted, metrics, fill, options } = args
+  return {
+    kind: 'textRun' as const,
+    bbox: { x: args.x, y: args.y, w: clampAdvance(metrics.advanceWidth), h: args.lineHeight },
+    baseline: args.baseline,
+    text: fitted.text,
+    code: true,
+    ...(fitted.truncated ? { truncated: true as const } : {}),
+    ...(fitted.overflows ? { overflows: true as const } : {}),
+    appearance: {
+      ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+      ...(fill !== undefined ? { fill } : {}),
+      fontFamily: options.theme.monoFontFamily,
+      fontSize: codeFontSizePx(options.theme),
+    },
+  }
+}
+
+/**
+ * One highlighted source line as scene runs, laid left to right.
+ *
+ * A code line never WRAPS — its indentation and its identity as one source
+ * line are the point — so the only way to keep it inside the panel is to cut
+ * it, exactly as an atomic inline run is cut. The line's width budget is
+ * shared across its tokens: fitting each one against the full width would
+ * let a highlighted line run out of a panel a plain line is cut to stay
+ * inside.
+ */
+function codeLineRuns(
+  tokens: readonly { text: string; role?: CodeTokenRole | undefined }[],
+  index: number,
+  ctx: {
+    cursor: Cursor
+    options: ResolvedMdastOptions
+    font: FontDescriptor
+    innerWidth: number
+  },
+): TextRunNode[] {
+  const { cursor, options, font, innerWidth } = ctx
+  const lineHeight = codeLineHeightPx(options.theme)
+  const y = cursor.y + options.theme.codeBlockPaddingPx + index * lineHeight
+  const baselineOf = (ascent: number) =>
+    clampAdvance(baselineIn(lineHeight, codeFontSizePx(options.theme), ascent))
+
+  const out: TextRunNode[] = []
+  let x = 0
+  for (const token of tokens) {
+    const fitted = fitToWidth(token.text, font, options.measure, innerWidth - x)
+    if (fitted.text === '') break
+    const metrics = options.measure(fitted.text, font)
+    const fill = token.role !== undefined ? options.syntax?.[token.role] : undefined
+    out.push(
+      codeTokenRun({
+        fitted,
+        metrics,
+        fill,
+        x: cursor.x + options.theme.codeBlockPaddingPx + x,
+        y,
+        lineHeight,
+        baseline: baselineOf(metrics.ascent),
+        options,
+      }),
+    )
+    x += clampAdvance(metrics.advanceWidth)
+    // Either flag means the line's remaining width is spent: a token kept
+    // past `innerWidth` leaves the next `innerWidth - x` negative, which
+    // `fitToWidth` reads as "no width to fit against" and answers by
+    // returning the WHOLE token uncut, straight past the panel.
+    if (fitted.truncated || fitted.overflows) break
+  }
+  return out
+}
+
+/**
+ * A row's cells, laid out BEFORE the row has a height: a column narrow
+ * enough to wrap its content is reachable (`tableColumnWidths` scales
+ * columns down to fit), and a row fixed at one line box would paint the
+ * overflow across the row below it.
+ */
+function layoutTableCells(
+  cells: readonly { children: readonly MdastCellPhrasingContent[] }[],
+  ctx: {
+    cursor: Cursor
+    options: ResolvedMdastOptions
+    columnWidths: readonly number[]
+    header: boolean
+  },
+): { cellX: number; width: number; runs: readonly TextRunNode[]; lineCount: number }[] {
+  const { cursor, options, columnWidths, header } = ctx
+  let x = cursor.x
+  return cells.map((cell, cellIndex) => {
+    const width = columnWidths[cellIndex] ?? 0
+    const cellX = x
+    x += width
+    const { runs, lineCount } = layoutPhrasing(
+      cell.children,
+      { y: cursor.y + options.theme.tableCellPaddingYPx, x: options.theme.tableCellPaddingXPx },
+      { ...options, maxWidth: width - 2 * options.theme.tableCellPaddingXPx },
+      options.theme.bodyFontSizePx,
+      header ? { strong: true } : {},
+    )
+    return { cellX, width, runs, lineCount }
+  })
+}
+
+/**
+ * One table row, laid out cell by cell.
+ *
+ * The first mdast table row IS the header; GitHub bolds it and starts its
+ * zebra on the row after, so the parity check counts from the header exactly
+ * as `tr:nth-child(2n)` does.
+ *
+ * Cells are laid out BEFORE the row has a height: a column narrow enough to
+ * wrap its content is reachable (`tableColumnWidths` scales columns down to
+ * fit), and a row fixed at one line box would paint the overflow across the
+ * row below it.
+ */
+function layoutTableRow(
+  row: { children: readonly { children: readonly MdastCellPhrasingContent[] }[] },
+  rowIndex: number,
+  rowCount: number,
+  ctx: {
+    cursor: Cursor
+    options: ResolvedMdastOptions
+    columnWidths: readonly number[]
+    tableWidth: number
+  },
+): TableRowSceneNode {
+  const { cursor, options, columnWidths, tableWidth } = ctx
+  const rowY = cursor.y
+  // The first mdast table row IS the header; GitHub bolds it and
+  // starts its zebra on the row after, so the parity check counts
+  // from the header exactly as `tr:nth-child(2n)` does.
+  const header = rowIndex === 0
+  const last = rowIndex === rowCount - 1
+  const laid = layoutTableCells(row.children, { cursor, options, columnWidths, header })
+  const rowHeight =
+    Math.max(...laid.map((cell) => cell.lineCount), 1) * bodyLineHeightPx(options.theme) +
+    2 * options.theme.tableCellPaddingYPx
+  const cells: TableCellSceneNode[] = laid.map((cell) => ({
+    kind: 'tableCell',
+    bbox: { x: cell.cellX, y: rowY, w: cell.width, h: rowHeight },
+    runs: cell.runs,
+  }))
+  cursor.y += rowHeight
+  return {
+    kind: 'tableRow',
+    bbox: { x: cursor.x, y: rowY, w: tableWidth, h: rowHeight },
+    cells,
+    ...(header ? { header: true } : {}),
+    ...(last ? {} : { appearance: panelPaint(options.theme, options.theme.borderOpacity) }),
+  }
+}
+
+/**
+ * A fenced block. A language whose `renderDiagram` answers takes over the
+ * block entirely; everything else is laid out as source.
+ *
+ * One run per SOURCE line: a single `<text>` carrying the whole fence paints
+ * it on one line — SVG collapses the newlines — so the code ran off the
+ * right edge of a box sized for every line.
+ */
+function layoutCodeBlock(
+  node: Extract<MdastFlowContent, { type: 'code' }>,
+  cursor: Cursor,
+  options: ResolvedMdastOptions,
+): SceneNode {
+  if (node.lang) {
+    let rendered: string | RenderedSvgFragment | undefined
+    try {
+      rendered = options.renderDiagram?.(node.lang, node.value)
+    } catch {
+      rendered = undefined
+    }
+    if (rendered !== undefined) {
+      return placeFragment(rendered, cursor, options)
+    }
+  }
+  const lines = node.value.split('\n')
+  const height =
+    lines.length * codeLineHeightPx(options.theme) + 2 * options.theme.codeBlockPaddingPx
+  const font = bodyFont(options.theme.monoFontFamily, codeFontSizePx(options.theme))
+  // One run per SOURCE line. A single `<text>` carrying the whole fence
+  // paints it on one line — SVG collapses the newlines — so the code ran
+  // off the right edge of a box sized for every line.
+  // A code line never wraps — its indentation and its identity as one
+  // source line are the point — so the only way to keep it inside the
+  // panel is to cut it, exactly as an atomic inline run is cut.
+  const innerWidth = options.maxWidth - 2 * options.theme.codeBlockPaddingPx
+  const tokenLines = tokenizeCode(node.lang ?? '', node.value, lines.length, options)
+  const runs: TextRunNode[] = tokenLines.flatMap((tokens, index) =>
+    codeLineRuns(tokens, index, { cursor, options, font, innerWidth }),
+  )
+  const code: CodeBlockNode = {
+    kind: 'codeBlock',
+    bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: height },
+    value: node.value,
+    ...(node.lang ? { lang: node.lang } : {}),
+    runs,
+    appearance: panelPaint(options.theme, options.theme.panelOpacity),
+    radius: options.theme.cornerRadiusPx,
+  }
+  cursor.y += height + options.theme.blockGapPx
+  return code
+}
+
+/**
+ * Display math. A THROWING renderer degrades this one node to the
+ * placeholder (the total-layout rule), exactly as `renderDiagram` does.
+ */
+function layoutMathBlock(
+  node: Extract<MdastFlowContent, { type: 'math' }>,
+  cursor: Cursor,
+  options: ResolvedMdastOptions,
+): SceneNode {
+  const renderMath = options.renderMath ?? defaultRenderMath
+  let rendered: string | RenderedSvgFragment
+  try {
+    // A throwing renderer degrades this one node to the placeholder
+    // (total-layout rule), exactly like renderDiagram above.
+    rendered = renderMath(node.value, true) ?? defaultRenderMath(node.value)
+  } catch {
+    rendered = defaultRenderMath(node.value)
+  }
+  if (typeof rendered !== 'string') {
+    return placeFragment(rendered, cursor, options)
+  }
+  const height = node.value.split('\n').length * codeLineHeightPx(options.theme)
+  const fragment: SvgFragmentNode = {
+    kind: 'svgFragment',
+    bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
+    svg: rendered,
+  }
+  cursor.y += height + options.theme.blockGapPx
+  return fragment
 }
 
 function layoutBlock(
@@ -1104,88 +1418,8 @@ function layoutBlock(
       }
       return list
     }
-    case 'code': {
-      if (node.lang) {
-        let rendered: string | RenderedSvgFragment | undefined
-        try {
-          rendered = options.renderDiagram?.(node.lang, node.value)
-        } catch {
-          rendered = undefined
-        }
-        if (rendered !== undefined) {
-          return placeFragment(rendered, cursor, options)
-        }
-      }
-      const lines = node.value.split('\n')
-      const height =
-        lines.length * codeLineHeightPx(options.theme) + 2 * options.theme.codeBlockPaddingPx
-      const font = bodyFont(options.theme.monoFontFamily, codeFontSizePx(options.theme))
-      // One run per SOURCE line. A single `<text>` carrying the whole fence
-      // paints it on one line — SVG collapses the newlines — so the code ran
-      // off the right edge of a box sized for every line.
-      // A code line never wraps — its indentation and its identity as one
-      // source line are the point — so the only way to keep it inside the
-      // panel is to cut it, exactly as an atomic inline run is cut.
-      const innerWidth = options.maxWidth - 2 * options.theme.codeBlockPaddingPx
-      const tokenLines = tokenizeCode(node.lang ?? '', node.value, lines.length, options)
-      const runs: TextRunNode[] = tokenLines.flatMap((tokens, index) => {
-        const y =
-          cursor.y + options.theme.codeBlockPaddingPx + index * codeLineHeightPx(options.theme)
-        const baselineOf = (ascent: number) =>
-          clampAdvance(
-            baselineIn(codeLineHeightPx(options.theme), codeFontSizePx(options.theme), ascent),
-          )
-        const out: TextRunNode[] = []
-        let x = 0
-        for (const token of tokens) {
-          // The line's budget is shared across its tokens: fitting each one
-          // against the full width would let a highlighted line run out of
-          // the panel that a plain one is cut to stay inside.
-          const fitted = fitToWidth(token.text, font, options.measure, innerWidth - x)
-          if (fitted.text === '') break
-          const metrics = options.measure(fitted.text, font)
-          const fill = token.role !== undefined ? options.syntax?.[token.role] : undefined
-          out.push({
-            kind: 'textRun' as const,
-            bbox: {
-              x: cursor.x + options.theme.codeBlockPaddingPx + x,
-              y,
-              w: clampAdvance(metrics.advanceWidth),
-              h: codeLineHeightPx(options.theme),
-            },
-            baseline: baselineOf(metrics.ascent),
-            text: fitted.text,
-            code: true,
-            ...(fitted.truncated ? { truncated: true as const } : {}),
-            ...(fitted.overflows ? { overflows: true as const } : {}),
-            appearance: {
-              ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
-              ...(fill !== undefined ? { fill } : {}),
-              fontFamily: options.theme.monoFontFamily,
-              fontSize: codeFontSizePx(options.theme),
-            },
-          })
-          x += clampAdvance(metrics.advanceWidth)
-          // Either flag means the line's remaining width is spent: a token
-          // kept past `innerWidth` leaves the next `innerWidth - x` negative,
-          // which `fitToWidth` reads as "no width to fit against" and answers
-          // by returning the WHOLE token uncut, straight past the panel.
-          if (fitted.truncated || fitted.overflows) break
-        }
-        return out
-      })
-      const code: CodeBlockNode = {
-        kind: 'codeBlock',
-        bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: height },
-        value: node.value,
-        ...(node.lang ? { lang: node.lang } : {}),
-        runs,
-        appearance: panelPaint(options.theme, options.theme.panelOpacity),
-        radius: options.theme.cornerRadiusPx,
-      }
-      cursor.y += height + options.theme.blockGapPx
-      return code
-    }
+    case 'code':
+      return layoutCodeBlock(node, cursor, options)
     case 'html': {
       const rawHtml: RawHtmlNode = {
         kind: 'rawHtml',
@@ -1227,48 +1461,14 @@ function layoutBlock(
       const columnCount = Math.max(...node.children.map((row) => row.children.length), 1)
       const columnWidths = tableColumnWidths(node, columnCount, options)
       const tableWidth = columnWidths.reduce((total, w) => total + w, 0)
-      const rows: TableRowSceneNode[] = node.children.map((row, rowIndex) => {
-        const rowY = cursor.y
-        // The first mdast table row IS the header; GitHub bolds it and
-        // starts its zebra on the row after, so the parity check counts
-        // from the header exactly as `tr:nth-child(2n)` does.
-        const header = rowIndex === 0
-        const last = rowIndex === node.children.length - 1
-        let x = cursor.x
-        // Cells are laid out BEFORE the row has a height: a column narrow
-        // enough to wrap its content is reachable (tableColumnWidths scales
-        // columns down to fit), and a row fixed at one line box would paint
-        // the overflow across the row below it.
-        const laid = row.children.map((cell, cellIndex) => {
-          const width = columnWidths[cellIndex] ?? 0
-          const cellX = x
-          x += width
-          const { runs, lineCount } = layoutPhrasing(
-            cell.children,
-            { y: rowY + options.theme.tableCellPaddingYPx, x: options.theme.tableCellPaddingXPx },
-            { ...options, maxWidth: width - 2 * options.theme.tableCellPaddingXPx },
-            options.theme.bodyFontSizePx,
-            header ? { strong: true } : {},
-          )
-          return { cellX, width, runs, lineCount }
-        })
-        const rowHeight =
-          Math.max(...laid.map((cell) => cell.lineCount), 1) * bodyLineHeightPx(options.theme) +
-          2 * options.theme.tableCellPaddingYPx
-        const cells: TableCellSceneNode[] = laid.map((cell) => ({
-          kind: 'tableCell',
-          bbox: { x: cell.cellX, y: rowY, w: cell.width, h: rowHeight },
-          runs: cell.runs,
-        }))
-        cursor.y += rowHeight
-        return {
-          kind: 'tableRow',
-          bbox: { x: cursor.x, y: rowY, w: tableWidth, h: rowHeight },
-          cells,
-          ...(header ? { header: true } : {}),
-          ...(last ? {} : { appearance: panelPaint(options.theme, options.theme.borderOpacity) }),
-        }
-      })
+      const rows: TableRowSceneNode[] = node.children.map((row, rowIndex) =>
+        layoutTableRow(row, rowIndex, node.children.length, {
+          cursor,
+          options,
+          columnWidths,
+          tableWidth,
+        }),
+      )
       cursor.y += options.theme.blockGapPx
       const table: TableBlockNode = {
         kind: 'table',
@@ -1282,28 +1482,8 @@ function layoutBlock(
       }
       return table
     }
-    case 'math': {
-      const renderMath = options.renderMath ?? defaultRenderMath
-      let rendered: string | RenderedSvgFragment
-      try {
-        // A throwing renderer degrades this one node to the placeholder
-        // (total-layout rule), exactly like renderDiagram above.
-        rendered = renderMath(node.value, true) ?? defaultRenderMath(node.value)
-      } catch {
-        rendered = defaultRenderMath(node.value)
-      }
-      if (typeof rendered !== 'string') {
-        return placeFragment(rendered, cursor, options)
-      }
-      const height = node.value.split('\n').length * codeLineHeightPx(options.theme)
-      const fragment: SvgFragmentNode = {
-        kind: 'svgFragment',
-        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
-        svg: rendered,
-      }
-      cursor.y += height + options.theme.blockGapPx
-      return fragment
-    }
+    case 'math':
+      return layoutMathBlock(node, cursor, options)
   }
 }
 

@@ -41,6 +41,24 @@ describe('SetupJourney — storage evidence on the steps', () => {
     expect(detail?.textContent).toMatch(/2\.5 MiB used/)
   })
 
+  it('offers Protect only while it can still be asked for, and names who granted it', () => {
+    // The two done states are not interchangeable: `granted` is this site's
+    // own permission and `browser-managed` is a browser that decides for
+    // itself, and a reader acting on the wrong one would look for a setting
+    // that is not theirs to change. Neither offers the button, because
+    // there is nothing left to ask.
+    renderJourney({ persist: 'granted' })
+    expect(screen.getByText('granted')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Protect' })).toBeNull()
+
+    renderJourney({ persist: 'browser-managed' })
+    expect(screen.getByText('managed by the browser')).toBeTruthy()
+
+    // ...and `todo` is the one state that CAN be asked.
+    renderJourney({ persist: 'todo' })
+    expect(screen.getByRole('button', { name: 'Protect' })).toBeTruthy()
+  })
+
   it('renders no usage line when the estimate is unavailable', () => {
     renderJourney({ estimate: null })
     // Subject presence: the step itself rendered — absence on an empty page

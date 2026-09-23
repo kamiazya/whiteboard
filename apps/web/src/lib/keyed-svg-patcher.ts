@@ -265,6 +265,62 @@ function reconcileGroups(
   return nextElements
 }
 
+/**
+ * A replaced key that also MOVED belongs to FLIP, not to the ramp: the
+ * incoming element is already flying from where its predecessor sat, and a
+ * ghost fading at that same spot is the double image FLIP exists to avoid.
+ */
+function reclaimMovedKeys({
+  firstRects,
+  nextElements,
+  elements,
+  arriving,
+  leaving,
+}: {
+  firstRects: ReadonlyMap<string, DOMRect> | undefined
+  nextElements: ReadonlyMap<string, Element>
+  elements: ReadonlyMap<string, Element>
+  arriving: Set<string>
+  leaving: Set<Element>
+}): void {
+  for (const [key, first] of firstRects ?? []) {
+    const element = nextElements.get(key)
+    if (element === undefined) continue
+    const last = element.getBoundingClientRect()
+    const moved =
+      Math.abs(first.left - last.left) >= MIN_MOVE_PX ||
+      Math.abs(first.top - last.top) >= MIN_MOVE_PX
+    if (!moved) continue
+    arriving.delete(key)
+    const stale = elements.get(key)
+    if (stale !== undefined) leaving.delete(stale)
+  }
+}
+
+/** Children past the new group count: faded out when they were planned to leave, else removed. */
+function dropSurplusChildren(
+  root: Element,
+  keep: number,
+  leaving: ReadonlySet<Element>,
+  fadeOut: (child: Element) => void,
+): void {
+  for (const child of [...root.children].slice(keep)) {
+    if (leaving.has(child)) fadeOut(child)
+    else child.remove()
+  }
+}
+
+function fadeInArriving(
+  arriving: ReadonlySet<string>,
+  nextElements: ReadonlyMap<string, Element>,
+): void {
+  for (const key of arriving) {
+    const element = nextElements.get(key)
+    if (element === undefined || typeof element.animate !== 'function') continue
+    element.animate([{ opacity: 0 }, { opacity: 1 }], FADE_IN)
+  }
+}
+
 export function mountKeyedSvg(
   container: Element,
   initial: KeyedSvgRender,
@@ -325,35 +381,10 @@ export function mountKeyedSvg(
 
     const nextElements = reconcileGroups(root, next, elements, prevSvgByKey)
 
-    // A replaced key that also MOVED belongs to FLIP, not to the ramp: the
-    // incoming element is already flying from where its predecessor sat, and
-    // a ghost fading at that same spot is the double image FLIP exists to
-    // avoid.
-    for (const [key, first] of firstRects ?? []) {
-      const element = nextElements.get(key)
-      if (element === undefined) continue
-      const last = element.getBoundingClientRect()
-      if (
-        Math.abs(first.left - last.left) < MIN_MOVE_PX &&
-        Math.abs(first.top - last.top) < MIN_MOVE_PX
-      ) {
-        continue
-      }
-      arriving.delete(key)
-      const stale = elements.get(key)
-      if (stale !== undefined) leaving.delete(stale)
-    }
+    reclaimMovedKeys({ firstRects, nextElements, elements, arriving, leaving })
 
-    for (const child of [...root.children].slice(next.groups.length)) {
-      if (leaving.has(child)) fadeOut(child)
-      else child.remove()
-    }
-
-    for (const key of arriving) {
-      const element = nextElements.get(key)
-      if (element === undefined || typeof element.animate !== 'function') continue
-      element.animate([{ opacity: 0 }, { opacity: 1 }], FADE_IN)
-    }
+    dropSurplusChildren(root, next.groups.length, leaving, fadeOut)
+    fadeInArriving(arriving, nextElements)
 
     if (firstRects !== undefined && firstRects.size > 0) {
       playMoveAnimations(root, nextElements, firstRects)

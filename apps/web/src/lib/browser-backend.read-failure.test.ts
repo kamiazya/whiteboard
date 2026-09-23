@@ -27,6 +27,7 @@
  */
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserBackend } from './browser-backend.js'
@@ -100,5 +101,39 @@ describe('what a failed workspace read is reported as', () => {
     const { reasons } = connectAgainst(new DOMException('transaction aborted', 'AbortError'))
     await vi.waitFor(() => expect(reasons).toEqual(['read-unavailable']))
     await expectLoggedFailure('opening the workspace record failed')
+  })
+})
+
+describe('a legacy record that could not be read is not shadowed', () => {
+  it('refuses rather than placing an empty node over a document that may be intact', async () => {
+    // The workspace opens fine and simply has no node for this document. The
+    // legacy read then answers `read-unavailable` — it knows NOTHING about
+    // the stored bytes — so placing an empty node here would shadow a
+    // document that may be sitting on disk intact, reached by nothing worse
+    // than a transient IndexedDB failure.
+    const saved: unknown[] = []
+    const docs = {
+      open: async () => new LoroDoc(),
+      create: async () => new LoroDoc(),
+      save: async (...args: unknown[]) => {
+        saved.push(args)
+      },
+      readCursor: async () => undefined,
+      catchUp: async () => undefined,
+    } as unknown as WorkspaceDocs
+    const legacy = {
+      load: async () => ({ kind: 'read-unavailable' }) as const,
+    } as unknown as LoroStore
+
+    const reasons: string[] = []
+    const backend = new BrowserBackend(TARGET, docs, {} as unknown as DocumentFileStore, legacy)
+    backend.connect({
+      onConnected: () => {},
+      onSnapshot: (_snapshot: Uint8Array) => {},
+      onError: (reason: string) => reasons.push(reason),
+    } as never)
+
+    await vi.waitFor(() => expect(reasons).toEqual(['read-unavailable']))
+    expect(saved).toEqual([])
   })
 })

@@ -1,24 +1,13 @@
 /**
- * The Connections chip's backlinks for the document on screen.
- *
- * Daemon-only: backlinks come from the daemon's index, which the browser
- * keeper has no equivalent of, so there is no twin of this hook and nothing
- * for `keeper-parity.test.ts` to pair it with.
- *
- * It owns its own SCOPE RESET rather than leaving one line behind in the
- * page's. The fetch below nulls the value itself, but only once it knows the
- * ARRIVED document's id — which comes from a list that may still be
- * refreshing — so without the reset the departed document's connections are
- * listed under the arrived one until it does.
+ * The daemon's half of the Connections chip: its backlinks route, handed to
+ * the keeper-agnostic `useConnections`. The browser's half is
+ * `use-browser-connections.ts`.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
+import { useMemo } from 'react'
 import { getDocumentBacklinks } from '../lib/daemon-api-client.js'
+import { type Connections, type UseConnectionsResult, useConnections } from './use-connections.js'
 
-export interface DaemonConnections {
-  readonly backlinks: readonly ConnectionsBacklink[]
-  readonly unlinkedMentions: readonly ConnectionsBacklink[]
-}
+export type DaemonConnections = Connections
 
 export interface UseDaemonConnectionsOptions {
   readonly daemonFetch: typeof globalThis.fetch
@@ -36,59 +25,19 @@ export interface UseDaemonConnectionsOptions {
   readonly path: string | null
 }
 
-export interface UseDaemonConnectionsResult {
-  readonly connections: DaemonConnections | null
-  /** Re-runs the fetch; the panel uses it after linkifying a mention. */
-  readonly refresh: () => void
-}
-
 export function useDaemonConnections({
   daemonFetch,
   daemonBaseUrl,
   workspaceId,
   documentId,
   path,
-}: UseDaemonConnectionsOptions): UseDaemonConnectionsResult {
-  const [connections, setConnections] = useState<DaemonConnections | null>(null)
-  const [connectionsRefresh, setConnectionsRefresh] = useState(0)
-  // Which SCOPE a request was made in. `cancelled` below cannot carry this:
-  // it is set by the fetch effect's own cleanup, which runs only when that
-  // effect's deps change — and the path is not one of them, deliberately (see
-  // the fetch effect). So a switch while the id still lags runs no cleanup,
-  // and the in-flight response would land AFTER the reset and refill the
-  // panel it just cleared.
-  const pathScope = useRef(0)
-
-  // SCOPE RESET — see scoped-screen-state.test.ts.
-  useEffect(() => {
-    pathScope.current += 1
-    setConnections(null)
-  }, [path])
-
-  useEffect(() => {
-    setConnections(null)
-    if (documentId === undefined || workspaceId === null) return
-    // NOT keyed on the path: after a switch the id lags, so re-running here
-    // would re-fetch the DEPARTED document and show it under the arrived one.
-    // The scope is checked at apply time instead.
-    const requestedIn = pathScope.current
-    let cancelled = false
-    getDocumentBacklinks(daemonFetch, daemonBaseUrl, workspaceId, documentId)
-      .then((response) => {
-        if (!cancelled && pathScope.current === requestedIn) setConnections(response)
-      })
-      .catch(() => {
-        // The chip simply stays disabled; connections are never worth an
-        // error surface of their own on a page that otherwise works.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [daemonFetch, daemonBaseUrl, workspaceId, documentId, connectionsRefresh])
-
-  const refresh = useCallback(() => {
-    setConnectionsRefresh((n) => n + 1)
-  }, [])
-
-  return { connections, refresh }
+}: UseDaemonConnectionsOptions): UseConnectionsResult {
+  const read = useMemo(
+    () =>
+      workspaceId === null
+        ? null
+        : (id: string) => getDocumentBacklinks(daemonFetch, daemonBaseUrl, workspaceId, id),
+    [daemonFetch, daemonBaseUrl, workspaceId],
+  )
+  return useConnections({ read, documentId, path })
 }

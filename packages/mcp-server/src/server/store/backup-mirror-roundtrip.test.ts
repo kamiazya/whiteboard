@@ -25,9 +25,9 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-async function putBlob(contents: string): Promise<string> {
+async function putBlob(contents: string, tenantId: string = SELF_HOST_TENANT_ID): Promise<string> {
   const digest = createHash('sha256').update(contents).digest('hex')
-  const dir = join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), digest.slice(0, 2))
+  const dir = join(blobsRoot(dataDir, tenantId), digest.slice(0, 2))
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, digest.slice(2)), contents)
   return digest
@@ -103,6 +103,47 @@ describe('a mirrored backup restores what it captured', () => {
         'utf8',
       ),
     ).toBe('a version thumbnail')
+  })
+
+  it('puts each tenant blobs back under that tenant, not all into one', async () => {
+    const mine = await putBlob('tenant one image')
+    const theirs = await putBlob('tenant two image', 'tenant-two')
+
+    const backupRoot = join(root, 'backups')
+    const backupDir = join(backupRoot, '2026-03-04T05-06-07.000Z')
+    expect(
+      (await performBackup({ dataDir, outputDir: backupDir, mirrorRoot: backupRoot })).kind,
+    ).toBe('ok')
+    // Neither tenant's blobs travel inside the backup directory — the mirror
+    // holds both, flat, and the manifest says whose each one is. The rest of
+    // each tenant's directory (its workspaces, its origin files) is copied as
+    // usual, so the discriminator is the blob root, not `tenants/`.
+    for (const tenantId of [SELF_HOST_TENANT_ID, 'tenant-two']) {
+      expect(await pathExists(blobsRoot(backupDir, tenantId))).toBe(false)
+    }
+    for (const digest of [mine, theirs]) {
+      expect(await pathExists(join(backupRoot, 'blobs', digest.slice(0, 2), digest.slice(2)))).toBe(
+        true,
+      )
+    }
+
+    const restored = await restoreInto(backupDir)
+    expect(
+      await readFile(
+        join(blobsRoot(restored, SELF_HOST_TENANT_ID), mine.slice(0, 2), mine.slice(2)),
+        'utf8',
+      ),
+    ).toBe('tenant one image')
+    expect(
+      await readFile(
+        join(blobsRoot(restored, 'tenant-two'), theirs.slice(0, 2), theirs.slice(2)),
+        'utf8',
+      ),
+    ).toBe('tenant two image')
+    // And neither landed in the other's directory.
+    expect(
+      await pathExists(join(blobsRoot(restored, 'tenant-two'), mine.slice(0, 2), mine.slice(2))),
+    ).toBe(false)
   })
 
   /**

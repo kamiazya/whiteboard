@@ -122,6 +122,27 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: [],
   },
+  // What the documents of a workspace point at, as a graph: the facts one
+  // document contributes, the aggregate that answers backlinks and unlinked
+  // mentions, and the frontier-stamped cache that keeps those facts between
+  // reads. Its own package because BOTH keepers answer these questions, and
+  // server-core — where it grew — carries hono and the daemon's tool surface
+  // into anything that imports it. The keeper-specific half is one port,
+  // `DocumentContentSource`; everything that decides what a reference IS
+  // stays here, once.
+  '@kamiazya/whiteboard-reference-graph': {
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-loro-adapter',
+      '@kamiazya/whiteboard-search',
+    ],
+    // loro-crdt: the port hands the cache a LoroDoc, which extraction reads.
+    // zod: the aggregate's facts and the backlink entry are schemas the
+    // daemon's published output schema composes.
+    allowedThirdParty: ['loro-crdt', 'zod'],
+  },
   '@kamiazya/whiteboard-loro-adapter': {
     // Deliberately NOT ports: this package adapts loro-crdt to the model and
     // knows nothing about where a document sits, so it implements no port.
@@ -168,6 +189,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-plugin-visual',
       '@kamiazya/whiteboard-search',
+      '@kamiazya/whiteboard-reference-graph',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
@@ -290,6 +312,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       // runs, the same ones the daemon does — so the rules for changing one
       // live in a package below both rather than in either root.
       '@kamiazya/whiteboard-history',
+      // reference-graph: the browser keeper answers "what links here" from
+      // the same facts, aggregate and cache the daemon does — its Connections
+      // panel — so it reads the package rather than a copy of it.
+      '@kamiazya/whiteboard-reference-graph',
     ],
     allowedThirdParty: [],
   },

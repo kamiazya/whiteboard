@@ -212,7 +212,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // guard they share, and `endInkCommand` joining the id-picking family. It
   // is the first verb the matrix reported missing from BOTH collections
   // rather than from one, which is why one increment adds two writes.
-  'apps/web/src/lib/spatial/commands.ts': 1597,
+  // 1597 -> 1626: `setLineEnd` and `reorderNodes` each became a named
+  // decision plus its helper, which is what took both under the complexity
+  // threshold. The bodies did not grow; the signatures and their doc comments
+  // are the added lines.
+  'apps/web/src/lib/spatial/commands.ts': 1626,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -328,7 +332,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // it serves cost more than that. A net +13 to delete a rule that had to be
   // remembered in five places is the trade, said plainly rather than hidden
   // behind a smaller number.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1258,
+  // 1258 -> 889: the panel's pieces — its toolbar, what it says about the
+  // last write, the object pane, the card menu's items and each column view
+  // — moved to `workspace-files-panel-parts.tsx` beside it.
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 889,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
   // map on a document's node, and the read that never opens one. They sit
   // here rather than in a new file because `nodeById` is this module's, and
@@ -384,52 +391,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // than a merge — a document is never in both — and the comment saying so is
   // most of the 14 lines.
   'packages/mcp-server/src/server/store/document-store.ts': 1145,
-  // Raised from 926 by the version STORE being built once and shared. A
-  // merge's pre-merge point cannot go through the versions seam — that
-  // `save` carries a label and nothing else, while a checkpoint has to say
-  // it is automatic and which variation it belongs to — so the store is
-  // built here and handed to both seams, and the comment saying why is most
-  // of the seven lines.
-  // Raised from 933 by the checkpoint scheduler being BUILT here — the
-  // keeper's `save`, the HEAD lookup its rows are laned by, and the pair the
-  // session signals. Most of the 54 lines is two pieces of reasoning a reader
-  // cannot recover from the code: the doc handed to the scheduler is the
-  // workspace RECORD rather than this document's content (it keys the
-  // "anything changed" check on a frontier, and the record's is what the
-  // store saves), and the pair's `flush` signals BEFORE it flushes, because
-  // the edit flush's commit reaches `subscribeLocalUpdates` only on a later
-  // microtask and a flush alone would find nothing armed. Raised again to 997
-  // when `signal` was made TOTAL: it runs inside Loro's subscriber, where a
-  // throw escapes as an unhandled rejection that reddens a whole run while
-  // every test passes.
-  // Raised again to 1011 by the branch-refresh signal: the browser record is
-  // not readable at mount, so nothing re-read the branch plane once it
-  // arrived and a document opened ON a variation kept naming the default one.
-  // Most of the added lines is that reason — the bug is invisible in the
-  // three lines of state that fix it.
-  // Raised again to 1028 by kind parity on the versions seam. Two lines pick
-  // the record seam by kind and supply the document's kind to it; the rest is
-  // the two findings behind them, neither recoverable from the code. A note's
-  // version ROWS were always written — a version is a frontier of the
-  // workspace record — and only the seam that reads and restores one was
-  // built from a backend a note never has. And `loadPast` asked the past
-  // STATE its kind, which a tree-hosted document keeps in its node meta, so
-  // the answer was always "not markdown": the fallback saved a canvas and
-  // drew a note an empty viewer.
-  // Raised again to 1031 by the SEARCH the URL sync now carries: one line of
-  // wiring so a HEAD moved from the shared `?v=` banner refreshes the chip,
-  // and three of reason. The reason is the whole entry — a `navigate` given a
-  // pathname replaces the location, so the query a reader arrived with is
-  // dropped by a repair they never asked for, and nothing about the call says
-  // so.
-  // +2 for the shared thread-write door: this page still chooses between the
-  // markdown host and the spatial write per verb, so what it saves is the
-  // command building rather than the branch.
-  // +2: the tab's mark. The resolution is memoised because the resolver
-  // PARSES — a fresh object every render re-arms the favicon's debounce on
-  // every render instead of on a change to the document — and a `useMemo`
-  // is two lines a call site cannot avoid paying.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1035,
   // +1 for a task list's checkbox, which is one import and one branch here:
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
@@ -458,7 +419,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +7: that image asks the caller WHERE its picture is, through the
   // `resolveReference` seam a body already carries — so a written path can
   // be a workspace attachment instead of only an absolute URL.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1752,
+  // Raised 1752 -> 1932. The file grew by RATIONALE, not by logic: eleven
+  // inner steps that were inline blocks are now named functions, each
+  // carrying the comment that was buried in the middle of the block it came
+  // from. The next real shrink moves the code-block trio (layoutCodeBlock /
+  // codeLineRuns / codeTokenRun) and the table half into sibling modules —
+  // which needs `ResolvedMdastOptions` and `Cursor` extracted first, or the
+  // new module imports them back and closes a package-internal cycle.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1932,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -479,7 +447,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // path beside the one it has.
   // Raised 2170 -> 2177: the bent branch carries `rounded` now, with the
   // reason it did not before.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2177,
+  // Raised 2177 -> 2483. The file grew by RATIONALE, not by logic: sixteen
+  // inline blocks became named functions, each carrying the comment that was
+  // buried in the middle of it. The next real shrink splits the three
+  // concerns this file holds — anchor placement, the side-choice search, and
+  // the router — into sibling modules; they share `AnchorContext`,
+  // `SidePair` and the cost vocabulary, so the types move first or each new
+  // module imports them back.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2483,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
@@ -703,6 +678,14 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
 // record. `gestures.test` and this file itself are new entries rather than
 // raises: both crossed 800 for the first time on that merge.
 const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
+  // The function-size ledger's own file crossed 800 while paying DOWN the
+  // complexity exemption list: decomposing a JSX-heavy component turns one
+  // over-budget function into several smaller ones, and each is an entry
+  // here with a reason. It is a DATA table with a header, which is the same
+  // reason its own comment gives for the list being 400-odd entries rather
+  // than 17 — so it is recorded rather than split, and splitting it would
+  // put half the ledger where a reader does not look for it.
+  'tools/arch-lint/src/function-size-budget.test.ts': 835,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
@@ -777,7 +760,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // not hold), a stroke end dropped in empty space and one dropped on a box,
   // and the collection-picking sibling that answers nothing for a relation
   // aimed at empty space.
-  'apps/web/src/lib/spatial/commands.test.ts': 2042,
+  // 2042 -> 2075: two rules of `set-line-end` that nothing pinned (a stale
+  // box id, and both ends on one box) now have tests.
+  'apps/web/src/lib/spatial/commands.test.ts': 2075,
   // Raised 1063 -> 1068: the embed-preview wait became `waitForOrSayWhen`,
   // which needs a line saying why a wait here reports more than "it expired"
   // — this test has failed twice on CI from branches that cannot reach it.

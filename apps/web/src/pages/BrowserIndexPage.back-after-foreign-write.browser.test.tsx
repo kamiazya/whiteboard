@@ -34,8 +34,8 @@ import { idbContentClock } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { createSeededDocument } from './use-browser-document-controller.js'
 
 claimIsolatedWhiteboardDb('browserindexpage-backforeignwrite')
 

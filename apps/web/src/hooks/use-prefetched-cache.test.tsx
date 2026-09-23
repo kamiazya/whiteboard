@@ -7,7 +7,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useCallback } from 'react'
 import { describe, expect, it } from 'vitest'
-import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
+import {
+  type PrefetchRequest,
+  TRANSIENT_LOAD_ATTEMPTS,
+  usePrefetchedCache,
+} from './use-prefetched-cache.js'
 
 /** A loader whose completion the test controls, one gate per key. */
 function gatedLoader() {
@@ -64,7 +68,10 @@ describe('usePrefetchedCache', () => {
     expect(loader.calls).toEqual(['gone'])
   })
 
-  it('never re-fetches a key whose load rejected', async () => {
+  it('never re-fetches a key whose load rejected, unless the request asked for attempts', async () => {
+    // The DEFAULT, and what `use-markdown-fragments` relies on: a fragment
+    // that failed to render fails the same way every time, so asking again
+    // is waste on every keystroke.
     const calls: string[] = []
     const { result, rerender } = renderHook(() =>
       usePrefetchedCache<string>(
@@ -89,6 +96,63 @@ describe('usePrefetchedCache', () => {
     rerender()
     expect(result.current('boom')).toBeUndefined()
     expect(calls).toEqual(['boom'])
+  })
+
+  it('asks again after a load REJECTS, so one transient read does not blank a target for good', async () => {
+    // The failure this rule exists for: a reference whose store read threw
+    // once was cached as "nothing here" and never re-asked, so an embed sat
+    // on its placeholder for the life of the page — with nothing logged,
+    // because the throw was swallowed on the way here.
+    const calls: string[] = []
+    const { result } = renderHook(() =>
+      usePrefetchedCache<string>(
+        useCallback(
+          () => [
+            {
+              key: 'flaky',
+              attempts: TRANSIENT_LOAD_ATTEMPTS,
+              load: () => {
+                calls.push('flaky')
+                return calls.length === 1
+                  ? Promise.reject(new Error('transient'))
+                  : Promise.resolve('arrived')
+              },
+            },
+          ],
+          [],
+        ),
+      ),
+    )
+    await waitFor(() => expect(result.current('flaky')).toBe('arrived'))
+    expect(calls).toEqual(['flaky', 'flaky'])
+  })
+
+  it('stops asking a key that keeps rejecting, so a broken target is not a retry storm', async () => {
+    const calls: string[] = []
+    const { result, rerender } = renderHook(() =>
+      usePrefetchedCache<string>(
+        useCallback(
+          () => [
+            {
+              key: 'boom',
+              attempts: TRANSIENT_LOAD_ATTEMPTS,
+              load: () => {
+                calls.push('boom')
+                return Promise.reject(new Error('nope'))
+              },
+            },
+          ],
+          [],
+        ),
+      ),
+    )
+    await waitFor(() => expect(calls.length).toBe(TRANSIENT_LOAD_ATTEMPTS))
+    await act(async () => {})
+
+    rerender()
+    rerender()
+    expect(result.current('boom')).toBeUndefined()
+    expect(calls.length).toBe(TRANSIENT_LOAD_ATTEMPTS)
   })
 
   it('starts one load per key across superseded effects, and keeps its result', async () => {

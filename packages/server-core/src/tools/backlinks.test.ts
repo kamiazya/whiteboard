@@ -172,6 +172,29 @@ describe('GET /backlinks', () => {
     )
   })
 
+  it('carries at most three snippets per mention — enough to judge it, few enough to read', async () => {
+    const deps = makeDeps()
+    const { create, writeBody } = await seed(deps)
+    // seed() created the target named 'Release plan' at path 'target'.
+    const wordy = await create('wordy', 'markdown', 'Wordy')
+    const targetId = (await deps.documentIndex.resolveDocument({ workspaceId: WS, path: 'target' }))
+      ?.documentId
+    if (targetId === undefined) throw new Error('target missing')
+    await writeBody(
+      wordy.documentId,
+      [
+        'one Release plan',
+        'two Release plan',
+        'three Release plan',
+        'four Release plan',
+        'five Release plan',
+      ].join('\n\n'),
+    )
+    const out = await backlinksOf(deps, targetId)
+    expect(out.unlinkedMentions).toHaveLength(1)
+    expect(out.unlinkedMentions[0]?.contexts).toHaveLength(3)
+  })
+
   it('an unnamed document accrues no mentions — a path is an address, not prose', async () => {
     const deps = makeDeps()
     const { create, writeBody } = await seed(deps)

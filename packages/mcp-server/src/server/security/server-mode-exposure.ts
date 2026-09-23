@@ -86,43 +86,45 @@ export type ServerModeExposureDecision =
 export function resolveServerModeExposure(
   input: ServerModeExposureInput,
 ): ServerModeExposureDecision {
-  if (input.mode === 'local-daemon') {
-    // Local-daemon is loopback-only regardless of externalUrl. This mirrors
-    // the pre-startup guard in `daemon-auth-binding.ts` so the policy is
-    // consistent across both entry points.
-    if (!isLoopbackHost(input.bindHost)) {
-      return { ok: false, code: 'local_daemon.non_loopback_forbidden' }
-    }
-    return {
-      ok: true,
-      kind: 'local-loopback',
-      // Bare IPv6 literals (e.g. ::1) are not valid in a URL host — they
-      // require brackets. Bracketed form ([::1]) and non-IPv6 hosts are
-      // left unchanged.
-      publicBaseUrl: `http://${bracketIpv6(input.bindHost)}`,
-      allowedOrigins: LOCAL_DAEMON_ALLOWED_ORIGINS,
-      trustedProxy: false,
-    }
+  return input.mode === 'local-daemon' ? localDaemonExposure(input) : serverModeExposure(input)
+}
+
+/**
+ * Local-daemon is loopback-only regardless of externalUrl. This mirrors the
+ * pre-startup guard in `daemon-auth-binding.ts` so the policy is consistent
+ * across both entry points.
+ */
+function localDaemonExposure(input: ServerModeExposureInput): ServerModeExposureDecision {
+  if (!isLoopbackHost(input.bindHost)) {
+    return { ok: false, code: 'local_daemon.non_loopback_forbidden' }
   }
-
-  // server-mode
-
-  if (!input.externalUrl) {
-    return { ok: false, code: 'server_mode.external_url_required' }
+  return {
+    ok: true,
+    kind: 'local-loopback',
+    // Bare IPv6 literals (e.g. ::1) are not valid in a URL host — they
+    // require brackets. Bracketed form ([::1]) and non-IPv6 hosts are
+    // left unchanged.
+    publicBaseUrl: `http://${bracketIpv6(input.bindHost)}`,
+    allowedOrigins: LOCAL_DAEMON_ALLOWED_ORIGINS,
+    trustedProxy: false,
   }
+}
 
+/** The https origin the deployment is reached at, or why it is refused. */
+function externalOrigin(
+  externalUrl: string | undefined,
+): { ok: true; parsed: URL } | ServerModeExposureDecision {
+  if (!externalUrl) return { ok: false, code: 'server_mode.external_url_required' }
   let parsed: URL
   try {
-    parsed = new URL(input.externalUrl)
+    parsed = new URL(externalUrl)
   } catch {
     // Unparseable — not a valid https URL.
     return { ok: false, code: 'server_mode.external_url_must_be_https' }
   }
-
   if (parsed.protocol !== 'https:') {
     return { ok: false, code: 'server_mode.external_url_must_be_https' }
   }
-
   // Origin-only contract: credentials, non-root path, query string, and
   // fragment are all rejected. The raw URL is never echoed in the failure
   // decision — sensitive query/credential data must not reach operator logs.
@@ -135,19 +137,25 @@ export function resolveServerModeExposure(
   ) {
     return { ok: false, code: 'server_mode.external_url_must_be_origin' }
   }
+  return { ok: true, parsed }
+}
 
-  // Same origin-only rules as externalUrl (https required, no
-  // credentials/path/query/fragment) via the shared pattern parser — entries
-  // may be exact origins or leftmost-label wildcard subdomain patterns (see
-  // origin-pattern.ts). The neutral reason is mapped back onto this module's
-  // own failure-code namespace so existing callers see byte-identical codes.
-  // The raw origin string is never echoed in the failure decision. Storing
-  // the canonicalized entry string (rather than `new URL(origin).origin`)
-  // matters here: `new URL('https://*.example.com')` does not throw, so a
-  // naive normalization would silently keep the wildcard as an inert literal
-  // string that isOriginAllowedForServerMode's matcher must still be able to
-  // re-parse back into a pattern.
-  const allowedOrigins = input.allowedOrigins ?? []
+/**
+ * Same origin-only rules as externalUrl (https required, no
+ * credentials/path/query/fragment) via the shared pattern parser — entries may
+ * be exact origins or leftmost-label wildcard subdomain patterns (see
+ * origin-pattern.ts). The neutral reason is mapped back onto this module's own
+ * failure-code namespace so existing callers see byte-identical codes. The raw
+ * origin string is never echoed in the failure decision. Storing the
+ * canonicalized entry string (rather than `new URL(origin).origin`) matters
+ * here: `new URL('https://*.example.com')` does not throw, so a naive
+ * normalization would silently keep the wildcard as an inert literal string
+ * that isOriginAllowedForServerMode's matcher must still be able to re-parse
+ * back into a pattern.
+ */
+function normalizedAllowedOrigins(
+  allowedOrigins: readonly string[],
+): { ok: true; origins: string[] } | ServerModeExposureDecision {
   const normalizedOrigins: string[] = []
   for (const origin of allowedOrigins) {
     const result = parseOriginPatternEntry(origin)
@@ -162,6 +170,17 @@ export function resolveServerModeExposure(
     }
     normalizedOrigins.push(canonicalizeOriginPatternEntry(origin))
   }
+  return { ok: true, origins: normalizedOrigins }
+}
+
+function serverModeExposure(input: ServerModeExposureInput): ServerModeExposureDecision {
+  const external = externalOrigin(input.externalUrl)
+  if (!('parsed' in external)) return external
+  const parsed = external.parsed
+
+  const normalized = normalizedAllowedOrigins(input.allowedOrigins ?? [])
+  if (!('origins' in normalized)) return normalized
+  const normalizedOrigins = normalized.origins
 
   return {
     ok: true,

@@ -25,6 +25,8 @@ import { type RunningServer, startHttpServer } from './http-server.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { getDb } from './store/db/index.js'
+import { tenantRoot } from './tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from './tenant/id.js'
 
 const _FLAGS = WEBAUTHN_FLAG_UP | WEBAUTHN_FLAG_UV | WEBAUTHN_FLAG_BE
 
@@ -101,7 +103,7 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
     // The pairing grant is seeded on disk before the server starts, same as
     // production: a browser must already be paired before it can mint a
     // pairing token at all.
-    createPairingGrantStore(dir).addGrant(HOSTED)
+    createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID)).addGrant(HOSTED)
 
     const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1', token: DAEMON_TOKEN })
@@ -147,7 +149,7 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
   const bindSession = bindPasskeySessionOverHttp
 
   it('refuses a bound session that is not a member of a member-gated workspace (not_a_member)', async () => {
-    createPairingGrantStore(dir).addGrant(HOSTED)
+    createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID)).addGrant(HOSTED)
     const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1', token: DAEMON_TOKEN })
 
@@ -173,7 +175,7 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
   })
 
   it('completes the real WS upgrade for a bound session that IS an admitted member', async () => {
-    createPairingGrantStore(dir).addGrant(HOSTED)
+    createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID)).addGrant(HOSTED)
     const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1', token: DAEMON_TOKEN })
 
@@ -195,7 +197,7 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
   })
 
   it('admits a bare pairing session on a member-LESS workspace', async () => {
-    createPairingGrantStore(dir).addGrant(HOSTED)
+    createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID)).addGrant(HOSTED)
     const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1', token: DAEMON_TOKEN })
 

@@ -191,68 +191,100 @@ export function createOAuthJwtValidator(
   }
 
   return {
-    async validate(
-      input: OAuthResourceTokenValidationInput,
-    ): Promise<OAuthResourceTokenValidationResult> {
-      let resolverFailed = false
-
-      // Wrap keyResolver to detect resolver-thrown errors vs jose-internal
-      // errors. The wrapper discards the thrown message — it may contain
-      // IdP URLs, JWKS endpoint addresses, or stack frames.
-      const wrappedKey: JWTVerifyGetKey = async (protectedHeader) => {
-        try {
-          return await keyResolver(protectedHeader)
-        } catch {
-          resolverFailed = true
-          throw new Error()
-        }
-      }
-
-      let payload: Record<string, unknown>
-
-      try {
-        const verified = await jwtVerify(input.token, wrappedKey, {
-          issuer,
-          audience: typeof audience === 'string' ? audience : [...audience],
-          clockTolerance: clockSkewSeconds,
-          algorithms: [...allowedAlgorithms],
-          requiredClaims: ['exp'],
-        })
-        payload = verified.payload as Record<string, unknown>
-
-        if (!allowUntypedAccessTokens) {
-          const tokenUse = payload.token_use
-          const hasAccessTokenDiscriminator =
-            isAccessTokenTyped(verified.protectedHeader.typ) || tokenUse === 'access'
-          if (!hasAccessTokenDiscriminator) {
-            return { ok: false, reason: 'not_access_token' }
-          }
-        }
-      } catch (err) {
-        return refusalFor(err, resolverFailed)
-      }
-
-      if (typeof payload.sub !== 'string' || payload.sub === '') {
-        return { ok: false, reason: 'malformed' }
-      }
-
-      const scopes = parseScopesClaim(payload, scopeClaim)
-
-      const grantedSet = new Set<string>(scopes)
-      for (const required of input.requiredScopes) {
-        if (!grantedSet.has(required)) {
-          return { ok: false, reason: 'insufficient_scope' }
-        }
-      }
-
-      return {
-        ok: true,
-        subject: payload.sub,
+    validate: (input) =>
+      validateToken(input, {
         issuer,
-        audience: typeof audience === 'string' ? audience : [...audience],
-        scopes,
-        expiresAt: typeof payload.exp === 'number' ? payload.exp : undefined,
-      }
-    },
+        audience,
+        clockSkewSeconds,
+        allowedAlgorithms,
+        allowUntypedAccessTokens,
+        scopeClaim,
+        keyResolver,
+      }),
+  }
+}
+
+interface ValidatorSettings {
+  readonly issuer: string
+  readonly audience: string | readonly string[]
+  readonly clockSkewSeconds: number
+  readonly allowedAlgorithms: readonly string[]
+  readonly allowUntypedAccessTokens: boolean
+  readonly scopeClaim: 'scope' | 'scp'
+  readonly keyResolver: JwtKeyResolver
+}
+
+const audienceList = (audience: string | readonly string[]): string | string[] =>
+  typeof audience === 'string' ? audience : [...audience]
+
+/**
+ * The signature check and the access-token discriminator — everything that can
+ * fail as a REFUSAL rather than as a claim judgement. Answers the payload, or
+ * the refusal to return verbatim.
+ */
+async function verifiedPayload(
+  token: string,
+  settings: ValidatorSettings,
+): Promise<
+  | { readonly kind: 'payload'; readonly payload: Record<string, unknown> }
+  | { readonly kind: 'refusal'; readonly result: OAuthResourceTokenValidationResult }
+> {
+  let resolverFailed = false
+  // Wrap keyResolver to detect resolver-thrown errors vs jose-internal
+  // errors. The wrapper discards the thrown message — it may contain IdP
+  // URLs, JWKS endpoint addresses, or stack frames.
+  const wrappedKey: JWTVerifyGetKey = async (protectedHeader) => {
+    try {
+      return await settings.keyResolver(protectedHeader)
+    } catch {
+      resolverFailed = true
+      throw new Error()
+    }
+  }
+
+  try {
+    const verified = await jwtVerify(token, wrappedKey, {
+      issuer: settings.issuer,
+      audience: audienceList(settings.audience),
+      clockTolerance: settings.clockSkewSeconds,
+      algorithms: [...settings.allowedAlgorithms],
+      requiredClaims: ['exp'],
+    })
+    const payload = verified.payload as Record<string, unknown>
+    if (settings.allowUntypedAccessTokens) return { kind: 'payload', payload }
+    const typed = isAccessTokenTyped(verified.protectedHeader.typ) || payload.token_use === 'access'
+    return typed
+      ? { kind: 'payload', payload }
+      : { kind: 'refusal', result: { ok: false, reason: 'not_access_token' } }
+  } catch (err) {
+    return { kind: 'refusal', result: refusalFor(err, resolverFailed) }
+  }
+}
+
+async function validateToken(
+  input: OAuthResourceTokenValidationInput,
+  settings: ValidatorSettings,
+): Promise<OAuthResourceTokenValidationResult> {
+  const verified = await verifiedPayload(input.token, settings)
+  if (verified.kind === 'refusal') return verified.result
+  const { payload } = verified
+
+  if (typeof payload.sub !== 'string' || payload.sub === '') {
+    return { ok: false, reason: 'malformed' }
+  }
+
+  const scopes = parseScopesClaim(payload, settings.scopeClaim)
+  const granted = new Set<string>(scopes)
+  if (input.requiredScopes.some((required) => !granted.has(required))) {
+    return { ok: false, reason: 'insufficient_scope' }
+  }
+
+  return {
+    ok: true,
+    subject: payload.sub,
+    issuer: settings.issuer,
+    audience: audienceList(settings.audience),
+    scopes,
+    expiresAt: typeof payload.exp === 'number' ? payload.exp : undefined,
   }
 }

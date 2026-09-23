@@ -263,6 +263,86 @@ export interface OAuthAuthzRouterOptions {
   registry: OAuthClientRegistry
 }
 
+/**
+ * Why the registry refuses this request, or `null` when it does not.
+ *
+ * Both answers are rendered LOCALLY by the caller and must never produce a
+ * Location header: sending an OAuth error to an unverified `redirect_uri`
+ * *is* an open redirect, with attacker-chosen parameters on top of it.
+ */
+function unregisteredRedirect(
+  registry: OAuthAuthzRouterOptions['registry'],
+  clientId: string,
+  redirectUri: string,
+): 'unknown_client' | 'redirect_uri_mismatch' | null {
+  if (!registry.some((entry) => entry.clientId === clientId)) return 'unknown_client'
+  if (!isRegisteredRedirectUri(registry, clientId, redirectUri)) return 'redirect_uri_mismatch'
+  return null
+}
+
+/**
+ * RFC 6749 §4.1.2.1 names a different error for each of these, and the one
+ * the client receives decides what it retries — so the FIELD that failed
+ * picks it, rather than every schema failure reading as `invalid_request`.
+ */
+function authorizeRedirectError(error: z.ZodError): AuthorizeRedirectError {
+  const failedKeys = new Set(error.issues.map((issue) => issue.path[0]))
+  if (failedKeys.has('response_type')) return 'unsupported_response_type'
+  return failedKeys.has('scope') ? 'invalid_scope' : 'invalid_request'
+}
+
+/**
+ * Everything that has to hold before a decision is acted on, in one place —
+ * each answer a locally rendered refusal, never a redirect.
+ *
+ * The order is load-bearing: the target is read while the transaction is
+ * still PENDING (after approve/deny it is no longer readable, and a missing
+ * one is also how a restarted daemon's in-memory store surfaces to the
+ * user), and the registry is re-checked LAST because an operator can remove
+ * a client between the GET and this POST, and this is the final point before
+ * a Location header is emitted.
+ *
+ * The double submit is the cookie AND the form field each being the value
+ * the store bound to this transaction: possession of a transaction id alone
+ * authorizes nothing.
+ */
+async function admittedDecision(
+  c: Context,
+  options: OAuthAuthzRouterOptions,
+): Promise<
+  | {
+      transactionId: string
+      decision: z.infer<typeof decisionFormSchema>['decision']
+      target: NonNullable<ReturnType<OAuthTransactionStore['getTransactionRedirect']>>
+    }
+  | { refusal: { reason: AuthorizeErrorReason; status: 400 | 403 } }
+> {
+  const csrfFailed = { refusal: { reason: 'csrf_check_failed', status: 403 } } as const
+  if (isCrossSiteRequest(c)) return csrfFailed
+
+  const form = decisionFormSchema.safeParse(
+    Object.fromEntries(new URLSearchParams(await c.req.text()).entries()),
+  )
+  if (!form.success) return csrfFailed
+  const { transaction_id: transactionId, csrf_token: formCsrfToken, decision } = form.data
+
+  const cookieCsrfToken = getCookie(c, APPROVAL_COOKIE_NAME)
+  if (!cookieCsrfToken) return csrfFailed
+
+  const target = options.store.getTransactionRedirect(transactionId)
+  if (!target) return { refusal: { reason: 'transaction_not_found', status: 400 } }
+
+  const bound =
+    options.store.verifyApprovalBinding(transactionId, cookieCsrfToken) &&
+    options.store.verifyApprovalBinding(transactionId, formCsrfToken)
+  if (!bound) return csrfFailed
+
+  if (!isRegisteredRedirectUri(options.registry, target.clientId, target.redirectUri)) {
+    return { refusal: { reason: 'redirect_uri_mismatch', status: 400 } }
+  }
+  return { transactionId, decision, target }
+}
+
 export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
   const app = new Hono()
 
@@ -284,22 +364,14 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
     // registered one must never produce a Location header: sending an OAuth
     // error to an unverified redirect_uri *is* an open redirect, and the
     // error parameters would be attacker-chosen bait on top of it.
-    const knownClient = options.registry.some((entry) => entry.clientId === clientId)
-    if (!knownClient) return errorPage(c, 'unknown_client', 400)
-    if (!isRegisteredRedirectUri(options.registry, clientId, redirectUri)) {
-      return errorPage(c, 'redirect_uri_mismatch', 400)
-    }
+    const unregistered = unregisteredRedirect(options.registry, clientId, redirectUri)
+    if (unregistered) return errorPage(c, unregistered, 400)
 
     // Past this line the redirect_uri is trusted, so RFC 6749 §4.1.2.1
     // error redirects are safe.
     const parsed = authorizeQuerySchema.safeParse(query)
     if (!parsed.success) {
-      const failedKeys = new Set(parsed.error.issues.map((issue) => issue.path[0]))
-      const error: AuthorizeRedirectError = failedKeys.has('response_type')
-        ? 'unsupported_response_type'
-        : failedKeys.has('scope')
-          ? 'invalid_scope'
-          : 'invalid_request'
+      const error = authorizeRedirectError(parsed.error)
       // `state` may itself be the missing parameter; echo it only when the
       // client actually sent one.
       const state = query.state
@@ -354,38 +426,9 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
   })
 
   app.post(OAUTH_AUTHORIZE_DECISION_PATH, oauthBodyLimit, async (c) => {
-    if (isCrossSiteRequest(c)) return errorPage(c, 'csrf_check_failed', 403)
-
-    const form = decisionFormSchema.safeParse(
-      Object.fromEntries(new URLSearchParams(await c.req.text()).entries()),
-    )
-    if (!form.success) return errorPage(c, 'csrf_check_failed', 403)
-    const { transaction_id: transactionId, csrf_token: formCsrfToken, decision } = form.data
-
-    const cookieCsrfToken = getCookie(c, APPROVAL_COOKIE_NAME)
-    if (!cookieCsrfToken) return errorPage(c, 'csrf_check_failed', 403)
-
-    // Read the redirect target while the transaction is still pending — after
-    // approve/deny it is no longer readable, and a missing one here is also
-    // how a restarted daemon (in-memory store) surfaces to the user.
-    const target = options.store.getTransactionRedirect(transactionId)
-    if (!target) return errorPage(c, 'transaction_not_found', 400)
-
-    // Double submit: the cookie AND the form field must each be the value the
-    // store bound to this transaction. Possession of a transaction id alone
-    // authorizes nothing.
-    const bound =
-      options.store.verifyApprovalBinding(transactionId, cookieCsrfToken) &&
-      options.store.verifyApprovalBinding(transactionId, formCsrfToken)
-    if (!bound) return errorPage(c, 'csrf_check_failed', 403)
-
-    // Re-check the stored redirect_uri against the registry rather than
-    // trusting that the GET validated it: an operator can remove a client
-    // between the two requests, and this is the last point before a Location
-    // header is emitted.
-    if (!isRegisteredRedirectUri(options.registry, target.clientId, target.redirectUri)) {
-      return errorPage(c, 'redirect_uri_mismatch', 400)
-    }
+    const admitted = await admittedDecision(c, options)
+    if ('refusal' in admitted) return errorPage(c, admitted.refusal.reason, admitted.refusal.status)
+    const { transactionId, decision, target } = admitted
 
     // The approval session is spent either way — a decided transaction can
     // never be decided again, so leaving its cookie on the browser only keeps

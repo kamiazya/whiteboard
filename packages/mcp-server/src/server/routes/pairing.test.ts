@@ -17,6 +17,8 @@ import {
   createPairingTokenStore,
 } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { tenantRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createPairingRouter } from './pairing.js'
 
 const HOSTED = 'https://latest.kamiazya-whiteboard.pages.dev'
@@ -25,11 +27,11 @@ let dir: string | null = null
 
 function makeApp() {
   dir = mkdtempSync(join(tmpdir(), 'pairing-routes-'))
-  const grants = createPairingGrantStore(dir)
+  const grants = createPairingGrantStore(tenantRoot(dir, SELF_HOST_TENANT_ID))
   const codes = createPairingCodeStore()
   const tokens = createPairingTokenStore()
   const identity = createDaemonIdentity({ dataDir: dir })
-  const credentials = createWebAuthnCredentialStore(dir)
+  const credentials = createWebAuthnCredentialStore(tenantRoot(dir, SELF_HOST_TENANT_ID))
   return {
     app: createPairingRouter({ grants, codes, tokens, credentials, identity }),
     grants,

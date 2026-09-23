@@ -16,23 +16,70 @@ import {
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { LoroStore, type LoroStoreLike, touchContentTimestamp } from './loro-store.js'
+
+/**
+ * The read did not complete, so nothing is known about the document — as
+ * opposed to `null`, which is the document's own answer ("no content here").
+ * A caller that caches answers must keep the two apart: this one is worth
+ * asking again, and caching it as the other is what leaves a preview blank
+ * for good.
+ */
+export class DocumentContentUnreadableError extends Error {
+  constructor(readonly documentId: string) {
+    super(`document content could not be read: ${documentId}`)
+    this.name = 'DocumentContentUnreadableError'
+  }
+}
 
 /**
  * A document's CURRENT content as a standalone Loro document (a value
  * projection — fresh oplog, current state), or null when neither the
- * workspace tree nor the legacy store holds it readably.
+ * workspace tree nor the legacy store HOLDS it.
+ *
+ * The ONE read for a browser-kept document nothing has open: the files
+ * source, a duplicate, an embed and the reference graph all come through
+ * here, so what "current" means — tree first, legacy record after — is
+ * decided once.
+ *
+ * A read that did not COMPLETE is a different answer and now propagates as
+ * `DocumentContentUnreadableError`. It used to be folded into "no content"
+ * twice over — a thrown read was caught here and reported as `not-found`,
+ * and the store's own `read-unavailable`, which exists to say "the read
+ * failed and this says nothing about the document", fell into the same
+ * `!== 'ok'` branch. Every caller above reads that as "this document has no
+ * content", and the prefetch caches it as terminal, so ONE transient
+ * IndexedDB failure blanked a body's embed for the life of the page — with
+ * nothing logged, because the catch was silent.
+ *
+ * `corrupt-snapshot` / `corrupt-delta` / `unsupported-version` stay `null`:
+ * those are verdicts on the stored bytes, so asking again cannot change the
+ * answer. Only the one that says nothing about the bytes is retryable.
  */
 export async function loadDocumentContent(
   documentId: string,
-  dbName?: string,
+  options: {
+    /**
+     * The legacy per-document store to fall back on. Injected by a surface
+     * that was handed one (a page's store double in a test); the default is
+     * the real one.
+     */
+    readonly loro?: LoroStoreLike
+    readonly dbName?: string
+  } = {},
 ): Promise<LoroDoc | null> {
-  const projected = await loadWorkspaceDocumentProjection(documentId, dbName)
-  if (projected !== null) return projected
-  const result = await new LoroStore(dbName)
-    .load(documentId)
-    .catch(() => ({ kind: 'not-found' }) as const)
-  if (result.kind !== 'ok') return null
+  // Whether the TREE could be read is its own fact: a workspace that did not
+  // open says nothing about the document either, so "the legacy row has no
+  // record" must not become "no content" underneath it.
+  const tree = await treeProjection(documentId, options.dbName)
+  if (tree.doc !== null) return tree.doc
+  const treeUnread = !tree.read
+  const result = await (options.loro ?? new LoroStore(options.dbName)).load(documentId)
+  if (result.kind === 'read-unavailable') throw new DocumentContentUnreadableError(documentId)
+  if (result.kind !== 'ok') {
+    if (treeUnread) throw new DocumentContentUnreadableError(documentId)
+    return null
+  }
   const doc = new Loro()
   doc.import(result.snapshot)
   for (const delta of result.deltas ?? []) doc.import(delta)
@@ -54,9 +101,31 @@ export async function loadWorkspaceDocumentProjection(
   documentId: string,
   dbName?: string,
 ): Promise<LoroDoc | null> {
-  const workspace = await openWorkspaceOrNull(new BrowserWorkspaceDocs(dbName))
-  if (workspace === null) return null
-  return projectWorkspaceDocument(workspace, documentId)
+  return (await treeProjection(documentId, dbName)).doc
+}
+
+/**
+ * The tree's answer AND whether the tree could be read at all — the
+ * distinction `loadDocumentContent` needs and its callers must not be given:
+ * `loadWorkspaceDocumentProjection` is total on purpose (see `boot.test.ts`,
+ * which holds it as the real consumer of a workspace id whose resolution can
+ * reject), so the two answers are separated here instead.
+ */
+async function treeProjection(
+  documentId: string,
+  dbName: string | undefined,
+): Promise<{ doc: LoroDoc | null; read: boolean }> {
+  try {
+    // Inside an async body, so the synchronous `getBrowserWorkspaceId` throw
+    // that `openWorkspaceOrNull` exists to absorb lands in this catch.
+    const workspace = await new BrowserWorkspaceDocs(dbName).open(getBrowserWorkspaceId())
+    return {
+      doc: workspace === null ? null : projectWorkspaceDocument(workspace, documentId),
+      read: true,
+    }
+  } catch {
+    return { doc: null, read: false }
+  }
 }
 
 /**

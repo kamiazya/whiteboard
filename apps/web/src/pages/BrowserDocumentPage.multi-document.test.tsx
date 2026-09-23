@@ -102,7 +102,7 @@ function render(ui: ReactElement) {
  * in that list and the navigation would be a no-op.
  */
 async function seedTwoDocuments(store: IdbDocumentIndex): Promise<[string, string]> {
-  const { createSeededDocument } = await import('./use-browser-document-controller.js')
+  const { createSeededDocument } = await import('../lib/create-seeded-document.js')
   const loro = new LoroStore()
   const clock = idbContentClock()
   const a = await createSeededDocument(store, loro, clock)

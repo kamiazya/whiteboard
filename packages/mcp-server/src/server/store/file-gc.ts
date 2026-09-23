@@ -43,6 +43,29 @@ function workspaceFilesDir(workspaceId: string): string {
   return assertPathWithinDir(dir, getDataDir(), 'files dir')
 }
 
+/**
+ * One entry of the legacy `elements` list, as three plain reads.
+ *
+ * A CONTAINER entry answers through `.get`; a plain-VALUE entry — the shape a
+ * workspace-tree projection carries a legacy list in — is its own record and
+ * answers through `toJSON()` or directly. Asking that question once here is
+ * what lets the caller read the three fields without repeating it per field.
+ */
+function legacyElementFields(el: unknown): {
+  type: unknown
+  isDeleted: unknown
+  fileId: unknown
+} | null {
+  if (!el || typeof el !== 'object') return null
+  if (typeof (el as { get?: unknown }).get === 'function') {
+    const get = (el as { get: (k: string) => unknown }).get.bind(el)
+    return { type: get('type'), isDeleted: get('isDeleted'), fileId: get('fileId') }
+  }
+  const obj =
+    (el as { toJSON?: () => Record<string, unknown> }).toJSON?.() ?? (el as Record<string, unknown>)
+  return { type: obj.type, isDeleted: obj.isDeleted, fileId: obj.fileId }
+}
+
 // Walk a single doc state and collect fileIds referenced by it. Two passes,
 // both additive into the same sink:
 //
@@ -57,25 +80,9 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
 
   const list = doc.getMovableList('elements')
   for (let i = 0; i < list.length; i++) {
-    const el = list.get(i)
-    if (!el || typeof el !== 'object') continue
-    const get =
-      typeof (el as { get?: unknown }).get === 'function'
-        ? (k: string) => (el as { get: (k: string) => unknown }).get(k)
-        : null
-    // Container entries answer via .get/.toJSON; a plain-VALUE entry — the
-    // shape a workspace-tree projection carries a legacy list in — is its
-    // own record.
-    const obj = get
-      ? null
-      : ((el as { toJSON?: () => Record<string, unknown> }).toJSON?.() ??
-        (el as Record<string, unknown>))
-    const type = get ? get('type') : obj?.type
-    if (type !== 'image') continue
-    const isDeleted = get ? get('isDeleted') : obj?.isDeleted
-    if (isDeleted === true) continue
-    const fileId = get ? get('fileId') : obj?.fileId
-    if (typeof fileId === 'string' && fileId.length > 0) sink.add(fileId)
+    const fields = legacyElementFields(list.get(i))
+    if (fields === null || fields.type !== 'image' || fields.isDeleted === true) continue
+    if (typeof fields.fileId === 'string' && fields.fileId.length > 0) sink.add(fields.fileId)
   }
 }
 
@@ -200,6 +207,56 @@ export interface PurgeFilesOptions {
 const DEFAULT_GRACE_MS = 60 * 60 * 1000
 
 /**
+ * Delete the uploads nothing points at any more, and report what went.
+ *
+ * Two things are deliberately NOT deleted. Anything that does not look like
+ * an image upload (`.tmp`, a partial write): the directory is ours, but the
+ * dangling-references heuristic says nothing about those, and a future,
+ * explicit cleanup is the right owner. And anything touched inside the grace
+ * window: a file uploaded a moment ago is tied to no document yet, because
+ * the caller is about to save the element that references it — the tombstone
+ * delay is what keeps that upload -> save window from losing a legitimate
+ * blob.
+ *
+ * A failure per file is logged and stepped over rather than raised: the file
+ * may simply have vanished between the `stat` and the `unlink`, and a later
+ * pass retries either way.
+ */
+async function unlinkDangling({
+  workspaceId,
+  dir,
+  entries,
+  referenced,
+  graceMs,
+}: {
+  workspaceId: string
+  dir: string
+  entries: readonly string[]
+  referenced: ReadonlySet<string>
+  graceMs: number
+}): Promise<{ purgedCount: number; purgedBytes: number }> {
+  let purgedCount = 0
+  let purgedBytes = 0
+  const now = Date.now()
+  for (const entry of entries) {
+    const ext = extname(entry).toLowerCase()
+    if (!IMAGE_EXTS.has(ext)) continue
+    if (referenced.has(basename(entry, ext))) continue
+    const fullPath = join(dir, entry)
+    try {
+      const info = await stat(fullPath)
+      if (graceMs > 0 && now - info.mtimeMs < graceMs) continue
+      await unlink(fullPath)
+      purgedCount += 1
+      purgedBytes += info.size
+    } catch (err) {
+      log.warning({ workspaceId, entry, err }, 'purge skipped')
+    }
+  }
+  return { purgedCount, purgedBytes }
+}
+
+/**
  * Parsed strictly — a bare non-negative base-10 integer — matching the
  * sibling `WHITEBOARD_FILE_GC_INTERVAL_MS`.
  *
@@ -303,36 +360,6 @@ export async function purgeDanglingFiles(
       return { purgedCount: 0, purgedBytes: 0, skippedReason: 'record-moved' as const }
     }
 
-    let purgedCount = 0
-    let purgedBytes = 0
-    const now = Date.now()
-    for (const entry of entries) {
-      const ext = extname(entry).toLowerCase()
-      // Skip anything that does not look like an image upload — the dir
-      // is ours, but stray files (.tmp, partial uploads) should not be
-      // deleted by the dangling-references heuristic; leave them for a
-      // future, more explicit cleanup.
-      if (!IMAGE_EXTS.has(ext)) continue
-      const fileId = basename(entry, ext)
-      if (referenced.has(fileId)) continue
-      const fullPath = join(dir, entry)
-      try {
-        const info = await stat(fullPath)
-        // Tombstone delay: a file uploaded just now isn't tied to any
-        // canvas yet, but the user is about to call saveDocument with the
-        // matching image element. Spare freshly-touched files so that
-        // upload → saveDocument window doesn't lose a legitimate blob.
-        if (graceMs > 0 && now - info.mtimeMs < graceMs) continue
-        await unlink(fullPath)
-        purgedCount += 1
-        purgedBytes += info.size
-      } catch (err) {
-        // Race: file vanished between stat and unlink, or unlink failed
-        // for another reason — log and move on. Subsequent runs will
-        // retry.
-        log.warning({ workspaceId, entry, err }, 'purge skipped')
-      }
-    }
-    return { purgedCount, purgedBytes }
+    return await unlinkDangling({ workspaceId, dir, entries, referenced, graceMs })
   })
 }

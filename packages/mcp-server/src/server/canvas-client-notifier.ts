@@ -20,6 +20,22 @@ import {
 const log = getLogger('canvas-client-notifier')
 
 /**
+ * The request's optional fields, with the absent ones left OUT rather than
+ * sent as `undefined` — the wire message is validated against a schema that
+ * distinguishes the two.
+ */
+function viewportPayload(request: ViewportRequest): Record<string, unknown> {
+  return {
+    ...(request.mode === undefined ? {} : { mode: request.mode }),
+    ...(request.elementIds === undefined ? {} : { elementIds: [...request.elementIds] }),
+    ...(request.animate === undefined ? {} : { animate: request.animate }),
+    ...(request.scrollX === undefined ? {} : { scrollX: request.scrollX }),
+    ...(request.scrollY === undefined ? {} : { scrollY: request.scrollY }),
+    ...(request.zoom === undefined ? {} : { zoom: request.zoom }),
+  }
+}
+
+/**
  * Bridges server-core's `CanvasClientNotifier` port onto the daemon's
  * WebSocket routes.
  *
@@ -104,14 +120,7 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
         // a message that will land. Report on ready clients, which is what
         // "someone is watching right now" means.
         if (getReadyClientCount(request.workspaceId, path) === 0) return false
-        sendViewportRequest(request.workspaceId, path, nanoid(), {
-          ...(request.mode === undefined ? {} : { mode: request.mode }),
-          ...(request.elementIds === undefined ? {} : { elementIds: [...request.elementIds] }),
-          ...(request.animate === undefined ? {} : { animate: request.animate }),
-          ...(request.scrollX === undefined ? {} : { scrollX: request.scrollX }),
-          ...(request.scrollY === undefined ? {} : { scrollY: request.scrollY }),
-          ...(request.zoom === undefined ? {} : { zoom: request.zoom }),
-        })
+        sendViewportRequest(request.workspaceId, path, nanoid(), viewportPayload(request))
         return true
       } catch (err) {
         log.warning(

@@ -133,33 +133,21 @@ function ReplicaActionPanel({
   )
 }
 
-export function ReplicaReadPage({
-  workspaceId,
-  displayName,
-  syncedAt,
-  daemonBaseUrl,
-  renewal,
-  withheld,
-  onReconnect,
-}: ReplicaReadPageProps) {
-  const [state, setState] = useState<LoadState>({ kind: 'loading' })
-  // Bumped by Reconnect to re-run the load effect below without touching
-  // `workspaceId` — a forget()+re-ask must go through the SAME open() path
-  // a cold load takes, never a bespoke retry.
-  const [attempt, setAttempt] = useState(0)
-  const [reconnecting, setReconnecting] = useState(false)
-  const [unlocking, setUnlocking] = useState(false)
-  const [selectedPath, setSelectedPath] = useState<string | null>(null)
-  // The markdown editor's controlled value, re-derived when the selection
-  // changes; edits go straight into the record's containers and a debounced
-  // save appends them to the stored replica.
-  const [draft, setDraft] = useState<string | null>(null)
-  // ponytail: one trailing 500ms debounce + a sequential save chain — the
-  // full save-scheduler carries persistence-state reporting this page does
-  // not show. Upgrade path: thread createSaveScheduler when a save
-  // indicator arrives here.
+/**
+ * The replica's save queue: one trailing debounce and a sequential chain.
+ *
+ * ponytail: the full save-scheduler carries persistence-state reporting this
+ * page does not show. Upgrade path: thread createSaveScheduler when a save
+ * indicator arrives here.
+ *
+ * The unmount FLUSHES rather than cancels — the daemon returning is exactly
+ * what unmounts this page, and that moment must not eat the last debounce
+ * window of typing.
+ */
+function useReplicaSaveQueue(workspaceId: string) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveChain = useRef<Promise<void>>(Promise.resolve())
+  const latestRecord = useRef<LoroDoc | null>(null)
   const saveNow = useCallback(
     (record: LoroDoc) => {
       saveChain.current = saveChain.current
@@ -182,10 +170,6 @@ export function ReplicaReadPage({
     },
     [saveNow],
   )
-  // FLUSH on unmount, not cancel: the daemon returning is exactly what
-  // unmounts this page, and that moment must not eat the last debounce
-  // window of typing.
-  const latestRecord = useRef<LoroDoc | null>(null)
   useEffect(() => {
     return () => {
       if (saveTimer.current !== null) {
@@ -195,7 +179,28 @@ export function ReplicaReadPage({
       }
     }
   }, [saveNow])
+  return { scheduleSave, latestRecord }
+}
 
+/**
+ * Opens this workspace's stored replica and says what came back: the record
+ * and its entries, a withheld reason, or nothing at all. Re-runs on an
+ * `attempt` bump, which is how Reconnect and Unlock re-enter the SAME open
+ * path a cold load takes rather than a bespoke retry.
+ */
+function useReplicaRecord({
+  workspaceId,
+  daemonBaseUrl,
+  attempt,
+  withheld,
+  setState,
+}: {
+  workspaceId: string
+  daemonBaseUrl: string
+  attempt: number
+  withheld: ReplicaReadPageProps['withheld']
+  setState: (state: LoadState) => void
+}): void {
   useEffect(() => {
     let cancelled = false
     setState({ kind: 'loading' })
@@ -263,6 +268,314 @@ export function ReplicaReadPage({
       cancelled = true
     }
   }, [workspaceId, daemonBaseUrl, attempt, withheld])
+}
+
+/**
+ * What the selected document points at, resolved out of the replica itself.
+ *
+ * Seeded from what the SELECTED document says, then walked the way every
+ * other keeper walks it — `referenceTargets` re-reads the graph as it grows,
+ * so a referenced body's own links load too, under its own caps.
+ */
+function replicaReferenceWire({
+  record,
+  entries,
+  selected,
+  resolveAlias,
+  resolveTitle,
+}: {
+  record: LoroDoc
+  entries: readonly WorkspaceDocumentEntry[]
+  selected: WorkspaceDocumentEntry
+  resolveAlias: ReturnType<typeof createUniqueNameResolver>
+  resolveTitle: ReturnType<typeof linkTitles>
+}): ReferenceWire {
+  const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
+  const load = (target: string): LoadedReference | null => {
+    const entry = byId.get(resolveAlias(target) ?? target) ?? byId.get(target)
+    if (entry === undefined) return null
+    const containers = documentContainers(record, entry.documentId)
+    return {
+      documentId: entry.documentId,
+      ...(entry.name === undefined ? {} : { name: entry.name }),
+      ...(entry.kind === 'spatial'
+        ? { canvas: readSpatialCanvas(containers) }
+        : { body: readMarkdownBody(containers) }),
+    }
+  }
+  // Seeded from what the SELECTED document says, then walked the way every
+  // other keeper walks it — `referenceTargets` re-reads the graph as it
+  // grows, so a referenced body's own links load too, under its own caps.
+  const containers = documentContainers(record, selected.documentId)
+  const seeds =
+    selected.kind === 'spatial'
+      ? { canvases: [readSpatialCanvas(containers)] }
+      : { bodies: [readMarkdownBody(containers)] }
+  const graph = new Map<string, LoadedReference | null>()
+  for (;;) {
+    const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
+      (target) => !graph.has(target),
+    )
+    if (wanted.length === 0) break
+    for (const target of wanted) graph.set(target, load(target))
+  }
+  return referenceWire(graph, { resolveAlias, resolveTitle })
+}
+
+/** The link table and reference seams the editor draws this replica with. */
+function useReplicaSeams(state: LoadState, selected: WorkspaceDocumentEntry | undefined) {
+  const linkable = useMemo(
+    (): readonly LinkableDocument[] =>
+      state.kind === 'ready'
+        ? state.entries.map((entry) => ({
+            id: entry.documentId,
+            path: entry.path,
+            ...(entry.name === undefined ? {} : { displayName: entry.name }),
+            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          }))
+        : [],
+    [state],
+  )
+  const resolveAlias = useMemo(() => createUniqueNameResolver(linkEntries(linkable)), [linkable])
+  const resolveTitle = useMemo(() => linkTitles(linkable), [linkable])
+
+  const references = useMemo(
+    () =>
+      state.kind !== 'ready' || selected === undefined
+        ? undefined
+        : replicaReferenceWire({
+            record: state.record,
+            entries: state.entries,
+            selected,
+            resolveAlias,
+            resolveTitle,
+          }),
+    [state, selected, resolveAlias, resolveTitle],
+  )
+
+  const seams = useMemo(
+    () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
+    [references],
+  )
+  return { seams, references }
+}
+
+/**
+ * What is being edited, and what an edit does: the record is the source on
+ * every selection switch, and a change writes through the containers before
+ * the debounced save appends it.
+ */
+function useReplicaEditing({
+  state,
+  selected,
+  scheduleSave,
+}: {
+  state: LoadState
+  selected: WorkspaceDocumentEntry | undefined
+  scheduleSave: (record: LoroDoc) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const content = useMemo(() => {
+    if (state.kind !== 'ready' || selected === undefined) return null
+    const containers = documentContainers(state.record, selected.documentId)
+    return selected.kind === 'spatial'
+      ? { kind: 'spatial' as const, canvas: readSpatialCanvas(containers) }
+      : { kind: 'markdown' as const, body: readMarkdownBody(containers) }
+  }, [state, selected])
+
+  // Selection decides the draft; the record is the source on every switch.
+  useEffect(() => {
+    setDraft(content?.kind === 'markdown' ? content.body : null)
+    spatialPrev.current = content?.kind === 'spatial' ? content.canvas : null
+    setSpatialDraft(content?.kind === 'spatial' ? content.canvas : null)
+  }, [content])
+
+  // The spatial draft mirrors the markdown one; `spatialPrev` is what the
+  // visible-diff reconcile compares against, advanced on every commit.
+  const [spatialDraft, setSpatialDraft] = useState<SpatialCanvas | null>(null)
+  const spatialPrev = useRef<SpatialCanvas | null>(null)
+  const onSpatialChange = useCallback(
+    (next: SpatialCanvas) => {
+      if (state.kind !== 'ready' || selected === undefined || selected.kind !== 'spatial') return
+      setSpatialDraft(next)
+      const prev = spatialPrev.current
+      if (prev !== null) {
+        // A visible diff, never a whole-canvas resync: a resync's silent
+        // deletion of an unknown-version record would become an op that
+        // SHIPS, erasing a newer client's node on the keeper.
+        reconcileSpatialCanvas(documentContainers(state.record, selected.documentId), prev, next)
+      }
+      spatialPrev.current = next
+      scheduleSave(state.record)
+    },
+    [state, selected, scheduleSave],
+  )
+
+  const onDraftChange = useCallback(
+    (next: string) => {
+      if (state.kind !== 'ready' || selected === undefined || selected.kind === 'spatial') return
+      setDraft(next)
+      writeMarkdownBody(documentContainers(state.record, selected.documentId), next)
+      scheduleSave(state.record)
+    },
+    [state, selected, scheduleSave],
+  )
+  return { content, draft, spatialDraft, onDraftChange, onSpatialChange }
+}
+
+interface ReplicaReaderProps {
+  entries: WorkspaceDocumentEntry[]
+  displayName: ReplicaReadPageProps['displayName']
+  workspaceId: string
+  syncedAt: ReplicaReadPageProps['syncedAt']
+  selected: WorkspaceDocumentEntry | undefined
+  selectedPath: string | null
+  setSelectedPath: (path: string) => void
+  content: { kind: 'spatial'; canvas: SpatialCanvas } | { kind: 'markdown'; body: string } | null
+  draft: string | null
+  spatialDraft: SpatialCanvas | null
+  onDraftChange: (next: string) => void
+  onSpatialChange: (next: SpatialCanvas) => void
+  seams: ReturnType<typeof referenceSeamsFromWire> | undefined
+  references: ReferenceWire | undefined
+}
+
+/** The replica as a document surface: the banner, the tree, and the editor. */
+function ReplicaReader({
+  entries,
+  displayName,
+  workspaceId,
+  syncedAt,
+  selected,
+  selectedPath,
+  setSelectedPath,
+  content,
+  draft,
+  spatialDraft,
+  onDraftChange,
+  onSpatialChange,
+  seams,
+  references,
+}: ReplicaReaderProps) {
+  return (
+    <div className="flex h-full flex-col" data-testid="replica-state-readable">
+      <div
+        data-testid="replica-offline-banner"
+        className="border-b bg-amber-500/10 px-4 py-2 text-sm"
+      >
+        <span className="font-medium">{displayName ?? workspaceId}</span>
+        {' — the daemon that keeps this workspace is unreachable. '}
+        This is the copy cached in this browser
+        {syncedAt !== undefined && (
+          <> (synced {formatRelative(syncedAt, { pastDay: 'absolute' })})</>
+        )}
+        . Edits save here and ship to the daemon when it returns.
+      </div>
+      <div className="flex min-h-0 flex-1">
+        <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
+          <WorkspaceFileTree
+            documents={entries}
+            onOpen={(entry) => setSelectedPath(entry.path)}
+            {...(selectedPath === null ? {} : { selectedPath })}
+          />
+        </div>
+        <div
+          className={
+            // The spatial editor measures itself: inside a padded
+            // overflow-auto box its h-full slightly overflows, a scrollbar
+            // appears, the box shrinks, the scrollbar leaves — a
+            // ResizeObserver oscillation React reports as "maximum update
+            // depth exceeded". Text content keeps the scrolling pane.
+            content?.kind === 'spatial'
+              ? 'min-w-0 flex-1 overflow-hidden'
+              : 'min-w-0 flex-1 overflow-auto p-4'
+          }
+        >
+          {content === null && (
+            <p className="text-sm text-muted-foreground">Select a document to read.</p>
+          )}
+          {content?.kind === 'markdown' && draft !== null && (
+            <MarkdownEditor
+              key={selected?.documentId}
+              initialViewMode="split"
+              value={draft}
+              onChange={onDraftChange}
+              references={seams}
+            />
+          )}
+          {content?.kind === 'spatial' && spatialDraft !== null && (
+            <SpatialEditor
+              key={selected?.documentId}
+              canvas={spatialDraft}
+              onChange={onSpatialChange}
+              // Editing-forward: the palette still offers the hand tool,
+              // but an offline visit that came here to fix something
+              // should not need a tool switch first.
+              defaultTool="select"
+              className="h-full"
+              references={references}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What the live region says. Mounted before it speaks
+ * (polite-live-region.test.ts): a role="status" region that arrives already
+ * carrying its message is announced inconsistently, so that ONE region stays
+ * in the DOM for the page's whole life and only its text changes — sr-only
+ * when there is nothing to say, since the visible copy says the same thing
+ * for a sighted reader.
+ *
+ * 'locked' and 'needs-connection' both render NOTHING but a connectivity
+ * message, so a screen-reader user landing there (first mount, or after a
+ * Reconnect attempt that settles back) must hear it — not just 'Loading…'
+ * followed by silence.
+ */
+function replicaLiveStatus({
+  state,
+  reconnecting,
+  pageState,
+  lockedLine,
+}: {
+  state: LoadState
+  reconnecting: boolean
+  pageState: ReturnType<typeof replicaPageState> | null
+  lockedLine: string | undefined
+}): string | null {
+  if (state.kind === 'loading') return 'Loading…'
+  if (reconnecting) return 'Reconnecting…'
+  if (pageState === 'removed' || pageState === 'unpaired') return REPLICA_STATE_COPY[pageState].body
+  if (pageState === 'locked' || pageState === 'needs-connection') {
+    return REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')
+  }
+  if (pageState === 'unlockable') return REPLICA_STATE_COPY.unlockable.body
+  return null
+}
+
+export function ReplicaReadPage({
+  workspaceId,
+  displayName,
+  syncedAt,
+  daemonBaseUrl,
+  renewal,
+  withheld,
+  onReconnect,
+}: ReplicaReadPageProps) {
+  const [state, setState] = useState<LoadState>({ kind: 'loading' })
+  // Bumped by Reconnect to re-run the load effect below without touching
+  // `workspaceId` — a forget()+re-ask must go through the SAME open() path
+  // a cold load takes, never a bespoke retry.
+  const [attempt, setAttempt] = useState(0)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [unlocking, setUnlocking] = useState(false)
+  const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const { scheduleSave, latestRecord } = useReplicaSaveQueue(workspaceId)
+
+  useReplicaRecord({ workspaceId, daemonBaseUrl, attempt, withheld, setState })
 
   // Read on every render rather than held in state: `unlockReplicaKey` can
   // DROP the blob (a spent lease, ciphertext nothing here opens), and a
@@ -328,129 +641,16 @@ export function ReplicaReadPage({
   // entries — so a `[[...]]` written here resolves by the rules the rest of
   // the app already applies (path or id; a display name is a label, never a
   // target) rather than by a lookup this page invented for itself.
-  const linkable = useMemo(
-    (): readonly LinkableDocument[] =>
-      state.kind === 'ready'
-        ? state.entries.map((entry) => ({
-            id: entry.documentId,
-            path: entry.path,
-            ...(entry.name === undefined ? {} : { displayName: entry.name }),
-            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-          }))
-        : [],
-    [state],
-  )
-  const resolveAlias = useMemo(() => createUniqueNameResolver(linkEntries(linkable)), [linkable])
-  const resolveTitle = useMemo(() => linkTitles(linkable), [linkable])
-
-  const references = useMemo((): ReferenceWire | undefined => {
-    if (state.kind !== 'ready' || selected === undefined) return undefined
-    const byId = new Map(state.entries.map((entry) => [entry.documentId, entry]))
-    const load = (target: string): LoadedReference | null => {
-      const entry = byId.get(resolveAlias(target) ?? target) ?? byId.get(target)
-      if (entry === undefined) return null
-      const containers = documentContainers(state.record, entry.documentId)
-      return {
-        documentId: entry.documentId,
-        ...(entry.name === undefined ? {} : { name: entry.name }),
-        ...(entry.kind === 'spatial'
-          ? { canvas: readSpatialCanvas(containers) }
-          : { body: readMarkdownBody(containers) }),
-      }
-    }
-    // Seeded from what the SELECTED document says, then walked the way every
-    // other keeper walks it — `referenceTargets` re-reads the graph as it
-    // grows, so a referenced body's own links load too, under its own caps.
-    const containers = documentContainers(state.record, selected.documentId)
-    const seeds =
-      selected.kind === 'spatial'
-        ? { canvases: [readSpatialCanvas(containers)] }
-        : { bodies: [readMarkdownBody(containers)] }
-    const graph = new Map<string, LoadedReference | null>()
-    for (;;) {
-      const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
-        (target) => !graph.has(target),
-      )
-      if (wanted.length === 0) break
-      for (const target of wanted) graph.set(target, load(target))
-    }
-    return referenceWire(graph, { resolveAlias, resolveTitle })
-  }, [state, selected, resolveAlias, resolveTitle])
-
-  const seams = useMemo(
-    () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
-    [references],
-  )
-
-  const content = useMemo(() => {
-    if (state.kind !== 'ready' || selected === undefined) return null
-    const containers = documentContainers(state.record, selected.documentId)
-    return selected.kind === 'spatial'
-      ? { kind: 'spatial' as const, canvas: readSpatialCanvas(containers) }
-      : { kind: 'markdown' as const, body: readMarkdownBody(containers) }
-  }, [state, selected])
-
-  // Selection decides the draft; the record is the source on every switch.
-  useEffect(() => {
-    setDraft(content?.kind === 'markdown' ? content.body : null)
-    spatialPrev.current = content?.kind === 'spatial' ? content.canvas : null
-    setSpatialDraft(content?.kind === 'spatial' ? content.canvas : null)
-  }, [content])
-
-  // The spatial draft mirrors the markdown one; `spatialPrev` is what the
-  // visible-diff reconcile compares against, advanced on every commit.
-  const [spatialDraft, setSpatialDraft] = useState<SpatialCanvas | null>(null)
-  const spatialPrev = useRef<SpatialCanvas | null>(null)
-  const onSpatialChange = useCallback(
-    (next: SpatialCanvas) => {
-      if (state.kind !== 'ready' || selected === undefined || selected.kind !== 'spatial') return
-      setSpatialDraft(next)
-      const prev = spatialPrev.current
-      if (prev !== null) {
-        // A visible diff, never a whole-canvas resync: a resync's silent
-        // deletion of an unknown-version record would become an op that
-        // SHIPS, erasing a newer client's node on the keeper.
-        reconcileSpatialCanvas(documentContainers(state.record, selected.documentId), prev, next)
-      }
-      spatialPrev.current = next
-      scheduleSave(state.record)
-    },
-    [state, selected, scheduleSave],
-  )
-
-  const onDraftChange = useCallback(
-    (next: string) => {
-      if (state.kind !== 'ready' || selected === undefined || selected.kind === 'spatial') return
-      setDraft(next)
-      writeMarkdownBody(documentContainers(state.record, selected.documentId), next)
-      scheduleSave(state.record)
-    },
-    [state, selected, scheduleSave],
-  )
+  const { seams, references } = useReplicaSeams(state, selected)
+  const { content, draft, spatialDraft, onDraftChange, onSpatialChange } = useReplicaEditing({
+    state,
+    selected,
+    scheduleSave,
+  })
 
   const lockedLine = state.kind === 'withheld' ? lockedDetail(state.reason) : undefined
 
-  // Mounted before it speaks (polite-live-region.test.ts): a role="status"
-  // region that arrives already carrying its message is announced
-  // inconsistently, so this ONE region stays in the DOM for the page's whole
-  // life and only its text changes — sr-only when there is nothing to say,
-  // since the visible copy below says the same thing for a sighted reader.
-  // 'locked' and 'needs-connection' both render NOTHING but a connectivity
-  // message, so a screen-reader user landing there (first mount, or after a
-  // Reconnect attempt that settles back) must hear it — not just 'Loading…'
-  // followed by silence.
-  const liveStatus =
-    state.kind === 'loading'
-      ? 'Loading…'
-      : reconnecting
-        ? 'Reconnecting…'
-        : pageState === 'removed' || pageState === 'unpaired'
-          ? REPLICA_STATE_COPY[pageState].body
-          : pageState === 'locked' || pageState === 'needs-connection'
-            ? REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')
-            : pageState === 'unlockable'
-              ? REPLICA_STATE_COPY.unlockable.body
-              : null
+  const liveStatus = replicaLiveStatus({ state, reconnecting, pageState, lockedLine })
 
   return (
     <div className="flex h-full flex-col" data-testid="replica-read-page">
@@ -459,67 +659,22 @@ export function ReplicaReadPage({
       </p>
       {state.kind === 'loading' && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
       {pageState === 'readable' && state.kind === 'ready' && (
-        <div className="flex h-full flex-col" data-testid="replica-state-readable">
-          <div
-            data-testid="replica-offline-banner"
-            className="border-b bg-amber-500/10 px-4 py-2 text-sm"
-          >
-            <span className="font-medium">{displayName ?? workspaceId}</span>
-            {' — the daemon that keeps this workspace is unreachable. '}
-            This is the copy cached in this browser
-            {syncedAt !== undefined && (
-              <> (synced {formatRelative(syncedAt, { pastDay: 'absolute' })})</>
-            )}
-            . Edits save here and ship to the daemon when it returns.
-          </div>
-          <div className="flex min-h-0 flex-1">
-            <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
-              <WorkspaceFileTree
-                documents={state.entries}
-                onOpen={(entry) => setSelectedPath(entry.path)}
-                {...(selectedPath === null ? {} : { selectedPath })}
-              />
-            </div>
-            <div
-              className={
-                // The spatial editor measures itself: inside a padded
-                // overflow-auto box its h-full slightly overflows, a scrollbar
-                // appears, the box shrinks, the scrollbar leaves — a
-                // ResizeObserver oscillation React reports as "maximum update
-                // depth exceeded". Text content keeps the scrolling pane.
-                content?.kind === 'spatial'
-                  ? 'min-w-0 flex-1 overflow-hidden'
-                  : 'min-w-0 flex-1 overflow-auto p-4'
-              }
-            >
-              {content === null && (
-                <p className="text-sm text-muted-foreground">Select a document to read.</p>
-              )}
-              {content?.kind === 'markdown' && draft !== null && (
-                <MarkdownEditor
-                  key={selected?.documentId}
-                  initialViewMode="split"
-                  value={draft}
-                  onChange={onDraftChange}
-                  references={seams}
-                />
-              )}
-              {content?.kind === 'spatial' && spatialDraft !== null && (
-                <SpatialEditor
-                  key={selected?.documentId}
-                  canvas={spatialDraft}
-                  onChange={onSpatialChange}
-                  // Editing-forward: the palette still offers the hand tool,
-                  // but an offline visit that came here to fix something
-                  // should not need a tool switch first.
-                  defaultTool="select"
-                  className="h-full"
-                  references={references}
-                />
-              )}
-            </div>
-          </div>
-        </div>
+        <ReplicaReader
+          entries={state.entries}
+          displayName={displayName}
+          workspaceId={workspaceId}
+          syncedAt={syncedAt}
+          selected={selected}
+          selectedPath={selectedPath}
+          setSelectedPath={setSelectedPath}
+          content={content}
+          draft={draft}
+          spatialDraft={spatialDraft}
+          onDraftChange={onDraftChange}
+          onSpatialChange={onSpatialChange}
+          seams={seams}
+          references={references}
+        />
       )}
       {(pageState === 'needs-connection' || pageState === 'locked') && (
         <ReplicaActionPanel

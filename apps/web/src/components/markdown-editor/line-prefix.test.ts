@@ -195,6 +195,16 @@ describe('changeIndent', () => {
     expect(apply(outdent, '- a\n- b', 7)).toBeNull()
   })
 
+  it('outdents to the line it is a CHILD of, not merely the nearest shallower one', () => {
+    // Ragged indentation only a hand can type. `- c` sits at 5; the line
+    // above it sits at 4, which is shallower — but its CONTENT column is 6,
+    // so `- c` was never its child. The parent is `- a` at the margin.
+    // Landing on the nearest shallower line instead would make Tab,
+    // Shift-Tab stop being the identity it reads as.
+    const doc = '- a\n    - b\n     - c'
+    expect(docAfter(outdent, doc, doc.length)).toBe('- a\n    - b\n- c')
+  })
+
   it('moves any other line by the indent unit, the way Tab does', () => {
     expect(apply(indent, 'prose', 5)).toEqual({ doc: '  prose', head: 7 })
     expect(docAfter(outdent, '    prose', 9)).toBe('  prose')

@@ -93,6 +93,23 @@ function cli(args, extraEnv = {}) {
   return r
 }
 
+/**
+ * One stdout line as the daemon's READY record, or `undefined`.
+ *
+ * The stream carries ordinary log lines too, so a line that is not JSON —
+ * or is JSON saying something else — is simply not the record this smoke is
+ * waiting for.
+ */
+function readyLine(line) {
+  if (!line.trim()) return undefined
+  try {
+    const obj = JSON.parse(line)
+    return obj.ok === true && typeof obj.pid === 'number' ? obj : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function waitForReadyJson(proc, timeoutMs = 30_000) {
   return new Promise((res) => {
     let buf = ''
@@ -101,18 +118,10 @@ async function waitForReadyJson(proc, timeoutMs = 30_000) {
       buf += chunk.toString()
       const lines = buf.split('\n')
       buf = lines.pop() ?? ''
-      for (const line of lines) {
-        if (!line.trim()) continue
-        try {
-          const obj = JSON.parse(line)
-          if (obj.ok === true && typeof obj.pid === 'number') {
-            clearTimeout(timer)
-            res(obj)
-            return
-          }
-        } catch {
-          /* not JSON */
-        }
+      const ready = lines.map(readyLine).find((o) => o !== undefined)
+      if (ready !== undefined) {
+        clearTimeout(timer)
+        res(ready)
       }
     })
     proc.on('exit', () => {
@@ -387,7 +396,12 @@ try {
     } catch {
       fail('scenario 3: blob manifest is not valid JSON')
     }
-    if (manifest.schemaVersion !== 2) fail('scenario 3: blob manifest schemaVersion mismatch')
+    if (manifest.schemaVersion !== 3) fail('scenario 3: blob manifest schemaVersion mismatch')
+    // v3 records WHOSE each blob is, because the mirror is flat and a restore
+    // that cannot tell would put every tenant's blobs into one.
+    if (typeof manifest.tenants !== 'object' || manifest.tenants === null) {
+      fail('scenario 3: blob manifest names no tenants')
+    }
     // No `--mirror-dir`, so this backup keeps its own mirror and stays a
     // directory an operator can carry away.
     if (manifest.mirror !== 'self') fail('scenario 3: a one-off backup is not self-contained')

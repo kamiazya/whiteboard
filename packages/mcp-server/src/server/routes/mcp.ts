@@ -11,7 +11,7 @@ import {
   isLegacyRequest,
   WebStandardStreamableHTTPServerTransport,
 } from '@modelcontextprotocol/server'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { errorMessage } from '../../shared/error-message.js'
 import {
   extractInitializeDebugPayload,
@@ -32,123 +32,166 @@ export interface McpRouterDeps {
   readonly pairingUnavailableReason: PairingUnavailableReason
 }
 
-export function createMcpRouter({
-  modernMcpHandler,
-  pairingLinkContext,
-  pairingUnavailableReason,
-}: McpRouterDeps): Hono {
+/**
+ * `MCP_HTTP_DEBUG=1`'s tracing, as one object rather than nine `if (debug)`
+ * branches through the handler.
+ *
+ * Every method is a no-op when tracing is off, and each BUILDS its own
+ * fields — so the payload extraction and the timestamps cost nothing when
+ * nobody is reading them, which is what the inline branches were for. `at()`
+ * is `Date.now()`, or 0 when nothing will read the duration.
+ */
+function mcpHttpTrace(enabled: boolean) {
+  return {
+    at: (): number => (enabled ? Date.now() : 0),
+    init(parsedBody: unknown): void {
+      if (!enabled) return
+      const payload = extractInitializeDebugPayload(parsedBody)
+      if (payload) httpLog.info(payload, 'mcp-http:init')
+    },
+
+    exchange(args: {
+      c: Context
+      parsedBody: unknown
+      status: number
+      startedAt: number
+      era?: 'modern'
+    }): void {
+      if (!enabled) return
+      const body = isJsonObject(args.parsedBody) ? args.parsedBody : {}
+      httpLog.info(
+        {
+          httpMethod: args.c.req.method.toUpperCase(),
+          path: args.c.req.path,
+          jsonrpcMethod: body.method ?? null,
+          requestId: body.id ?? null,
+          status: args.status,
+          durationMs: Date.now() - args.startedAt,
+          ...(args.era === undefined ? {} : { era: args.era }),
+        },
+        'mcp-http',
+      )
+    },
+
+    construct(startedAt: number): void {
+      if (enabled) httpLog.info({ durationMs: Date.now() - startedAt }, 'mcp-http:construct')
+    },
+
+    destructSkipped(): void {
+      if (enabled) httpLog.info({ reason: 'sse-stream-active' }, 'mcp-http:destruct-skipped')
+    },
+
+    destructError(error: unknown): void {
+      if (enabled) httpLog.info({ message: errorMessage(error) }, 'mcp-http:destruct-error')
+    },
+
+    destruct(startedAt: number): void {
+      if (enabled) httpLog.info({ durationMs: Date.now() - startedAt }, 'mcp-http:destruct')
+    },
+  }
+}
+
+type McpHttpTrace = ReturnType<typeof mcpHttpTrace>
+
+/**
+ * The parsed JSON body, or `undefined` for anything that is not a JSON POST.
+ *
+ * Era routing and both transports read the SAME parse: cloning and parsing
+ * twice would be a second chance for the two to disagree about what the
+ * request said.
+ */
+async function jsonBodyOf(c: Context): Promise<unknown> {
+  if (c.req.method.toUpperCase() !== 'POST') return undefined
+  if (!c.req.header('content-type')?.toLowerCase().includes('application/json')) return undefined
+  try {
+    return await c.req.raw.clone().json()
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The legacy transport: a FRESH server per request, because the MCP SDK
+ * throws 'Already connected' if one Server is connected to more than one
+ * transport. The heavy workspace-id file IO is memoized inside
+ * `createMcpServer`, so concurrent `/mcp` requests stay cheap and race-free.
+ */
+async function handleLegacy(
+  c: Context,
+  deps: McpRouterDeps,
+  parsedBody: unknown,
+  startedAt: number,
+  trace: McpHttpTrace,
+): Promise<Response> {
+  const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true })
+  let response: Response | undefined
+  try {
+    const constructStartedAt = trace.at()
+    const server = await createMcpServer({
+      pairing: deps.pairingLinkContext,
+      pairingUnavailableReason: deps.pairingUnavailableReason,
+    })
+    trace.construct(constructStartedAt)
+    await server.connect(transport)
+    response = await transport.handleRequest(c.req.raw, { parsedBody })
+    trace.exchange({ c, parsedBody, status: response.status, startedAt })
+    return response
+  } finally {
+    await closeUnlessStreaming(transport, response, trace)
+  }
+}
+
+/**
+ * Closing an SSE response's transport would cancel a body that is still
+ * OPEN, before the client received any events — so a `text/event-stream`
+ * response is left alone. A JSON-mode response is fully buffered by the time
+ * `handleRequest` resolves, so closing there is safe and frees the
+ * transport.
+ */
+async function closeUnlessStreaming(
+  transport: WebStandardStreamableHTTPServerTransport,
+  response: Response | undefined,
+  trace: McpHttpTrace,
+): Promise<void> {
+  const streaming = response?.headers
+    .get('content-type')
+    ?.toLowerCase()
+    .includes('text/event-stream')
+  if (streaming) {
+    trace.destructSkipped()
+    return
+  }
+  const destructStartedAt = trace.at()
+  try {
+    await transport.close()
+  } catch (error) {
+    // A close failure on a finished request must not leak into the response
+    // path; it is visible only under MCP_HTTP_DEBUG=1.
+    trace.destructError(error)
+  }
+  trace.destruct(destructStartedAt)
+}
+
+export function createMcpRouter(deps: McpRouterDeps): Hono {
   const router = new Hono()
   router.all('/mcp', async (c) => {
     const startedAt = Date.now()
-    const debug = shouldLogMcpHttpDebug()
-    let parsedBody: unknown
-    if (
-      c.req.method.toUpperCase() === 'POST' &&
-      c.req.header('content-type')?.toLowerCase().includes('application/json')
-    ) {
-      try {
-        parsedBody = await c.req.raw.clone().json()
-      } catch {
-        parsedBody = undefined
-      }
-    }
-    if (debug) {
-      const initializeDebug = extractInitializeDebugPayload(parsedBody)
-      if (initializeDebug) {
-        httpLog.info(initializeDebug, 'mcp-http:init')
-      }
-    }
+    const trace = mcpHttpTrace(shouldLogMcpHttpDebug())
+    const parsedBody = await jsonBodyOf(c)
+    trace.init(parsedBody)
+
     // Era routing runs the exact classification `createMcpHandler` itself
     // uses, so this branch can never disagree with the entry. Modern
-    // requests never reach the legacy transport below.
-    const isLegacy =
+    // requests never reach the legacy transport.
+    const legacy =
       parsedBody !== undefined
         ? await isLegacyRequest(c.req.raw, parsedBody)
         : await isLegacyRequest(c.req.raw)
-    if (!isLegacy) {
-      const response = await modernMcpHandler.fetch(c.req.raw, { parsedBody })
-      if (debug) {
-        const body = isJsonObject(parsedBody) ? parsedBody : {}
-        httpLog.info(
-          {
-            httpMethod: c.req.method.toUpperCase(),
-            path: c.req.path,
-            jsonrpcMethod: body.method ?? null,
-            requestId: body.id ?? null,
-            status: response.status,
-            durationMs: Date.now() - startedAt,
-            era: 'modern',
-          },
-          'mcp-http',
-        )
-      }
-      return response
-    }
-    // The MCP SDK throws 'Already connected' if a single Server is connected to
-    // more than one transport, so build a fresh per-request server. The heavy
-    // workspace-id file IO is memoized inside createMcpServer to keep
-    // concurrent /mcp requests cheap and race-free.
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      enableJsonResponse: true,
-    })
-    let response: Response | undefined
-    try {
-      const constructStartedAt = debug ? Date.now() : 0
-      const server = await createMcpServer({
-        pairing: pairingLinkContext,
-        pairingUnavailableReason,
-      })
-      if (debug) {
-        httpLog.info({ durationMs: Date.now() - constructStartedAt }, 'mcp-http:construct')
-      }
-      await server.connect(transport)
-      response = await transport.handleRequest(c.req.raw, { parsedBody })
-      if (debug) {
-        const body = isJsonObject(parsedBody) ? parsedBody : {}
-        httpLog.info(
-          {
-            httpMethod: c.req.method.toUpperCase(),
-            path: c.req.path,
-            jsonrpcMethod: body.method ?? null,
-            requestId: body.id ?? null,
-            status: response.status,
-            durationMs: Date.now() - startedAt,
-          },
-          'mcp-http',
-        )
-      }
-      return response
-    } finally {
-      // Skip transport.close() when the response is an SSE stream
-      // (Content-Type: text/event-stream). For SSE the response body is a still
-      // open ReadableStream and closing the transport here would cancel it
-      // before the client receives any events. JSON-mode responses, by
-      // contrast, are fully buffered before handleRequest resolves so close()
-      // is safe and useful for cleanup.
-      const isSseResponse = response?.headers
-        .get('content-type')
-        ?.toLowerCase()
-        .includes('text/event-stream')
-      if (isSseResponse) {
-        if (debug) {
-          httpLog.info({ reason: 'sse-stream-active' }, 'mcp-http:destruct-skipped')
-        }
-      } else {
-        const destructStartedAt = debug ? Date.now() : 0
-        try {
-          await transport.close()
-        } catch (error) {
-          // Closing failures from a finished request should not leak into the
-          // response path. Log only when MCP_HTTP_DEBUG=1 for visibility.
-          if (debug) {
-            httpLog.info({ message: errorMessage(error) }, 'mcp-http:destruct-error')
-          }
-        }
-        if (debug) {
-          httpLog.info({ durationMs: Date.now() - destructStartedAt }, 'mcp-http:destruct')
-        }
-      }
-    }
+    if (legacy) return handleLegacy(c, deps, parsedBody, startedAt, trace)
+
+    const response = await deps.modernMcpHandler.fetch(c.req.raw, { parsedBody })
+    trace.exchange({ c, parsedBody, status: response.status, startedAt, era: 'modern' })
+    return response
   })
   return router
 }

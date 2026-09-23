@@ -1,5 +1,5 @@
-import { ContentFactsCache } from '../references/content-facts-cache.js'
-import { mentionsOfIn, ReferenceAggregate } from '../references/reference-aggregate.js'
+import { backlinksIn, type ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
+import { factsCacheFor } from '../references/content-source.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { BacklinksInput, BacklinksOutput } from './backlinks.schemas.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
@@ -25,30 +25,12 @@ export {
 export async function computeBacklinks(
   deps: ServerDeps,
   input: BacklinksInput,
-  cache: ContentFactsCache = new ContentFactsCache(),
+  cache: ContentFactsCache = factsCacheFor(deps),
 ): Promise<BacklinksOutput> {
   const entries = await deps.documentIndex.listDocuments({ workspaceId: input.workspaceId })
   if (!entries.some((entry) => entry.documentId === input.documentId)) {
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.documentId)
   }
 
-  const content = await cache.factsFor(deps, input.workspaceId, entries)
-  const aggregate = new ReferenceAggregate()
-  for (const entry of entries) {
-    const facts = content.get(entry.documentId)
-    aggregate.upsert(entry.documentId, 0, {
-      path: entry.path,
-      ...(entry.name === undefined ? {} : { name: entry.name }),
-      ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-      refs: [...(facts?.refs ?? [])],
-      texts: [...(facts?.texts ?? [])],
-    })
-  }
-  const alive = aggregate.entries()
-  const name = alive.get(input.documentId)?.name
-  return {
-    backlinks: aggregate.backlinksOf(input.documentId),
-    unlinkedMentions:
-      name === undefined ? [] : mentionsOfIn({ documentId: input.documentId, name }, alive),
-  }
+  return backlinksIn(entries, await cache.factsFor(input.workspaceId, entries), input.documentId)
 }

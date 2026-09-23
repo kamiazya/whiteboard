@@ -23,6 +23,8 @@ import { createDaemonIdentity } from '../security/daemon-identity.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { tenantRoot } from '../tenant/data-layout.js'
+import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -68,10 +70,10 @@ describe('server mode mounts the same /api surface as the local daemon', () => {
       shutdown: () => Promise.resolve(),
       identity: createDaemonIdentity({ dataDir: pairingDir }),
       pairing: {
-        grants: createPairingGrantStore(pairingDir),
+        grants: createPairingGrantStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
         codes: createPairingCodeStore(),
         tokens: createPairingTokenStore(),
-        credentials: createWebAuthnCredentialStore(pairingDir),
+        credentials: createWebAuthnCredentialStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
       },
       serverDeps: resolveServerDeps(createContainer()),
     })

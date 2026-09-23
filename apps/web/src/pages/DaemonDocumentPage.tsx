@@ -1,14 +1,7 @@
-import {
-  documentsApiUrl,
-  saveVersionResponseSchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
-import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import { Button } from '../components/ui/button.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
@@ -17,9 +10,9 @@ import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
-import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
+import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { createDaemonFetch, linkifyDocumentMentions } from '../lib/daemon-api-client.js'
+import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
@@ -32,8 +25,15 @@ import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
+import {
+  daemonConnectionsSlot,
+  daemonDocumentLabels,
+  daemonEmptyState,
+  daemonTerminalAnswer,
+  daemonTopBarSlot,
+  daemonVersionsSlot,
+} from './daemon-document-slots.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
-import { DaemonTerminalScreen, membershipRefusedScreen } from './daemon-terminal-screens.js'
 import type {
   DocumentKeeper,
   DocumentKeeperAnswer,
@@ -417,103 +417,25 @@ function useDaemonDocument(
     refusal: controller.refusal,
   })
 
-  if (pageState.kind === 'loading') {
-    return {
-      kind: 'terminal',
-      node: (
-        <DaemonTerminalScreen status="">
-          <DocumentPageSkeleton label="Connecting to daemon" />
-        </DaemonTerminalScreen>
-      ),
-    }
-  }
+  const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
+  if (terminal !== null) return terminal
 
-  if (pageState.kind === 'membership-refused') {
-    return {
-      kind: 'terminal',
-      node: membershipRefusedScreen(pageState, daemonBaseUrl, controller.retry),
-    }
-  }
-
-  if (pageState.kind === 'load-degraded') {
-    return { kind: 'terminal', node: <LoadDegradedView message={pageState.message} /> }
-  }
-
-  const documentKey = canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'
+  const labels = daemonDocumentLabels(canvas)
+  const { documentKey } = labels
   const openDocument = (id: string) => controller.switchDocument(resolveRefPath(id) ?? id)
 
-  const emptyState =
-    pageState.kind === 'document-missing' ? (
-      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
-        {onNavigateBack && (
-          <button
-            type="button"
-            onClick={onNavigateBack}
-            className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <span aria-hidden="true">← </span>Back to documents
-          </button>
-        )}
-        <p className="text-sm text-muted-foreground">
-          Nothing is at <span className="font-medium text-foreground">“{pageState.path}”</span> in
-          this workspace. It may have been deleted or renamed.
-        </p>
-        {controller.createError && (
-          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
-            {controller.createError}
-          </div>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={creating}
-          onClick={() => {
-            setCreating(true)
-            void controller.createDocument(pageState.path).finally(() => setCreating(false))
-          }}
-        >
-          Create a canvas at this path
-        </Button>
-      </div>
-    ) : pageState.kind === 'workspace-empty' ? (
-      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
-        {/* WorkspaceTopBar (the usual home for this button) only mounts once
-            a canvas is selected, so a workspace that resolves to zero
-            documents — an empty workspace, or a gallery row whose canvas was
-            deleted by another client — needs its own back affordance here. */}
-        {onNavigateBack && (
-          <button
-            type="button"
-            onClick={onNavigateBack}
-            className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <span aria-hidden="true">← </span>Back to documents
-          </button>
-        )}
-        <p className="text-sm text-muted-foreground">This workspace has no documents yet.</p>
-        {controller.createError && (
-          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
-            {controller.createError}
-          </div>
-        )}
-        {/* An empty state is a reading surface, not a dense toolbar strip
-            (ADR-0006 point 4), so the control keeps its text label rather
-            than becoming an icon-only "+". */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={creating}
-          onClick={() => void handleCreateDocument()}
-        >
-          Create a canvas
-        </Button>
-      </div>
-    ) : undefined
+  const emptyState = daemonEmptyState({
+    pageState,
+    onNavigateBack,
+    createError: controller.createError,
+    creating,
+    setCreating,
+    createDocument: controller.createDocument,
+    handleCreateDocument,
+  })
 
   const model: DocumentPageModel = {
-    scopeKey: canvas ? `${canvas.workspaceId}:${canvas.path}` : null,
+    scopeKey: labels.scopeKey,
     documentKey,
     documentKind,
     srTitle: 'Whiteboard (daemon)',
@@ -553,95 +475,41 @@ function useDaemonDocument(
       loadReference,
     },
     openDocument,
-    overlayTitle: canvas?.path ?? 'Untitled',
-    exportFilenameBase: canvas?.path ?? 'canvas',
+    overlayTitle: labels.overlayTitle,
+    exportFilenameBase: labels.exportFilenameBase,
     commands: {
       provider: { kind: 'daemon', daemonBaseUrl },
       // The daemon canvas summary carries no display name yet (only
       // path/updatedAt) — the path doubles as `name` until that changes.
-      canvas:
-        canvas !== null
-          ? { workspaceId: canvas.workspaceId, documentId: canvas.path, name: canvas.path }
-          : null,
+      canvas: labels.commandCanvas,
       // Identity key = workspaceId+path, matching this page's own canvas.
-      registryKey: canvas !== null ? `${canvas.workspaceId}/${canvas.path}` : null,
+      registryKey: labels.registryKey,
     },
-    versions: {
-      enabled: canvas !== null,
-      workspaceId: canvas?.workspaceId ?? '',
-      path: canvas?.path ?? '',
-      save: async (label) => {
-        if (canvas === null) throw new Error('saveVersion: no canvas')
-        const res = await daemonFetch(
-          `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ label }),
-          },
-        )
-        if (!res.ok) throw new Error(`save failed: ${res.status}`)
-        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-        if (!parsed.success) {
-          log.error(
-            'POST /versions response did not match saveVersionResponseSchema:',
-            parsed.error,
-          )
-          throw new Error('save response did not match schema')
-        }
-        return {
-          workspaceId: canvas.workspaceId,
-          path: canvas.path,
-          versionId: parsed.data.version.id,
-        }
-      },
-      announceRefresh: events.onVersionCreated,
-      // The server's manual POST /versions route does not broadcast
-      // version_created over the websocket (that only fires for auto-saves
-      // and other peers' saves), so this save must dispatch the same
-      // identity-scoped event useDocumentSync fires on a broadcast — otherwise
-      // nothing listening for the save (the version list, the tab) learns it happened.
-      announceOnce: () => dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined),
-    },
-    topBar: canvas
-      ? {
-          workspaceId: canvas.workspaceId,
-          path: canvas.path,
-          branchRefreshSignal,
-          onBranchesChanged: () => setBranchRefreshSignal((n) => n + 1),
-          ...(onNavigateBack === undefined ? {} : { onNavigateBack }),
-        }
-      : null,
+    versions: daemonVersionsSlot({
+      canvas,
+      labels,
+      daemonFetch,
+      daemonBaseUrl,
+      log,
+      onVersionCreated: events.onVersionCreated,
+    }),
+    topBar: daemonTopBarSlot(canvas, branchRefreshSignal, setBranchRefreshSignal, onNavigateBack),
     spatial: {
       editorRef: spatialEditorRef,
       agentTouchedNodeIds: agentActivity.touchedNodeIds,
       children: <AgentPresenceChip summary={agentActivity.summary} />,
     },
     ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),
-    ...(canvas
-      ? {
-          connections: {
-            backlinks: connections === null ? null : connections.backlinks,
-            ...(connections === null ? {} : { mentions: connections.unlinkedMentions }),
-            onOpen: (entry) => controller.switchDocument(entry.path),
-            onLinkify: (mention) => {
-              if (controller.workspaceId === null || currentDocumentId === undefined) return
-              void linkifyDocumentMentions(
-                daemonFetch,
-                daemonBaseUrl,
-                controller.workspaceId,
-                mention.documentId,
-                currentDocumentId,
-              )
-                .then(() => refreshConnections())
-                .catch(() => {
-                  // The panel simply keeps showing the mention; the
-                  // next open retries.
-                })
-            },
-          },
-        }
-      : {}),
+    ...daemonConnectionsSlot({
+      canvas,
+      connections,
+      workspaceId: controller.workspaceId,
+      currentDocumentId,
+      switchDocument: controller.switchDocument,
+      daemonFetch,
+      daemonBaseUrl,
+      refreshConnections,
+    }),
     slots: {
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
       ...documentActions,

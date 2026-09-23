@@ -1,5 +1,5 @@
 import { mkdir, readdir, rename, stat } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { getLogger } from '../log.js'
 
@@ -33,8 +33,18 @@ const WORKSPACES_DIRNAME = 'workspaces'
 const BLOBS_DIRNAME = 'blobs'
 const FILES_DIRNAME = 'files'
 
-export function tenantRoot(dataDir: string, tenantId: string): string {
-  return join(dataDir, TENANTS_DIRNAME, tenantId)
+declare const tenantDir: unique symbol
+
+/**
+ * One tenant's own directory. Branded, so a store that asks for it cannot be
+ * handed the data directory by mistake — the same reason `TenantDatabase` is
+ * branded, and the mistake is the same one: a path that looks right and is one
+ * level too high holds every tenant's things.
+ */
+export type TenantDir = string & { readonly [tenantDir]: 'tenant' }
+
+export function tenantRoot(dataDir: string, tenantId: string): TenantDir {
+  return join(dataDir, TENANTS_DIRNAME, tenantId) as TenantDir
 }
 
 export function blobsRoot(dataDir: string, tenantId: string): string {
@@ -53,6 +63,26 @@ export function workspaceFilesDir(dataDir: string, tenantId: string, workspaceId
   return join(workspaceDir(dataDir, tenantId, workspaceId), FILES_DIRNAME)
 }
 
+/**
+ * Every tenant this data directory holds, from the directories under
+ * `tenants/`. What a keeper-wide pass — a backup, its mirror, a sweep — has to
+ * walk, since nothing else records the list on disk.
+ */
+export async function listTenants(dataDir: string): Promise<string[]> {
+  const entries = await readdir(join(dataDir, TENANTS_DIRNAME), { withFileTypes: true }).catch(
+    () => [],
+  )
+  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+}
+
+/** Whether a path is some tenant's blob store, which a backup mirrors rather than copies. */
+export function isAnyTenantBlobsPath(dataDir: string, path: string): boolean {
+  const tenants = join(dataDir, TENANTS_DIRNAME)
+  if (!path.startsWith(tenants + sep)) return false
+  const rest = path.slice(tenants.length + 1).split(sep)
+  return rest[1] === BLOBS_DIRNAME
+}
+
 const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, 'models'])
 
 /**
@@ -69,28 +99,78 @@ const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, 'models']
 export async function moveLegacyDataDirUnderTenant(
   dataDir: string,
   tenantId: string,
-): Promise<{ blobs: boolean; workspaces: string[] }> {
-  const moved: { blobs: boolean; workspaces: string[] } = { blobs: false, workspaces: [] }
-  for (const entry of await readdir(dataDir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || KEEPER_OWNED.has(entry.name)) continue
-    const from = join(dataDir, entry.name)
-    if (entry.name === BLOBS_DIRNAME) {
-      if (await moveDir(from, blobsRoot(dataDir, tenantId))) moved.blobs = true
-      continue
-    }
-    // A workspace directory is one with a `files/` child; anything else at the
-    // top of a data directory is not this layout's and is left alone.
-    if (!(await isDirectory(join(from, FILES_DIRNAME)))) continue
-    if (await moveDir(from, workspaceDir(dataDir, tenantId, entry.name))) {
-      moved.workspaces.push(entry.name)
+  /**
+   * Files at the top of the data directory that belong to the tenant, named by
+   * whoever owns them — a store knows its own filename, and this module knows
+   * where a tenant's things live.
+   */
+  options: { files: readonly string[] },
+): Promise<{ blobs: boolean; workspaces: string[]; files: string[] }> {
+  return {
+    files: await moveTenantFiles(dataDir, tenantId, options.files),
+    ...(await moveTenantDirectories(dataDir, tenantId)),
+  }
+}
+
+async function moveTenantFiles(
+  dataDir: string,
+  tenantId: string,
+  files: readonly string[],
+): Promise<string[]> {
+  const moved: string[] = []
+  for (const name of files) {
+    if (await moveFile(join(dataDir, name), join(tenantRoot(dataDir, tenantId), name))) {
+      moved.push(name)
     }
   }
   return moved
 }
 
+async function moveTenantDirectories(
+  dataDir: string,
+  tenantId: string,
+): Promise<{ blobs: boolean; workspaces: string[] }> {
+  let blobs = false
+  const workspaces: string[] = []
+  for (const entry of await readdir(dataDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || KEEPER_OWNED.has(entry.name)) continue
+    const from = join(dataDir, entry.name)
+    if (entry.name === BLOBS_DIRNAME) {
+      if (await moveDir(from, blobsRoot(dataDir, tenantId))) blobs = true
+    } else if (await isWorkspaceDir(from)) {
+      if (await moveDir(from, workspaceDir(dataDir, tenantId, entry.name))) {
+        workspaces.push(entry.name)
+      }
+    }
+  }
+  return { blobs, workspaces }
+}
+
+/** A workspace directory is one with a `files/` child; anything else at the top of a data directory is not this layout's. */
+async function isWorkspaceDir(dir: string): Promise<boolean> {
+  return await isDirectory(join(dir, FILES_DIRNAME))
+}
+
 async function isDirectory(path: string): Promise<boolean> {
   return await stat(path)
     .then((s) => s.isDirectory())
+    .catch(() => false)
+}
+
+async function moveFile(from: string, to: string): Promise<boolean> {
+  if (!(await isFile(from))) return false
+  if (await isFile(to)) {
+    log.warning({ from, to }, 'left a legacy file in place: the tenant already holds one')
+    return false
+  }
+  await mkdir(dirname(to), { recursive: true })
+  await rename(from, to)
+  return true
+}
+
+async function isFile(path: string): Promise<boolean> {
+  return await stat(path)
+    .then((s) => s.isFile())
     .catch(() => false)
 }
 
