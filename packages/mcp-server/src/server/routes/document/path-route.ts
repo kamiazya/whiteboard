@@ -104,6 +104,39 @@ type DocumentsHandler = (
 ) => Promise<Response> | Response
 
 /**
+ * The whole parse behind `onDocumentsRoute`, as a pure function of the URL.
+ *
+ * `null` means "this is not my route" — every caller answers it with
+ * `next()`, so a suffix that does not match falls through to the sibling
+ * registrations rather than refusing. The suffix is matched FROM THE END,
+ * which is what keeps a nested document path unambiguous: `a/versions/versions`
+ * is the versions listing of the document `a/versions`, not a listing of `a`.
+ */
+export function matchDocumentsTail(
+  pathname: string,
+  suffixPattern: string[],
+): { workspaceId: string; path: string; params: Record<string, string> } | null {
+  const match = pathname.match(DOCUMENTS_PREFIX)
+  if (match === null) return null
+  const workspaceId = decodePathSegment(match[1] ?? '')
+  const rawTail = (match[2] ?? '').replace(/\/$/, '').split('/')
+  const tail = rawTail.map(decodePathSegment)
+  if (workspaceId === null || tail.some((segment) => segment === null || segment === '')) {
+    return null
+  }
+  if (tail.length < suffixPattern.length + 1) return null
+
+  const params: Record<string, string> = {}
+  const suffixStart = tail.length - suffixPattern.length
+  for (const [i, expected] of suffixPattern.entries()) {
+    const actual = tail[suffixStart + i] as string
+    if (expected.startsWith(':')) params[expected.slice(1)] = actual
+    else if (actual !== expected) return null
+  }
+  return { workspaceId, path: (tail.slice(0, suffixStart) as string[]).join('/'), params }
+}
+
+/**
  * The `/api/workspaces/:workspaceId/documents/<document path>/<suffix...>`
  * family — same wildcard dispatch as onDocumentAction, with a multi-segment
  * suffix pattern matched FROM THE END (`':x'` entries capture). The suffix
@@ -121,23 +154,9 @@ export function onDocumentsRoute(
   ...middleware: MiddlewareHandler[]
 ): void {
   const dispatch = async (c: Context, next: Next) => {
-    const match = c.req.path.match(DOCUMENTS_PREFIX)
-    if (match === null) return next()
-    const workspaceId = decodePathSegment(match[1] ?? '')
-    const rawTail = (match[2] ?? '').replace(/\/$/, '').split('/')
-    const tail = rawTail.map(decodePathSegment)
-    if (workspaceId === null || tail.some((segment) => segment === null || segment === '')) {
-      return next()
-    }
-    if (tail.length < suffixPattern.length + 1) return next()
-    const params: Record<string, string> = {}
-    const suffixStart = tail.length - suffixPattern.length
-    for (const [i, expected] of suffixPattern.entries()) {
-      const actual = tail[suffixStart + i] as string
-      if (expected.startsWith(':')) params[expected.slice(1)] = actual
-      else if (actual !== expected) return next()
-    }
-    const path = (tail.slice(0, suffixStart) as string[]).join('/')
+    const matched = matchDocumentsTail(c.req.path, suffixPattern)
+    if (matched === null) return next()
+    const { workspaceId, path, params } = matched
     const invalid = validated(c, workspaceId, path, options.badRequest)
     if (invalid) return invalid
     return handler(c, await workspaceIdFromHandle(c, workspaceId), path, params)
