@@ -19,7 +19,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/p
 import { dirname, join, posix, relative, sep } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
-import { blobsRoot } from '../tenant/data-layout.js'
+import { blobsRoot, listTenants } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 const log = getLogger('backup-blob-mirror')
@@ -52,8 +52,7 @@ const BLOB_MANIFEST_FILENAME = 'blobs.json'
  */
 const DIGEST = /^[0-9a-f]{64}$/
 
-const manifestSchema = z.object({
-  schemaVersion: z.literal(2),
+const tenantReferencesSchema = z.object({
   /**
    * The sharded content-addressed store, by digest — the same identity
    * `FsBlobStore` addresses by, so the mirror path follows from the digest
@@ -69,26 +68,52 @@ const manifestSchema = z.object({
    * the version thumbnail's retirement.
    */
   files: z.record(z.string(), z.string().regex(DIGEST)),
-  /**
-   * Where the mirror this backup reads from lives, said rather than inferred.
-   *
-   * `self` is a one-off `whiteboard server backup --output-dir=X`: the mirror
-   * is inside X, so the directory can be carried somewhere and restored on
-   * its own, which is the affordance the shared shape would otherwise take
-   * away. `parent` is the schedule, where every retained backup shares one
-   * mirror beside them.
-   *
-   * Recorded because restore would otherwise have to guess by looking for a
-   * `blobs/` directory in two places, and a guess that picks the wrong one
-   * restores the wrong bytes without saying so.
-   */
-  mirror: z.enum(['self', 'parent']),
+})
+
+/**
+ * Where the mirror this backup reads from lives, said rather than inferred.
+ *
+ * `self` is a one-off `whiteboard server backup --output-dir=X`: the mirror
+ * is inside X, so the directory can be carried somewhere and restored on
+ * its own, which is the affordance the shared shape would otherwise take
+ * away. `parent` is the schedule, where every retained backup shares one
+ * mirror beside them.
+ *
+ * Recorded because restore would otherwise have to guess by looking for a
+ * `blobs/` directory in two places, and a guess that picks the wrong one
+ * restores the wrong bytes without saying so.
+ */
+const mirrorLocationSchema = z.enum(['self', 'parent'])
+
+/**
+ * v3 records WHOSE each blob is. A keeper holds tenants, and the mirror is
+ * flat because a blob's path there is its digest — so without the tenant a
+ * restore knows the bytes and not where they go, and would put every tenant's
+ * blobs in one.
+ */
+const manifestSchema = z.object({
+  schemaVersion: z.literal(3),
+  tenants: z.record(z.string(), tenantReferencesSchema),
+  mirror: mirrorLocationSchema,
+})
+
+/** What a backup taken before tenants existed recorded: one keeper, one set. */
+const legacyManifestSchema = z.object({
+  schemaVersion: z.literal(2),
+  blobs: z.array(z.string().regex(DIGEST)),
+  files: z.record(z.string(), z.string().regex(DIGEST)),
+  mirror: mirrorLocationSchema,
 })
 
 /** What one backup references, in the two shapes the mirror stores. */
-export interface BackupBlobReferences {
+interface TenantBlobReferences {
   blobs: ReadonlySet<string>
   files: Readonly<Record<string, string>>
+}
+
+export interface BackupBlobReferences {
+  /** By tenant id. A backup taken before tenants existed reads as the self-host one. */
+  tenants: Readonly<Record<string, TenantBlobReferences>>
   mirror: 'self' | 'parent'
 }
 
@@ -124,21 +149,31 @@ export async function mirrorBlobsIntoBackup(
   backupRoot: string,
   options: MirrorBlobsOptions = {},
 ): Promise<BackupBlobReferences> {
-  // One tenant's blobs. A many-tenant keeper mirrors each tenant in turn; the
-  // mirror itself stays flat, because a blob's path there IS its digest.
-  const sourceRoot = blobsRoot(dataDir, SELF_HOST_TENANT_ID)
-  const blobs = new Set<string>()
-  const files: Record<string, string> = {}
-
-  let shards: string[]
-  try {
-    shards = await readdir(sourceRoot)
-  } catch {
-    // No blobs directory at all is an ordinary state — a deployment that has
-    // never had an upload.
-    shards = []
+  // Every tenant the keeper holds: a backup is the KEEPER's, and mirroring one
+  // tenant would leave the others with no durable copy at all. The mirror
+  // itself stays flat, because a blob's path there IS its digest — two tenants
+  // holding the same bytes share the one copy, and the manifest says whose.
+  const tenants: Record<string, TenantBlobReferences> = {}
+  for (const tenantId of await listTenants(dataDir)) {
+    tenants[tenantId] = await mirrorOneTenant(blobsRoot(dataDir, tenantId), backupRoot)
   }
 
+  const references: BackupBlobReferences = { tenants, mirror: options.mirror ?? 'self' }
+  if (options.manifestInto) {
+    await writeManifest(options.manifestInto, references)
+  }
+  return references
+}
+
+async function mirrorOneTenant(
+  sourceRoot: string,
+  backupRoot: string,
+): Promise<TenantBlobReferences> {
+  const blobs = new Set<string>()
+  const files: Record<string, string> = {}
+  // No blobs directory at all is an ordinary state — a tenant that has never
+  // had an upload.
+  const shards = await readdir(sourceRoot).catch(() => [] as string[])
   for (const entry of shards) {
     if (SHARD_NAME.test(entry)) {
       await mirrorShard(sourceRoot, backupRoot, entry, blobs)
@@ -146,12 +181,7 @@ export async function mirrorBlobsIntoBackup(
       await mirrorNamedTree(sourceRoot, backupRoot, entry, files)
     }
   }
-
-  const references: BackupBlobReferences = { blobs, files, mirror: options.mirror ?? 'self' }
-  if (options.manifestInto) {
-    await writeManifest(options.manifestInto, references)
-  }
-  return references
+  return { blobs, files }
 }
 
 /**
@@ -265,16 +295,32 @@ export async function readBackupBlobManifest(
     return null
   }
   try {
-    const parsed = manifestSchema.safeParse(JSON.parse(raw))
-    if (!parsed.success) {
-      log.warning({ backupDir }, 'blob manifest does not parse; treating the backup as unmirrored')
-      return null
+    const json: unknown = JSON.parse(raw)
+    const parsed = manifestSchema.safeParse(json)
+    if (parsed.success) {
+      return {
+        tenants: Object.fromEntries(
+          Object.entries(parsed.data.tenants).map(([tenantId, refs]) => [
+            tenantId,
+            { blobs: new Set(refs.blobs), files: refs.files },
+          ]),
+        ),
+        mirror: parsed.data.mirror,
+      }
     }
-    return {
-      blobs: new Set(parsed.data.blobs),
-      files: parsed.data.files,
-      mirror: parsed.data.mirror,
+    // A backup taken before tenants existed: one keeper, one set, and the
+    // tenant it belongs to is the one that keeper had.
+    const legacy = legacyManifestSchema.safeParse(json)
+    if (legacy.success) {
+      return {
+        tenants: {
+          [SELF_HOST_TENANT_ID]: { blobs: new Set(legacy.data.blobs), files: legacy.data.files },
+        },
+        mirror: legacy.data.mirror,
+      }
     }
+    log.warning({ backupDir }, 'blob manifest does not parse; treating the backup as unmirrored')
+    return null
   } catch {
     log.warning({ backupDir }, 'blob manifest is not readable JSON; treating it as unmirrored')
     return null
@@ -283,12 +329,21 @@ export async function readBackupBlobManifest(
 
 async function writeManifest(backupDir: string, references: BackupBlobReferences): Promise<void> {
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     // Sorted, so two backups of the same store produce the same bytes and a
     // diff between manifests reads as what changed rather than as reordering.
-    blobs: [...references.blobs].sort(),
-    files: Object.fromEntries(
-      Object.entries(references.files).sort(([a], [b]) => (a < b ? -1 : 1)),
+    tenants: Object.fromEntries(
+      Object.entries(references.tenants)
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([tenantId, refs]) => [
+          tenantId,
+          {
+            blobs: [...refs.blobs].sort(),
+            files: Object.fromEntries(
+              Object.entries(refs.files).sort(([a], [b]) => (a < b ? -1 : 1)),
+            ),
+          },
+        ]),
     ),
     mirror: references.mirror,
   } satisfies z.infer<typeof manifestSchema>

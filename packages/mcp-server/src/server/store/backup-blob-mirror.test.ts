@@ -5,7 +5,11 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { blobsRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { mirrorBlobsIntoBackup, readBackupBlobManifest } from './backup-blob-mirror.js'
+import {
+  type BackupBlobReferences,
+  mirrorBlobsIntoBackup,
+  readBackupBlobManifest,
+} from './backup-blob-mirror.js'
 
 let root: string
 let dataDir: string
@@ -21,10 +25,18 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
+/** The self-host tenant's half of a manifest — what a one-tenant keeper records. */
+function selfBlobs(refs: BackupBlobReferences | null): ReadonlySet<string> {
+  return refs?.tenants[SELF_HOST_TENANT_ID]?.blobs ?? new Set()
+}
+function selfFiles(refs: BackupBlobReferences | null): Readonly<Record<string, string>> {
+  return refs?.tenants[SELF_HOST_TENANT_ID]?.files ?? {}
+}
+
 /** Write a blob where `FsBlobStore` would put it: `blobs/<2hex>/<62hex>`. */
-async function putBlob(contents: string): Promise<string> {
+async function putBlob(contents: string, tenantId: string = SELF_HOST_TENANT_ID): Promise<string> {
   const digest = createHash('sha256').update(contents).digest('hex')
-  const dir = join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), digest.slice(0, 2))
+  const dir = join(blobsRoot(dataDir, tenantId), digest.slice(0, 2))
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, digest.slice(2)), contents)
   return digest
@@ -57,10 +69,10 @@ describe('the backup blob mirror', () => {
     const one = await mirrorBlobsIntoBackup(dataDir, backupRoot)
     const two = await mirrorBlobsIntoBackup(dataDir, backupRoot)
 
-    expect([...one.blobs].sort()).toEqual([first, second].sort())
+    expect([...selfBlobs(one)].sort()).toEqual([first, second].sort())
     // The second pass reports the same references — a backup references
     // every blob it needs, not only the ones it happened to copy.
-    expect([...two.blobs].sort()).toEqual([first, second].sort())
+    expect([...selfBlobs(two)].sort()).toEqual([first, second].sort())
 
     // …and the store holds one copy, not two.
     const mirrored = await dirBytes(join(backupRoot, 'blobs'))
@@ -79,6 +91,55 @@ describe('the backup blob mirror', () => {
    * made the old shape slower as the data grew. Only an untouched file proves
    * the skip happened.
    */
+  it('reads a manifest written before tenants existed as the tenant that keeper had', async () => {
+    // v2 recorded one keeper's blobs with no tenant. Read as "no tenant at
+    // all" a restore would put nothing back; read as the self-host tenant it
+    // puts them where that keeper kept them.
+    const backupDir = join(backupRoot, '2026-01-01T00-00-00.000Z')
+    await mkdir(backupDir, { recursive: true })
+    const digest = 'a'.repeat(64)
+    await writeFile(
+      join(backupDir, 'blobs.json'),
+      JSON.stringify({
+        schemaVersion: 2,
+        blobs: [digest],
+        files: { '01JWORKSPACE00000000000000/versions/v1.png': 'b'.repeat(64) },
+        mirror: 'parent',
+      }),
+    )
+    const refs = await readBackupBlobManifest(backupDir)
+    expect(refs?.mirror).toBe('parent')
+    expect(Object.keys(refs?.tenants ?? {})).toEqual([SELF_HOST_TENANT_ID])
+    expect(refs?.tenants[SELF_HOST_TENANT_ID]?.blobs).toEqual(new Set([digest]))
+    expect(refs?.tenants[SELF_HOST_TENANT_ID]?.files).toEqual({
+      '01JWORKSPACE00000000000000/versions/v1.png': 'b'.repeat(64),
+    })
+  })
+
+  it('mirrors every tenant, and records which tenant each blob belongs to', async () => {
+    // A keeper holds tenants; a backup is the keeper's. Mirroring one tenant
+    // leaves the others with no durable copy at all, and a manifest that does
+    // not say whose a blob is cannot restore it to the right place.
+    const mine = await putBlob('tenant one bytes')
+    const theirs = await putBlob('tenant two bytes', 'tenant-two')
+    const backupDir = join(backupRoot, '2026-03-04T05-06-07.000Z')
+    const refs = await mirrorBlobsIntoBackup(dataDir, backupRoot, {
+      manifestInto: backupDir,
+      mirror: 'parent',
+    })
+
+    expect(refs.tenants[SELF_HOST_TENANT_ID]?.blobs).toEqual(new Set([mine]))
+    expect(refs.tenants['tenant-two']?.blobs).toEqual(new Set([theirs]))
+    // The mirror itself stays flat: a blob's path there IS its digest.
+    for (const digest of [mine, theirs]) {
+      expect(
+        await readFile(join(backupRoot, 'blobs', digest.slice(0, 2), digest.slice(2)), 'utf8'),
+      ).toBeTruthy()
+    }
+    const reread = await readBackupBlobManifest(backupDir)
+    expect(reread?.tenants['tenant-two']?.blobs).toEqual(new Set([theirs]))
+  })
+
   it('does not re-copy a blob it has already mirrored', async () => {
     const digest = await putBlob('mirrored once')
     await mirrorBlobsIntoBackup(dataDir, backupRoot)
@@ -148,8 +209,8 @@ describe('the backup blob mirror', () => {
 
   it('has nothing to say about a data directory with no blobs', async () => {
     const empty = await mirrorBlobsIntoBackup(dataDir, backupRoot)
-    expect([...empty.blobs]).toEqual([])
-    expect(empty.files).toEqual({})
+    expect(empty.tenants).toEqual({})
+    // A keeper with no tenant directory has nothing to mirror and says so.
   })
 
   /**
@@ -190,7 +251,7 @@ describe('the backup blob mirror', () => {
       expect(stored).toBe('thumb bytes')
 
       const manifest = await readBackupBlobManifest(backupDir)
-      expect(manifest?.files).toEqual({
+      expect(selfFiles(manifest)).toEqual({
         '01JWORKSPACE00000000000000/versions/v1.png': digest,
       })
     })
@@ -211,8 +272,8 @@ describe('the backup blob mirror', () => {
 
       expect(first).not.toBe(second)
       const path = '01JWORKSPACE00000000000000/versions/v1.png'
-      expect((await readBackupBlobManifest(dayOne))?.files[path]).toBe(first)
-      expect((await readBackupBlobManifest(dayTwo))?.files[path]).toBe(second)
+      expect(selfFiles(await readBackupBlobManifest(dayOne))[path]).toBe(first)
+      expect(selfFiles(await readBackupBlobManifest(dayTwo))[path]).toBe(second)
       for (const digest of [first, second]) {
         expect(
           await readFile(join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2)), 'utf8'),
@@ -250,8 +311,8 @@ describe('the backup blob mirror', () => {
         mirror: 'parent',
       })
 
-      expect((await readBackupBlobManifest(backupDir))?.blobs).toEqual(refs.blobs)
-      expect([...refs.blobs]).toEqual([digest])
+      expect(selfBlobs(await readBackupBlobManifest(backupDir))).toEqual(selfBlobs(refs))
+      expect([...selfBlobs(refs)]).toEqual([digest])
     })
 
     /**
