@@ -60,6 +60,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
 import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
+import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
@@ -113,6 +114,75 @@ function summarize(pin: PinnedCredential): PinnedCredentialSummary {
     backupEligible: pin.backupEligible,
     createdAt: pin.createdAt,
   }
+}
+
+/**
+ * Which origin this token is for — the only thing the two grant types
+ * disagree about. A `code` grant proves it by redeeming the pairing code; a
+ * renewal proves it with the Origin header against a persisted grant.
+ *
+ * Every refusal here is a 403: each one means the caller did not establish
+ * an origin, not that the request was malformed.
+ */
+async function pairingOrigin(
+  request: z.infer<typeof pairingTokenRequestSchema>,
+  originHeader: string | undefined,
+  codes: PairingCodeStore,
+  grants: PairingGrantStore,
+): Promise<{ origin: string } | { error: ReturnType<typeof errorBody> }> {
+  if (request.grantType === 'code') {
+    const redeemed = await codes.redeem(request.code, request.codeVerifier)
+    return redeemed === null
+      ? { error: errorBody('invalid_code', 'the pairing code is invalid or has expired') }
+      : { origin: redeemed.origin }
+  }
+
+  if (!originHeader) {
+    return { error: errorBody('origin_required', 'renewal requires an Origin header') }
+  }
+  let origin: string
+  try {
+    origin = new URL(originHeader).origin
+  } catch {
+    return { error: errorBody('malformed_origin', 'the Origin header is not a valid origin') }
+  }
+  return grants.origins().includes(origin)
+    ? { origin }
+    : { error: errorBody('no_pairing_grant', 'this origin has no pairing grant') }
+}
+
+/**
+ * Why this assertion is not accepted, or `null` when it is.
+ *
+ * The ORDER is the security property, not an arrangement: the signature is
+ * checked first, then the authenticator's backup eligibility against what
+ * was pinned, and only then is the sign count RECORDED — a monotonicity
+ * check that writes, so it must never run for an assertion that failed
+ * either check above it.
+ */
+function assertionRejection(args: {
+  assertion: z.infer<typeof sessionAssertRequestSchema>
+  pin: PinnedCredential
+  nonce: Uint8Array
+  origin: string
+  credentialId: string
+  credentials: WebAuthnCredentialStore
+}): string | null {
+  const verdict = verifyWebAuthnAssertion(
+    decodeAttestation({ kind: 'webauthn', ...args.assertion }),
+    {
+      challenge: args.nonce,
+      origin: args.origin,
+      rpId: args.pin.rpId,
+      publicKeyJwk: args.pin.publicKeyJwk,
+    },
+  )
+  if (!verdict.ok) return verdict.reason
+  if (verdict.backupEligible !== args.pin.backupEligible) return 'backupEligibility'
+  if (!args.credentials.recordSignCount(args.origin, args.credentialId, verdict.signCount)) {
+    return 'signCount'
+  }
+  return null
 }
 
 export function createPairingRouter({
@@ -257,42 +327,17 @@ export function createPairingRouter({
       return c.json(invalidRequestBody(parsed.error), 400)
     }
 
-    if (parsed.data.grantType === 'code') {
-      const redeemed = await codes.redeem(parsed.data.code, parsed.data.codeVerifier)
-      if (redeemed === null) {
-        return c.json(errorBody('invalid_code', 'the pairing code is invalid or has expired'), 403)
-      }
-      const minted = tokens.mint(redeemed.origin)
-      const response = pairingTokenResponseSchema.parse({
-        ...minted,
-        origin: redeemed.origin,
-        ...(parsed.data.nonce !== undefined
-          ? { identity: signTokenResponse(identity, parsed.data.nonce, minted, redeemed.origin) }
-          : {}),
-      })
-      return c.json(response, 200)
-    }
+    const resolved = await pairingOrigin(parsed.data, c.req.header('origin'), codes, grants)
+    if ('error' in resolved) return c.json(resolved.error, 403)
 
-    // Renewal: Origin-header authentication against a persisted grant.
-    const originHeader = c.req.header('origin')
-    if (!originHeader) {
-      return c.json(errorBody('origin_required', 'renewal requires an Origin header'), 403)
-    }
-    let origin: string
-    try {
-      origin = new URL(originHeader).origin
-    } catch {
-      return c.json(errorBody('malformed_origin', 'the Origin header is not a valid origin'), 403)
-    }
-    if (!grants.origins().includes(origin)) {
-      return c.json(errorBody('no_pairing_grant', 'this origin has no pairing grant'), 403)
-    }
-    const minted = tokens.mint(origin)
+    const minted = tokens.mint(resolved.origin)
     const response = pairingTokenResponseSchema.parse({
       ...minted,
-      origin,
+      origin: resolved.origin,
       ...(parsed.data.nonce !== undefined
-        ? { identity: signTokenResponse(identity, parsed.data.nonce, minted, origin) }
+        ? {
+            identity: signTokenResponse(identity, parsed.data.nonce, minted, resolved.origin),
+          }
         : {}),
     })
     return c.json(response, 200)
@@ -365,22 +410,15 @@ export function createPairingRouter({
     const nonce = challenges.redeem(session.token)
     if (nonce === null) return refuse('assertion_rejected', 'challenge')
 
-    const verdict = verifyWebAuthnAssertion(
-      decodeAttestation({ kind: 'webauthn', ...parsed.data }),
-      {
-        challenge: nonce,
-        origin: session.origin,
-        rpId: pin.rpId,
-        publicKeyJwk: pin.publicKeyJwk,
-      },
-    )
-    if (!verdict.ok) return refuse('assertion_rejected', verdict.reason)
-    if (verdict.backupEligible !== pin.backupEligible) {
-      return refuse('assertion_rejected', 'backupEligibility')
-    }
-    if (!credentials.recordSignCount(session.origin, credentialId, verdict.signCount)) {
-      return refuse('assertion_rejected', 'signCount')
-    }
+    const rejected = assertionRejection({
+      assertion: parsed.data,
+      pin,
+      nonce,
+      origin: session.origin,
+      credentialId,
+      credentials,
+    })
+    if (rejected !== null) return refuse('assertion_rejected', rejected)
 
     const bound = tokens.bind(session.token, { origin: session.origin, credentialId })
     if (bound === null) {
