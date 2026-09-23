@@ -27,15 +27,25 @@ type Op =
   | { readonly kind: 'advance'; readonly ms: number }
   | { readonly kind: 'toExpiry'; readonly pick: number }
 
+// Weighted and with a small `pick`, so the interesting interleavings — the
+// same link redeemed twice, a read exactly at expiry — happen in most runs
+// rather than in a lucky few. Uniform picks over every issued link reached
+// them too rarely to hold under CI's repeated runs.
+const pickArb = fc.nat({ max: 2 })
 const opArb: fc.Arbitrary<Op> = fc.oneof(
-  fc.constant({ kind: 'issue' as const }),
-  fc.record({ kind: fc.constant('open' as const), pick: fc.nat() }),
-  fc.record({ kind: fc.constant('redeem' as const), pick: fc.nat() }),
-  fc.record({ kind: fc.constant('revoke' as const), pick: fc.nat() }),
-  fc.record({ kind: fc.constant('advance' as const), ms: fc.constantFrom(1, 499, 500, 1000) }),
-  // Lands the clock EXACTLY on one link's expiry. Random steps reached that
-  // instant too rarely to count on — it is where `>=` versus `>` lives.
-  fc.record({ kind: fc.constant('toExpiry' as const), pick: fc.nat() }),
+  { weight: 2, arbitrary: fc.constant({ kind: 'issue' as const }) },
+  { weight: 3, arbitrary: fc.record({ kind: fc.constant('open' as const), pick: pickArb }) },
+  { weight: 4, arbitrary: fc.record({ kind: fc.constant('redeem' as const), pick: pickArb }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant('revoke' as const), pick: pickArb }) },
+  {
+    weight: 1,
+    arbitrary: fc.record({
+      kind: fc.constant('advance' as const),
+      ms: fc.constantFrom(1, 499, 500, 1000),
+    }),
+  },
+  // Lands the clock EXACTLY on one link's expiry, where `>=` versus `>` lives.
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant('toExpiry' as const), pick: pickArb }) },
 )
 
 interface Modelled {
