@@ -51,10 +51,10 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // settings and migration surfaces, 48 -> 42 with the daemon's store,
 // 42 -> 38 with its document routes, 38 -> 33 with five more of its HTTP
 // routes, 33 -> 31 with its two transports, 31 -> 26 with its composition
-// root, and 26 -> 23 with the boundary scanner and the mkdir lock: the
-// comment asks for the ceiling to follow an obvious gap, and a paydown that
-// leaves slack is exactly one.
-const EXEMPT_CEILING = 23
+// root, 26 -> 25 with the spatial edge router, and 25 -> 22 with the
+// boundary scanner and the mkdir lock: the comment asks for the ceiling to
+// follow an obvious gap, and a paydown that leaves slack is exactly one.
+const EXEMPT_CEILING = 22
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
