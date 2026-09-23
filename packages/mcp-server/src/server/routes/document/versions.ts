@@ -12,10 +12,13 @@ import {
 import type { RequestOperator } from '@kamiazya/whiteboard-server-core'
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
+import type { z } from 'zod'
 import { getDoc } from '../../store/document-store.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import {
   defaultHumanDisplayName,
+  type ErrorAnswer,
+  firstOwned,
   handleCorruptStoredData,
   handleDocumentNotFound,
 } from './_shared.js'
@@ -31,6 +34,51 @@ export interface VersionsRouterOptions {
   daemonActor?: string
 }
 
+/**
+ * What a version save can be refused for, in the order this route answers
+ * them. The SET is named here rather than inline because it is the same
+ * three times in this file, and which errors a route owns is part of what
+ * the route means.
+ */
+const STORED_DOCUMENT_ANSWERS: readonly ErrorAnswer[] = [
+  handleDocumentNotFound,
+  handleCorruptStoredData,
+]
+
+/**
+ * An empty body is valid — a version needs neither a label nor an operator.
+ * A body that is PRESENT must parse as JSON and pass the schema.
+ */
+function parseSaveVersionBody(
+  rawText: string,
+): { label?: string; operator?: RequestOperator } | { error: { error: string; message: string } } {
+  if (rawText.length === 0) return {}
+  let json: unknown
+  try {
+    json = JSON.parse(rawText)
+  } catch {
+    return { error: { error: 'invalid_body', message: 'malformed JSON' } }
+  }
+  const parsed = saveVersionRequestSchema.safeParse(json)
+  if (!parsed.success) {
+    return { error: { error: 'invalid_body', message: saveVersionIssueMessage(parsed.error) } }
+  }
+  return { label: parsed.data.label, operator: parsed.data.operator }
+}
+
+/**
+ * The actor case gets its own sentence: a caller sending one has a wrong
+ * model of whose name it is, and "operator is invalid" would send them
+ * looking at the wrong field.
+ */
+function saveVersionIssueMessage(error: z.ZodError): string {
+  const issue = error.issues[0]
+  if (issue?.code === 'unrecognized_keys' && issue.keys.includes('actor')) {
+    return 'operator.actor is stamped by the daemon and must not be sent'
+  }
+  return issue?.path[0] === 'operator' ? 'operator is invalid' : 'label must be string'
+}
+
 // GET /api/workspaces/:workspaceId/documents/:path/versions
 // POST /api/workspaces/:workspaceId/documents/:path/versions
 export function createVersionsRouter(options: VersionsRouterOptions) {
@@ -44,10 +92,8 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const response: ListVersionsResponse = { versions }
       return c.json(response)
     } catch (err) {
-      const missing = handleDocumentNotFound(err)
-      if (missing) return c.json(missing.body, missing.status)
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })
@@ -96,10 +142,8 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
             : { kind: 'spatial', canvas: readSpatialCanvas(past) }
         return c.json(response)
       } catch (err) {
-        const missing = handleDocumentNotFound(err)
-        if (missing) return c.json(missing.body, missing.status)
-        const issue = handleCorruptStoredData(err)
-        if (issue) return c.json(issue.body, issue.status)
+        const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+        if (owned) return c.json(owned.body, owned.status)
         throw err
       }
     },
@@ -108,35 +152,10 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
   // Save a manual version with body { label?: string; operator?: RequestOperator }.
   // auto is false.
   onDocumentsRoute(app, 'post', ['versions'], async (c, workspaceId, path) => {
-    // Empty body is valid (no label / operator); a non-empty body must parse as
-    // JSON and pass schema validation, otherwise return invalid_body.
-    const rawText = await c.req.text()
-    let label: string | undefined
-    let operator: RequestOperator | undefined
-    if (rawText.length > 0) {
-      let json: unknown
-      try {
-        json = JSON.parse(rawText)
-      } catch {
-        return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
-      }
-      const parsed = saveVersionRequestSchema.safeParse(json)
-      if (!parsed.success) {
-        const issue = parsed.error.issues[0]
-        // The actor case gets its own sentence: a caller sending one has a
-        // wrong model of whose name it is, and "operator is invalid" would
-        // send them looking at the wrong field.
-        const namedTheDevice = issue?.code === 'unrecognized_keys' && issue.keys.includes('actor')
-        const message = namedTheDevice
-          ? 'operator.actor is stamped by the daemon and must not be sent'
-          : issue?.path[0] === 'operator'
-            ? 'operator is invalid'
-            : 'label must be string'
-        return c.json({ error: 'invalid_body', message }, 400)
-      }
-      label = parsed.data.label
-      operator = parsed.data.operator
-    }
+    const parsed = parseSaveVersionBody(await c.req.text())
+    if ('error' in parsed) return c.json(parsed.error, 400)
+    const { label, operator } = parsed
+
     try {
       const doc = await getDoc(workspaceId, path)
       // The SCHEMA is what stops a caller naming the device; this spread
@@ -155,10 +174,8 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const response: SaveVersionResponse = { version: entry }
       return c.json(response)
     } catch (err) {
-      const missing = handleDocumentNotFound(err)
-      if (missing) return c.json(missing.body, missing.status)
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
+      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      if (owned) return c.json(owned.body, owned.status)
       throw err
     }
   })

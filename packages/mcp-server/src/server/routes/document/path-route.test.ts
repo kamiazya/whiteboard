@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import { onDocumentAction, onDocumentFile } from './path-route.js'
+import { matchDocumentsTail, onDocumentAction, onDocumentFile } from './path-route.js'
 
 describe('onDocumentAction', () => {
   function appWith(action: string) {
@@ -49,5 +49,63 @@ describe('onDocumentFile', () => {
     expect(res.status).toBe(200)
     // Greedy: the LAST /file/<id> is the file tail, the rest is the path.
     expect(await res.json()).toEqual({ workspaceId: 'ws1', path: 'a/file/b', fileId: 'c' })
+  })
+})
+
+describe('matchDocumentsTail', () => {
+  it('anchors the suffix at the END, so a document named after it stays reachable', () => {
+    expect(
+      matchDocumentsTail('/api/workspaces/ws1/documents/a/versions/versions', ['versions']),
+    ).toEqual({ workspaceId: 'ws1', path: 'a/versions', params: {} })
+  })
+
+  it('captures a `:name` suffix segment as a param', () => {
+    expect(
+      matchDocumentsTail('/api/workspaces/ws1/documents/notes/plan/versions/v7/document', [
+        'versions',
+        ':id',
+        'document',
+      ]),
+    ).toEqual({ workspaceId: 'ws1', path: 'notes/plan', params: { id: 'v7' } })
+  })
+
+  it('takes the whole tail as the path for an empty pattern', () => {
+    expect(matchDocumentsTail('/api/workspaces/ws1/documents/a/b/c', [])).toEqual({
+      workspaceId: 'ws1',
+      path: 'a/b/c',
+      params: {},
+    })
+  })
+
+  it('decodes each segment, so an encoded slash is part of ONE segment', () => {
+    expect(
+      matchDocumentsTail('/api/workspaces/my%20ws/documents/a%2Fb/versions', ['versions']),
+    ).toEqual({ workspaceId: 'my ws', path: 'a/b', params: {} })
+  })
+
+  it.each([
+    ['a different prefix', '/api/w/ws1/document/a/versions', ['versions']],
+    ['a suffix that does not match', '/api/workspaces/ws1/documents/a/pins', ['versions']],
+    [
+      'no path left once the suffix is taken',
+      '/api/workspaces/ws1/documents/versions',
+      ['versions'],
+    ],
+    ['an empty segment', '/api/workspaces/ws1/documents/a//versions', ['versions']],
+    [
+      'undecodable percent-escapes',
+      '/api/workspaces/ws1/documents/a/%E0%A4%A/versions',
+      ['versions'],
+    ],
+  ])('answers null for %s, so the registration falls through', (_why, path, pattern) => {
+    expect(matchDocumentsTail(path, pattern as string[])).toBeNull()
+  })
+
+  it('ignores one trailing slash', () => {
+    expect(matchDocumentsTail('/api/workspaces/ws1/documents/a/versions/', ['versions'])).toEqual({
+      workspaceId: 'ws1',
+      path: 'a',
+      params: {},
+    })
   })
 })

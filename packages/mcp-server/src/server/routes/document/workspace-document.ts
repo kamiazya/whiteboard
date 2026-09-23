@@ -13,6 +13,7 @@ import {
   promoteWorkspace,
   type ServerDeps,
 } from '@kamiazya/whiteboard-server-core'
+import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
@@ -110,29 +111,89 @@ function verifyPromotionAttestation(input: {
 //
 // GET  /api/w/:workspaceId/workspace-document/snapshot
 // POST /api/w/:workspaceId/workspace-document/update?documentId=<ulid>
+/**
+ * The preamble all three workspace-document routes share: the handle as
+ * written is validated (so a malformed one keeps its 400), resolved to a
+ * canonical id, and the workspace is checked to EXIST.
+ *
+ * That last check is the honesty rule this surface runs on: an unregistered
+ * workspace is a refusal, not a phantom. Inside a registered workspace a
+ * missing workspace document is minted empty — the workspace is real, it
+ * just has no tree-plane documents yet.
+ */
+async function admittedWorkspace(
+  c: Context,
+  depsOf: () => Promise<ServerDeps>,
+): Promise<{ handle: string; workspaceId: string; deps: ServerDeps } | { refusal: Response }> {
+  // The route cannot match without the segment; `?? ''` is for the type,
+  // and an empty handle refuses through the same validator as any other
+  // unusable one rather than through a second path.
+  const handle = c.req.param('workspaceId') ?? ''
+  try {
+    validateWorkspaceId(handle)
+  } catch (err) {
+    const body = validationErrorBody(err)
+    if (body) return { refusal: c.json({ title: body.message }, 400) }
+    throw err
+  }
+  const workspaceId = await workspaceIdFromHandle(c, handle)
+  const deps = await depsOf()
+  if (!(await deps.workspaceDocuments.exists(workspaceId))) {
+    return { refusal: c.json({ title: `Workspace "${workspaceId}" not found` }, 404) }
+  }
+  return { handle, workspaceId, deps }
+}
+
+/**
+ * The wire shape as the promotion itself wants it: the snapshot decoded, and
+ * the attestation only if the browser sent one (it is optional — a workspace
+ * may be promoted without passkey evidence, and `attested` in the response
+ * says which happened).
+ */
+function promoteRequestFrom(json: unknown):
+  | { snapshot: Uint8Array; attestation: Attestation | undefined }
+  | {
+      error: { error: string; message: string }
+    } {
+  const parsed = promoteWorkspaceRequestSchema.safeParse(json)
+  if (!parsed.success) {
+    return {
+      error: {
+        error: 'invalid_body',
+        message: 'snapshot must be base64url and attestation, if present, a WebAuthn assertion',
+      },
+    }
+  }
+  return {
+    snapshot: new Uint8Array(Buffer.from(parsed.data.snapshot, 'base64url')),
+    attestation: parsed.data.attestation,
+  }
+}
+
+/**
+ * `null` for both the unattested request and the one whose evidence checks
+ * out — the two are the same to this route, and only the response's
+ * `attested` distinguishes them.
+ */
+function attestationRefusal(
+  args: Omit<Parameters<typeof verifyPromotionAttestation>[0], 'attestation'> & {
+    attestation: Attestation | undefined
+  },
+): { error: string; message: string } | null {
+  if (args.attestation === undefined) return null
+  const verdict = verifyPromotionAttestation({ ...args, attestation: args.attestation })
+  return verdict.ok ? null : { error: 'attestation_rejected', message: verdict.reason }
+}
+
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
   const app = new Hono()
   const depsOf = async (): Promise<ServerDeps> =>
     options.serverDeps ?? (await getDefaultServerDeps())
 
   app.get('/api/w/:workspaceId/workspace-document/snapshot', async (c) => {
-    const handle = c.req.param('workspaceId')
-    try {
-      validateWorkspaceId(handle)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json({ title: body.message }, 400)
-      throw err
-    }
-    const workspaceId = await workspaceIdFromHandle(c, handle)
-    const deps = await depsOf()
-    // Same honesty rule as the per-document snapshot: an unregistered
-    // workspace is a refusal, not a phantom. Inside a registered workspace,
-    // a missing workspace document is minted empty — the workspace is real,
-    // it just has no tree-plane documents yet.
-    if (!(await deps.workspaceDocuments.exists(workspaceId))) {
-      return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
-    }
+    const admitted = await admittedWorkspace(c, depsOf)
+    if ('refusal' in admitted) return admitted.refusal
+    const { workspaceId, deps } = admitted
     const doc = await deps.workspaceDocuments.get(workspaceId)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
     return c.body(snapshot, 200, { 'Content-Type': 'application/octet-stream' })
@@ -152,19 +213,9 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         ),
     }),
     async (c) => {
-      const handle = c.req.param('workspaceId')
-      try {
-        validateWorkspaceId(handle)
-      } catch (err) {
-        const body = validationErrorBody(err)
-        if (body) return c.json({ title: body.message }, 400)
-        throw err
-      }
-      const workspaceId = await workspaceIdFromHandle(c, handle)
-      const deps = await depsOf()
-      if (!(await deps.workspaceDocuments.exists(workspaceId))) {
-        return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
-      }
+      const admitted = await admittedWorkspace(c, depsOf)
+      if ('refusal' in admitted) return admitted.refusal
+      const { workspaceId, deps } = admitted
       const bytes = new Uint8Array(await c.req.arrayBuffer())
 
       const result = await applyWorkspaceDocumentUpdate(deps, { workspaceId, update: bytes })
@@ -216,50 +267,28 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         ),
     }),
     async (c) => {
-      const handle = c.req.param('workspaceId')
-      try {
-        validateWorkspaceId(handle)
-      } catch (err) {
-        const body = validationErrorBody(err)
-        if (body) return c.json({ title: body.message }, 400)
-        throw err
-      }
-      const workspaceId = await workspaceIdFromHandle(c, handle)
-      const deps = await depsOf()
-      if (!(await deps.workspaceDocuments.exists(workspaceId))) {
-        return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
-      }
+      const admitted = await admittedWorkspace(c, depsOf)
+      if ('refusal' in admitted) return admitted.refusal
+      const { handle, workspaceId, deps } = admitted
       let json: unknown
       try {
         json = await c.req.json()
       } catch {
         return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
       }
-      const parsed = promoteWorkspaceRequestSchema.safeParse(json)
-      if (!parsed.success) {
-        return c.json(
-          {
-            error: 'invalid_body',
-            message: 'snapshot must be base64url and attestation, if present, a WebAuthn assertion',
-          },
-          400,
-        )
-      }
-      const snapshot = new Uint8Array(Buffer.from(parsed.data.snapshot, 'base64url'))
-      const attestation = parsed.data.attestation
-      if (attestation !== undefined) {
-        const verdict = verifyPromotionAttestation({
-          attestation,
-          originHeader: c.req.header('origin'),
-          // The handle as the browser addressed it, which is what it hashed.
-          handle,
-          snapshot,
-          credentials: options.credentials,
-        })
-        if (!verdict.ok) {
-          return c.json({ error: 'attestation_rejected', message: verdict.reason }, 403)
-        }
-      }
+      const request = promoteRequestFrom(json)
+      if ('error' in request) return c.json(request.error, 400)
+      const { snapshot, attestation } = request
+
+      const refusal = attestationRefusal({
+        attestation,
+        originHeader: c.req.header('origin'),
+        handle,
+        snapshot,
+        credentials: options.credentials,
+      })
+      if (refusal) return c.json(refusal, 403)
+
       // The device that wrote the row (ADR-0035 decision 2), as every other
       // human row this daemon writes; the person's evidence is beside it.
       const operator: OperatorInfo = {
