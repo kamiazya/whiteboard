@@ -56,6 +56,46 @@ non-zero exit code if any are missing or invalid.
 
 See `.env.server.example` for a filled-in template.
 
+## Signing people in through your identity provider
+
+Set `WHITEBOARD_SIGN_IN_CONFIG` to the path of a YAML or JSON file listing the
+OpenID Connect providers people may sign in with. When it is unset, there is
+no sign-in route at all.
+
+```yaml
+providers:
+  - id: google                       # what the sign-in URL names
+    kind: oidc
+    issuer: https://accounts.google.com
+    clientId: 1234.apps.googleusercontent.com
+    clientSecret: { env: GOOGLE_CLIENT_SECRET }   # or { file: /run/secrets/google }
+    admission:
+      googleHostedDomains: [corp.example]   # only accounts of this Workspace
+      createAccounts: false                 # the default: invitations only
+```
+
+Register `https://<your host>/auth/callback/<id>` as the redirect URI with the
+provider. A person signs in at `/auth/sign-in/<id>`.
+
+What the `admission` block can say:
+
+| Key | Meaning |
+|---|---|
+| `createAccounts` | Whether a person the rules admit gets an account on first sign-in. Default `false`: only invited people do. |
+| `honourEmailInvitations` | Whether an invitation addressed to an email is honoured when this provider asserts that email verified. Default `false`. |
+| `allowedEmailDomains` | Only addresses in these domains, matched exactly (a subdomain is not the domain). |
+| `googleHostedDomains` | Only Google Workspace accounts of these domains (Google's `hd` claim). |
+| `requiredClaims` | Each named claim must carry one of the listed values, e.g. `groups: [whiteboard]`. |
+
+Every rule that reads an email or a domain requires the provider to assert the
+email verified. The rules are checked at every sign-in, not only the first.
+The server refuses to start if the file is invalid or a secret it names is
+empty.
+
+The session this opens is not yet what `/api` and `/mcp` authorize with:
+those still take the provider's bearer tokens. Using the session for them is
+the next step.
+
 ## Reverse proxy and TLS
 
 The container binds plain HTTP on port 3099 (loopback only in the provided

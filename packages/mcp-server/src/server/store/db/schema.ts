@@ -188,6 +188,19 @@ interface SignInSessionsTable {
   expiresAt: Timestamp
 }
 
+// ADR-0046 decision 1: an authorization-code flow between its redirect and
+// its callback, bound to the browser that began it.
+interface SignInAttemptsTable {
+  state: string
+  browserBindingHash: string
+  providerId: string
+  nonce: string
+  codeVerifier: string
+  invitationToken: string | null
+  returnTo: string
+  expiresAt: Timestamp
+}
+
 // Whether a workspace has ever had a member — set once by `addMember`'s
 // first insert, never cleared by `revokeL1Membership` (user decision
 // 2026-09-21: removing the sole member does not revert a workspace to
@@ -220,6 +233,7 @@ export interface DatabaseSchema {
   accountBindings: AccountBindingsTable
   invitations: InvitationsTable
   signInSessions: SignInSessionsTable
+  signInAttempts: SignInAttemptsTable
   workspaceMemberships: WorkspaceMembershipsTable
   workspaceReplicaKeys: WorkspaceReplicaKeysTable
   workspaceMembersOnly: WorkspaceMembersOnlyTable

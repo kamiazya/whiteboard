@@ -139,6 +139,7 @@
     "loro-crdt": "catalog:",
     "nanoid": "^6.0.1",
     "open": "^11.0.1",
+    "openid-client": "^6.8.8",
     "opentype.js": "^2.0.0",
     "pino": "^10.3.1",
     "ws": "^8.21.0",

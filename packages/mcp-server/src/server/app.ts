@@ -38,6 +38,7 @@ import {
 import { createPairingRouter } from './routes/pairing.js'
 import { createReplicaKeyRouter } from './routes/replica-key.js'
 import { createRuntimeRouter } from './routes/runtime.js'
+import { createSignInRoutes } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
@@ -633,6 +634,8 @@ export function createApp(options: AppOptions) {
     }),
   )
   if (options.authMode === 'server-mode') {
+    // Before the UI catch-all, which would otherwise answer every /auth path.
+    if (options.signIn !== undefined) app.route('/', createSignInRoutes(options.signIn))
     mountServerModeUi(app)
     // Same shape as the local-daemon return below, so callers see one type
     // rather than a union. Server-mode does not consult this resolver — its
