@@ -10,6 +10,7 @@
  * one sitting.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
@@ -283,20 +284,18 @@ export function browserVersionsSlot({
 /**
  * The Connections chip's slot. `backlinks: null` while the first answer is
  * still being read, so the chip waits rather than claiming there are none.
- *
- * No `onLinkify`: turning a mention into a link rewrites ANOTHER document,
- * which this keeper has no operation for yet, and the panel hides the button
- * for a keeper that offers navigation only.
  */
 export function browserConnectionsSlot(
   connections: Connections | null,
   openDocument: (documentId: string) => void,
+  linkify: (mention: ConnectionsBacklink) => void,
 ): Pick<DocumentPageModel, 'connections'> {
   return {
     connections: {
       backlinks: connections === null ? null : connections.backlinks,
       ...(connections === null ? {} : { mentions: connections.unlinkedMentions }),
       onOpen: (entry) => openDocument(entry.documentId),
+      onLinkify: linkify,
     },
   }
 }
