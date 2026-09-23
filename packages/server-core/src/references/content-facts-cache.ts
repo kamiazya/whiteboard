@@ -23,16 +23,21 @@ const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], bearers: [] }
  * Only content facts live here. Index-authority meta (path/name/kind) is
  * read fresh from the listing per request — a rename needs no invalidation.
  */
+/** One document's cached facts, and its vector once one has been asked for. */
+interface HeldFacts {
+  stamp: string
+  facts: ContentFacts
+  vector?: Float32Array
+  vectorFrom?: string
+}
+
 export class ContentFactsCache {
   /** workspaceId -> documentId -> stamped facts. Scoped so alternating
    *  requests across workspaces cannot evict each other's entries. */
   /** workspaceId -> documentId -> stamped facts, plus its vector once one
    *  has been asked for. The vector rides the SAME stamp as the facts, so
    *  an edit invalidates both together and neither can go stale alone. */
-  private readonly held = new Map<
-    string,
-    Map<string, { stamp: string; facts: ContentFacts; vector?: Float32Array; vectorFrom?: string }>
-  >()
+  private readonly held = new Map<string, Map<string, HeldFacts>>()
 
   /**
    * Facts for exactly `entries` of one workspace, loading only documents
@@ -82,6 +87,37 @@ export class ContentFactsCache {
   }
 
   /**
+   * Which of `entries` still need a vector from THIS embedder, with the text
+   * to embed. A vector from a different embedder is not a cache hit: it
+   * belongs to another vector space, and reusing it would have the query
+   * measured against documents nobody scored the same way.
+   *
+   * The name and path are embedded alongside the body, so a document that is
+   * only a title still gets a vector — otherwise it would sit in the lexical
+   * ranking with no semantic counterpart and be judged by half the evidence.
+   * Only a document with nothing at all is skipped.
+   */
+  private pendingEmbeds(
+    entries: readonly DocumentEntry[],
+    held: Map<string, HeldFacts>,
+    facts: ReadonlyMap<string, ContentFacts>,
+    embedder: Embedder,
+  ): { documentId: string; text: string }[] {
+    const pending: { documentId: string; text: string }[] = []
+    for (const entry of entries) {
+      const cached = held.get(entry.documentId)
+      if (cached === undefined) continue
+      if (cached.vector !== undefined && cached.vectorFrom === embedder.id) continue
+      const text = [entry.name ?? '', entry.path, ...(facts.get(entry.documentId)?.texts ?? [])]
+        .join('\n')
+        .trim()
+      if (text === '') continue
+      pending.push({ documentId: entry.documentId, text })
+    }
+    return pending
+  }
+
+  /**
    * Vectors for `entries`, embedding only what the stamp says is new or
    * changed — the same validation the facts use, so an untouched document
    * is never re-embedded even though embedding is the expensive half.
@@ -103,20 +139,7 @@ export class ContentFactsCache {
     const held = this.held.get(workspaceId)
     if (held === undefined) return []
 
-    const pending: { documentId: string; text: string }[] = []
-    for (const entry of entries) {
-      const cached = held.get(entry.documentId)
-      // A vector from a DIFFERENT embedder is not a cache hit: it belongs
-      // to another vector space, and reusing it would have the query
-      // measured against documents nobody scored the same way.
-      if (cached === undefined) continue
-      if (cached.vector !== undefined && cached.vectorFrom === embedder.id) continue
-      const text = [entry.name ?? '', entry.path, ...(facts.get(entry.documentId)?.texts ?? [])]
-        .join('\n')
-        .trim()
-      if (text === '') continue
-      pending.push({ documentId: entry.documentId, text })
-    }
+    const pending = this.pendingEmbeds(entries, held, facts, embedder)
     if (pending.length > 0) {
       const vectors = await embedder.embed(
         pending.map((entry) => entry.text),

@@ -193,10 +193,6 @@
         "!packages/mcp-server/src/server/store/file-gc.ts",
         "!packages/mcp-server/src/server/store/version-store.ts",
         "!packages/mcp-server/src/shared/mkdir-lock.ts",
-        "!packages/server-core/src/operations/restore-version.ts",
-        "!packages/server-core/src/references/content-facts-cache.ts",
-        "!packages/server-core/src/references/follow-rename.ts",
-        "!packages/server-core/src/references/reference-aggregate.ts",
         "!tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs",
         "!tools/arch-lint/src/cycle-check.ts",
         "!tools/arch-lint/src/source-scan.ts"
