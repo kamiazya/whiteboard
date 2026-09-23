@@ -25,7 +25,7 @@ type Op =
   | { readonly kind: 'redeem'; readonly pick: number }
   | { readonly kind: 'revoke'; readonly pick: number }
   | { readonly kind: 'advance'; readonly ms: number }
-  | { readonly kind: 'toExpiry'; readonly pick: number }
+  | { readonly kind: 'openAtExpiry'; readonly pick: number }
 
 // Weighted and with a small `pick`, so the interesting interleavings — the
 // same link redeemed twice, a read exactly at expiry — happen in most runs
@@ -44,8 +44,12 @@ const opArb: fc.Arbitrary<Op> = fc.oneof(
       ms: fc.constantFrom(1, 499, 500, 1000),
     }),
   },
-  // Lands the clock EXACTLY on one link's expiry, where `>=` versus `>` lives.
-  { weight: 1, arbitrary: fc.record({ kind: fc.constant('toExpiry' as const), pick: pickArb }) },
+  // Lands the clock EXACTLY on one link's expiry and reads it there, where
+  // `>=` versus `>` lives.
+  {
+    weight: 2,
+    arbitrary: fc.record({ kind: fc.constant('openAtExpiry' as const), pick: pickArb }),
+  },
 )
 
 interface Modelled {
@@ -107,15 +111,14 @@ describe('invitation links — against a model', () => {
         }
         const inv = issued[op.pick % Math.max(issued.length, 1)]
         if (inv === undefined) continue
-        if (op.kind === 'toExpiry') {
-          now = Math.max(now, inv.expiresAt)
-          continue
-        }
+        if (op.kind === 'openAtExpiry') now = Math.max(now, inv.expiresAt)
         const state = expected(inv, now)
-        if (op.kind === 'open') {
+        if (op.kind === 'open' || op.kind === 'openAtExpiry') {
           const opened = await store.openLink(inv.token, now)
           expect(opened.ok ? 'usable' : opened.reason).toBe(state)
-          if (now === inv.expiresAt) reached.expiredAtBoundary++
+          // Counted only where the boundary DECIDES the answer: a link read
+          // at its expiry that is neither redeemed nor revoked.
+          if (now === inv.expiresAt && state === 'expired') reached.expiredAtBoundary++
         } else if (op.kind === 'redeem') {
           const ok = await store.redeem(inv.id, 'p-x', now)
           expect(ok).toBe(state === 'usable')
