@@ -91,39 +91,76 @@ function storageOf(state: ConnectionState | undefined): StorageHealth | undefine
   return state !== undefined && state.keeper === 'browser' ? state.storage : undefined
 }
 
-export function ShellMark({ state, className }: ShellMarkProps) {
-  const session = sessionOf(state)
-  const storage = storageOf(state)
+/**
+ * Whether the reassurance gesture is playing: true for `RECOVERED_MS` after
+ * a session that had DROPPED comes back.
+ *
+ * Keyed on the TRANSITION rather than the value — the previous session is
+ * held in a ref — because keyed on the value alone every re-render that
+ * happened to be synced would replay it, and React re-renders for reasons of
+ * its own.
+ *
+ * Leaving synced ENDS the gesture, and clearing the flag is what makes the
+ * next recovery playable: `setRecovered(true)` on a flag that is already
+ * true is a no-op — React bails on identical state, the class never leaves
+ * the DOM, and the animation therefore never restarts. A connection that
+ * drops repeatedly would show the reassurance once and then never again,
+ * which is the opposite of who needs it.
+ *
+ * A first mount that is already synced is not a recovery — celebrating it
+ * would make every navigation twinkle, and spend the gesture before anything
+ * went wrong. A keeper change is not one either: browser -> daemon is a
+ * move, with its own narration, and no session dropped for it to come back
+ * from.
+ */
+function useRecoveryGesture(session: SessionHealth | undefined): boolean {
   const [recovered, setRecovered] = useState(false)
-  // The PREVIOUS session, so the gesture keys on a transition rather than on
-  // a value. Keyed on the value alone, every re-render that happened to be
-  // synced would replay it — and React re-renders for reasons of its own.
   const previous = useRef<SessionHealth | undefined>(session)
 
   useEffect(() => {
     const before = previous.current
     previous.current = session
-    // Leaving synced ENDS the gesture, and clearing the flag is what makes
-    // the next recovery playable: `setRecovered(true)` on a flag that is
-    // already true is a no-op — React bails on identical state, the class
-    // never leaves the DOM, and the animation therefore never restarts. A
-    // connection that drops repeatedly would show the reassurance once and
-    // then never again, which is the opposite of who needs it.
     if (session !== 'synced') {
       setRecovered(false)
       return
     }
-    // Only a session that had DROPPED and came back. A first mount that is
-    // already synced is not a recovery — celebrating it would make every
-    // navigation twinkle, and spend the gesture before anything went wrong.
-    // A keeper change is not one either: browser -> daemon is a move, with
-    // its own narration, and no session dropped for it to come back from.
     if (before !== 'reconnecting' && before !== 'sync-off') return
     setRecovered(true)
     const timer = setTimeout(() => setRecovered(false), RECOVERED_MS)
     return () => clearTimeout(timer)
   }, [session])
 
+  return recovered
+}
+
+/**
+ * The terminus dot, whose SHAPE is what the keeper's health says: filled for
+ * attention, a ring for the softer state, and absent when there is nothing
+ * to report.
+ */
+function MarkCap({ cap }: { cap: 'filled' | 'ring' | undefined }) {
+  if (cap === undefined) return null
+  return (
+    <circle
+      data-testid="shell-mark-cap"
+      data-tone="attention"
+      data-shape={cap}
+      cx={TERMINUS.x}
+      cy={TERMINUS.y}
+      r={cap === 'ring' ? 6 : 8}
+      className={cn(
+        'wb-mark-cap',
+        cap === 'filled' && 'fill-amber-500',
+        cap === 'ring' && 'fill-none stroke-amber-500 [stroke-width:4]',
+      )}
+    />
+  )
+}
+
+export function ShellMark({ state, className }: ShellMarkProps) {
+  const session = sessionOf(state)
+  const storage = storageOf(state)
+  const recovered = useRecoveryGesture(session)
   const cap = state === undefined ? undefined : capOf(state)
   const broken = state !== undefined && isNotKeeping(state)
   // Gated on the session as well as on the flag. `useEffect` is PASSIVE — it
@@ -196,21 +233,7 @@ export function ShellMark({ state, className }: ShellMarkProps) {
           className="wb-mark-cap animate-[attention-pulse_900ms_var(--motion-ease-out)_2] fill-amber-500"
         />
       )}
-      {cap !== undefined && (
-        <circle
-          data-testid="shell-mark-cap"
-          data-tone="attention"
-          data-shape={cap}
-          cx={TERMINUS.x}
-          cy={TERMINUS.y}
-          r={cap === 'ring' ? 6 : 8}
-          className={cn(
-            'wb-mark-cap',
-            cap === 'filled' && 'fill-amber-500',
-            cap === 'ring' && 'fill-none stroke-amber-500 [stroke-width:4]',
-          )}
-        />
-      )}
+      <MarkCap cap={cap} />
     </svg>
   )
 }
