@@ -602,7 +602,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 117,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 142,
   'packages/mcp-server/src/server/routes/fonts.ts#createFontsRouter': 58,
-  'packages/mcp-server/src/server/routes/mcp.ts#createMcpRouter': 120,
   // 112 -> 136: a FOURTH route in a four-route router (the members-only
   // reopen, user decision 2026-09-21). Paid for partly first — the bar's
   // rationale moved to the file header, where a statement about the
@@ -632,7 +631,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/viewport.ts#createViewportRouter': 71,
   // 75 -> 76 (ADR-0041 S8 slice 2): every accepted decision carries the resolved grant for the upgrade's membership check.
   'packages/mcp-server/src/server/routes/ws-auth.ts#authorizeWsUpgrade': 76,
-  'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 291,
+  // Raised 291 -> 311: the one inline `ws.on('message')` wall became five
+  // named inner functions (onTextFrame / onClientReady / onBinaryFrame /
+  // persistUpdate / signalPersisted), each carrying the rationale that was
+  // previously buried mid-handler. The closure is longer by those doc
+  // comments and shorter by nothing — the next real shrink is moving them
+  // out of the closure, which needs a context object this change does not
+  // introduce.
+  'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 311,
   // 108 -> 117: `reopenToOriginTrust`, the membership gate's only exit
   // (user decision 2026-09-21). A factory gains a method; there is nothing
   // to extract, and splitting the store by which table a method touches
