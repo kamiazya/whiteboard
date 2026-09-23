@@ -129,6 +129,135 @@ async function waitForExit(
   return !isPidAlive(pid)
 }
 
+/**
+ * Every reason NOT to signal anything, asked before a signal is sent. Each
+ * one also forgets the record it just judged, because in every case the
+ * record no longer describes a process this CLI manages.
+ *
+ * The two identity checks are the point: a PID-reuse race could have put an
+ * unrelated process at `record.pid`, and killing it would be the worst thing
+ * this command could do.
+ */
+/** The answer for a record that no longer describes a process we manage. */
+function notRunning(reason: ServerStopResult['reason'], pid?: number): RunServerStopOutcome {
+  return outcome(0, {
+    action: 'not-running',
+    reason,
+    recordFound: true,
+    recordFresh: false,
+    ...(pid === undefined ? {} : { pid }),
+  })
+}
+
+async function stopRefusal(
+  dataDir: string,
+  removeRecord: NonNullable<RunServerStopOptions['removeRecord']>,
+  isPidAlive: NonNullable<RunServerStopOptions['isPidAlive']>,
+  verifyIdentity: NonNullable<RunServerStopOptions['verifyIdentity']>,
+): Promise<{ record: ServerModeRecord } | { outcome: RunServerStopOutcome }> {
+  const readResult = readServerModeRecord(dataDir)
+
+  if (readResult.kind === 'missing') {
+    return {
+      outcome: outcome(0, {
+        action: 'not-running',
+        reason: 'server-record-not-found',
+        recordFound: false,
+        recordFresh: false,
+      }),
+    }
+  }
+
+  if (readResult.kind === 'malformed') {
+    // Refuse to kill an unknown process. Clean up the corrupt file.
+    await forgetRecord(removeRecord, dataDir)
+    return {
+      outcome: outcome(2, {
+        action: 'refused',
+        reason: 'server-record-malformed',
+        recordFound: true,
+        recordFresh: false,
+      }),
+    }
+  }
+
+  const { record } = readResult
+  if (!isPidAlive(record.pid)) {
+    await forgetRecord(removeRecord, dataDir)
+    return { outcome: notRunning('server-process-not-running', record.pid) }
+  }
+
+  if (!(await verifyIdentity(record))) {
+    await forgetRecord(removeRecord, dataDir)
+    const reason = record.instanceId ? 'server-process-not-running' : 'server-instance-unverifiable'
+    return { outcome: notRunning(reason, record.pid) }
+  }
+
+  return { record }
+}
+
+/**
+ * SIGTERM, and the two ways it can fail. `ESRCH` is not a failure at all —
+ * the process exited in the window between the liveness check and the kill,
+ * which is the outcome this command wanted. `null` means the signal landed.
+ */
+async function sendStopSignal(
+  record: ServerModeRecord,
+  killFn: NonNullable<RunServerStopOptions['killFn']>,
+  removeRecord: NonNullable<RunServerStopOptions['removeRecord']>,
+  dataDir: string,
+): Promise<RunServerStopOutcome | null> {
+  try {
+    killFn(record.pid, 'SIGTERM')
+    return null
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException | undefined)?.code !== 'ESRCH') {
+      return outcome(1, {
+        action: 'refused',
+        reason: 'server-stop-signal-failed',
+        recordFound: true,
+        recordFresh: true,
+        pid: record.pid,
+      })
+    }
+  }
+  await forgetRecord(removeRecord, dataDir)
+  return notRunning('server-process-not-running', record.pid)
+}
+
+/**
+ * SIGTERM timed out. Re-check identity before escalating: if the managed
+ * server has already exited and its PID was reused, the polling loop would
+ * have seen the NEW process as still alive, and SIGKILL would land on
+ * something unrelated.
+ *
+ * Both paths answer the same outcome, deliberately: our server is gone
+ * either way, and the result has no field that could say which.
+ */
+async function escalateAfterTimeout(
+  record: ServerModeRecord,
+  verifyIdentity: NonNullable<RunServerStopOptions['verifyIdentity']>,
+  killFn: NonNullable<RunServerStopOptions['killFn']>,
+  removeRecord: NonNullable<RunServerStopOptions['removeRecord']>,
+  dataDir: string,
+): Promise<RunServerStopOutcome> {
+  if (await verifyIdentity(record)) {
+    try {
+      killFn(record.pid, 'SIGKILL')
+    } catch {
+      /* already gone */
+    }
+  }
+  await forgetRecord(removeRecord, dataDir)
+  return outcome(0, {
+    action: 'stopped',
+    reason: 'server-stop-timeout',
+    recordFound: true,
+    recordFresh: true,
+    pid: record.pid,
+  })
+}
+
 export async function runServerStop(options: RunServerStopOptions): Promise<RunServerStopOutcome> {
   const dataDir = options.dataDir ?? resolveDefaultDataDir(process.env)
   const isPidAlive = options.isPidAlive ?? defaultIsPidAlive
@@ -139,113 +268,16 @@ export async function runServerStop(options: RunServerStopOptions): Promise<RunS
   const stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS
   const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
 
-  const readResult = readServerModeRecord(dataDir)
+  const refusal = await stopRefusal(dataDir, removeRecord, isPidAlive, verifyIdentity)
+  if ('outcome' in refusal) return refusal.outcome
+  const { record } = refusal
 
-  if (readResult.kind === 'missing') {
-    return outcome(0, {
-      action: 'not-running',
-      reason: 'server-record-not-found',
-      recordFound: false,
-      recordFresh: false,
-    })
-  }
-
-  if (readResult.kind === 'malformed') {
-    // Refuse to kill an unknown process. Clean up the corrupt file.
-    await forgetRecord(removeRecord, dataDir)
-    return outcome(2, {
-      action: 'refused',
-      reason: 'server-record-malformed',
-      recordFound: true,
-      recordFresh: false,
-    })
-  }
-
-  const { record } = readResult
-  const alive = isPidAlive(record.pid)
-
-  if (!alive) {
-    await forgetRecord(removeRecord, dataDir)
-    return outcome(0, {
-      action: 'not-running',
-      reason: 'server-process-not-running',
-      recordFound: true,
-      recordFresh: false,
-      pid: record.pid,
-    })
-  }
-
-  // PID is alive — verify it is actually our managed server before killing.
-  // A PID-reuse race could have placed an unrelated process at record.pid.
-  const rightProcess = await verifyIdentity(record)
-  if (!rightProcess) {
-    await forgetRecord(removeRecord, dataDir)
-    return outcome(0, {
-      action: 'not-running',
-      reason: record.instanceId ? 'server-process-not-running' : 'server-instance-unverifiable',
-      recordFound: true,
-      recordFresh: false,
-      pid: record.pid,
-    })
-  }
-
-  try {
-    killFn(record.pid, 'SIGTERM')
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ESRCH') {
-      // Process exited in the window between liveness check and kill.
-      await forgetRecord(removeRecord, dataDir)
-      return outcome(0, {
-        action: 'not-running',
-        reason: 'server-process-not-running',
-        recordFound: true,
-        recordFresh: false,
-        pid: record.pid,
-      })
-    }
-    return outcome(1, {
-      action: 'refused',
-      reason: 'server-stop-signal-failed',
-      recordFound: true,
-      recordFresh: true,
-      pid: record.pid,
-    })
-  }
+  const signalFailure = await sendStopSignal(record, killFn, removeRecord, dataDir)
+  if (signalFailure !== null) return signalFailure
 
   const exited = await waitForExit(record.pid, isPidAlive, sleep, stopTimeoutMs, pollIntervalMs)
-
   if (!exited) {
-    // SIGTERM timed out. Re-check identity before escalating to SIGKILL: if the
-    // managed server has already exited and its PID was reused by another process,
-    // the polling loop would have seen the new process as still alive. Do not kill
-    // an unrelated process.
-    const stillOurs = await verifyIdentity(record)
-    if (!stillOurs) {
-      await forgetRecord(removeRecord, dataDir)
-      // Same outcome as the SIGKILL path below, deliberately: our server is
-      // gone either way, and the result has no field that could say which.
-      return outcome(0, {
-        action: 'stopped',
-        reason: 'server-stop-timeout',
-        recordFound: true,
-        recordFresh: true,
-        pid: record.pid,
-      })
-    }
-    try {
-      killFn(record.pid, 'SIGKILL')
-    } catch {
-      /* already gone */
-    }
-    await forgetRecord(removeRecord, dataDir)
-    return outcome(0, {
-      action: 'stopped',
-      reason: 'server-stop-timeout',
-      recordFound: true,
-      recordFresh: true,
-      pid: record.pid,
-    })
+    return await escalateAfterTimeout(record, verifyIdentity, killFn, removeRecord, dataDir)
   }
 
   await forgetRecord(removeRecord, dataDir)

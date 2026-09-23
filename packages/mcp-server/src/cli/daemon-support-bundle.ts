@@ -57,6 +57,33 @@ function fail(message: string): DaemonSupportBundleOutcome {
   return { stdout: '', stderr: `${message}\n`, exitCode: 1 }
 }
 
+/**
+ * The daemon's own JSONL log stream, read back through the schema so the
+ * support-bundle builder sees a typed array rather than hand-built strings.
+ * A line that does not parse is DROPPED: a bundle is a diagnostic, and one
+ * malformed record must not cost the operator every other one. Fields are
+ * copied by name — no spread — so a field the schema gains later cannot ride
+ * into the bundle without someone deciding it should.
+ */
+function parseLogEntries(stdout: string): DaemonLogEntryInput[] {
+  if (!stdout) return []
+  const entries: DaemonLogEntryInput[] = []
+  for (const line of stdout.split('\n')) {
+    if (line.length === 0) continue
+    const parsed = daemonLogEntrySchema.safeParse(JSON.parse(line))
+    if (!parsed.success) continue
+    const e = parsed.data
+    entries.push({
+      timestamp: e.timestamp,
+      level: e.level,
+      source: e.source,
+      message: e.message,
+      fields: e.fields,
+    })
+  }
+  return entries
+}
+
 export async function runDaemonSupportBundle(
   options: DaemonSupportBundleOptions,
 ): Promise<DaemonSupportBundleOutcome> {
@@ -76,23 +103,7 @@ export async function runDaemonSupportBundle(
   // re-using runDaemonLogs's JSONL stream. Parse it back through the
   // schema so the support-bundle builder sees a typed array, not
   // hand-built strings.
-  const logsOutcome = await runDaemonLogs({ dataDir, now })
-  const logsEntries: DaemonLogEntryInput[] = []
-  if (logsOutcome.stdout) {
-    for (const line of logsOutcome.stdout.split('\n').filter((l) => l.length > 0)) {
-      const parsed = daemonLogEntrySchema.safeParse(JSON.parse(line))
-      if (parsed.success) {
-        const e = parsed.data
-        logsEntries.push({
-          timestamp: e.timestamp,
-          level: e.level,
-          source: e.source,
-          message: e.message,
-          fields: e.fields,
-        })
-      }
-    }
-  }
+  const logsEntries = parseLogEntries((await runDaemonLogs({ dataDir, now })).stdout)
 
   const input: SupportBundleInput = {
     createdAt: now(),

@@ -57,6 +57,29 @@ function writeJsonObject(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`)
 }
 
+/**
+ * What `daemon` accepts. A set rather than a chain of `!==` comparisons, and
+ * the type is read OFF it, so a subcommand added to one is added to both.
+ */
+const DAEMON_SUBCOMMANDS = ['status', 'doctor', 'stop', 'logs', 'support-bundle', 'run'] as const
+type DaemonSubcommand = (typeof DAEMON_SUBCOMMANDS)[number]
+const isDaemonSubcommand = (value: string | undefined): value is DaemonSubcommand =>
+  DAEMON_SUBCOMMANDS.includes(value as DaemonSubcommand)
+
+/**
+ * The subcommands whose whole job is to answer one JSON object. They differ
+ * in nothing else, so they are a table rather than three identical blocks —
+ * and `satisfies` is what keeps the table in step with the union above.
+ */
+const JSON_DAEMON_COMMANDS = {
+  status: runDaemonStatus,
+  doctor: runDaemonDoctor,
+  stop: runDaemonStop,
+} satisfies Record<
+  Exclude<DaemonSubcommand, 'logs' | 'run' | 'support-bundle'>,
+  (options: { dataDir: string }) => Promise<{ result: unknown; exitCode: number }>
+>
+
 export async function main(argv: readonly string[]): Promise<number> {
   // no-arg: published MCP configs invoke the package as
   // `npx -y @kamiazya/whiteboard-mcp@latest` with no subcommand.
@@ -89,19 +112,21 @@ export async function main(argv: readonly string[]): Promise<number> {
     return await dispatchSearch(subcommand, rest)
   }
 
-  if (
-    command !== 'daemon' ||
-    (subcommand !== 'status' &&
-      subcommand !== 'doctor' &&
-      subcommand !== 'stop' &&
-      subcommand !== 'logs' &&
-      subcommand !== 'support-bundle' &&
-      subcommand !== 'run')
-  ) {
-    process.stderr.write(`Unknown command. Currently supported:\n  ${USAGE}`)
-    return 64
+  if (command === 'daemon' && isDaemonSubcommand(subcommand)) {
+    return await dispatchDaemon(subcommand, rest)
   }
 
+  process.stderr.write(`Unknown command. Currently supported:\n  ${USAGE}`)
+  return 64
+}
+
+/**
+ * The `daemon` family. Each subcommand is read-only about the filesystem —
+ * the data directory is RESOLVED here and never probed for writability,
+ * because mkdir and write probes belong to the daemon's startup path, not to
+ * a command an operator runs to ask a question.
+ */
+async function dispatchDaemon(subcommand: DaemonSubcommand, rest: readonly string[]) {
   if (subcommand === 'run') {
     return await dispatchRun(rest)
   }
@@ -124,31 +149,17 @@ export async function main(argv: readonly string[]): Promise<number> {
   // the daemon's startup path.
   const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
 
-  if (subcommand === 'status') {
-    const { result, exitCode } = await runDaemonStatus({ dataDir })
-    writeJsonObject(result)
-    return exitCode
-  }
-
-  if (subcommand === 'doctor') {
-    const { result, exitCode } = await runDaemonDoctor({ dataDir })
-    writeJsonObject(result)
-    return exitCode
-  }
-
   if (subcommand === 'logs') {
-    // `logs` emits JSONL — write the formatted stream verbatim,
-    // do NOT route it through `writeJsonObject` (which would wrap
-    // the JSONL stream with an extra trailing newline and break
-    // the one-line-per-entry contract for downstream consumers).
+    // `logs` emits JSONL — write the formatted stream verbatim, do NOT route
+    // it through `writeJsonObject` (which would wrap the stream with an extra
+    // trailing newline and break the one-line-per-entry contract downstream).
     const { stdout, stderr, exitCode } = await runDaemonLogs({ dataDir })
     if (stdout) process.stdout.write(stdout)
     if (stderr) process.stderr.write(stderr)
     return exitCode
   }
 
-  // subcommand === 'stop'
-  const { result, exitCode } = await runDaemonStop({ dataDir })
+  const { result, exitCode } = await JSON_DAEMON_COMMANDS[subcommand]({ dataDir })
   writeJsonObject(result)
   return exitCode
 }

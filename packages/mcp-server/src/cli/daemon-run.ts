@@ -98,6 +98,160 @@ function installDaemonSignalHandlers(cleanup: () => Promise<void>): void {
   process.once('SIGINT', handle)
 }
 
+/**
+ * Best-effort, on every startup: the stale silent-reconnect credential file
+ * holds enrolled public keys and hashed legacy secrets for a feature that no
+ * longer has a server half, and its outcome must never decide whether the
+ * daemon starts. `purgeLegacyWebOriginTrustFile` already swallows its own
+ * expected failures (ENOENT, permission errors); this catch is
+ * defense-in-depth against any other rejection reaching the caller.
+ */
+async function purgeLegacyTrustFile(dataDir: string): Promise<void> {
+  try {
+    await purgeLegacyWebOriginTrustFile(dataDir)
+  } catch (err) {
+    getLogger('daemon-startup').warning(
+      { err: err as Error },
+      'legacy reconnect trust-file purge failed unexpectedly',
+    )
+  }
+}
+
+/** A refusal an operator can fix by changing one setting. */
+function configError(
+  message: string,
+  code: Extract<DaemonRunOutcome, { kind: 'input-error' }>['code'],
+): { outcome: DaemonRunOutcome } {
+  return { outcome: { kind: 'input-error', message, code } }
+}
+
+/**
+ * The two VALUES an operator's environment supplies, or the refusal that
+ * says one of them could not be understood. Fail-fast for the same reason in
+ * both cases: a daemon that starts with a silently-empty allowlist, or with
+ * its authorization surface absent, is worse than one that does not start.
+ * `loadAllowedWebOriginsFromEnv` logs the structured failure via `getLogger`
+ * without echoing the raw offending value.
+ */
+function resolveEnvConfig(env: NodeJS.ProcessEnv):
+  | {
+      allowedWebOrigins: NonNullable<ReturnType<typeof loadAllowedWebOriginsFromEnv>>
+      oauthClientRegistry: Extract<
+        ReturnType<typeof parseOAuthClientRegistryEnv>,
+        { ok: true }
+      >['registry']
+    }
+  | { outcome: DaemonRunOutcome } {
+  const allowedWebOrigins = loadAllowedWebOriginsFromEnv(env)
+  if (allowedWebOrigins === null) {
+    return configError(
+      'Invalid WHITEBOARD_ALLOWED_WEB_ORIGINS entry. See the daemon log for details.',
+      'invalid_allowed_web_origins',
+    )
+  }
+
+  const oauthRegistry = parseOAuthClientRegistryEnv(env.WHITEBOARD_OAUTH_CLIENT_REGISTRY)
+  if (!oauthRegistry.ok) {
+    return configError(
+      `Invalid WHITEBOARD_OAUTH_CLIENT_REGISTRY (${oauthRegistry.error}).`,
+      'invalid_oauth_client_registry',
+    )
+  }
+
+  return { allowedWebOrigins, oauthClientRegistry: oauthRegistry.registry }
+}
+
+/**
+ * The two refusals that produce no value of their own.
+ *
+ * The first covers every remaining setting an operator can configure
+ * (WHITEBOARD_REPLICA_TIER, the storage family, WHITEBOARD_LOG_LEVEL — see
+ * startup-env.ts). This is the packaged `whiteboard daemon run` command, a
+ * separate startup path from server/index.ts's dev entrypoint, and must apply
+ * the same gate or an invalid value is silently ignored rather than aborting.
+ *
+ * The second refuses two token sources at once: honouring one silently would
+ * let an operator's script think stdin (or the env var) took effect when the
+ * other one actually did. Checked by PRESENCE only, so no token's value is
+ * ever read here and nothing can leak into the message.
+ */
+function startupEnvRefusal(
+  env: NodeJS.ProcessEnv,
+  options: DaemonRunOptions,
+): { outcome: DaemonRunOutcome } | null {
+  const startupIssues = collectStartupEnvIssues(getDataDir(), env)
+  if (startupIssues.length > 0) {
+    getLogger('daemon-startup').error(
+      { issues: describeEnvIssues(startupIssues) },
+      'configured settings could not be understood; refusing to start',
+    )
+    return configError(
+      `Invalid configuration: ${startupIssues.map((issue) => issue.variable).join(', ')}. See the daemon log for details.`,
+      'startup_env',
+    )
+  }
+
+  if (options.tokenStdin && env.WHITEBOARD_DAEMON_TOKEN !== undefined) {
+    return configError(
+      'Conflicting token sources: --token-stdin and WHITEBOARD_DAEMON_TOKEN cannot both be set. Choose one.',
+      'token_source_conflict',
+    )
+  }
+
+  return null
+}
+
+/**
+ * Every gate an operator's configuration has to pass BEFORE any lock or
+ * filesystem work, and the two values that survive them.
+ */
+function resolveStartupConfig(
+  host: string,
+  options: DaemonRunOptions,
+): ReturnType<typeof resolveEnvConfig> {
+  // local-daemon is loopback-only regardless of --host. Refusing here means
+  // a non-loopback bind never reaches startHttpServer, so an unauthenticated
+  // daemon cannot be exposed beyond loopback even by operator error.
+  if (!assertLoopbackBindHost(host).ok) {
+    return {
+      outcome: {
+        kind: 'refused',
+        message:
+          'Refusing to bind the local daemon to a non-loopback host. Use 127.0.0.1, localhost, or ::1.',
+      },
+    }
+  }
+
+  const env = options.env ?? process.env
+  const config = resolveEnvConfig(env)
+  if ('outcome' in config) return config
+  return startupEnvRefusal(env, options) ?? config
+}
+
+/**
+ * The token this daemon will accept: read from stdin when asked for, else
+ * taken from the environment, else minted. Read through `options.env` rather
+ * than `process.env` directly so config-file-layered values (applied by the
+ * dispatcher before this is called) and test overrides share one seam.
+ */
+async function resolveStartupToken(
+  options: DaemonRunOptions,
+): Promise<{ token: string } | { outcome: DaemonRunOutcome }> {
+  if (!options.tokenStdin) {
+    return { token: (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN ?? nanoid(32) }
+  }
+  let token: string
+  try {
+    token = await readTokenFromStdin()
+  } catch {
+    return { outcome: { kind: 'input-error', message: 'Failed to read token from stdin.' } }
+  }
+  if (!token) {
+    return { outcome: { kind: 'input-error', message: 'Token read from stdin was empty.' } }
+  }
+  return { token }
+}
+
 export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRunOutcome> {
   // An explicit --data-dir must govern ALL persistence (sqlite db, canvas
   // blobs, exports), not just the daemon registry file. Redirect the shared
@@ -110,94 +264,12 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   // startup lock share the same resolved-absolute path the stores will use.
   const dataDir = getDataDir()
 
-  // Best-effort cleanup of the stale silent-reconnect credential file, on
-  // every startup: it holds enrolled public keys and hashed legacy secrets
-  // for a feature that no longer has a server half, and its outcome must
-  // never affect whether the daemon starts. purgeLegacyWebOriginTrustFile
-  // already swallows its own expected failures (ENOENT, permission errors);
-  // this outer catch is defense-in-depth against any other unexpected
-  // rejection reaching this call.
-  try {
-    await purgeLegacyWebOriginTrustFile(dataDir)
-  } catch (err) {
-    getLogger('daemon-startup').warning(
-      { err: err as Error },
-      'legacy reconnect trust-file purge failed unexpectedly',
-    )
-  }
+  await purgeLegacyTrustFile(dataDir)
 
   const host = options.host ?? '127.0.0.1'
 
-  // Pre-startup guard: local-daemon is loopback-only regardless of --host.
-  // Refusing here (before any lock/fs work) means a non-loopback bind never
-  // reaches startHttpServer, so an unauthenticated daemon can't be exposed
-  // beyond loopback even by operator error.
-  const bindGuard = assertLoopbackBindHost(host)
-  if (!bindGuard.ok) {
-    return {
-      kind: 'refused',
-      message:
-        'Refusing to bind the local daemon to a non-loopback host. Use 127.0.0.1, localhost, or ::1.',
-    }
-  }
-
-  // Fail fast before any lock/fs work: an invalid WHITEBOARD_ALLOWED_WEB_ORIGINS
-  // must never start a daemon with a silently-empty or partially-parsed
-  // allowlist. loadAllowedWebOriginsFromEnv logs the structured failure via
-  // getLogger without echoing the raw offending value.
-  const allowedWebOrigins = loadAllowedWebOriginsFromEnv(options.env ?? process.env)
-  if (allowedWebOrigins === null) {
-    return {
-      kind: 'input-error',
-      message: 'Invalid WHITEBOARD_ALLOWED_WEB_ORIGINS entry. See the daemon log for details.',
-      code: 'invalid_allowed_web_origins',
-    }
-  }
-
-  // Same fail-fast posture as the allowlist above: a malformed registry must
-  // not start a daemon whose authorization-server surface is silently absent.
-  const oauthRegistry = parseOAuthClientRegistryEnv(
-    (options.env ?? process.env).WHITEBOARD_OAUTH_CLIENT_REGISTRY,
-  )
-  if (!oauthRegistry.ok) {
-    return {
-      kind: 'input-error',
-      message: `Invalid WHITEBOARD_OAUTH_CLIENT_REGISTRY (${oauthRegistry.error}).`,
-      code: 'invalid_oauth_client_registry',
-    }
-  }
-
-  // Same fail-fast posture as the two guards above, for every remaining
-  // setting an operator can configure (WHITEBOARD_REPLICA_TIER, the storage
-  // family, WHITEBOARD_LOG_LEVEL — see startup-env.ts). This is the
-  // packaged `whiteboard daemon run` CLI command, a separate startup path
-  // from server/index.ts's dev entrypoint, and must apply the same gate or
-  // an invalid value is silently ignored rather than aborting.
-  const startupIssues = collectStartupEnvIssues(dataDir, options.env ?? process.env)
-  if (startupIssues.length > 0) {
-    getLogger('daemon-startup').error(
-      { issues: describeEnvIssues(startupIssues) },
-      'configured settings could not be understood; refusing to start',
-    )
-    return {
-      kind: 'input-error',
-      message: `Invalid configuration: ${startupIssues.map((issue) => issue.variable).join(', ')}. See the daemon log for details.`,
-      code: 'startup_env',
-    }
-  }
-
-  // Fail fast on ambiguous token input: honouring one source silently would
-  // let an operator's script think stdin (or the env var) took effect when
-  // the other one actually did. Checked by presence only — never touches
-  // either token's value, so nothing can leak into this message.
-  if (options.tokenStdin && (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN !== undefined) {
-    return {
-      kind: 'input-error',
-      message:
-        'Conflicting token sources: --token-stdin and WHITEBOARD_DAEMON_TOKEN cannot both be set. Choose one.',
-      code: 'token_source_conflict',
-    }
-  }
+  const config = resolveStartupConfig(host, options)
+  if ('outcome' in config) return config.outcome
 
   const existing = await loadDaemonRecord(dataDir)
   if (existing !== null && isPidAlive(existing.pid)) {
@@ -207,23 +279,9 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     }
   }
 
-  let token: string
-  if (options.tokenStdin) {
-    try {
-      token = await readTokenFromStdin()
-    } catch {
-      return { kind: 'input-error', message: 'Failed to read token from stdin.' }
-    }
-    if (!token) {
-      return { kind: 'input-error', message: 'Token read from stdin was empty.' }
-    }
-  } else {
-    // Read through options.env (defaulting to process.env) rather than
-    // process.env directly so config-file-layered values (applied by the
-    // dispatcher before this is called) and test overrides share one seam
-    // with the allowedWebOrigins read above.
-    token = (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN ?? nanoid(32)
-  }
+  const resolved = await resolveStartupToken(options)
+  if ('outcome' in resolved) return resolved.outcome
+  const token = resolved.token
 
   return await withDaemonStartupLock(dataDir, async () => {
     const port = options.port ?? (await findAvailablePort())
@@ -236,8 +294,8 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
       port,
       host,
       token,
-      allowedWebOrigins,
-      oauthClientRegistry: oauthRegistry.registry,
+      allowedWebOrigins: config.allowedWebOrigins,
+      oauthClientRegistry: config.oauthClientRegistry,
       replicaTier: replicaEnv.tier,
       replicaLeaseTtlMs: replicaEnv.leaseTtlMs,
     })

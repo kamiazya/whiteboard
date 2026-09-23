@@ -44,10 +44,10 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
  * — nothing forces it, which is the honest cost.
  */
 // Lowered from 114 with codec's six files, then 72 -> 70 with the two
-// document pages, then 70 -> 67 with canvas-render's three measurements:
-// the comment asks for the ceiling to follow an obvious gap, and a paydown
-// that leaves slack is exactly one.
-const EXEMPT_CEILING = 67
+// document pages, then 70 -> 65 with mcp-server's five CLI files: the
+// comment asks for the ceiling to follow an obvious gap, and a paydown that
+// leaves slack is exactly one.
+const EXEMPT_CEILING = 65
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
