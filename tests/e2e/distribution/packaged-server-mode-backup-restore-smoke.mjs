@@ -52,7 +52,10 @@ const SMOKE_AUDIENCE = 'https://whiteboard.docker-br-smoke.example'
 // main server-mode docker smoke (4293), so the full chain can run back-to-back.
 const HOST_SERVER_PORT = 4294
 const READINESS_TIMEOUT_MS = 60_000
-const WORKSPACE_ID = 'sess-smoke-br'
+// Assigned when scenario 3 creates the workspace: on a members-only keeper
+// (ADR-0046 decision 10) the creator becomes its first member, which is what
+// lets the same bearer read it back on the restored server.
+let WORKSPACE_ID
 const CANVAS_PATH = 'canvas-smoke-br'
 const FILE_ID = 'filesmokebr001' // must match validateFileId: [A-Za-z0-9_-]{1,64}
 const WORKSPACE_DISPLAY_NAME = 'Backup Restore Smoke'
@@ -266,6 +269,7 @@ function makeJwt(privateKey, scope) {
     { alg: 'ES256', typ: 'at+jwt', kid: 'br-smoke-key' },
     {
       sub: 'br-smoke-user',
+      azp: 'br-smoke-client',
       scope,
       iss: SMOKE_ISSUER,
       aud: SMOKE_AUDIENCE,
@@ -341,6 +345,34 @@ const jwkPublic = publicKey.export({ format: 'jwk' })
 const jwks = { keys: [{ ...jwkPublic, kid: 'br-smoke-key', use: 'sig', alg: 'ES256' }] }
 
 const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir)
+
+// The JWT issuer declared as a sign-in provider whose `bearerClients` names
+// this client, so the seeding bearer becomes a user (ADR-0046 decision 5).
+const signInConfigFile = join(certsDir, 'sign-in.json')
+writeFileSync(
+  signInConfigFile,
+  JSON.stringify({
+    providers: [
+      {
+        id: 'smoke',
+        kind: 'oidc',
+        issuer: SMOKE_ISSUER,
+        clientId: 'wb-smoke',
+        clientSecret: { env: 'SMOKE_CLIENT_SECRET' },
+        admission: { createAccounts: true, bearerClients: ['br-smoke-client'] },
+      },
+    ],
+  }),
+)
+chmodSync(signInConfigFile, 0o644)
+const SIGN_IN_RUN_ARGS = [
+  '-v',
+  `${signInConfigFile}:/config/sign-in.json:ro`,
+  '-e',
+  'WHITEBOARD_SIGN_IN_CONFIG=/config/sign-in.json',
+  '-e',
+  'SMOKE_CLIENT_SECRET=smoke-client-secret',
+]
 const tlsKey = readFileSync(tlsKeyFile)
 const tlsCert = readFileSync(tlsCertFile)
 
@@ -397,6 +429,7 @@ try {
       `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
       '-e',
       `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
+      ...SIGN_IN_RUN_ARGS,
       SERVER_IMAGE,
     ]
     const r = docker(args, { timeout: 15_000 })
@@ -425,7 +458,18 @@ try {
   {
     const jwt = makeJwt(privateKey, SEED_SCOPES)
 
-    // Create workspace + canvas (workspace:write).
+    // Create the workspace; its creator is its first member.
+    const workspaceRes = await authedFetch(serverBaseUrl, '/api/workspaces', jwt, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Backup Restore Seed' }),
+    })
+    if (workspaceRes.status !== 201) {
+      fail('scenario 3: workspace create failed', { status: workspaceRes.status })
+    }
+    WORKSPACE_ID = (await workspaceRes.json()).workspaceId
+
+    // Create a canvas in it (workspace:write).
     const createRes = await authedFetch(
       serverBaseUrl,
       `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`,
@@ -589,6 +633,7 @@ try {
       `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
       '-e',
       `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
+      ...SIGN_IN_RUN_ARGS,
       SERVER_IMAGE,
     ]
     const r = docker(args, { timeout: 15_000 })
