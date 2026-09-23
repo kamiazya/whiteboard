@@ -2,7 +2,7 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { listLocalDocuments } from '../lib/local-document-summary.js'
-import { waitForOrSayWhen } from '../test-utils/late-arrival.js'
+import { expectTypedSource, waitForOrSayWhen } from '../test-utils/late-arrival.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 /**
  * Markdown-canvas 導線 (real IndexedDB + real CodeMirror): create a markdown
@@ -705,17 +705,12 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // break, which would fold the trailing text into the embed's paragraph
     // and turn it into an INLINE run instead of a block embed.
     await userEvent.keyboard(`![[[[${TARGET_ID}]]{Enter}{Enter}and more typing`)
+    await expectTypedSource(`![[${TARGET_ID}]]\n\nand more typing`)
 
     // The preview loads the target body asynchronously and lays it out
     // inline through the render pipeline's embed seam.
     //
-    // `waitForOrSayWhen` for the same reason its canvas-group sibling below
-    // takes it, and because the two failures are one subject: this wait has
-    // ALSO expired on CI from branches that cannot reach `apps/web`, with the
-    // breadcrumb drawn (it comes from the page's own name table) and the
-    // content absent — which is the signature of a load still in flight AND
-    // the signature of a load that answered nothing, and the message could
-    // not tell them apart. Whichever of the two fails next now says which.
+    // The typed source was checked above, so a failure here is the render's.
     await waitForOrSayWhen(
       () => {
         const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
@@ -757,6 +752,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     await userEvent.keyboard(`![[[[${BOARD_ID}]]{Enter}{Enter}and more typing`)
+    await expectTypedSource(`![[${BOARD_ID}]]\n\nand more typing`)
 
     // The preview loads the board asynchronously and lays it out as a
     // miniature under its name: both the canvas's own text and the
@@ -800,6 +796,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // The completion closes at `#`, so the Enter after the fragment ends the
     // line rather than accepting a candidate.
     await userEvent.keyboard(`![[[[${BOARD_ID}#Launch]]{Enter}{Enter}and more typing`)
+    await expectTypedSource(`![[${BOARD_ID}#Launch]]\n\nand more typing`)
 
     // `waitForOrSayWhen` rather than a plain wait: this one has failed twice
     // on CI from branches that cannot reach `apps/web`, and the message it
@@ -937,6 +934,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       // locator on the contenteditable is ambiguous under strict mode.
       await focusEditable(() => document.querySelector('[contenteditable="true"]'))
       await userEvent.keyboard(`![[[[${LEGACY_ID}]]{Enter}{Enter}trailing`)
+      await expectTypedSource(`![[${LEGACY_ID}]]\n\ntrailing`)
 
       await waitFor(
         () => {

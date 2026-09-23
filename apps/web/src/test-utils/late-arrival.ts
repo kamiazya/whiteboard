@@ -1,4 +1,5 @@
 import { waitFor } from '@testing-library/react'
+import { expect } from 'vitest'
 
 /**
  * Wait for `assert` under a budget, and when the budget expires KEEP
@@ -41,4 +42,34 @@ export async function waitForOrSayWhen(
       `${options.subject} arrived ${Math.round(lateBy)}ms AFTER its ${options.budgetMs}ms budget expired — it was still in flight, not missing. What the wait saw when it gave up:\n${String(expired)}`,
     )
   }
+}
+
+/**
+ * Waits for the editor to HOLD what the test typed, before anything waits on
+ * what the preview draws from it.
+ *
+ * The embed tests below fail on CI with the preview reading the embed's
+ * LABEL and never its body — and a lone `![[target]]` followed by a single
+ * newline (or none) renders exactly that: an INLINE embed draws its label
+ * and no body, so no amount of waiting on the load delivers one. Measured:
+ * `![[ID]]\n\nand more typing` lays out the body, `![[ID]]\nand more typing`
+ * lays out `Embed target and more typing`, which is the failure's text. So
+ * "the body never arrived" was two failures sharing one message — the
+ * source missing its blank line, or the source right and the render wrong —
+ * and this check is what tells them apart from a single CI log, since the
+ * failure's DOM dump is truncated before it reaches the editor.
+ *
+ * Reads CodeMirror's rendered lines, so it holds for a document short enough
+ * to be drawn whole — which every test typing into an empty editor is.
+ */
+export async function expectTypedSource(expected: string): Promise<void> {
+  await waitForOrSayWhen(
+    () => {
+      const lines = [...document.querySelectorAll('.cm-content .cm-line')].map(
+        (line) => line.textContent ?? '',
+      )
+      expect(lines.join('\n')).toBe(expected)
+    },
+    { budgetMs: 10_000, subject: 'the typed source' },
+  )
 }
