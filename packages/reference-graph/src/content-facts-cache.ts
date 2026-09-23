@@ -5,7 +5,7 @@ import { type ContentFacts, extractContentFacts } from './extract.js'
 const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], bearers: [] }
 
 /**
- * What the cache needs of a KEEPER: the two reads it cannot do itself.
+ * What the cache needs of a KEEPER that it cannot read off the listing.
  *
  * The daemon answers from its document store, the browser from IndexedDB —
  * which is exactly why this is a port and not a `ServerDeps`. Each keeper
@@ -13,41 +13,43 @@ const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], bearers: [] }
  * when a cached answer is stale, stay written once for both.
  */
 export interface DocumentContentSource {
+  /** The stored document, or null when nothing is stored for it yet. */
+  loadDocument(
+    workspaceId: string,
+    documentId: DocumentEntry['documentId'],
+  ): Promise<LoroDoc | null>
   /**
-   * An opaque VERSION per document, asked for a whole listing at once: equal
-   * bytes mean the content has not changed, and null means nothing is stored
-   * for that document yet. A missing id reads as null.
+   * An opaque version per document, for entries whose listing carries no
+   * `contentDigest` — an index that does not hold the content cannot derive
+   * one. Equal bytes mean unchanged, null means nothing stored. Batched so a
+   * keeper answers a whole listing in one read.
    *
-   * Batched because the two keepers find versions at opposite granularities.
-   * The daemon holds a live document per path and reads each one's frontier;
-   * the browser holds ONE workspace record and learns which documents moved
-   * from a single diff of it. A per-document call would make the browser
-   * reopen that record once per document.
-   *
-   * A keeper that cannot tell may answer a version that differs every time.
-   * That only over-invalidates — the facts are re-read — and never serves a
-   * stale answer, which is the direction this contract allows.
+   * OPTIONAL: a keeper whose every listing carries a digest has nothing to
+   * say here, and a digest-less entry from a keeper without this is simply
+   * re-read every time — the listing's own contract ("a consumer that finds
+   * it absent must not memoise").
    */
-  readVersions(
+  readVersions?(
     workspaceId: string,
     documentIds: readonly DocumentEntry['documentId'][],
   ): Promise<ReadonlyMap<string, Uint8Array | null>>
-  /** The stored document. Asked only for a document whose version is non-null. */
-  loadDocument(workspaceId: string, documentId: DocumentEntry['documentId']): Promise<LoroDoc>
 }
 
 /**
  * Content-derived facts per document, kept between requests and validated
- * by the document's VERSION as its keeper reports it — on the daemon, the
- * Loro frontier every persisting writer updates (tools, WS sync, restore,
- * import alike), because it is what the sync protocol itself runs on.
+ * by the listing's `contentDigest` — a hash of the document's MERGED content,
+ * computed at read time by the same function on both keepers.
  *
  * That is the load-bearing design choice: correctness does not depend on
  * enumerating write paths and hooking each one (the risk ADR-0014 deferred
- * the incremental mode over). A writer this cache has never heard of still
- * moves the frontier, and the stale entry is caught on the next read. An
- * event feed, if one ever lands, becomes an eager invalidation into this
+ * the incremental mode over), nor on any replica's word about when it last
+ * wrote. A writer this cache has never heard of still changes the content,
+ * and a merge that produces a state nobody wrote still changes the digest.
+ * An event feed, if one ever lands, becomes an eager invalidation into this
  * same structure rather than a second source of truth.
+ *
+ * An entry without a digest falls back to the keeper's own version
+ * (`readVersions`), and without that is re-read every time.
  *
  * Only content facts live here. Index-authority meta (path/name/kind) is
  * read fresh from the listing per request — a rename needs no invalidation.
@@ -79,36 +81,58 @@ export class ContentFactsCache {
     const wanted = new Set(entries.map((entry) => entry.documentId))
     for (const id of held.keys()) if (!wanted.has(id)) held.delete(id)
 
-    const versions = await this.source.readVersions(
-      workspaceId,
-      entries.map((entry) => entry.documentId),
-    )
+    const versions = await this.versionsWithoutDigest(workspaceId, entries)
     const result = new Map<string, ContentFacts>()
     for (const entry of entries) {
-      const version = versions.get(entry.documentId) ?? null
-      if (version === null) {
-        held.delete(entry.documentId)
-        result.set(entry.documentId, EMPTY_FACTS)
-        continue
-      }
-      // The kind is part of the stamp: extraction branches on it, so facts
-      // are only valid FOR the kind they were extracted under. No
-      // listing-only kind mutation exists today — this closes the latent
-      // trap rather than a reachable bug.
-      const stamp = `${entry.kind ?? '?'}:${hexOf(version)}`
-      const cached = held.get(entry.documentId)
-      if (cached !== undefined && cached.stamp === stamp) {
-        result.set(entry.documentId, cached.facts)
-        continue
-      }
-      const facts = extractContentFacts(
-        entry,
-        await this.source.loadDocument(workspaceId, entry.documentId),
+      result.set(
+        entry.documentId,
+        await this.factsForOne(workspaceId, entry, versionOf(entry, versions), held),
       )
-      held.set(entry.documentId, { stamp, facts })
-      result.set(entry.documentId, facts)
     }
     return result
+  }
+
+  /**
+   * One document's facts: the held ones when its stamp still matches, else
+   * read and extracted — and held again only when there is a stamp to hold
+   * them under and something was actually stored.
+   */
+  private async factsForOne(
+    workspaceId: string,
+    entry: DocumentEntry,
+    version: string | null | undefined,
+    held: Map<string, { stamp: string; facts: ContentFacts }>,
+  ): Promise<ContentFacts> {
+    if (version === null) {
+      held.delete(entry.documentId)
+      return EMPTY_FACTS
+    }
+    // The kind is part of the stamp: extraction branches on it, so facts are
+    // only valid FOR the kind they were extracted under. No listing-only kind
+    // mutation exists today — this closes the latent trap rather than a
+    // reachable bug.
+    const stamp = version === undefined ? undefined : `${entry.kind ?? '?'}:${version}`
+    const cached = held.get(entry.documentId)
+    if (stamp !== undefined && cached?.stamp === stamp) return cached.facts
+
+    const doc = await this.source.loadDocument(workspaceId, entry.documentId)
+    const facts = doc === null ? EMPTY_FACTS : extractContentFacts(entry, doc)
+    if (stamp === undefined || doc === null) held.delete(entry.documentId)
+    else held.set(entry.documentId, { stamp, facts })
+    return facts
+  }
+
+  /** The keeper's versions for the entries the listing gave no digest. */
+  private async versionsWithoutDigest(
+    workspaceId: string,
+    entries: readonly DocumentEntry[],
+  ): Promise<ReadonlyMap<string, Uint8Array | null>> {
+    const undigested = entries.filter((entry) => entry.contentDigest === undefined)
+    if (undigested.length === 0 || this.source.readVersions === undefined) return new Map()
+    return this.source.readVersions(
+      workspaceId,
+      undigested.map((entry) => entry.documentId),
+    )
   }
 
   /**
@@ -120,6 +144,21 @@ export class ContentFactsCache {
   stampOf(workspaceId: string, documentId: string): string | undefined {
     return this.held.get(workspaceId)?.get(documentId)?.stamp
   }
+}
+
+/**
+ * What a document's stamp is built from: its digest when the listing has one,
+ * else the keeper's version. `null` is "nothing stored"; `undefined` is "no
+ * version to hold it under", which means read it and do not keep it.
+ */
+function versionOf(
+  entry: DocumentEntry,
+  versions: ReadonlyMap<string, Uint8Array | null>,
+): string | null | undefined {
+  if (entry.contentDigest !== undefined) return `digest:${entry.contentDigest}`
+  if (!versions.has(entry.documentId)) return undefined
+  const version = versions.get(entry.documentId) ?? null
+  return version === null ? null : `version:${hexOf(version)}`
 }
 
 function hexOf(version: Uint8Array): string {

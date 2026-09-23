@@ -15,15 +15,20 @@ paths:
   `unlinkedNameSpans`): backlinks and unlinked mentions, computed from those
   facts. The aggregate is the one query engine; an event feed, if one lands,
   fills the same structure rather than becoming a second answer.
-- **The version-stamped cache** (`ContentFactsCache`): facts kept between
-  reads and re-extracted only for a document whose version moved.
-  Correctness does not depend on hooking every write path — any persisted
-  write moves the version, and the next read catches it.
-- **One port, `DocumentContentSource`** — the two reads the cache cannot do
-  itself: a version per document, read for a whole listing at once, and the
-  document. The daemon's is `server-core`'s `factsCacheFor(deps)` (a live
-  document's frontier per path); the browser's comes from one diff of its
-  workspace record, which is why the version read is batched.
+- **The digest-validated cache** (`ContentFactsCache`): facts kept between
+  reads and re-extracted only for a document whose listing `contentDigest`
+  moved. The digest is a hash of the MERGED content, computed at read time by
+  the same function on both keepers, so correctness depends neither on
+  hooking every write path nor on any replica's word about when it wrote.
+- **One port, `DocumentContentSource`** — what the listing cannot give the
+  cache: the document itself (`loadDocument`, null when nothing is stored),
+  and OPTIONALLY a version per document for a listing entry with no digest.
+  The daemon supplies both (`server-core`'s `factsCacheFor(deps)`, whose
+  fallback is a live document's frontier — its in-memory test index lists no
+  digests). The browser supplies only the load, because every listing it
+  makes carries a digest. A digest-less entry with no keeper version is
+  re-read every time: the listing's own contract for an absent digest is
+  "must not memoise".
 
 ## What does NOT belong here
 

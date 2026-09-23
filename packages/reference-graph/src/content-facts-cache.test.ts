@@ -7,8 +7,18 @@ const WS = 'ws-1'
 const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
-function entry(documentId: string, kind: DocumentEntry['kind'] = 'markdown'): DocumentEntry {
-  return { workspaceId: WS, documentId, path: documentId.toLowerCase(), kind } as DocumentEntry
+function entry(
+  documentId: string,
+  kind: DocumentEntry['kind'] = 'markdown',
+  contentDigest?: string,
+): DocumentEntry {
+  return {
+    workspaceId: WS,
+    documentId,
+    path: documentId.toLowerCase(),
+    kind,
+    ...(contentDigest === undefined ? {} : { contentDigest }),
+  } as DocumentEntry
 }
 
 /**
@@ -23,13 +33,13 @@ function fakeSource(frontiers: Map<string, Uint8Array | null>) {
     },
     async loadDocument(_workspaceId, documentId) {
       loads.push(documentId)
-      return new LoroDoc()
+      return frontiers.get(documentId) === null ? null : new LoroDoc()
     },
   }
   return { source, loads }
 }
 
-describe('ContentFactsCache over a keeper port', () => {
+describe('ContentFactsCache over a keeper version, for a listing with no digest', () => {
   it('loads a document once while its frontier bytes stay the same', async () => {
     const { source, loads } = fakeSource(new Map([[A, new Uint8Array([1])]]))
     const cache = new ContentFactsCache(source)
@@ -105,5 +115,65 @@ describe('ContentFactsCache over a keeper port', () => {
 
     expect(cache.stampOf(WS, A)).toBeDefined()
     expect(cache.stampOf(WS, B)).toBeUndefined()
+  })
+})
+
+/**
+ * The primary path: both keepers list through the workspace tree, whose every
+ * entry carries a digest of its MERGED content. The keeper is not asked for
+ * a version at all.
+ */
+describe('ContentFactsCache over the listing digest', () => {
+  function loadOnlySource() {
+    const loads: string[] = []
+    const source: DocumentContentSource = {
+      async loadDocument(_workspaceId, documentId) {
+        loads.push(documentId)
+        return new LoroDoc()
+      },
+    }
+    return { source, loads }
+  }
+
+  it('reuses facts while the digest holds, without asking the keeper for a version', async () => {
+    const { source, loads } = loadOnlySource()
+    const cache = new ContentFactsCache(source)
+
+    await cache.factsFor(WS, [entry(A, 'markdown', 'd1')])
+    await cache.factsFor(WS, [entry(A, 'markdown', 'd1')])
+
+    expect(loads).toEqual([A])
+  })
+
+  it('reads again once the digest moves', async () => {
+    const { source, loads } = loadOnlySource()
+    const cache = new ContentFactsCache(source)
+
+    await cache.factsFor(WS, [entry(A, 'markdown', 'd1')])
+    await cache.factsFor(WS, [entry(A, 'markdown', 'd2')])
+
+    expect(loads).toEqual([A, A])
+  })
+
+  // The listing's contract for an absent digest: must not memoise. With no
+  // keeper version to fall back on either, every read goes to the keeper.
+  it('re-reads a digest-less entry every time when the keeper has no versions', async () => {
+    const { source, loads } = loadOnlySource()
+    const cache = new ContentFactsCache(source)
+
+    await cache.factsFor(WS, [entry(A)])
+    await cache.factsFor(WS, [entry(A)])
+
+    expect(loads).toEqual([A, A])
+    expect(cache.stampOf(WS, A)).toBeUndefined()
+  })
+
+  it('answers empty facts for a listed document whose content is not stored', async () => {
+    const cache = new ContentFactsCache({ loadDocument: async () => null })
+
+    const facts = await cache.factsFor(WS, [entry(A, 'markdown', 'd1')])
+
+    expect(facts.get(A)).toEqual({ refs: [], texts: [], bearers: [] })
+    expect(cache.stampOf(WS, A)).toBeUndefined()
   })
 })
