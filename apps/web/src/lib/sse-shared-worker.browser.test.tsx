@@ -216,3 +216,78 @@ it('hands a later tab a snapshot that already contains an earlier push', async (
   forked.import(decode(snapshot))
   expect(forked.getMap('m').get('k')).toBe('already-there')
 }, 30_000)
+
+it('leaves a port that subscribed to a different document alone', async () => {
+  // A port on the SAME origin is otherwise indistinguishable from a recipient;
+  // what keeps it out of the fan-out is its subscription set, and nothing else
+  // in this file makes that visible.
+  const NAME = 'whiteboard-sse-doc-scope-test'
+  const pushing = openPort(NAME)
+  const elsewhere = openPort(NAME)
+  const stamp = Date.now()
+  const doc = `w/scoped-${stamp}`
+  const other = `w/other-${stamp}`
+
+  pushing.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  pushing.postMessage({ type: 'subscribe', doc })
+  elsewhere.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  elsewhere.postMessage({ type: 'subscribe', doc: other })
+
+  const leaked = vi.fn()
+  elsewhere.addEventListener('message', (e: MessageEvent) => {
+    if ((e.data as { type?: string }).type === 'authority-update') leaked()
+  })
+
+  const tab = new LoroDoc()
+  tab.getMap('m').set('k', 'scoped')
+  tab.commit()
+  pushing.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+
+  // Ordered rather than raced, the same way the origin case above is: replica
+  // work runs on one queue, so this answer is strictly after the push.
+  await new Promise<string>((resolve, reject) => {
+    elsewhere.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: string; snapshot?: string }
+      if (data.type === 'snapshot' && data.snapshot !== undefined) resolve(data.snapshot)
+    })
+    elsewhere.postMessage({ type: 'snapshot-request', doc: other })
+    setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
+  })
+  expect(leaked).not.toHaveBeenCalled()
+}, 30_000)
+
+it('keeps a port subscribed across a re-init that only rotates the token', async () => {
+  // Re-init is how a rotated token arrives. Replacing the port's record would
+  // strand the subscription handles it already holds — the document stays
+  // subscribed on the daemon with nothing able to release it, and this port
+  // stops receiving. Asserted as still-receiving, which is the half a user
+  // would notice.
+  const NAME = 'whiteboard-sse-reinit-test'
+  const pushing = openPort(NAME)
+  const rotating = openPort(NAME)
+  const doc = `w/reinit-${Date.now()}`
+
+  for (const port of [pushing, rotating]) {
+    port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 'first' })
+    port.postMessage({ type: 'subscribe', doc })
+  }
+  // The same origin, a new token, and deliberately no second subscribe.
+  rotating.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 'rotated' })
+
+  const arrived = new Promise<string>((resolve, reject) => {
+    rotating.addEventListener('message', (e: MessageEvent) => {
+      const data = e.data as { type?: string; update?: string }
+      if (data.type === 'authority-update' && data.update !== undefined) resolve(data.update)
+    })
+    setTimeout(() => reject(new Error('the re-inited port stopped receiving')), 10_000)
+  })
+
+  const tab = new LoroDoc()
+  tab.getMap('m').set('k', 'after-rotation')
+  tab.commit()
+  pushing.postMessage({ type: 'push', doc, update: b64(tab.export({ mode: 'update' })) })
+
+  const forked = new LoroDoc()
+  forked.import(decode(await arrived))
+  expect(forked.getMap('m').get('k')).toBe('after-rotation')
+}, 30_000)

@@ -15,6 +15,40 @@ import { postWorkerRequest, sseWorkerEventSchema } from './sse-shared-worker-pro
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
 
+/** Hands a worker's snapshot reply to everyone waiting on that document. */
+function resolveSnapshot(
+  snapshotWaiters: Map<string, Set<(bytes: Uint8Array) => void>>,
+  doc: string,
+  snapshot: string,
+): void {
+  const waiters = snapshotWaiters.get(doc)
+  if (!waiters) return
+  snapshotWaiters.delete(doc)
+  const bytes = fromBase64(snapshot)
+  for (const resolve of waiters) resolve(bytes)
+}
+
+/**
+ * The ONE inbound channel. Every byte a tab applies has been through the
+ * worker's replica — ordered and deduplicated against the daemon's frames and
+ * every sibling tab's pushes — so all tabs observe the same sequence.
+ */
+function deliverToListeners(
+  set: ReadonlySet<DocListener>,
+  evt: Exclude<ReturnType<typeof sseWorkerEventSchema.parse>, { type: 'snapshot' }>,
+): void {
+  if (evt.type === 'authority-update') {
+    const bytes = fromBase64(evt.update)
+    for (const l of set) l.onUpdate(bytes)
+    return
+  }
+  if (evt.type === 'status') {
+    for (const l of set) l.onConnectionChange?.(evt.connected)
+    return
+  }
+  for (const l of set) l.onMessage(evt.raw)
+}
+
 export function createSharedSseStreamSource(
   baseUrl: string,
   token: string | undefined,
@@ -78,33 +112,16 @@ export function createSharedSseStreamSource(
     const parsed = sseWorkerEventSchema.safeParse(e.data)
     if (!parsed.success) return
     const evt = parsed.data
+    // Answered ahead of the listener gate below: the backend snapshots BEFORE
+    // it subscribes — the seed must exist before the stream's deltas land on
+    // it — so at reply time the document routinely has no listener yet, and
+    // gating this on one would deadlock every first open.
     if (evt.type === 'snapshot') {
-      // Answered ahead of the listener gate below: the backend snapshots
-      // BEFORE it subscribes — the seed must exist before the stream's deltas
-      // land on it — so at reply time the document routinely has no listener
-      // yet, and gating this on one would deadlock every first open.
-      const waiters = snapshotWaiters.get(evt.doc)
-      if (!waiters) return
-      snapshotWaiters.delete(evt.doc)
-      const bytes = fromBase64(evt.snapshot)
-      for (const resolve of waiters) resolve(bytes)
+      resolveSnapshot(snapshotWaiters, evt.doc, evt.snapshot)
       return
     }
     const set = listeners.get(evt.doc)
-    if (!set) return
-    // The ONE inbound channel. Every byte a tab applies has been through the
-    // worker's replica — ordered and deduplicated against the daemon's frames
-    // and every sibling tab's pushes — so all tabs observe the same sequence.
-    if (evt.type === 'authority-update') {
-      const bytes = fromBase64(evt.update)
-      for (const l of set) l.onUpdate(bytes)
-      return
-    }
-    if (evt.type === 'status') {
-      for (const l of set) l.onConnectionChange?.(evt.connected)
-      return
-    }
-    for (const l of set) l.onMessage(evt.raw)
+    if (set) deliverToListeners(set, evt)
   }
   port.start()
   postWorkerRequest(port, { type: 'init', baseUrl, token })

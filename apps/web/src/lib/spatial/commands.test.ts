@@ -1919,6 +1919,39 @@ describe('re-attaching an end', () => {
     expect(() => spatialCanvasSchema.parse(next)).not.toThrow()
   })
 
+  it('leaves a stroke end alone when the box it names is not on the canvas', () => {
+    // A stale id — the box was deleted between the grab and the release —
+    // must not become an attachment to nothing, which the schema would then
+    // refuse for the whole canvas.
+    const before = inked(
+      { kind: 'point', point: { x: 10, y: 10 } },
+      {
+        kind: 'point',
+        point: { x: 400, y: 400 },
+      },
+    )
+    const next = applyCommand(before, {
+      kind: 'set-line-end',
+      id: 'l1',
+      endpoint: 'to',
+      target: { kind: 'node', node: 'gone' },
+    })
+    expect(next.lines?.[0]?.to).toEqual({ kind: 'point', point: { x: 400, y: 400 } })
+  })
+
+  it('refuses to put both ends of one stroke on the same box', () => {
+    // Both ends on one box is a stroke with nowhere to go — it would be drawn
+    // as a degenerate loop, and the drag that produced it reads as a slip.
+    const before = inked({ kind: 'node', node: 'a' }, { kind: 'point', point: { x: 400, y: 400 } })
+    const next = applyCommand(before, {
+      kind: 'set-line-end',
+      id: 'l1',
+      endpoint: 'to',
+      target: { kind: 'node', node: 'a' },
+    })
+    expect(next.lines?.[0]?.to).toEqual({ kind: 'point', point: { x: 400, y: 400 } })
+  })
+
   it('picks the end write by the collection the id came from, and refuses a relation in empty space', () => {
     const canvas: SpatialCanvas = {
       ...inked({ kind: 'node', node: 'a' }, { kind: 'point', point: { x: 400, y: 400 } }),

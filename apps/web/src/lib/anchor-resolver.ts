@@ -15,7 +15,7 @@
  * as any passage being gone.
  */
 
-import type { AnnotationAnchor, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { resolveTextAnchor } from './text-anchor.js'
 
@@ -39,22 +39,36 @@ export function anchorResolverFor(subject: AnchorResolverSubject): AnchorResolve
   const { canvas } = subject
   const nodes = new Map(canvas.nodes.map((node) => [node.id, node]))
   const edgeIds = new Set(canvas.edges.map((edge) => edge.id))
-  return ({ anchor }) => {
-    if (anchor.kind === 'spatial') {
-      if (anchor.nodeId !== undefined) return nodes.has(anchor.nodeId) ? 'placed' : 'orphaned'
-      if (anchor.edgeId !== undefined) return edgeIds.has(anchor.edgeId) ? 'placed' : 'orphaned'
-      // A set is about its members: placed while any of them is, since the
-      // outline still has something to enclose.
-      if (anchor.nodeIds !== undefined)
-        return anchor.nodeIds.some((id) => nodes.has(id)) ? 'placed' : 'orphaned'
-      return 'placed'
-    }
-    // The document itself cannot be gone while it is being read.
-    if (anchor.kind !== 'text') return 'placed'
-    if (anchor.nodeId === undefined) return 'placed'
-    const node = nodes.get(anchor.nodeId)
-    const text = node === undefined ? undefined : nodeText(node)
-    if (text === undefined) return 'orphaned'
-    return resolveTextAnchor(text, anchor).kind
+  return ({ anchor }) => resolveCanvasAnchor(anchor, nodes, edgeIds)
+}
+
+/** A spatial anchor holds while what it names is still on the canvas. */
+function resolveSpatialAnchor(
+  anchor: Extract<AnnotationAnchor, { kind: 'spatial' }>,
+  nodes: ReadonlyMap<string, SpatialNode>,
+  edgeIds: ReadonlySet<string>,
+): AnchorPlacement {
+  if (anchor.nodeId !== undefined) return nodes.has(anchor.nodeId) ? 'placed' : 'orphaned'
+  if (anchor.edgeId !== undefined) return edgeIds.has(anchor.edgeId) ? 'placed' : 'orphaned'
+  // A set is about its members: placed while any of them is, since the
+  // outline still has something to enclose.
+  if (anchor.nodeIds !== undefined) {
+    return anchor.nodeIds.some((id) => nodes.has(id)) ? 'placed' : 'orphaned'
   }
+  return 'placed'
+}
+
+function resolveCanvasAnchor(
+  anchor: AnnotationAnchor,
+  nodes: ReadonlyMap<string, SpatialNode>,
+  edgeIds: ReadonlySet<string>,
+): AnchorPlacement {
+  if (anchor.kind === 'spatial') return resolveSpatialAnchor(anchor, nodes, edgeIds)
+  // The document itself cannot be gone while it is being read.
+  if (anchor.kind !== 'text') return 'placed'
+  if (anchor.nodeId === undefined) return 'placed'
+  const node = nodes.get(anchor.nodeId)
+  const text = node === undefined ? undefined : nodeText(node)
+  if (text === undefined) return 'orphaned'
+  return resolveTextAnchor(text, anchor).kind
 }
