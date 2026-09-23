@@ -1,8 +1,9 @@
 import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
+import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
 import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
-import { ContentFactsCache } from '../references/content-facts-cache.js'
-import type { ContentFacts } from '../references/extract.js'
+import { factsCacheFor } from '../references/content-source.js'
+import { DocumentVectorCache } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
 import { fuseByRank } from '../search/rrf.js'
@@ -99,7 +100,7 @@ function collectSearchable(
 
 export function createDocumentSearchTool(
   deps: ServerDeps,
-  cache: ContentFactsCache = new ContentFactsCache(),
+  vectors: DocumentVectorCache = new DocumentVectorCache(factsCacheFor(deps)),
 ) {
   return {
     name: 'wb_document_search' as const,
@@ -113,7 +114,7 @@ export function createDocumentSearchTool(
         throw new SearchNeedsQueryOrFilterError()
       }
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
-      const content = await cache.factsFor(deps, parsed.workspaceId, entries)
+      const content = await vectors.facts.factsFor(parsed.workspaceId, entries)
 
       const searchable = collectSearchable(entries, content, parsed)
 
@@ -181,8 +182,7 @@ export function createDocumentSearchTool(
         alsoIndex: emojiSearchText,
       })
       const semantic = await rankSemantically(
-        deps,
-        cache,
+        vectors,
         parsed.workspaceId,
         entries.filter((entry) => byId.has(entry.documentId)),
         query,
@@ -254,15 +254,14 @@ export function createDocumentSearchTool(
  * the user nothing worse than the lexical results they had before.
  */
 async function rankSemantically(
-  deps: ServerDeps,
-  cache: ContentFactsCache,
+  vectors: DocumentVectorCache,
   workspaceId: string,
-  entries: readonly Parameters<ContentFactsCache['factsFor']>[2][number][],
+  entries: readonly DocumentEntry[],
   query: string,
   embedder: Embedder,
 ): Promise<string[] | undefined> {
   try {
-    const documents = await cache.vectorsFor(deps, workspaceId, entries, embedder)
+    const documents = await vectors.vectorsFor(workspaceId, entries, embedder)
     if (documents.length === 0) return []
     const [queryVector] = await embedder.embed([query], 'query')
     if (queryVector === undefined) return undefined

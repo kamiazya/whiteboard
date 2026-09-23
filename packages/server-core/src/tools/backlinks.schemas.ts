@@ -6,8 +6,8 @@
  * exists rather than being a matter of taste.
  */
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { backlinkEntrySchema } from '@kamiazya/whiteboard-reference-graph'
 import { z } from 'zod'
-import { backlinkEntrySchema } from '../references/backlink-entry.js'
 
 export const backlinksInputSchema = z
   .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })

@@ -55,6 +55,7 @@ export default defineConfig({
       'tools/arch-lint/vitest.node.config.ts',
       'packages/loro-adapter/vitest.node.config.ts',
       'packages/search/vitest.node.config.ts',
+      'packages/reference-graph/vitest.node.config.ts',
       'packages/server-core/vitest.node.config.ts',
       'packages/workspace-index/vitest.node.config.ts',
       'packages/history/vitest.node.config.ts',

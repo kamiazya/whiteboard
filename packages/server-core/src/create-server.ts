@@ -6,7 +6,8 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
 import { errorBody, invalidRequestBody } from './api-errors.js'
-import { ContentFactsCache } from './references/content-facts-cache.js'
+import { factsCacheFor } from './references/content-source.js'
+import { DocumentVectorCache } from './search/document-vector-cache.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyEditTool } from './tools/body-edit.js'
@@ -64,7 +65,7 @@ export function createServer(deps: ServerDeps) {
   // One stamp-validated content-facts cache per server: backlinks/mentions,
   // tags, and search all read through it, so a request after a quiet period
   // reloads only what changed — regardless of which write path changed it.
-  const factsCache = new ContentFactsCache()
+  const factsCache = factsCacheFor(deps)
 
   /**
    * The workspace handle is resolved HERE, once per request, and every handler
@@ -271,7 +272,7 @@ export function createServer(deps: ServerDeps) {
     threadEdit: createThreadEditTool(deps),
     viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
-    documentSearch: createDocumentSearchTool(deps, factsCache),
+    documentSearch: createDocumentSearchTool(deps, new DocumentVectorCache(factsCache)),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),

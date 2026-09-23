@@ -1,6 +1,7 @@
 import { type TagInUse, tagsInUse } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
-import { ContentFactsCache } from '../references/content-facts-cache.js'
+import type { ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
+import { factsCacheFor } from '../references/content-source.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { DocumentTagsInput, DocumentTagsOutput } from './document-tags.schemas.js'
 import { workspaceTagLibrary } from './tag-library.js'
@@ -50,10 +51,10 @@ function splitBearerTags(bearers: readonly { what: string; tags: readonly string
 export async function computeDocumentTags(
   deps: ServerDeps,
   input: DocumentTagsInput,
-  cache: ContentFactsCache = new ContentFactsCache(),
+  cache: ContentFactsCache = factsCacheFor(deps),
 ): Promise<DocumentTagsOutput> {
   const entries = await deps.documentIndex.listDocuments({ workspaceId: input.workspaceId })
-  const content = await cache.factsFor(deps, input.workspaceId, entries)
+  const content = await cache.factsFor(input.workspaceId, entries)
   const documents: DocumentTagsOutput['documents'] = []
   const contents: DocumentTagsOutput['contents'] = []
   for (const entry of entries) {
@@ -71,8 +72,8 @@ export async function computeTagsInUse(
   deps: ServerDeps,
   workspaceId: string,
   entries: readonly DocumentEntry[],
-  cache: ContentFactsCache = new ContentFactsCache(),
+  cache: ContentFactsCache = factsCacheFor(deps),
 ): Promise<TagInUse[]> {
-  const content = await cache.factsFor(deps, workspaceId, entries)
+  const content = await cache.factsFor(workspaceId, entries)
   return tagsInUse(entries.flatMap((entry) => content.get(entry.documentId)?.bearers ?? []))
 }
