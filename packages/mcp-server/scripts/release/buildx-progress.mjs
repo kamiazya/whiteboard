@@ -78,6 +78,32 @@ function isLayer(name) {
 }
 
 /**
+ * Fold one progress line into the step map.
+ *
+ * A line with no `#<id>` prefix belongs to no step, and buildx writes its own
+ * failures that way. They are the shortest path from "0% cached" to a cause,
+ * so they are kept as diagnostics even though nothing owns them.
+ */
+function readProgressLine(line, steps, diagnostics) {
+  const idMatch = line.match(/^#(\d+)\s+(.*)$/)
+  if (!idMatch) {
+    if (/^(WARNING|ERROR)\b/.test(line)) addDiagnostic(diagnostics, line)
+    return
+  }
+  const [, id, rest] = idMatch
+  const entry = steps.get(id) ?? { name: '', cached: false, error: false, seconds: null }
+  if (entry.name === '' && isNameLine(rest)) entry.name = rest
+  if (/^CACHED\b/.test(rest)) entry.cached = true
+  if (/^ERROR\b/.test(rest)) {
+    entry.error = true
+    addDiagnostic(diagnostics, `#${id} ${rest}`)
+  }
+  const done = rest.match(/^DONE\s+([\d.]+)s/)
+  if (done) entry.seconds = Number(done[1])
+  steps.set(id, entry)
+}
+
+/**
  * `--progress=plain` writes one `#<id>` prefixed line per event:
  *
  *   #12 [server 4/9] RUN pnpm install --frozen-lockfile
@@ -99,26 +125,7 @@ export function parseBuildxProgress(output) {
   const diagnostics = []
   for (const raw of String(output ?? '').split('\n')) {
     // GitHub prefixes each log line with a timestamp; strip it before matching.
-    const line = raw.replace(/^\S+Z\s/, '').trim()
-    const idMatch = line.match(/^#(\d+)\s+(.*)$/)
-    if (!idMatch) {
-      // buildx writes its own failures with no step to attach them to. They
-      // are the shortest path from "0% cached" to a cause, so they are kept
-      // even though they belong to no step.
-      if (/^(WARNING|ERROR)\b/.test(line)) addDiagnostic(diagnostics, line)
-      continue
-    }
-    const [, id, rest] = idMatch
-    const entry = steps.get(id) ?? { name: '', cached: false, error: false, seconds: null }
-    if (entry.name === '' && isNameLine(rest)) entry.name = rest
-    if (/^CACHED\b/.test(rest)) entry.cached = true
-    if (/^ERROR\b/.test(rest)) {
-      entry.error = true
-      addDiagnostic(diagnostics, `#${id} ${rest}`)
-    }
-    const done = rest.match(/^DONE\s+([\d.]+)s/)
-    if (done) entry.seconds = Number(done[1])
-    steps.set(id, entry)
+    readProgressLine(raw.replace(/^\S+Z\s/, '').trim(), steps, diagnostics)
   }
 
   // A step that ERRORed has no DONE line. Resolving on duration alone dropped
