@@ -166,6 +166,19 @@ interface WorkspaceReplicaKeysTable {
   createdAt: Timestamp
 }
 
+// ADR-0046 decision 6. Exactly one of `tokenHash` (a one-time link, stored
+// hashed) and `email` (an address a provider must assert verified) is set.
+interface InvitationsTable {
+  id: string
+  tokenHash: string | null
+  email: string | null
+  invitedBy: string
+  createdAt: Timestamp
+  expiresAt: Timestamp
+  redeemedAt: Timestamp | null
+  redeemedBy: string | null
+}
+
 // Whether a workspace has ever had a member — set once by `addMember`'s
 // first insert, never cleared by `revokeL1Membership` (user decision
 // 2026-09-21: removing the sole member does not revert a workspace to
@@ -196,6 +209,7 @@ export interface DatabaseSchema {
   memberProfiles: MemberProfilesTable
   accounts: AccountsTable
   accountBindings: AccountBindingsTable
+  invitations: InvitationsTable
   workspaceMemberships: WorkspaceMembershipsTable
   workspaceReplicaKeys: WorkspaceReplicaKeysTable
   workspaceMembersOnly: WorkspaceMembersOnlyTable
