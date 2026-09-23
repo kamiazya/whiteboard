@@ -491,7 +491,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // path beside the one it has.
   // Raised 2170 -> 2177: the bent branch carries `rounded` now, with the
   // reason it did not before.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2177,
+  // Raised 2177 -> 2483. The file grew by RATIONALE, not by logic: sixteen
+  // inline blocks became named functions, each carrying the comment that was
+  // buried in the middle of it. The next real shrink splits the three
+  // concerns this file holds — anchor placement, the side-choice search, and
+  // the router — into sibling modules; they share `AnchorContext`,
+  // `SidePair` and the cost vocabulary, so the types move first or each new
+  // module imports them back.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2483,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
@@ -722,7 +729,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reason its own comment gives for the list being 400-odd entries rather
   // than 17 — so it is recorded rather than split, and splitting it would
   // put half the ledger where a reader does not look for it.
-  'tools/arch-lint/src/function-size-budget.test.ts': 818,
+  'tools/arch-lint/src/function-size-budget.test.ts': 826,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon

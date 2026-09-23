@@ -495,11 +495,19 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 94,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#assignEdgeAnchors': 52,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#computeAnchorsFor': 89,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 250,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore.evaluateTrial': 82,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#initialSideChoices': 58,
+  // Raised 250 -> 308: the trial evaluator's three steps are now named
+  // closures (applySelfCosts / applyPairCosts / rescorePairsOf /
+  // rescorePairInto), each carrying the invariant that was a comment inside
+  // the loop it came from. The closure is longer by those doc comments and
+  // shorter by nothing; the next real shrink is lifting the score object
+  // into a module of its own, which needs its eight captured caches passed
+  // as a bundle.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 308,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeAcrossRegions': 111,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 94,
+  // Raised 94 -> 102 for the same reason: `improveEdge` replaced the
+  // candidate loop's body and brought its incumbent-wins-ties rationale
+  // with it.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 102,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#patchAnchorGroups': 54,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeEdge': 164,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeOrthogonal': 180,
