@@ -76,6 +76,71 @@ const REGEX_MAY_FOLLOW: ReadonlySet<string> = new Set([
   '^',
 ])
 
+/** Past the end of a `//` comment — its own newline is left for the caller. */
+function skipLineComment(source: string, from: number): number {
+  let i = from
+  while (i < source.length && source[i] !== '\n') i += 1
+  return i
+}
+
+/** Past a block comment's terminator, or to the end when it is unterminated. */
+function skipBlockComment(source: string, from: number): number {
+  const end = source.indexOf('*/', from + 2)
+  return end === -1 ? source.length : end + 2
+}
+
+/**
+ * Past a regex literal's closing delimiter.
+ *
+ * A closing bracket only closes a character class that an opening one began,
+ * so a slash INSIDE a class does not end the literal. A newline ends the
+ * scan because a regex cannot span lines, and treating an unterminated one
+ * as running to EOF would swallow the rest of the file.
+ */
+function skipRegexLiteral(source: string, from: number): number {
+  let i = from + 1
+  let inClass = false
+  while (i < source.length) {
+    const r = source[i] as string
+    if (r === '\\') {
+      i += 2
+      continue
+    }
+    if (r === '[') inClass = true
+    else if (r === ']') inClass = false
+    else if (r === '/' && !inClass) break
+    else if (r === '\n') break
+    i += 1
+  }
+  return i + 1
+}
+
+/**
+ * A string or template literal, replaced by its own quotes plus its body
+ * ONLY when the body is a bare identifier.
+ *
+ * Keeping identifier-shaped bodies is what lets a scan see `import x from
+ * 'node:fs'`-style specifiers and property keys while still erasing prose,
+ * which is where a word this tool searches for would otherwise hide.
+ */
+function readStringLiteral(
+  source: string,
+  from: number,
+  quote: string,
+): { next: number; text: string } {
+  const start = from + 1
+  let i = start
+  while (i < source.length && source[i] !== quote) {
+    if (source[i] === '\\') i += 1
+    i += 1
+  }
+  const body = source.slice(start, i)
+  return {
+    next: i + 1,
+    text: quote + (/^[A-Za-z_$][\w$]*$/.test(body) ? body : '') + quote,
+  }
+}
+
 export function stripCommentsAndStrings(source: string): string {
   let out = ''
   let i = 0
@@ -84,43 +149,22 @@ export function stripCommentsAndStrings(source: string): string {
     const ch = source[i] as string
     const next = source[i + 1]
     if (ch === '/' && next === '/') {
-      while (i < source.length && source[i] !== '\n') i += 1
+      i = skipLineComment(source, i)
       continue
     }
     if (ch === '/' && next === '*') {
-      const end = source.indexOf('*/', i + 2)
-      i = end === -1 ? source.length : end + 2
+      i = skipBlockComment(source, i)
       continue
     }
     if (ch === '/' && REGEX_MAY_FOLLOW.has(lastMeaningful)) {
-      i += 1
-      let inClass = false
-      while (i < source.length) {
-        const r = source[i] as string
-        if (r === '\\') {
-          i += 2
-          continue
-        }
-        if (r === '[') inClass = true
-        else if (r === ']') inClass = false
-        else if (r === '/' && !inClass) break
-        else if (r === '\n') break
-        i += 1
-      }
-      i += 1
+      i = skipRegexLiteral(source, i)
       lastMeaningful = ')'
       continue
     }
     if (ch === "'" || ch === '"' || ch === '`') {
-      const start = i + 1
-      i = start
-      while (i < source.length && source[i] !== ch) {
-        if (source[i] === '\\') i += 1
-        i += 1
-      }
-      const body = source.slice(start, i)
-      out += ch + (/^[A-Za-z_$][\w$]*$/.test(body) ? body : '') + ch
-      i += 1
+      const literal = readStringLiteral(source, i, ch)
+      out += literal.text
+      i = literal.next
       lastMeaningful = ch
       continue
     }

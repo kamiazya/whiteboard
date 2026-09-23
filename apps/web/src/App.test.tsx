@@ -2,7 +2,8 @@ import { resetTokenStoreForTests } from '@kamiazya/whiteboard-daemon-client/api-
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App, LazyPageFallback } from './App.js'
+import { App } from './App.js'
+import { LazyPageFallback } from './app-screens.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
 import {

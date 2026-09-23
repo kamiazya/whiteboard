@@ -1333,6 +1333,837 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       toggleSelectionMember,
     })
 
+    /**
+     * The editors that open ON the canvas rather than in a panel: an edge's
+     * label, a group's label, a new comment, and a node's own text.
+     */
+    const inPlaceEditors = () => (
+      <>
+        {edgeLabelEditId !== null && (
+          <EdgeLabelEditorOverlay
+            editId={edgeLabelEditId}
+            canvas={canvas}
+            fontFamily={editingFontFamily}
+            edgePaths={edgePaths}
+            zoom={viewport.zoom}
+            palette={palette}
+            applyResult={applyResult}
+            onClose={() => setEdgeLabelEditId(null)}
+          />
+        )}
+        {groupLabelEditId !== null && (
+          <GroupLabelEditorOverlay
+            editId={groupLabelEditId}
+            canvas={canvas}
+            fontFamily={editingFontFamily}
+            zoom={viewport.zoom}
+            palette={palette}
+            applyResult={applyResult}
+            onClose={() => setGroupLabelEditId(null)}
+          />
+        )}
+        {commentCompose !== null && (
+          <CommentComposeOverlay
+            compose={commentCompose}
+            canvas={canvas}
+            edgePathOf={edgePathOf}
+            obstacles={commentPlacementObstacles()}
+            createId={createId}
+            zoom={viewport.zoom}
+            palette={palette}
+            applyResult={applyResult}
+            onClose={() => setCommentCompose(null)}
+          />
+        )}
+        {gestureState.kind === 'editing-text' &&
+          selectedNode !== undefined &&
+          nodeKind(selectedNode) === 'text' &&
+          selection !== undefined && (
+            <MarkdownBodyEditorOverlay
+              node={selectedNode}
+              fontFamily={editingFontFamily}
+              selectionBox={selection.box}
+              sceneNodes={scene.nodes}
+              sceneCurrent={sceneCurrent}
+              threads={threads}
+              onRequestComment={(anchor) => {
+                setCommentCompose({
+                  point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
+                  targetNodeId: selectedNode.id,
+                  threadAnchor: { ...anchor, nodeId: selectedNode.id },
+                })
+                return true
+              }}
+              zoom={viewport.zoom}
+              theme={theme}
+              palette={palette}
+              canvas={canvas}
+              gestureState={gestureState}
+              applyResult={applyResult}
+            />
+          )}
+      </>
+    )
+
+    /**
+     * What is drawn AROUND the selection: its outline, its handles, and the
+     * verbs that act on it.
+     */
+    const selectionOverlay = () => (
+      <>
+        {selection !== undefined && selectionBox !== undefined && (
+          <SelectionOverlay
+            // Keyed by TARGET: a new selection remounts the overlay and
+            // replays the outline's draw-once; dragging or resizing the
+            // same node keeps the element and stays still.
+            key={selection.id}
+            box={selectionBox}
+            zoom={viewport.zoom}
+            onHandlePointerDown={(handle, _handleBox, e) => {
+              const root = beginOverlayGesture(e)
+              if (root === null) return
+              const point = screenToCanvas(clientPointToRootLocal(e, root), viewport)
+              applyResult(
+                reduceGesture(gestureState, canvas, {
+                  type: 'pointerdown-handle',
+                  nodeId: selection.id,
+                  handle,
+                  point,
+                  // The resize anchor is the box the HANDLES surround, not
+                  // the handle's own tiny hit-box `_handleBox` describes —
+                  // using the handle box here would seed
+                  // `reducePointerUpResizing`'s anchor-preserving math from
+                  // an 8px square instead, growing/shrinking from the wrong
+                  // origin.
+                  box: selectionBox,
+                  // Omitted for a lone node, which keeps the original
+                  // single-command path — including its collapse-to-zero
+                  // behavior, which group members deliberately do not share.
+                  ...(isMultiSelection ? { members: selectionMembers } : {}),
+                }),
+              )
+            }}
+            // Connecting and editing act on ONE node; from handles that
+            // surround a group they would claim to apply to all of them.
+            onConnectPointerDown={
+              isMultiSelection
+                ? undefined
+                : (e) => {
+                    if (beginOverlayGesture(e) === null) return
+                    applyResult(
+                      reduceGesture(gestureState, canvas, {
+                        type: 'pointerdown-connect',
+                        nodeId: selection.id,
+                      }),
+                    )
+                  }
+            }
+            onHandleKeyDown={handleResizeHandleKeyDown}
+            onConnectKeyDown={handleConnectKeyDown}
+            // The ⋯ opens the SAME menu right-click does, for the same
+            // target — one catalog, now with a visible doorway. Offered
+            // for every selection (multi included: align/distribute were
+            // the least discoverable actions of all).
+            // Only a single text node has a body to open, and only when the
+            // host has a surface to open it on.
+            onOpenInEditor={
+              onOpenInEditor !== undefined &&
+              !isMultiSelection &&
+              selectedNode !== undefined &&
+              nodeKind(selectedNode) === 'text'
+                ? () => onOpenInEditor(selectedNode.id, nodeText(selectedNode) ?? '')
+                : undefined
+            }
+            onMoreActions={(anchor) => {
+              const screen = canvasToScreen(anchor, viewport)
+              setContextMenu({
+                x: screen.x,
+                y: screen.y,
+                nodeId: selection.id,
+                edgeId: undefined,
+                point: anchor,
+                // The ⋯ vessel follows the editor's width, decided at open
+                // time (the menu is transient): below the minimap
+                // breakpoint the popover becomes a bottom sheet — keyed
+                // off the CONTAINER for the same reason the minimap is.
+                variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
+              })
+            }}
+          />
+        )}
+      </>
+    )
+
+    /**
+     * The handles for whatever is selected that has a PATH: an ink stroke's
+     * bends, an edge's ends, and the live connect/reattach preview.
+     */
+    const routableHandles = () => (
+      <>
+        {selectedInkIds.length > 0 && (
+          <EdgeSelectionHighlight
+            selectedEdgeIds={selectedInkIds}
+            edgePaths={edgePaths}
+            // The live half of the ink drag: the committed strokes stay
+            // where they are and their outlines travel, which is the
+            // same bargain the node drag makes with its ghost box. A
+            // full re-layout per frame is what the preview overlay
+            // exists to avoid (see `drag-preview.ts`'s header).
+            offset={
+              gestureState.kind === 'moving-ink'
+                ? {
+                    x: (livePoint?.x ?? gestureState.startPoint.x) - gestureState.startPoint.x,
+                    y: (livePoint?.y ?? gestureState.startPoint.y) - gestureState.startPoint.y,
+                  }
+                : undefined
+            }
+          />
+        )}
+        {selectedRoutable !== undefined && (
+          <EdgeEndHandles
+            path={edgePathOf(selectedRoutable.id) ?? []}
+            zoom={viewport.zoom}
+            onArm={(endpoint, event) => {
+              if (event !== undefined) beginOverlayGesture(event)
+              applyResult(
+                reduceGesture(gestureState, canvas, {
+                  type: 'pointerdown-end',
+                  elementId: selectedRoutable.id,
+                  endpoint,
+                }),
+              )
+            }}
+          />
+        )}
+        {selectedRoutable !== undefined && (
+          <EdgeBendLayer
+            edge={selectedRoutable}
+            path={edgePathOf(selectedRoutable.id) ?? []}
+            viewport={viewport}
+            begin={beginOverlayGesture}
+            dispatch={(event) => applyResult(reduceGesture(gestureState, canvas, event))}
+          />
+        )}
+        {(gestureState.kind === 'connecting' || gestureState.kind === 'reattaching') && (
+          <BoxTargetOverlay
+            gestureState={gestureState}
+            sourceNodeId={
+              gestureState.kind === 'connecting'
+                ? gestureState.fromNodeId
+                : // The box the OTHER end is on, which this end may not
+                  // land on either: the write refuses a self-loop, so
+                  // offering it as a target would offer a no-op.
+                  otherEndNodeOf(canvas, gestureState.elementId, gestureState.endpoint)
+            }
+            hoveredNodeId={livePoint === null ? undefined : hitTest(selectableBoxes, livePoint)}
+            canvas={canvas}
+            boxes={boxes}
+            selectableBoxes={selectableBoxes}
+            createId={createId}
+            applyResult={applyResult}
+          />
+        )}
+      </>
+    )
+
+    /**
+     * What is drawn ABOUT the current selection and the edit in progress:
+     * the outline, the multi-selection box, the routable handles, and the
+     * in-place label and comment editors.
+     *
+     * Split from `canvasSpaceLayers` only by length — both are flat lists of
+     * independent slots, and the cut is where "what is on the canvas" ends
+     * and "what is being done to it" begins.
+     */
+    const selectionAndEditorLayers = () => (
+      <>
+        {selectionOverlay()}
+        {/* In-flight gesture preview. Drawn from component-local pointer
+      state above the committed SVG, so the expensive
+      layout+stringify+innerHTML path runs once per gesture (at
+      pointerup) instead of once per frame. */}
+        {dragPreview !== undefined && (
+          <DragPreviewLayer
+            preview={dragPreview}
+            zoom={viewport.zoom}
+            contentSvg={dragContentSvg}
+          />
+        )}
+        {/* Rendered for the WHOLE drag, not only once a live point
+          exists. The committed copy leaves the surface the moment the
+          drag starts (`surfaceKeyed` above), so gating the preview on
+          `live` left the comment in neither place until the first
+          pointermove — it vanished. Worst on touch, where a long-press
+          starts the drag and a finger held still sends no move. Before
+          the pointer travels the delta is zero, which draws the preview
+          exactly over the anchor it was pressed at. */}
+        {commentDrag !== null && (
+          <CommentDragLayer
+            comment={commentDrag.comment}
+            delta={{
+              x: (commentDrag.live?.x ?? commentDrag.startPoint.x) - commentDrag.startPoint.x,
+              y: (commentDrag.live?.y ?? commentDrag.startPoint.y) - commentDrag.startPoint.y,
+            }}
+            measure={resolvedMeasure}
+            theme={theme}
+            obstacles={commentDrag.obstacles}
+          />
+        )}
+        {routableHandles()}
+        {inPlaceEditors()}
+      </>
+    )
+
+    /**
+     * The facet panel, which is ABOUT whatever is selected. An edge
+     * selection wins over a node one because selecting an edge clears the
+     * node selection, so the two are never both live.
+     */
+    const facetPanelSlot = () => {
+      const edgeTarget =
+        selectedEdgeId === null
+          ? undefined
+          : canvas.edges.find((entry) => entry.id === selectedEdgeId)
+      const target = canvas.nodes.find((entry) => entry.id === selectedId)
+      // Nothing selected: there is nothing for the inspector to be
+      // about. It closes rather than standing there saying so — the
+      // same thing a press on blank canvas does to the context menu,
+      // which is the semantic this matches. The flag is cleared during
+      // render just above, so re-opening it later is an ordinary open
+      // rather than a stuck true.
+      if (edgeTarget === undefined && target === undefined) return null
+      return (
+        <FacetFormPanel
+          subject={
+            edgeTarget !== undefined
+              ? { kind: 'edge', edge: edgeTarget }
+              : { kind: 'node', node: target as SpatialNode }
+          }
+          registry={bundledFacetRegistry}
+          // What the board already wrote into free-entry fields, so a
+          // second classification is a pick. Recomputed per render
+          // while the panel is open: one pass over the nodes' facets.
+          suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
+          tagSuggestions={[...collectCanvasTags(canvas), ...(tagSuggestions ?? [])]}
+          {...(tagLibrary === undefined ? {} : { tagLibrary })}
+          variant={inspectorIsSheet ? 'sheet' : 'dock'}
+          onTagsChange={(after) => {
+            // Every write is the CHANGE the row showed being made,
+            // applied to the object's tags as the eager chain holds
+            // them (`canvasRef.current`), never the shown list copied
+            // over: under a slow parent the row still shows the list
+            // before the previous commit landed, and on a selection
+            // of five the four other boxes carry tags of their own.
+            if (edgeTarget !== undefined) {
+              const current = canvasRef.current.edges.find((e) => e.id === edgeTarget.id)
+              applyResult({
+                state: { kind: 'idle' },
+                commands: [
+                  {
+                    kind: 'set-edge-tags' as const,
+                    id: edgeTarget.id,
+                    tags: retag(current?.tags, edgeTarget.tags ?? [], after),
+                  },
+                ],
+              })
+              return
+            }
+            const before = target?.tags ?? []
+            applyResult({
+              state: { kind: 'idle' },
+              commands: writeReachesIds(target, selectedId, extraIds).flatMap((id) => {
+                const node = canvasRef.current.nodes.find((entry) => entry.id === id)
+                return node === undefined
+                  ? []
+                  : [
+                      {
+                        kind: 'set-node-tags' as const,
+                        id,
+                        tags: retag(node.tags, before, after),
+                      },
+                    ]
+              }),
+            })
+          }}
+          onWrite={(key, payload) => {
+            if (edgeTarget !== undefined) {
+              // One edge, because an edge selection is one edge —
+              // there is no multi-edge selection to fan out over.
+              applyResult({
+                state: { kind: 'idle' },
+                commands: [{ kind: 'set-edge-facet' as const, id: edgeTarget.id, key, payload }],
+              })
+              return
+            }
+            // Applies to the whole selection, the semantics the menu
+            // bands had: reshaping five selected nodes must not become
+            // five visits to this panel.
+            const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
+            const ids =
+              target !== undefined && members.has(target.id)
+                ? [...members]
+                : target === undefined
+                  ? []
+                  : [target.id]
+            applyResult({
+              state: { kind: 'idle' },
+              commands: ids.map((id) => ({
+                kind: 'set-node-facet' as const,
+                id,
+                key,
+                payload,
+              })),
+            })
+          }}
+        />
+      )
+    }
+
+    /**
+     * What the chrome OPENS: the context menu, the canvas picker and the
+     * link dialog. Each is modal over the surface rather than part of it.
+     */
+    const canvasDialogs = () => (
+      <>
+        {contextMenu !== null && (
+          <CanvasContextMenu
+            commands={{
+              applyResult,
+              applyBoxMoves,
+              copySelection,
+              cutSelection,
+              pasteClipboard,
+              duplicateSelection,
+              reorderSelection,
+              groupSelection,
+              createNodeAt,
+              createGroupAtViewportCenter,
+              openLinkNode,
+              onOpenFileRef,
+              onAddImage,
+              onToggleNodeLock,
+              onToggleEdgeLock,
+              setEdgeLabelEditId,
+              setGroupLabelEditId,
+              setSelectedEdgeId,
+              setLinkDialog,
+              setDocumentPicker,
+              setFacetPanelOpen,
+              setCommentCompose,
+              showResolvedComments,
+              setShowResolvedComments,
+            }}
+            contextMenu={contextMenu}
+            setContextMenu={setContextMenu}
+            canvas={canvas}
+            canvasRef={canvasRef}
+            theme={theme}
+            gestureState={gestureState}
+            isEdgeLocked={isEdgeLocked}
+            fileRefOptions={fileRefOptions}
+            pendingImagePointRef={pendingImagePointRef}
+            imageInputRef={imageInputRef}
+            pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
+            isLocked={isLocked}
+            extraIds={extraIds}
+            selectedId={selectedId}
+            selectedInkIds={selectedInkIds}
+            createId={createId ?? defaultCreateId}
+            isImageFileRef={isImageFileRef}
+            missingFileRef={missingFileRef}
+          />
+        )}
+        {canvasPicker !== null &&
+          fileRefOptions !== undefined &&
+          // A retarget edits ONE node, so it may not outlive it: an undo,
+          // an import or a peer's delete can take the node while the
+          // dialog is open, and `set-node-file` for a node that is gone
+          // is a no-op the user cannot see. Resolved in the render like
+          // the two label editors below rather than cleared by an effect
+          // — a gate the dialog cannot render without passing is one no
+          // future canvas-changing path can forget.
+          (canvasPicker.mode === 'create' ||
+            canvas.nodes.some((node) => node.id === canvasPicker.nodeId)) && (
+            <DocumentPickerDialog
+              title={
+                canvasPicker.mode === 'create' ? `Add ${CREATION_LABELS.document}` : 'Change target'
+              }
+              options={fileRefOptions}
+              currentFile={
+                canvasPicker.mode === 'retarget'
+                  ? (() => {
+                      const target = canvas.nodes.find((n) => n.id === canvasPicker.nodeId)
+                      return target === undefined ? undefined : nodeFile(target)
+                    })()
+                  : undefined
+              }
+              onPick={(file) => {
+                if (canvasPicker.mode === 'create') {
+                  createFileRefAtViewportCenter(file, canvasPicker.point)
+                } else {
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [{ kind: 'set-node-file', id: canvasPicker.nodeId, file }],
+                  })
+                }
+                setDocumentPicker(null)
+              }}
+              onCancel={() => setDocumentPicker(null)}
+            />
+          )}
+        {linkDialog !== null &&
+          // Same rule as the picker above: an Edit URL that outlived its
+          // link shows an empty field and writes nothing on OK.
+          (linkDialog.mode === 'create' ||
+            canvas.nodes.some((node) => node.id === linkDialog.nodeId)) && (
+            <LinkUrlDialog
+              title={linkDialog.mode === 'create' ? `Add ${CREATION_LABELS.link}` : 'Edit URL'}
+              initialUrl={
+                linkDialog.mode === 'edit'
+                  ? (() => {
+                      const target = canvas.nodes.find((n) => n.id === linkDialog.nodeId)
+                      return target === undefined ? undefined : nodeUrl(target)
+                    })()
+                  : undefined
+              }
+              onSubmit={(url) => {
+                if (linkDialog.mode === 'create') {
+                  createLinkAtViewportCenter(url, linkDialog.point)
+                } else {
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [{ kind: 'set-node-url', id: linkDialog.nodeId, url }],
+                  })
+                }
+                setLinkDialog(null)
+              }}
+              onCancel={() => setLinkDialog(null)}
+            />
+          )}
+      </>
+    )
+
+    /**
+     * The chrome a person ACTS through: the tool palette, the image button,
+     * and the menus and dialogs those open.
+     *
+     * Split from `screenSpaceOverlays` at the line where "what the canvas
+     * shows you" ends and "what you press" begins.
+     */
+    const canvasChrome = () => (
+      <>
+        {/* The OOUI creation surface: every canvas is empty until a node
+      exists and double-click-empty-space has no visible cue, so the
+      palette is the always-visible, keyboard-reachable way in. Fixed to
+      the bottom edge outside the pan/zoom transform. */}
+        {pendingCut !== null && (
+          <PendingCutChip
+            count={pendingCut.snapshot.size}
+            coarse={hasCoarsePointer()}
+            onCancel={() => setPendingCut(null)}
+          />
+        )}
+        <ToolPalette
+          // The dock does NOT change with the mode. Navigation belongs to the
+          // viewport, not to whichever tool is armed, so nothing is exchanged
+          // for entering hand mode — the host's history cluster stays put and
+          // the one view control (zoom to fit) is always in the same place.
+          leading={paletteLeading}
+          onZoomToFit={frameContent}
+          onCreateNode={createNodeAtViewportCenter}
+          onCreateLink={() => setLinkDialog({ mode: 'create' })}
+          onCreateGroup={createGroupAtViewportCenter}
+          onCreateDocumentRef={
+            fileRefOptions === undefined ? undefined : () => setDocumentPicker({ mode: 'create' })
+          }
+          onCreateImage={
+            onAddImage === undefined
+              ? undefined
+              : () => {
+                  pendingImagePointRef.current = null
+                  imageInputRef.current?.click()
+                }
+          }
+          tool={tool}
+          onToolChange={(next) => {
+            setTool(next)
+            toolChosenByUserRef.current = true
+            // A stated preference outranks the canvas-shape guess on the
+            // next open in this tab.
+            writeLastTool(next)
+            // A context menu is an edit affordance of the mode it was
+            // opened in — switching tools (especially into view-only hand
+            // mode) must not leave it floating.
+            setContextMenu(null)
+            // Entering hand mode drops EVERY edit affordance, not just the
+            // menu: a surviving selection would keep Delete/resize/connect
+            // handles live, an open editor would keep accepting text, and
+            // an armed connect could still complete — all edits in a mode
+            // whose contract is "no press can change the canvas". The
+            // in-flight gesture is cancelled like Escape (uncommitted text
+            // is discarded, not committed).
+            if (next === 'hand') {
+              if (gestureState.kind !== 'idle') {
+                applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+              }
+              applySelection({ type: 'clear' })
+              setSelectedEdgeId(null)
+              setEdgeLabelEditId(null)
+              setGroupLabelEditId(null)
+              setMarquee(null)
+            }
+          }}
+        />
+        {onAddImage !== undefined && (
+          <input
+            ref={imageInputRef}
+            data-editor-overlay
+            data-testid="image-file-input"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file === undefined) return
+              const backgroundGroupId = pendingBackgroundGroupIdRef.current
+              pendingBackgroundGroupIdRef.current = null
+              if (backgroundGroupId !== null) {
+                if (onAddImage === undefined || !file.type.startsWith('image/')) return
+                void onAddImage(file).then((ref) => {
+                  if (ref !== undefined) {
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-group-background', id: backgroundGroupId, background: ref },
+                      ],
+                    })
+                  }
+                })
+                return
+              }
+              addImageFile(file, pendingImagePointRef.current ?? undefined)
+              pendingImagePointRef.current = null
+            }}
+          />
+        )}
+        {canvasDialogs()}
+      </>
+    )
+
+    /**
+     * Everything drawn in SCREEN space, outside the pan/zoom transform: the
+     * minimap, the legend, the tool palette, and every menu or dialog the
+     * canvas opens over itself.
+     *
+     * A function for the same reason as `canvasSpaceLayers` — each of these
+     * reads this render's own state, and threading it through props would be
+     * the same tree with a wider seam.
+     */
+    const screenSpaceOverlays = () => (
+      <>
+        {/* Screen space, outside the pan/zoom transform — an overview that
+      panned with the canvas would defeat its purpose.
+      It stays up during a drag: `data-editor-overlay` already stops a
+      press on it reaching the canvas, so hiding bought nothing and cost
+      a flicker on every gesture. Hidden only on an empty canvas, where
+      an overview of nothing is chrome with no job. */}
+        {/* What the board's colour MEANS, as the layout attached it to the
+      scene (ADR-0040 decision 6). Screen space like the minimap; the keyed
+      projection omits its SVG twin, so the corner is drawn once. */}
+        {scene?.legend !== undefined && <LegendOverlay legend={scene.legend} />}
+        {boxes.length > 0 && rootSize.width >= MINIMAP_MIN_ROOT_WIDTH_PX && (
+          <MinimapOverlay
+            boxes={minimapNodes}
+            viewportRect={{
+              x: viewport.x,
+              y: viewport.y,
+              width: rootSize.width / viewport.zoom,
+              height: rootSize.height / viewport.zoom,
+            }}
+            width={MINIMAP_WIDTH_PX}
+            height={MINIMAP_HEIGHT_PX}
+            onNavigate={(point: { x: number; y: number }) =>
+              setViewport((vp) => ({
+                ...vp,
+                x: point.x - rootSize.width / vp.zoom / 2,
+                y: point.y - rootSize.height / vp.zoom / 2,
+              }))
+            }
+          />
+        )}
+        {longPressPulse !== null && (
+          // The moment the long-press commits: one expanding ring at the
+          // pressed point. Haptics are best-effort at most (see
+          // haptics.ts), so this is the feedback channel that always works;
+          // removed on its own animationend (the reduced-motion floor
+          // shortens, never cancels, so cleanup still fires).
+          //
+          // OUTSIDE the pan/zoom transform, unlike the canvas-space
+          // overlays: the coordinates are root-local screen px, and a
+          // fixed-size feedback ring must not scale with zoom.
+          <div
+            data-testid="long-press-pulse"
+            aria-hidden="true"
+            className="long-press-pulse"
+            style={{ left: longPressPulse.x, top: longPressPulse.y }}
+            onAnimationEnd={() => setLongPressPulse(null)}
+          />
+        )}
+        {canvasChrome()}
+      </>
+    )
+
+    /**
+     * Everything drawn in CANVAS space, under the pan/zoom transform: the
+     * committed scene, the live drag layers, the annotation pins and the
+     * proposal overlays.
+     *
+     * A function rather than a component because every layer below reads
+     * this render's gesture state — threading thirty values through props
+     * would be the same tree with a wider seam, and this one re-creates
+     * exactly what the inline JSX did.
+     */
+    const canvasSpaceLayers = () => (
+      <div
+        data-testid="viewport-transform"
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          transform: viewportTransformCss(viewport),
+          transformOrigin: '0 0',
+          // canvas-render's layoutMdastBlocks assigns no appearance to
+          // markdown body text runs (they carry no `fill` attribute at
+          // all), so they inherit it from whichever ancestor sets one —
+          // the seam that keeps body text visible on the dark canvas
+          // surface without editing canvas-render itself. It sits on the
+          // shared ancestor of EVERY canvas-space layer rather than on
+          // the committed one, because the live drag layers host the same
+          // markup: set on the committed layer alone, a dragged node's
+          // body text fell back to the UA default black and read as
+          // vanishing for the length of the gesture. Any element that DOES
+          // carry its own `fill` presentation attribute is unaffected
+          // (presentation attributes win over an inherited value), which
+          // is every shape the selection overlay draws.
+          fill: palette.labelFill,
+        }}
+      >
+        <div
+          data-testid="canvas-content"
+          className="canvas-surface"
+          style={{
+            position: 'absolute',
+            left: (dragStatic?.bounds ?? bounds).x,
+            top: (dragStatic?.bounds ?? bounds).y,
+          }}
+          // Mount-once keyed patching (use-keyed-svg.ts): every byte that
+          // lands in this container is still canvas-render's serializer
+          // output — the patcher only decides WHICH groups to replace —
+          // so CanvasViewer.tsx's single-producer injection reasoning
+          // carries over unchanged, and untouched groups keep their DOM
+          // nodes across commits (selection, focus, animations survive).
+          ref={canvasContentRef}
+        />
+        {liveEdges !== undefined && (
+          <div
+            data-testid="live-edges"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: liveEdges.bounds.x,
+              top: liveEdges.bounds.y,
+              pointerEvents: 'none',
+            }}
+            // Same trusted producer as the committed scene (canvas-render's
+            // escaping serializer).
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
+            dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
+          />
+        )}
+        {liveNode !== undefined && (
+          <div
+            data-testid="live-node"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: liveNode.bounds.x,
+              top: liveNode.bounds.y,
+              pointerEvents: 'none',
+            }}
+            // Same trusted producer as the committed scene (canvas-render's
+            // escaping serializer).
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
+            dangerouslySetInnerHTML={{ __html: liveNode.svg }}
+          />
+        )}
+        {/* Editor-only iframe embeds for link nodes (never in exports).
+          Rides the same transform as every canvas-space overlay; the
+          LOD gate mirrors the canvas-embed thresholds. */}
+        <LinkEmbedLayer
+          canvas={canvas}
+          interactive={tool !== 'hand'}
+          shouldOffer={(node) =>
+            node.width * viewport.zoom >= EXPAND_MIN_W &&
+            node.height * viewport.zoom >= EXPAND_MIN_H
+          }
+        />
+        {marquee !== null && <MarqueeOverlay marquee={marquee} zoom={viewport.zoom} />}
+        {gestureState.kind === 'drawing' && (
+          <InkDraftLayer
+            points={gestureState.points}
+            zoom={viewport.zoom}
+            stroke={palette.edgeStroke}
+          />
+        )}
+        {snapGuides !== null && (
+          <SnapGuidesOverlay guides={snapGuides} boxes={boxes} zoom={viewport.zoom} />
+        )}
+        {/* Which nodes are in the selection. The overlay above outlines the
+        region the handles act on, which says nothing about membership —
+        outlining only the extras left the primary looking untouched, so a
+        Select All over three nodes read as though it had skipped one.
+        Hidden while a move is in flight: every member travels with the
+        ghost, so these outlines (boxes and internal-edge highlights,
+        both derived from the committed scene) would mark geometry that
+        is no longer drawn there. */}
+        {pendingCut !== null && (
+          <GhostOverlay
+            boxes={canvas.nodes.flatMap((n) =>
+              pendingCut.snapshot.has(n.id)
+                ? [{ id: n.id, x: n.x, y: n.y, width: n.width, height: n.height }]
+                : [],
+            )}
+            zoom={viewport.zoom}
+          />
+        )}
+        {isMultiSelection && gestureState.kind !== 'moving' && (
+          <MemberOutlinesOverlay
+            selectionMembers={selectionMembers}
+            edges={canvas.edges}
+            edgePaths={edgePaths}
+            zoom={viewport.zoom}
+          />
+        )}
+        {/* The same drawing as above in a different colour: "these boxes,
+        outlined". `edges` is empty on purpose — an agent reports the
+        edges it touched, but an edge outline is far less legible than a
+        box one and the nodes are what actually moved. Add it if edge-only
+        batches turn out to be a real case. */}
+        {agentTouchedNodeIds !== undefined && agentTouchedNodeIds.size > 0 && (
+          <MemberOutlinesOverlay
+            testId="agent-touch-outlines"
+            stroke="var(--accent-foreground)"
+            selectionMembers={boxes.filter((entry) => agentTouchedNodeIds.has(entry.id))}
+            edges={[]}
+            edgePaths={[]}
+            zoom={viewport.zoom}
+          />
+        )}
+        {selectionAndEditorLayers()}
+      </div>
+    )
+
     return (
       // The inspector is a SIBLING of the canvas, not an overlay on it. The
       // root IS the pointer surface — every screenToCanvas reads its rect —
@@ -1596,745 +2427,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               />
             )
           })()}
-          {/* Screen space, outside the pan/zoom transform — an overview that
-          panned with the canvas would defeat its purpose.
-          It stays up during a drag: `data-editor-overlay` already stops a
-          press on it reaching the canvas, so hiding bought nothing and cost
-          a flicker on every gesture. Hidden only on an empty canvas, where
-          an overview of nothing is chrome with no job. */}
-          {/* What the board's colour MEANS, as the layout attached it to the
-          scene (ADR-0040 decision 6). Screen space like the minimap; the keyed
-          projection omits its SVG twin, so the corner is drawn once. */}
-          {scene?.legend !== undefined && <LegendOverlay legend={scene.legend} />}
-          {boxes.length > 0 && rootSize.width >= MINIMAP_MIN_ROOT_WIDTH_PX && (
-            <MinimapOverlay
-              boxes={minimapNodes}
-              viewportRect={{
-                x: viewport.x,
-                y: viewport.y,
-                width: rootSize.width / viewport.zoom,
-                height: rootSize.height / viewport.zoom,
-              }}
-              width={MINIMAP_WIDTH_PX}
-              height={MINIMAP_HEIGHT_PX}
-              onNavigate={(point: { x: number; y: number }) =>
-                setViewport((vp) => ({
-                  ...vp,
-                  x: point.x - rootSize.width / vp.zoom / 2,
-                  y: point.y - rootSize.height / vp.zoom / 2,
-                }))
-              }
-            />
-          )}
-          {longPressPulse !== null && (
-            // The moment the long-press commits: one expanding ring at the
-            // pressed point. Haptics are best-effort at most (see
-            // haptics.ts), so this is the feedback channel that always works;
-            // removed on its own animationend (the reduced-motion floor
-            // shortens, never cancels, so cleanup still fires).
-            //
-            // OUTSIDE the pan/zoom transform, unlike the canvas-space
-            // overlays: the coordinates are root-local screen px, and a
-            // fixed-size feedback ring must not scale with zoom.
-            <div
-              data-testid="long-press-pulse"
-              aria-hidden="true"
-              className="long-press-pulse"
-              style={{ left: longPressPulse.x, top: longPressPulse.y }}
-              onAnimationEnd={() => setLongPressPulse(null)}
-            />
-          )}
-          {/* The OOUI creation surface: every canvas is empty until a node
-          exists and double-click-empty-space has no visible cue, so the
-          palette is the always-visible, keyboard-reachable way in. Fixed to
-          the bottom edge outside the pan/zoom transform. */}
-          {pendingCut !== null && (
-            <PendingCutChip
-              count={pendingCut.snapshot.size}
-              coarse={hasCoarsePointer()}
-              onCancel={() => setPendingCut(null)}
-            />
-          )}
-          <ToolPalette
-            // The dock does NOT change with the mode. Navigation belongs to the
-            // viewport, not to whichever tool is armed, so nothing is exchanged
-            // for entering hand mode — the host's history cluster stays put and
-            // the one view control (zoom to fit) is always in the same place.
-            leading={paletteLeading}
-            onZoomToFit={frameContent}
-            onCreateNode={createNodeAtViewportCenter}
-            onCreateLink={() => setLinkDialog({ mode: 'create' })}
-            onCreateGroup={createGroupAtViewportCenter}
-            onCreateDocumentRef={
-              fileRefOptions === undefined ? undefined : () => setDocumentPicker({ mode: 'create' })
-            }
-            onCreateImage={
-              onAddImage === undefined
-                ? undefined
-                : () => {
-                    pendingImagePointRef.current = null
-                    imageInputRef.current?.click()
-                  }
-            }
-            tool={tool}
-            onToolChange={(next) => {
-              setTool(next)
-              toolChosenByUserRef.current = true
-              // A stated preference outranks the canvas-shape guess on the
-              // next open in this tab.
-              writeLastTool(next)
-              // A context menu is an edit affordance of the mode it was
-              // opened in — switching tools (especially into view-only hand
-              // mode) must not leave it floating.
-              setContextMenu(null)
-              // Entering hand mode drops EVERY edit affordance, not just the
-              // menu: a surviving selection would keep Delete/resize/connect
-              // handles live, an open editor would keep accepting text, and
-              // an armed connect could still complete — all edits in a mode
-              // whose contract is "no press can change the canvas". The
-              // in-flight gesture is cancelled like Escape (uncommitted text
-              // is discarded, not committed).
-              if (next === 'hand') {
-                if (gestureState.kind !== 'idle') {
-                  applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
-                }
-                applySelection({ type: 'clear' })
-                setSelectedEdgeId(null)
-                setEdgeLabelEditId(null)
-                setGroupLabelEditId(null)
-                setMarquee(null)
-              }
-            }}
-          />
-          {onAddImage !== undefined && (
-            <input
-              ref={imageInputRef}
-              data-editor-overlay
-              data-testid="image-file-input"
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                e.target.value = ''
-                if (file === undefined) return
-                const backgroundGroupId = pendingBackgroundGroupIdRef.current
-                pendingBackgroundGroupIdRef.current = null
-                if (backgroundGroupId !== null) {
-                  if (onAddImage === undefined || !file.type.startsWith('image/')) return
-                  void onAddImage(file).then((ref) => {
-                    if (ref !== undefined) {
-                      applyResult({
-                        state: { kind: 'idle' },
-                        commands: [
-                          { kind: 'set-group-background', id: backgroundGroupId, background: ref },
-                        ],
-                      })
-                    }
-                  })
-                  return
-                }
-                addImageFile(file, pendingImagePointRef.current ?? undefined)
-                pendingImagePointRef.current = null
-              }}
-            />
-          )}
-          {contextMenu !== null && (
-            <CanvasContextMenu
-              commands={{
-                applyResult,
-                applyBoxMoves,
-                copySelection,
-                cutSelection,
-                pasteClipboard,
-                duplicateSelection,
-                reorderSelection,
-                groupSelection,
-                createNodeAt,
-                createGroupAtViewportCenter,
-                openLinkNode,
-                onOpenFileRef,
-                onAddImage,
-                onToggleNodeLock,
-                onToggleEdgeLock,
-                setEdgeLabelEditId,
-                setGroupLabelEditId,
-                setSelectedEdgeId,
-                setLinkDialog,
-                setDocumentPicker,
-                setFacetPanelOpen,
-                setCommentCompose,
-                showResolvedComments,
-                setShowResolvedComments,
-              }}
-              contextMenu={contextMenu}
-              setContextMenu={setContextMenu}
-              canvas={canvas}
-              canvasRef={canvasRef}
-              theme={theme}
-              gestureState={gestureState}
-              isEdgeLocked={isEdgeLocked}
-              fileRefOptions={fileRefOptions}
-              pendingImagePointRef={pendingImagePointRef}
-              imageInputRef={imageInputRef}
-              pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
-              isLocked={isLocked}
-              extraIds={extraIds}
-              selectedId={selectedId}
-              selectedInkIds={selectedInkIds}
-              createId={createId ?? defaultCreateId}
-              isImageFileRef={isImageFileRef}
-              missingFileRef={missingFileRef}
-            />
-          )}
-          {canvasPicker !== null &&
-            fileRefOptions !== undefined &&
-            // A retarget edits ONE node, so it may not outlive it: an undo,
-            // an import or a peer's delete can take the node while the
-            // dialog is open, and `set-node-file` for a node that is gone
-            // is a no-op the user cannot see. Resolved in the render like
-            // the two label editors below rather than cleared by an effect
-            // — a gate the dialog cannot render without passing is one no
-            // future canvas-changing path can forget.
-            (canvasPicker.mode === 'create' ||
-              canvas.nodes.some((node) => node.id === canvasPicker.nodeId)) && (
-              <DocumentPickerDialog
-                title={
-                  canvasPicker.mode === 'create'
-                    ? `Add ${CREATION_LABELS.document}`
-                    : 'Change target'
-                }
-                options={fileRefOptions}
-                currentFile={
-                  canvasPicker.mode === 'retarget'
-                    ? (() => {
-                        const target = canvas.nodes.find((n) => n.id === canvasPicker.nodeId)
-                        return target === undefined ? undefined : nodeFile(target)
-                      })()
-                    : undefined
-                }
-                onPick={(file) => {
-                  if (canvasPicker.mode === 'create') {
-                    createFileRefAtViewportCenter(file, canvasPicker.point)
-                  } else {
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [{ kind: 'set-node-file', id: canvasPicker.nodeId, file }],
-                    })
-                  }
-                  setDocumentPicker(null)
-                }}
-                onCancel={() => setDocumentPicker(null)}
-              />
-            )}
-          {linkDialog !== null &&
-            // Same rule as the picker above: an Edit URL that outlived its
-            // link shows an empty field and writes nothing on OK.
-            (linkDialog.mode === 'create' ||
-              canvas.nodes.some((node) => node.id === linkDialog.nodeId)) && (
-              <LinkUrlDialog
-                title={linkDialog.mode === 'create' ? `Add ${CREATION_LABELS.link}` : 'Edit URL'}
-                initialUrl={
-                  linkDialog.mode === 'edit'
-                    ? (() => {
-                        const target = canvas.nodes.find((n) => n.id === linkDialog.nodeId)
-                        return target === undefined ? undefined : nodeUrl(target)
-                      })()
-                    : undefined
-                }
-                onSubmit={(url) => {
-                  if (linkDialog.mode === 'create') {
-                    createLinkAtViewportCenter(url, linkDialog.point)
-                  } else {
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [{ kind: 'set-node-url', id: linkDialog.nodeId, url }],
-                    })
-                  }
-                  setLinkDialog(null)
-                }}
-                onCancel={() => setLinkDialog(null)}
-              />
-            )}
-          <div
-            data-testid="viewport-transform"
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              transform: viewportTransformCss(viewport),
-              transformOrigin: '0 0',
-              // canvas-render's layoutMdastBlocks assigns no appearance to
-              // markdown body text runs (they carry no `fill` attribute at
-              // all), so they inherit it from whichever ancestor sets one —
-              // the seam that keeps body text visible on the dark canvas
-              // surface without editing canvas-render itself. It sits on the
-              // shared ancestor of EVERY canvas-space layer rather than on
-              // the committed one, because the live drag layers host the same
-              // markup: set on the committed layer alone, a dragged node's
-              // body text fell back to the UA default black and read as
-              // vanishing for the length of the gesture. Any element that DOES
-              // carry its own `fill` presentation attribute is unaffected
-              // (presentation attributes win over an inherited value), which
-              // is every shape the selection overlay draws.
-              fill: palette.labelFill,
-            }}
-          >
-            <div
-              data-testid="canvas-content"
-              className="canvas-surface"
-              style={{
-                position: 'absolute',
-                left: (dragStatic?.bounds ?? bounds).x,
-                top: (dragStatic?.bounds ?? bounds).y,
-              }}
-              // Mount-once keyed patching (use-keyed-svg.ts): every byte that
-              // lands in this container is still canvas-render's serializer
-              // output — the patcher only decides WHICH groups to replace —
-              // so CanvasViewer.tsx's single-producer injection reasoning
-              // carries over unchanged, and untouched groups keep their DOM
-              // nodes across commits (selection, focus, animations survive).
-              ref={canvasContentRef}
-            />
-            {liveEdges !== undefined && (
-              <div
-                data-testid="live-edges"
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  left: liveEdges.bounds.x,
-                  top: liveEdges.bounds.y,
-                  pointerEvents: 'none',
-                }}
-                // Same trusted producer as the committed scene (canvas-render's
-                // escaping serializer).
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
-                dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
-              />
-            )}
-            {liveNode !== undefined && (
-              <div
-                data-testid="live-node"
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  left: liveNode.bounds.x,
-                  top: liveNode.bounds.y,
-                  pointerEvents: 'none',
-                }}
-                // Same trusted producer as the committed scene (canvas-render's
-                // escaping serializer).
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
-                dangerouslySetInnerHTML={{ __html: liveNode.svg }}
-              />
-            )}
-            {/* Editor-only iframe embeds for link nodes (never in exports).
-              Rides the same transform as every canvas-space overlay; the
-              LOD gate mirrors the canvas-embed thresholds. */}
-            <LinkEmbedLayer
-              canvas={canvas}
-              interactive={tool !== 'hand'}
-              shouldOffer={(node) =>
-                node.width * viewport.zoom >= EXPAND_MIN_W &&
-                node.height * viewport.zoom >= EXPAND_MIN_H
-              }
-            />
-            {marquee !== null && <MarqueeOverlay marquee={marquee} zoom={viewport.zoom} />}
-            {gestureState.kind === 'drawing' && (
-              <InkDraftLayer
-                points={gestureState.points}
-                zoom={viewport.zoom}
-                stroke={palette.edgeStroke}
-              />
-            )}
-            {snapGuides !== null && (
-              <SnapGuidesOverlay guides={snapGuides} boxes={boxes} zoom={viewport.zoom} />
-            )}
-            {/* Which nodes are in the selection. The overlay above outlines the
-            region the handles act on, which says nothing about membership —
-            outlining only the extras left the primary looking untouched, so a
-            Select All over three nodes read as though it had skipped one.
-            Hidden while a move is in flight: every member travels with the
-            ghost, so these outlines (boxes and internal-edge highlights,
-            both derived from the committed scene) would mark geometry that
-            is no longer drawn there. */}
-            {pendingCut !== null && (
-              <GhostOverlay
-                boxes={canvas.nodes.flatMap((n) =>
-                  pendingCut.snapshot.has(n.id)
-                    ? [{ id: n.id, x: n.x, y: n.y, width: n.width, height: n.height }]
-                    : [],
-                )}
-                zoom={viewport.zoom}
-              />
-            )}
-            {isMultiSelection && gestureState.kind !== 'moving' && (
-              <MemberOutlinesOverlay
-                selectionMembers={selectionMembers}
-                edges={canvas.edges}
-                edgePaths={edgePaths}
-                zoom={viewport.zoom}
-              />
-            )}
-            {/* The same drawing as above in a different colour: "these boxes,
-            outlined". `edges` is empty on purpose — an agent reports the
-            edges it touched, but an edge outline is far less legible than a
-            box one and the nodes are what actually moved. Add it if edge-only
-            batches turn out to be a real case. */}
-            {agentTouchedNodeIds !== undefined && agentTouchedNodeIds.size > 0 && (
-              <MemberOutlinesOverlay
-                testId="agent-touch-outlines"
-                stroke="var(--accent-foreground)"
-                selectionMembers={boxes.filter((entry) => agentTouchedNodeIds.has(entry.id))}
-                edges={[]}
-                edgePaths={[]}
-                zoom={viewport.zoom}
-              />
-            )}
-            {selection !== undefined && selectionBox !== undefined && (
-              <SelectionOverlay
-                // Keyed by TARGET: a new selection remounts the overlay and
-                // replays the outline's draw-once; dragging or resizing the
-                // same node keeps the element and stays still.
-                key={selection.id}
-                box={selectionBox}
-                zoom={viewport.zoom}
-                onHandlePointerDown={(handle, _handleBox, e) => {
-                  const root = beginOverlayGesture(e)
-                  if (root === null) return
-                  const point = screenToCanvas(clientPointToRootLocal(e, root), viewport)
-                  applyResult(
-                    reduceGesture(gestureState, canvas, {
-                      type: 'pointerdown-handle',
-                      nodeId: selection.id,
-                      handle,
-                      point,
-                      // The resize anchor is the box the HANDLES surround, not
-                      // the handle's own tiny hit-box `_handleBox` describes —
-                      // using the handle box here would seed
-                      // `reducePointerUpResizing`'s anchor-preserving math from
-                      // an 8px square instead, growing/shrinking from the wrong
-                      // origin.
-                      box: selectionBox,
-                      // Omitted for a lone node, which keeps the original
-                      // single-command path — including its collapse-to-zero
-                      // behavior, which group members deliberately do not share.
-                      ...(isMultiSelection ? { members: selectionMembers } : {}),
-                    }),
-                  )
-                }}
-                // Connecting and editing act on ONE node; from handles that
-                // surround a group they would claim to apply to all of them.
-                onConnectPointerDown={
-                  isMultiSelection
-                    ? undefined
-                    : (e) => {
-                        if (beginOverlayGesture(e) === null) return
-                        applyResult(
-                          reduceGesture(gestureState, canvas, {
-                            type: 'pointerdown-connect',
-                            nodeId: selection.id,
-                          }),
-                        )
-                      }
-                }
-                onHandleKeyDown={handleResizeHandleKeyDown}
-                onConnectKeyDown={handleConnectKeyDown}
-                // The ⋯ opens the SAME menu right-click does, for the same
-                // target — one catalog, now with a visible doorway. Offered
-                // for every selection (multi included: align/distribute were
-                // the least discoverable actions of all).
-                // Only a single text node has a body to open, and only when the
-                // host has a surface to open it on.
-                onOpenInEditor={
-                  onOpenInEditor !== undefined &&
-                  !isMultiSelection &&
-                  selectedNode !== undefined &&
-                  nodeKind(selectedNode) === 'text'
-                    ? () => onOpenInEditor(selectedNode.id, nodeText(selectedNode) ?? '')
-                    : undefined
-                }
-                onMoreActions={(anchor) => {
-                  const screen = canvasToScreen(anchor, viewport)
-                  setContextMenu({
-                    x: screen.x,
-                    y: screen.y,
-                    nodeId: selection.id,
-                    edgeId: undefined,
-                    point: anchor,
-                    // The ⋯ vessel follows the editor's width, decided at open
-                    // time (the menu is transient): below the minimap
-                    // breakpoint the popover becomes a bottom sheet — keyed
-                    // off the CONTAINER for the same reason the minimap is.
-                    variant: rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'grid',
-                  })
-                }}
-              />
-            )}
-            {/* In-flight gesture preview. Drawn from component-local pointer
-            state above the committed SVG, so the expensive
-            layout+stringify+innerHTML path runs once per gesture (at
-            pointerup) instead of once per frame. */}
-            {dragPreview !== undefined && (
-              <DragPreviewLayer
-                preview={dragPreview}
-                zoom={viewport.zoom}
-                contentSvg={dragContentSvg}
-              />
-            )}
-            {/* Rendered for the WHOLE drag, not only once a live point
-                exists. The committed copy leaves the surface the moment the
-                drag starts (`surfaceKeyed` above), so gating the preview on
-                `live` left the comment in neither place until the first
-                pointermove — it vanished. Worst on touch, where a long-press
-                starts the drag and a finger held still sends no move. Before
-                the pointer travels the delta is zero, which draws the preview
-                exactly over the anchor it was pressed at. */}
-            {commentDrag !== null && (
-              <CommentDragLayer
-                comment={commentDrag.comment}
-                delta={{
-                  x: (commentDrag.live?.x ?? commentDrag.startPoint.x) - commentDrag.startPoint.x,
-                  y: (commentDrag.live?.y ?? commentDrag.startPoint.y) - commentDrag.startPoint.y,
-                }}
-                measure={resolvedMeasure}
-                theme={theme}
-                obstacles={commentDrag.obstacles}
-              />
-            )}
-            {selectedInkIds.length > 0 && (
-              <EdgeSelectionHighlight
-                selectedEdgeIds={selectedInkIds}
-                edgePaths={edgePaths}
-                // The live half of the ink drag: the committed strokes stay
-                // where they are and their outlines travel, which is the
-                // same bargain the node drag makes with its ghost box. A
-                // full re-layout per frame is what the preview overlay
-                // exists to avoid (see `drag-preview.ts`'s header).
-                offset={
-                  gestureState.kind === 'moving-ink'
-                    ? {
-                        x: (livePoint?.x ?? gestureState.startPoint.x) - gestureState.startPoint.x,
-                        y: (livePoint?.y ?? gestureState.startPoint.y) - gestureState.startPoint.y,
-                      }
-                    : undefined
-                }
-              />
-            )}
-            {selectedRoutable !== undefined && (
-              <EdgeEndHandles
-                path={edgePathOf(selectedRoutable.id) ?? []}
-                zoom={viewport.zoom}
-                onArm={(endpoint, event) => {
-                  if (event !== undefined) beginOverlayGesture(event)
-                  applyResult(
-                    reduceGesture(gestureState, canvas, {
-                      type: 'pointerdown-end',
-                      elementId: selectedRoutable.id,
-                      endpoint,
-                    }),
-                  )
-                }}
-              />
-            )}
-            {selectedRoutable !== undefined && (
-              <EdgeBendLayer
-                edge={selectedRoutable}
-                path={edgePathOf(selectedRoutable.id) ?? []}
-                viewport={viewport}
-                begin={beginOverlayGesture}
-                dispatch={(event) => applyResult(reduceGesture(gestureState, canvas, event))}
-              />
-            )}
-            {(gestureState.kind === 'connecting' || gestureState.kind === 'reattaching') && (
-              <BoxTargetOverlay
-                gestureState={gestureState}
-                sourceNodeId={
-                  gestureState.kind === 'connecting'
-                    ? gestureState.fromNodeId
-                    : // The box the OTHER end is on, which this end may not
-                      // land on either: the write refuses a self-loop, so
-                      // offering it as a target would offer a no-op.
-                      otherEndNodeOf(canvas, gestureState.elementId, gestureState.endpoint)
-                }
-                hoveredNodeId={livePoint === null ? undefined : hitTest(selectableBoxes, livePoint)}
-                canvas={canvas}
-                boxes={boxes}
-                selectableBoxes={selectableBoxes}
-                createId={createId}
-                applyResult={applyResult}
-              />
-            )}
-            {edgeLabelEditId !== null && (
-              <EdgeLabelEditorOverlay
-                editId={edgeLabelEditId}
-                canvas={canvas}
-                fontFamily={editingFontFamily}
-                edgePaths={edgePaths}
-                zoom={viewport.zoom}
-                palette={palette}
-                applyResult={applyResult}
-                onClose={() => setEdgeLabelEditId(null)}
-              />
-            )}
-            {groupLabelEditId !== null && (
-              <GroupLabelEditorOverlay
-                editId={groupLabelEditId}
-                canvas={canvas}
-                fontFamily={editingFontFamily}
-                zoom={viewport.zoom}
-                palette={palette}
-                applyResult={applyResult}
-                onClose={() => setGroupLabelEditId(null)}
-              />
-            )}
-            {commentCompose !== null && (
-              <CommentComposeOverlay
-                compose={commentCompose}
-                canvas={canvas}
-                edgePathOf={edgePathOf}
-                obstacles={commentPlacementObstacles()}
-                createId={createId}
-                zoom={viewport.zoom}
-                palette={palette}
-                applyResult={applyResult}
-                onClose={() => setCommentCompose(null)}
-              />
-            )}
-            {gestureState.kind === 'editing-text' &&
-              selectedNode !== undefined &&
-              nodeKind(selectedNode) === 'text' &&
-              selection !== undefined && (
-                <MarkdownBodyEditorOverlay
-                  node={selectedNode}
-                  fontFamily={editingFontFamily}
-                  selectionBox={selection.box}
-                  sceneNodes={scene.nodes}
-                  sceneCurrent={sceneCurrent}
-                  threads={threads}
-                  onRequestComment={(anchor) => {
-                    setCommentCompose({
-                      point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
-                      targetNodeId: selectedNode.id,
-                      threadAnchor: { ...anchor, nodeId: selectedNode.id },
-                    })
-                    return true
-                  }}
-                  zoom={viewport.zoom}
-                  theme={theme}
-                  palette={palette}
-                  canvas={canvas}
-                  gestureState={gestureState}
-                  applyResult={applyResult}
-                />
-              )}
-          </div>
+          {screenSpaceOverlays()}
+          {canvasSpaceLayers()}
         </div>
-        {facetPanelOpen &&
-          (() => {
-            // The panel is ABOUT whatever is selected. An edge selection wins
-            // over a node one because selecting an edge clears the node
-            // selection, so the two are never both live.
-            const edgeTarget =
-              selectedEdgeId === null
-                ? undefined
-                : canvas.edges.find((entry) => entry.id === selectedEdgeId)
-            const target = canvas.nodes.find((entry) => entry.id === selectedId)
-            // Nothing selected: there is nothing for the inspector to be
-            // about. It closes rather than standing there saying so — the
-            // same thing a press on blank canvas does to the context menu,
-            // which is the semantic this matches. The flag is cleared during
-            // render just above, so re-opening it later is an ordinary open
-            // rather than a stuck true.
-            if (edgeTarget === undefined && target === undefined) return null
-            return (
-              <FacetFormPanel
-                subject={
-                  edgeTarget !== undefined
-                    ? { kind: 'edge', edge: edgeTarget }
-                    : { kind: 'node', node: target as SpatialNode }
-                }
-                registry={bundledFacetRegistry}
-                // What the board already wrote into free-entry fields, so a
-                // second classification is a pick. Recomputed per render
-                // while the panel is open: one pass over the nodes' facets.
-                suggestions={collectFieldSuggestions(canvas.nodes, bundledFacetRegistry)}
-                tagSuggestions={[...collectCanvasTags(canvas), ...(tagSuggestions ?? [])]}
-                {...(tagLibrary === undefined ? {} : { tagLibrary })}
-                variant={inspectorIsSheet ? 'sheet' : 'dock'}
-                onTagsChange={(after) => {
-                  // Every write is the CHANGE the row showed being made,
-                  // applied to the object's tags as the eager chain holds
-                  // them (`canvasRef.current`), never the shown list copied
-                  // over: under a slow parent the row still shows the list
-                  // before the previous commit landed, and on a selection
-                  // of five the four other boxes carry tags of their own.
-                  if (edgeTarget !== undefined) {
-                    const current = canvasRef.current.edges.find((e) => e.id === edgeTarget.id)
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        {
-                          kind: 'set-edge-tags' as const,
-                          id: edgeTarget.id,
-                          tags: retag(current?.tags, edgeTarget.tags ?? [], after),
-                        },
-                      ],
-                    })
-                    return
-                  }
-                  const before = target?.tags ?? []
-                  applyResult({
-                    state: { kind: 'idle' },
-                    commands: writeReachesIds(target, selectedId, extraIds).flatMap((id) => {
-                      const node = canvasRef.current.nodes.find((entry) => entry.id === id)
-                      return node === undefined
-                        ? []
-                        : [
-                            {
-                              kind: 'set-node-tags' as const,
-                              id,
-                              tags: retag(node.tags, before, after),
-                            },
-                          ]
-                    }),
-                  })
-                }}
-                onWrite={(key, payload) => {
-                  if (edgeTarget !== undefined) {
-                    // One edge, because an edge selection is one edge —
-                    // there is no multi-edge selection to fan out over.
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        { kind: 'set-edge-facet' as const, id: edgeTarget.id, key, payload },
-                      ],
-                    })
-                    return
-                  }
-                  // Applies to the whole selection, the semantics the menu
-                  // bands had: reshaping five selected nodes must not become
-                  // five visits to this panel.
-                  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
-                  const ids =
-                    target !== undefined && members.has(target.id)
-                      ? [...members]
-                      : target === undefined
-                        ? []
-                        : [target.id]
-                  applyResult({
-                    state: { kind: 'idle' },
-                    commands: ids.map((id) => ({
-                      kind: 'set-node-facet' as const,
-                      id,
-                      key,
-                      payload,
-                    })),
-                  })
-                }}
-              />
-            )
-          })()}
+        {facetPanelOpen && facetPanelSlot()}
       </div>
     )
   },

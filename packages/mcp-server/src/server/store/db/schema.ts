@@ -119,23 +119,32 @@ interface LeasesTable {
   expiresAt: Timestamp
 }
 
-// ADR-0041's L1 subject: a person, identified by the passkey credentials the
-// daemon has already pinned. No key material — a credential id is only a
-// public handle (decision 1).
+// ADR-0041's L1 subject and ADR-0045's USER: who a person is inside one
+// tenant. `accountId` names the keeper-wide account that signs in as them;
+// at most one user per account per tenant. No key material (ADR-0041
+// decision 1).
 interface MemberProfilesTable {
   id: string
   displayName: string
+  accountId: string
   createdAt: Timestamp
   updatedAt: Timestamp
 }
 
-// A pinned passkey belongs to at most one profile; (credentialId, origin)
-// mirrors the pin's own identity in webauthn-credential-store.ts. No FK to
-// memberProfiles — house style since 0016/0017.
-interface ProfileCredentialsTable {
-  credentialId: string
-  origin: string
-  profileId: string
+// ADR-0045's ACCOUNT: the keeper-wide login identity. Belongs to no tenant
+// and carries nothing a tenant reads.
+interface AccountsTable {
+  id: string
+  createdAt: Timestamp
+}
+
+// What resolves to an account: which authenticator vouched, and the subject
+// it vouched for (ADR-0045 decision 15). No FK — house style since 0016/0017.
+interface AccountBindingsTable {
+  authenticator: string
+  subject: string
+  accountId: string
+  createdAt: Timestamp
 }
 
 // L1 membership as a ROW, deliberately outside the CRDT-synced workspace
@@ -185,7 +194,8 @@ export interface DatabaseSchema {
   documentFrontiers: DocumentFrontiersTable
   leases: LeasesTable
   memberProfiles: MemberProfilesTable
-  profileCredentials: ProfileCredentialsTable
+  accounts: AccountsTable
+  accountBindings: AccountBindingsTable
   workspaceMemberships: WorkspaceMembershipsTable
   workspaceReplicaKeys: WorkspaceReplicaKeysTable
   workspaceMembersOnly: WorkspaceMembersOnlyTable

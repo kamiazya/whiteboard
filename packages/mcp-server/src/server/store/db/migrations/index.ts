@@ -30,6 +30,7 @@ import { migration as memberProfiles } from './0028-member-profiles.js'
 import { migration as workspaceReplicaKeys } from './0029-workspace-replica-keys.js'
 import { migration as workspaceMembersOnly } from './0030-workspace-members-only.js'
 import { migration as tenants } from './0031-tenants.js'
+import { migration as accounts } from './0032-accounts.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0003 still says `canvas-doc-store` after the port it creates was renamed to
@@ -71,4 +72,5 @@ export const migrations: Record<string, Migration> = {
   '0029-workspace-replica-keys': workspaceReplicaKeys,
   '0030-workspace-members-only': workspaceMembersOnly,
   '0031-tenants': tenants,
+  '0032-accounts': accounts,
 }

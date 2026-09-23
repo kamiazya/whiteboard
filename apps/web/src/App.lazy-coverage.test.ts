@@ -7,8 +7,10 @@
 // the fourth lazy page after a comment in App.test.tsx had already enumerated
 // "the other three", and it flaked in CI while passing in isolation for months.
 //
-// A count in a comment goes stale. This does not: it reads both files and
-// fails when App gains a lazy page that App.test.tsx neither mocks nor imports.
+// A count in a comment goes stale. This does not: it reads App, the screens
+// it dispatches to, and the test, and fails when a lazy page appears that
+// App.test.tsx neither mocks nor imports. Both source files, because a page
+// moving between them must not fall out of coverage on the way.
 // Source is captured at build time via `?raw` rather than read at runtime, so
 // this stays free of `node:fs` — apps/web is browser-only (see
 // web-app-boundary.test.ts).
@@ -16,8 +18,9 @@
 import { describe, expect, it } from 'vitest'
 import testSource from './App.test.tsx?raw'
 import appSource from './App.tsx?raw'
+import screensSource from './app-screens.tsx?raw'
 
-/** Every module path App hands to `lazy(() => import('...'))`. */
+/** Every module path App's own files hand to `lazy(() => import('...'))`. */
 const lazyImports = (source: string): string[] =>
   [...source.matchAll(/lazy\(\s*\(\)\s*=>\s*\n?\s*import\(\s*'([^']+)'/g)].map(
     (m) => m[1] as string,
@@ -25,7 +28,7 @@ const lazyImports = (source: string): string[] =>
 
 describe('every page App lazy-loads is covered by App.test.tsx', () => {
   it('is either vi.mock ed or statically imported, so lazy() settles in a microtask', () => {
-    const pages = lazyImports(appSource)
+    const pages = [...lazyImports(appSource), ...lazyImports(screensSource)]
     // A regex that silently matched nothing would make this guard vacuous.
     expect(pages.length).toBeGreaterThan(3)
 

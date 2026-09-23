@@ -161,7 +161,18 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 69,
-  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 578,
+  // Lowered 578 -> 311: the thread row moved to `thread-row.tsx`.
+  'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 311,
+  // The row the panel's list is made of, split three ways: the row and its
+  // verbs, the open conversation, and the messages inside it. Each is a
+  // block of JSX rather than a branch — the shape a size budget cannot tell
+  // from logic and a complexity budget can, and all three are now UNDER the
+  // complexity threshold, which is what this increment was for. Splitting
+  // further would cut a single visual unit in half without a reader gaining
+  // anything.
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 155,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 57,
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 92,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 165,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
@@ -250,6 +261,26 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 160,
   'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 319,
   'apps/web/src/components/spatial-editor/SnapGuidesOverlay.tsx#SnapGuidesOverlay': 76,
+  // The editor's JSX, cut into the layers it always had: canvas space under
+  // the pan/zoom transform, screen space above it, the chrome you press, the
+  // dialogs that chrome opens, and what is drawn about the selection. Each
+  // is a block of JSX rather than a branch — the shape a size budget cannot
+  // tell from logic and a complexity budget can — and all eight are now
+  // UNDER the complexity threshold, which is what this increment was for.
+  //
+  // FUNCTIONS rather than components, and rather than a sibling module: each
+  // layer reads this render's live gesture state, so a component would thread
+  // roughly forty values through props — a wider seam, in the app's most
+  // stateful surface, for no reader benefit. The tree they build is exactly
+  // the tree the inline JSX built.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasSpaceLayers': 139,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#selectionOverlay': 84,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#routableHandles': 67,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#inPlaceEditors': 67,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 119,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#facetPanelSlot': 99,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#runNavigation': 55,
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 91,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
@@ -723,7 +754,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/workspace-index/src/document-store-workspace-docs.ts#save': 99,
   'packages/workspace-index/src/loro-workspace-document-index.ts#deleteDocument': 53,
   'tools/arch-lint/src/scanner.ts#collectModuleSpecifiers': 61,
-  'tools/arch-lint/src/source-scan.ts#stripCommentsAndStrings': 54,
 }
 
 /**

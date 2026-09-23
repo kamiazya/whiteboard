@@ -18,16 +18,17 @@ const TENANT_SCOPE = {
   documentSnapshotChunks: 'tenant',
   documentDeltas: 'tenant',
   documentFrontiers: 'tenant',
-  // A User is who a person is INSIDE one tenant; the keeper-wide Account a
-  // passkey authenticates is a later layer above it and does not change this.
+  // A User is who a person is INSIDE one tenant (ADR-0045).
   memberProfiles: 'tenant',
-  profileCredentials: 'tenant',
   workspaceMemberships: 'tenant',
   workspaceReplicaKeys: 'tenant',
   workspaceMembersOnly: 'tenant',
   leases: 'keeper-wide: leader election between instances of one keeper, about the process',
   runtime: 'keeper-wide: the local daemon’s own settings, such as its current workspace',
   tenants: 'keeper-wide: the list of tenants itself',
+  accounts:
+    'keeper-wide: an account is who signs in, and belongs to no tenant (ADR-0045); the user row in each tenant names it, never the reverse',
+  accountBindings: 'keeper-wide: what an authenticator vouched for, resolving to an account',
 } as const satisfies Record<keyof DatabaseSchema, TenantScope>
 
 type TenantScopedTable = {
