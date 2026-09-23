@@ -22,6 +22,7 @@ const TENANT_SCOPE = {
   memberProfiles: 'tenant',
   invitations: 'tenant',
   signInSessions: 'tenant',
+  signInAttempts: 'tenant',
   workspaceMemberships: 'tenant',
   workspaceReplicaKeys: 'tenant',
   workspaceMembersOnly: 'tenant',

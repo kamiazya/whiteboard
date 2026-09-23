@@ -19,7 +19,11 @@ import { getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
+import type { SignInRoutesDeps } from './routes/sign-in.js'
+import { createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
+import { createRelyingParty, type ResolvedProvider } from './security/oidc-relying-party.js'
+import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
@@ -43,7 +47,15 @@ export interface StartServerModeHttpOptions {
    *  factory so a wiring test can assert the sweeper is armed and stopped
    *  without running a full pass. */
   fileGcSweeperFactory?: typeof createFileGcSweeper
+  /** ADR-0046: the external providers this keeper signs people in through,
+   *  secrets already resolved. None, and no sign-in route is mounted. */
+  signInProviders?: readonly ResolvedProvider[]
 }
+
+// How long a sign-in lasts before the person signs in again. Admission is
+// re-checked at that sign-in (ADR-0046 decision 5); membership is checked on
+// every request regardless, so this bounds only how stale a REFUSAL can be.
+const SIGN_IN_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 // Caps how long close() waits for an in-flight file-gc pass. Same value and
 // same reason as the local daemon's: a full pass can be expensive, and a
@@ -84,12 +96,7 @@ export async function startServerModeHttp(
     if (closing) return
     closing = true
     await backgroundWork.stopAll()
-    await new Promise<void>((resolve, reject) => {
-      server.close((err) => {
-        if (err) reject(err)
-        else resolve()
-      })
-    })
+    await closeListener(server)
 
     // A SECOND flush, after the listener is closed and every in-flight
     // request has finished.
@@ -135,6 +142,7 @@ export async function startServerModeHttp(
     publicBaseUrl: options.publicBaseUrl,
     allowedOrigins: options.allowedOrigins,
     authStrategy: options.authStrategy,
+    ...(await signInOption(options, dataDir)),
     instanceId,
     touch: () => {},
     getStatus: () => ({
@@ -272,4 +280,27 @@ export async function startServerModeHttp(
     instanceId,
     close,
   }
+}
+
+function closeListener(server: { close(done: (err?: Error) => void): unknown }): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()))
+  })
+}
+
+// No providers configured means no `/auth/*` route at all, not an empty one.
+async function signInOption(
+  { signInProviders, publicBaseUrl }: StartServerModeHttpOptions,
+  dataDir: string,
+): Promise<{ signIn?: SignInRoutesDeps }> {
+  if (signInProviders === undefined || signInProviders.length === 0) return {}
+  const db = await getDb(dataDir)
+  const signIn: SignInRoutesDeps = {
+    providers: signInProviders,
+    rp: createRelyingParty(),
+    attempts: createSignInAttemptStore(db),
+    signIn: createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS),
+    publicBaseUrl,
+  }
+  return { signIn }
 }
