@@ -2056,12 +2056,19 @@ class ClipboardFlow implements fc.Command<Model, Real> {
     return true
   }
   run(model: Model, real: Real): void {
-    // For `cutDelete` prefer a node that HAS an edge: the reconnection is
-    // about the severed boundary, and cutting a lone node exercises none
-    // of it. Falls back to any node, so the arm still runs on documents
-    // where nothing is connected.
+    // For both RECONNECTING modes prefer a node that HAS an edge: the
+    // reconnection is about the severed boundary, and cutting a lone node
+    // exercises none of it. Falls back to any node, so each arm still runs
+    // on documents where nothing is connected.
+    //
+    // `cutTouch` was drawing from `pick`, which is why weighting the two
+    // modes up moved `reconnections` by one and no more: the arm ran more
+    // often and still landed on unconnected nodes at the same rate. The
+    // small term in the chain was the NODE, not the mode.
     const node =
-      this.mode === 'cutDelete' ? pickConnected(real, this.index) : pick(real, this.index)
+      this.mode === 'cutDelete' || this.mode === 'cutTouch'
+        ? pickConnected(real, this.index)
+        : pick(real, this.index)
     if (node === undefined) return
     pressNode(real, node.id, { x: node.x, y: node.y }, this.toString())
     releasePointer(real, { x: node.x, y: node.y }, null, `${this.toString()}:up`)
@@ -2337,14 +2344,26 @@ const allCommands = [
       fc.boolean(),
     )
     .map(([i, keep, external]) => new PressThenReplace(i, keep, external)),
+  // Weighted toward the STEP placements, which are the only two that can
+  // move `stepReordersEffective`: `front`/`back` on a node already there
+  // change nothing, so half the uniform draw could not reach the counter at
+  // all. Both still draw often enough for the shortcut ledger, which tallies
+  // the key press rather than the effect.
   fc
     .tuple(
       indexArb,
-      fc.constantFrom<'forward' | 'backward' | 'front' | 'back'>(
-        'forward',
-        'backward',
-        'front',
-        'back',
+      fc.oneof(
+        {
+          arbitrary: fc.constantFrom<'forward' | 'backward' | 'front' | 'back'>(
+            'forward',
+            'backward',
+          ),
+          weight: 3,
+        },
+        {
+          arbitrary: fc.constantFrom<'forward' | 'backward' | 'front' | 'back'>('front', 'back'),
+          weight: 1,
+        },
       ),
     )
     .map(([i, p]) => new PressThenReorder(i, p)),
@@ -2362,14 +2381,34 @@ const allCommands = [
   fc.constant(new Copy()),
   fc.constant(new Cut()),
   fc.option(pointArb, { nil: null }).map((at) => new Paste(at)),
+  // Weighted toward the two RECONNECTING modes. `reconnections` is the end
+  // of a chain — a cut, then a paste that resolves as an insert, then a
+  // severed boundary to rewire — and a chain's probability is a product, so
+  // a modest dip in any link collapses it while its neighbours stay in
+  // range. That is exactly what the census showed on the three runs that
+  // failed this floor. `copy` and `cut` lose nothing by being drawn less
+  // often here: both are reachable on their own through the standalone
+  // `Copy`/`Cut`/`Paste` arms above, which is where `copies`, `cuts` and
+  // `cutMoves` get most of their count.
   fc
     .tuple(
       indexArb,
-      fc.constantFrom<'copy' | 'cut' | 'cutDelete' | 'cutTouch'>(
-        'copy',
-        'cut',
-        'cutDelete',
-        'cutTouch',
+      fc.oneof(
+        {
+          arbitrary: fc.constantFrom<'copy' | 'cut' | 'cutDelete' | 'cutTouch'>(
+            'cutDelete',
+            'cutTouch',
+          ),
+          weight: 4,
+        },
+        // `cut` keeps its own arm and its original share. It is the only
+        // route to the same-canvas MOVE branch, and a first attempt that
+        // took its weight along with `copy`'s put `cutMoves` UNDER its floor
+        // — a densification that fixed two counters by breaking a third,
+        // visible only because the whole census was compared rather than the
+        // two being aimed at.
+        { arbitrary: fc.constant<'copy' | 'cut' | 'cutDelete' | 'cutTouch'>('cut'), weight: 2 },
+        { arbitrary: fc.constant<'copy' | 'cut' | 'cutDelete' | 'cutTouch'>('copy'), weight: 1 },
       ),
       fc.option(pointArb, { nil: null }),
     )
@@ -2535,6 +2574,30 @@ describe('editor composite state (command-based)', () => {
     // that did less work, or this conjunction alone being unlucky — and
     // the census printed on failure is what will settle it the next time
     // one fires, without another thirty runs.
+    //
+    // 2026-09-23. A third failure carried the whole census, which settled
+    // it: the run did MORE work, not less (`moveCommits`, `multiSelections`
+    // at or above their ranges) while a CHAIN was low — `cuts` in range,
+    // `pasteInserts` below it, `reconnections` at 1. A chain's probability
+    // is a product, so `numRuns` buys margin on it only linearly and is the
+    // wrong lever. Two densifications instead, measured over 20 baseline
+    // runs against 60 after (minimum, and median where it differs):
+    //
+    //   stepReordersEffective   8 -> 16   (floor 5)
+    //   reconnections           5 ->  3,  median 8 -> 10
+    //   cutMoves               10 ->  9   (floor 4)
+    //   pasteInserts           32 -> 22   (floor 12)
+    //
+    // `stepReordersEffective` is decided: 60 runs never went below 16 where
+    // 20 baseline runs reached 8. `reconnections` moved its CENTRE up and
+    // its single worst draw down, which is what 3x the sampling does on its
+    // own — so the tail is not claimed to have improved, only the mass.
+    //
+    // The first attempt took the weight for both reconnecting modes out of
+    // `copy` AND `cut`, and put `cutMoves` under its floor: `cut` is the
+    // only route to the same-canvas MOVE branch. Visible only because the
+    // WHOLE census was compared rather than the two counters being aimed
+    // at, which is the habit rather than the anecdote.
     //
     // Re-measure when adding a command, widening the document generator,
     // or making the model MORE faithful, because all three dilute every
