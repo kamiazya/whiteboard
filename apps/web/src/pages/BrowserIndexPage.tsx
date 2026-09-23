@@ -129,30 +129,54 @@ function reofferFailures(
   }
 }
 
-export function BrowserIndexPage({
-  // Safe as a parameter default (unlike the clocks below): the shared
-  // accessor memoizes, so every render sees the same identity. The concrete
-  // index lives behind this lazy page, not in App, to keep loro-crdt off the
-  // entry chunk (entry-graph-loro-free.test.ts).
-  index = sharedFoldingBrowserIndex(),
-  loro = defaultLoroStore,
-  pointer = defaultPointer,
-  clock = defaultClock,
-  onOpenDocument,
-  revision,
-}: BrowserIndexPageProps) {
-  const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
-  // Consulted only for the onboarding decision below: a workspace whose list
-  // is empty but whose trash is not must keep the PANEL, because the Trash
-  // section is the one affordance that undoes the delete that just emptied
-  // the list. Failure degrades to 0 — onboarding — never to an error.
-  const [trashCount, setTrashCount] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-  // The `disabled` attribute (via createDisabled) is the whole double-press
-  // mechanism: React flushes this state before a second click can dispatch,
-  // and a handler-side `if (creating) return` reads a stale closure in
-  // exactly the same-tick case it would have to catch.
-  const [creating, setCreating] = useState(false)
+/**
+ * What this page LISTS, and the reads that keep it current: the documents,
+ * the trash count the onboarding decision consults, the workspace's own name,
+ * and the files source the panel reads through. Held together because they
+ * re-read together — on a workspace switch, on this page's own writes, and on
+ * a Back that returns to this mount.
+ */
+/**
+ * The workspace's own display NAME. Its own chain, deliberately not folded
+ * into the documents load: a name that will not load leaves the heading on
+ * the handle, which is still true, and must not surface as "Failed to load
+ * documents from this browser."
+ */
+function useBrowserWorkspaceName(
+  index: BrowserIndexPageProps['index'] & {},
+  activeWorkspace: ReturnType<typeof browserWorkspaceIdentitySnapshot>,
+  revision: BrowserIndexPageProps['revision'],
+): string | null {
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    // Cleared BEFORE the lookup, not merely overwritten after it. On a switch
+    // this state still holds the workspace the person just left, and the
+    // `.catch` below deliberately swallows a failed read — so without this the
+    // new workspace renders under the old one's name, indefinitely and with
+    // nothing saying so. Dropping to the handle fallback for the round trip is
+    // the right trade: the handle is what the address already carries, and it
+    // is true about the workspace on screen.
+    setWorkspaceName(null)
+    Promise.resolve()
+      .then(() => index.resolveWorkspace(getBrowserWorkspaceId()))
+      .then((row) => {
+        if (!cancelled) setWorkspaceName(row === null ? null : workspaceLabel(row))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [index, activeWorkspace, revision])
+  return workspaceName
+}
+
+/** The subscribed workspace identity, and the files source scoped to it. */
+function useBrowserFilesSource(
+  index: BrowserIndexPageProps['index'] & {},
+  loro: BrowserIndexPageProps['loro'] & {},
+  clock: BrowserIndexPageProps['clock'] & {},
+) {
   // The workspace this page is listing. Subscribed, not read: ADR-0019's
   // switch is an in-SPA route change, so this page stays mounted across one,
   // and the load effect below keyed on the index and the clock — neither of
@@ -182,56 +206,46 @@ export function BrowserIndexPage({
     // on, which is the whole point of the memo.
     [index, loro, clock, activeWorkspace],
   )
-  // Deletions happen in this page's dialog, behind the panel's back — the
-  // panel re-reads whenever this identity changes, exactly as on the daemon
-  // page.
-  const [filesRevision, setFilesRevision] = useState(0)
-  // What this page calls itself. The identity the accessor publishes carries
-  // no display name (it is the ADDRESSING half), so the row has to be read —
-  // in the same effect, which already re-runs on a switch.
-  const [workspaceName, setWorkspaceName] = useState<string | null>(null)
+  return { activeWorkspace, filesSource }
+}
 
+/** The documents and the trash count, re-read on every trigger that moves them. */
+interface BrowserDocumentsLoadInput {
+  index: BrowserIndexPageProps['index'] & {}
+  clock: BrowserIndexPageProps['clock'] & {}
+  filesSource: ReturnType<typeof createLocalFilesSource>
+  activeWorkspace: ReturnType<typeof browserWorkspaceIdentitySnapshot>
+  revision: BrowserIndexPageProps['revision']
+  filesRevision: number
+  setSnapshots: (rows: DocumentSnapshot[]) => void
+  setTrashCount: (count: number) => void
+  setError: (message: string | null) => void
+}
+
+function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
   useEffect(() => {
     let cancelled = false
-    // Cleared BEFORE the lookup, not merely overwritten after it. On a switch
-    // this state still holds the workspace the person just left, and the
-    // `.catch` below deliberately swallows a failed read — so without this the
-    // new workspace renders under the old one's name, indefinitely and with
-    // nothing saying so. Dropping to the handle fallback for the round trip is
-    // the right trade: the handle is what the address already carries, and it
-    // is true about the workspace on screen.
-    setWorkspaceName(null)
     // Cleared on every re-load, not only set on failure: this effect now
     // re-runs on ordinary Backs (`revision`), so a transient failure's alert
     // would otherwise outlive the successful retry indefinitely (measured:
     // fail-once-then-succeed left the alert over a correct list).
-    setError(null)
-    // Its own chain, deliberately not folded into the documents load below: a
-    // name that will not load leaves the heading on the handle, which is still
-    // true, and must not surface as "Failed to load documents from this
-    // browser."
-    Promise.resolve()
-      .then(() => index.resolveWorkspace(getBrowserWorkspaceId()))
-      .then((row) => {
-        if (!cancelled) setWorkspaceName(row === null ? null : workspaceLabel(row))
-      })
-      .catch(() => undefined)
+    props.setError(null)
     // On a device that has never created a document there is no workspace to
     // list, and the port answers that with an error rather than an empty
     // list. Ensuring it here is what makes a first visit render the empty
     // state instead of "Failed to load documents from this browser."
-    ensureLocalWorkspace(index)
-      .then(() => listLocalDocuments(index, clock))
+    ensureLocalWorkspace(props.index)
+      .then(() => listLocalDocuments(props.index, props.clock))
       .then((all) => {
-        if (!cancelled) setSnapshots(all)
+        if (!cancelled) props.setSnapshots(all)
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load documents from this browser.')
+        if (!cancelled) props.setError('Failed to load documents from this browser.')
       })
-    filesSource
+    props.filesSource
       .listTrash?.()
       .then((rows) => {
-        if (!cancelled) setTrashCount(rows.length)
+        if (!cancelled) props.setTrashCount(rows.length)
       })
       .catch(() => undefined)
     return () => {
@@ -246,7 +260,194 @@ export function BrowserIndexPage({
     // page's OWN writes (create below, delete dialog — #1325's fix), and
     // `revision` follows the ROUTE returning here (see the prop's doc) so a
     // return re-reads even when the write was not this page's own.
-  }, [index, clock, filesSource, activeWorkspace, revision, filesRevision])
+  }, [
+    props.index,
+    props.clock,
+    props.filesSource,
+    props.activeWorkspace,
+    props.revision,
+    props.filesRevision,
+  ])
+}
+
+interface BrowserIndexListingInput {
+  index: BrowserIndexPageProps['index'] & {}
+  loro: BrowserIndexPageProps['loro'] & {}
+  clock: BrowserIndexPageProps['clock'] & {}
+  revision: BrowserIndexPageProps['revision']
+}
+
+function useBrowserIndexListing(props: BrowserIndexListingInput) {
+  const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
+  // Consulted only for the onboarding decision below: a workspace whose list
+  // is empty but whose trash is not must keep the PANEL, because the Trash
+  // section is the one affordance that undoes the delete that just emptied
+  // the list. Failure degrades to 0 — onboarding — never to an error.
+  const [trashCount, setTrashCount] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const { activeWorkspace, filesSource } = useBrowserFilesSource(
+    props.index,
+    props.loro,
+    props.clock,
+  )
+  // Deletions happen in this page's dialog, behind the panel's back — the
+  // panel re-reads whenever this identity changes, exactly as on the daemon
+  // page.
+  const [filesRevision, setFilesRevision] = useState(0)
+
+  useBrowserDocumentsLoad({
+    index: props.index,
+    clock: props.clock,
+    filesSource,
+    activeWorkspace,
+    revision: props.revision,
+    filesRevision,
+    setSnapshots,
+    setTrashCount,
+    setError,
+  })
+
+  const workspaceName = useBrowserWorkspaceName(props.index, activeWorkspace, props.revision)
+
+  return {
+    snapshots,
+    setSnapshots,
+    trashCount,
+    setTrashCount,
+    error,
+    setError,
+    workspaceName,
+    filesSource,
+    filesRevision,
+    setFilesRevision,
+    activeWorkspace,
+  }
+}
+
+/**
+ * The four states this list can be in, in the order they are decided:
+ * loading, onboarding (empty with nothing in the trash), the panel, and a
+ * failed load. A component rather than a ternary chain in the page body —
+ * each arm is a different screen, and reading which one is on is what the
+ * chain made hard.
+ */
+interface BrowserIndexBodyProps {
+  snapshots: DocumentSnapshot[] | null
+  trashCount: number
+  error: string | null
+  creating: boolean
+  filesSource: ReturnType<typeof createLocalFilesSource>
+  activeWorkspace: ReturnType<typeof browserWorkspaceIdentitySnapshot>
+  routedFolder: ReturnType<typeof useRoutedFolder>['folder']
+  setRoutedFolder: ReturnType<typeof useRoutedFolder>['setFolder']
+  onOpenDocument: BrowserIndexPageProps['onOpenDocument']
+  filesRevision: number
+  onCreate: (kind: DocumentKind) => void | Promise<void>
+  onRequestDelete: (pending: PendingDelete) => void
+}
+
+function BrowserIndexBody(props: BrowserIndexBodyProps) {
+  if (props.snapshots === null && !props.error) {
+    return (
+      <div
+        role="status"
+        aria-label="Loading documents"
+        className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
+      >
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="animate-pulse rounded-lg border p-2">
+            <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (props.snapshots !== null && props.snapshots.length === 0 && props.trashCount === 0) {
+    // The onboarding state renders INSTEAD of the panel: a three-pane browser
+    // of nothing teaches less than one sentence and one button, and this
+    // button also OPENS what it creates.
+    return (
+      <EmptyWorkspaceState
+        onCreate={(kind) => void props.onCreate(kind)}
+        disabled={props.creating}
+        subtitle="Everything stays in this browser — no account, no upload."
+      />
+    )
+  }
+  if (props.snapshots !== null) {
+    return <BrowserFilesSection {...props} />
+  }
+  // Load failed (error set, snapshots never arrived): creating does not need
+  // the list — numbering falls back to nothing and the index refuses a
+  // duplicate address, so the worst case is a refused create rather than two
+  // documents at one path.
+  return (
+    <button
+      type="button"
+      disabled={props.creating}
+      onClick={() => void props.onCreate('spatial')}
+      className="self-start rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+    >
+      Create a canvas
+    </button>
+  )
+}
+
+/** The panel itself, once the list has arrived. */
+function BrowserFilesSection(props: BrowserIndexBodyProps) {
+  return (
+    <WorkspaceFilesPanel
+      source={props.filesSource}
+      // Read from the subscribed identity rather than the address: this
+      // page stays mounted across an in-SPA workspace switch, and the
+      // identity is what moves with it.
+      workspace={
+        props.activeWorkspace === null ? undefined : workspaceHandle(props.activeWorkspace)
+      }
+      initialFolder={props.routedFolder}
+      onFolderChange={props.setRoutedFolder}
+      onOpenDocument={props.onOpenDocument}
+      onRequestDelete={(path, displayName, kind) =>
+        props.onRequestDelete({ paths: [path], displayName, kind })
+      }
+      onRequestDeleteMany={(paths) =>
+        props.onRequestDelete({ paths, displayName: `${paths.length} documents` })
+      }
+      revision={props.filesRevision}
+    />
+  )
+}
+
+export function BrowserIndexPage({
+  // Safe as a parameter default (unlike the clocks below): the shared
+  // accessor memoizes, so every render sees the same identity. The concrete
+  // index lives behind this lazy page, not in App, to keep loro-crdt off the
+  // entry chunk (entry-graph-loro-free.test.ts).
+  index = sharedFoldingBrowserIndex(),
+  loro = defaultLoroStore,
+  pointer = defaultPointer,
+  clock = defaultClock,
+  onOpenDocument,
+  revision,
+}: BrowserIndexPageProps) {
+  const {
+    snapshots,
+    setSnapshots,
+    trashCount,
+    setTrashCount,
+    error,
+    setError,
+    workspaceName,
+    filesSource,
+    filesRevision,
+    setFilesRevision,
+    activeWorkspace,
+  } = useBrowserIndexListing({ index, loro, clock, revision })
+  // The `disabled` attribute (via createDisabled) is the whole double-press
+  // mechanism: React flushes this state before a second click can dispatch,
+  // and a handler-side `if (creating) return` reads a stale closure in
+  // exactly the same-tick case it would have to catch.
+  const [creating, setCreating] = useState(false)
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
@@ -349,59 +550,20 @@ export function BrowserIndexPage({
           {error}
         </div>
       )}
-      {snapshots === null && !error ? (
-        <div
-          role="status"
-          aria-label="Loading documents"
-          className="skeleton-appear grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4"
-        >
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="animate-pulse rounded-lg border p-2">
-              <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
-            </div>
-          ))}
-        </div>
-      ) : snapshots !== null && snapshots.length === 0 && trashCount === 0 ? (
-        // The onboarding state renders INSTEAD of the panel: a three-pane
-        // browser of nothing teaches less than one sentence and one button,
-        // and this button also OPENS what it creates.
-        <EmptyWorkspaceState
-          onCreate={(kind) => void handleCreate(kind)}
-          disabled={creating}
-          subtitle="Everything stays in this browser — no account, no upload."
-        />
-      ) : snapshots !== null ? (
-        <WorkspaceFilesPanel
-          source={filesSource}
-          // Read from the subscribed identity rather than the address: this
-          // page stays mounted across an in-SPA workspace switch, and the
-          // identity is what moves with it.
-          workspace={activeWorkspace === null ? undefined : workspaceHandle(activeWorkspace)}
-          initialFolder={routedFolder}
-          onFolderChange={setRoutedFolder}
-          onOpenDocument={onOpenDocument}
-          onRequestDelete={(path, displayName, kind) =>
-            setPendingDelete({ paths: [path], displayName, kind })
-          }
-          onRequestDeleteMany={(paths) =>
-            setPendingDelete({ paths, displayName: `${paths.length} documents` })
-          }
-          revision={filesRevision}
-        />
-      ) : (
-        // Load failed (error set, snapshots never arrived): creating does
-        // not need the list — numbering falls back to nothing and the index
-        // refuses a duplicate address, so the worst case is a refused create
-        // rather than two documents at one path.
-        <button
-          type="button"
-          disabled={creating}
-          onClick={() => void handleCreate('spatial')}
-          className="self-start rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-        >
-          Create a canvas
-        </button>
-      )}
+      <BrowserIndexBody
+        snapshots={snapshots}
+        trashCount={trashCount}
+        error={error}
+        creating={creating}
+        filesSource={filesSource}
+        activeWorkspace={activeWorkspace}
+        routedFolder={routedFolder}
+        setRoutedFolder={setRoutedFolder}
+        onOpenDocument={onOpenDocument}
+        filesRevision={filesRevision}
+        onCreate={handleCreate}
+        onRequestDelete={setPendingDelete}
+      />
       <DeleteDocumentDialog
         pending={
           pendingDelete === null
