@@ -26,7 +26,7 @@ import {
   type SearchableDocument,
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
-import { Loro } from 'loro-crdt'
+import type { Loro } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
@@ -41,7 +41,7 @@ import {
   idbContentClock,
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
-import { loadWorkspaceDocumentProjection } from './workspace-content.js'
+import { loadDocumentContent } from './workspace-content.js'
 
 /**
  * One document read from the store, discriminated by kind — a board carries
@@ -193,20 +193,8 @@ export function createLocalFilesSource(
   }
 
   async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
-    // The workspace document first — that is where the editor persists — and
-    // the injected per-document store as the fallback, which is also what an
-    // injected test double exercises.
-    const projected = await loadWorkspaceDocumentProjection(entry.documentId)
-    if (projected !== null) return projected
-    const loaded = await loro.load(entry.documentId)
-    if (loaded.kind !== 'ok') {
-      throw new Error(`document ${entry.documentId} is not readable: ${loaded.kind}`)
-    }
-    const doc = new Loro()
-    doc.import(loaded.snapshot)
-    // The log too: a thumbnail of the last snapshot alone is a picture of a
-    // document the user is not looking at.
-    for (const delta of loaded.deltas ?? []) doc.import(delta)
+    const doc = await loadDocumentContent(entry.documentId, { loro })
+    if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
     return doc
   }
 

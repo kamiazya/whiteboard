@@ -61,7 +61,7 @@ const sources = import.meta.glob(
     './pages/use-delete-document.ts',
     './pages/use-document-actions.tsx',
     './pages/DaemonDocumentPage.tsx',
-    './pages/use-daemon-connections.ts',
+    './pages/use-connections.ts',
     './pages/use-daemon-document-backend.ts',
     './pages/DocumentPage.tsx',
     './pages/document-page-inspector.tsx',
@@ -568,10 +568,11 @@ const CASES = [
   {
     // The connections hook is part of this screen's scan surface, not a
     // separate one: its state moved THERE rather than away, so the ledger
-    // below still has to account for it.
+    // below still has to account for it. It is both keepers' hook now; the
+    // daemon's half only supplies the read.
     files: [
       DAEMON_DOCUMENT_PAGE,
-      './pages/use-daemon-connections.ts',
+      './pages/use-connections.ts',
       // The duplicate hook is BOTH keepers' now, so it is part of this
       // screen's scan surface as well as the browser page's — a screen that
       // holds the state has to account for it, whoever else also does.

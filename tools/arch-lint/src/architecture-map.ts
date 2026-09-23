@@ -312,6 +312,10 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       // runs, the same ones the daemon does — so the rules for changing one
       // live in a package below both rather than in either root.
       '@kamiazya/whiteboard-history',
+      // reference-graph: the browser keeper answers "what links here" from
+      // the same facts, aggregate and cache the daemon does — its Connections
+      // panel — so it reads the package rather than a copy of it.
+      '@kamiazya/whiteboard-reference-graph',
     ],
     allowedThirdParty: [],
   },

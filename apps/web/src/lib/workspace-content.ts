@@ -16,7 +16,7 @@ import {
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { LoroStore, type LoroStoreLike, touchContentTimestamp } from './loro-store.js'
 
 /**
  * The read did not complete, so nothing is known about the document — as
@@ -37,6 +37,11 @@ export class DocumentContentUnreadableError extends Error {
  * projection — fresh oplog, current state), or null when neither the
  * workspace tree nor the legacy store HOLDS it.
  *
+ * The ONE read for a browser-kept document nothing has open: the files
+ * source, a duplicate, an embed and the reference graph all come through
+ * here, so what "current" means — tree first, legacy record after — is
+ * decided once.
+ *
  * A read that did not COMPLETE is a different answer and now propagates as
  * `DocumentContentUnreadableError`. It used to be folded into "no content"
  * twice over — a thrown read was caught here and reported as `not-found`,
@@ -53,15 +58,23 @@ export class DocumentContentUnreadableError extends Error {
  */
 export async function loadDocumentContent(
   documentId: string,
-  dbName?: string,
+  options: {
+    /**
+     * The legacy per-document store to fall back on. Injected by a surface
+     * that was handed one (a page's store double in a test); the default is
+     * the real one.
+     */
+    readonly loro?: LoroStoreLike
+    readonly dbName?: string
+  } = {},
 ): Promise<LoroDoc | null> {
   // Whether the TREE could be read is its own fact: a workspace that did not
   // open says nothing about the document either, so "the legacy row has no
   // record" must not become "no content" underneath it.
-  const tree = await treeProjection(documentId, dbName)
+  const tree = await treeProjection(documentId, options.dbName)
   if (tree.doc !== null) return tree.doc
   const treeUnread = !tree.read
-  const result = await new LoroStore(dbName).load(documentId)
+  const result = await (options.loro ?? new LoroStore(options.dbName)).load(documentId)
   if (result.kind === 'read-unavailable') throw new DocumentContentUnreadableError(documentId)
   if (result.kind !== 'ok') {
     if (treeUnread) throw new DocumentContentUnreadableError(documentId)

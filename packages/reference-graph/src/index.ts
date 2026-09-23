@@ -2,6 +2,7 @@ export { type BacklinkEntry, backlinkEntrySchema } from './backlink-entry.js'
 export { ContentFactsCache, type DocumentContentSource } from './content-facts-cache.js'
 export { type ContentFacts, extractContentFacts } from './extract.js'
 export {
+  backlinksIn,
   type DocumentReferenceFacts,
   mentionsOfIn,
   type RawReference,

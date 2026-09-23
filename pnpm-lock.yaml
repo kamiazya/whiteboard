@@ -197,6 +197,9 @@ importers:
       '@kamiazya/whiteboard-ports':
         specifier: workspace:*
         version: link:../../packages/ports
+      '@kamiazya/whiteboard-reference-graph':
+        specifier: workspace:*
+        version: link:../../packages/reference-graph
       '@kamiazya/whiteboard-search':
         specifier: workspace:*
         version: link:../../packages/search

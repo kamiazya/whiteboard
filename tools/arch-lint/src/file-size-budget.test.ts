@@ -391,57 +391,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // than a merge — a document is never in both — and the comment saying so is
   // most of the 14 lines.
   'packages/mcp-server/src/server/store/document-store.ts': 1145,
-  // Raised from 926 by the version STORE being built once and shared. A
-  // merge's pre-merge point cannot go through the versions seam — that
-  // `save` carries a label and nothing else, while a checkpoint has to say
-  // it is automatic and which variation it belongs to — so the store is
-  // built here and handed to both seams, and the comment saying why is most
-  // of the seven lines.
-  // Raised from 933 by the checkpoint scheduler being BUILT here — the
-  // keeper's `save`, the HEAD lookup its rows are laned by, and the pair the
-  // session signals. Most of the 54 lines is two pieces of reasoning a reader
-  // cannot recover from the code: the doc handed to the scheduler is the
-  // workspace RECORD rather than this document's content (it keys the
-  // "anything changed" check on a frontier, and the record's is what the
-  // store saves), and the pair's `flush` signals BEFORE it flushes, because
-  // the edit flush's commit reaches `subscribeLocalUpdates` only on a later
-  // microtask and a flush alone would find nothing armed. Raised again to 997
-  // when `signal` was made TOTAL: it runs inside Loro's subscriber, where a
-  // throw escapes as an unhandled rejection that reddens a whole run while
-  // every test passes.
-  // Raised again to 1011 by the branch-refresh signal: the browser record is
-  // not readable at mount, so nothing re-read the branch plane once it
-  // arrived and a document opened ON a variation kept naming the default one.
-  // Most of the added lines is that reason — the bug is invisible in the
-  // three lines of state that fix it.
-  // Raised again to 1028 by kind parity on the versions seam. Two lines pick
-  // the record seam by kind and supply the document's kind to it; the rest is
-  // the two findings behind them, neither recoverable from the code. A note's
-  // version ROWS were always written — a version is a frontier of the
-  // workspace record — and only the seam that reads and restores one was
-  // built from a backend a note never has. And `loadPast` asked the past
-  // STATE its kind, which a tree-hosted document keeps in its node meta, so
-  // the answer was always "not markdown": the fallback saved a canvas and
-  // drew a note an empty viewer.
-  // Raised again to 1031 by the SEARCH the URL sync now carries: one line of
-  // wiring so a HEAD moved from the shared `?v=` banner refreshes the chip,
-  // and three of reason. The reason is the whole entry — a `navigate` given a
-  // pathname replaces the location, so the query a reader arrived with is
-  // dropped by a repair they never asked for, and nothing about the call says
-  // so.
-  // +2 for the shared thread-write door: this page still chooses between the
-  // markdown host and the spatial write per verb, so what it saves is the
-  // command building rather than the branch.
-  // +2: the tab's mark. The resolution is memoised because the resolver
-  // PARSES — a fresh object every render re-arms the favicon's debounce on
-  // every render instead of on a change to the document — and a `useMemo`
-  // is two lines a call site cannot avoid paying.
-  // 1035 -> 811: the terminal screens, the kind-decided model slots and the
-  // address-bar effect each became a named piece in a sibling module, which
-  // is what took the page's own hook under the complexity budget. Recorded
-  // at the measurement rather than left at the old ceiling, so the next
-  // change spends headroom deliberately.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 811,
   // +1 for a task list's checkbox, which is one import and one branch here:
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
@@ -498,7 +447,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // path beside the one it has.
   // Raised 2170 -> 2177: the bent branch carries `rounded` now, with the
   // reason it did not before.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2177,
+  // Raised 2177 -> 2483. The file grew by RATIONALE, not by logic: sixteen
+  // inline blocks became named functions, each carrying the comment that was
+  // buried in the middle of it. The next real shrink splits the three
+  // concerns this file holds — anchor placement, the side-choice search, and
+  // the router — into sibling modules; they share `AnchorContext`,
+  // `SidePair` and the cost vocabulary, so the types move first or each new
+  // module imports them back.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2483,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
