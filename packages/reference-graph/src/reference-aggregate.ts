@@ -4,7 +4,7 @@ import {
   documentKindSchema,
   documentPathSchema,
 } from '@kamiazya/whiteboard-model'
-import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
+import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { snippetAround } from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
 
@@ -236,5 +236,41 @@ function resolvesTo(
       return documentIdSchema.safeParse(ref.target).success
         ? ref.target === targetId
         : resolve(ref.target) === targetId
+  }
+}
+
+/**
+ * Everything linking to `documentId`, and the documents that NAME it in
+ * prose without a link — answered from one listing and its facts.
+ *
+ * The one definition of "what links here" for both keepers: each lists its
+ * documents and reads their facts its own way, and this is where the answer
+ * is built from them. The aggregate is rebuilt per call; it is in-memory map
+ * work over cached facts, and the cache is what spares the reads.
+ */
+export function backlinksIn(
+  entries: readonly DocumentEntry[],
+  content: ReadonlyMap<
+    string,
+    { readonly refs: readonly RawReference[]; readonly texts: readonly string[] }
+  >,
+  documentId: string,
+): { backlinks: BacklinkEntry[]; unlinkedMentions: BacklinkEntry[] } {
+  const aggregate = new ReferenceAggregate()
+  for (const entry of entries) {
+    const facts = content.get(entry.documentId)
+    aggregate.upsert(entry.documentId, 0, {
+      path: entry.path,
+      ...(entry.name === undefined ? {} : { name: entry.name }),
+      ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+      refs: [...(facts?.refs ?? [])],
+      texts: [...(facts?.texts ?? [])],
+    })
+  }
+  const alive = aggregate.entries()
+  const name = alive.get(documentId)?.name
+  return {
+    backlinks: aggregate.backlinksOf(documentId),
+    unlinkedMentions: name === undefined ? [] : mentionsOfIn({ documentId, name }, alive),
   }
 }
