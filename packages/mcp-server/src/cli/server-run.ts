@@ -228,7 +228,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
       publicBaseUrl: plan.publicBaseUrl,
       allowedOrigins: [...plan.allowedOrigins],
       authStrategy,
-      ...(signInProviders.length === 0 ? {} : { signInProviders }),
+      signInProviders,
     })
   } catch {
     // Startup failure (EADDRINUSE, permission, etc.). Discard the error

@@ -38,7 +38,7 @@ import {
 import { createPairingRouter } from './routes/pairing.js'
 import { createReplicaKeyRouter } from './routes/replica-key.js'
 import { createRuntimeRouter } from './routes/runtime.js'
-import { createSignInRoutes } from './routes/sign-in.js'
+import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
@@ -116,7 +116,9 @@ function membershipWiring(options: AppOptions): {
  * Server-mode serves only a static placeholder: no build artifact, no
  * runtime-config or token injection, no static asset roots.
  */
-function mountServerModeUi(app: Hono): void {
+function mountServerModeUi(app: Hono, signIn: SignInRoutesDeps | undefined): void {
+  // Before the UI catch-all, which would otherwise answer every /auth path.
+  if (signIn !== undefined) app.route('/', createSignInRoutes(signIn))
   app.get('*', (c) => {
     if (isReservedUiPath(c.req.path)) return c.notFound()
     return c.html(SERVER_MODE_PLACEHOLDER_HTML)
@@ -634,9 +636,7 @@ export function createApp(options: AppOptions) {
     }),
   )
   if (options.authMode === 'server-mode') {
-    // Before the UI catch-all, which would otherwise answer every /auth path.
-    if (options.signIn !== undefined) app.route('/', createSignInRoutes(options.signIn))
-    mountServerModeUi(app)
+    mountServerModeUi(app, options.signIn)
     // Same shape as the local-daemon return below, so callers see one type
     // rather than a union. Server-mode does not consult this resolver — its
     // `/api/*` goes through `createServerModeApiAuthMiddleware` over the
