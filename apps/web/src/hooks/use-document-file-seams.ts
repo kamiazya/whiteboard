@@ -74,6 +74,29 @@ export interface DocumentFileSeams {
   isImageFileRef: (file: string) => boolean
 }
 
+/**
+ * What this keeper loaded for one reference, minus the facets, which are a
+ * surface extra. `null` keeps the terminal "nothing here" slot so the seams
+ * answer without the layout retrying. The id the page's table resolved a
+ * written path to rides on the record, so a body's `![[path]]` finds it by id.
+ */
+function loadedReferenceFor(
+  ref: string,
+  document: { name?: string; body?: string; canvas?: LoadedReference['canvas'] } | null,
+  resolveAlias: AliasResolver | undefined,
+): LoadedReference | null {
+  if (document === null) return null
+  const documentId = documentIdSchema.safeParse(ref).success
+    ? ref
+    : (resolveAlias?.(ref) ?? undefined)
+  return {
+    ...(documentId !== undefined ? { documentId } : {}),
+    ...(document.name !== undefined ? { name: document.name } : {}),
+    ...(document.body !== undefined ? { body: document.body } : {}),
+    ...(document.canvas !== undefined ? { canvas: document.canvas } : {}),
+  }
+}
+
 export function useDocumentFileSeams({
   canvas,
   adapter,
@@ -106,20 +129,7 @@ export function useDocumentFileSeams({
   const graph = useMemo(() => {
     const entries = new Map<string, LoadedReference | null>()
     for (const [ref, document] of embedContent) {
-      const documentId = documentIdSchema.safeParse(ref).success
-        ? ref
-        : (resolveAlias?.(ref) ?? undefined)
-      entries.set(
-        ref,
-        document === null
-          ? null
-          : {
-              ...(documentId !== undefined ? { documentId } : {}),
-              ...(document.name !== undefined ? { name: document.name } : {}),
-              ...(document.body !== undefined ? { body: document.body } : {}),
-              ...(document.canvas !== undefined ? { canvas: document.canvas } : {}),
-            },
-      )
+      entries.set(ref, loadedReferenceFor(ref, document, resolveAlias))
     }
     return entries
   }, [embedContent, resolveAlias])

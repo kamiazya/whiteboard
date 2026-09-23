@@ -56,6 +56,35 @@ export interface WorkspaceAddressInputs {
   readonly awaitingDaemonRenewal: boolean
 }
 
+/**
+ * Whether this keeper may rewrite the address, and the workspace the address
+ * names when it may. `leave-alone` covers every reason not to touch it: a
+ * pair route, an address the daemon keeps, one that is undecided rather than
+ * foreign (see `awaitingDaemonRenewal`), no browser workspace to point at, a
+ * settings route, a path this app does not own, an address already naming
+ * this browser's workspace, and a REPLICA address — which is not this
+ * keeper's to erase, since the workspace it names exists, kept elsewhere, and
+ * the replica page may be serving it.
+ */
+function addressToRewrite(input: {
+  isPairRoute: boolean
+  daemonKept: boolean
+  awaitingDaemonRenewal: boolean
+  pathname: string
+  settings: ReturnType<ReturnType<typeof createUserSettingsStore>['load']>
+}): string | undefined | 'leave-alone' {
+  const { isPairRoute, daemonKept, awaitingDaemonRenewal, pathname } = input
+  if (isPairRoute || daemonKept || awaitingDaemonRenewal) return 'leave-alone'
+  if (parseSettingsRoute(pathname) !== null) return 'leave-alone'
+  if (!isKnownAppPath(pathname)) return 'leave-alone'
+  const route = parseWorkspaceRoute(pathname)
+  const named = route === null ? undefined : route.workspace
+  if (named === undefined) return undefined
+  if (browserWorkspaceMatches(named)) return 'leave-alone'
+  if (findReplicaForHandle(input.settings, named) !== null) return 'leave-alone'
+  return named
+}
+
 export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   const {
     location,
@@ -177,20 +206,18 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   // started. Pushed, back would return to an address that rewrites itself
   // again — a trap of our own making.
   useEffect(() => {
-    if (isPairRoute) return
-    if (daemonKept) return
-    // Undecided, not foreign — see the field's comment.
-    if (awaitingDaemonRenewal) return
+    // Narrowed here rather than inside the helper: the rewrite below needs
+    // the handle itself, and a null check that only the helper knows about
+    // would leave it unnarrowed.
     if (browserHandle === null) return
-    if (parseSettingsRoute(location.pathname) !== null) return
-    if (!isKnownAppPath(location.pathname)) return
-    const route = parseWorkspaceRoute(location.pathname)
-    const named = route === null ? undefined : route.workspace
-    if (named !== undefined && browserWorkspaceMatches(named)) return
-    // A replica address is not this keeper's to erase: the workspace it
-    // names exists, kept elsewhere, and the replica page may be serving it.
-    if (named !== undefined && findReplicaForHandle(userSettingsStore.load(), named) !== null)
-      return
+    const named = addressToRewrite({
+      isPairRoute,
+      daemonKept,
+      awaitingDaemonRenewal,
+      pathname: location.pathname,
+      settings: userSettingsStore.load(),
+    })
+    if (named === 'leave-alone') return
     let cancelled = false
     const rewrite = () => {
       if (cancelled) return

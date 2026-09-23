@@ -195,6 +195,26 @@ function isEditingText(target: EventTarget | null): boolean {
  * into the session, precisely so staleness detection can span a session
  * teardown + the next session's construction.
  */
+/**
+ * Undo/redo from the keyboard — SpatialEditor has no buttons of its own, so
+ * this is the only entry point. The event is only swallowed when the step was
+ * actually taken: with nothing to undo the keystroke belongs to the browser.
+ */
+function handleUndoRedoKey(ev: KeyboardEvent, undo: () => boolean, redo: () => boolean): void {
+  if (!(ev.ctrlKey || ev.metaKey)) return
+  if (isEditingText(ev.target)) return
+  const key = ev.key.toLowerCase()
+  const step =
+    key === 'z' && !ev.shiftKey
+      ? undo
+      : (key === 'z' && ev.shiftKey) || key === 'y'
+        ? redo
+        : undefined
+  if (step === undefined || !step()) return
+  ev.preventDefault()
+  ev.stopPropagation()
+}
+
 export function useDocumentSync(
   backend: DocumentBackend | null,
   options?: UseDocumentSyncOptions,
@@ -503,23 +523,7 @@ export function useDocumentSync(
   // Keyboard intercept for undo/redo — SpatialEditor has no undo/redo buttons
   // of its own, so the keyboard is the only entry point.
   useEffect(() => {
-    function onKeyDown(ev: KeyboardEvent): void {
-      if (!(ev.ctrlKey || ev.metaKey)) return
-      if (isEditingText(ev.target)) return
-      const key = ev.key.toLowerCase()
-      if (key === 'z' && !ev.shiftKey) {
-        if (loroUndo()) {
-          ev.preventDefault()
-          ev.stopPropagation()
-        }
-      } else if ((key === 'z' && ev.shiftKey) || key === 'y') {
-        if (loroRedo()) {
-          ev.preventDefault()
-          ev.stopPropagation()
-        }
-      }
-    }
-
+    const onKeyDown = (ev: KeyboardEvent) => handleUndoRedoKey(ev, loroUndo, loroRedo)
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => {
       window.removeEventListener('keydown', onKeyDown, { capture: true })
