@@ -28,8 +28,6 @@
  *                assistive-tech signal.
  */
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { settingsPath } from '../../lib/app-routes.js'
 import {
   type ConnectionState,
   isNotKeeping,
@@ -38,19 +36,13 @@ import {
 } from '../../lib/connection-state.js'
 import type { StorageHealth } from '../../lib/storage-health.js'
 import { ShellMark } from '../shell/ShellMark.js'
-
-/** A wall-clock time for the popover: `10:32`, in the reader's locale. */
-function formatWrittenAt(iso: string): string {
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return iso
-  // A save time in the status popover is read as a clock time beside the
-  // reader's own, not as an age — "written at 10:32", never "written 4m
-  // ago" — so it is not formatRelative's stamp.
-  // time-format-is-deliberate: a clock time, not an age
-  return at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-}
-
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
+import {
+  BrowserStoragePanel,
+  DaemonReconnectingPanel,
+  DaemonSyncedPanel,
+  SyncOffPanel,
+} from './connection-panels.js'
 
 export interface ConnectionStatusProps {
   /**
@@ -116,6 +108,39 @@ const STORAGE_LABEL: Record<StorageHealth, string> = {
   failed: 'Browser — write failed',
 }
 
+/**
+ * The state has no word on SCREEN, so the accessible name carries it — the
+ * one place a colour-and-motion signal must not be the only signal.
+ *
+ * The workspace's NAME rather than the bare word: the design record puts the
+ * name here precisely so the shell states it without drawing it, and the
+ * session word joins it when a page published one.
+ */
+function markAriaLabel(workspaceName: string | undefined, label: string | null): string {
+  const session = label === null ? '' : ` — ${label}`
+  return workspaceName === undefined
+    ? `Workspace${session}`
+    : `Workspace: ${workspaceName}${session}`
+}
+
+/**
+ * The workspace block comes FIRST and carries its own head, because that head
+ * is an editable name and editing belongs to the component that owns the
+ * rename. Without one — no workspace known — the session word still needs
+ * stating, so the bare head stands in.
+ */
+function PopoverHead({
+  label,
+  workspaceMenu,
+}: {
+  label: string | null
+  workspaceMenu: ReactNode | undefined
+}) {
+  if (workspaceMenu !== undefined) return <div className="mb-2 text-sm">{workspaceMenu}</div>
+  if (label === null) return null
+  return <p className="mb-2 border-b pb-2 text-xs font-medium text-muted-foreground">{label}</p>
+}
+
 export function ConnectionStatus({
   state,
   daemonBaseUrl,
@@ -156,11 +181,7 @@ export function ConnectionStatus({
           // record puts the name here precisely so the shell states it
           // without drawing it, and the session word joins it when a page
           // published one.
-          aria-label={
-            workspaceName === undefined
-              ? `Workspace${label === null ? '' : ` — ${label}`}`
-              : `Workspace: ${workspaceName}${label === null ? '' : ` — ${label}`}`
-          }
+          aria-label={markAriaLabel(workspaceName, label)}
           {...(label === null ? {} : { title: label })}
           className="flex shrink-0 items-center justify-center rounded-md p-1 text-foreground/70 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground"
         >
@@ -172,111 +193,15 @@ export function ConnectionStatus({
             that head is an editable name and editing belongs to the component
             that owns the rename. Without one — no workspace known — the
             session word still needs stating, so the bare head stands in. */}
-        {workspaceMenu === undefined ? (
-          label !== null && (
-            <p className="mb-2 border-b pb-2 text-xs font-medium text-muted-foreground">{label}</p>
-          )
-        ) : (
-          <div className="mb-2 text-sm">{workspaceMenu}</div>
-        )}
-        {state?.keeper === 'daemon' && state.session === 'synced' && (
-          <div className="flex flex-col gap-1 text-sm">
-            <p className="font-medium">Live sync is on</p>
-            <p className="text-muted-foreground">
-              Changes are saved to the daemon on this machine
-              {daemonBaseUrl ? (
-                <>
-                  {' at '}
-                  <span className="font-mono text-xs">
-                    {daemonBaseUrl.replace(/^https?:\/\//, '')}
-                  </span>
-                </>
-              ) : null}
-              .
-            </p>
-            {/* The chip reports; it does not manage. Changing which daemon
-                this browser uses is something you go looking for, so it
-                lives in Settings and this only points at it. */}
-            {children}
-            <Link
-              to={settingsPath('connections')}
-              className="mt-1 text-xs font-medium text-primary hover:underline"
-            >
-              Manage in Settings
-            </Link>
-          </div>
-        )}
-        {state?.keeper === 'daemon' && state.session === 'reconnecting' && (
-          <div className="flex flex-col gap-1 text-sm">
-            <p className="font-medium">Live sync is not running</p>
-            <p className="text-muted-foreground">
-              This document is not receiving changes from the daemon right now. Your edits are kept
-              and sent when the connection returns. Reload the page if it does not recover.
-            </p>
-          </div>
-        )}
-        {state?.keeper === 'browser' && state.storage === 'ok' && (
-          <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium">Kept in this browser</p>
-            <p className="text-muted-foreground">
-              {/* The one place "saved" is said, and only on asking: the mark
-                  draws nothing for it. A time, because a bare "saved" is true
-                  of a document never written too. */}
-              {lastWrittenAt ? `Written at ${formatWrittenAt(lastWrittenAt)}. ` : ''}
-              Your documents live in this browser's storage. Other browsers cannot see them, and
-              clearing site data removes them.
-            </p>
-            {children}
-          </div>
-        )}
-        {state?.keeper === 'browser' && state.storage === 'stuck' && (
-          <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium">Still writing to this browser</p>
-            <p className="text-muted-foreground">
-              Your latest edits have not reached this browser's storage yet. They are kept in this
-              tab meanwhile; if this does not clear, reload the page.
-            </p>
-          </div>
-        )}
-        {state?.keeper === 'browser' && state.storage === 'failed' && (
-          <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium">This browser could not be written to</p>
-            <p className="text-muted-foreground">
-              {lastWrittenAt
-                ? `Edits since ${formatWrittenAt(lastWrittenAt)} are in this tab only. `
-                : 'Your edits are in this tab only. '}
-              Export the document before closing the tab, or reload to try again.
-            </p>
-          </div>
-        )}
-        {syncOff && (
-          <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium">Live sync is off</p>
-            <p className="text-muted-foreground">
-              The daemon rejected this session, so edits stay in this browser until you re-pair.
-            </p>
-            <div className="mt-1 flex flex-col gap-1.5">
-              {onRepair && (
-                <button
-                  type="button"
-                  onClick={onRepair}
-                  className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-                >
-                  Re-pair with the daemon
-                </button>
-              )}
-              {onWorkInBrowser && (
-                <button
-                  type="button"
-                  onClick={onWorkInBrowser}
-                  className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-                >
-                  Work in this browser instead
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        <PopoverHead label={label} workspaceMenu={workspaceMenu} />
+        <DaemonSyncedPanel state={state} daemonBaseUrl={daemonBaseUrl}>
+          {children}
+        </DaemonSyncedPanel>
+        <DaemonReconnectingPanel state={state} />
+        <BrowserStoragePanel state={state} lastWrittenAt={lastWrittenAt ?? null}>
+          {children}
+        </BrowserStoragePanel>
+        <SyncOffPanel show={syncOff} onRepair={onRepair} onWorkInBrowser={onWorkInBrowser} />
       </PopoverContent>
     </Popover>
   )
