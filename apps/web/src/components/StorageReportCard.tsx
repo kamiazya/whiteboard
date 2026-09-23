@@ -1,5 +1,4 @@
 import {
-  listWorkspacesResponseSchema,
   optimizeAllDocumentsResponseSchema,
   pruneSandwichedVersionsResponseSchema,
   purgeResultSchema,
@@ -12,25 +11,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { formatBytes } from '../lib/format-bytes.js'
+import { sweepWorkspaces, useMaintenanceRunner } from './storage-maintenance.js'
+import {
+  type CategoryDescriptor,
+  type RowAction,
+  StorageCategoryRow,
+} from './storage-report-rows.js'
 
 // Storage starts as visibility-before-enforcement: rows expose where bytes are
 // accumulating before the app applies caps, LRU, or category-specific cleanup.
 // Each category keeps a stable row hook and reserved action slot so future
 // Optimize / Cleanup controls can target the exact object they act on.
-
-interface CategoryDescriptor {
-  // Keyed by the wire contract's own category union, so a row for something
-  // the daemon cannot report does not compile. It used to be `string`, and a
-  // `libraries` row survived the deletion of its server half by rendering a
-  // permanent 0 B — a value indistinguishable from "nothing stored yet".
-  key: StorageCategory
-  label: string
-  description: string
-  // Optional soft cap. When the row's bytes pass this threshold the row
-  // surfaces a "near / over cap" hint. No auto-prune happens here; this
-  // component only makes growth visible before any cleanup policy runs.
-  softCapBytes?: number
-}
 
 const CATEGORIES: CategoryDescriptor[] = [
   { key: 'blobs', label: 'Canvas snapshots', description: 'Latest Loro doc per canvas' },
@@ -84,6 +75,26 @@ function humanizeAge(seconds: number): string {
   if (seconds < 3600) return RELATIVE_TIME_FORMAT.format(-Math.round(seconds / 60), 'minute')
   if (seconds < 86_400) return RELATIVE_TIME_FORMAT.format(-Math.round(seconds / 3600), 'hour')
   return RELATIVE_TIME_FORMAT.format(-Math.round(seconds / 86_400), 'day')
+}
+
+/** The storage report, or the reason it could not be read. */
+async function readStorageReport(
+  fetchApi: typeof globalThis.fetch,
+): Promise<{ report: StorageReportPayload } | { error: string }> {
+  try {
+    const res = await fetchApi('/api/runtime/storage')
+    if (!res.ok) return { error: `HTTP ${res.status}` }
+    return { report: storageReportPayloadSchema.parse(await res.json()) }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Wait out whatever is left of a floor, and nothing when it has passed. */
+async function holdUntil(deadline: number): Promise<void> {
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) return
+  await new Promise((resolve) => setTimeout(resolve, remaining))
 }
 
 export function StorageReportCard() {
@@ -145,36 +156,25 @@ export function StorageReportCard() {
     setLoading(true)
     setError(null)
     const start = Date.now()
-    try {
-      const res = await fetchApi('/api/runtime/storage')
-      if (!mountedRef.current) return
-      if (!res.ok) {
-        setError(`HTTP ${res.status}`)
-        return
-      }
-      const json = storageReportPayloadSchema.parse(await res.json())
-      if (!mountedRef.current) return
-      setReport(json)
-      setUpdatedAt(Date.now())
-    } catch (err) {
-      if (mountedRef.current) {
-        setError(err instanceof Error ? err.message : String(err))
-      }
-    } finally {
-      const elapsed = Date.now() - start
-      const remaining = MIN_REFRESH_MS - elapsed
-      if (remaining > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remaining))
-      }
-      if (mountedRef.current) {
-        setLoading(false)
+    const read = await readStorageReport(fetchApi)
+    if (mountedRef.current) {
+      if ('error' in read) setError(read.error)
+      else {
+        setReport(read.report)
+        setUpdatedAt(Date.now())
       }
     }
+    // The spinner is held to a floor so a fast answer still reads as an
+    // action that happened, rather than as a button that did nothing.
+    await holdUntil(start + MIN_REFRESH_MS)
+    if (mountedRef.current) setLoading(false)
   }, [fetchApi])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  const runMaintenance = useMaintenanceRunner(mountedRef, scheduleStatusClear, refresh)
 
   // Optimize all documents across every workspace. Loops sequentially so the
   // doc-cache eviction inside each compact stays coherent. Refreshes the
@@ -182,182 +182,172 @@ export function StorageReportCard() {
   // separate Refresh click.
   const [optimizing, setOptimizing] = useState(false)
   const [optimizeStatus, setOptimizeStatus] = useState<string | null>(null)
-  const optimizeAll = useCallback(async () => {
-    setOptimizing(true)
-    setOptimizeStatus('Optimizing…')
-    try {
-      const wsRes = await fetchApi('/api/workspaces')
-      if (!mountedRef.current) return
-      if (!wsRes.ok) {
-        setOptimizeStatus('Optimize failed')
-        return
-      }
-      const { workspaces } = listWorkspacesResponseSchema.parse(await wsRes.json())
-      let savings = 0
-      let failedWorkspaces = 0
-      for (const { workspaceId } of workspaces) {
-        const res = await fetchApi(`/api/workspaces/${workspaceId}/documents/optimize-all`, {
-          method: 'POST',
-        })
-        if (!res.ok) {
-          failedWorkspaces += 1
-          continue
-        }
-        const body = optimizeAllDocumentsResponseSchema.parse(await res.json())
-        savings += body.totalBeforeBytes - body.totalAfterBytes
-      }
-      if (!mountedRef.current) return
-      // A per-workspace failure does not abort the loop (other workspaces
-      // may still succeed), so the summary must say so explicitly — silently
-      // reporting "Saved"/"Already optimal" would tell the user everything
-      // succeeded when it did not.
-      setOptimizeStatus(
-        appendPartialFailureNote(
-          savings > 0 ? `Saved ${formatBytes(savings)}` : 'Already optimal',
-          failedWorkspaces,
-        ),
-      )
-      void refresh()
-    } catch {
-      if (mountedRef.current) setOptimizeStatus('Optimize failed')
-    } finally {
-      if (mountedRef.current) {
-        setOptimizing(false)
-        scheduleStatusClear(() => setOptimizeStatus(null))
-      }
-    }
-  }, [refresh, scheduleStatusClear, fetchApi])
+  const optimizeAll = useCallback(
+    () =>
+      runMaintenance({
+        setBusy: setOptimizing,
+        setStatus: setOptimizeStatus,
+        running: 'Optimizing…',
+        failed: 'Optimize failed',
+        run: async () => {
+          const swept = await sweepWorkspaces(
+            fetchApi,
+            (workspaceId) => `/api/workspaces/${workspaceId}/documents/optimize-all`,
+            (saved, body) => {
+              const parsed = optimizeAllDocumentsResponseSchema.parse(body)
+              return saved + (parsed.totalBeforeBytes - parsed.totalAfterBytes)
+            },
+            0,
+          )
+          if (swept === null) return null
+          return appendPartialFailureNote(
+            swept.total > 0 ? `Saved ${formatBytes(swept.total)}` : 'Already optimal',
+            swept.failedWorkspaces,
+          )
+        },
+      }),
+    [runMaintenance, fetchApi],
+  )
 
   // Daemon-log rotation override. Logs are also pruned fire-and-forget
   // on every daemon startup; this button lets the user reclaim disk
   // without bouncing the daemon.
   const [pruningLogs, setPruningLogs] = useState(false)
   const [pruneLogsStatus, setPruneLogsStatus] = useState<string | null>(null)
-  const pruneOldLogs = useCallback(async () => {
-    setPruningLogs(true)
-    setPruneLogsStatus('Pruning…')
-    try {
-      const res = await fetchApi('/api/runtime/logs/prune', { method: 'POST' })
-      if (!mountedRef.current) return
-      if (!res.ok) {
-        setPruneLogsStatus('Prune failed')
-        return
-      }
-      const body = purgeResultSchema.parse(await res.json())
-      if (!mountedRef.current) return
-      setPruneLogsStatus(
-        body.purgedCount > 0
-          ? `Removed ${body.purgedCount} (${formatBytes(body.purgedBytes)})`
-          : 'Nothing to prune',
-      )
-      void refresh()
-    } catch {
-      if (mountedRef.current) setPruneLogsStatus('Prune failed')
-    } finally {
-      if (mountedRef.current) {
-        setPruningLogs(false)
-        scheduleStatusClear(() => setPruneLogsStatus(null))
-      }
-    }
-  }, [refresh, scheduleStatusClear, fetchApi])
+  const pruneOldLogs = useCallback(
+    () =>
+      runMaintenance({
+        setBusy: setPruningLogs,
+        setStatus: setPruneLogsStatus,
+        running: 'Pruning…',
+        failed: 'Prune failed',
+        run: async () => {
+          const res = await fetchApi('/api/runtime/logs/prune', { method: 'POST' })
+          if (!res.ok) return null
+          const body = purgeResultSchema.parse(await res.json())
+          return body.purgedCount > 0
+            ? `Removed ${body.purgedCount} (${formatBytes(body.purgedBytes)})`
+            : 'Nothing to prune'
+        },
+      }),
+    [runMaintenance, fetchApi],
+  )
 
   // Sandwiched auto-version prune. Manual versions are explicit user
   // save-points; autos between any two manuals add no rollback value and
   // can be safely dropped. Same iterating pattern as Optimize all.
   const [pruningVersions, setPruningVersions] = useState(false)
   const [pruneVersionsStatus, setPruneVersionsStatus] = useState<string | null>(null)
-  const pruneSandwichedAutoVersions = useCallback(async () => {
-    setPruningVersions(true)
-    setPruneVersionsStatus('Cleaning…')
-    try {
-      const wsRes = await fetchApi('/api/workspaces')
-      if (!mountedRef.current) return
-      if (!wsRes.ok) {
-        setPruneVersionsStatus('Cleanup failed')
-        return
-      }
-      const { workspaces } = listWorkspacesResponseSchema.parse(await wsRes.json())
-      let totalDeleted = 0
-      let failedWorkspaces = 0
-      for (const { workspaceId } of workspaces) {
-        const res = await fetchApi(`/api/workspaces/${workspaceId}/versions/prune-sandwiched`, {
-          method: 'POST',
-        })
-        if (!res.ok) {
-          failedWorkspaces += 1
-          continue
-        }
-        const body = pruneSandwichedVersionsResponseSchema.parse(await res.json())
-        totalDeleted += body.totalDeleted
-      }
-      if (!mountedRef.current) return
-      setPruneVersionsStatus(
-        appendPartialFailureNote(
-          totalDeleted > 0 ? `Removed ${totalDeleted} auto-version(s)` : 'Nothing to clean',
-          failedWorkspaces,
-        ),
-      )
-      void refresh()
-    } catch {
-      if (mountedRef.current) setPruneVersionsStatus('Cleanup failed')
-    } finally {
-      if (mountedRef.current) {
-        setPruningVersions(false)
-        scheduleStatusClear(() => setPruneVersionsStatus(null))
-      }
-    }
-  }, [refresh, scheduleStatusClear, fetchApi])
+  const pruneSandwichedAutoVersions = useCallback(
+    () =>
+      runMaintenance({
+        setBusy: setPruningVersions,
+        setStatus: setPruneVersionsStatus,
+        running: 'Cleaning…',
+        failed: 'Cleanup failed',
+        run: async () => {
+          const swept = await sweepWorkspaces(
+            fetchApi,
+            (workspaceId) => `/api/workspaces/${workspaceId}/versions/prune-sandwiched`,
+            (deleted, body) =>
+              deleted + pruneSandwichedVersionsResponseSchema.parse(body).totalDeleted,
+            0,
+          )
+          if (swept === null) return null
+          return appendPartialFailureNote(
+            swept.total > 0 ? `Removed ${swept.total} auto-version(s)` : 'Nothing to clean',
+            swept.failedWorkspaces,
+          )
+        },
+      }),
+    [runMaintenance, fetchApi],
+  )
 
   // Dangling-files cleanup. Same workspace-iterating pattern as Optimize
   // all — call the per-workspace purge endpoint, sum the freed bytes, and
   // refresh the storage report so the row total updates immediately.
   const [cleaningFiles, setCleaningFiles] = useState(false)
   const [cleanFilesStatus, setCleanFilesStatus] = useState<string | null>(null)
-  const cleanupDanglingFiles = useCallback(async () => {
-    setCleaningFiles(true)
-    setCleanFilesStatus('Cleaning…')
-    try {
-      const wsRes = await fetchApi('/api/workspaces')
-      if (!mountedRef.current) return
-      if (!wsRes.ok) {
-        setCleanFilesStatus('Cleanup failed')
-        return
-      }
-      const { workspaces } = listWorkspacesResponseSchema.parse(await wsRes.json())
-      let purgedBytes = 0
-      let purgedCount = 0
-      let failedWorkspaces = 0
-      for (const { workspaceId } of workspaces) {
-        const res = await fetchApi(`/api/workspaces/${workspaceId}/files/purge-dangling`, {
-          method: 'POST',
-        })
-        if (!res.ok) {
-          failedWorkspaces += 1
-          continue
-        }
-        const body = purgeResultSchema.parse(await res.json())
-        purgedBytes += body.purgedBytes
-        purgedCount += body.purgedCount
-      }
-      if (!mountedRef.current) return
-      setCleanFilesStatus(
-        appendPartialFailureNote(
-          purgedCount > 0
-            ? `Removed ${purgedCount} (${formatBytes(purgedBytes)})`
-            : 'Nothing to clean',
-          failedWorkspaces,
-        ),
-      )
-      void refresh()
-    } catch {
-      if (mountedRef.current) setCleanFilesStatus('Cleanup failed')
-    } finally {
-      if (mountedRef.current) {
-        setCleaningFiles(false)
-        scheduleStatusClear(() => setCleanFilesStatus(null))
-      }
-    }
-  }, [refresh, scheduleStatusClear, fetchApi])
+  const cleanupDanglingFiles = useCallback(
+    () =>
+      runMaintenance({
+        setBusy: setCleaningFiles,
+        setStatus: setCleanFilesStatus,
+        running: 'Cleaning…',
+        failed: 'Cleanup failed',
+        run: async () => {
+          const swept = await sweepWorkspaces(
+            fetchApi,
+            (workspaceId) => `/api/workspaces/${workspaceId}/files/purge-dangling`,
+            (acc, body) => {
+              const parsed = purgeResultSchema.parse(body)
+              return {
+                bytes: acc.bytes + parsed.purgedBytes,
+                count: acc.count + parsed.purgedCount,
+              }
+            },
+            { bytes: 0, count: 0 },
+          )
+          if (swept === null) return null
+          return appendPartialFailureNote(
+            swept.total.count > 0
+              ? `Removed ${swept.total.count} (${formatBytes(swept.total.bytes)})`
+              : 'Nothing to clean',
+            swept.failedWorkspaces,
+          )
+        },
+      }),
+    [runMaintenance, fetchApi],
+  )
+
+  // One entry per row that HAS a control. A row with no entry still gets the
+  // reserved slot, so adding one later does not nudge the others.
+  const rowActions: Partial<Record<StorageCategory, RowAction>> = {
+    blobs: {
+      icon: Sparkles,
+      idleLabel: 'Optimize',
+      busyLabel: 'Optimizing…',
+      ariaLabel: 'Optimize all documents',
+      busy: optimizing,
+      run: () => void optimizeAll(),
+      // Prefer the freshest signal: a transient status from the user's last
+      // click wins over the persisted lastAutoCompactedAt timestamp.
+      status:
+        optimizeStatus ??
+        (report?.lastAutoCompactedAt
+          ? `Auto-optimised ${humanizeAge(
+              Math.max(0, Math.floor((now - report.lastAutoCompactedAt) / 1000)),
+            )}`
+          : 'Never auto-optimised'),
+    },
+    versions: {
+      icon: Eraser,
+      idleLabel: 'Cleanup',
+      busyLabel: 'Cleaning…',
+      ariaLabel: 'Cleanup sandwiched auto-versions',
+      busy: pruningVersions,
+      run: () => void pruneSandwichedAutoVersions(),
+      status: pruneVersionsStatus,
+    },
+    files: {
+      icon: Eraser,
+      idleLabel: 'Cleanup',
+      busyLabel: 'Cleaning…',
+      ariaLabel: 'Clean up dangling files',
+      busy: cleaningFiles,
+      run: () => void cleanupDanglingFiles(),
+      status: cleanFilesStatus,
+    },
+    logs: {
+      icon: Eraser,
+      idleLabel: 'Cleanup',
+      busyLabel: 'Pruning…',
+      ariaLabel: 'Prune old daemon logs',
+      busy: pruningLogs,
+      run: () => void pruneOldLogs(),
+      status: pruneLogsStatus,
+    },
+  }
 
   const ageSeconds = updatedAt === null ? null : Math.max(0, Math.floor((now - updatedAt) / 1000))
 
@@ -402,127 +392,14 @@ export function StorageReportCard() {
       )}
 
       <ul className="rounded-lg border divide-y">
-        {CATEGORIES.map(({ key, label, description, softCapBytes }) => {
-          const bucket = report?.byCategory[key] ?? { bytes: 0, files: 0 }
-          const overCap = softCapBytes !== undefined && bucket.bytes > softCapBytes
-          const nearCap =
-            !overCap && softCapBytes !== undefined && bucket.bytes > softCapBytes * 0.8
-          return (
-            <li key={key} data-storage-row={key} className="flex items-center gap-3 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate">{label}</div>
-                <div className="text-xs text-muted-foreground truncate">{description}</div>
-              </div>
-              <div className="shrink-0 text-right font-mono text-xs tabular-nums">
-                <div className={overCap ? 'text-destructive' : undefined}>
-                  {formatBytes(bucket.bytes)}
-                  {softCapBytes !== undefined && (
-                    <span className="text-muted-foreground"> / {formatBytes(softCapBytes)}</span>
-                  )}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {overCap
-                    ? 'Over soft cap — please uninstall unused'
-                    : nearCap
-                      ? 'Approaching soft cap'
-                      : `${bucket.files} files`}
-                </div>
-              </div>
-              {/* Reserved action slot. Today only the Canvas snapshots row
-                  carries an action (Optimize all → compact Loro op-log on
-                  every canvas across every workspace). Other rows keep an
-                  empty same-width slot so future additions do not nudge
-                  other rows. */}
-              <div
-                className="shrink-0 min-w-[2.25rem] flex flex-col items-end gap-0.5"
-                data-storage-actions={key}
-              >
-                {key === 'blobs' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5"
-                      onClick={() => void optimizeAll()}
-                      disabled={optimizing}
-                      aria-label="Optimize all documents"
-                    >
-                      <Sparkles className={optimizing ? 'size-3.5 animate-pulse' : 'size-3.5'} />
-                      <span className="text-xs">{optimizing ? 'Optimizing…' : 'Optimize'}</span>
-                    </Button>
-                    <span className="text-[10px] text-muted-foreground">
-                      {/* Prefer the freshest signal: a transient
-                          optimizeStatus from the user's last click wins
-                          over the persisted lastAutoCompactedAt timestamp. */}
-                      {optimizeStatus ??
-                        (report?.lastAutoCompactedAt
-                          ? `Auto-optimised ${humanizeAge(
-                              Math.max(0, Math.floor((now - report.lastAutoCompactedAt) / 1000)),
-                            )}`
-                          : 'Never auto-optimised')}
-                    </span>
-                  </>
-                )}
-                {key === 'versions' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5"
-                      onClick={() => void pruneSandwichedAutoVersions()}
-                      disabled={pruningVersions}
-                      aria-label="Cleanup sandwiched auto-versions"
-                    >
-                      <Eraser className={pruningVersions ? 'size-3.5 animate-pulse' : 'size-3.5'} />
-                      <span className="text-xs">{pruningVersions ? 'Cleaning…' : 'Cleanup'}</span>
-                    </Button>
-                    {pruneVersionsStatus && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {pruneVersionsStatus}
-                      </span>
-                    )}
-                  </>
-                )}
-                {key === 'files' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5"
-                      onClick={() => void cleanupDanglingFiles()}
-                      disabled={cleaningFiles}
-                      aria-label="Clean up dangling files"
-                    >
-                      <Eraser className={cleaningFiles ? 'size-3.5 animate-pulse' : 'size-3.5'} />
-                      <span className="text-xs">{cleaningFiles ? 'Cleaning…' : 'Cleanup'}</span>
-                    </Button>
-                    {cleanFilesStatus && (
-                      <span className="text-[10px] text-muted-foreground">{cleanFilesStatus}</span>
-                    )}
-                  </>
-                )}
-                {key === 'logs' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5"
-                      onClick={() => void pruneOldLogs()}
-                      disabled={pruningLogs}
-                      aria-label="Prune old daemon logs"
-                    >
-                      <Eraser className={pruningLogs ? 'size-3.5 animate-pulse' : 'size-3.5'} />
-                      <span className="text-xs">{pruningLogs ? 'Pruning…' : 'Cleanup'}</span>
-                    </Button>
-                    {pruneLogsStatus && (
-                      <span className="text-[10px] text-muted-foreground">{pruneLogsStatus}</span>
-                    )}
-                  </>
-                )}
-              </div>
-            </li>
-          )
-        })}
+        {CATEGORIES.map((descriptor) => (
+          <StorageCategoryRow
+            key={descriptor.key}
+            descriptor={descriptor}
+            bucket={report?.byCategory[descriptor.key] ?? { bytes: 0, files: 0 }}
+            action={rowActions[descriptor.key]}
+          />
+        ))}
       </ul>
     </div>
   )

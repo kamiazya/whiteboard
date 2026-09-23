@@ -82,6 +82,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",
   },
+  'src/components/storage-maintenance.ts': {
+    reach: 'both-keepers',
+    browser: 'src/lib/persistent-storage.ts',
+    note: "the card's sweep half, extracted from it — same answer, same browser counterpart",
+  },
   'src/components/StorageReportCard.tsx': {
     reach: 'both-keepers',
     browser: 'src/lib/persistent-storage.ts',
