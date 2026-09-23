@@ -164,6 +164,19 @@ remove, so the first round could not stand as written.
     they record that THIS tenant accepts a credential, which is the link's
     authentication half.
 
+14. **A person switches accounts from a menu, the way Google's corner menu
+    does**, without signing out. Each tenant's host holds sessions for
+    several accounts at once, and the menu lists the accounts signed in on
+    this host, plus the tenants this BROWSER remembers having opened.
+    Switching to an account already signed in on the host takes no passkey
+    gesture; opening a remembered tenant not yet signed in takes one, and
+    needs no new enrolment because of decision 11. Chosen over Google's own
+    shape — one accounts domain holding every session and handing them to
+    each tenant — because that handoff is exactly what decision 12 refused.
+    The tenant list lives in the browser, not the keeper, so decision 13
+    holds: nothing keeper-wide learns which tenants a person uses. Per
+    decision 6, a self-host keeper with one account shows no menu.
+
 ## Consequences
 
 - **The subdomain decision reaches further than this ADR.** Every origin-keyed
