@@ -59,6 +59,47 @@ function namesOf(table: Readonly<Record<string, unknown>> | undefined): Readonly
   return new Set(Object.keys(table ?? {}))
 }
 
+/**
+ * Why a REJECTED flag was refused, or `undefined` if this argument is not
+ * one. Both forms are matched, so `--token=secret` is refused by the flag
+ * rather than falling through to "unknown argument" — which would be correct
+ * and useless.
+ */
+function rejectionFor<Field extends string>(
+  arg: string,
+  rejectedNames: ReadonlySet<string>,
+  table: FlagTable<Field>,
+): string | undefined {
+  const rejected = [...rejectedNames].find((name) => arg === name || arg.startsWith(`${name}=`))
+  return rejected === undefined ? undefined : (table.rejected?.[rejected] as string)
+}
+
+/**
+ * What a VALUE-taking flag's argument assigns, as one of three answers: the
+ * field and value to record, the usage error to report, or `undefined` for
+ * an argument that names no value flag at all.
+ *
+ * The bare form is an error rather than a lookahead: a value always travels
+ * inline, so `--x secret` can never put a secret in a position this scanner
+ * would echo.
+ */
+function valueAssignment<Field extends string>(
+  arg: string,
+  valueNames: ReadonlySet<string>,
+  table: FlagTable<Field>,
+): { field: Field; flag: string; value: string } | { error: string } | undefined {
+  if (valueNames.has(arg)) return { error: `${arg} requires the inline form: ${arg}=<value>` }
+
+  const flag = [...valueNames].find((name) => arg.startsWith(`${name}=`))
+  if (flag === undefined) return undefined
+
+  const value = arg.slice(flag.length + 1)
+  const check = Object.hasOwn(table.checks ?? {}, flag) ? table.checks?.[flag] : undefined
+  const failure = check === undefined ? emptyCheck(flag, value) : check(value)
+  if (failure !== undefined) return { error: failure }
+  return { field: table.values[flag] as Field, flag, value }
+}
+
 export function scanFlags<Field extends string>(
   args: readonly string[],
   table: FlagTable<Field>,
@@ -78,29 +119,16 @@ export function scanFlags<Field extends string>(
       continue
     }
 
-    // Both forms of a rejected flag, so `--token=secret` is refused by the
-    // flag rather than falling through to "unknown argument" — which would
-    // be correct and useless.
-    const rejected = [...rejectedNames].find((name) => arg === name || arg.startsWith(`${name}=`))
-    if (rejected !== undefined) return usageError(table.rejected?.[rejected] as string)
+    const rejection = rejectionFor(arg, rejectedNames, table)
+    if (rejection !== undefined) return usageError(rejection)
 
-    if (valueNames.has(arg)) {
-      return usageError(`${arg} requires the inline form: ${arg}=<value>`)
+    const assignment = valueAssignment(arg, valueNames, table)
+    if (assignment === undefined) return usageError(`Unknown argument: ${redactFlagValue(arg)}`)
+    if ('error' in assignment) return usageError(assignment.error)
+    if (values[assignment.field] !== undefined) {
+      return usageError(`${assignment.flag} specified more than once`)
     }
-
-    const flag = [...valueNames].find((name) => arg.startsWith(`${name}=`))
-    if (flag !== undefined) {
-      const value = arg.slice(flag.length + 1)
-      const check = Object.hasOwn(table.checks ?? {}, flag) ? table.checks?.[flag] : undefined
-      const failure = check === undefined ? emptyCheck(flag, value) : check(value)
-      if (failure !== undefined) return usageError(failure)
-      const field = table.values[flag] as Field
-      if (values[field] !== undefined) return usageError(`${flag} specified more than once`)
-      values[field] = value
-      continue
-    }
-
-    return usageError(`Unknown argument: ${redactFlagValue(arg)}`)
+    values[assignment.field] = assignment.value
   }
 
   return { kind: 'ok', seen, values }
