@@ -2169,10 +2169,10 @@ describe('the workspace names the page', () => {
     await waitFor(() =>
       expect(within(dialog).getByText('1 of 2 could not be deleted.')).toBeTruthy(),
     )
-    // NAMED, not counted. `only?.displayName ?? only?.path` is the fallback
-    // chain; what must never appear is the count form the un-narrowed branch
-    // produces.
-    expect(within(dialog).getByText(/Delete "beta"\?/)).toBeTruthy()
+    // NAMED as the panel shows it (the page reads the listing the panel
+    // renders), never counted: the count form is what the un-narrowed branch
+    // produced.
+    expect(within(dialog).getByText(/Delete "Beta board"\?/)).toBeTruthy()
     expect(within(dialog).queryByText(/1 documents/)).toBeNull()
   })
 

@@ -76,3 +76,27 @@ it('shows the Connections chip with the backlink count and opens the source', as
     timeout: 15_000,
   })
 })
+
+it('links a mention from the panel, and the source moves to the backlinks', async () => {
+  const index = new FoldingBrowserIndex()
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId(), segment: 'default' })
+  await note(index, 'beta', 'Beta', 'The target.')
+  await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
+
+  render(
+    <div style={{ height: '100vh' }}>
+      <MemoryRouter initialEntries={['/']}>
+        <BrowserDocumentPage store={index} initialPath="beta" />
+        <LocationProbe />
+      </MemoryRouter>
+    </div>,
+  )
+
+  await userEvent.click(
+    await screen.findByRole('button', { name: /connections \(0\)/i }, { timeout: 15_000 }),
+  )
+  await userEvent.click(await screen.findByRole('button', { name: /link it/i }))
+
+  await screen.findByRole('button', { name: /connections \(1\)/i }, { timeout: 15_000 })
+  await waitFor(() => expect(screen.queryByRole('button', { name: /link it/i })).toBeNull())
+})

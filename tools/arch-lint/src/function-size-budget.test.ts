@@ -514,10 +514,19 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 323,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing': 406,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.emit': 89,
+  // Raised 406 -> 460: the inline-run walker's inner steps are now NAMED
+  // (emitAtomic / placeCollapsed / clusterCameDown / placeSegment /
+  // emitImage / emitWikiLink / emitEmbed / layoutTableCells), and each
+  // carries the rationale that was a comment mid-body. Nothing was added.
+  // The next real shrink is moving the code-block trio and the table half
+  // into sibling modules, which needs `ResolvedMdastOptions` / `Cursor`
+  // extracted first or it closes a package-internal cycle.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing': 460,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.walk': 126,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.wrapAndPush': 80,
+  // Raised 80 -> 87 for the same reason: `clusterCameDown` and
+  // `placeSegment` replaced two inline blocks and brought their doc
+  // comments with them.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.wrapAndPush': 87,
   'packages/canvas-render/src/layout/scale-scene.ts#scaleNode': 88,
   'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 68,
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
@@ -705,7 +714,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 169,
   'packages/server-core/src/tools/document-set.ts#createDocumentSetTool': 110,
   'packages/server-core/src/tools/facet-list.ts#createFacetListTool': 87,
-  'packages/server-core/src/tools/linkify-mentions.ts#linkifyMentions': 56,
   'packages/server-core/src/tools/version-restore.ts#createVersionRestoreTool': 64,
   // 93 -> 99: no new logic. The one exported chunk-size constant is 18
   // characters longer than the local `MAX_CHUNK_BYTES` it replaced, so the

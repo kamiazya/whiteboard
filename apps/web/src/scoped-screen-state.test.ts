@@ -228,6 +228,8 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
   selectedWorkspaceRef:
     'no subject: mirrors the selection, written during render so it is current within the very render that changes it',
   addressedWorkspaceRef: 'no subject: mirrors the addressed workspace, written during render',
+  filesSourceRef:
+    'no subject: mirrors the memoized source during render, and carries the workspace it belongs to, which `sourceFor` checks before using it',
   listGeneration:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-answer race it exists to close',
   reportedWorkspaceRef:
