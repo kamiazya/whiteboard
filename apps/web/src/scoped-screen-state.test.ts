@@ -54,6 +54,7 @@ const sources = import.meta.glob(
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
+    './pages/use-browser-route-sync.ts',
     './pages/use-auto-checkpoint.ts',
     './pages/use-document-list-refresh.ts',
     './pages/use-duplicate-document.ts',
@@ -109,6 +110,9 @@ const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
+// The address-bar half of that page, extracted so the page's own hook stays
+// under the complexity budget: `lastKnownCanvasIdRef` moved THERE, not away.
+const BROWSER_ROUTE_SYNC = './pages/use-browser-route-sync.ts'
 // The page's automatic-checkpoint wiring, extracted when its file-size budget
 // said so; same SCREEN by the same rule the panel's hooks are.
 const AUTO_CHECKPOINT_HOOK = './pages/use-auto-checkpoint.ts'
@@ -552,6 +556,7 @@ const CASES = [
   {
     files: [
       BROWSER_DOCUMENT_PAGE,
+      BROWSER_ROUTE_SYNC,
       AUTO_CHECKPOINT_HOOK,
       DUPLICATE_DOCUMENT_HOOK,
       DOCUMENT_LIST_HOOK,

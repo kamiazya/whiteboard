@@ -132,6 +132,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_PAGE,
     note: 'the per-keeper document pages; what they must offer alike is pinned by file-seam-conformance.test.ts and page-state-conformance.test.ts',
   },
+  'src/pages/daemon-document-slots.tsx': {
+    reach: 'both-keepers',
+    browser: 'src/pages/browser-document-slots.tsx',
+    note: "each keeper page's terminal screens and model slots, extracted so the page's own hook stays under the complexity budget; the browser half answers the same questions without a daemon",
+  },
   'src/pages/DaemonIndexPage.tsx': {
     reach: 'both-keepers',
     browser: 'src/pages/BrowserIndexPage.tsx',

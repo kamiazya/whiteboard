@@ -140,8 +140,6 @@
         "!apps/web/src/components/workspace-files/FolderContentsList.tsx",
         "!apps/web/src/components/workspace-files/SearchResults.tsx",
         "!apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx",
-        "!apps/web/src/pages/BrowserDocumentPage.tsx",
-        "!apps/web/src/pages/DaemonDocumentPage.tsx",
         "!packages/canvas-render/src/layout/edges/spatial-edges.ts",
         "!packages/canvas-render/src/layout/nodes/mdast-blocks.ts",
         "!packages/canvas-viewer/scripts/smoke-widget.mjs",
