@@ -392,6 +392,33 @@ async function checkUnderHostCsp(browser, injectedHtml) {
 }
 
 /**
+ * Poll every non-main frame until one of them has drawn an SVG.
+ *
+ * ANY non-main frame is the widget frame: matching on
+ * `url() === 'about:srcdoc'` is Chrome-build-dependent — chrome-stable
+ * under CDP can report a sandboxed srcdoc frame's URL differently than
+ * bundled Chromium does.
+ *
+ * The 30s budget is headroom rather than taste: CI runners parse and
+ * execute the 1.9 MB inline bundle noticeably slower than the file:// pages
+ * this smoke checks first.
+ */
+async function waitForWidgetSvg(page) {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      if (frame === page.mainFrame()) continue
+      const count = await frame
+        .evaluate(() => document.querySelectorAll('svg').length)
+        .catch(() => 0)
+      if (count > 0) return count
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  return 0
+}
+
+/**
  * Sandboxed srcdoc hosting, where `location.href` is the non-URL
  * "about:srcdoc" — a mode file:// and http(s) loads cannot catch.
  */
@@ -427,23 +454,7 @@ async function checkSrcdocHosting(browser, injectedHtml) {
   }, injectedHtml)
   // CI runners parse+execute the 1.9 MB inline bundle noticeably slower
   // than the file:// pages above; give the sandboxed frame extra headroom.
-  const srcdocDeadline = Date.now() + 30_000
-  let srcdocSvgCount = 0
-  while (Date.now() < srcdocDeadline) {
-    // Any non-main frame is the widget frame — matching on
-    // url() === 'about:srcdoc' is Chrome-build-dependent (chrome-stable
-    // under CDP can report a sandboxed srcdoc frame's URL differently
-    // than bundled Chromium).
-    for (const frame of srcdocPage.frames()) {
-      if (frame === srcdocPage.mainFrame()) continue
-      srcdocSvgCount = await frame
-        .evaluate(() => document.querySelectorAll('svg').length)
-        .catch(() => 0)
-      if (srcdocSvgCount > 0) break
-    }
-    if (srcdocSvgCount > 0) break
-    await new Promise((resolve) => setTimeout(resolve, 200))
-  }
+  const srcdocSvgCount = await waitForWidgetSvg(srcdocPage)
   if (srcdocSvgCount === 0) {
     const frameUrls = srcdocPage
       .frames()
