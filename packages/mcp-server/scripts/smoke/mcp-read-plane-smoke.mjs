@@ -132,6 +132,73 @@ function redact(value, ...secrets) {
   return s
 }
 
+/**
+ * Everything this origin has PERSISTED, in the three forms a leak could take
+ * — runs inside the page, so it names nothing from this module.
+ *
+ * Strings are searched as text; binary values are searched as BYTES (a
+ * persisted key would be the decoded 32 bytes, not its base64url spelling,
+ * and a UTF-8 decode of ciphertext can never contain it); a persisted
+ * `CryptoKey` is a leak on its own, whatever it holds.
+ */
+async function dumpPersistedValues(needleBytes) {
+  const hasSubsequence = (hay, needle) => {
+    outer: for (let i = 0; i + needle.length <= hay.length; i++) {
+      for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer
+      return true
+    }
+    return false
+  }
+  const asBytes = (value) =>
+    value instanceof ArrayBuffer
+      ? new Uint8Array(value)
+      : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+  const readRequest = (request) =>
+    new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+
+  const isBinary = (value) => value instanceof ArrayBuffer || ArrayBuffer.isView(value)
+  const isCryptoKey = (value) => typeof CryptoKey !== 'undefined' && value instanceof CryptoKey
+
+  const strings = []
+  let cryptoKeys = 0
+  let byteHits = 0
+  // One line per KIND of value, each delegating: a walker that also decoded
+  // bytes and counted needles inline was the whole of this file's complexity.
+  const collectBinary = (value) => {
+    const bytes = asBytes(value)
+    for (const needle of needleBytes) if (hasSubsequence(bytes, needle)) byteHits += 1
+    strings.push(new TextDecoder().decode(bytes))
+  }
+  const collectEach = (values) => {
+    for (const item of values) collect(item)
+  }
+  function collect(value) {
+    if (typeof value === 'string') strings.push(value)
+    else if (isCryptoKey(value)) cryptoKeys += 1
+    else if (isBinary(value)) collectBinary(value)
+    else if (Array.isArray(value)) collectEach(value)
+    else if (value && typeof value === 'object') collectEach(Object.values(value))
+  }
+
+  const db = await readRequest(indexedDB.open('whiteboard'))
+  for (const storeName of Array.from(db.objectStoreNames)) {
+    collect(
+      await readRequest(db.transaction([storeName], 'readonly').objectStore(storeName).getAll()),
+    )
+  }
+  db.close()
+
+  const localStorageStrings = []
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i)
+    if (key) localStorageStrings.push(window.localStorage.getItem(key) ?? '')
+  }
+  return { idb: strings, localStorage: localStorageStrings, cryptoKeys, byteHits }
+}
+
 // The record a browser keeper would pull: the same shape mcp-passkey-promote-
 // smoke.mjs builds, plus a real markdown body so the sealed-at-rest walk has
 // a real plaintext marker to look for.
@@ -496,59 +563,7 @@ try {
     typeof realKey === 'string' && typeof realSalt === 'string'
       ? [b64uToBytes(realKey), b64uToBytes(realSalt)]
       : []
-  const sealedDump = await page.evaluate(async (needleBytes) => {
-    // Strings are searched as text; binary values are searched as BYTES
-    // (a persisted key would be the decoded 32 bytes, not its base64url
-    // spelling, and a UTF-8 decode of ciphertext can never contain it);
-    // a persisted CryptoKey is a leak on its own, whatever it holds.
-    const strings = []
-    let cryptoKeys = 0
-    let byteHits = 0
-    const hasSubsequence = (hay, needle) => {
-      outer: for (let i = 0; i + needle.length <= hay.length; i++) {
-        for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer
-        return true
-      }
-      return false
-    }
-    function collectStrings(value, out) {
-      if (typeof value === 'string') out.push(value)
-      else if (typeof CryptoKey !== 'undefined' && value instanceof CryptoKey) cryptoKeys += 1
-      else if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-        const bytes =
-          value instanceof ArrayBuffer
-            ? new Uint8Array(value)
-            : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
-        for (const needle of needleBytes) if (hasSubsequence(bytes, needle)) byteHits += 1
-        out.push(new TextDecoder().decode(bytes))
-      } else if (Array.isArray(value)) {
-        for (const item of value) collectStrings(item, out)
-      } else if (value && typeof value === 'object') {
-        for (const item of Object.values(value)) collectStrings(item, out)
-      }
-      return out
-    }
-    const db = await new Promise((resolveDb, rejectDb) => {
-      const req = indexedDB.open('whiteboard')
-      req.onsuccess = () => resolveDb(req.result)
-      req.onerror = () => rejectDb(req.error)
-    })
-    for (const storeName of Array.from(db.objectStoreNames)) {
-      const records = await new Promise((resolveStore, rejectStore) => {
-        const req = db.transaction([storeName], 'readonly').objectStore(storeName).getAll()
-        req.onsuccess = () => resolveStore(req.result)
-        req.onerror = () => rejectStore(req.error)
-      })
-      collectStrings(records, strings)
-    }
-    db.close()
-    const localStorageStrings = []
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const key = window.localStorage.key(i)
-      if (key) localStorageStrings.push(window.localStorage.getItem(key) ?? '')
-    }
-    return { idb: strings, localStorage: localStorageStrings, cryptoKeys, byteHits }
-  }, needles)
+  const sealedDump = await page.evaluate(dumpPersistedValues, needles)
   const markerLeaked =
     sealedDump.idb.some((s) => s.includes(MARKER)) ||
     sealedDump.localStorage.some((s) => s.includes(MARKER))

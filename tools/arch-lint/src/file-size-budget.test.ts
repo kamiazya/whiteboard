@@ -320,7 +320,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised 1045 -> 1090: the daemon-page address ping-pong fix marks the
   // pathname it supersedes and re-checks daemonKept live in the rewrite's
   // async callback.
-  'apps/web/src/App.tsx': 917,
   // Raised 1196 -> 1245, +49, for naming the column area's four views. The
   // file GREW and says more for it: a four-arm ternary chain over three
   // unrelated tests became a discriminated union built once and a switch
@@ -710,7 +709,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // pinned here, not only in the hook's test).
   // 1956 -> 1997 for the /receive-transfer route case: the fragment carries
   // the whole handshake, so it is pinned here beside /pair's same guard.
-  'apps/web/src/App.test.tsx': 1997,
+  'apps/web/src/App.test.tsx': 1998,
   'apps/web/src/components/VersionTimeline.test.tsx': 1061,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   'apps/web/src/components/migration/DaemonDetectedBanner.test.tsx': 982,

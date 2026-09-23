@@ -55,11 +55,17 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // chip and the shell mark, 23 -> 19 with four of its own scripts, 19 -> 14
 // with the build and smoke leftovers, 14 -> 13 with the markdown block
 // layout, 13 -> 12 with the storage report card, 12 -> 10 with the version
+// layout, 13 -> 12 with the storage report card, 12 -> 10 with the version
 // timeline and the comments panel, 10 -> 7 with the boundary scanner, the
-// cycle check and the mkdir lock, and 7 -> 6 with the spatial editor: the
-// comment asks for the ceiling to follow an obvious gap, and a paydown that
-// leaves slack is exactly one.
-const EXEMPT_CEILING = 6
+// cycle check and the mkdir lock, 7 -> 6 with the spatial editor, 6 -> 5
+// with the app root, and 5 -> 2 with the three MCP smoke scripts: the comment
+// asks for the ceiling to follow an obvious gap, and a paydown that leaves
+// slack is exactly one.
+//
+// Two is where this programme ENDS rather than pauses. Both files left were
+// measured and deliberately kept (see the floor's note below), so the next
+// move on either is a judgement about that file, not another sweep.
+const EXEMPT_CEILING = 2
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
@@ -90,12 +96,19 @@ describe('the cognitive-complexity exemption list', () => {
     const paths = exemptions().map((glob) => glob.slice(1))
     // The list is the subject: an empty one would pass every assertion below
     // while measuring nothing. The floor was 50 while the list was in the
-    // hundreds, then 20 as the paydown passed 48. It moves again for the
-    // same reason and by the same rule — to a number that still means "not
-    // vacuous" rather than one the programme has to stop at. Lower it again
-    // when it is in the way; never delete it, or the guard stops measuring
-    // the moment the list empties.
-    expect(paths.length).toBeGreaterThan(5)
+    // hundreds, then 20 as the paydown passed 48, then 5, then 3. It moves
+    // again for the same reason and by the same rule — to a number that
+    // still means "not vacuous" rather than one the programme has to stop
+    // at. Lower it again when it is in the way; never delete it, or the
+    // guard stops measuring the moment the list empties.
+    //
+    // One is the end of the road for lowering: the two files left were each
+    // MEASURED and deliberately kept — `AppShell.tsx` (21 -> 16 over four
+    // extractions, issues/app-shell-complexity-resists-slot-extraction) and
+    // `MarkdownEditor.tsx` (issues/markdown-editor-complexity-is-its-jsx).
+    // If either is ever paid down, delete this guard's floor along with the
+    // list rather than lowering it to zero.
+    expect(paths.length).toBeGreaterThan(1)
     const over = filesOverThreshold(paths)
     expect(paths.filter((path) => !over.has(path))).toEqual([])
   })
