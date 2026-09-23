@@ -142,10 +142,9 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: 'src/pages/BrowserIndexPage.tsx',
   },
   'src/pages/daemon-index-actions.ts': {
-    reach: 'gap',
-    missing:
-      'the browser index row has no Duplicate: BrowserIndexPage never passes onDuplicateDocument to WorkspaceFilesPanel, which renders the action only when it is handed one. Delete is mirrored; duplicate is not',
-    followUp: 'issues/browser-index-row-cannot-duplicate',
+    reach: 'both-keepers',
+    browser: 'src/lib/duplicate-browser-document.ts',
+    note: "the row actions each index page performs on the panel's behalf. The browser's delete helpers are inline in BrowserIndexPage; its duplicate is one definition for both browser surfaces, since the row has only a path while the open page also owes a flush and a switch",
   },
   'src/pages/PairConsentPage.tsx': {
     reach: 'daemon-itself',

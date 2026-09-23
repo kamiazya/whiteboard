@@ -193,7 +193,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
   app.get('/api/w/:workspaceId/workspace-document/snapshot', async (c) => {
     const admitted = await admittedWorkspace(c, depsOf)
     if ('refusal' in admitted) return admitted.refusal
-    const { handle, workspaceId, deps } = admitted
+    const { workspaceId, deps } = admitted
     const doc = await deps.workspaceDocuments.get(workspaceId)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
     return c.body(snapshot, 200, { 'Content-Type': 'application/octet-stream' })
@@ -215,7 +215,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
     async (c) => {
       const admitted = await admittedWorkspace(c, depsOf)
       if ('refusal' in admitted) return admitted.refusal
-      const { handle, workspaceId, deps } = admitted
+      const { workspaceId, deps } = admitted
       const bytes = new Uint8Array(await c.req.arrayBuffer())
 
       const result = await applyWorkspaceDocumentUpdate(deps, { workspaceId, update: bytes })

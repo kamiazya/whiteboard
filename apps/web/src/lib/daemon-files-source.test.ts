@@ -421,3 +421,76 @@ describe('createDaemonFilesSource tags in use', () => {
     await expect(source.readTagLibrary?.()).resolves.toEqual(library)
   })
 })
+
+describe('createDaemonFilesSource tag reads', () => {
+  /** Counts `/document-tags` and answers everything else plausibly. */
+  function countingTagFetch(tagStatus = 200) {
+    const asked: string[] = []
+    const fetchLike = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/document-tags')) {
+        asked.push(url)
+        return Promise.resolve(
+          tagStatus === 200
+            ? jsonResponse({
+                documents: [],
+                contents: [],
+                library: { release: { description: 'shipped' } },
+                inUse: [{ tag: 'release', documents: 1, boards: 0, nodes: 0, edges: 0 }],
+              })
+            : jsonResponse({ message: 'down' }, tagStatus),
+        )
+      }
+      if (url.endsWith('/names')) {
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      }
+      if (url.endsWith('/documents')) return Promise.resolve(jsonResponse({ documents: [] }))
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    return { asked, fetchLike }
+  }
+
+  // The panel reloads the chips once the list has LANDED, so the two asks are
+  // sequential and an in-flight-only dedupe could not see them — which is
+  // what made an addressed cold load pay for the vocabulary twice.
+  it('serves the vocabulary from the tags its list read already fetched', async () => {
+    const { asked, fetchLike } = countingTagFetch()
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await source.listDocuments()
+    expect(asked).toHaveLength(1)
+    expect(await source.listTagsInUse?.()).toEqual([
+      { tag: 'release', documents: 1, boards: 0, nodes: 0, edges: 0 },
+    ])
+    expect(await source.readTagLibrary?.()).toEqual({ release: { description: 'shipped' } })
+    expect(asked).toHaveLength(1)
+  })
+
+  // What `useTagsInUse` promises: the chips count the tags that came back
+  // with the rows they are drawn beside. So a second list read — every write
+  // the panel makes triggers one — must not be answered from the first.
+  it('reads the tags again for a second list read', async () => {
+    const { asked, fetchLike } = countingTagFetch()
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await source.listDocuments()
+    await source.listTagsInUse?.()
+    await source.listDocuments()
+    await source.listTagsInUse?.()
+
+    expect(asked).toHaveLength(2)
+  })
+
+  // A refusal is not an answer to hold: holding one would leave a source
+  // that failed once answering from that failure for as long as it lives.
+  it('retries after a failed tag read instead of holding the failure', async () => {
+    const { asked, fetchLike } = countingTagFetch(500)
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    await source.listDocuments()
+    await expect(source.listTagsInUse?.()).rejects.toThrow()
+    await expect(source.readTagLibrary?.()).rejects.toThrow()
+
+    expect(asked).toHaveLength(3)
+  })
+})
