@@ -56,6 +56,192 @@ export interface FolderContentsListProps {
 }
 
 /**
+ * The card's picture, and the two things drawn ON it.
+ *
+ * Both selection glyphs are drawn while a selection is live and CSS picks
+ * between them from the button's own `aria-pressed` — so the picture cannot
+ * disagree with what is announced. Presence is gated on the MODE, which is a
+ * different question from the state, and `aria-hidden` because the button
+ * already says it.
+ */
+function CardThumbnail({
+  entry,
+  selection,
+  changed,
+  renderThumbnail,
+}: {
+  entry: WorkspaceDocumentEntry
+  selection: FolderContentsListProps['selection']
+  changed: FolderContentsListProps['changed']
+  renderThumbnail: FolderContentsListProps['renderThumbnail']
+}) {
+  return (
+    <span className="bg-muted/40 relative flex aspect-video w-full items-center justify-center overflow-hidden">
+      {renderThumbnail?.(entry) ?? (
+        <span data-kind={entry.kind ?? 'markdown'} className="text-muted-foreground text-xs">
+          {entry.kind ?? 'markdown'}
+        </span>
+      )}
+      {/* Both drawn while a selection is live, and CSS picks between
+          them from the button's own `aria-pressed` — so the picture
+          cannot disagree with what is announced. Presence is gated on
+          the MODE, which is a different question from the state.
+          `aria-hidden` because the button already says it. */}
+      {changed?.has(entry.documentId) && (
+        /* Binary, and in the corner opposite the selection check so
+           the two never collide. `role="img"` with a name rather
+           than a bare colour: a dot nobody can see or hear is not a
+           signal, and this one contributes to the card's own
+           accessible name the way the kind badge already does. */
+        <span
+          role="img"
+          aria-label="Changed since you last opened it"
+          data-testid="card-changed-dot"
+          // The SAME badge as the settings nudge, deliberately.
+          // BRAND.md reserves `#3b6ecc` as the blue spark, the AI's
+          // hand — and says the favicon's syncing dot reuses that hue
+          // because "the system is at work" is the same semantic
+          // family as the AI acting. A document rewritten while the
+          // person was elsewhere is that family: in this product the
+          // thing that rewrote it is usually an agent.
+          //
+          // Not `--primary`, which is chroma zero here and drew this
+          // as ink. Not amber, which the conflict badge below already
+          // spends on this same card. Not a second blue of my own:
+          // `badge-colour-surface.test.ts` holds every badge to one
+          // literal, because that is exactly what went wrong.
+          //
+          // Fixed across themes on purpose — a brand hue is chosen to
+          // read on both grounds — with the ring carrying it over a
+          // thumbnail of any colour.
+          className="absolute top-1 right-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
+        />
+      )}
+      {selection !== undefined && (
+        <>
+          <Circle
+            aria-hidden="true"
+            className="text-muted-foreground/70 absolute top-1 left-1 size-5 group-aria-pressed:hidden"
+          />
+          <CheckCircle2
+            aria-hidden="true"
+            className="fill-primary text-primary-foreground absolute top-1 left-1 hidden size-5 group-aria-pressed:block"
+          />
+        </>
+      )}
+    </span>
+  )
+}
+
+/**
+ * A document, as a card. Everything it shows beyond the name is a fact the
+ * ROW carries — a kind, a path conflict, a pin, when it last moved, its tags
+ * — so the card is the arrangement and owns none of it.
+ */
+function DocumentCard({
+  entry,
+  selectedPath,
+  selection,
+  changed,
+  renderThumbnail,
+  onOpen,
+  onActivateDocument,
+  onDocumentContextMenu,
+}: {
+  entry: WorkspaceDocumentEntry
+  selectedPath: FolderContentsListProps['selectedPath']
+  selection: FolderContentsListProps['selection']
+  changed: FolderContentsListProps['changed']
+  renderThumbnail: FolderContentsListProps['renderThumbnail']
+  onOpen: FolderContentsListProps['onOpen']
+  onActivateDocument: FolderContentsListProps['onActivateDocument']
+  onDocumentContextMenu: FolderContentsListProps['onDocumentContextMenu']
+}) {
+  return (
+    <button
+      type="button"
+      data-doc-path={entry.path}
+      aria-current={entry.path === selectedPath ? 'true' : undefined}
+      aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
+      onClick={() => onOpen({ kind: 'document', document: entry })}
+      onDoubleClick={onActivateDocument === undefined ? undefined : () => onActivateDocument(entry)}
+      onKeyDown={
+        onActivateDocument === undefined
+          ? undefined
+          : (event) => {
+              if (event.key === 'Enter') {
+                // Without this the keydown ALSO fires the native
+                // button click, selecting after the open.
+                event.preventDefault()
+                onActivateDocument(entry)
+              }
+            }
+      }
+      onContextMenu={
+        onDocumentContextMenu === undefined
+          ? undefined
+          : (event) => {
+              event.preventDefault()
+              onDocumentContextMenu(entry, event.clientX, event.clientY)
+            }
+      }
+      // `group` + `aria-pressed:` so the SELECTED look is derived from
+      // the attribute a screen reader reads, rather than written a
+      // second time from `selection.has(...)`. toggle-state-surface
+      // enforces that, and caught this card doing exactly the doubled
+      // thing it forbids.
+      className="group hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 aria-pressed:border-primary aria-pressed:bg-accent/30 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
+    >
+      <CardThumbnail
+        entry={entry}
+        selection={selection}
+        changed={changed}
+        renderThumbnail={renderThumbnail}
+      />
+      <span className="flex min-w-0 flex-col px-2 py-1.5">
+        {/* The display name is the label everywhere else; the segment
+              is the fallback for a document nobody named, never a name
+              invented from the path. */}
+        <span className="flex min-w-0 items-center gap-1">
+          <KindBadge kind={entry.kind} />
+          <span data-testid="card-title" className="truncate text-sm">
+            {entry.name ?? entry.path.split('/').at(-1)}
+          </span>
+          {entry.shadowed && (
+            <span
+              data-testid="card-shadowed-badge"
+              title="Another document owns this path. Rename this one to resolve the conflict."
+              className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+            >
+              Path conflict
+            </span>
+          )}
+          {entry.pinOrder !== undefined && (
+            /* The pin used to exist only as a sort position — state a
+                 reader could not see on the object it belongs to. */
+            <Pin
+              role="img"
+              aria-label="Pinned"
+              className="text-muted-foreground ml-auto size-3 shrink-0"
+            />
+          )}
+        </span>
+        {entry.updatedAt !== undefined && (
+          <span data-testid="card-subtitle" className="text-muted-foreground truncate text-xs">
+            {formatRelative(entry.updatedAt)}
+          </span>
+        )}
+        {(entry.tags?.length ?? 0) > 0 && (
+          <span className="text-muted-foreground truncate text-[11px]">
+            {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+          </span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+/**
  * The kind, spoken in the tree rows' existing icon vocabulary rather than a
  * word — with the kind as the icon's accessible name, so what left the
  * subtitle text still answers to a reader.
@@ -138,142 +324,16 @@ export function FolderContentsList({
       ))}
       {here.map((entry) => (
         <li key={entry.documentId}>
-          <button
-            type="button"
-            data-doc-path={entry.path}
-            aria-current={entry.path === selectedPath ? 'true' : undefined}
-            aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
-            onClick={() => onOpen({ kind: 'document', document: entry })}
-            onDoubleClick={
-              onActivateDocument === undefined ? undefined : () => onActivateDocument(entry)
-            }
-            onKeyDown={
-              onActivateDocument === undefined
-                ? undefined
-                : (event) => {
-                    if (event.key === 'Enter') {
-                      // Without this the keydown ALSO fires the native
-                      // button click, selecting after the open.
-                      event.preventDefault()
-                      onActivateDocument(entry)
-                    }
-                  }
-            }
-            onContextMenu={
-              onDocumentContextMenu === undefined
-                ? undefined
-                : (event) => {
-                    event.preventDefault()
-                    onDocumentContextMenu(entry, event.clientX, event.clientY)
-                  }
-            }
-            // `group` + `aria-pressed:` so the SELECTED look is derived from
-            // the attribute a screen reader reads, rather than written a
-            // second time from `selection.has(...)`. toggle-state-surface
-            // enforces that, and caught this card doing exactly the doubled
-            // thing it forbids.
-            className="group hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 aria-pressed:border-primary aria-pressed:bg-accent/30 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
-          >
-            <span className="bg-muted/40 relative flex aspect-video w-full items-center justify-center overflow-hidden">
-              {renderThumbnail?.(entry) ?? (
-                <span
-                  data-kind={entry.kind ?? 'markdown'}
-                  className="text-muted-foreground text-xs"
-                >
-                  {entry.kind ?? 'markdown'}
-                </span>
-              )}
-              {/* Both drawn while a selection is live, and CSS picks between
-                  them from the button's own `aria-pressed` — so the picture
-                  cannot disagree with what is announced. Presence is gated on
-                  the MODE, which is a different question from the state.
-                  `aria-hidden` because the button already says it. */}
-              {changed?.has(entry.documentId) && (
-                /* Binary, and in the corner opposite the selection check so
-                   the two never collide. `role="img"` with a name rather
-                   than a bare colour: a dot nobody can see or hear is not a
-                   signal, and this one contributes to the card's own
-                   accessible name the way the kind badge already does. */
-                <span
-                  role="img"
-                  aria-label="Changed since you last opened it"
-                  data-testid="card-changed-dot"
-                  // The SAME badge as the settings nudge, deliberately.
-                  // BRAND.md reserves `#3b6ecc` as the blue spark, the AI's
-                  // hand — and says the favicon's syncing dot reuses that hue
-                  // because "the system is at work" is the same semantic
-                  // family as the AI acting. A document rewritten while the
-                  // person was elsewhere is that family: in this product the
-                  // thing that rewrote it is usually an agent.
-                  //
-                  // Not `--primary`, which is chroma zero here and drew this
-                  // as ink. Not amber, which the conflict badge below already
-                  // spends on this same card. Not a second blue of my own:
-                  // `badge-colour-surface.test.ts` holds every badge to one
-                  // literal, because that is exactly what went wrong.
-                  //
-                  // Fixed across themes on purpose — a brand hue is chosen to
-                  // read on both grounds — with the ring carrying it over a
-                  // thumbnail of any colour.
-                  className="absolute top-1 right-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
-                />
-              )}
-              {selection !== undefined && (
-                <>
-                  <Circle
-                    aria-hidden="true"
-                    className="text-muted-foreground/70 absolute top-1 left-1 size-5 group-aria-pressed:hidden"
-                  />
-                  <CheckCircle2
-                    aria-hidden="true"
-                    className="fill-primary text-primary-foreground absolute top-1 left-1 hidden size-5 group-aria-pressed:block"
-                  />
-                </>
-              )}
-            </span>
-            <span className="flex min-w-0 flex-col px-2 py-1.5">
-              {/* The display name is the label everywhere else; the segment
-                  is the fallback for a document nobody named, never a name
-                  invented from the path. */}
-              <span className="flex min-w-0 items-center gap-1">
-                <KindBadge kind={entry.kind} />
-                <span data-testid="card-title" className="truncate text-sm">
-                  {entry.name ?? entry.path.split('/').at(-1)}
-                </span>
-                {entry.shadowed && (
-                  <span
-                    data-testid="card-shadowed-badge"
-                    title="Another document owns this path. Rename this one to resolve the conflict."
-                    className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400"
-                  >
-                    Path conflict
-                  </span>
-                )}
-                {entry.pinOrder !== undefined && (
-                  /* The pin used to exist only as a sort position — state a
-                     reader could not see on the object it belongs to. */
-                  <Pin
-                    role="img"
-                    aria-label="Pinned"
-                    className="text-muted-foreground ml-auto size-3 shrink-0"
-                  />
-                )}
-              </span>
-              {entry.updatedAt !== undefined && (
-                <span
-                  data-testid="card-subtitle"
-                  className="text-muted-foreground truncate text-xs"
-                >
-                  {formatRelative(entry.updatedAt)}
-                </span>
-              )}
-              {(entry.tags?.length ?? 0) > 0 && (
-                <span className="text-muted-foreground truncate text-[11px]">
-                  {entry.tags?.map((tag) => `#${tag}`).join(' ')}
-                </span>
-              )}
-            </span>
-          </button>
+          <DocumentCard
+            entry={entry}
+            selectedPath={selectedPath}
+            selection={selection}
+            changed={changed}
+            renderThumbnail={renderThumbnail}
+            onOpen={onOpen}
+            onActivateDocument={onActivateDocument}
+            onDocumentContextMenu={onDocumentContextMenu}
+          />
         </li>
       ))}
     </ul>

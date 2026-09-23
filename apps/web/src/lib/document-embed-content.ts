@@ -118,8 +118,12 @@ export async function loadBrowserReference(
     if (entry?.kind === 'spatial') return { documentId, ...name, canvas: readSpatialCanvas(doc) }
     return { documentId, ...name, body: readMarkdownBody(doc) }
   } catch (err) {
+    // Reported AND re-thrown: `undefined` here means "this document has no
+    // content", which the prefetch caches as terminal — so answering it for
+    // a store that merely failed to read left the embed blank for the life
+    // of the page. The caller (usePrefetchedEntries) asks again instead.
     log.warn('referenced document load failed', { documentId, err })
-    return undefined
+    throw err
   }
 }
 

@@ -2,6 +2,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { type ReferenceLoader, useReferenceSeams } from './use-reference-seams.js'
 
 const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
@@ -21,6 +22,26 @@ describe('useReferenceSeams', () => {
     expect(JSON.stringify(embedded)).toContain('embedded body')
     expect(result.current.resolveTitle(B)).toBe('Note B')
     expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks a rejected load again, so one failed store read does not blank an embed for good', async () => {
+    // The flake this closes: a transient IndexedDB read threw, the loader
+    // reported it as "this document has no content", and the prefetch cached
+    // that as terminal — the embed kept its placeholder for the life of the
+    // page, with the name beside it (which comes from the page's own table,
+    // not from the load) and nothing logged.
+    let asked = 0
+    const load = vi.fn<ReferenceLoader>(async () => {
+      asked += 1
+      if (asked === 1) throw new Error('the store could not be read')
+      return { documentId: B, body: 'embedded body', name: 'Note B' }
+    })
+    const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))
+    await waitFor(() => {
+      expect(JSON.stringify(result.current.resolveEmbed(B))).toContain('embedded body')
+    })
+    expect(asked).toBe(2)
+    await expectLoggedFailure('reference load failed')
   })
 
   it("answers an inline image's picture, which is the whole point of the seam", async () => {
