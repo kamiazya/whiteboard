@@ -470,7 +470,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +7: that image asks the caller WHERE its picture is, through the
   // `resolveReference` seam a body already carries — so a written path can
   // be a workspace attachment instead of only an absolute URL.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1752,
+  // Raised 1752 -> 1932. The file grew by RATIONALE, not by logic: eleven
+  // inner steps that were inline blocks are now named functions, each
+  // carrying the comment that was buried in the middle of the block it came
+  // from. The next real shrink moves the code-block trio (layoutCodeBlock /
+  // codeLineRuns / codeTokenRun) and the table half into sibling modules —
+  // which needs `ResolvedMdastOptions` and `Cursor` extracted first, or the
+  // new module imports them back and closes a package-internal cycle.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1932,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -722,7 +729,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reason its own comment gives for the list being 400-odd entries rather
   // than 17 — so it is recorded rather than split, and splitting it would
   // put half the ledger where a reader does not look for it.
-  'tools/arch-lint/src/function-size-budget.test.ts': 814,
+  'tools/arch-lint/src/function-size-budget.test.ts': 821,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
