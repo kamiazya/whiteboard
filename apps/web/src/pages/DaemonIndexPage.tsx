@@ -5,18 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
-import {
-  createDaemonFetch,
-  createDocument,
-  DaemonApiError,
-  getWorkspaceNames,
-  listDocuments,
-  listTrash,
-  listWorkspaces,
-} from '../lib/daemon-api-client.js'
+import { createDaemonFetch, createDocument, listWorkspaces } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
+import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 
@@ -112,6 +105,20 @@ export function DaemonIndexPage({
         ? createDaemonFilesSource(daemonFetch, daemonBaseUrl, selectedWorkspace)
         : null,
     [daemonFetch, daemonBaseUrl, selectedWorkspace],
+  )
+  // The page's own reads go through the panel's source whenever they are
+  // about the workspace on screen, so the two share one read. A load for any
+  // other workspace (a stale callback) gets a source of its own.
+  const filesSourceRef = useRef({ workspaceId: selectedWorkspace, source: filesSource })
+  filesSourceRef.current = { workspaceId: selectedWorkspace, source: filesSource }
+  const sourceFor = useCallback(
+    (workspaceId: string) => {
+      const current = filesSourceRef.current
+      return current.workspaceId === workspaceId && current.source !== null
+        ? current.source
+        : createDaemonFilesSource(daemonFetch, daemonBaseUrl, workspaceId)
+    },
+    [daemonFetch, daemonBaseUrl],
   )
   const [rows, setRows] = useState<DocumentRow[]>([])
   // Consulted only for the onboarding decision: a workspace whose list is
@@ -324,33 +331,26 @@ export function DaemonIndexPage({
     async (workspaceId: string, isStale: () => boolean) => {
       setLoadError(null)
       try {
-        const [documentsRes, names, trashEntries] = await Promise.all([
-          listDocuments(daemonFetch, daemonBaseUrl, workspaceId),
-          // Failure degrades to "nothing named, nothing pinned", never to a
-          // failed list.
-          getWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
-          // Loaded HERE because this runs after every delete too (the dialog
-          // dismiss re-invokes it), which is exactly when the count decides
-          // whether onboarding may replace the panel.
-          listTrash(daemonFetch, daemonBaseUrl, workspaceId)
-            .then((res) => res.entries.length)
-            .catch(() => 0),
-        ])
+        // Through the SAME source the panel reads, and as a refresh: this runs
+        // on load and after every create, duplicate and delete, which is
+        // exactly when the data moved. The panel's own read then answers from
+        // what this one holds instead of asking again. The trash is read here
+        // because the count decides whether onboarding may replace the panel.
+        const { entries, trash } = await sourceFor(workspaceId).refresh()
         if (isStale()) return
-        const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
-        const nextRows: DocumentRow[] = documentsRes.documents.map((c) => {
-          const pinOrder = pinIndex.get(c.path)
-          return {
-            path: c.path,
-            displayName: names?.documents?.[c.path] ?? c.path,
-            updatedAt: c.updatedAt,
-            kind: c.kind,
-            pinned: pinOrder !== undefined,
-            pinOrder: pinOrder ?? Number.POSITIVE_INFINITY,
-          }
-        })
-        setRows(sortRows(nextRows))
-        setTrashCount(trashEntries)
+        setRows(
+          sortRows(
+            entries.map((entry) => ({
+              path: entry.path,
+              displayName: entry.name ?? entry.path,
+              updatedAt: entry.updatedAt,
+              ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+              pinned: entry.pinOrder !== undefined,
+              pinOrder: entry.pinOrder ?? Number.POSITIVE_INFINITY,
+            })),
+          ),
+        )
+        setTrashCount(trash?.length ?? 0)
         setLoaded(true)
       } catch (err) {
         if (isStale()) return
@@ -367,7 +367,7 @@ export function DaemonIndexPage({
         // anomaly, and a create issued against a workspace that no longer
         // exists would silently make a DIFFERENT one (the route passes
         // `createWorkspace: true`).
-        if (err instanceof DaemonApiError && err.status === 404) {
+        if (err instanceof WorkspaceMissingError) {
           // Deliberately NOT `setLoaded(true)` here. The load is not over —
           // the page is still deciding what it is showing. Marking it
           // complete renders the onboarding empty state for the workspace
@@ -382,7 +382,7 @@ export function DaemonIndexPage({
         setLoadError('Failed to load documents for this workspace.')
       }
     },
-    [daemonFetch, daemonBaseUrl, reselectAfterStale],
+    [sourceFor, reselectAfterStale],
   )
 
   // SCOPE RESET — see scoped-screen-state.test.ts
