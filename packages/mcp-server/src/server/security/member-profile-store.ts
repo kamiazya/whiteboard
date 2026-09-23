@@ -49,11 +49,7 @@
 
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import {
-  inTenantTransaction,
-  type TenantDatabase,
-  type TenantScoped,
-} from '../store/db/tenant-database.js'
+import { inTenantTransaction, type TenantScoped } from '../store/db/tenant-database.js'
 
 const memberProfileRowSchema = z
   .object({
@@ -231,7 +227,7 @@ async function insertUser(db: TenantScoped, accountId: string, displayName: stri
   return { id, now }
 }
 
-export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore {
+export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     async profileForBinding(binding) {
       const accountId = await accountFor(db, binding)

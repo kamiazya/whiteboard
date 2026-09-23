@@ -14,9 +14,9 @@
 import type { ProviderAdmission } from './sign-in-config.js'
 
 /** Claims the authenticator has already verified (signature, issuer, audience). */
-type VerifiedClaims = Readonly<Record<string, unknown>>
+export type VerifiedClaims = Readonly<Record<string, unknown>>
 
-type AdmissionRefusal =
+export type AdmissionRefusal =
   | 'email_unverified'
   | 'email_domain_not_allowed'
   | 'hosted_domain_not_allowed'
@@ -34,7 +34,7 @@ export type AdmissionDecision =
  * vocabulary cannot say. It sees the verified claims and answers; it cannot
  * widen admission, only refuse, since it runs after the declared rules pass.
  */
-type AdmissionRule = (input: {
+export type AdmissionRule = (input: {
   readonly providerId: string
   readonly claims: VerifiedClaims
 }) => { readonly admit: true } | { readonly admit: false; readonly reason: string }
