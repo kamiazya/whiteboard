@@ -59,11 +59,16 @@ export type TenantScoped = TenantDatabase | TenantTransaction
  * `db.transaction().execute` with the brand kept: Kysely hands the callback a
  * plain `Transaction`, which a store helper typed `TenantScoped` refuses, so
  * this is the one way to open a transaction a store can use.
+ *
+ * Already inside one, it JOINS it rather than opening another (Kysely refuses
+ * a nested `transaction()`), so a store method that is atomic on its own is
+ * also atomic as one step of a caller's larger transaction.
  */
 export function inTenantTransaction<T>(
   db: TenantScoped,
   fn: (trx: TenantTransaction) => Promise<T>,
 ): Promise<T> {
+  if (db.isTransaction) return fn(db as TenantTransaction)
   return db.transaction().execute((trx) => fn(trx as TenantTransaction))
 }
 

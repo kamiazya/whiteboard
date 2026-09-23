@@ -39,6 +39,15 @@ describe('sign-in sessions', () => {
     expect(await sessions.resolve(second, T0 + 1)).toBeNull()
   })
 
+  // Nothing else ever removes an expired session, so opening one is where the
+  // table sheds them; otherwise it grows with every sign-in forever.
+  it('deletes expired sessions when a new one is opened', async () => {
+    await sessions.create(person, T0, 1000)
+    await sessions.create(person, T0 + 5000, 1000)
+    const rows = await handle.rawDb.selectFrom('signInSessions').selectAll().execute()
+    expect(rows).toHaveLength(1)
+  })
+
   it('belongs to the tenant it was opened in', async () => {
     const token = await sessions.create(person, T0, 1000)
     const other = createSignInSessionStore(tenantDatabase(handle.rawDb, 'tenant-two'))

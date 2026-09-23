@@ -11,14 +11,18 @@
  *
  * Spending comes BEFORE creating: redemption is one conditional update, so a
  * link two people race for is won by exactly one of them, and the loser is
- * refused before any user exists. The reverse order would let both in.
+ * refused before any user exists. The reverse order would let both in. The
+ * two commit in ONE transaction, so a creation that fails leaves the link
+ * unspent rather than spent on nobody.
  */
 
-import type { InvitationStore } from './invitation-store.js'
-import type {
-  AuthenticatorBinding,
-  MemberProfile,
-  MemberProfileStore,
+import { inTenantTransaction, type TenantDatabase } from '../store/db/tenant-database.js'
+import { createInvitationStore, type InvitationStore } from './invitation-store.js'
+import {
+  type AuthenticatorBinding,
+  createMemberProfileStore,
+  type MemberProfile,
+  type MemberProfileStore,
 } from './member-profile-store.js'
 import {
   type AdmissionRefusal,
@@ -27,14 +31,38 @@ import {
   type VerifiedClaims,
 } from './sign-in-admission.js'
 import { type OidcProvider, providerAuthenticator } from './sign-in-config.js'
-import type { SignInSessionStore } from './sign-in-session-store.js'
+import { createSignInSessionStore, type SignInSessionStore } from './sign-in-session-store.js'
 
-export interface CompleteSignInDeps {
+interface NewcomerStores {
   readonly members: MemberProfileStore
   readonly invitations: InvitationStore
+}
+
+export interface CompleteSignInDeps extends NewcomerStores {
   readonly sessions: SignInSessionStore
   readonly sessionTtlMs: number
   readonly codeRules?: readonly AdmissionRule[]
+  /** Runs `fn` in ONE transaction over this tenant's member and invitation
+   *  stores, so spending an invitation and creating the user commit together
+   *  or not at all. */
+  atomically<T>(fn: (stores: NewcomerStores) => Promise<T>): Promise<T>
+}
+
+/** The deps over one tenant-bound database, as the composition roots build them. */
+export function createCompleteSignInDeps(
+  db: TenantDatabase,
+  sessionTtlMs: number,
+): CompleteSignInDeps {
+  return {
+    members: createMemberProfileStore(db),
+    invitations: createInvitationStore(db),
+    sessions: createSignInSessionStore(db),
+    sessionTtlMs,
+    atomically: (fn) =>
+      inTenantTransaction(db, (trx) =>
+        fn({ members: createMemberProfileStore(trx), invitations: createInvitationStore(trx) }),
+      ),
+  }
 }
 
 interface CompleteSignInInput {
@@ -119,16 +147,14 @@ export async function completeSignIn(
 
   let profile = existing
   if (profile === null) {
-    if (
-      arrived.kind !== 'none' &&
-      !(await deps.invitations.redeem(arrived.id, JSON.stringify(binding), now))
-    ) {
-      return refuse('invitation_unusable')
-    }
-    profile = await deps.members.ensureProfile({
-      binding,
-      displayName: displayNameFrom(claims, sub),
+    profile = await deps.atomically(async ({ members, invitations }) => {
+      const spent =
+        arrived.kind === 'none' ||
+        (await invitations.redeem(arrived.id, JSON.stringify(binding), now))
+      if (!spent) return null
+      return members.ensureProfile({ binding, displayName: displayNameFrom(claims, sub) })
     })
+    if (profile === null) return refuse('invitation_unusable')
   }
 
   const sessionToken = await deps.sessions.create(binding, now, deps.sessionTtlMs)

@@ -13,7 +13,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import type { TenantDatabase } from '../store/db/tenant-database.js'
+import type { TenantScoped } from '../store/db/tenant-database.js'
 
 const invitationSchema = z
   .object({
@@ -57,7 +57,7 @@ function hashToken(token: string): string {
 }
 
 async function insert(
-  db: TenantDatabase,
+  db: TenantScoped,
   input: IssueInput,
   kind: { tokenHash: string } | { email: string },
 ): Promise<Invitation> {
@@ -80,7 +80,7 @@ async function insert(
   return invitation
 }
 
-async function openLink(db: TenantDatabase, token: string, now: number) {
+async function openLink(db: TenantScoped, token: string, now: number) {
   const row = await db
     .selectFrom('invitations')
     .selectAll()
@@ -92,7 +92,7 @@ async function openLink(db: TenantDatabase, token: string, now: number) {
   return { ok: true as const, invitation: invitationSchema.parse(row) }
 }
 
-async function openForEmail(db: TenantDatabase, email: string, now: number) {
+async function openForEmail(db: TenantScoped, email: string, now: number) {
   const row = await db
     .selectFrom('invitations')
     .selectAll()
@@ -104,7 +104,7 @@ async function openForEmail(db: TenantDatabase, email: string, now: number) {
   return row === undefined ? null : invitationSchema.parse(row)
 }
 
-async function redeem(db: TenantDatabase, invitationId: string, redeemedBy: string, now: number) {
+async function redeem(db: TenantScoped, invitationId: string, redeemedBy: string, now: number) {
   const updated = await db
     .updateTable('invitations')
     .set({ redeemedAt: now, redeemedBy })
@@ -116,7 +116,7 @@ async function redeem(db: TenantDatabase, invitationId: string, redeemedBy: stri
   return updated.length > 0
 }
 
-async function revoke(db: TenantDatabase, invitationId: string) {
+async function revoke(db: TenantScoped, invitationId: string) {
   const deleted = await db
     .deleteFrom('invitations')
     .where('id', '=', invitationId)
@@ -125,7 +125,7 @@ async function revoke(db: TenantDatabase, invitationId: string) {
   return deleted.length > 0
 }
 
-export function createInvitationStore(db: TenantDatabase): InvitationStore {
+export function createInvitationStore(db: TenantScoped): InvitationStore {
   return {
     async createLink(input) {
       const token = randomBytes(32).toString('base64url')
