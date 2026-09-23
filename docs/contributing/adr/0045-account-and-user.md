@@ -3,9 +3,12 @@
 **Status:** Draft — the shape and its open forks were recorded on 2026-09-23
 while the conversation was fresh, and the owner answered all of them the same
 day (see **Decisions taken** below). A second round, forced by what the
-first round's implementation exposed, was answered the same day too
-(decisions 11-13). Of all of it only decision 8 is built — the origin-keyed
-stores live under their tenant — and
+first round's implementation exposed, added decisions 11-14 the same day,
+and a third added decision 15, which makes authentication a seam. Of the
+account/user model itself only decision 8's tenant partitioning is built —
+the origin-keyed stores live under their tenant. The external-token
+validation seam decision 15 cites already exists, but it does not yet
+resolve anything to an account; and
 [ADR-0041](0041-profile-and-authority.md)'s Member/profile remains what ships;
 the draft stays a draft until the first increment is built, so that increment
 can correct it rather than inherit a record nobody tested. This exists so the
@@ -48,9 +51,16 @@ change**.
    Everything a workspace names keeps pointing here, which is what makes the
    constraint above hold: adding accounts moves nothing a workspace can see.
 
-2. **An ACCOUNT is the login identity: what an authenticator vouches for.**
-   A passkey is the built-in authenticator, not the only one (decision 15).
-   It is keeper-wide, belongs to no tenant, and holds credentials. It carries no
+   This supersedes ADR-0035 decision 1's use of "user" for the set of a
+   person's device DIDs: that set stays device evidence, not the product's
+   User. It also narrows ADR-0041 decision 1's keeper-held profile: in a
+   keeper with several tenants, each profile record belongs to exactly one.
+
+2. **An ACCOUNT is the keeper-wide login identity that one or more
+   authenticator bindings resolve to.** A passkey is the built-in
+   authenticator and contributes a WebAuthn credential; other authenticators
+   contribute a subject of their own (decision 15). An account belongs to no
+   tenant. It carries no
    display name a tenant reads, no membership, and no authority of its own —
    authority reaches a resource through a user
    ([ADR-0043](0043-authority-as-keys.md)), never through an account.
@@ -65,10 +75,12 @@ change**.
    holds both credentials. Declaring them the same person is exactly what
    ADR-0035 decision 4 says a keeper may not do.
 
-5. **The credential table moves under the account, and nothing else moves.**
-   `profileCredentials` (credential -> profile) becomes credential -> account
-   plus account -> user, the second half kept inside each tenant
-   (decision 13). That is a change on the authentication side only; the
+5. **Authentication bindings move under the account, and nothing
+   workspace-facing moves.** `profileCredentials` (credential -> profile)
+   splits into binding -> account plus account -> user, the second half kept
+   inside each tenant (decision 13). For the passkey authenticator a binding
+   is the WebAuthn credential; another authenticator's binding is the stable
+   subject it reports. That is a change on the authentication side only; the
    workspace-facing unit does not move, per the constraint.
 
 6. **Self-host keeps exactly one account per person and need not show the
@@ -99,9 +111,9 @@ alternatives are what the answers were chosen against.
 7. **A request's tenant is its SUBDOMAIN** — `acme.example.com`, one origin per
    tenant. Chosen over a path prefix and over a session-carried current tenant,
    and the reason is that this codebase already decides trust by ORIGIN: a
-   pairing grant is an origin the user approved, a passkey pin is keyed by
-   origin, and a credential's rpId is the origin it was registered at. Under a
-   path prefix every tenant shares one origin, so the browser-side boundary
+   pairing grant is an origin the user approved, and a passkey pin records
+   the origin that accepted the credential. (Where a passkey is REGISTERED is
+   a separate question, which decision 11 answers.) Under a path prefix every tenant shares one origin, so the browser-side boundary
    disappears and only the server's own check is left; under a session, a
    mistake in that check IS the leak. A subdomain makes the browser enforce
    what the server also enforces. It costs DNS and certificate work for each
@@ -112,16 +124,19 @@ alternatives are what the answers were chosen against.
    and the tenant comes from the request's host.
 
 8. **The file-backed stores are partitioned per tenant too**: pairing grants
-   and passkey pins move under the tenant's directory, beside its blobs. With
-   decision 7 this is the same boundary twice over, since an origin now names
-   one tenant. Left keeper-wide they would mean "an origin this KEEPER trusts",
+   and passkey pins move under the tenant's directory, beside its blobs. Once
+   decision 7's host routing exists, the host and the storage enforce the
+   boundary independently; until then only the storage partition does. Left keeper-wide they would mean "an origin this KEEPER trusts",
    and a grant one tenant gave would answer for another.
 
-9. **An existing member of a tenant invites an account into it**, and the
-   invitation is what creates that tenant's user. Not the keeper's operator:
+9. **An existing USER of a tenant invites an account into it**, and
+   accepting the invitation is what creates that tenant's user. (A tenant has
+   users; "member" stays ADR-0041's word for a user admitted to one
+   WORKSPACE, and workspace membership does not by itself confer the right to
+   invite. Which users may invite is governance, as fork 2 said.) Not the keeper's operator:
    authority comes from owning the resource (ADR-0035 decision 4), and an
    operator who could add people to any tenant would be an issuer of identity
-   in all of them. The first member comes with the tenant's creation.
+   in all of them. The first user comes with the tenant's creation.
 
 10. **An account carries a display name for ITS OWN picker** — "work",
     "private" — shown where a person chooses a passkey, and never shown to a
@@ -191,9 +206,13 @@ remove, so the first round could not stand as written.
     say). The built-in passkey is one authenticator; an external identity
     provider, a header set by a reverse proxy the operator trusts, or a
     directory are others, supplied by whoever deploys the keeper. The
-    server-mode bearer-token seam that already takes an external validator
-    returning an issuer and a subject is the same shape, and becomes one
-    authenticator rather than a parallel path.
+    server-mode bearer-token seam already takes an external validator that
+    returns an issuer and a subject, and becomes one authenticator rather
+    than a parallel path — but not as it stands: it deliberately surfaces
+    only the subject and scopes to what it authorizes, so resolving to an
+    account means either doing that resolution inside the strategy or
+    carrying the authenticator's identity forward without exposing raw
+    issuer metadata to unrelated surfaces.
 
     What stays fixed whatever the authenticator: an account is not a user
     (decision 1), authority reaches a resource only through a user
@@ -213,10 +232,11 @@ remove, so the first round could not stand as written.
 
 ## Consequences
 
-- **The subdomain decision reaches further than this ADR.** Every origin-keyed
-  store (grants, pins) gains a tenant, the daemon's CORS and cookie scope
-  follow the host, and a deployment needs a wildcard certificate. None of that
-  is work this ADR does; it is what decision 7 commits to.
+- **The subdomain decision reaches further than the first increment.**
+  Decision 8's per-tenant grants and pins are built. Host-derived tenant
+  selection, host-scoped sessions, CORS following the host, and wildcard
+  DNS and certificates wait, per decision 15, for a keeper that can hold
+  more than one tenant.
 - **Easier:** a tenant's member list cannot leak that a person exists
   elsewhere, because it is a list of users and a user belongs to one tenant.
   Attribution stays stable when an account is deleted, since a user is not the
@@ -244,10 +264,15 @@ remove, so the first round could not stand as written.
   the person set for another tenant, and an admin listing members would see an
   identity that is not theirs.
 - **A profile is tenant-scoped and there is no account.** What ships today,
-  extended. A person then registers a passkey per tenant, and a keeper with
-  many tenants asks the same person to enrol repeatedly — acceptable at one
-  tenant, which is why it is what ships, and the reason this ADR is a draft
-  rather than a rewrite.
-- **An account IS the user, with a per-tenant nickname.** Collapses decision 3
-  into a field. It reads simpler and loses decision 4: two accounts for one
-  person become impossible, so "work and private" cannot be expressed.
+  extended. Each tenant's profile then owns its authentication directly: a
+  passkey is enrolled per tenant, so a keeper with many tenants asks the same
+  person to enrol repeatedly, and an external authenticator has to be wired
+  to profiles one tenant at a time. It also leaves a single-tenant self-host
+  no place to plug its own sign-in in without coupling it to the user a
+  workspace sees — the reason decision 15 builds the account first.
+- **An account IS the user, with per-tenant presentation fields.** Removes
+  the account -> user link, and with it makes the identity a tenant sees
+  keeper-wide: either every tenant reads one shared identity — the
+  constraint the owner set — or a tenant-local user is recreated under
+  another name. It also stops one account resolving to separately governed
+  users in different tenants, which is decision 3.
