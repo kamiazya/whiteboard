@@ -2,7 +2,10 @@
 
 **Status:** Draft — the shape and its open forks were recorded on 2026-09-23
 while the conversation was fresh, and the owner answered all of them the same
-day (see **Decisions taken** below). Nothing here is implemented, and
+day (see **Decisions taken** below). A second round, forced by what the
+first round's implementation exposed, was answered the same day too
+(decisions 11-13). Of all of it only decision 8 is built — the origin-keyed
+stores live under their tenant — and
 [ADR-0041](0041-profile-and-authority.md)'s Member/profile remains what ships;
 the draft stays a draft until the first increment is built, so that increment
 can correct it rather than inherit a record nobody tested. This exists so the
@@ -52,8 +55,8 @@ change**.
    ([ADR-0043](0043-authority-as-keys.md)), never through an account.
 
 3. **An account links to zero or more users, at most one per tenant.** Signing
-   in with an account and then choosing a tenant resolves to that tenant's
-   user. A person who wants to be two people in one tenant uses two accounts,
+   in with an account at a tenant resolves to that tenant's user (where the
+   sign-in happens is decision 12). A person who wants to be two people in one tenant uses two accounts,
    which is the same answer as "work and private".
 
 4. **Nothing joins two accounts.** A person holding a work account and a
@@ -63,7 +66,8 @@ change**.
 
 5. **The credential table moves under the account, and nothing else moves.**
    `profileCredentials` (credential -> profile) becomes credential -> account
-   plus account -> user. That is a change on the authentication side only; the
+   plus account -> user, the second half kept inside each tenant
+   (decision 13). That is a change on the authentication side only; the
    workspace-facing unit does not move, per the constraint.
 
 6. **Self-host keeps exactly one account per person and need not show the
@@ -125,6 +129,41 @@ alternatives are what the answers were chosen against.
     which is a usability answer rather than a change to the model. A tenant
     still reads only the user's name (decision 1).
 
+## Decisions taken, second round (owner, 2026-09-23)
+
+Decision 7 met the code. A credential is registered against the hostname it
+was created at, and under decision 7 every tenant has its own hostname — so
+an account's passkey would work in exactly one tenant, and a person with
+three tenants would enrol three times. That is the cost decision 2 exists to
+remove, so the first round could not stand as written.
+
+11. **An account's passkey is registered against the keeper's parent
+    domain** — `example.com`, not `acme.example.com`. WebAuthn lets a
+    credential name a registrable suffix of the origin it is created at, and
+    every tenant subdomain then offers the same credential. What this does
+    NOT weaken: which tenant a sign-in is FOR is still the request's host
+    (decision 7), checked against the assertion's origin, so the browser
+    still refuses to carry one tenant's session to another. Chosen over
+    keeping the per-hostname registration, which is stronger isolation and
+    leaves an account holding nothing but a picker name.
+
+12. **Sign-in happens at the tenant's own subdomain.** The session belongs to
+    that host alone, and "choosing a tenant" is opening its address. Chosen
+    over a central sign-in page at the parent domain that hands a session
+    across to the tenant: that handoff is a token crossing origins, which is
+    a new way for a session to leak, and it buys only a list of one's own
+    tenants.
+
+13. **The account -> user link is kept inside each tenant.** A tenant's user
+    row names the account it belongs to; the keeper-wide table holds accounts
+    and their credentials and nothing about tenants. So nothing keeper-wide
+    can answer "which tenants is this person in" — not a tenant's admin, and
+    not the operator reading one table. Chosen over a keeper-wide link table,
+    which is what a tenant list after sign-in would need and decision 12
+    removed the need for. The per-tenant passkey pins decision 8 moved stay:
+    they record that THIS tenant accepts a credential, which is the link's
+    authentication half.
+
 ## Consequences
 
 - **The subdomain decision reaches further than this ADR.** Every origin-keyed
@@ -142,6 +181,10 @@ alternatives are what the answers were chosen against.
 - **A migration when it lands:** the credential rows have to split, with each
   existing profile becoming one account plus one user. In a self-host that is
   a one-to-one rewrite; there is no SaaS data yet.
+- **An account cannot be deleted by one query.** Decision 13 means its users
+  are found by asking each tenant, so deleting an account is a sweep over
+  tenants — acceptable because it is rare, and the price of the keeper-wide
+  table knowing nothing about tenants.
 - **Cost of recording it now:** the tenant increment classified
   `memberProfiles` and `profileCredentials` as tenant-scoped, which is the
   reading this ADR makes permanent for the user half and provisional for the
