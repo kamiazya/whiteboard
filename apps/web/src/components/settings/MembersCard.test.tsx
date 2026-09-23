@@ -170,6 +170,28 @@ describe('MembersCard', () => {
     expect(screen.getByTestId('members-status').textContent).toMatch(/Ada was added/)
   })
 
+  it('sends nothing while the form is incomplete — a blank or whitespace name is not an add', async () => {
+    // A silent no-op rather than an error: the person has not finished, and
+    // an alert here would report a failure that has not happened. The
+    // whitespace case is the one a trim-less guard lets through.
+    const { fetchFn } = renderCard(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'GET' && url === MEMBERS_URL) return jsonResponse({ members: [] })
+      if (method === 'GET' && url === CREDENTIALS_URL)
+        return jsonResponse({ credentials: [PIN_A, PIN_B] })
+      return jsonResponse({}, 404)
+    })
+
+    await screen.findByText('No one has been added to this workspace yet.')
+    fireEvent.change(screen.getByLabelText('Passkey'), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(fetchFn.mock.calls.filter(([, init]) => init?.method === 'POST')).toEqual([])
+    expect(screen.getByTestId('members-status').textContent).toBe('')
+  })
+
   it('shows the daemon refusal inline and keeps the form when adding is refused', async () => {
     renderCard(async (url, init) => {
       const method = init?.method ?? 'GET'
