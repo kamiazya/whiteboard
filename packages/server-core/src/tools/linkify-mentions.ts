@@ -1,18 +1,8 @@
-import {
-  MARKDOWN_BODY_KEY,
-  readDocumentKind,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
-  documentIdSchema,
-  nodeText,
-  spatialCanvasSchema,
-  withNodeText,
-} from '@kamiazya/whiteboard-model'
-import { unlinkedNameSpans } from '@kamiazya/whiteboard-reference-graph'
+import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { linkifyMentionsIn } from '@kamiazya/whiteboard-reference-graph'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
-import { loadDocument, saveDocumentBodySnapshot, saveDocumentSnapshot } from './document-io.js'
+import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 
 import type { LinkifyMentionsInput, LinkifyMentionsOutput } from './linkify-mentions.schemas.js'
 
@@ -31,17 +21,6 @@ export class NamelessLinkifyTargetError extends Error {
     )
     this.name = 'NamelessLinkifyTargetError'
   }
-}
-
-function rewrite(text: string, name: string, markup: string): { text: string; count: number } {
-  const spans = unlinkedNameSpans(text, name)
-  let out = text
-  // Reverse order so earlier spans' offsets stay valid while later ones are
-  // spliced.
-  for (const span of [...spans].reverse()) {
-    out = out.slice(0, span.index) + markup + out.slice(span.index + span.length)
-  }
-  return { text: out, count: spans.length }
 }
 
 /**
@@ -72,44 +51,13 @@ export async function linkifyMentions(
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.targetDocumentId)
   }
   if (target.name === undefined) throw new NamelessLinkifyTargetError(input.targetDocumentId)
-  const name = target.name
 
-  // The reader's rule decides the spelling: the PATH is the written form
-  // (display names are retired from resolution; the prose word survives as
-  // the label). The one path the reader would not resolve here is one that
-  // reads as a document id — ids resolve first — so that target links by
-  // its id, the spelling nothing can shadow. The same trade the link picker
-  // makes.
-  const markup = documentIdSchema.safeParse(target.path).success
-    ? `[[${input.targetDocumentId}|${name}]]`
-    : `[[${target.path}|${name}]]`
-
-  const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-  const kind = source.kind ?? readDocumentKind(doc)
-
-  if (kind === 'markdown') {
-    const text = doc.getText(MARKDOWN_BODY_KEY)
-    const spans = unlinkedNameSpans(text.toString(), name)
-    for (const span of [...spans].reverse()) {
-      text.delete(span.index, span.length)
-      text.insert(span.index, markup)
-    }
-    if (spans.length === 0) return { linked: 0 }
-    doc.commit()
-    await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-    return { linked: spans.length }
-  }
-
-  let linked = 0
-  const nodes = readSpatialCanvas(doc).nodes.map((node) => {
-    const text = nodeText(node)
-    if (text === undefined) return node
-    const result = rewrite(text, name, markup)
-    linked += result.count
-    return result.count === 0 ? node : withNodeText(node, result.text)
+  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
+  const linked = linkifyMentionsIn(doc, source.kind ?? readDocumentKind(doc) ?? 'spatial', {
+    documentId: input.targetDocumentId,
+    path: target.path,
+    name: target.name,
   })
-  if (linked === 0) return { linked: 0 }
-  const candidate = spatialCanvasSchema.parse({ nodes, edges: canvas.edges })
-  await saveDocumentBodySnapshot(deps, input.workspaceId, input.documentId, doc, candidate)
+  if (linked > 0) await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
   return { linked }
 }
