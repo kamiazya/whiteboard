@@ -21,6 +21,7 @@ const TENANT_SCOPE = {
   // A User is who a person is INSIDE one tenant (ADR-0045).
   memberProfiles: 'tenant',
   invitations: 'tenant',
+  signInSessions: 'tenant',
   workspaceMemberships: 'tenant',
   workspaceReplicaKeys: 'tenant',
   workspaceMembersOnly: 'tenant',
