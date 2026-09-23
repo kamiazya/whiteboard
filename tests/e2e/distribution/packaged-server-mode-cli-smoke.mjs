@@ -387,7 +387,12 @@ try {
     } catch {
       fail('scenario 3: blob manifest is not valid JSON')
     }
-    if (manifest.schemaVersion !== 2) fail('scenario 3: blob manifest schemaVersion mismatch')
+    if (manifest.schemaVersion !== 3) fail('scenario 3: blob manifest schemaVersion mismatch')
+    // v3 records WHOSE each blob is, because the mirror is flat and a restore
+    // that cannot tell would put every tenant's blobs into one.
+    if (typeof manifest.tenants !== 'object' || manifest.tenants === null) {
+      fail('scenario 3: blob manifest names no tenants')
+    }
     // No `--mirror-dir`, so this backup keeps its own mirror and stays a
     // directory an operator can carry away.
     if (manifest.mirror !== 'self') fail('scenario 3: a one-off backup is not self-contained')
