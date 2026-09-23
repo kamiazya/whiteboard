@@ -733,8 +733,12 @@ async function aRegisteredFacetWriteIsValidated(ctx) {
   Object.assign(ctx, { vocabulary })
 }
 
-async function stencilsAndTagsFromTheWorkspaceLibrary(ctx) {
-  const { documentId, vocabulary } = ctx
+/**
+ * A stencil the WORKSPACE defines dresses a box (ADR-0034), plus the
+ * FILTERED discovery answer called explicitly: `otherTargets` is a partial
+ * reply's own account of what it left out.
+ */
+async function aWorkspaceStencilDressesABox({ documentId, vocabulary }) {
   // The FILTERED answer, called explicitly: `otherTargets` is a partial
   // record, and the SDK validates `structuredContent` against the output
   // schema at runtime, so a scope-keyed field that drifts back to requiring
@@ -783,7 +787,17 @@ async function stencilsAndTagsFromTheWorkspaceLibrary(ctx) {
     )
   }
   console.log('[e2e] wb_facet_set + wb_canvas_edit → a stencil the WORKSPACE defines dresses a box')
+}
 
+/**
+ * The SECOND axis (ADR-0036 §6): a box says what it IS with `stencil`, and
+ * what it is ABOUT with a scoped tag on the node (ADR-0040) — stored beside
+ * the stencil rather than in place of it.
+ *
+ * The SDK validates structuredContent against the output schema, so a write
+ * the schema does not admit fails here and only here.
+ */
+async function theSecondAxisIsStoredBesideTheStencil({ documentId }) {
   // The SECOND axis (ADR-0036 §6): a box says what it IS with `stencil` and
   // how it is doing with the registered classification facet, and the
   // classification survives the save beside the stencil. Through
@@ -836,6 +850,14 @@ async function stencilsAndTagsFromTheWorkspaceLibrary(ctx) {
     throw new Error(`the tag clobbered the stencil: ${JSON.stringify(storedRedis)}`)
   }
   console.log('[e2e] wb_facet_set tags on a node → the second axis is stored beside the stencil')
+}
+
+/**
+ * The board and an edge are taggable too — the vocabulary IN USE is counted
+ * by what carries it, a rename reaches the board and every node and edge in
+ * one call, and the tagged search finds the board by its node.
+ */
+async function theTagVocabularyInUseIsCountedAndRenamed({ documentId }) {
   // The board and an edge are taggable too, and the vocabulary in use is
   // what wb_facet_list answers with a workspaceId.
   const boardTagged = await callTool('wb_facet_set', {
@@ -885,7 +907,14 @@ async function stencilsAndTagsFromTheWorkspaceLibrary(ctx) {
     )
   }
   console.log('[e2e] wb_document_search → a board found by a node tag, the node named')
+}
 
+/**
+ * The workspace's TAG LIBRARY — ADR-0040 decision 5's DECLARED layer, end
+ * to end: discovery first (the one call that tells a model what a write
+ * will be judged against), then an admitted write, then the refusals.
+ */
+async function theWorkspaceTagLibraryAdmitsAndRefuses({ documentId }) {
   // The workspace's TAG LIBRARY (ADR-0040 decision 5's declared layer), end
   // to end, for the reason the stencil library is: the declaration is a
   // record of records in a document facet, serialised into OKF frontmatter
@@ -1020,6 +1049,13 @@ async function stencilsAndTagsFromTheWorkspaceLibrary(ctx) {
   console.log(
     '[e2e] tag library → admitted write lands, undeclared and exclusive refused, painted by intent',
   )
+}
+
+async function stencilsAndTagsFromTheWorkspaceLibrary(ctx) {
+  await aWorkspaceStencilDressesABox(ctx)
+  await theSecondAxisIsStoredBesideTheStencil(ctx)
+  await theTagVocabularyInUseIsCountedAndRenamed(ctx)
+  await theWorkspaceTagLibraryAdmitsAndRefuses(ctx)
 }
 
 async function aFreeEndedLineAndEdgeTargetFacets(ctx) {
@@ -1218,8 +1254,15 @@ async function storedBendsDrawAndProposeModeStores(ctx) {
   console.log('[e2e] wb_canvas_edit(mode:propose) → stored, board untouched, tidy refused')
 }
 
-async function nodeFacetsAndTheEditorLock(ctx) {
-  const { documentId, named } = ctx
+/**
+ * ADR-0029 decision 7's flip, through a real MCP client: with NO mode, a
+ * batch of CONTENT is proposed and the board does not move, while a batch
+ * carrying something a proposal cannot represent applies.
+ *
+ * The compiler cannot see either — `mode` is optional on both sides of the
+ * wire — so this is the guard that would catch the default going back.
+ */
+async function noModeProposesContentAndAppliesTheRest({ documentId }) {
   // ADR-0029 decision 7's flip, through a real MCP client: with NO mode, a
   // batch of content is proposed and the board does not move, while a batch
   // carrying something a proposal cannot represent applies. The compiler
@@ -1251,7 +1294,13 @@ async function nodeFacetsAndTheEditorLock(ctx) {
     )
   }
   console.log('[e2e] wb_canvas_edit(no mode) → content proposed, a comment applied')
+}
 
+/**
+ * Facet discovery: an agent learns the exact keys and payload contracts
+ * rather than guessing them, which is what every write below relies on.
+ */
+async function facetDiscoveryFiltersByTarget() {
   // Facet discovery: an agent learns the exact keys and payload contracts
   // rather than guessing them, which is what the writes below rely on.
   const registered = await callTool('wb_facet_list', {})
@@ -1278,7 +1327,14 @@ async function nodeFacetsAndTheEditorLock(ctx) {
     throw new Error(`wb_facet_list(target: node) filtered wrongly: ${JSON.stringify(nodeKeys)}`)
   }
   console.log('[e2e] wb_facet_list(target: node) → filtered to node-target facets')
+}
 
+/**
+ * Node-target facets (ADR-0013): set, tombstone, merge beside a second
+ * plugin's facet, delete both in one call — and refuse a `nodeId` spread
+ * across several documents, which names no single node.
+ */
+async function nodeFacetsMergeAndTombstone({ documentId, named }) {
   // Node-target facets (ADR-0013): set a silhouette on one node of the
   // spatial document, then delete it with the null tombstone.
   const nodeFacet = await callTool('wb_facet_set', {
@@ -1344,6 +1400,10 @@ async function nodeFacetsAndTheEditorLock(ctx) {
     'nodeId names a node of ONE document',
   )
   console.log('[e2e] wb_facet_set → a nodeId across several documents is refused')
+}
+
+/** The board this scenario's lock is taken on, and the lock itself. */
+async function theEditorLockIsTaken({ documentId }) {
   console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(
@@ -1400,6 +1460,13 @@ async function nodeFacetsAndTheEditorLock(ctx) {
     ops: [{ op: 'node.lock', id: 'lockable', locked: true }],
   })
   console.log('[e2e] wb_canvas_edit → lockable locked')
+}
+
+async function nodeFacetsAndTheEditorLock(ctx) {
+  await noModeProposesContentAndAppliesTheRest(ctx)
+  await facetDiscoveryFiltersByTarget()
+  await nodeFacetsMergeAndTombstone(ctx)
+  await theEditorLockIsTaken(ctx)
 }
 
 async function theLockStaysOutOfTheExportAndTheSceneDraws(ctx) {
@@ -1756,8 +1823,17 @@ async function theAnnotationLayerThroughWidgetShapes(ctx) {
   console.log('[e2e] wb_thread_edit → thread.add / message.add / thread.resolve on a markdown note')
 }
 
-async function threadAnchorsAndTheLayoutSnapshot(ctx) {
-  const { documentId, viewed } = ctx
+/**
+ * The five anchors a spatial thread can carry, and where each lands in the
+ * projection `canvas_view` serves.
+ *
+ * Beyond a node there are two REFERENCES — an edge, and a passage of a
+ * node's text — and three anchors with no single object: a node set, a bare
+ * region, and the document itself. Each reaches the widget through the
+ * projection, which is what it draws pins from, and what no unit test of the
+ * tool sees.
+ */
+async function everyThreadAnchorReachesTheProjection({ documentId, viewed }) {
   // The two references a spatial anchor may carry beyond a node, and the
   // text arm naming a node: an EDGE comment, and a comment on a passage of
   // a node's text. Both reach canvas_view through the projection — the edge
@@ -1845,7 +1921,17 @@ async function threadAnchorsAndTheLayoutSnapshot(ctx) {
   console.log(
     '[e2e] wb_thread_edit → edge, node-passage, node-set, region and document threads reach canvas_view',
   )
+}
 
+/**
+ * The opt-in layout analysis is a SECOND composition through the same output
+ * schema, reached only when `layout` is set, so the default read below cannot
+ * cover it. It is also the only tool result still built through
+ * server-core's `layoutSpatialCanvas` delegate besides `wb_scene_render` —
+ * which makes this the runtime guard that a laid-out scene still validates
+ * through the real MCP SDK.
+ */
+async function theLayoutAnalysisNamesTheSeededNode(documentId) {
   // The opt-in layout analysis is a SECOND composition through the same
   // output schema, reached only when `layout` is set, so the default read
   // below cannot cover it. It is also the only tool result still built
@@ -1871,7 +1957,16 @@ async function threadAnchorsAndTheLayoutSnapshot(ctx) {
     )
   }
   console.log('[e2e] wb_canvas_snapshot(layout:true) → analysis naming the seeded node by id')
+}
 
+/**
+ * The DEFAULT read: stored content only, no layout pass. The runtime guard
+ * that the semantic projection (node text, type, lock state, edges) still
+ * validates against `canvasSnapshotSchema` through the real MCP SDK, and the
+ * one that pins the honesty of the caps — `nodeCount` is the board's real
+ * total, not the returned length.
+ */
+async function theDefaultSnapshotCountsHonestly(documentId) {
   // The DEFAULT read: stored content only, no layout pass. This is the
   // runtime guard that the semantic projection (node text, type, lock state,
   // edges) still validates against canvasSnapshotSchema through the real MCP
@@ -1897,6 +1992,12 @@ async function threadAnchorsAndTheLayoutSnapshot(ctx) {
     )
   }
   console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
+}
+
+async function threadAnchorsAndTheLayoutSnapshot(ctx) {
+  await everyThreadAnchorReachesTheProjection(ctx)
+  await theLayoutAnalysisNamesTheSeededNode(ctx.documentId)
+  await theDefaultSnapshotCountsHonestly(ctx.documentId)
 }
 
 async function nodeEditsAndTransactionAtomicity(ctx) {
@@ -2318,11 +2419,12 @@ async function versionsAreRestoredCopiedAndRolledBack(ctx) {
   Object.assign(ctx, { mdCanvasId })
 }
 
-async function anImportedDocumentIsFoundAndRoundTrips(ctx) {
-  const { documentId, mdCanvasId } = ctx
-  // A write in the format the document is not in destroys rather than
-  // fails: OKF into the spatial one replaces its nodes, a node into the
-  // markdown one lands beside the text node holding its body.
+/**
+ * A write in the format the document is NOT in destroys rather than fails:
+ * OKF into the spatial one replaces its nodes, a node into the markdown one
+ * lands beside the text node holding its body. Both are refused.
+ */
+async function aCrossFormatWriteIsRefused({ documentId, mdCanvasId }) {
   await expectToolError(
     'wb_workspace_edit',
     {
@@ -2342,39 +2444,50 @@ async function anImportedDocumentIsFoundAndRoundTrips(ctx) {
     'on a markdown document',
     'This edits a JSON Canvas',
   )
+}
 
-  // `status` is an OKF root key this server does not model; it rides along so
-  // the round trip below proves the preservation rule at runtime, where the
-  // MCP SDK validates structuredContent against outputSchema and a bucket the
-  // schema does not admit fails here and only here. `description` is modelled,
-  // so it comes back as a field. The write declares no `generated`, so the
-  // server stamps the `actor` passed below.
-  const importMarkdown = [
-    '---',
-    'type: issue',
-    'title: "Smoke test issue"',
-    'tags:',
-    '  - smoke',
-    '  - e2e',
-    'description: An issue written by the e2e smoke.',
-    'status: stable',
-    'facets:',
-    '  example.sample/v1:',
-    '    status: open',
-    '---',
-    'Imported body.',
-  ].join('\n')
+/**
+ * The OKF document this scenario reads back.
+ *
+ * `status` is a root key this server does not model; it rides along so the
+ * round trip proves the preservation rule at RUNTIME, where the MCP SDK
+ * validates structuredContent against outputSchema and a bucket the schema
+ * does not admit fails there and only there. `description` is modelled, so it
+ * comes back as a field. The write declares no `generated`, so the server
+ * stamps the actor it is passed.
+ */
+const IMPORT_MARKDOWN = [
+  '---',
+  'type: issue',
+  'title: "Smoke test issue"',
+  'tags:',
+  '  - smoke',
+  '  - e2e',
+  'description: An issue written by the e2e smoke.',
+  'status: stable',
+  'facets:',
+  '  example.sample/v1:',
+  '    status: open',
+  '---',
+  'Imported body.',
+].join('\n')
+
+async function importTheMarkdownDocument(mdCanvasId) {
   const imported = await setDocument(
-    { documentId: mdCanvasId, markdown: importMarkdown },
+    { documentId: mdCanvasId, markdown: IMPORT_MARKDOWN },
     { actor: 'process:mcp-e2e-smoke' },
   )
   if (imported.applied !== 1 || imported.results[0].documentId !== mdCanvasId) {
     throw new Error(`document.set returned unexpected shape: ${JSON.stringify(imported)}`)
   }
   console.log('[e2e] document.set → imported')
+}
 
-  // wb_document_search over the body just imported — the runtime guard for
-  // this tool's structuredContent-vs-outputSchema drift, plus tag filtering.
+/**
+ * `wb_document_search` over the body just imported — the runtime guard for
+ * this tool's structuredContent-vs-outputSchema drift, plus tag filtering.
+ */
+async function searchFindsTheImportedBody(mdCanvasId) {
   const searched = await callTool('wb_document_search', {
     workspaceId: WORKSPACE_ID,
     query: 'Imported body',
@@ -2399,17 +2512,10 @@ async function anImportedDocumentIsFoundAndRoundTrips(ctx) {
     throw new Error(`wb_document_search reported a semantic rank with no embedder configured`)
   }
   console.log('[e2e] wb_document_search → found the imported body, snippet and lexical rank')
+}
 
-  // The scoped-tag grammar (ADR-0040 decision 1) is checked where a tag is
-  // WRITTEN: a colon makes a tag scoped, and a scoped tag with an uppercase
-  // half is refused with the rule rather than stored as a plain tag.
-  await expectToolError(
-    'wb_facet_set',
-    { workspaceId: WORKSPACE_ID, documentIds: [mdCanvasId], tags: { add: ['Health:failing'] } },
-    'a tag with a colon that is not key:value is refused on write',
-    'not a scoped tag',
-  )
-
+/** Everything the import declared comes back, in the layer that models it. */
+async function theImportRoundTrips(mdCanvasId) {
   const exported = await readDocument(mdCanvasId)
   if (!exported.content.includes('Imported body.')) {
     throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)
@@ -2441,8 +2547,7 @@ async function anImportedDocumentIsFoundAndRoundTrips(ctx) {
       `modelled OKF description did not survive: ${JSON.stringify(exported.frontmatter)}`,
     )
   }
-  const preserved = exported.frontmatter.facetsRaw
-  if (preserved?.status !== 'stable') {
+  if (exported.frontmatter.facetsRaw?.status !== 'stable') {
     throw new Error(
       `unmodelled OKF root keys were not preserved: ${JSON.stringify(exported.frontmatter)}`,
     )
@@ -2456,6 +2561,23 @@ async function anImportedDocumentIsFoundAndRoundTrips(ctx) {
     '[e2e] wb_document_get → generated stamped from the declared actor, unmodelled OKF keys preserved at the root',
   )
   console.log('[e2e] wb_document_get → round-trip verified (core facets + extension facets)')
+}
+
+async function anImportedDocumentIsFoundAndRoundTrips(ctx) {
+  const { mdCanvasId } = ctx
+  await aCrossFormatWriteIsRefused(ctx)
+  await importTheMarkdownDocument(mdCanvasId)
+  await searchFindsTheImportedBody(mdCanvasId)
+  // The scoped-tag grammar (ADR-0040 decision 1) is checked where a tag is
+  // WRITTEN: a colon makes a tag scoped, and a scoped tag with an uppercase
+  // half is refused with the rule rather than stored as a plain tag.
+  await expectToolError(
+    'wb_facet_set',
+    { workspaceId: WORKSPACE_ID, documentIds: [mdCanvasId], tags: { add: ['Health:failing'] } },
+    'a tag with a colon that is not key:value is refused on write',
+    'not a scoped tag',
+  )
+  await theImportRoundTrips(mdCanvasId)
 }
 
 /**
