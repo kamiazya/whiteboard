@@ -84,7 +84,7 @@ export async function moveLegacyDataDirUnderTenant(
    * whoever owns them — a store knows its own filename, and this module knows
    * where a tenant's things live.
    */
-  options: { files: readonly string[] } = { files: [] },
+  options: { files: readonly string[] },
 ): Promise<{ blobs: boolean; workspaces: string[]; files: string[] }> {
   return {
     files: await moveTenantFiles(dataDir, tenantId, options.files),
