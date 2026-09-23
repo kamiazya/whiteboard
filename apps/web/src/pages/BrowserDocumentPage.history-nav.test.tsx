@@ -106,7 +106,7 @@ describe('BrowserDocumentPage browser Back/Forward (browser — real IndexedDB)'
     // Seeded before mount, the way the document browser creates them: the
     // editor creates nothing itself any more, and an in-place switch resolves
     // the URL against the documents the controller has already listed.
-    const { createSeededDocument } = await import('./use-browser-document-controller.js')
+    const { createSeededDocument } = await import('../lib/create-seeded-document.js')
     const loro = new LoroStore()
     const clock = idbContentClock()
     const seededA = await createSeededDocument(store, loro, clock)
