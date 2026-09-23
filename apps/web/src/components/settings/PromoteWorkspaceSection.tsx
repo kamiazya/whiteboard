@@ -17,6 +17,7 @@
  * this section renders on a settings page that must not pay for the CRDT
  * bundle until the user actually reaches for promotion.
  */
+
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Button } from '../../components/ui/button.js'
@@ -39,6 +40,7 @@ import {
   passkeySupported,
   registerPasskey,
 } from '../../lib/passkey-attestation.js'
+import type { PromoteWorkspaceResult } from '../../lib/promote-workspace.js'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
 import type { PromotionResultRecord, UserSettings } from '../../lib/user-settings-store.js'
 import { type WorkspaceIdentity, workspaceLabel } from '../../lib/workspace-handle.js'
@@ -125,40 +127,241 @@ type PromoteFlow =
   | { step: 'running'; phase: 'record' | 'blobs' }
   | { step: 'unavailable'; reason: string }
 
-function describeResult(result: PromotionResultRecord): string {
-  if (!result.ok) {
-    return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason}`
-  }
-  const parts = [
-    `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
-  ]
-  if (result.attested === true) parts.push('Your passkey confirmed this move')
-  // `false` is the DESTINATION reporting it did not verify what this side
-  // signed — not an unconfirmed move, which is refused before the POST.
-  else if (result.attested === false) parts.push('The destination did not record a confirmation')
+/**
+ * Whether the destination confirmed what this side signed. `false` is the
+ * DESTINATION reporting it did not record a confirmation — not an
+ * unconfirmed move, which is refused before the POST — so it is said rather
+ * than left silent.
+ */
+function attestationNote(result: PromotionResultRecord & { ok: true }): string | undefined {
+  if (result.attested === true) return 'Your passkey confirmed this move'
+  if (result.attested === false) return 'The destination did not record a confirmation'
+  return undefined
+}
+
+/** What a move could not carry, counted. Each is retryable and says so. */
+function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
+  const notes: string[] = []
   if (result.shadowedPaths.length > 0) {
-    parts.push(
+    notes.push(
       `${result.shadowedPaths.length} path${result.shadowedPaths.length === 1 ? '' : 's'} already existed there — both versions are kept, the earlier one marked shadowed: ${result.shadowedPaths.join(', ')}`,
     )
   }
   if (result.blobsMissing.length > 0) {
-    parts.push(
+    notes.push(
       `${result.blobsMissing.length} referenced image${result.blobsMissing.length === 1 ? ' was' : 's were'} already missing from this browser and could not be moved`,
     )
   }
   if (result.blobsFailed.length > 0) {
-    parts.push(
+    notes.push(
       `${result.blobsFailed.length} image upload${result.blobsFailed.length === 1 ? '' : 's'} failed — moving again retries them safely`,
     )
   }
+  return notes
+}
+
+/**
+ * The demote pull (ADR-0023 decision 2): cache the daemon's merged record
+ * back into this browser's planes, and delete the source record only once
+ * that cache is proven to carry everything.
+ *
+ * Best-effort throughout — the move itself already landed, so a failed pull
+ * costs only the cache line on the report, never the promotion.
+ *
+ * The demote gate is deliberately strict. `missing` gates alongside `failed`
+ * because the file store folds read errors into "missing", so those
+ * references may be retryable and the source record is the retry vehicle.
+ * And the read-back has its OWN try/catch rather than the caller's:
+ * `replicaCarriesAll` reads through the sealed store and can throw
+ * `ReplicaKeyWithheldError` if the session key lapses between the cache
+ * write and this read — letting that escape would report an
+ * already-successful move as a failed one. The decision is simply deferred
+ * (the browser copy stays, as in any other unverified-replica case) and a
+ * later visit re-asks.
+ */
+async function cacheAndMaybeDemote({
+  fetchImpl,
+  daemonBaseUrl,
+  workspaceId,
+  target,
+  outcome,
+  settingsStore,
+}: {
+  fetchImpl: typeof globalThis.fetch
+  daemonBaseUrl: string
+  workspaceId: string
+  target: WorkspaceIdentity | undefined
+  outcome: Extract<PromoteWorkspaceResult, { kind: 'ok' }>
+  settingsStore: PromoteWorkspaceSectionProps['settingsStore']
+}): Promise<{ replicaSyncedAt: string | undefined; localCopyRemoved: boolean }> {
+  const { BrowserWorkspaceDocs } = await import('../../lib/browser-workspace-docs.js')
+  const { cacheDaemonWorkspace } = await import('../../lib/replica-cache.js')
+  const cache = await cacheDaemonWorkspace({
+    fetch: fetchImpl,
+    daemonBaseUrl,
+    workspaceId,
+    workspaceDocs: new BrowserWorkspaceDocs(),
+  })
+  if (cache.kind === 'withheld') {
+    log.warn('replica cache after promote withheld: reconnect and try again')
+    return { replicaSyncedAt: undefined, localCopyRemoved: false }
+  }
+  if (cache.kind !== 'ok') {
+    log.warn('replica cache after promote failed', cache.reason)
+    return { replicaSyncedAt: undefined, localCopyRemoved: false }
+  }
+
+  // Register the replica NOW: findReplicaForHandle and the shell notice read
+  // the registry, and an entry that only appears on some later visit leaves
+  // the fresh cache invisible offline.
+  const { withReplicaEntry } = await import('../../lib/replicas.js')
+  settingsStore.update((current) =>
+    withReplicaEntry(current, workspaceId, {
+      daemonBaseUrl,
+      syncedAt: cache.syncedAt,
+      syncedFrontier: cache.syncedFrontier,
+      ...(target?.segment === undefined ? {} : { segment: target.segment }),
+      ...(target?.displayName === undefined ? {} : { displayName: target.displayName }),
+    }),
+  )
+
+  if (outcome.blobs.failed.length > 0 || outcome.blobs.missing.length > 0) {
+    return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: false }
+  }
+
+  try {
+    const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
+      '../../lib/demote-browser-workspace.js'
+    )
+    const carried = await replicaCarriesAll(
+      new BrowserWorkspaceDocs(),
+      workspaceId,
+      outcome.promotedDocumentIds,
+    )
+    if (!carried) return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: false }
+    await demoteBrowserWorkspace(outcome.sourceWorkspaceId)
+    return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: true }
+  } catch (err) {
+    // The move stands either way; a withheld session key or a failed
+    // deletion only means the old copy lingers, which the report says
+    // plainly.
+    log.warn('demote after promote failed', err)
+    return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: false }
+  }
+}
+
+/**
+ * What this browser can say about the passkey a move is confirmed with, and
+ * what it offers next in each case.
+ *
+ * `unsupported` offers nothing on purpose: a browser that cannot use
+ * passkeys cannot move the workspace at all, so a register button there
+ * would be a control that can only fail. `registering`'s status region is
+ * MOUNTED before it speaks (polite-live-region.test.ts): a status region
+ * that arrives already carrying its message is announced inconsistently, so
+ * it is always in the tree and only its text changes.
+ */
+function PasskeyState({
+  passkey,
+  onRegister,
+}: {
+  passkey: { kind: string; detail?: string }
+  onRegister: () => void
+}) {
+  return (
+    <div
+      data-testid="promote-passkey"
+      className="flex flex-col gap-1.5 rounded-md border px-3 py-2 text-xs"
+    >
+      {passkey.kind === 'registered' && (
+        <p>
+          A passkey is registered for this daemon. You will be asked to confirm the move with it.
+        </p>
+      )}
+      {passkey.kind === 'none' && (
+        <>
+          <p>
+            No passkey for this daemon yet. Register one to move the workspace — a move to another
+            keeper is confirmed with a passkey.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            data-testid="promote-register-passkey"
+            onClick={onRegister}
+          >
+            Register a passkey
+          </Button>
+        </>
+      )}
+      {/* Mounted before it speaks (polite-live-region.test.ts):
+        a status region that arrives with its message is
+        announced inconsistently, so this one is always in the
+        tree and only its text changes. */}
+      <p
+        role="status"
+        aria-live="polite"
+        data-testid="promote-passkey-status"
+        className={passkey.kind === 'registering' ? undefined : 'sr-only'}
+      >
+        {passkey.kind === 'registering' ? 'Waiting for your passkey…' : ''}
+      </p>
+      {passkey.kind === 'error' && (
+        <>
+          <p>Registering the passkey failed: {passkey.detail}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            data-testid="promote-register-passkey"
+            onClick={onRegister}
+          >
+            Try again
+          </Button>
+        </>
+      )}
+      {passkey.kind === 'unsupported' && (
+        <p>
+          This browser cannot use passkeys, so it cannot move the workspace. Open this page in a
+          browser that can, or export the documents you need.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * What is left in THIS browser afterwards. The two are independent: a
+ * replica can be cached whether or not the original was removed, and the
+ * removal is what a reader most needs told.
+ */
+function browserCopyNotes(result: PromotionResultRecord & { ok: true }): string[] {
+  const notes: string[] = []
   if (result.replicaSyncedAt !== undefined) {
-    parts.push('The daemon workspace is now cached in this browser')
+    notes.push('The daemon workspace is now cached in this browser')
   }
-  if (result.localCopyRemoved === true) {
-    parts.push('The browser copy was removed — the cached replica serves offline reads')
-  } else {
-    parts.push('The original copy is kept in this browser')
+  notes.push(
+    result.localCopyRemoved === true
+      ? 'The browser copy was removed — the cached replica serves offline reads'
+      : 'The original copy is kept in this browser',
+  )
+  return notes
+}
+
+function describeResult(result: PromotionResultRecord): string {
+  if (!result.ok) {
+    return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason}`
   }
+  const attestation = attestationNote(result)
+  const parts = [
+    `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
+    ...(attestation === undefined ? [] : [attestation]),
+    ...carryNotes(result),
+    ...browserCopyNotes(result),
+  ]
   return `${parts.join('. ')}.`
 }
 
@@ -320,75 +523,19 @@ export function PromoteWorkspaceSection({
           onProgress: (phase) => setFlow({ step: 'running', phase }),
           attest: signerFor(daemon.baseUrl, targetId, credentialsOf()),
         })
-        // The demote pull (ADR-0023 decision 2): cache the daemon's merged
-        // record back into this browser's planes. Best-effort — the move
-        // itself already landed, so a failed pull costs only the cache line
-        // on the report, never the promotion.
-        let replicaSyncedAt: string | undefined
-        let localCopyRemoved = false
-        if (outcome.kind === 'ok') {
-          const { cacheDaemonWorkspace } = await import('../../lib/replica-cache.js')
-          const cache = await cacheDaemonWorkspace({
-            fetch: fetchImpl,
-            daemonBaseUrl: daemon.baseUrl,
-            workspaceId: targetId,
-            workspaceDocs: new BrowserWorkspaceDocs(),
-          })
-          if (cache.kind === 'ok') {
-            replicaSyncedAt = cache.syncedAt
-            // Register the replica NOW: findReplicaForHandle and the shell
-            // notice read the registry, and an entry that only appears on
-            // some later visit leaves the fresh cache invisible offline.
-            const { withReplicaEntry } = await import('../../lib/replicas.js')
-            settingsStore.update((current) =>
-              withReplicaEntry(current, targetId, {
+        const after =
+          outcome.kind === 'ok'
+            ? await cacheAndMaybeDemote({
+                fetchImpl,
                 daemonBaseUrl: daemon.baseUrl,
-                syncedAt: cache.syncedAt,
-                syncedFrontier: cache.syncedFrontier,
-                ...(target?.segment === undefined ? {} : { segment: target.segment }),
-                ...(target?.displayName === undefined ? {} : { displayName: target.displayName }),
-              }),
-            )
-            // The demote gate (ADR-0023 decision 2): delete the source
-            // record only when every image made it across AND the replica
-            // read back from this browser holds every promoted document.
-            // `missing` gates too: the file store folds read errors into
-            // "missing", so those references may be retryable — and the
-            // record is the retry vehicle.
-            if (outcome.blobs.failed.length === 0 && outcome.blobs.missing.length === 0) {
-              // Scoped to its own try/catch, deliberately NOT the outer
-              // one below: `replicaCarriesAll` reads through the sealed
-              // store and can throw `ReplicaKeyWithheldError` if the
-              // session key lapses between the cache write above and this
-              // read-back. The promotion itself already landed — letting
-              // that escape to the outer catch would report an already-
-              // successful move as a failed one. The demote decision is
-              // simply deferred (the browser copy stays, same as any
-              // other unverified-replica case); a later visit re-asks.
-              try {
-                const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
-                  '../../lib/demote-browser-workspace.js'
-                )
-                const carried = await replicaCarriesAll(
-                  new BrowserWorkspaceDocs(),
-                  targetId,
-                  outcome.promotedDocumentIds,
-                )
-                if (carried) {
-                  await demoteBrowserWorkspace(outcome.sourceWorkspaceId)
-                  localCopyRemoved = true
-                }
-              } catch (err) {
-                // The move stands either way; a withheld session key or a
-                // failed deletion only means the old copy lingers, which
-                // the report says plainly.
-                log.warn('demote after promote failed', err)
-              }
-            }
-          } else if (cache.kind === 'withheld') {
-            log.warn('replica cache after promote withheld: reconnect and try again')
-          } else log.warn('replica cache after promote failed', cache.reason)
-        }
+                workspaceId: targetId,
+                target,
+                outcome,
+                settingsStore,
+              })
+            : { replicaSyncedAt: undefined, localCopyRemoved: false }
+        const { replicaSyncedAt, localCopyRemoved } = after
+
         record =
           outcome.kind === 'ok'
             ? {
@@ -568,68 +715,7 @@ export function PromoteWorkspaceSection({
                   own, so there is no unconfirmed crossing to record. The
                   block says which state it is in, because a disabled button
                   with no reason beside it is the same as a broken one. */}
-              <div
-                data-testid="promote-passkey"
-                className="flex flex-col gap-1.5 rounded-md border px-3 py-2 text-xs"
-              >
-                {passkey.kind === 'registered' && (
-                  <p>
-                    A passkey is registered for this daemon. You will be asked to confirm the move
-                    with it.
-                  </p>
-                )}
-                {passkey.kind === 'none' && (
-                  <>
-                    <p>
-                      No passkey for this daemon yet. Register one to move the workspace — a move to
-                      another keeper is confirmed with a passkey.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="self-start"
-                      data-testid="promote-register-passkey"
-                      onClick={() => void registerHere()}
-                    >
-                      Register a passkey
-                    </Button>
-                  </>
-                )}
-                {/* Mounted before it speaks (polite-live-region.test.ts):
-                    a status region that arrives with its message is
-                    announced inconsistently, so this one is always in the
-                    tree and only its text changes. */}
-                <p
-                  role="status"
-                  aria-live="polite"
-                  data-testid="promote-passkey-status"
-                  className={passkey.kind === 'registering' ? undefined : 'sr-only'}
-                >
-                  {passkey.kind === 'registering' ? 'Waiting for your passkey…' : ''}
-                </p>
-                {passkey.kind === 'error' && (
-                  <>
-                    <p>Registering the passkey failed: {passkey.detail}</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="self-start"
-                      data-testid="promote-register-passkey"
-                      onClick={() => void registerHere()}
-                    >
-                      Try again
-                    </Button>
-                  </>
-                )}
-                {passkey.kind === 'unsupported' && (
-                  <p>
-                    This browser cannot use passkeys, so it cannot move the workspace. Open this
-                    page in a browser that can, or export the documents you need.
-                  </p>
-                )}
-              </div>
+              <PasskeyState passkey={passkey} onRegister={() => void registerHere()} />
               <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setFlow({ step: 'idle' })}>
                   Cancel

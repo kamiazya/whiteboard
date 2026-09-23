@@ -185,7 +185,16 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/editor-verbs.ts#wrapSelectionWith': 63,
   'apps/web/src/components/markdown-editor/proposal-decorations.ts#proposalDecorations': 71,
   'apps/web/src/components/markdown-editor/verb-catalog.tsx#verbCatalogItems': 64,
-  'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner': 649,
+  // 649 -> 434: every ROW moved to `daemon-detected-banner-rows.tsx` — what
+  // the Local Network Access permission needs said, why a check came back
+  // empty, the port field, and each shape the found daemons can take. The
+  // three entries there are the rows still over the line budget; each is a
+  // block of copy with its own reasoning, and all three are under the
+  // complexity threshold.
+  'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner': 434,
+  'apps/web/src/components/migration/daemon-detected-banner-rows.tsx#LocalNetworkGateNotice': 71,
+  'apps/web/src/components/migration/daemon-detected-banner-rows.tsx#ProbeFailureNotice': 66,
+  'apps/web/src/components/migration/daemon-detected-banner-rows.tsx#SingleDaemonBanner': 72,
   'apps/web/src/components/migration/DaemonDetectedBanner.tsx#DaemonDetectedBanner.runProbe': 92,
   // A Settings card of the same shape as its two neighbours below (334 and
   // 522): the rows, the shared confirm dialog and the two-step delete are
@@ -196,9 +205,20 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // IndexedDB has to leave the card listing what it CAN read rather than
   // rejecting, and that branch is where the explanation lives.
   'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 147,
-  'apps/web/src/components/settings/MembersCard.tsx#MembersCard': 334,
-  'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 522,
-  'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 163,
+  // 334 -> 310: one generation-checked read (`readCurrent`) replaces eight
+  // copies of the same staleness test, and the add's request and POST are
+  // their own functions.
+  'apps/web/src/components/settings/MembersCard.tsx#MembersCard': 310,
+  // 522 -> 399: the passkey states became a component, and the cache-then-
+  // maybe-demote step its own function (below) — which is where the reason
+  // its read-back has a try/catch of its own now lives.
+  'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PromoteWorkspaceSection': 399,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#cacheAndMaybeDemote': 70,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.tsx#PasskeyState': 71,
+  // 163 -> 81: the ladder is `journeySteps` and one function per rung, so
+  // "which state is this environment in" is answered once rather than in
+  // the middle of the list that draws it.
+  'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 81,
   'apps/web/src/components/shell/ShellMark.tsx#ShellMark': 123,
   'apps/web/src/components/shell/WorkspaceMenu.tsx#WorkspaceMenu': 339,
   'apps/web/src/components/spatial-editor/BoxTargetOverlay.tsx#BoxTargetOverlay': 95,

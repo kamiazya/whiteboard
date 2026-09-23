@@ -8,7 +8,7 @@ import {
   memberProfileSummarySchema,
   removeMemberResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { useDaemonApi } from '../../contexts/DaemonApiContext.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
@@ -33,6 +33,83 @@ type CardState =
 
 function membersUrl(workspaceId: string): string {
   return `/api/workspaces/${encodeURIComponent(workspaceId)}/members`
+}
+
+/**
+ * One read, judged against the generation that started it.
+ *
+ * `stale` is NOT an error and must not be drawn as one: it means a newer
+ * read (or a daemon-identity change) overtook this one, and whatever answer
+ * arrives belongs to a question nobody is asking any more. The check happens
+ * twice — after the fetch and after the body — because the body is a second
+ * await and the generation can move across either.
+ *
+ * A network throw is the caller's to catch: it cannot be told from a stale
+ * abort here, and the caller knows which of its own reads was in flight.
+ */
+async function readCurrent<T>(
+  fetchApi: (url: string) => Promise<Response>,
+  url: string,
+  schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } },
+  generation: number,
+  generationRef: RefObject<number>,
+): Promise<{ kind: 'ok'; value: T } | { kind: 'stale' } | { kind: 'error' }> {
+  const res = await fetchApi(url)
+  if (generation !== generationRef.current) return { kind: 'stale' }
+  if (!res.ok) return { kind: 'error' }
+  const parsed = schema.safeParse(await res.json())
+  if (generation !== generationRef.current) return { kind: 'stale' }
+  if (!parsed.success) return { kind: 'error' }
+  return { kind: 'ok', value: parsed.data }
+}
+
+/**
+ * What the add form is asking for, or `null` when it is not asking for
+ * anything yet: no pin chosen, or a name that is only whitespace. Both are
+ * a silent no-op rather than an error, because neither is a failure — the
+ * person has not finished.
+ */
+function addMemberRequest(
+  data: FormData,
+  pins: readonly { credentialId: string; origin: string }[],
+): { credentialId: string; origin: string; displayName: string } | null {
+  const pin = pins[Number(data.get('credentialIndex'))]
+  const displayName = String(data.get('displayName') ?? '').trim()
+  if (pin === undefined || displayName.length === 0) return null
+  return { credentialId: pin.credentialId, origin: pin.origin, displayName }
+}
+
+/**
+ * The add itself, judged against the generation that started it. `stale` is
+ * not an error for the reason `readCurrent` gives; an error carries the
+ * daemon's own reason when it sent one, because "Request failed (400)" tells
+ * a person nothing they can act on.
+ */
+async function postMember(
+  fetchApi: (url: string, init?: RequestInit) => Promise<Response>,
+  workspaceId: string,
+  request: { credentialId: string; origin: string; displayName: string },
+  generation: number,
+  generationRef: RefObject<number>,
+): Promise<
+  | { kind: 'ok'; value: z.infer<typeof memberProfileSummarySchema> }
+  | { kind: 'stale' }
+  | { kind: 'error'; message: string }
+> {
+  const res = await fetchApi(membersUrl(workspaceId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (generation !== generationRef.current) return { kind: 'stale' }
+  if (!res.ok) {
+    const reason = apiErrorReason(await res.json().catch(() => undefined))
+    return { kind: 'error', message: reason ?? `Request failed (${res.status}).` }
+  }
+  const parsed = memberProfileSummarySchema.safeParse(await res.json())
+  if (generation !== generationRef.current) return { kind: 'stale' }
+  if (!parsed.success) return { kind: 'error', message: `Request failed (${res.status}).` }
+  return { kind: 'ok', value: parsed.data }
 }
 
 /**
@@ -78,42 +155,34 @@ export function MembersCard({ workspaceId }: { workspaceId: string }) {
       // genuinely completed.
       const generation = options?.generation ?? ++generationRef.current
       setState({ kind: 'loading' })
-      try {
-        const membersRes = await fetchApi(membersUrl(workspaceId))
-        if (generation !== generationRef.current) return
-        if (!membersRes.ok) {
-          setState({ kind: 'error' })
-          return
-        }
-        const membersParsed = listMembersResponseSchema.safeParse(await membersRes.json())
-        if (generation !== generationRef.current) return
-        if (!membersParsed.success) {
-          setState({ kind: 'error' })
-          return
-        }
 
-        const pinsRes = await fetchApi('/api/pairing/credentials')
-        if (generation !== generationRef.current) return
-        if (!pinsRes.ok) {
-          setState({ kind: 'error' })
-          return
-        }
-        const pinsParsed = listCredentialsResponseSchema.safeParse(await pinsRes.json())
-        if (generation !== generationRef.current) return
-        if (!pinsParsed.success) {
-          setState({ kind: 'error' })
-          return
-        }
-
-        setState({
-          kind: 'loaded',
-          members: membersParsed.data.members,
-          pins: pinsParsed.data.credentials,
-        })
-      } catch {
-        if (generation !== generationRef.current) return
+      const members = await readCurrent(
+        fetchApi,
+        membersUrl(workspaceId),
+        listMembersResponseSchema,
+        generation,
+        generationRef,
+      )
+      if (members.kind === 'stale') return
+      if (members.kind === 'error') {
         setState({ kind: 'error' })
+        return
       }
+
+      const pins = await readCurrent(
+        fetchApi,
+        '/api/pairing/credentials',
+        listCredentialsResponseSchema,
+        generation,
+        generationRef,
+      )
+      if (pins.kind === 'stale') return
+      if (pins.kind === 'error') {
+        setState({ kind: 'error' })
+        return
+      }
+
+      setState({ kind: 'loaded', members: members.value.members, pins: pins.value.credentials })
     },
     [fetchApi, workspaceId],
   )
@@ -126,40 +195,24 @@ export function MembersCard({ workspaceId }: { workspaceId: string }) {
     event.preventDefault()
     if (state.kind !== 'loaded') return
     const form = event.currentTarget
-    const data = new FormData(form)
-    const pin = state.pins[Number(data.get('credentialIndex'))]
-    const displayName = String(data.get('displayName') ?? '').trim()
-    if (pin === undefined || displayName.length === 0) return
+    const request = addMemberRequest(new FormData(form), state.pins)
+    if (request === null) return
 
     const generation = generationRef.current
     setAdding(true)
     setAddError(null)
     try {
-      const res = await fetchApi(membersUrl(workspaceId), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          credentialId: pin.credentialId,
-          origin: pin.origin,
-          displayName,
-        }),
-      })
-      if (generation !== generationRef.current) return
-      if (!res.ok) {
-        setAddError(
-          apiErrorReason(await res.json().catch(() => undefined)) ??
-            `Request failed (${res.status}).`,
-        )
-        return
-      }
-      const parsed = memberProfileSummarySchema.safeParse(await res.json())
-      if (generation !== generationRef.current) return
-      if (!parsed.success) {
-        setAddError(`Request failed (${res.status}).`)
+      const added = await postMember(fetchApi, workspaceId, request, generation, generationRef)
+      if (added.kind === 'stale') return
+      if (added.kind === 'error') {
+        setAddError(added.message)
         return
       }
       form.reset()
-      setStatus(`${parsed.data.displayName} was added.`)
+      setStatus(`${added.value.displayName} was added.`)
+      // The caller's own generation, not a fresh one: minting one here would
+      // read as a daemon-identity change and invalidate an unrelated
+      // in-flight request — see `load`.
       await load({ generation })
     } catch {
       if (generation !== generationRef.current) return

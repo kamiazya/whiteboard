@@ -51,6 +51,158 @@ const ACTION_CLASS =
   'mt-1.5 inline-block rounded-md border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/5'
 
 /**
+ * The ladder itself: one rung per detectable state of how safe the user's
+ * data is, from "in one browser profile" up to "owned by a local daemon".
+ *
+ * Each rung is a VALUE rather than a branch in the render, so the question
+ * "which state is this environment in" is answered once, here, and the list
+ * below draws whatever it is handed. A rung the environment cannot advance
+ * is `blocked` rather than a dead action button.
+ */
+function journeySteps({
+  persist,
+  protectDeclined,
+  protecting,
+  onProtect,
+  install,
+  onInstall,
+  daemonConnected,
+  estimate,
+  daemonStorageBytes,
+}: Required<Pick<SetupJourneyProps, 'persist' | 'protectDeclined'>> &
+  Omit<SetupJourneyProps, 'persist' | 'protectDeclined'>): Step[] {
+  const usageDetail =
+    estimate == null
+      ? undefined
+      : `${formatBytes(estimate.usageBytes)} used · ${formatBytes(estimate.quotaBytes)} available`
+  const steps: Step[] = [
+    {
+      key: 'draw',
+      kind: 'done',
+      title: 'Draw in your browser',
+      state: "you're here",
+      desc: 'Canvases live in this browser profile, no account needed.',
+    },
+    protectStep(persist, protectDeclined, protecting, onProtect, usageDetail),
+    installStep(install, onInstall),
+    daemonStep(daemonConnected, daemonStorageBytes),
+  ]
+  return steps
+}
+
+/**
+ * Whether the browser has promised to keep the documents. `granted` and
+ * `browser-managed` are both done — the second is a browser that decides for
+ * itself and has decided yes — and only `todo` can be asked, since `unknown`
+ * has not answered yet and a refusal is not re-askable from here.
+ */
+function protectStep(
+  persist: SetupJourneyProps['persist'],
+  protectDeclined: boolean,
+  protecting: SetupJourneyProps['protecting'],
+  onProtect: SetupJourneyProps['onProtect'],
+  usageDetail: string | undefined,
+): Step {
+  if (persist === 'granted' || persist === 'browser-managed') {
+    return {
+      key: 'protect',
+      kind: 'done',
+      title: 'Protect your data',
+      state: persist === 'granted' ? 'granted' : 'managed by the browser',
+      detail: usageDetail,
+    }
+  }
+  return {
+    key: 'protect',
+    kind: 'action',
+    title: 'Protect your data',
+    state: persist === 'unknown' ? '…' : 'not granted yet',
+    detail: usageDetail,
+    desc: 'Ask the browser to keep your documents even when it is running low on space — without this it may delete them to free up room.',
+    action:
+      persist === 'todo' ? (
+        <button type="button" className={ACTION_CLASS} disabled={protecting} onClick={onProtect}>
+          {protecting ? 'Protecting…' : 'Protect'}
+        </button>
+      ) : undefined,
+    hint: protectDeclined
+      ? 'Your browser turned this down for now — it usually grants it once you have used the app a few times. Your documents still work; keep an export of anything you cannot lose.'
+      : undefined,
+  }
+}
+
+/**
+ * Three states rather than two: a browser that will never offer the prompt
+ * is BLOCKED rather than actionable, and points at its own menu instead of
+ * showing a button that could not do anything.
+ */
+function installStep(
+  install: SetupJourneyProps['install'],
+  onInstall: SetupJourneyProps['onInstall'],
+): Step {
+  if (install === 'installed') {
+    return { key: 'install', kind: 'done', title: 'Install the app', state: 'installed' }
+  }
+  if (install === 'installable') {
+    return {
+      key: 'install',
+      kind: 'action',
+      title: 'Install the app',
+      state: 'installable',
+      desc: 'Give the whiteboard its own window, icon, and offline start.',
+      action: (
+        <button type="button" className={ACTION_CLASS} onClick={onInstall}>
+          Install
+        </button>
+      ),
+    }
+  }
+  return {
+    key: 'install',
+    kind: 'blocked',
+    title: 'Install the app',
+    state: 'no prompt available',
+    hint: 'Your browser’s menu may offer Install or Add to Home Screen.',
+  }
+}
+
+/** The top rung. Its detail is what the daemon actually holds, once it can say. */
+function daemonStep(
+  daemonConnected: SetupJourneyProps['daemonConnected'],
+  daemonStorageBytes: SetupJourneyProps['daemonStorageBytes'],
+): Step {
+  if (!daemonConnected) {
+    return {
+      key: 'daemon',
+      kind: 'action',
+      title: 'Connect the companion app',
+      state: 'not connected',
+      desc: 'Run the companion app to keep documents in real files on your computer, with version history.',
+      action: (
+        <Link to={settingsPath('connections')} className={ACTION_CLASS}>
+          How to connect
+        </Link>
+      ),
+    }
+  }
+  return {
+    key: 'daemon',
+    kind: 'done',
+    title: 'Connect the companion app',
+    state: 'connected',
+    detail:
+      daemonStorageBytes == null ? undefined : (
+        <>
+          {`${formatBytes(daemonStorageBytes)} on this computer · `}
+          <Link to={settingsPath('connections')} className="underline">
+            breakdown
+          </Link>
+        </>
+      ),
+  }
+}
+
+/**
  * The durability ladder: each step is a detectable state of how safe the
  * user's data is, from "in one browser profile" up to "owned by a local
  * daemon". Steps the current environment cannot advance render dashed
@@ -67,99 +219,17 @@ export function SetupJourney({
   estimate,
   daemonStorageBytes,
 }: SetupJourneyProps) {
-  const usageDetail =
-    estimate == null
-      ? undefined
-      : `${formatBytes(estimate.usageBytes)} used · ${formatBytes(estimate.quotaBytes)} available`
-  const steps: Step[] = [
-    {
-      key: 'draw',
-      kind: 'done',
-      title: 'Draw in your browser',
-      state: "you're here",
-      desc: 'Canvases live in this browser profile, no account needed.',
-    },
-    persist === 'granted' || persist === 'browser-managed'
-      ? {
-          key: 'protect',
-          kind: 'done',
-          title: 'Protect your data',
-          state: persist === 'granted' ? 'granted' : 'managed by the browser',
-          detail: usageDetail,
-        }
-      : {
-          key: 'protect',
-          kind: 'action',
-          title: 'Protect your data',
-          state: persist === 'unknown' ? '…' : 'not granted yet',
-          detail: usageDetail,
-          desc: 'Ask the browser to keep your documents even when it is running low on space — without this it may delete them to free up room.',
-          action:
-            persist === 'todo' ? (
-              <button
-                type="button"
-                className={ACTION_CLASS}
-                disabled={protecting}
-                onClick={onProtect}
-              >
-                {protecting ? 'Protecting…' : 'Protect'}
-              </button>
-            ) : undefined,
-          hint: protectDeclined
-            ? 'Your browser turned this down for now — it usually grants it once you have used the app a few times. Your documents still work; keep an export of anything you cannot lose.'
-            : undefined,
-        },
-    install === 'installed'
-      ? { key: 'install', kind: 'done', title: 'Install the app', state: 'installed' }
-      : install === 'installable'
-        ? {
-            key: 'install',
-            kind: 'action',
-            title: 'Install the app',
-            state: 'installable',
-            desc: 'Give the whiteboard its own window, icon, and offline start.',
-            action: (
-              <button type="button" className={ACTION_CLASS} onClick={onInstall}>
-                Install
-              </button>
-            ),
-          }
-        : {
-            key: 'install',
-            kind: 'blocked',
-            title: 'Install the app',
-            state: 'no prompt available',
-            hint: 'Your browser’s menu may offer Install or Add to Home Screen.',
-          },
-    daemonConnected
-      ? {
-          key: 'daemon',
-          kind: 'done',
-          title: 'Connect the companion app',
-          state: 'connected',
-          detail:
-            daemonStorageBytes == null ? undefined : (
-              <>
-                {`${formatBytes(daemonStorageBytes)} on this computer · `}
-                <Link to={settingsPath('connections')} className="underline">
-                  breakdown
-                </Link>
-              </>
-            ),
-        }
-      : {
-          key: 'daemon',
-          kind: 'action',
-          title: 'Connect the companion app',
-          state: 'not connected',
-          desc: 'Run the companion app to keep documents in real files on your computer, with version history.',
-          action: (
-            <Link to={settingsPath('connections')} className={ACTION_CLASS}>
-              How to connect
-            </Link>
-          ),
-        },
-  ]
+  const steps = journeySteps({
+    persist,
+    protectDeclined,
+    protecting,
+    onProtect,
+    install,
+    onInstall,
+    daemonConnected,
+    estimate,
+    daemonStorageBytes,
+  })
 
   return (
     <ol className="flex flex-col">

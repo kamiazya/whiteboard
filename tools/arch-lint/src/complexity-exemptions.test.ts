@@ -44,14 +44,16 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
  * — nothing forces it, which is the honest cost.
  */
 // Lowered from 114 with codec's six files, then 72 -> 70 with the two
+// document pages, 70 -> 67 with canvas-render, 67 -> 65 with daemon-client,
+// 65 -> 60 with mcp-server's CLI, 60 -> 58 with the two keeper document
 // Lowered from 114 with codec's six files, then 72 -> 70 with the two
 // document pages, 70 -> 67 with canvas-render, 67 -> 65 with daemon-client,
 // 65 -> 60 with mcp-server's CLI, 60 -> 58 with the two keeper document
-// pages, 58 -> 55 with the markdown editor's three pure modules, and
-// 55 -> 52 with the workspace-files panel and its two lists: the comment
-// asks for the ceiling to follow an obvious gap, and a paydown that leaves
-// slack is exactly one.
-const EXEMPT_CEILING = 52
+// pages, 58 -> 55 with the markdown editor's three pure modules, 55 -> 52
+// with the workspace-files panel and its two lists, and 52 -> 48 with the
+// settings and migration surfaces: the comment asks for the ceiling to
+// follow an obvious gap, and a paydown that leaves slack is exactly one.
+const EXEMPT_CEILING = 48
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
@@ -81,8 +83,12 @@ describe('the cognitive-complexity exemption list', () => {
   it('names only files that still exceed the threshold — a paid-down file leaves the list', () => {
     const paths = exemptions().map((glob) => glob.slice(1))
     // The list is the subject: an empty one would pass every assertion below
-    // while measuring nothing.
-    expect(paths.length).toBeGreaterThan(50)
+    // while measuring nothing. The floor was 50 while the list was in the
+    // hundreds; the paydown took it to 48, so it moves to a number that
+    // still means "not vacuous" rather than one the programme has to stop
+    // at. Lower it again the same way when it is in the way — never delete
+    // it, or the guard stops measuring the moment the list empties.
+    expect(paths.length).toBeGreaterThan(20)
     const over = filesOverThreshold(paths)
     expect(paths.filter((path) => !over.has(path))).toEqual([])
   })
