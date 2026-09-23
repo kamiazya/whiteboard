@@ -36,6 +36,7 @@
 // vocabulary (Zod schemas, OAuth scope-request parsing) needs a value to
 // check membership against, not only a compile-time union. `AuthScope`
 // is derived from this array so the two can never drift apart.
+import type { BearerToken } from './bearer-provisioning.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
 
 export const AUTH_SCOPES = [
@@ -105,6 +106,9 @@ export type AuthDecision =
        *  it: it spells the issuer, and the context is what downstream code
        *  may log or serialise. It exists to resolve a person, nothing else. */
       person?: AuthenticatorBinding
+      /** The verified bearer token behind `person`, read only when that
+       *  person has no user yet (ADR-0046 decision 5). */
+      bearer?: () => BearerToken
     }
   | {
       ok: false

@@ -30,6 +30,10 @@ export const providerAdmissionSchema = z
     // Each named claim must carry one of the listed values (a claim that is an
     // array satisfies the rule when any element matches).
     requiredClaims: z.record(z.string().min(1), z.array(z.string().min(1)).min(1)).optional(),
+    // The OAuth clients (`azp`, else `client_id`) whose bearer tokens may
+    // create a user through these same rules. Absent: a bearer never creates
+    // one, since any client able to obtain this keeper's audience could.
+    bearerClients: z.array(z.string().min(1)).min(1).optional(),
   })
   .strict()
 

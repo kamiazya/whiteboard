@@ -2,8 +2,13 @@ import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/a
 import type { Context, MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { ALL_AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
+import {
+  type BearerProvisioning,
+  type BearerToken,
+  provisionBearerPerson,
+} from './bearer-provisioning.js'
 import type { ResolvedGrant } from './credential-resolver.js'
-import type { MemberProfileStore } from './member-profile-store.js'
+import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { membershipRefusalFor, rememberGrant } from './membership-gate.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
@@ -34,6 +39,9 @@ export interface ServerModePeople {
   readonly members: MemberProfileStore
   readonly sessions: SignInSessionStore
   readonly now?: () => number
+  /** How a bearer's person with no user here may become one (ADR-0046
+   *  decision 5). Absent: a bearer never creates a user. */
+  readonly bearerProvisioning?: BearerProvisioning
 }
 
 type Refusal = { status: 401 | 403; code: string; wwwAuthenticate?: string }
@@ -59,9 +67,29 @@ async function serverModeGrant(
     requiredScopes,
   })
   if (!decision.ok) return { refusal: decision }
-  const { context, person } = decision
+  const { context, person, bearer } = decision
+  if (person !== undefined && bearer !== undefined && people !== undefined) {
+    const refused = await bearerBecomesUser(people, person, bearer)
+    if (refused !== undefined) return { refusal: refused }
+  }
   const scopes = 'scopes' in context ? context.scopes : ALL_AUTH_SCOPES
   return { grant: { kind: 'external-bearer', scopes, ...(person === undefined ? {} : { person }) } }
+}
+
+// A person with a user proceeds untouched; one without is admitted or refused
+// by the provider declared for the bearer's issuer. An issuer no provider
+// declares keeps its bearers user-less, which the membership gate answers.
+async function bearerBecomesUser(
+  people: ServerModePeople,
+  person: AuthenticatorBinding,
+  bearer: () => BearerToken,
+): Promise<Refusal | undefined> {
+  const provisioning = people.bearerProvisioning
+  if (provisioning === undefined) return undefined
+  if ((await people.members.profileForBinding(person)) !== null) return undefined
+  const outcome = await provisionBearerPerson(provisioning, person, bearer())
+  if (outcome.ok || outcome.reason === 'no_provider') return undefined
+  return { status: 403, code: outcome.reason }
 }
 
 export function createServerModeApiAuthMiddleware(

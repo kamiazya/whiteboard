@@ -44,6 +44,7 @@
 import type { MiddlewareHandler } from 'hono'
 import type { AuthAuthorizeInput, AuthDecision, AuthScope } from './auth-strategy.js'
 import { parseBearerAuthorizationHeader } from './bearer-token.js'
+import type { VerifiedClaims } from './sign-in-admission.js'
 import { providerAuthenticator } from './sign-in-config.js'
 
 type OAuthResourceTokenValidationFailureReason =
@@ -71,6 +72,10 @@ export type OAuthResourceTokenValidationResult =
       audience: string | readonly string[]
       scopes: readonly AuthScope[]
       expiresAt?: number
+      /** The verified payload, for deciding whether its person may become a user. */
+      claims?: VerifiedClaims
+      /** Whether the token declared itself an access token (RFC 9068). */
+      typed?: boolean
     }
   | {
       ok: false
@@ -98,6 +103,59 @@ const FORBIDDEN: AuthDecision = {
   code: 'auth.forbidden',
 }
 
+// 401 retries with a credential; 403 is understood and insufficient.
+function refusalFor(reason: OAuthResourceTokenValidationFailureReason): AuthDecision {
+  switch (reason) {
+    case 'insufficient_scope':
+      return FORBIDDEN
+    case 'missing':
+    case 'malformed':
+    case 'invalid_signature':
+    case 'invalid_issuer':
+    case 'invalid_audience':
+    case 'expired':
+    case 'revoked':
+    case 'validator_unavailable':
+    case 'not_access_token':
+      return UNAUTHORIZED
+    default: {
+      const _exhaustive: never = reason
+      void _exhaustive
+      return UNAUTHORIZED
+    }
+  }
+}
+
+function grantedDecision(
+  result: Extract<OAuthResourceTokenValidationResult, { ok: true }>,
+): AuthDecision {
+  return {
+    ok: true,
+    context: {
+      kind: 'oauth-resource-server',
+      subject: result.subject,
+      // Surface only `subject` + `scopes` in the auth context.
+      // Issuer / audience are validator-internal: leaking them
+      // into downstream handlers (and into anything that
+      // serialises `decision.context`) would publish IdP URLs
+      // and internal resource ids onto operator-facing surfaces.
+      scopes: result.scopes,
+    },
+    // The account binding a sign-in through the same issuer would
+    // resolve to (ADR-0046 decision 1), so a bearer and a session name
+    // the same person. Beside the context rather than in it — see
+    // AuthDecision.
+    person: {
+      authenticator: providerAuthenticator({ issuer: result.issuer }),
+      subject: result.subject,
+    },
+    // A function rather than a field: the payload spells the issuer and
+    // the person's email, and a decision that is logged or serialised
+    // must carry neither.
+    bearer: () => ({ claims: result.claims ?? {}, typed: result.typed === true }),
+  }
+}
+
 export function createOAuthResourceServerAuthStrategy(options: {
   validator: OAuthResourceTokenValidator
 }): AsyncAuthStrategy {
@@ -120,27 +178,7 @@ export function createOAuthResourceServerAuthStrategy(options: {
         // IdP URLs, stack frames, or partial token data.
         return UNAUTHORIZED
       }
-      if (!result.ok) {
-        switch (result.reason) {
-          case 'insufficient_scope':
-            return FORBIDDEN
-          case 'missing':
-          case 'malformed':
-          case 'invalid_signature':
-          case 'invalid_issuer':
-          case 'invalid_audience':
-          case 'expired':
-          case 'revoked':
-          case 'validator_unavailable':
-          case 'not_access_token':
-            return UNAUTHORIZED
-          default: {
-            const _exhaustive: never = result.reason
-            void _exhaustive
-            return UNAUTHORIZED
-          }
-        }
-      }
+      if (!result.ok) return refusalFor(result.reason)
       // Scope subset enforcement at the strategy boundary — the
       // validator's `ok` is only one of two checks, the route's
       // `requiredScopes` is the other.
@@ -150,27 +188,7 @@ export function createOAuthResourceServerAuthStrategy(options: {
           return FORBIDDEN
         }
       }
-      return {
-        ok: true,
-        context: {
-          kind: 'oauth-resource-server',
-          subject: result.subject,
-          // Surface only `subject` + `scopes` in the auth context.
-          // Issuer / audience are validator-internal: leaking them
-          // into downstream handlers (and into anything that
-          // serialises `decision.context`) would publish IdP URLs
-          // and internal resource ids onto operator-facing surfaces.
-          scopes: result.scopes,
-        },
-        // The account binding a sign-in through the same issuer would
-        // resolve to (ADR-0046 decision 1), so a bearer and a session name
-        // the same person. Beside the context rather than in it — see
-        // AuthDecision.
-        person: {
-          authenticator: providerAuthenticator({ issuer: result.issuer }),
-          subject: result.subject,
-        },
-      }
+      return grantedDecision(result)
     },
   }
 }

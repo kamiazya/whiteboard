@@ -65,16 +65,12 @@ export interface DocumentRouterOptions {
   firstMember?: FirstMember
 }
 
-// Entry point that composes the canvas API's sub-routers: workspace/canvas
-// CRUD, names/pin metadata, the live-doc snapshot+update path, version
-// history (list/save/thumbnails/restore), and maintenance (compact/prune/
-// optimize). Split by concern so each is independently testable; this file
-// only wires shared dependencies (versionStore, auto-version trigger,
-// auto-compact) between them.
-export function createDocumentRouter(options: DocumentRouterOptions = {}) {
-  const app = new Hono()
-  const versionStore = options.versionStore ?? new FileVersionStore()
-  const triggerAutoVersion = createAutoVersionTrigger(versionStore, {
+// The checkpoint trigger both the HTTP and the WS update paths fire.
+function armAutoVersionTrigger(
+  options: DocumentRouterOptions,
+  versionStore: VersionStore,
+): AutoVersionTrigger {
+  const trigger = createAutoVersionTrigger(versionStore, {
     ...(options.autoVersionQuietMs === undefined ? {} : { quietMs: options.autoVersionQuietMs }),
     ...(options.daemonActor === undefined ? {} : { daemonActor: options.daemonActor }),
     // The checkpoint lands long after the update that signalled it, so the
@@ -87,11 +83,24 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
         })
     },
   })
-  options.onAutoVersionTrigger?.(triggerAutoVersion)
+  options.onAutoVersionTrigger?.(trigger)
   // Register the same trigger for the WS path, synchronously. The holder is
   // auto-version.ts rather than ws.ts precisely so this needs no import of a
   // module that imports back — see its comment for the promise this replaced.
-  setAutoVersionTrigger(triggerAutoVersion)
+  setAutoVersionTrigger(trigger)
+  return trigger
+}
+
+// Entry point that composes the canvas API's sub-routers: workspace/canvas
+// CRUD, names/pin metadata, the live-doc snapshot+update path, version
+// history (list/save/thumbnails/restore), and maintenance (compact/prune/
+// optimize). Split by concern so each is independently testable; this file
+// only wires shared dependencies (versionStore, auto-version trigger,
+// auto-compact) between them.
+export function createDocumentRouter(options: DocumentRouterOptions = {}) {
+  const app = new Hono()
+  const versionStore = options.versionStore ?? new FileVersionStore()
+  const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
 
   // Auto-compact debounce: every successful saveDocument reschedules a per-
   // canvas compaction. The 30s default lets active editing sessions burst

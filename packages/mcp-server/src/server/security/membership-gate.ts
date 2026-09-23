@@ -29,7 +29,7 @@ export function rememberGrant(c: Context, grant: ResolvedGrant): void {
   grantMemo.set(c.req.raw, grant)
 }
 
-export function grantOf(c: Context): ResolvedGrant | undefined {
+function grantOf(c: Context): ResolvedGrant | undefined {
   return grantMemo.get(c.req.raw)
 }
 

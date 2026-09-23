@@ -298,10 +298,17 @@ async function peopleOptions(
 ): Promise<{ people: ServerModePeople; signIn?: SignInRoutesDeps }> {
   const db = await getDb(dataDir)
   const deps = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS)
-  const people = { members: deps.members, sessions: deps.sessions }
-  if (signInProviders === undefined || signInProviders.length === 0) return { people }
+  if (signInProviders === undefined || signInProviders.length === 0) {
+    return { people: { members: deps.members, sessions: deps.sessions } }
+  }
   return {
-    people,
+    // A bearer from a declared provider's issuer may become a user by that
+    // provider's rules (ADR-0046 decision 5); see bearer-provisioning.ts.
+    people: {
+      members: deps.members,
+      sessions: deps.sessions,
+      bearerProvisioning: { providers: signInProviders, members: deps.members },
+    },
     signIn: {
       providers: signInProviders,
       rp: createRelyingParty(),
