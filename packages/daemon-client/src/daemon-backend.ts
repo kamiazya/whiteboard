@@ -33,6 +33,7 @@ import { uploadFiles } from './upload-files.js'
 import {
   clientReadyMessageSchema,
   exportResponseMessageSchema,
+  type ServerTextMessage,
   viewportResponseMessageSchema,
 } from './ws-messages.js'
 import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from './ws-protocol.js'
@@ -68,6 +69,94 @@ export interface DaemonApiTransport {
 // signal available for "this token cannot ever succeed"; retrying it forever
 // would silently spam reconnects with no way for the user to recover.
 const MAX_CONSECUTIVE_IMMEDIATE_FAILURES = 3
+
+/**
+ * One server text message, dispatched by its `type`. A chain of early
+ * returns rather than a table, because two arms do more than call a handler:
+ * a viewport request ACKs on the socket it arrived on, and an unparseable
+ * frame is ignored rather than raised — a client one release behind the
+ * daemon must keep working over the messages it does understand.
+ */
+/**
+ * A message the daemon expects an ANSWER to. Split from the notifications
+ * below because these two are the arms that do more than call a handler: the
+ * viewport request ACKs on the socket it ARRIVED on — captured in the message
+ * closure rather than read from `this.ws`, so a reconnect racing the ACK
+ * cannot mis-route it to the new socket — and the export request is answered
+ * by whatever the handler goes on to render.
+ */
+function receiveRequestMessage(
+  msg: Extract<ServerTextMessage, { type: 'viewport_request' | 'export_request' }>,
+  handlers: DocumentBackendHandlers,
+  ws: WebSocket,
+): void {
+  if (msg.type === 'viewport_request') {
+    handlers.onViewportRequest({
+      requestId: msg.requestId,
+      mode: msg.mode,
+      elementIds: msg.elementIds,
+      animate: msg.animate,
+      scrollX: msg.scrollX,
+      scrollY: msg.scrollY,
+      zoom: msg.zoom,
+    })
+    ws.send(
+      JSON.stringify(
+        viewportResponseMessageSchema.parse({
+          type: 'viewport_response',
+          requestId: msg.requestId,
+        }),
+      ),
+    )
+    return
+  }
+  handlers.onExportRequest({
+    requestId: msg.requestId,
+    padding: msg.padding,
+    scale: msg.scale,
+    minFontPx: msg.minFontPx,
+    frameId: msg.frameId,
+    theme: msg.theme,
+  })
+}
+
+/**
+ * One server text message, dispatched by its `type`. A frame that does not
+ * parse is ignored rather than raised: a client one release behind the daemon
+ * must keep working over the messages it does understand.
+ */
+function receiveTextMessage(data: string, handlers: DocumentBackendHandlers, ws: WebSocket): void {
+  const msg = parseServerTextMessage(data)
+  if (!msg) return
+
+  if (msg.type === 'viewport_request' || msg.type === 'export_request') {
+    receiveRequestMessage(msg, handlers, ws)
+    return
+  }
+  if (msg.type === 'version_created') {
+    handlers.onVersionCreated(msg.version)
+    return
+  }
+  if (msg.type === 'restore_started') {
+    handlers.onRestoreStarted({ label: msg.label })
+    return
+  }
+  if (msg.type === 'restore_complete') {
+    handlers.onRestoreComplete()
+    return
+  }
+  if (msg.type === 'head_changed') {
+    handlers.onHeadChanged({ head: msg.head })
+    return
+  }
+  if (msg.type === 'agent_activity') {
+    handlers.onAgentActivity?.({
+      operator: msg.operator,
+      touched: msg.touched,
+      summary: msg.summary,
+    })
+  }
+}
 
 export class DaemonBackend implements DocumentBackend {
   private readonly workspaceId: string
@@ -234,77 +323,25 @@ export class DaemonBackend implements DocumentBackend {
 
     ws.onmessage = (event: MessageEvent) => {
       if (event.data instanceof ArrayBuffer) {
-        const bytes = new Uint8Array(event.data)
-        if (!this.snapshotReceived) {
-          this.snapshotReceived = true
-          handlers.onSnapshot(bytes)
-        } else {
-          handlers.onRemoteUpdate(bytes)
-        }
+        this.receiveBinaryFrame(new Uint8Array(event.data), handlers)
         return
       }
-
-      if (typeof event.data === 'string') {
-        const msg = parseServerTextMessage(event.data)
-        if (!msg) return
-
-        if (msg.type === 'version_created') {
-          handlers.onVersionCreated(msg.version)
-          return
-        }
-        if (msg.type === 'restore_started') {
-          handlers.onRestoreStarted({ label: msg.label })
-          return
-        }
-        if (msg.type === 'restore_complete') {
-          handlers.onRestoreComplete()
-          return
-        }
-        if (msg.type === 'head_changed') {
-          handlers.onHeadChanged({ head: msg.head })
-          return
-        }
-        if (msg.type === 'agent_activity') {
-          handlers.onAgentActivity?.({
-            operator: msg.operator,
-            touched: msg.touched,
-            summary: msg.summary,
-          })
-          return
-        }
-        if (msg.type === 'viewport_request') {
-          handlers.onViewportRequest({
-            requestId: msg.requestId,
-            mode: msg.mode,
-            elementIds: msg.elementIds,
-            animate: msg.animate,
-            scrollX: msg.scrollX,
-            scrollY: msg.scrollY,
-            zoom: msg.zoom,
-          })
-          // ACK always goes on the same socket captured in this message closure,
-          // not via this.ws, so concurrent reconnects do not mis-route the ACK.
-          ws.send(
-            JSON.stringify(
-              viewportResponseMessageSchema.parse({
-                type: 'viewport_response',
-                requestId: msg.requestId,
-              }),
-            ),
-          )
-          return
-        }
-        if (msg.type === 'export_request') {
-          handlers.onExportRequest({
-            requestId: msg.requestId,
-            padding: msg.padding,
-            scale: msg.scale,
-            minFontPx: msg.minFontPx,
-            frameId: msg.frameId,
-            theme: msg.theme,
-          })
-        }
-      }
+      if (typeof event.data === 'string') receiveTextMessage(event.data, handlers, ws)
     }
+  }
+
+  /**
+   * A binary frame: the FIRST is the snapshot this session opens from and
+   * every later one is a remote update. The socket carries no marker saying
+   * which, so arrival order is the discriminator — which is why the flag is
+   * the session's rather than the socket's.
+   */
+  private receiveBinaryFrame(bytes: Uint8Array, handlers: DocumentBackendHandlers): void {
+    if (!this.snapshotReceived) {
+      this.snapshotReceived = true
+      handlers.onSnapshot(bytes)
+      return
+    }
+    handlers.onRemoteUpdate(bytes)
   }
 }

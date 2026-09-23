@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   canvasSnapshotUrl,
   documentUpdateUrl,
+  parseSseEvent,
   SseStreamHub,
   workspaceIdOfDocKey,
 } from './sse-stream-hub.js'
@@ -121,6 +122,30 @@ describe('SseStreamHub', () => {
 
     expect(b).toEqual([])
     expect(a[0]).toBe('{"x":1}')
+    hub.close()
+  })
+
+  it('is undisturbed by a keep-alive between two real frames', async () => {
+    // What a hub-level test can see: a keep-alive delivers nothing and the
+    // stream stays live. That the frame is dropped by the PARSER rather than
+    // absorbed downstream is `parseSseEvent`'s own test below — every
+    // consumer in `dispatch` re-validates, so this one passes either way.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d' })
+    const messages: string[] = []
+    const updates: Uint8Array[] = []
+    hub.subscribe('w/a', { onUpdate: (u) => updates.push(u), onMessage: (m) => messages.push(m) })
+    await flush()
+
+    fake.push(': keep-alive\n\n')
+    fake.push('event: message\n\n')
+    await flush()
+    expect(messages).toEqual([])
+    expect(updates).toEqual([])
+
+    // The stream is still live: a real frame after them still arrives.
+    fake.push(`event: message\ndata: ${JSON.stringify({ doc: 'w/a', raw: '{"x":1}' })}\n\n`)
+    await vi.waitFor(() => expect(messages.length).toBe(1))
     hub.close()
   })
 
@@ -336,5 +361,26 @@ describe('workspaceIdOfDocKey', () => {
     expect(workspaceIdOfDocKey('workspace:')).toBeNull()
     expect(workspaceIdOfDocKey('no-slash-here')).toBeNull()
     expect(workspaceIdOfDocKey('/leading-slash')).toBeNull()
+  })
+})
+
+describe('parseSseEvent', () => {
+  it('reads the event name and joins every data line', () => {
+    expect(parseSseEvent('event: update\ndata: one\ndata: two')).toEqual({
+      event: 'update',
+      data: 'one\ntwo',
+    })
+  })
+
+  it('defaults the event name to message', () => {
+    expect(parseSseEvent('data: hi')).toEqual({ event: 'message', data: 'hi' })
+  })
+
+  it('answers nothing for a frame with no data line', () => {
+    // A comment and a bare keep-alive: something arrived, and there is
+    // nothing to deliver. An empty event is not an event.
+    expect(parseSseEvent(': keep-alive')).toBeNull()
+    expect(parseSseEvent('event: ready')).toBeNull()
+    expect(parseSseEvent('')).toBeNull()
   })
 })
