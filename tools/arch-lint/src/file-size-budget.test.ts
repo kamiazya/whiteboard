@@ -332,7 +332,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // it serves cost more than that. A net +13 to delete a rule that had to be
   // remembered in five places is the trade, said plainly rather than hidden
   // behind a smaller number.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1258,
+  // 1258 -> 889: the panel's pieces — its toolbar, what it says about the
+  // last write, the object pane, the card menu's items and each column view
+  // — moved to `workspace-files-panel-parts.tsx` beside it.
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 889,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
   // map on a document's node, and the read that never opens one. They sit
   // here rather than in a new file because `nodeById` is this module's, and
