@@ -53,7 +53,14 @@ export async function duplicateBrowserDocument(input: {
  * thumbnail, an embed or a backlink would read.
  */
 async function readMergedContent(loro: LoroStoreLike, documentId: string): Promise<Uint8Array> {
-  const doc = await loadDocumentContent(documentId, { loro })
-  if (doc === null) throw new Error('The document data could not be read for duplication.')
+  // One refusal for a person, whichever way the read failed: absent content
+  // and a read that did not complete are the same answer to "why was no copy
+  // made", and the page shows this message as it is. The cause stays attached.
+  const doc = await loadDocumentContent(documentId, { loro }).catch((cause: unknown) => {
+    throw new Error(UNREADABLE_FOR_DUPLICATION, { cause })
+  })
+  if (doc === null) throw new Error(UNREADABLE_FOR_DUPLICATION)
   return new Uint8Array(doc.export({ mode: 'snapshot' }))
 }
+
+const UNREADABLE_FOR_DUPLICATION = 'The document data could not be read for duplication.'

@@ -155,10 +155,9 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     why: 'the Connections screen is where a daemon is found, paired and promoted to — its subject is the connection, so a browser keeper has nothing to mirror',
   },
   'src/pages/use-daemon-connections.ts': {
-    reach: 'gap',
-    missing:
-      'the Connections chip has no browser half at all — BrowserDocumentPage matches neither `connections` nor `Backlink`, so a browser-kept document shows no backlinks and no unlinked mentions',
-    followUp: 'issues/browser-keeper-has-no-connections-panel',
+    reach: 'both-keepers',
+    browser: 'src/pages/use-browser-connections.ts',
+    note: 'both halves hand a read to one keeper-agnostic hook (`use-connections.ts`); the browser answers from the same reference graph the daemon does. Linkify is the daemon half only: the browser has no operation that rewrites another document yet, and the panel hides the button without one',
   },
   'src/pages/use-daemon-document-controller.ts': {
     reach: 'both-keepers',
