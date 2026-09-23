@@ -514,10 +514,19 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 323,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing': 406,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.emit': 89,
+  // Raised 406 -> 460: the inline-run walker's inner steps are now NAMED
+  // (emitAtomic / placeCollapsed / clusterCameDown / placeSegment /
+  // emitImage / emitWikiLink / emitEmbed / layoutTableCells), and each
+  // carries the rationale that was a comment mid-body. Nothing was added.
+  // The next real shrink is moving the code-block trio and the table half
+  // into sibling modules, which needs `ResolvedMdastOptions` / `Cursor`
+  // extracted first or it closes a package-internal cycle.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing': 460,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.walk': 126,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.wrapAndPush': 80,
+  // Raised 80 -> 87 for the same reason: `clusterCameDown` and
+  // `placeSegment` replaced two inline blocks and brought their doc
+  // comments with them.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.wrapAndPush': 87,
   'packages/canvas-render/src/layout/scale-scene.ts#scaleNode': 88,
   'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 68,
   'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
