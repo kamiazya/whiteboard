@@ -261,6 +261,26 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 160,
   'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 319,
   'apps/web/src/components/spatial-editor/SnapGuidesOverlay.tsx#SnapGuidesOverlay': 76,
+  // The editor's JSX, cut into the layers it always had: canvas space under
+  // the pan/zoom transform, screen space above it, the chrome you press, the
+  // dialogs that chrome opens, and what is drawn about the selection. Each
+  // is a block of JSX rather than a branch — the shape a size budget cannot
+  // tell from logic and a complexity budget can — and all eight are now
+  // UNDER the complexity threshold, which is what this increment was for.
+  //
+  // FUNCTIONS rather than components, and rather than a sibling module: each
+  // layer reads this render's live gesture state, so a component would thread
+  // roughly forty values through props — a wider seam, in the app's most
+  // stateful surface, for no reader benefit. The tree they build is exactly
+  // the tree the inline JSX built.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasSpaceLayers': 139,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#selectionOverlay': 84,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#routableHandles': 67,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#inPlaceEditors': 67,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#screenSpaceOverlays': 53,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasChrome': 100,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#canvasDialogs': 119,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#facetPanelSlot': 99,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#runNavigation': 55,
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 91,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,

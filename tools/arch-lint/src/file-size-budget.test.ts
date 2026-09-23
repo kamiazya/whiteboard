@@ -568,7 +568,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the reason that used to sit inside the arm. The file's own eight
   // `reduce*` siblings were the precedent; this finishes that shape.
   'apps/web/src/components/spatial-editor/gestures.ts': 845,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2341,
+  // Raised 2341 -> 2437. The file grew by the doc comments its eight JSX
+  // layers now carry, and by the fragments wrapping them; nothing was added
+  // and nothing duplicated. The next real shrink moves a layer into a
+  // sibling module, which needs its share of the editor's gesture state
+  // named as a bundle first.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2437,
   // The six pointer handlers, moved verbatim; over budget on arrival, and
   // splitting `handlePointerUp` there is what shrinks it.
   // 1052 -> 1240: the press and release paths became claimant chains and the
@@ -685,7 +690,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // reason its own comment gives for the list being 400-odd entries rather
   // than 17 — so it is recorded rather than split, and splitting it would
   // put half the ledger where a reader does not look for it.
-  'tools/arch-lint/src/function-size-budget.test.ts': 846,
+  'tools/arch-lint/src/function-size-budget.test.ts': 864,
   // Raised 1611 -> 1643 for the workspaceId branch's two new assertions
   // (ADR-0041 S0-5's Members card): the browser-mode case that pins
   // workspaceId stays undefined when settingsDaemon is, and the paired-daemon
