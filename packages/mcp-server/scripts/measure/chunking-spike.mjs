@@ -42,6 +42,31 @@ const extractor = await pipeline('feature-extraction', DEFAULT_MODEL, { dtype: '
 const countTokens = async (text) => (await tokenizer(text)).input_ids.dims[1]
 
 /**
+ * A single block over budget, cut by LINES and each over-budget line by
+ * words, pushing every full chunk and answering with the tail.
+ *
+ * Both steps are needed: assigning an over-budget line straight to the
+ * accumulator hands it to the model, which truncates it silently — and an
+ * instrument built to measure truncation must not quietly do the same
+ * thing. The corpus has one 507-token line today, under the model's 512
+ * limit but over this budget, so the path is reachable now rather than
+ * hypothetically.
+ */
+async function packOversizedBlock(block, chunks) {
+  let part = ''
+  for (const line of block.split('\n')) {
+    for (const piece of await splitToBudget(line)) {
+      const next = part === '' ? piece : `${part}\n${piece}`
+      if ((await countTokens(next)) > CHUNK_BUDGET) {
+        if (part !== '') chunks.push(part)
+        part = piece
+      } else part = next
+    }
+  }
+  return part
+}
+
+/**
  * Greedy packing over markdown BLOCKS rather than a blind character window.
  * A heading and the paragraph under it belong together, and splitting mid
  * sentence is what makes a passage embedding meaningless.
@@ -64,19 +89,8 @@ async function chunk(text) {
     // quietly do the same thing. The corpus has one 507-token line today,
     // under the model's 512 limit but over this budget, so the path is
     // reachable now rather than hypothetically.
-    if ((await countTokens(block)) > CHUNK_BUDGET) {
-      let part = ''
-      for (const line of block.split('\n')) {
-        for (const piece of await splitToBudget(line)) {
-          const next = part === '' ? piece : `${part}\n${piece}`
-          if ((await countTokens(next)) > CHUNK_BUDGET) {
-            if (part !== '') chunks.push(part)
-            part = piece
-          } else part = next
-        }
-      }
-      current = part
-    } else current = block
+    current =
+      (await countTokens(block)) > CHUNK_BUDGET ? await packOversizedBlock(block, chunks) : block
   }
   if (current.trim() !== '') chunks.push(current)
   return chunks.length === 0 ? [text] : chunks

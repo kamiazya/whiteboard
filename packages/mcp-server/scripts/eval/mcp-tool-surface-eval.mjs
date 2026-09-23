@@ -115,6 +115,60 @@ function compositionLine(composition) {
 }
 
 /**
+ * One board's drawing scores, or the reason it could not be scored.
+ *
+ * The score is a DIAGNOSTIC beside the verdict: a board it cannot read is
+ * recorded as such, not a reason to abandon a run that has already spent its
+ * quota. The SVG is already on disk either way.
+ *
+ * A library that failed to read is carried in and thrown HERE rather than
+ * degraded to an empty one, because an empty library scores every board as
+ * if it declared nothing — which is a NUMBER, and a wrong number reads like
+ * a reading. An absent score does not.
+ */
+async function scoreBoard(wb, board, documentId, library, libraryError) {
+  try {
+    if (libraryError !== undefined) {
+      throw new Error(
+        `the workspace tag library could not be read, so this board cannot be scored as drawn: ${libraryError}`,
+      )
+    }
+    const read = await wb.call('wb_document_get', {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+    })
+    const content = read.documents[0]?.content
+    if (content === undefined) throw new Error('the document has no content')
+    const parsed = parseSpatial(content)
+    if (!parsed.ok) {
+      throw new Error(`the document does not parse as a canvas: ${parsed.error.message}`)
+    }
+    // The canvas AS DRAWN, which is what the SVG already is: the layout
+    // resolves a declared tag colour onto the node before laying anything
+    // out, and `wb_scene_render` passes the library. Scoring the STORED
+    // canvas instead reported a board nobody draws — round 21 read `colour
+    // carried(health)` in the verdict and `colour unused` in this column,
+    // for the same board in the same run, because the verifier had been
+    // fixed and this had not. It reaches every column, not just the facet
+    // one: contrast and treatment counts are read off the same colours.
+    const canvas = withDeclaredColours(parsed.value, library)
+    const scene = layoutSpatialCanvas(canvas, {
+      measure: constantRatioMeasureText,
+      appearance: DRAWING_APPEARANCE,
+      tagLibrary: library,
+    })
+    return {
+      board,
+      score: scoreDrawing(canvas, scene),
+      composition: scoreComposition(canvas, scene),
+      facets: scoreFacets(canvas),
+    }
+  } catch (error) {
+    return { board, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
  * What the boards a write task names LOOK like and how they SCORE, after
  * the task: a layout can pass every property the verifier asks and still
  * read badly. Rendered through the pipeline a person sees into
@@ -157,48 +211,7 @@ async function captureBoards(wb, task, trial) {
     mkdirSync(figures, { recursive: true })
     const file = `${task.name}-${trial}-${path}`.replace(/[^a-z0-9]+/gi, '-')
     writeFileSync(join(figures, `${file}.svg`), rendered.svg)
-    // The score is a diagnostic beside the verdict: a board it cannot read
-    // is recorded as such, not a reason to abandon a run that has already
-    // spent its quota. The SVG above is already on disk either way.
-    try {
-      if (libraryError !== undefined) {
-        throw new Error(
-          `the workspace tag library could not be read, so this board cannot be scored as drawn: ${libraryError}`,
-        )
-      }
-      const read = await wb.call('wb_document_get', {
-        workspaceId: WORKSPACE_ID,
-        documentIds: [entry.documentId],
-      })
-      const content = read.documents[0]?.content
-      if (content === undefined) throw new Error('the document has no content')
-      const parsed = parseSpatial(content)
-      if (!parsed.ok)
-        throw new Error(`the document does not parse as a canvas: ${parsed.error.message}`)
-      // The canvas AS DRAWN, which is what the SVG above already is: the
-      // layout resolves a declared tag colour onto the node before laying
-      // anything out, and `wb_scene_render` passes the library. Scoring the
-      // stored canvas instead reported a board nobody draws — round 21 read
-      // `colour carried(health)` in the verdict and `colour unused` in this
-      // column, for the same board in the same run, because the verifier had
-      // been fixed and this had not. It reaches every column, not just the
-      // facet one: contrast and treatment counts are read off the same
-      // colours.
-      const canvas = withDeclaredColours(parsed.value, library)
-      const scene = layoutSpatialCanvas(canvas, {
-        measure: constantRatioMeasureText,
-        appearance: DRAWING_APPEARANCE,
-        tagLibrary: library,
-      })
-      drawing.push({
-        board: path,
-        score: scoreDrawing(canvas, scene),
-        composition: scoreComposition(canvas, scene),
-        facets: scoreFacets(canvas),
-      })
-    } catch (error) {
-      drawing.push({ board: path, error: error instanceof Error ? error.message : String(error) })
-    }
+    drawing.push(await scoreBoard(wb, path, entry.documentId, library, libraryError))
   }
   return drawing
 }
@@ -257,6 +270,127 @@ const normalise = (s) =>
     .trim()
     .replace(/^["'`]+|["'`.]+$/g, '')
     .toLowerCase()
+
+/**
+ * One `claude` run, as its parsed NDJSON transcript.
+ *
+ * Every exit is a resolve rather than a reject: a spawn failure, a timeout
+ * kill and a clean exit are all outcomes this eval RECORDS, and throwing on
+ * one would lose the trials that already ran. Lines that do not parse are
+ * progress noise the CLI interleaves.
+ */
+function runClaude(args, cwd) {
+  return new Promise((resolvePromise) => {
+    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (c) => {
+      stdout += c.toString()
+    })
+    child.stderr.on('data', (c) => {
+      stderr += c.toString()
+    })
+    const timer = setTimeout(() => child.kill('SIGTERM'), TASK_TIMEOUT_MS)
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      resolvePromise({ code: -1, parsed: [], stderr: String(error) })
+    })
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      const parsed = []
+      for (const line of stdout.split('\n')) {
+        if (line.trim() === '') continue
+        try {
+          parsed.push(JSON.parse(line))
+        } catch {
+          /* progress noise */
+        }
+      }
+      resolvePromise({ code, parsed, stderr })
+    })
+  })
+}
+
+/** Every whiteboard tool the model called, with the arm it picked on a batch. */
+function toolCallsIn(message) {
+  const calls = []
+  const inputs = []
+  for (const block of message?.content ?? []) {
+    if (block.type !== 'tool_use' || block.name === 'StructuredOutput') continue
+    const name = block.name.replace(/^mcp__whiteboard__/, '')
+    // A batch tool's cost is decided by which arm the model picked, and the
+    // tool name alone cannot say: record `ops[].op` beside it.
+    const ops = Array.isArray(block.input?.ops)
+      ? block.input.ops.map((o) => o?.op).filter((o) => typeof o === 'string')
+      : []
+    calls.push(ops.length > 0 ? `${name}[${ops.join(',')}]` : name)
+    // The payload itself goes to `--out` only: whether a model declared
+    // geometry or left it to placement is the kind of question a
+    // before/after on a shape has to answer.
+    inputs.push({ tool: name, input: block.input })
+  }
+  return { calls, inputs }
+}
+
+/**
+ * What a tool said BACK on a refusal — the C11 evidence: which parameter the
+ * model got wrong, and whether the refusal told it how to fix it.
+ */
+function toolErrorsIn(message) {
+  const texts = []
+  for (const block of message?.content ?? []) {
+    if (block.type !== 'tool_result' || block.is_error !== true) continue
+    const text = Array.isArray(block.content)
+      ? block.content.map((c) => c.text ?? '').join(' ')
+      : String(block.content ?? '')
+    texts.push(text.slice(0, 240))
+  }
+  return texts
+}
+
+/** The three things a trial reads out of a transcript, plus its result event. */
+function readTranscript(events) {
+  const calls = []
+  const inputs = []
+  const errorTexts = []
+  let result
+  for (const event of events) {
+    if (event.type === 'assistant') {
+      const used = toolCallsIn(event.message)
+      calls.push(...used.calls)
+      inputs.push(...used.inputs)
+    } else if (event.type === 'user') {
+      errorTexts.push(...toolErrorsIn(event.message))
+    } else if (event.type === 'result') {
+      result = event
+    }
+  }
+  return { calls, inputs, errorTexts, result }
+}
+
+/**
+ * Whether the model's ANSWER matches the one the task declares.
+ *
+ * Two tiers, because an exact string is the wrong bar for a free-text
+ * answer and "contains it somewhere" is the wrong bar for a long one: a
+ * loose match has to CONTAIN the wanted answer and stay within three times
+ * its length, so a paraphrase counts and a wall of text that happens to
+ * mention it does not.
+ */
+function answerVerdict(want, result) {
+  const answered =
+    result?.structured_output?.answer ??
+    String(result?.result ?? '')
+      .split('\n')
+      .at(-1)
+  const got = normalise(answered)
+  const wanted = normalise(want)
+  const exact = got === wanted
+  const loose = !exact && got.includes(wanted) && got.length <= wanted.length * 3
+  if (exact) return { ok: true, detail: `answered "${answered}"` }
+  if (loose) return { ok: true, detail: `loosely: "${answered}"` }
+  return { ok: false, detail: `answered "${answered}", wanted "${want}"` }
+}
 
 /**
  * One task, one trial: a fresh copy of the fixture, a fresh CLI session.
@@ -324,94 +458,15 @@ async function runOnce(task, trial) {
   ]
 
   const started = Date.now()
-  const events = await new Promise((resolvePromise) => {
-    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = ''
-    let stderr = ''
-    child.stdout.on('data', (c) => {
-      stdout += c.toString()
-    })
-    child.stderr.on('data', (c) => {
-      stderr += c.toString()
-    })
-    const timer = setTimeout(() => child.kill('SIGTERM'), TASK_TIMEOUT_MS)
-    child.on('error', (error) => {
-      clearTimeout(timer)
-      resolvePromise({ code: -1, parsed: [], stderr: String(error) })
-    })
-    child.on('exit', (code) => {
-      clearTimeout(timer)
-      const lines = stdout.split('\n').filter((l) => l.trim() !== '')
-      const parsed = []
-      for (const line of lines) {
-        try {
-          parsed.push(JSON.parse(line))
-        } catch {
-          /* progress noise */
-        }
-      }
-      resolvePromise({ code, parsed, stderr })
-    })
-  })
+  const events = await runClaude(args, cwd)
 
-  const calls = []
-  const inputs = []
-  const errorTexts = []
-  let result
-  for (const event of events.parsed) {
-    if (event.type === 'assistant') {
-      for (const block of event.message?.content ?? []) {
-        if (block.type === 'tool_use' && block.name !== 'StructuredOutput') {
-          const name = block.name.replace(/^mcp__whiteboard__/, '')
-          // A batch tool's cost is decided by which arm the model picked,
-          // and the tool name alone cannot say: record `ops[].op` beside it.
-          const ops = Array.isArray(block.input?.ops)
-            ? block.input.ops.map((o) => o?.op).filter((o) => typeof o === 'string')
-            : []
-          calls.push(ops.length > 0 ? `${name}[${ops.join(',')}]` : name)
-          // The payload itself goes to `--out` only: whether a model
-          // declared geometry or left it to placement is the kind of
-          // question a before/after on a shape has to answer.
-          inputs.push({ tool: name, input: block.input })
-        }
-      }
-    } else if (event.type === 'user') {
-      for (const block of event.message?.content ?? []) {
-        // What the tool said back is the C11 evidence: which parameter
-        // the model got wrong, and whether the refusal told it how to fix it.
-        if (block.type === 'tool_result' && block.is_error === true) {
-          const text = Array.isArray(block.content)
-            ? block.content.map((c) => c.text ?? '').join(' ')
-            : String(block.content ?? '')
-          errorTexts.push(text.slice(0, 240))
-        }
-      }
-    } else if (event.type === 'result') {
-      result = event
-    }
-  }
+  const { calls, inputs, errorTexts, result } = readTranscript(events.parsed)
 
   let verdict
   /** @type {{ board: string, score?: Record<string, unknown>, error?: string }[]} */
   let drawing = []
   if (task.answer !== undefined) {
-    const answered =
-      result?.structured_output?.answer ??
-      String(result?.result ?? '')
-        .split('\n')
-        .at(-1)
-    const got = normalise(answered)
-    const want = normalise(task.answer)
-    const exact = got === want
-    const loose = !exact && got.includes(want) && got.length <= want.length * 3
-    verdict = {
-      ok: exact || loose,
-      detail: exact
-        ? `answered "${answered}"`
-        : loose
-          ? `loosely: "${answered}"`
-          : `answered "${answered}", wanted "${task.answer}"`,
-    }
+    verdict = answerVerdict(task.answer, result)
   } else {
     const wb = await connectWhiteboard(join(dir, 'data'))
     try {
