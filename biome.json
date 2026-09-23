@@ -125,10 +125,7 @@
         "!apps/web/src/components/spatial-editor/SpatialEditor.tsx",
         "!packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs",
         "!packages/mcp-server/scripts/smoke/mcp-http-convergence-smoke.mjs",
-        "!packages/mcp-server/scripts/smoke/mcp-read-plane-smoke.mjs",
-        "!packages/mcp-server/src/shared/mkdir-lock.ts",
-        "!tools/arch-lint/src/cycle-check.ts",
-        "!tools/arch-lint/src/source-scan.ts"
+        "!packages/mcp-server/scripts/smoke/mcp-read-plane-smoke.mjs"
       ],
       "linter": {
         "rules": {

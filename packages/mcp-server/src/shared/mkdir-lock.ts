@@ -81,6 +81,44 @@ export interface MkdirLockOptions {
 // ensure the lock's parent directory already exists. Waits (polling every
 // `retryDelayMs`) for a concurrent holder to release, reclaiming the lock
 // early if that holder's recorded pid is dead, and gives up after
+/**
+ * One attempt at the exclusive create. `false` means somebody else holds it,
+ * which is the only failure this function answers for — anything other than
+ * EEXIST is a real filesystem error and propagates.
+ */
+async function tryAcquire(lockDirPath: string): Promise<boolean> {
+  try {
+    await mkdir(lockDirPath, { recursive: false })
+    await writeOwnerMetadata(lockDirPath)
+    return true
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    return false
+  }
+}
+
+/**
+ * Wait out the current holder, or take the lock from it.
+ *
+ * A holder whose recorded pid is DEAD never released — the process died
+ * holding it — so the lock is reclaimed immediately rather than waited out
+ * to the deadline, which would leave every caller blocked until the timeout
+ * on every subsequent run.
+ */
+async function waitForHolder(
+  lockDirPath: string,
+  deadline: number,
+  retryDelayMs: number,
+): Promise<void> {
+  const owner = await loadOwnerMetadata(lockDirPath)
+  if (owner && !isPidAlive(owner.pid)) {
+    await reclaimDeadLock(lockDirPath)
+    return
+  }
+  if (Date.now() >= deadline) throw new Error(`Lock timeout waiting for: ${lockDirPath}`)
+  await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+}
+
 // `timeoutMs`.
 export async function withMkdirLock<T>(
   lockDirPath: string,
@@ -91,26 +129,8 @@ export async function withMkdirLock<T>(
   const timeoutMs = options.timeoutMs ?? 10_000
   const deadline = Date.now() + timeoutMs
 
-  while (true) {
-    try {
-      await mkdir(lockDirPath, { recursive: false })
-      await writeOwnerMetadata(lockDirPath)
-      break
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code
-      if (code !== 'EEXIST') {
-        throw err
-      }
-      const owner = await loadOwnerMetadata(lockDirPath)
-      if (owner && !isPidAlive(owner.pid)) {
-        await reclaimDeadLock(lockDirPath)
-        continue
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(`Lock timeout waiting for: ${lockDirPath}`)
-      }
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
-    }
+  while (!(await tryAcquire(lockDirPath))) {
+    await waitForHolder(lockDirPath, deadline, retryDelayMs)
   }
 
   try {

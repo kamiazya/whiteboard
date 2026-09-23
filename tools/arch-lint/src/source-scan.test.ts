@@ -41,6 +41,23 @@ describe('stripCommentsAndStrings — a regex literal is not a string', () => {
     expect(stripCommentsAndStrings(source)).toContain('isAuthorized(')
   })
 
+  // A slash inside a CHARACTER CLASS does not close the literal. Treating
+  // it as the terminator ends the regex early, and everything from there to
+  // the real terminator is then read as code — so the pattern's own text
+  // starts matching whatever a scan is looking for. Surfaced by a mutation
+  // that removed the `inClass` guard and left every other case green.
+  it('does not end a regex at a slash inside a character class', () => {
+    const source = ['const sep = /[/]/', 'const call = isAuthorized(h, t)'].join('\n')
+
+    const stripped = stripCommentsAndStrings(source)
+
+    expect(stripped).toContain('isAuthorized(')
+    // The WHOLE literal is consumed, so the line it sat on keeps only what
+    // came before it. Ending the regex at the inner slash instead leaves the
+    // class's tail (`]/`) behind as code.
+    expect(stripped.split('\n')[0]).toBe('const sep = ')
+  })
+
   // Division must not be mistaken for a regex opening, or the stripper eats
   // real code from the slash onwards — the same blindness, other way round.
   it('does not treat division as a regex', () => {
