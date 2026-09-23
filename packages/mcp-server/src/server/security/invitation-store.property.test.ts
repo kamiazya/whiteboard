@@ -25,14 +25,17 @@ type Op =
   | { readonly kind: 'redeem'; readonly pick: number }
   | { readonly kind: 'revoke'; readonly pick: number }
   | { readonly kind: 'advance'; readonly ms: number }
+  | { readonly kind: 'toExpiry'; readonly pick: number }
 
 const opArb: fc.Arbitrary<Op> = fc.oneof(
   fc.constant({ kind: 'issue' as const }),
   fc.record({ kind: fc.constant('open' as const), pick: fc.nat() }),
   fc.record({ kind: fc.constant('redeem' as const), pick: fc.nat() }),
   fc.record({ kind: fc.constant('revoke' as const), pick: fc.nat() }),
-  // Steps around the TTL so the boundary itself is reached, not only both sides.
   fc.record({ kind: fc.constant('advance' as const), ms: fc.constantFrom(1, 499, 500, 1000) }),
+  // Lands the clock EXACTLY on one link's expiry. Random steps reached that
+  // instant too rarely to count on — it is where `>=` versus `>` lives.
+  fc.record({ kind: fc.constant('toExpiry' as const), pick: fc.nat() }),
 )
 
 interface Modelled {
@@ -94,6 +97,10 @@ describe('invitation links — against a model', () => {
         }
         const inv = issued[op.pick % Math.max(issued.length, 1)]
         if (inv === undefined) continue
+        if (op.kind === 'toExpiry') {
+          now = Math.max(now, inv.expiresAt)
+          continue
+        }
         const state = expected(inv, now)
         if (op.kind === 'open') {
           const opened = await store.openLink(inv.token, now)
