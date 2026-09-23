@@ -13,7 +13,7 @@ import {
   WEBAUTHN_FLAG_UV,
 } from '../shared/test-utils/webauthn-fixtures.js'
 import { type RunningServer, startHttpServer } from './http-server.js'
-import { createMemberProfileStore } from './security/member-profile-store.js'
+import { createMemberProfileStore, passkeyBinding } from './security/member-profile-store.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { getDb } from './store/db/index.js'
 import { tenantRoot } from './tenant/data-layout.js'
@@ -68,8 +68,7 @@ describe('startHttpServer route membership gate — app.ts admit wiring (S8 slic
 
     const members = createMemberProfileStore(db)
     const gatingProfile = await members.ensureProfile({
-      origin: HOSTED,
-      credentialId: 'gating-member-cred',
+      binding: passkeyBinding(HOSTED, 'gating-member-cred'),
       displayName: 'Gating Member',
     })
     await members.addMember(WS_GATED, gatingProfile.id)

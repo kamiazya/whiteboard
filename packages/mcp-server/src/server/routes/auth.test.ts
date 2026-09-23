@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createMemberProfileStore } from '../security/member-profile-store.js'
+import { createMemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
 import { membershipAdmit, requiresDaemonAuth } from './auth.js'
 
@@ -56,8 +56,7 @@ describe('membershipAdmit', () => {
     // A gating member, so a member-less workspace's origin-trust fallback
     // cannot make this pass for the wrong reason.
     const profile = await members.ensureProfile({
-      origin: 'https://example.test',
-      credentialId: 'gating-member-cred',
+      binding: passkeyBinding('https://example.test', 'gating-member-cred'),
       displayName: 'Gating Member',
     })
     await members.addMember('ws1', profile.id)

@@ -69,14 +69,24 @@ const profileCredentialSchema = z
   .object({ origin: z.string().min(1), credentialId: z.string().min(1) })
   .strict()
 
-// The built-in authenticator (ADR-0045 decision 15). Its subject is the pin's
-// own identity, so a credential under two origins stays two claims — the
-// passkey's rpId is its hostname, and two ports on one host share it.
+/**
+ * Who an authenticator vouched for (ADR-0045 decision 15, ADR-0046): which
+ * authenticator, and the subject it vouched for. Resolving a person always
+ * goes through one of these, whatever produced it.
+ */
+export interface AuthenticatorBinding {
+  readonly authenticator: string
+  readonly subject: string
+}
+
+// The built-in authenticator. Its subject is the pin's own identity, so a
+// credential under two origins stays two claims — the passkey's rpId is its
+// hostname, and two ports on one host share it.
 const PASSKEY_AUTHENTICATOR = 'passkey'
 const passkeySubjectSchema = z.tuple([z.string().min(1), z.string().min(1)])
 
-function passkeySubject(origin: string, credentialId: string): string {
-  return JSON.stringify([origin, credentialId])
+export function passkeyBinding(origin: string, credentialId: string): AuthenticatorBinding {
+  return { authenticator: PASSKEY_AUTHENTICATOR, subject: JSON.stringify([origin, credentialId]) }
 }
 
 const memberProfileSchema = memberProfileRowSchema.omit({ accountId: true }).extend({
@@ -87,13 +97,14 @@ export type MemberProfile = z.infer<typeof memberProfileSchema>
 type MembershipStatus = 'member' | 'not-a-member'
 
 interface EnsureProfileInput {
-  origin: string
-  credentialId: string
+  binding: AuthenticatorBinding
   displayName: string
 }
 
 export interface MemberProfileStore {
-  profileForCredential(origin: string, credentialId: string): Promise<MemberProfile | null>
+  /** This tenant's user for whoever `binding` resolves to; null when the
+   *  binding names no account, or an account with no user here. */
+  profileForBinding(binding: AuthenticatorBinding): Promise<MemberProfile | null>
   ensureProfile(input: EnsureProfileInput): Promise<MemberProfile>
   listMembers(workspaceId: string): Promise<MemberProfile[]>
   addMember(workspaceId: string, profileId: string): Promise<void>
@@ -175,14 +186,14 @@ async function passkeysOf(db: TenantScoped, accountId: string) {
   })
 }
 
-async function accountForPasskey(db: TenantScoped, origin: string, credentialId: string) {
-  const binding = await db
+async function accountFor(db: TenantScoped, { authenticator, subject }: AuthenticatorBinding) {
+  const row = await db
     .selectFrom('accountBindings')
     .select('accountId')
-    .where('authenticator', '=', PASSKEY_AUTHENTICATOR)
-    .where('subject', '=', passkeySubject(origin, credentialId))
+    .where('authenticator', '=', authenticator)
+    .where('subject', '=', subject)
     .executeTakeFirst()
-  return binding?.accountId ?? null
+  return row?.accountId ?? null
 }
 
 function toProfile(
@@ -222,19 +233,19 @@ async function insertUser(db: TenantScoped, accountId: string, displayName: stri
 
 export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore {
   return {
-    async profileForCredential(origin, credentialId) {
-      const accountId = await accountForPasskey(db, origin, credentialId)
+    async profileForBinding(binding) {
+      const accountId = await accountFor(db, binding)
       return accountId === null ? null : loadProfileWhere(db, 'accountId', accountId)
     },
 
-    async ensureProfile({ origin, credentialId, displayName }) {
+    async ensureProfile({ binding, displayName }) {
       return inTenantTransaction(db, async (trx) => {
         // A claimed credential names its account, and the account's user here
         // is the person; the display name given here does not rename them, and
         // nothing here ever merges two accounts — linking is an explicit
         // operation (ADR-0041 decision 7, ADR-0045 decision 4), not a side
         // effect of registering.
-        const known = await accountForPasskey(trx, origin, credentialId)
+        const known = await accountFor(trx, binding)
         if (known !== null) {
           const user = await loadProfileWhere(trx, 'accountId', known)
           if (user !== null) return user
@@ -250,16 +261,12 @@ export function createMemberProfileStore(db: TenantDatabase): MemberProfileStore
         await trx.insertInto('accounts').values({ id: accountId, createdAt: now }).execute()
         await trx
           .insertInto('accountBindings')
-          .values({
-            authenticator: PASSKEY_AUTHENTICATOR,
-            subject: passkeySubject(origin, credentialId),
-            accountId,
-            createdAt: now,
-          })
+          .values({ ...binding, accountId, createdAt: now })
           .execute()
-        return toProfile({ id, displayName, accountId, createdAt: now, updatedAt: now }, [
-          { origin, credentialId },
-        ])
+        return toProfile(
+          { id, displayName, accountId, createdAt: now, updatedAt: now },
+          await passkeysOf(trx, accountId),
+        )
       })
     },
 
