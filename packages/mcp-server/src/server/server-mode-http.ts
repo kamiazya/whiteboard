@@ -20,12 +20,10 @@ import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRoutesDeps } from './routes/sign-in.js'
-import { createInvitationStore } from './security/invitation-store.js'
-import { createMemberProfileStore } from './security/member-profile-store.js'
+import { createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { createRelyingParty, type ResolvedProvider } from './security/oidc-relying-party.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
-import { createSignInSessionStore } from './security/sign-in-session-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
@@ -301,12 +299,7 @@ async function signInOption(
     providers: signInProviders,
     rp: createRelyingParty(),
     attempts: createSignInAttemptStore(db),
-    signIn: {
-      members: createMemberProfileStore(db),
-      invitations: createInvitationStore(db),
-      sessions: createSignInSessionStore(db),
-      sessionTtlMs: SIGN_IN_SESSION_TTL_MS,
-    },
+    signIn: createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS),
     publicBaseUrl,
   }
   return { signIn }

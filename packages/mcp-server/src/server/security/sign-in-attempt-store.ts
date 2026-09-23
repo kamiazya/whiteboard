@@ -34,6 +34,9 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 export function createSignInAttemptStore(db: TenantDatabase): SignInAttemptStore {
   return {
     async begin({ providerId, returnTo, invitationToken, now, ttlMs }) {
+      // An attempt nobody finished is otherwise never removed; beginning one
+      // sheds them, at the rate of sign-ins and with no worker to declare.
+      await db.deleteFrom('signInAttempts').where('expiresAt', '<=', now).execute()
       const minted = {
         state: random(),
         browserBinding: random(),

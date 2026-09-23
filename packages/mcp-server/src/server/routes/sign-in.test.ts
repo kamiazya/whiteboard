@@ -16,12 +16,10 @@ import {
   type FakeOidcProvider,
   fakeOidcProvider,
 } from '../../shared/test-utils/fake-oidc-provider.js'
-import { createInvitationStore } from '../security/invitation-store.js'
-import { createMemberProfileStore } from '../security/member-profile-store.js'
+import { createCompleteSignInDeps } from '../security/complete-sign-in.js'
 import { createRelyingParty } from '../security/oidc-relying-party.js'
 import { createSignInAttemptStore } from '../security/sign-in-attempt-store.js'
 import { signInConfigSchema } from '../security/sign-in-config.js'
-import { createSignInSessionStore } from '../security/sign-in-session-store.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createSignInRoutes, SESSION_COOKIE } from './sign-in.js'
 
@@ -50,12 +48,7 @@ let idp: FakeOidcProvider
 
 function appFor(admission: object) {
   const db = handle.db
-  const signIn = {
-    members: createMemberProfileStore(db),
-    invitations: createInvitationStore(db),
-    sessions: createSignInSessionStore(db),
-    sessionTtlMs: HOUR,
-  }
+  const signIn = createCompleteSignInDeps(db, HOUR)
   const app = new Hono()
   app.route(
     '/',

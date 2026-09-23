@@ -49,6 +49,13 @@ describe('sign-in attempts', () => {
     expect(await attempts.take(begun.state, begun.browserBinding, T0 + TTL)).toBeNull()
   })
 
+  it('deletes abandoned attempts when a new one begins', async () => {
+    await attempts.begin({ providerId: 'corp', returnTo: '/', now: T0, ttlMs: TTL })
+    await attempts.begin({ providerId: 'corp', returnTo: '/', now: T0 + TTL, ttlMs: TTL })
+    const rows = await handle.rawDb.selectFrom('signInAttempts').selectAll().execute()
+    expect(rows).toHaveLength(1)
+  })
+
   it('carries the invitation a newcomer arrived with', async () => {
     const begun = await attempts.begin({
       providerId: 'corp',
