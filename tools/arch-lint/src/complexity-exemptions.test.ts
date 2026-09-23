@@ -86,11 +86,12 @@ describe('the cognitive-complexity exemption list', () => {
     const paths = exemptions().map((glob) => glob.slice(1))
     // The list is the subject: an empty one would pass every assertion below
     // while measuring nothing. The floor was 50 while the list was in the
-    // hundreds; the paydown took it to 48, so it moves to a number that
-    // still means "not vacuous" rather than one the programme has to stop
-    // at. Lower it again the same way when it is in the way — never delete
-    // it, or the guard stops measuring the moment the list empties.
-    expect(paths.length).toBeGreaterThan(20)
+    // hundreds, then 20 as the paydown passed 48. It moves again for the
+    // same reason and by the same rule — to a number that still means "not
+    // vacuous" rather than one the programme has to stop at. Lower it again
+    // when it is in the way; never delete it, or the guard stops measuring
+    // the moment the list empties.
+    expect(paths.length).toBeGreaterThan(5)
     const over = filesOverThreshold(paths)
     expect(paths.filter((path) => !over.has(path))).toEqual([])
   })
