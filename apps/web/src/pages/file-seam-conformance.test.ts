@@ -20,16 +20,27 @@
  */
 import { describe, expect, it } from 'vitest'
 
-/** The shared page: every keeper renders through it. */
+/** The shared page's own module: the shell, the header row, the editor. */
 const SHARED_PAGE = './DocumentPage.tsx'
+/**
+ * The inspector column, which is the shared page's other half: one table of
+ * panels, extracted so the page's own body stays under the complexity budget.
+ * Every chrome question below is about the shared PAGE rather than about a
+ * file, so it reads both — placing a panel one module over is still placing
+ * it, and a keeper page reaching for one is still the defect.
+ */
+const SHARED_PAGE_PARTS = './document-page-inspector.tsx'
 /** The keeper pages: each builds a model and renders the shared page. */
 const KEEPER_PAGES = ['./BrowserDocumentPage.tsx', './DaemonDocumentPage.tsx'] as const
-const ALL_PAGES = [SHARED_PAGE, ...KEEPER_PAGES] as const
+const ALL_PAGES = [SHARED_PAGE, SHARED_PAGE_PARTS, ...KEEPER_PAGES] as const
 
-const sources = import.meta.glob('./{DocumentPage,BrowserDocumentPage,DaemonDocumentPage}.tsx', {
-  query: '?raw',
-  import: 'default',
-})
+const sources = import.meta.glob(
+  './{DocumentPage,document-page-inspector,BrowserDocumentPage,DaemonDocumentPage}.tsx',
+  {
+    query: '?raw',
+    import: 'default',
+  },
+)
 
 const paneSource = import.meta.glob('../components/document-editor/SpatialEditorPane.tsx', {
   query: '?raw',
@@ -45,6 +56,11 @@ async function readPane(): Promise<string> {
   const loader = paneSource['../components/document-editor/SpatialEditorPane.tsx']
   expect(loader, 'no source loader for SpatialEditorPane').toBeDefined()
   return (await loader?.()) as string
+}
+
+/** The shared page across both of its modules. */
+async function readShared(): Promise<string> {
+  return `${await read(SHARED_PAGE)}\n${await read(SHARED_PAGE_PARTS)}`
 }
 
 async function read(page: string): Promise<string> {
@@ -264,7 +280,7 @@ const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'InspectorSegment', 'Connecti
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {
     expect(
-      renders(await read(SHARED_PAGE), chrome),
+      renders(await readShared(), chrome),
       `${chrome} is placed by the PAGE, so a page that omits it drops the ` +
         'surface for every keeper. This is the shape that shipped canvas ' +
         'embeds and image nodes doing nothing in daemon mode.',
@@ -317,7 +333,7 @@ describe('document page canvas chrome', () => {
 describe('document page document-level chrome', () => {
   it.each(SHARED_DOCUMENT_CHROME)('the shared page renders %s', async (chrome) => {
     expect(
-      renders(await read(SHARED_PAGE), chrome),
+      renders(await readShared(), chrome),
       `${chrome} is document-level chrome (ADR-0026 decision 5): a page that ` +
         'omits it leaves that document kind with no way to reach its ' +
         'conversations at all.',
@@ -338,7 +354,7 @@ describe('document page document-level chrome', () => {
 describe('document page inspector chrome', () => {
   it.each(SHARED_INSPECTOR_CHROME)('the shared page renders %s', async (chrome) => {
     expect(
-      renders(await read(SHARED_PAGE), chrome),
+      renders(await readShared(), chrome),
       `${chrome} is placed by the PAGE in its one inspector slot; a page that ` +
         'omits it leaves a keeper with the opener and no panel, or the panel ' +
         'overlaid somewhere else.',
