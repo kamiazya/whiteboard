@@ -49,7 +49,11 @@ import {
 import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
-import type { MemberProfile, MemberProfileStore } from '../security/member-profile-store.js'
+import {
+  type MemberProfile,
+  type MemberProfileStore,
+  passkeyBinding,
+} from '../security/member-profile-store.js'
 import type { PairingTokenStore } from '../security/pairing-session.js'
 import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { validateWorkspaceId, validationErrorBody } from '../validators.js'
@@ -166,8 +170,7 @@ export function createMembershipRouter({
     }
 
     const profile = await members.ensureProfile({
-      origin,
-      credentialId: request.credentialId,
+      binding: passkeyBinding(origin, request.credentialId),
       displayName: request.displayName,
     })
     await members.addMember(workspaceId, profile.id)

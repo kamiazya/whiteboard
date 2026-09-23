@@ -51,12 +51,9 @@ export async function workspaceAccess(
 
   if (!(await members.membersOnly(workspaceId))) return 'admitted'
 
-  if (grant.passkey === undefined) return 'requires_person_session'
+  if (grant.person === undefined) return 'requires_person_session'
 
-  const profile = await members.profileForCredential(
-    grant.passkey.origin,
-    grant.passkey.credentialId,
-  )
+  const profile = await members.profileForBinding(grant.person)
   if (profile === null) return 'not_a_member'
 
   const membership = await members.isWorkspaceMember(workspaceId, profile.id)

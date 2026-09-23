@@ -64,7 +64,7 @@ import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
-import type { MemberProfileStore } from '../security/member-profile-store.js'
+import { type MemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
 import {
   createSessionChallengeStore,
@@ -425,7 +425,7 @@ export function createPairingRouter({
       // The token expired between requireSession's check and here.
       return c.json({ error: 'unauthorized' }, 401)
     }
-    const profile = await members?.profileForCredential(session.origin, credentialId)
+    const profile = await members?.profileForBinding(passkeyBinding(session.origin, credentialId))
     const response: SessionAssertResponse = sessionAssertResponseSchema.parse({
       credentialId,
       profileId: profile?.id ?? null,

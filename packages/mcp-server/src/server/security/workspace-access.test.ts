@@ -13,7 +13,11 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import type { ResolvedGrant } from './credential-resolver.js'
-import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
+import {
+  createMemberProfileStore,
+  type MemberProfileStore,
+  passkeyBinding,
+} from './member-profile-store.js'
 import { membershipRefusal, OPERATOR_ISSUED_KINDS, workspaceAccess } from './workspace-access.js'
 
 const WS = 'ws-1'
@@ -33,8 +37,17 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-function grantOf(kind: ResolvedGrant['kind'], passkey?: ResolvedGrant['passkey']): ResolvedGrant {
-  return { kind, scopes: [], ...(passkey !== undefined ? { passkey } : {}) }
+function grantOf(
+  kind: ResolvedGrant['kind'],
+  passkey?: { origin: string; credentialId: string },
+): ResolvedGrant {
+  return {
+    kind,
+    scopes: [],
+    ...(passkey !== undefined
+      ? { person: passkeyBinding(passkey.origin, passkey.credentialId) }
+      : {}),
+  }
 }
 
 const UNBOUND_PAIRING = grantOf('pairing')
@@ -59,8 +72,7 @@ describe('workspaceAccess — operator-issued kinds (arm 1)', () => {
     EXPECTED_OPERATOR_ISSUED_KINDS,
   )('admits %s even on a workspace with a member, unbound', async (kind) => {
     const profile = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-1',
+      binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
@@ -77,8 +89,7 @@ describe('workspaceAccess — member-less workspace (arm 2)', () => {
 describe('workspaceAccess — a member-gated workspace', () => {
   it('requires a person session for an unbound pairing grant', async () => {
     const profile = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-1',
+      binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
@@ -87,8 +98,7 @@ describe('workspaceAccess — a member-gated workspace', () => {
 
   it('refuses a bound session whose passkey was never pinned as a profile', async () => {
     const profile = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-1',
+      binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
@@ -98,14 +108,12 @@ describe('workspaceAccess — a member-gated workspace', () => {
 
   it('refuses a bound session whose profile exists but is not a member of THIS workspace', async () => {
     const gatingMember = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-gate',
+      binding: passkeyBinding(ORIGIN, 'cred-gate'),
       displayName: 'Ada',
     })
     await members.addMember(WS, gatingMember.id)
     const outsider = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-outsider',
+      binding: passkeyBinding(ORIGIN, 'cred-outsider'),
       displayName: 'Bea',
     })
     const grant = grantOf('pairing', { origin: ORIGIN, credentialId: 'cred-outsider' })
@@ -115,8 +123,7 @@ describe('workspaceAccess — a member-gated workspace', () => {
 
   it('admits a bound session whose passkey belongs to a member', async () => {
     const profile = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-1',
+      binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
@@ -128,8 +135,7 @@ describe('workspaceAccess — a member-gated workspace', () => {
 describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)', () => {
   it('revoking the LAST member keeps the workspace person-gated for an unbound pairing grant', async () => {
     const profile = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-1',
+      binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
@@ -141,8 +147,7 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
 
   it('revoking the last member refuses that former member’s own passkey as not_a_member', async () => {
     const profile = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-1',
+      binding: passkeyBinding(ORIGIN, 'cred-1'),
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
@@ -158,13 +163,11 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
 
   it('revoking one member does not change another bound member’s answer', async () => {
     const removed = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-removed',
+      binding: passkeyBinding(ORIGIN, 'cred-removed'),
       displayName: 'Ada',
     })
     const staying = await members.ensureProfile({
-      origin: ORIGIN,
-      credentialId: 'cred-staying',
+      binding: passkeyBinding(ORIGIN, 'cred-staying'),
       displayName: 'Bea',
     })
     await members.addMember(WS, removed.id)
@@ -189,5 +192,28 @@ describe('membershipRefusal', () => {
       error: 'not_a_member',
       message: 'no such member in this workspace',
     })
+  })
+})
+
+// ADR-0046: a person is whoever an authenticator vouched for, not only a
+// passkey — the gate asks through the binding, whatever produced it.
+describe('workspaceAccess — any authenticator', () => {
+  const person = { authenticator: 'oidc:corp', subject: 'sub-42' }
+
+  it('admits a member signed in through a non-passkey authenticator', async () => {
+    const profile = await members.ensureProfile({ binding: person, displayName: 'Ada' })
+    await members.addMember(WS, profile.id)
+    expect(await workspaceAccess({ kind: 'pairing', scopes: [], person }, WS, members)).toBe(
+      'admitted',
+    )
+  })
+
+  it('does not admit the same subject vouched for by a different authenticator', async () => {
+    const profile = await members.ensureProfile({ binding: person, displayName: 'Ada' })
+    await members.addMember(WS, profile.id)
+    const impostor = { authenticator: 'oidc:other', subject: person.subject }
+    expect(
+      await workspaceAccess({ kind: 'pairing', scopes: [], person: impostor }, WS, members),
+    ).toBe('not_a_member')
   })
 })
