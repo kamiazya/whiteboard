@@ -103,6 +103,8 @@ export interface MemberProfileStore {
   profileForBinding(binding: AuthenticatorBinding): Promise<MemberProfile | null>
   ensureProfile(input: EnsureProfileInput): Promise<MemberProfile>
   listMembers(workspaceId: string): Promise<MemberProfile[]>
+  /** Every user this tenant has, oldest first — what an operator picks from. */
+  listUsers(): Promise<{ id: string; displayName: string }[]>
   addMember(workspaceId: string, profileId: string): Promise<void>
   revokeL1Membership(
     workspaceId: string,
@@ -281,6 +283,15 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
         if (profile !== null) profiles.push(profile)
       }
       return profiles
+    },
+
+    async listUsers() {
+      return db
+        .selectFrom('memberProfiles')
+        .select(['id', 'displayName'])
+        .orderBy('createdAt', 'asc')
+        .orderBy('id', 'asc')
+        .execute()
     },
 
     async addMember(workspaceId, profileId) {

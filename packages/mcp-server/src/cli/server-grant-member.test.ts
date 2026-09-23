@@ -1,0 +1,125 @@
+/**
+ * ADR-0046 decision 10: the first member of a workspace that already exists
+ * is granted by the operator, on the machine that holds the data directory.
+ * The person names themselves by signing in; the operator names them by
+ * their user id or their display name here, and an unknown or ambiguous
+ * name is refused with the candidates rather than guessed.
+ */
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  createMemberProfileStore,
+  type MemberProfileStore,
+} from '../server/security/member-profile-store.js'
+import { createIsolatedDb } from '../server/store/db/test-helpers.js'
+import { upsertWorkspaceRow } from '../server/store/db/upsert-workspace.js'
+import { grantMember, runServerGrantMember } from './server-grant-member.js'
+
+const WS = 'ws-plans'
+
+let root: string
+let handle: Awaited<ReturnType<typeof createIsolatedDb>>
+let members: MemberProfileStore
+
+async function userNamed(displayName: string, subject: string) {
+  return members.ensureProfile({
+    binding: { authenticator: 'oidc:test', subject },
+    displayName,
+  })
+}
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'wb-grant-member-'))
+  handle = await createIsolatedDb({ dataDir: root })
+  members = createMemberProfileStore(handle.db)
+  await upsertWorkspaceRow(handle.db, WS)
+})
+afterEach(async () => {
+  await handle.dispose()
+  await rm(root, { recursive: true, force: true })
+})
+
+describe('grantMember', () => {
+  it('makes a user named by id a member, closing the workspace to everyone else', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    const outcome = await grantMember(handle.db, { workspaceId: WS, user: ada.id })
+    expect(outcome).toEqual({
+      kind: 'ok',
+      workspaceId: WS,
+      user: { id: ada.id, displayName: 'Ada' },
+    })
+    expect(await members.isWorkspaceMember(WS, ada.id)).toBe('member')
+    expect(await members.membersOnly(WS)).toBe(true)
+  })
+
+  it('finds a user by their exact display name', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    await userNamed('Bob', 'bob-1')
+    const outcome = await grantMember(handle.db, { workspaceId: WS, user: 'Ada' })
+    expect(outcome.kind === 'ok' && outcome.user.id).toBe(ada.id)
+  })
+
+  it('refuses a name two users share, listing both', async () => {
+    const one = await userNamed('Ada', 'ada-1')
+    const two = await userNamed('Ada', 'ada-2')
+    const outcome = await grantMember(handle.db, { workspaceId: WS, user: 'Ada' })
+    expect(outcome.kind).toBe('ambiguous-user')
+    expect(outcome.kind === 'ambiguous-user' && outcome.users.map((u) => u.id).sort()).toEqual(
+      [one.id, two.id].sort(),
+    )
+    expect(await members.membersOnly(WS)).toBe(false)
+  })
+
+  it('refuses a user nobody has signed in as, listing who has', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    const outcome = await grantMember(handle.db, { workspaceId: WS, user: 'Grace' })
+    expect(outcome).toEqual({
+      kind: 'unknown-user',
+      users: [{ id: ada.id, displayName: 'Ada' }],
+    })
+  })
+
+  it('refuses a workspace this keeper does not hold', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    const outcome = await grantMember(handle.db, { workspaceId: 'ws-nowhere', user: ada.id })
+    expect(outcome).toEqual({ kind: 'unknown-workspace', workspaceId: 'ws-nowhere' })
+  })
+})
+
+describe('whiteboard server grant-member', () => {
+  function run(args: readonly string[]) {
+    const out: string[] = []
+    const err: string[] = []
+    const io = { stdout: (s: string) => out.push(s), stderr: (s: string) => err.push(s) }
+    return runServerGrantMember(args, io).then((code) => ({
+      code,
+      stdout: out.join(''),
+      stderr: err.join(''),
+    }))
+  }
+
+  it('grants and prints what it did as one JSON line', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    const res = await run(['--json', `--workspace=${WS}`, '--user=Ada', `--data-dir=${root}`])
+    expect(res.code).toBe(0)
+    expect(JSON.parse(res.stdout)).toEqual({
+      kind: 'ok',
+      workspaceId: WS,
+      user: { id: ada.id, displayName: 'Ada' },
+    })
+  })
+
+  it('exits 1 and names the fix when nobody matches', async () => {
+    const res = await run(['--json', `--workspace=${WS}`, '--user=Grace', `--data-dir=${root}`])
+    expect(res.code).toBe(1)
+    expect(res.stderr).toMatch(/sign in once/)
+  })
+
+  it('exits 64 without --workspace', async () => {
+    const res = await run(['--json', '--user=Ada'])
+    expect(res.code).toBe(64)
+    expect(res.stderr).toMatch(/--workspace=<id> is required/)
+  })
+})
