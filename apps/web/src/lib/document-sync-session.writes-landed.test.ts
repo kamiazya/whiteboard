@@ -35,55 +35,100 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+function openSession() {
+  let handlers: DocumentBackendHandlers | null = null
+  let releasePush: () => void = () => {}
+  const backend = {
+    connect(h: DocumentBackendHandlers) {
+      handlers = h
+      h.onConnected()
+    },
+    disconnect() {},
+    pushLocalUpdate: () =>
+      new Promise<void>((resolve) => {
+        releasePush = resolve
+      }),
+    getFile: async () => null,
+    putFile: async () => {},
+    sendClientReady() {},
+    sendExportResponse() {},
+  } as unknown as DocumentBackend
+  const persistence: BrowserPersistenceState['kind'][] = []
+  const statuses: string[] = []
+  const session = createDocumentSyncSession(backend, {
+    getOptions: () => ({}),
+    onStatusChange: (status) => statuses.push(status),
+    onBackendError: () => {},
+    onRestoreChange: () => {},
+    dispatchIdentityEvent: () => {},
+    generations: createGenerationCounters(),
+    onPersistenceChange: (state) => persistence.push(state.kind),
+  })
+  session.connect()
+  handlers!.onSnapshot(snapshotOf(canvas))
+  return {
+    session,
+    persistence,
+    statuses,
+    handlers: () => handlers!,
+    releasePush: () => releasePush(),
+  }
+}
+
+async function editAndPush(session: ReturnType<typeof openSession>['session']) {
+  const edit: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+  session.onChange(applyCommand(canvas, edit), edit)
+  await vi.advanceTimersByTimeAsync(300)
+  await flushMicrotasks()
+}
+
 describe('a write the backend retries on its own', () => {
   it('leaves the document saved, not degraded, once the backend says it landed', async () => {
     vi.useFakeTimers()
-    let handlers: DocumentBackendHandlers | null = null
-    let releasePush: () => void = () => {}
-    const backend = {
-      connect(h: DocumentBackendHandlers) {
-        handlers = h
-        h.onConnected()
-      },
-      disconnect() {},
-      pushLocalUpdate: () =>
-        new Promise<void>((resolve) => {
-          releasePush = resolve
-        }),
-      getFile: async () => null,
-      putFile: async () => {},
-      sendClientReady() {},
-      sendExportResponse() {},
-    } as unknown as DocumentBackend
-    const persistence: BrowserPersistenceState['kind'][] = []
-    const statuses: string[] = []
-    const session = createDocumentSyncSession(backend, {
-      getOptions: () => ({}),
-      onStatusChange: (status) => statuses.push(status),
-      onBackendError: () => {},
-      onRestoreChange: () => {},
-      dispatchIdentityEvent: () => {},
-      generations: createGenerationCounters(),
-      onPersistenceChange: (state) => persistence.push(state.kind),
-    })
-    session.connect()
-    handlers!.onSnapshot(snapshotOf(canvas))
-    const edit: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-    session.onChange(applyCommand(canvas, edit), edit)
-    await vi.advanceTimersByTimeAsync(300)
+    const s = openSession()
+    await editAndPush(s.session)
+    // The order a push can produce: handed over, refused and REPORTED, then
+    // resolved as if nothing happened — which must not read as saved.
+    s.handlers().onError?.('storage-failure')
+    s.releasePush()
     await flushMicrotasks()
-    // The order a worker-backed push produces: the push is handed over, the
-    // write is refused and REPORTED, then the push resolves as if nothing
-    // happened — which must not read as saved.
-    handlers!.onError?.('storage-failure')
-    releasePush()
-    await flushMicrotasks()
-    expect(persistence).toEqual(['pending', 'degraded'])
+    expect(s.persistence).toEqual(['pending', 'degraded'])
 
-    handlers!.onWritesLanded?.()
+    s.handlers().onWritesLanded?.()
     await flushMicrotasks()
-    expect(persistence).toEqual(['pending', 'degraded', 'saved'])
-    expect(statuses.at(-1)).toBe('connected')
-    session.dispose()
+    expect(s.persistence).toEqual(['pending', 'degraded', 'saved'])
+    expect(s.statuses.at(-1)).toBe('connected')
+    s.session.dispose()
+  })
+
+  // A worker-backed push resolves when it is handed over, so the session has
+  // already settled by the time the keeper refuses — the refusal is still a
+  // write that did not land, and has to say so.
+  it('degrades on a refusal that arrives after the push already resolved', async () => {
+    vi.useFakeTimers()
+    const s = openSession()
+    await editAndPush(s.session)
+    s.releasePush()
+    await flushMicrotasks()
+    expect(s.persistence).toEqual(['pending', 'saved'])
+
+    s.handlers().onError?.('storage-failure')
+    await flushMicrotasks()
+    expect(s.persistence).toEqual(['pending', 'saved', 'degraded'])
+    s.handlers().onWritesLanded?.()
+    await flushMicrotasks()
+    expect(s.persistence).toEqual(['pending', 'saved', 'degraded', 'saved'])
+    s.session.dispose()
+  })
+
+  // The same report also names a failed LOAD, which the page shows on its own
+  // screen; before anything was written it is not a persistence fact.
+  it('says nothing of persistence for a failure before any write', async () => {
+    vi.useFakeTimers()
+    const s = openSession()
+    s.handlers().onError?.('storage-failure')
+    await flushMicrotasks()
+    expect(s.persistence).toEqual([])
+    s.session.dispose()
   })
 })

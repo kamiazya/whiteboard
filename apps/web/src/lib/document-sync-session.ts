@@ -1235,11 +1235,10 @@ export function createDocumentSyncSession(
         if (isStale()) return
         deps.onBackendError(reason)
         deps.onStatusChange('error')
-        // The browser backend's write failure arrives here, not as a rejected
-        // push (see persistence-ledger's `failureEpoch`). The same reason also
-        // names a failed LOAD, which the page shows on its own screen — so this
-        // is a persistence fact only while there is a write to have failed.
-        if (reason === 'storage-failure') persistence.failedIfWriting()
+        // A write failure that is not a rejected push arrives here — the
+        // browser backend's store, or a worker-backed transport's keeper (see
+        // persistence-ledger). The ledger tells it apart from a failed LOAD.
+        if (reason === 'storage-failure') persistence.storageFailed()
       },
     })
   }

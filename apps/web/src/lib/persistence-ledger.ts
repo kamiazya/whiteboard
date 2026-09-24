@@ -16,6 +16,9 @@ type Report = (state: BrowserPersistenceState) => void
 export class PersistenceLedger {
   private unsaved = false
   private inFlightPushes = 0
+  // Whether this session has ever written: a storage failure before that is a
+  // failed LOAD, which the page shows on its own screen.
+  private written = false
   private lastSavedAt: string | null = null
   // A refused write keeps the document unsaved until a LATER write lands;
   // a quiet session after a failure is not a saved one.
@@ -43,6 +46,7 @@ export class PersistenceLedger {
   /** A push began; call one of the returned functions when it settles. */
   pushStarted(): { resolved(): void; rejected(): void; dropped(): void } {
     this.inFlightPushes++
+    this.written = true
     const epochAtPush = this.failureEpoch
     return {
       resolved: () => {
@@ -61,9 +65,13 @@ export class PersistenceLedger {
     }
   }
 
-  /** A write failed while something was still being written. */
-  failedIfWriting(): void {
-    if (this.unsaved || this.inFlightPushes > 0) this.failed()
+  /**
+   * A write did not land. Counted even after the session settled: a
+   * worker-backed push resolves when it is handed over, so the keeper's
+   * refusal can arrive after the edit already read as saved.
+   */
+  storageFailed(): void {
+    if (this.written || this.unsaved) this.failed()
   }
 
   /** Every write outstanding after a failure has now landed. */
@@ -83,6 +91,9 @@ export class PersistenceLedger {
   private failed(): void {
     this.failureEpoch++
     this.writeFailed = true
+    // A write that did not land leaves the document unsaved, even one that
+    // had already read as saved — so the landing that ends it settles again.
+    this.unsaved = true
     this.report({
       kind: 'degraded',
       reason: 'write-failed',

@@ -291,7 +291,10 @@ function scheduleWrite(baseUrl: string, doc: string): void {
         await hubFor(baseUrl).push(doc, pending)
         ackedVersions.set(key, at)
       }
-      writeLanded(baseUrl, doc)
+      // Only what the replica held at `at` has landed. An edit that arrived
+      // during the request is the next write's, and until that one lands the
+      // failure is not over.
+      if (replica.version().compare(at) === 0) writeLanded(baseUrl, doc)
     })
     // A refused write leaves `ackedVersions` where it was, so whatever writes
     // next — a later edit, the reconnect flush, or the retry scheduled here —
