@@ -3,8 +3,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
-import { LazyPageFallback } from './app-screens.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
+import { LazyPageFallback } from './components/LazyPageFallback.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
 import {
   getBrowserWorkspaceId,

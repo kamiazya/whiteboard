@@ -6,11 +6,11 @@ import {
   BrowserWorkspaceScreen,
   DaemonWorkspaceScreen,
   InvalidConfigScreen,
-  LazyPageFallback,
   NotFoundScreen,
   PairingFailedScreen,
   SettingsScreen,
 } from './app-screens.js'
+import { LazyPageFallback } from './components/LazyPageFallback.js'
 import { LinkPairingPending } from './components/LinkPairingPending.js'
 import { useDaemonGrant } from './hooks/use-daemon-grant.js'
 import {

@@ -248,15 +248,13 @@ describe('docs/ contract', () => {
     expect(devRow).toContain('stdio proxy')
   })
 
-  // The operator guide reads as complete (Dockerfile, compose, TLS, backup)
-  // but the browser UI server mode serves is the sign-in entrance only
-  // (ADR-0047): opening a workspace in the browser is not there yet. An
-  // operator who opens the root URL must learn that from the guide, not by
-  // looking for an editor that is not there.
-  it('tells self-hosting operators the browser UI is the sign-in entrance only', () => {
+  // What the browser UI server mode serves does (ADR-0047), and the one limit
+  // an operator scaling out has to know before a user reports it: an edit made
+  // through one instance reaches another only when that one restarts.
+  it('tells self-hosting operators what the browser UI does, and to run one instance for it', () => {
     const guide = readFileSync(join(DOCS_ROOT, 'how-to/self-host-with-docker.md'), 'utf8')
-    expect(guide).toContain('sign-in entrance only')
-    expect(guide).toContain('not available yet')
+    expect(guide).toContain('open one to read and')
+    expect(guide).toContain('Run a single instance for browser')
     // The two surfaces this deployment actually serves.
     expect(guide).toContain('/api')
     expect(guide).toContain('/mcp')

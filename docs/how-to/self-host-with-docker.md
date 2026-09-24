@@ -7,13 +7,20 @@ Provider (OAuth/JWT resource-server validation with external IdP). It is a
 separate deployment path from the local daemon mode — do not mix local-daemon
 tokens with server JWT authentication.
 
-> **The browser UI is the sign-in entrance only, for now.** The image carries
-> the web app and serves it from the server's own address. People sign in
-> there, see the workspaces they are members of, and sign out. Opening and
-> editing a workspace in the browser is not available yet: use an MCP client
-> against `/mcp`, or the HTTP API under `/api`. A server run without the web
-> build (from source, say) answers the root URL with a placeholder page
-> instead.
+> **The browser UI signs people in and opens their workspaces.** The image
+> carries the web app and serves it from the server's own address. People sign
+> in there, see the workspaces they are members of, and open one to read and
+> edit its documents; the browser keeps no copy of them. MCP clients use
+> `/mcp`, and the HTTP API is under `/api`. A server run without the web build
+> (from source, say) answers the root URL with a placeholder page instead.
+>
+> Two people editing the same document see each other's changes live when
+> their browsers reach the same instance. **Run a single instance for browser
+> editing for now:** behind a load balancer spreading people across several
+> instances, an instance keeps showing a document as it last loaded it, and
+> edits made through another instance appear there only after it restarts.
+> Nothing is lost — every edit is stored — but people on different instances
+> see different documents until then.
 
 ## Prerequisites
 

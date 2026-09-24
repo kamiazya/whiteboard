@@ -46,6 +46,8 @@ export interface DaemonIndexPageProps {
    */
   onWorkspaceResolved?: (workspace: string) => void
   onOpenDocument: (workspaceId: string, path: string) => void
+  /** Served by a server-mode keeper (ADR-0047), so the copy names a server. */
+  serverMode?: boolean
 }
 
 function sortRows(rows: DocumentRow[]): DocumentRow[] {
@@ -86,6 +88,7 @@ export function DaemonIndexPage({
   workspace,
   onWorkspaceResolved,
   onOpenDocument,
+  serverMode = false,
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
 
@@ -592,6 +595,7 @@ export function DaemonIndexPage({
           onDuplicate={handleDuplicate}
           onRequestDelete={setPendingDelete}
           onRetryWorkspaces={loadWorkspaces}
+          serverMode={serverMode}
         />
         <DeleteDocumentDialog
           pending={

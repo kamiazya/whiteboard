@@ -3,8 +3,8 @@
  * the keeper, so signing in is a navigation to its `/auth` routes and the
  * session is the host-only cookie the browser then holds.
  *
- * This is the entrance only — sign in, accept an invitation, see the
- * workspaces you are a member of, sign out. Opening one is not here yet.
+ * Sign in, accept an invitation, see the workspaces you are a member of, and
+ * open one in the editor (`ServerModeWorkspace`), or sign out.
  */
 import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
@@ -13,10 +13,12 @@ import {
   signInRefusalSchema,
   signInSessionResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
-import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { type ReactNode, useEffect, useState } from 'react'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Button, buttonVariants } from '../components/ui/button.js'
+import { workspacePath } from '../lib/app-routes.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
+import { ServerModeWorkspace } from './ServerModeWorkspace.js'
 
 type Fetch = typeof globalThis.fetch
 
@@ -138,8 +140,13 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
   ) : (
     <ul className="flex w-full max-w-md flex-col gap-1">
       {workspaces.map((w) => (
-        <li key={w.workspaceId} className="rounded-md border px-3 py-2 text-sm">
-          {w.name}
+        <li key={w.workspaceId}>
+          <Link
+            to={workspacePath(w.workspaceId)}
+            className="block rounded-md border px-3 py-2 text-sm hover:bg-muted"
+          >
+            {w.name}
+          </Link>
         </li>
       ))}
     </ul>
@@ -189,6 +196,26 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   )
 }
 
+// A workspace's routes answer 401 to a browser with no session; asking first
+// sends it to the sign-in screen instead of an editor that cannot load.
+function SignedInOnly({ fetchFn, children }: { fetchFn: Fetch; children: ReactNode }) {
+  const [signedIn, setSignedIn] = useState<boolean | null>(null)
+  useEffect(() => {
+    let live = true
+    void fetchFn('/auth/session')
+      .then(async (res) => signInSessionResponseSchema.parse(await res.json()).signedIn)
+      .catch(() => false)
+      .then((value) => {
+        if (live) setSignedIn(value)
+      })
+    return () => {
+      live = false
+    }
+  }, [fetchFn])
+  if (signedIn === null) return null
+  return signedIn ? children : <Navigate to="/sign-in" replace />
+}
+
 // One function for the app's lifetime: the pages key their effects on it, so a
 // default rebuilt per render would refetch on every render.
 const sameOriginFetch: Fetch = (input, init) => globalThis.fetch(input, init)
@@ -198,6 +225,14 @@ export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps)
     <Routes>
       <Route path="/sign-in" element={<SignInPage fetchFn={fetchFn} />} />
       <Route path="/invite" element={<InvitePage fetchFn={fetchFn} />} />
+      <Route
+        path="/w/*"
+        element={
+          <SignedInOnly fetchFn={fetchFn}>
+            <ServerModeWorkspace />
+          </SignedInOnly>
+        }
+      />
       <Route path="*" element={<WorkspacesPage fetchFn={fetchFn} />} />
     </Routes>
   )
