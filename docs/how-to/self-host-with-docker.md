@@ -80,6 +80,12 @@ Register `https://<your host>/auth/callback/<id>` as the redirect URI with the
 provider. A person opens `https://<your host>/`, which offers a button per
 provider; each leads to `/auth/sign-in/<id>`.
 
+People must open the server at `WHITEBOARD_SERVER_EXTERNAL_URL` exactly. A
+signed-in browser can only change anything from that origin: a request that
+changes something is refused its session unless its `Origin` is that URL. This
+is what stops a page on another host under the same site, which the browser
+would otherwise hand the session cookie to, from acting as the person.
+
 What the `admission` block can say:
 
 | Key | Meaning |

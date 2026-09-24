@@ -88,6 +88,7 @@ beforeEach(async () => {
     people: {
       members,
       sessions: createSignInSessionStore(handle.db),
+      origin: PUBLIC_URL,
       bearerProvisioning: { providers, members },
     },
     touch: () => {},
