@@ -237,25 +237,29 @@ describe('SSE sync transport', () => {
     // with it. Held separately it would outlive the subscription and keep the
     // daemon sending viewport requests for a canvas the client stopped
     // receiving updates for.
+    // Its own document per run: the last viewport request is cached per
+    // document for the process, so a fixed name would be replayed into a
+    // repeated run's client_ready.
+    const path = `vp-gone-${globalThis.crypto.randomUUID()}`
     const app = createApp(createRuntimeOptions())
     const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, subscribe: ['ws-1/vp-gone'] }),
+      body: JSON.stringify({ streamId, subscribe: [`ws-1/${path}`] }),
     })
     await app.request('/api/sync/message', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, doc: 'ws-1/vp-gone', message: { type: 'client_ready' } }),
+      body: JSON.stringify({ streamId, doc: `ws-1/${path}`, message: { type: 'client_ready' } }),
     })
 
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, unsubscribe: ['ws-1/vp-gone'] }),
+      body: JSON.stringify({ streamId, unsubscribe: [`ws-1/${path}`] }),
     })
-    sendViewportRequest('ws-1', 'vp-gone', 'req-gone', { mode: 'fit' })
+    sendViewportRequest('ws-1', path, 'req-gone', { mode: 'fit' })
 
     const frames = await readEvents(res, 1, 300)
     expect(frames.filter((f) => f.includes('viewport_request'))).toEqual([])
