@@ -128,6 +128,24 @@ async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
   }
 }
 
+function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
+  return workspaces === 'unavailable' ? (
+    <p role="alert" className="text-sm text-destructive">
+      Could not load your workspaces. Reload to try again.
+    </p>
+  ) : workspaces.length === 0 ? (
+    <p className="text-sm text-muted-foreground">You are not a member of any workspace yet.</p>
+  ) : (
+    <ul className="flex w-full max-w-md flex-col gap-1">
+      {workspaces.map((w) => (
+        <li key={w.workspaceId} className="rounded-md border px-3 py-2 text-sm">
+          {w.name}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   const navigate = useNavigate()
   const [signed, setSigned] = useState<Signed | null | 'loading'>('loading')
@@ -166,21 +184,7 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
         </p>
       )}
       <h1 className="text-xl font-semibold">Your workspaces</h1>
-      {signed.workspaces === 'unavailable' ? (
-        <p role="alert" className="text-sm text-destructive">
-          Could not load your workspaces. Reload to try again.
-        </p>
-      ) : signed.workspaces.length === 0 ? (
-        <p className="text-sm text-muted-foreground">You are not a member of any workspace yet.</p>
-      ) : (
-        <ul className="flex w-full max-w-md flex-col gap-1">
-          {signed.workspaces.map((w) => (
-            <li key={w.workspaceId} className="rounded-md border px-3 py-2 text-sm">
-              {w.name}
-            </li>
-          ))}
-        </ul>
-      )}
+      <WorkspaceList workspaces={signed.workspaces} />
     </Page>
   )
 }
