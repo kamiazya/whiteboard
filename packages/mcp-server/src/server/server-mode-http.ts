@@ -302,8 +302,9 @@ async function peopleOptions(
 ): Promise<{ people: ServerModePeople; signIn?: SignInRoutesDeps }> {
   const db = await getDb(dataDir)
   const deps = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS)
+  const origin = new URL(publicBaseUrl).origin
   if (signInProviders === undefined || signInProviders.length === 0) {
-    return { people: { members: deps.members, sessions: deps.sessions } }
+    return { people: { members: deps.members, sessions: deps.sessions, origin } }
   }
   return {
     // A bearer from a declared provider's issuer may become a user by that
@@ -311,6 +312,7 @@ async function peopleOptions(
     people: {
       members: deps.members,
       sessions: deps.sessions,
+      origin,
       bearerProvisioning: { providers: signInProviders, members: deps.members },
     },
     ...signInRoutes(signInProviders.filter(signsInWithBrowser), db, deps, publicBaseUrl),

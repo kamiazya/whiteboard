@@ -21,6 +21,7 @@ import {
 
 const WS = 'ws-plans'
 const ISSUER = 'oidc:https://idp.test'
+const ORIGIN = 'https://board.example.com'
 
 // "Bearer <sub>" names that subject; "Bearer anonymous" is a valid token that
 // names no person (a client-credentials token, say).
@@ -54,9 +55,13 @@ beforeEach(async () => {
   members = createMemberProfileStore(handle.db)
   sessions = createSignInSessionStore(handle.db)
   app = new Hono()
-  app.use('/api/*', createServerModeApiAuthMiddleware(strategy, { members, sessions }))
+  app.use(
+    '/api/*',
+    createServerModeApiAuthMiddleware(strategy, { members, sessions, origin: ORIGIN }),
+  )
   app.get('/api/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
   app.post('/api/runtime/logs/prune', (c) => c.json({ reached: true }))
+  app.post('/api/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
 })
 afterEach(async () => {
   await handle.dispose()
@@ -106,7 +111,7 @@ describe('server mode — who is asking, and are they a member', () => {
     )
     const res = await app.request('/api/runtime/logs/prune', {
       method: 'POST',
-      headers: { cookie: `${SESSION_COOKIE}=${token}` },
+      headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: ORIGIN },
     })
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'auth.forbidden' })
@@ -131,5 +136,41 @@ describe('server mode — who is asking, and are they a member', () => {
       60_000,
     )
     expect((await documents({ cookie: `${SESSION_COOKIE}=${token}` })).status).toBe(403)
+  })
+})
+
+// The session is a cookie the browser attaches to ANY request to this host,
+// including one a page on a sibling subdomain makes — SameSite=Lax does not
+// stop that. So a request that changes something is only the session's when
+// it came from this host's own pages.
+describe('server mode — a session changes nothing from another origin', () => {
+  async function writeAs(origin: string | undefined) {
+    await member('ada')
+    const token = await sessions.create(
+      { authenticator: ISSUER, subject: 'ada' },
+      Date.now(),
+      60_000,
+    )
+    return app.request(`/api/workspaces/${WS}/documents`, {
+      method: 'POST',
+      headers: {
+        cookie: `${SESSION_COOKIE}=${token}`,
+        ...(origin === undefined ? {} : { origin }),
+      },
+    })
+  }
+
+  it('accepts a write from its own pages', async () => {
+    expect((await writeAs(ORIGIN)).status).toBe(200)
+  })
+
+  it.for([
+    ['a sibling subdomain', 'https://evil.example.com'],
+    ['another port', 'https://board.example.com:8443'],
+    ['plain http', 'http://board.example.com'],
+    ['an opaque origin', 'null'],
+    ['no origin at all', undefined],
+  ] as const)('ignores the session on a write from %s', async ([, origin]) => {
+    expect((await writeAs(origin)).status).toBe(401)
   })
 })

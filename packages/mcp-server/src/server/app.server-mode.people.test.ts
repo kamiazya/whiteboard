@@ -71,7 +71,7 @@ beforeEach(async () => {
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
     serverDeps: resolveServerDeps(createContainer()),
-    people: { members, sessions },
+    people: { members, sessions, origin: PUBLIC_URL },
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')
@@ -89,7 +89,7 @@ async function signedIn(subject: string): Promise<Record<string, string>> {
   const binding = { authenticator: ISSUER, subject }
   await members.ensureProfile({ binding, displayName: subject })
   const token = await sessions.create(binding, Date.now(), 60_000)
-  return { cookie: `${SESSION_COOKIE}=${token}` }
+  return { cookie: `${SESSION_COOKIE}=${token}`, origin: PUBLIC_URL }
 }
 
 async function create(headers: Record<string, string>, displayName: string) {
