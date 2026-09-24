@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { DEV_TRANSPORT_OVERRIDE_KEY } from '../lib/dev-transport-override.js'
 import * as replicaRefresh from '../lib/replica-refresh.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
@@ -65,7 +66,10 @@ describe('DaemonDocumentPage served by a server-mode keeper', () => {
     vi.mocked(replicaRefresh.scheduleReplicaPush).mockClear()
     vi.mocked(replicaRefresh.scheduleReplicaRefresh).mockClear()
   })
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    window.localStorage.clear()
+  })
 
   // jsdom serves over http, where the scheme rule alone would pick WebSocket.
   it('syncs over SSE, the transport the keeper has', async () => {
@@ -74,6 +78,17 @@ describe('DaemonDocumentPage served by a server-mode keeper', () => {
     })
     await waitFor(() => expect(built.length).toBeGreaterThan(0))
     expect(built).toEqual(expect.arrayContaining(['sse']))
+    expect(built).not.toContain('websocket')
+  })
+
+  // A developer's pinned transport is for a paired daemon; a keeper with no
+  // WebSocket cannot honour it, so it must not reach one.
+  it('ignores a pinned WebSocket transport, which the keeper cannot serve', async () => {
+    window.localStorage.setItem(DEV_TRANSPORT_OVERRIDE_KEY, 'websocket')
+    rtlRender(<DaemonDocumentPage daemonBaseUrl={window.location.origin} serverMode />, {
+      wrapper: Wrapper,
+    })
+    await waitFor(() => expect(built.length).toBeGreaterThan(0))
     expect(built).not.toContain('websocket')
   })
 

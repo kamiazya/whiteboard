@@ -76,8 +76,10 @@ function connectDaemonDocument({
   // in a production build. It exists because the rule below is correct AND
   // makes the SSE path — and the SharedWorker behind it — unreachable from
   // `pnpm dev`, which serves plain http.
+  // A keeper with no WebSocket cannot honour a pinned 'websocket', so the pin
+  // is for a paired daemon only.
   const transport =
-    devTransportOverride() ??
+    (serverMode ? null : devTransportOverride()) ??
     selectDocumentTransport({
       pageOrigin: window.location.origin,
       daemonBaseUrl,
