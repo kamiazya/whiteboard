@@ -15,7 +15,7 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
-import { getDataDir } from './config.js'
+import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
@@ -30,6 +30,7 @@ import {
 } from './security/oidc-relying-party.js'
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
+import { serverModeUiStatus } from './server-mode-web-app.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import type { TenantDatabase } from './store/db/tenant-database.js'
@@ -167,13 +168,9 @@ export async function startServerModeHttp(
         dataDir: getDataDir(),
         dataDirWritable: isDataDirWritable(getDataDir()),
       },
-      app: {
-        // The static placeholder page is always available — it ships inline
-        // in app.ts, not as a build artifact — so both fields are fixed.
-        served: true,
-        buildPresent: true,
-        ui: 'server-placeholder',
-      },
+      // Something is always served: the web app when the image carries its
+      // build (ADR-0047), the inline placeholder when it does not.
+      app: { served: true, ...serverModeUiStatus(DIST_WEB_APP_DIR) },
       mcp: { httpEnabled: true, endpoint: `${baseUrl}/mcp` },
       clients: { connected: 0, ready: 0 },
       publicBaseUrl: options.publicBaseUrl,

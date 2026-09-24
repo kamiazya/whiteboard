@@ -57,7 +57,11 @@ const closure = workspaceClosure(targets, byName)
 
 describe('docker build targets are read out of Dockerfile.server', () => {
   it('finds every pnpm --filter target the image builds', () => {
-    expect(targets).toEqual(['@kamiazya/whiteboard-canvas-viewer', '@kamiazya/whiteboard-mcp'])
+    expect(targets).toEqual([
+      '@kamiazya/whiteboard-canvas-viewer',
+      '@kamiazya/whiteboard-mcp',
+      '@kamiazya/whiteboard-web',
+    ])
   })
 
   it('resolves each target to a workspace package', () => {
@@ -68,9 +72,9 @@ describe('docker build targets are read out of Dockerfile.server', () => {
     }
   })
 
-  it('a Dockerfile that builds a third package widens the target list', () => {
-    const widened = `${dockerfile}\nRUN pnpm --filter @kamiazya/whiteboard-web build\n`
-    expect(dockerBuildTargets(widened)).toContain('@kamiazya/whiteboard-web')
+  it('a Dockerfile that builds another package widens the target list', () => {
+    const widened = `${dockerfile}\nRUN pnpm --filter @kamiazya/whiteboard-search build\n`
+    expect(dockerBuildTargets(widened)).toContain('@kamiazya/whiteboard-search')
   })
 })
 
@@ -84,13 +88,10 @@ describe('the closure covers what the image compiles', () => {
     expect(closure).toContain('packages/model')
   })
 
-  // This is the claim the skip actually rests on, and it is not a coincidence
-  // of the current graph: architecture-map rule 2 forbids any shared package
-  // from importing a composition root, and web-app-boundary.test.ts pins the
-  // apps/web half. If that ever changed, apps/web would enter the closure here
-  // and this test would say so before the skip started hiding a real break.
-  it('excludes apps/web, the composition root nothing in the image depends on', () => {
-    expect(closure).not.toContain('apps/web')
+  // The image carries the web app a server-mode keeper serves (ADR-0047), so a
+  // web change can break the image build and must not be skipped.
+  it('contains apps/web, which the image builds and serves', () => {
+    expect(closure).toContain('apps/web')
   })
 })
 
@@ -140,7 +141,6 @@ describe('affectsDockerBuild answers for a change set', () => {
   })
 
   it('is false for the change shapes the skip exists for', () => {
-    expect(affectsDockerBuild(['apps/web/src/pages/BrowserIndexPage.tsx'], closure)).toBe(false)
     expect(affectsDockerBuild(['.claude/rules/dev-flow.md'], closure)).toBe(false)
     expect(affectsDockerBuild(['docs/contributing/testing.md'], closure)).toBe(false)
     expect(affectsDockerBuild(['tests/e2e/distribution/README.md'], closure)).toBe(false)
@@ -148,10 +148,7 @@ describe('affectsDockerBuild answers for a change set', () => {
 
   it('is true when any one path in a mixed change set affects the build', () => {
     expect(
-      affectsDockerBuild(
-        ['apps/web/src/pages/BrowserIndexPage.tsx', 'packages/codec/src/parse.ts'],
-        closure,
-      ),
+      affectsDockerBuild(['docs/contributing/testing.md', 'packages/codec/src/parse.ts'], closure),
     ).toBe(true)
   })
 

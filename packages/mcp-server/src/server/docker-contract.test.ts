@@ -69,6 +69,18 @@ describe('Dockerfile.server contracts', () => {
     expect(beforeFetch).toMatch(/^COPY\s+patches\b/m)
   })
 
+  // ADR-0047 decision 1: the image carries the web app its keeper serves. The
+  // web build copies itself into the server's dist/, so it runs after the
+  // server build and before the deploy that snapshots dist/.
+  it('builds the web app into the server bundle before deploying it', () => {
+    const instructions = dockerfile.replace(/^\s*#.*$/gm, '')
+    const server = instructions.indexOf('--filter @kamiazya/whiteboard-mcp build')
+    const web = instructions.indexOf('--filter @kamiazya/whiteboard-web build')
+    const deploy = instructions.indexOf('--filter @kamiazya/whiteboard-mcp deploy')
+    expect(web).toBeGreaterThan(server)
+    expect(deploy).toBeGreaterThan(web)
+  })
+
   it('entrypoint uses whiteboard server run --json (not daemon run)', () => {
     expect(dockerfile).toMatch(/ENTRYPOINT.*server.*run.*--json/)
     // Comments may mention "daemon run" to explain what the image does NOT support.

@@ -6,7 +6,7 @@
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { startBootSequence } from './boot.js'
+import { servedByServerKeeper, startBootSequence } from './boot.js'
 import { DB_VERSION, setWhiteboardDbNameForTests } from './lib/browser-idb.js'
 import {
   getBrowserWorkspaceId,
@@ -229,5 +229,22 @@ describe('startBootSequence — the address chooses which workspace boots', () =
     await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
 
     expect(getBrowserWorkspaceId()).toBe(only)
+  })
+})
+
+describe('servedByServerKeeper', () => {
+  afterEach(() => {
+    delete (window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__
+  })
+
+  it.for([
+    [undefined, false],
+    [null, false],
+    [{}, false],
+    [{ keeper: 'daemon' }, false],
+    [{ keeper: 'server' }, true],
+  ] as const)('reads %j as a server keeper: %s', ([config, expected]) => {
+    ;(window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__ = config
+    expect(servedByServerKeeper()).toBe(expected)
   })
 })
