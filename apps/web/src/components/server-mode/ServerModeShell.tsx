@@ -6,7 +6,7 @@
  * back to the workspace list, the open document's sync state, and who is
  * signed in.
  */
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
 import { notKeepingAnnouncement } from '../../lib/connection-state.js'
@@ -43,44 +43,59 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
 }
 
 /**
- * The person's other workspaces, one step away. A native select: it is a
- * list of names with one current, which is exactly what the element is, and
- * it brings keyboard and screen-reader behaviour with it. Absent until the
- * list arrives, and when there is nothing to switch to.
+ * The person's other workspaces, one step away: links behind a native
+ * disclosure. Not a select — a closed select changes on every arrow key in
+ * some browsers, and navigating on change would open each workspace a
+ * keyboard user merely passed through. The list is read again each time it
+ * opens, so a workspace made or renamed elsewhere is there when it is used.
+ * Absent when there is nothing to switch to.
  */
 function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
-  const navigate = useNavigate()
   const current = parseWorkspaceRoute(useLocation().pathname)?.workspace
   const [workspaces, setWorkspaces] = useState<MemberWorkspace[]>([])
-  useEffect(() => {
-    let live = true
+  const [open, setOpen] = useState(false)
+  const load = useCallback(() => {
     void listMemberWorkspaces(fetchFn).then((list) => {
-      if (live && list !== 'unavailable') setWorkspaces(list)
+      if (list !== 'unavailable') setWorkspaces(list)
     })
-    return () => {
-      live = false
-    }
   }, [fetchFn])
+  useEffect(load, [load])
   if (workspaces.length < 2) return null
   // The address may name a workspace by its segment rather than its id.
-  const selected =
-    workspaces.find((w) => w.workspaceId === current || w.segment === current)?.workspaceId ?? ''
+  const here = workspaces.find((w) => w.workspaceId === current || w.segment === current)
+  const label = here?.name ?? 'Workspaces'
   return (
-    <label className="flex min-w-0 items-center">
-      <span className="sr-only">Workspace</span>
-      <select
-        value={selected}
-        onChange={(e) => navigate(workspacePath(e.target.value))}
-        className="max-w-48 truncate rounded-md border bg-background px-2 py-1 text-sm"
+    <details
+      open={open}
+      onToggle={(e) => {
+        const next = e.currentTarget.open
+        setOpen(next)
+        if (next) load()
+      }}
+      className="relative min-w-0"
+    >
+      <summary
+        title={label}
+        className="max-w-48 cursor-pointer truncate rounded-md border px-2 py-1 text-foreground"
       >
-        {selected === '' && <option value="" disabled />}
+        {label}
+      </summary>
+      <ul className="absolute left-0 top-full z-50 mt-1 flex min-w-48 flex-col rounded-md border bg-background p-1 shadow-md">
         {workspaces.map((w) => (
-          <option key={w.workspaceId} value={w.workspaceId}>
-            {w.name}
-          </option>
+          <li key={w.workspaceId}>
+            <Link
+              to={workspacePath(w.workspaceId)}
+              title={w.name}
+              aria-current={w === here ? 'page' : undefined}
+              onClick={() => setOpen(false)}
+              className="block truncate rounded px-2 py-1 hover:bg-muted aria-[current=page]:font-medium"
+            >
+              {w.name}
+            </Link>
+          </li>
         ))}
-      </select>
-    </label>
+      </ul>
+    </details>
   )
 }
 
