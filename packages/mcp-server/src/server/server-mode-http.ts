@@ -20,6 +20,7 @@ import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRoutesDeps } from './routes/sign-in.js'
+import { subscribedWorkspaceIds } from './routes/ws.js'
 import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import {
@@ -34,8 +35,14 @@ import { serverModeUiStatus } from './server-mode-web-app.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import type { TenantDatabase } from './store/db/tenant-database.js'
+import {
+  cacheBackedWorkspaceDocs,
+  emitWorkspaceDocUpdated,
+  getWorkspaceDoc,
+} from './store/document-store.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
+import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 
 export interface StartServerModeHttpOptions {
   host: string
@@ -55,6 +62,8 @@ export interface StartServerModeHttpOptions {
    *  factory so a wiring test can assert the sweeper is armed and stopped
    *  without running a full pass. */
   fileGcSweeperFactory?: typeof createFileGcSweeper
+  /** Test-only seam, matching `startHttpServer`'s. */
+  workspaceTailFactory?: typeof createWorkspaceTail
   /** ADR-0046: the external providers this keeper signs people in through,
    *  secrets already resolved. None, and no sign-in route is mounted. */
   signInProviders?: readonly ConfiguredProvider[]
@@ -89,6 +98,28 @@ function isDataDirWritable(dir: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Several instances share one record (ADR-0020 decision 5), and the tail is
+ * how a browser on THIS one learns what another wrote. Off unless the
+ * operator sets the interval: one instance hears all its own writes.
+ */
+function serverModeWorkspaceTail(options: StartServerModeHttpOptions) {
+  const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
+  const workspaceTail =
+    workspaceTailIntervalMs === null
+      ? null
+      : (options.workspaceTailFactory ?? createWorkspaceTail)({
+          subscribedWorkspaces: subscribedWorkspaceIds,
+          docs: cacheBackedWorkspaceDocs(),
+          // The CACHED document, which is what every reader here is served
+          // from — catching up a fresh copy would leave it untouched.
+          liveDoc: getWorkspaceDoc,
+          emit: emitWorkspaceDocUpdated,
+          intervalMs: workspaceTailIntervalMs,
+        })
+  return { workspaceTail, workspaceTailIntervalMs }
 }
 
 export async function startServerModeHttp(
@@ -187,6 +218,7 @@ export async function startServerModeHttp(
   const backupDir = parseBackupDir(process.env)
   const backupSchedule = parseBackupSchedule(process.env)
   const backupKeep = parseBackupKeep(process.env)
+  const { workspaceTail, workspaceTailIntervalMs } = serverModeWorkspaceTail(options)
   const backgroundWork = startBackgroundWork([
     {
       name: 'auto-checkpoint',
@@ -244,16 +276,16 @@ export async function startServerModeHttp(
     },
     {
       name: 'workspace-tail',
-      trigger: 'not armed here',
+      trigger:
+        workspaceTailIntervalMs === null
+          ? 'off (WHITEBOARD_WORKSPACE_TAIL_MS unset)'
+          : `every ${workspaceTailIntervalMs}ms`,
       instances: {
         runs: 'every-instance',
         because: 'each instance catches ITS OWN cached documents up with what another wrote',
       },
       loop: LOOP_COSTS['workspace-tail'],
-      // Nothing to catch up: server mode has no WebSocket subscribers in this
-      // slice, and the tail exists to serve a browser attached to THIS
-      // instance. It arms when server mode grows the subscription surface.
-      worker: null,
+      worker: workspaceTail,
     },
   ])
 

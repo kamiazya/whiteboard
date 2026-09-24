@@ -17,7 +17,12 @@ import {
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
 import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
-import { setSyncSseHooks, sseBroadcastText, sseBroadcastTextToReady } from './sync-sse.js'
+import {
+  setSyncSseHooks,
+  sseBroadcastText,
+  sseBroadcastTextToReady,
+  sseSubscribedWorkspaceIds,
+} from './sync-sse.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
 
 // Connection registry: key = "workspaceId/path", value = Set<WebSocket>.
@@ -34,18 +39,19 @@ const readyConnections = new Map<string, Set<WebSocket>>()
 const workspaceConnections = new Map<string, Set<WebSocket>>()
 
 /**
- * The workspaces with a live audience on THIS instance.
+ * The workspaces with a live audience on THIS instance, over either
+ * transport — a socket, or an SSE stream subscribed to the workspace record.
  *
  * Read by the workspace tail so it follows only records somebody is watching.
  * Exposed as a function rather than the map so the caller cannot mutate the
  * registry, and so this module keeps owning what "connected" means.
  */
 export function subscribedWorkspaceIds(): string[] {
-  const ids: string[] = []
+  const ids = new Set(sseSubscribedWorkspaceIds())
   for (const [workspaceId, clients] of workspaceConnections) {
-    if (clients.size > 0) ids.push(workspaceId)
+    if (clients.size > 0) ids.add(workspaceId)
   }
-  return ids
+  return [...ids]
 }
 
 // The store-side funnel: every persisted workspace-document update — from a

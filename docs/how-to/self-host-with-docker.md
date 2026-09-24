@@ -14,13 +14,10 @@ tokens with server JWT authentication.
 > `/mcp`, and the HTTP API is under `/api`. A server run without the web build
 > (from source, say) answers the root URL with a placeholder page instead.
 >
-> Two people editing the same document see each other's changes live when
-> their browsers reach the same instance. **Run a single instance for browser
-> editing for now:** behind a load balancer spreading people across several
-> instances, an instance keeps showing a document as it last loaded it, and
-> edits made through another instance appear there only after it restarts.
-> Nothing is lost — every edit is stored — but people on different instances
-> see different documents until then.
+> Two people editing the same document see each other's changes live. To run
+> more than one instance behind a load balancer, see
+> [Running several instances](#running-several-instances): it takes one
+> setting on each instance and sticky sessions at the load balancer.
 
 ## Prerequisites
 
@@ -214,6 +211,60 @@ server {
 If you place a proxy that sets `X-Forwarded-For`, also set
 `WHITEBOARD_SERVER_TRUSTED_PROXY=true` so the server uses the forwarded IP for
 access decisions.
+
+The browser's live sync is a long-lived event stream (`/api/sync/stream`). The
+server marks it `X-Accel-Buffering: no`, so nginx passes it through as it is
+written rather than holding it in a buffer; a proxy that ignores that header
+needs buffering turned off for that path, or edits arrive in bursts.
+
+## Running several instances
+
+Instances need no clustering and no coordination between themselves. They
+share one record, which takes two things, both required: every instance
+points at the same libSQL server through `WHITEBOARD_DATABASE_URL` (the rows
+— a SQLite file cannot be shared between instances), and mounts the same
+data volume (the uploaded images, which stay in the data directory). Edits
+from any of them merge there without conflict (the design is
+[ADR-0020](../contributing/adr/0020-coordination-boundary.md)). Two settings
+make that visible to the people using them:
+
+1. **Set `WHITEBOARD_WORKSPACE_TAIL_MS` on every instance** — `1000` is a
+   reasonable start. Each instance keeps the documents its visitors have open
+   in memory, and this is how often it catches them up with what the other
+   instances wrote. It is also the delay: an edit made through one instance
+   reaches a browser on another within about one interval. Unset, an instance
+   shows a document as it last loaded it until it restarts. What a pass costs
+   is in the [configuration reference](../reference/configuration.md).
+
+2. **Make the load balancer sticky**, so one browser keeps reaching one
+   instance. A browser's live sync is one event stream plus requests that say
+   what it follows, and the stream lives on the instance that opened it — a
+   request that lands on another instance is refused (`404 unknown_stream`,
+   logged as a warning naming sticky sessions), and that browser stops
+   receiving edits. Any affinity your load balancer offers will do:
+
+   ```caddyfile
+   reverse_proxy whiteboard-1:3099 whiteboard-2:3099 {
+       lb_policy cookie
+   }
+   ```
+
+   ```yaml
+   # Traefik (Docker labels)
+   - traefik.http.services.whiteboard.loadbalancer.sticky.cookie=true
+   ```
+
+   ```nginx
+   upstream whiteboard {
+       ip_hash;
+       server whiteboard-1:3099;
+       server whiteboard-2:3099;
+   }
+   ```
+
+   A browser reopens its stream whenever it drops, so if an instance goes
+   away its browsers reconnect wherever the load balancer sends them next. MCP
+   clients need no affinity: `/mcp` keeps no per-connection state.
 
 ## Persistent data volume
 

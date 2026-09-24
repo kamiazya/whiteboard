@@ -7,10 +7,19 @@
 // The initial snapshot is NOT carried here: GET /api/w/:ws/document/:path/snapshot
 // already serves it as binary, and routing the largest payload through SSE
 // would only add base64 inflation. This stream carries incremental updates.
-import { afterEach, describe, expect, it } from 'vitest'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
 import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-sse.js'
 import { sendHeadChanged, sendViewportRequest, setResolveViewportFn } from './ws.js'
+
+// Its own data dir: opening a stream opens the store, and a store shared with
+// another file running in parallel waits on that file's lock until timeout.
+setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-transport-')))
+afterAll(() => resetDataDirForTests())
 
 // Both registries are module-level and outlive a single app instance, so a
 // stream opened here would otherwise stay subscribed for the rest of the run
@@ -108,6 +117,9 @@ describe('SSE sync transport', () => {
     expect(res.headers.get('content-type')).toMatch(/text\/event-stream/)
     // A proxy or the browser buffering this stream would defeat its purpose.
     expect(res.headers.get('cache-control')).toMatch(/no-cache/)
+    // nginx buffers a proxied response unless told not to, which holds every
+    // live update until a buffer fills; this header is how a response opts out.
+    expect(res.headers.get('x-accel-buffering')).toBe('no')
     await res.body?.cancel().catch(() => {})
   })
 
@@ -234,25 +246,29 @@ describe('SSE sync transport', () => {
     // with it. Held separately it would outlive the subscription and keep the
     // daemon sending viewport requests for a canvas the client stopped
     // receiving updates for.
+    // Its own document per run: the last viewport request is cached per
+    // document for the process, so a fixed name would be replayed into a
+    // repeated run's client_ready.
+    const path = `vp-gone-${globalThis.crypto.randomUUID()}`
     const app = createApp(createRuntimeOptions())
     const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, subscribe: ['ws-1/vp-gone'] }),
+      body: JSON.stringify({ streamId, subscribe: [`ws-1/${path}`] }),
     })
     await app.request('/api/sync/message', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, doc: 'ws-1/vp-gone', message: { type: 'client_ready' } }),
+      body: JSON.stringify({ streamId, doc: `ws-1/${path}`, message: { type: 'client_ready' } }),
     })
 
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, unsubscribe: ['ws-1/vp-gone'] }),
+      body: JSON.stringify({ streamId, unsubscribe: [`ws-1/${path}`] }),
     })
-    sendViewportRequest('ws-1', 'vp-gone', 'req-gone', { mode: 'fit' })
+    sendViewportRequest('ws-1', path, 'req-gone', { mode: 'fit' })
 
     const frames = await readEvents(res, 1, 300)
     expect(frames.filter((f) => f.includes('viewport_request'))).toEqual([])

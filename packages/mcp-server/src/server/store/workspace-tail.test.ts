@@ -121,14 +121,18 @@ describe('createWorkspaceTail', () => {
 
   /**
    * A workspace with no audience is forgotten, so the next subscription
-   * baselines again instead of replaying everything written while nobody was
-   * listening — the same reason the first pass baselines.
+   * starts from first sight again: the live document is reconciled and only
+   * what it lacked goes out — the write made while nobody was listening, not
+   * the log from the start.
    */
-  it('re-baselines a workspace whose audience left and came back', async () => {
+  it('sends only what was written while the audience was away', async () => {
     const h = harness()
     await writeFrom(h.docs, WS, 'existing', '1')
     h.subscribe(WS)
     await h.tail.pollOnce()
+    const held = await h.liveDoc(WS)
+    const peer = new LoroDoc()
+    peer.import(held.export({ mode: 'snapshot' }))
 
     h.subscribe()
     await h.tail.pollOnce()
@@ -136,7 +140,37 @@ describe('createWorkspaceTail', () => {
 
     h.subscribe(WS)
     await h.tail.pollOnce()
-    expect(h.emitted).toEqual([])
+    expect(h.emitted).toHaveLength(1)
+    // Only the gap: a doc holding nothing but it cannot read the earlier key.
+    const gapOnly = new LoroDoc()
+    gapOnly.import(h.emitted[0]!.update)
+    expect(gapOnly.getMap('meta').get('existing')).toBeUndefined()
+    for (const entry of h.emitted) peer.import(entry.update)
+    expect(peer.getMap('meta').get('while-away')).toBe('1')
+  })
+
+  /**
+   * The live document can be OLDER than the record at first sight: loaded
+   * before another instance wrote, and served that way to a browser that has
+   * just subscribed. Baselining at the record's cursor would skip the gap for
+   * good, so the first pass reconciles the live document and sends what it
+   * gained — only that, since the client already holds the rest.
+   */
+  it('catches a stale live document up on first sight and sends the gap', async () => {
+    const h = harness()
+    await writeFrom(h.docs, WS, 'existing', '1')
+    const held = await h.liveDoc(WS)
+    const peer = new LoroDoc()
+    peer.import(held.export({ mode: 'snapshot' }))
+
+    await writeFrom(h.docs, WS, 'before-audience', '1')
+    expect(held.getMap('meta').get('before-audience')).toBeUndefined()
+
+    h.subscribe(WS)
+    await h.tail.pollOnce()
+    expect(held.getMap('meta').get('before-audience')).toBe('1')
+    for (const entry of h.emitted) peer.import(entry.update)
+    expect(peer.getMap('meta').get('before-audience')).toBe('1')
   })
 
   it('keeps polling the other workspaces when one of them throws', async () => {
@@ -146,11 +180,12 @@ describe('createWorkspaceTail', () => {
     h.subscribe('ws-broken', WS)
 
     const captured = captureLogsForTests('warning')
+    const catchUp = h.docs.catchUp.bind(h.docs)
     const broken = vi
-      .spyOn(h.docs, 'readCursor')
-      .mockImplementation(async (workspaceId: string) => {
+      .spyOn(h.docs, 'catchUp')
+      .mockImplementation(async (workspaceId, doc, cursor) => {
         if (workspaceId === 'ws-broken') throw new Error('unreachable')
-        return { generation: null, afterSeq: null }
+        return catchUp(workspaceId, doc, cursor)
       })
     try {
       await h.tail.pollOnce()

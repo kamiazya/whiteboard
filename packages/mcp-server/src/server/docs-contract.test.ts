@@ -248,13 +248,19 @@ describe('docs/ contract', () => {
     expect(devRow).toContain('stdio proxy')
   })
 
-  // What the browser UI server mode serves does (ADR-0047), and the one limit
-  // an operator scaling out has to know before a user reports it: an edit made
-  // through one instance reaches another only when that one restarts.
-  it('tells self-hosting operators what the browser UI does, and to run one instance for it', () => {
+  // What the browser UI server mode serves does (ADR-0047), and the two things
+  // an operator scaling out has to set before a user reports stale documents:
+  // the workspace tail and a sticky load balancer.
+  it('tells self-hosting operators what the browser UI does, and how to run several instances', () => {
     const guide = readFileSync(join(DOCS_ROOT, 'how-to/self-host-with-docker.md'), 'utf8')
     expect(guide).toContain('open one to read and')
-    expect(guide).toContain('Run a single instance for browser')
+    expect(guide).toContain('## Running several instances')
+    expect(guide).toContain('WHITEBOARD_WORKSPACE_TAIL_MS')
+    expect(guide).toContain('sticky')
+    // Both halves of the shared record: rows in one libSQL server, and the
+    // images in one volume. Either alone leaves instances diverging.
+    expect(guide).toContain('both required')
+    expect(guide).toContain('WHITEBOARD_DATABASE_URL')
     // The two surfaces this deployment actually serves.
     expect(guide).toContain('/api')
     expect(guide).toContain('/mcp')
