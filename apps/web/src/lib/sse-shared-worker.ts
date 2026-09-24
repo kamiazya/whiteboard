@@ -496,6 +496,11 @@ function handleSubscribe(
     },
   })
   state.subscriptions.set(msg.doc, off)
+  // A tab arriving while a write is still being retried was not there when
+  // the failure was announced, so it is told now.
+  if (failedWrites.has(replicaKey(state.baseUrl, msg.doc))) {
+    postWorkerEvent(port, { type: 'write-state', doc: msg.doc, landed: false })
+  }
 }
 
 function handleUnsubscribe(msg: RequestOf<'unsubscribe'>, state: PortState): void {

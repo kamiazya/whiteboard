@@ -317,10 +317,11 @@ describe('SseBackend through a source whose push returns before the write lands'
   // itself, so the only way this page hears that the keeper refused the write
   // is the source telling it. Without passing that on, the editor reads saved
   // over an edit that exists nowhere but this tab.
-  it('reports a write that did not land, and the connection once it does', async () => {
+  it('reports a write that did not land, and its landing once the retry succeeds', async () => {
     const fake = createFakeTransport([])
-    const { handlers, connectedCount } = createHandlers()
+    const { handlers } = createHandlers()
     const errors: string[] = []
+    let landed = 0
     const listeners: { onWriteState?: (landed: boolean) => void }[] = []
     const source = {
       subscribe: (_doc: string, listener: { onWriteState?: (landed: boolean) => void }) => {
@@ -338,15 +339,20 @@ describe('SseBackend through a source whose push returns before the write lands'
       fake.transport,
       source,
     )
-    backend.connect({ ...handlers, onError: (reason) => errors.push(reason) })
+    backend.connect({
+      ...handlers,
+      onError: (reason) => errors.push(reason),
+      onWritesLanded: () => {
+        landed += 1
+      },
+    })
     await flush()
 
     for (const l of listeners) l.onWriteState?.(false)
     expect(errors).toEqual(['storage-failure'])
 
-    const before = connectedCount()
     for (const l of listeners) l.onWriteState?.(true)
-    expect(connectedCount()).toBe(before + 1)
+    expect(landed).toBe(1)
     backend.disconnect()
   })
 })

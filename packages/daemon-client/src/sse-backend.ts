@@ -134,12 +134,11 @@ export class SseBackend implements DocumentBackend {
         else handlers.onDisconnected?.()
       },
       // A worker-backed source's push returns before the keeper answers, so
-      // this is the only word this page gets that a write failed. Its landing
-      // is reported as a connection: the keeper is taking writes again, and
-      // the session answers that by sending its state and clearing the error.
+      // this is the only word this page gets that a write failed — and, since
+      // the worker retries on its own, that the failure is over.
       onWriteState: (landed) => {
         if (this.cancelled) return
-        if (landed) handlers.onConnected()
+        if (landed) handlers.onWritesLanded?.()
         else handlers.onError?.('storage-failure')
       },
     }

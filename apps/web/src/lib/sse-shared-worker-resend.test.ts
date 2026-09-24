@@ -210,4 +210,22 @@ describe('a write the daemon refused', { timeout: 25_000 }, () => {
     refuseWrites = false
     await until(() => writeStatesFor(doc, true) > 0)
   })
+
+  it('is told to a tab that subscribes while the write is still failing', async () => {
+    // That tab was not there when the failure was announced; without this it
+    // would read as saved over an edit still being retried.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseWrites = true
+    pushEdit(doc, 'late', 'edit')
+    await until(() => writeStatesFor(doc, false) === 1)
+
+    port.postMessage({ type: 'unsubscribe', doc })
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => writeStatesFor(doc, false) === 2)
+    refuseWrites = false
+    await until(() => writeStatesFor(doc, true) > 0)
+  })
 })
