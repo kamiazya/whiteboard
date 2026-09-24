@@ -55,7 +55,7 @@ const ServerModeApp = lazy(() =>
 
 /** A server-mode keeper marks the shell it serves (ADR-0047). A plain read,
  *  not the runtime-config schema, for the same entry-chunk reason. */
-function servedByServerKeeper(): boolean {
+export function servedByServerKeeper(): boolean {
   const raw = (window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__
   return (
     typeof raw === 'object' && raw !== null && (raw as { keeper?: unknown }).keeper === 'server'
