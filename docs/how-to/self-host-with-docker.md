@@ -77,7 +77,8 @@ providers:
 ```
 
 Register `https://<your host>/auth/callback/<id>` as the redirect URI with the
-provider. A person signs in at `/auth/sign-in/<id>`.
+provider. A person opens `https://<your host>/`, which offers a button per
+provider; each leads to `/auth/sign-in/<id>`.
 
 What the `admission` block can say:
 
