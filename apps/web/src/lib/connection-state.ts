@@ -1,3 +1,4 @@
+import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import type { SyncStatus } from './document-sync-types.js'
 import type { StorageHealth } from './storage-health.js'
 
@@ -11,14 +12,20 @@ export type SessionHealth = 'synced' | 'reconnecting' | 'sync-off' | 'write-fail
 /**
  * What a daemon-kept page reports from what its session knows. An auth
  * rejection outranks everything, because re-pairing is the only way out of
- * it; synced is claimed only while the session is connected; the session's
- * error is a write that did not land; `idle` (not started yet) folds in with
- * reconnecting, whose copy makes no claim about recovery timing.
+ * it; then a write that did not land (the session's persistence account, not
+ * its `error` status, which an unreadable document reports too); synced is
+ * claimed only while the session is connected; everything else — `idle`,
+ * `error` — folds in with reconnecting, whose copy makes no claim.
  */
-export function sessionHealthOf(authError: boolean, status: SyncStatus): SessionHealth {
+export function sessionHealthOf(
+  authError: boolean,
+  status: SyncStatus,
+  persistence: BrowserPersistenceState,
+): SessionHealth {
   if (authError) return 'sync-off'
-  if (status === 'connected') return 'synced'
-  return status === 'error' ? 'write-failed' : 'reconnecting'
+  if (persistence.kind === 'degraded' && persistence.reason === 'write-failed')
+    return 'write-failed'
+  return status === 'connected' ? 'synced' : 'reconnecting'
 }
 
 /**

@@ -193,6 +193,7 @@ function useDaemonDocument(
     coreFacets,
     setCoreFacets,
     syncStatus,
+    persistence,
     readOutlineSource,
     annotations,
     threadMarks,
@@ -370,12 +371,12 @@ function useDaemonDocument(
     setShellConnection({
       state: {
         keeper: 'daemon',
-        session: sessionHealthOf(authError, syncStatus),
+        session: sessionHealthOf(authError, syncStatus, persistence),
       },
       daemonBaseUrl,
     })
     return () => setShellConnection(null)
-  }, [authError, syncStatus, daemonBaseUrl])
+  }, [authError, syncStatus, persistence, daemonBaseUrl])
 
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one
