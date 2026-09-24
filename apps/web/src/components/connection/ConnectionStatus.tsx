@@ -30,8 +30,8 @@
 import type { ReactNode } from 'react'
 import {
   type ConnectionState,
-  isNotKeeping,
   isSyncOff,
+  notKeepingAnnouncement,
   type SessionHealth,
 } from '../../lib/connection-state.js'
 import type { StorageHealth } from '../../lib/storage-health.js'
@@ -41,6 +41,7 @@ import {
   BrowserStoragePanel,
   DaemonReconnectingPanel,
   DaemonSyncedPanel,
+  DaemonWriteFailedPanel,
   SyncOffPanel,
 } from './connection-panels.js'
 
@@ -85,6 +86,7 @@ const SESSION_LABEL: Record<SessionHealth, string> = {
   synced: 'Synced',
   reconnecting: 'Reconnecting',
   'sync-off': 'Sync off',
+  'write-failed': 'Not saved yet',
 }
 
 /**
@@ -156,19 +158,15 @@ export function ConnectionStatus({
   // Empty while the keeper is keeping: the region has to exist BEFORE the
   // message, but an empty one must not claim a name either. Both not-keeping
   // states announce, because both mean the same thing to the person typing.
-  const syncOffAnnouncement = syncOff
-    ? 'Live sync off'
-    : state !== null && isNotKeeping(state)
-      ? 'Writing to this browser failed'
-      : ''
+  const announcement = notKeepingAnnouncement(state)
 
   return (
     <Popover>
       {/* Always mounted, for the same reason as the busy line in
           WorkspaceTopBar: sync going off is a CHANGE, and a live region that
           appears together with its first message may never be announced. */}
-      <span role="status" aria-label={syncOffAnnouncement || undefined} className="sr-only">
-        {syncOffAnnouncement}
+      <span role="status" aria-label={announcement || undefined} className="sr-only">
+        {announcement}
       </span>
       <PopoverTrigger asChild>
         <button
@@ -198,6 +196,7 @@ export function ConnectionStatus({
           {children}
         </DaemonSyncedPanel>
         <DaemonReconnectingPanel state={state} />
+        <DaemonWriteFailedPanel state={state} />
         <BrowserStoragePanel state={state} lastWrittenAt={lastWrittenAt ?? null}>
           {children}
         </BrowserStoragePanel>
