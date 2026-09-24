@@ -46,6 +46,15 @@ export interface ServerModePeople {
 
 type Refusal = { status: 401 | 403; code: string; wwwAuthenticate?: string }
 
+// What a browser session may do: everything a person does with their own
+// workspaces, and nothing that administers the keeper — those routes stay with
+// credentials the operator scopes for them.
+const SESSION_SCOPES: readonly AuthScope[] = ALL_AUTH_SCOPES.filter(
+  (scope) => scope !== 'runtime:admin',
+)
+
+type GrantOutcome = { grant: ResolvedGrant } | { refusal: Refusal }
+
 // A session opened at this host comes first: it is a person already, and a
 // browser that has one should not also need a bearer. Only when there is none
 // (or it has expired) does the bearer decide.
@@ -54,12 +63,32 @@ async function serverModeGrant(
   authStrategy: AsyncAuthStrategy,
   requiredScopes: readonly AuthScope[],
   people: ServerModePeople | undefined,
-): Promise<{ grant: ResolvedGrant } | { refusal: Refusal }> {
-  const session = people === undefined ? undefined : getCookie(c, SESSION_COOKIE)
-  if (people !== undefined && session !== undefined) {
-    const person = await people.sessions.resolve(session, (people.now ?? Date.now)())
-    if (person !== null) return { grant: { kind: 'signed-in', scopes: ALL_AUTH_SCOPES, person } }
+): Promise<GrantOutcome> {
+  const signedIn = people === undefined ? undefined : await sessionGrant(c, people, requiredScopes)
+  return signedIn ?? bearerGrant(c, authStrategy, requiredScopes, people)
+}
+
+async function sessionGrant(
+  c: Context,
+  people: ServerModePeople,
+  requiredScopes: readonly AuthScope[],
+): Promise<GrantOutcome | undefined> {
+  const session = getCookie(c, SESSION_COOKIE)
+  if (session === undefined) return undefined
+  const person = await people.sessions.resolve(session, (people.now ?? Date.now)())
+  if (person === null) return undefined
+  if (requiredScopes.some((scope) => !SESSION_SCOPES.includes(scope))) {
+    return { refusal: { status: 403, code: 'auth.forbidden' } }
   }
+  return { grant: { kind: 'signed-in', scopes: SESSION_SCOPES, person } }
+}
+
+async function bearerGrant(
+  c: Context,
+  authStrategy: AsyncAuthStrategy,
+  requiredScopes: readonly AuthScope[],
+  people: ServerModePeople | undefined,
+): Promise<GrantOutcome> {
   const decision = await authStrategy.authorize({
     method: c.req.method.toUpperCase(),
     path: c.req.path,

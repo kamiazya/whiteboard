@@ -93,8 +93,10 @@ email verified. The rules are checked at every sign-in, not only the first.
 The server refuses to start if the file is invalid or a secret it names is
 empty.
 
-The session this opens authorizes `/api` as well as a bearer token does.
-`/mcp` still takes bearer tokens only.
+The session this opens authorizes `/api` for everything a person does with
+their workspaces. The keeper's administrative routes (those needing the
+`runtime:admin` scope) are not among them: they stay with bearer tokens you
+scope for them. `/mcp` still takes bearer tokens only.
 
 ## Who can reach a workspace
 

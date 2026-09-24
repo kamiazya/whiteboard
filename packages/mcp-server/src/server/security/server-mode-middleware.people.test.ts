@@ -56,6 +56,7 @@ beforeEach(async () => {
   app = new Hono()
   app.use('/api/*', createServerModeApiAuthMiddleware(strategy, { members, sessions }))
   app.get('/api/workspaces/:workspaceId/documents', (c) => c.json({ reached: true }))
+  app.post('/api/runtime/logs/prune', (c) => c.json({ reached: true }))
 })
 afterEach(async () => {
   await handle.dispose()
@@ -93,6 +94,22 @@ describe('server mode — who is asking, and are they a member', () => {
       60_000,
     )
     expect((await documents({ cookie: `${SESSION_COOKIE}=${token}` })).status).toBe(200)
+  })
+
+  // A browser session is a person, not an operator: the keeper's admin
+  // routes stay with credentials the operator scopes for them.
+  it('refuses an admin route to a signed-in session', async () => {
+    const token = await sessions.create(
+      { authenticator: ISSUER, subject: 'ada' },
+      Date.now(),
+      60_000,
+    )
+    const res = await app.request('/api/runtime/logs/prune', {
+      method: 'POST',
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'auth.forbidden' })
   })
 
   it('treats an unknown session as no session', async () => {
