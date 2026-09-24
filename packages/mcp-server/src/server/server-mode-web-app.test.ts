@@ -42,6 +42,7 @@ describe('mountServerModeWebApp', () => {
     '/',
     '/sign-in',
     '/w/plans',
+    '/index.html',
   ])('answers %s with the app shell, marked as a server keeper', async (path) => {
     await withBuild()
     const res = await app().request(path)

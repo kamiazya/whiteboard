@@ -47,7 +47,7 @@ let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let idp: FakeOidcProvider
 
-function appFor(admission: object) {
+function appFor(admission: object, fetchFn: typeof fetch = idp.fetch) {
   const db = handle.db
   const signIn = createCompleteSignInDeps(db, HOUR)
   const app = new Hono()
@@ -55,7 +55,7 @@ function appFor(admission: object) {
     '/',
     createSignInRoutes({
       providers: providerConfig(admission).map((p) => ({ ...p, clientSecretValue: 's3cret' })),
-      rp: createRelyingParty({ fetch: idp.fetch }),
+      rp: createRelyingParty({ fetch: fetchFn }),
       attempts: createSignInAttemptStore(db),
       signIn,
       publicBaseUrl: BASE,
@@ -179,6 +179,15 @@ describe('sign-in through an OIDC provider', () => {
       headers: { cookie: `${SESSION_COOKIE}=${session}` },
     })
     expect(await res.json()).toEqual({ signedIn: true, user: { displayName: 'Ada' } })
+  })
+
+  it('returns to the sign-in screen when the provider cannot be reached', async () => {
+    const { app } = appFor({ createAccounts: true }, () =>
+      Promise.reject(new TypeError('fetch failed')),
+    )
+    const res = await app.request(`${BASE}/auth/sign-in/corp`)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/sign-in?error=provider_unreachable')
   })
 
   it('answers an unknown provider with a JSON 404', async () => {

@@ -63,10 +63,11 @@ export function serverModeUiStatus(webAppDir: string): {
 export function mountServerModeWebApp(app: Hono, webAppDir: string): void {
   const files = serveStatic({ root: webAppDir })
   // A path with an extension is a file of the build; anything else is a
-  // route of the app, answered with its shell.
+  // route of the app, answered with its shell. `/index.html` IS the shell,
+  // and served raw it would lack the marker and boot the browser app.
   app.get('*', async (c, next) => {
     if (isReservedUiPath(c.req.path)) return c.notFound()
-    if (extname(c.req.path) !== '') {
+    if (c.req.path !== '/index.html' && extname(c.req.path) !== '') {
       return (await files(c, next)) ?? c.json({ error: 'not_found' }, 404)
     }
     const shell = await readFile(join(webAppDir, 'index.html'), 'utf-8').catch(() => null)

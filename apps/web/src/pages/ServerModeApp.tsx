@@ -107,17 +107,21 @@ function InvitePage({ fetchFn }: { fetchFn: Fetch }) {
 
 interface Signed {
   displayName: string
-  workspaces: { workspaceId: string; name: string }[]
+  // 'unavailable': the session is real and the list failed — a person who is
+  // signed in must not be sent to sign in again, or they loop.
+  workspaces: { workspaceId: string; name: string }[] | 'unavailable'
 }
 
 async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
   const session = signInSessionResponseSchema.parse(await (await fetchFn('/auth/session')).json())
   if (!session.signedIn) return null
-  const res = await fetchFn('/api/workspaces')
-  const { workspaces } = listWorkspacesResponseSchema.parse(await res.json())
+  const res = await fetchFn('/api/workspaces').catch(() => null)
+  // An error answer fails the schema like any malformed one.
+  const parsed = res && listWorkspacesResponseSchema.safeParse(await res.json().catch(() => null))
+  if (!parsed?.success) return { displayName: session.user.displayName, workspaces: 'unavailable' }
   return {
     displayName: session.user.displayName,
-    workspaces: workspaces.map((w) => ({
+    workspaces: parsed.data.workspaces.map((w) => ({
       workspaceId: w.workspaceId,
       name: w.displayName ?? w.segment ?? w.workspaceId,
     })),
@@ -127,6 +131,7 @@ async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   const navigate = useNavigate()
   const [signed, setSigned] = useState<Signed | null | 'loading'>('loading')
+  const [signOutFailed, setSignOutFailed] = useState(false)
   useEffect(() => {
     let live = true
     void loadSigned(fetchFn)
@@ -143,8 +148,9 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   if (signed === null) return <Navigate to="/sign-in" replace />
 
   const signOut = async () => {
-    await fetchFn('/auth/sign-out', { method: 'POST' })
-    navigate('/sign-in', { replace: true })
+    const res = await fetchFn('/auth/sign-out', { method: 'POST' }).catch(() => null)
+    if (res?.ok) navigate('/sign-in', { replace: true })
+    else setSignOutFailed(true)
   }
   return (
     <Page>
@@ -154,8 +160,17 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
           Sign out
         </Button>
       </header>
+      {signOutFailed && (
+        <p role="alert" className="text-sm text-destructive">
+          Could not sign out. Try again.
+        </p>
+      )}
       <h1 className="text-xl font-semibold">Your workspaces</h1>
-      {signed.workspaces.length === 0 ? (
+      {signed.workspaces === 'unavailable' ? (
+        <p role="alert" className="text-sm text-destructive">
+          Could not load your workspaces. Reload to try again.
+        </p>
+      ) : signed.workspaces.length === 0 ? (
         <p className="text-sm text-muted-foreground">You are not a member of any workspace yet.</p>
       ) : (
         <ul className="flex w-full max-w-md flex-col gap-1">

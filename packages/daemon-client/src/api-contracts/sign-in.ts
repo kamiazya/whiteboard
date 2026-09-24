@@ -34,6 +34,7 @@ export type SignInSessionResponse = z.infer<typeof signInSessionResponseSchema>
 export const signInRefusalSchema = z.enum([
   'sign_in_attempt_unknown',
   'provider_refused',
+  'provider_unreachable',
   'unknown_provider',
   'invitation_unusable',
   'no_subject',

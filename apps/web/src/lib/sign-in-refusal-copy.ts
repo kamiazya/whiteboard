@@ -9,6 +9,7 @@ export const SIGN_IN_REFUSAL_COPY = {
   sign_in_attempt_unknown:
     'That sign-in expired or was started in another browser. Please try again.',
   provider_refused: 'The sign-in provider did not confirm who you are. Please try again.',
+  provider_unreachable: 'The sign-in provider could not be reached. Please try again later.',
   unknown_provider: 'That sign-in provider is not configured on this server.',
   invitation_unusable: 'That invitation has been used or has expired. Ask for a new one.',
   no_subject: 'The sign-in provider did not say who you are.',

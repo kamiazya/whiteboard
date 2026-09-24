@@ -13,7 +13,8 @@ afterEach(cleanup)
 interface Keeper {
   providers?: { id: string; displayName: string }[] | 'none'
   signedIn?: string
-  workspaces?: { workspaceId: string; displayName?: string; segment?: string }[]
+  workspaces?: { workspaceId: string; displayName?: string; segment?: string }[] | 'failing'
+  signOut?: 'failing'
 }
 
 // A same-origin keeper answering the handful of routes the app reads.
@@ -33,8 +34,12 @@ function keeperFetch(keeper: Keeper) {
       )
     }
     if (url === '/auth/sign-out' && init?.method === 'POST')
-      return new Response(null, { status: 204 })
-    if (url === '/api/workspaces') return Response.json({ workspaces: keeper.workspaces ?? [] })
+      return new Response(null, { status: keeper.signOut === 'failing' ? 500 : 204 })
+    if (url === '/api/workspaces') {
+      return keeper.workspaces === 'failing'
+        ? Response.json({ error: 'internal' }, { status: 500 })
+        : Response.json({ workspaces: keeper.workspaces ?? [] })
+    }
     return Response.json({ error: 'not_found' }, { status: 404 })
   })
 }
@@ -101,5 +106,18 @@ describe('server mode workspaces', () => {
       ),
     )
     expect(await screen.findByRole('link', { name: /continue with corp sso/i })).toBeTruthy()
+  })
+
+  it('says the list failed, rather than sending a signed-in person to sign in', async () => {
+    renderAt('/', { signedIn: 'Ada', workspaces: 'failing', providers: [corp] })
+    expect((await screen.findByRole('alert')).textContent).toMatch(/could not load/i)
+    expect(screen.getByText(/signed in as ada/i)).toBeTruthy()
+  })
+
+  it('stays put and says so when signing out fails', async () => {
+    renderAt('/', { signedIn: 'Ada', providers: [corp], signOut: 'failing' })
+    fireEvent.click(await screen.findByRole('button', { name: /sign out/i }))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/could not sign out/i)
+    expect(screen.getByText(/signed in as ada/i)).toBeTruthy()
   })
 })

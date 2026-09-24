@@ -70,12 +70,20 @@ async function begin(c: Context, { deps, now, callbackUrl }: Routing, provider: 
     ...cookieOptions,
     maxAge: ATTEMPT_TTL_MS / 1000,
   })
-  const to = await deps.rp.authorizationUrl(provider, {
-    redirectUri: callbackUrl(provider.id),
-    state: attempt.state,
-    nonce: attempt.nonce,
-    codeVerifier: attempt.codeVerifier,
-  })
+  // Discovery reaches the provider over the network, so an outage lands here
+  // and is a reason the person can read, not a 500.
+  const to = await deps.rp
+    .authorizationUrl(provider, {
+      redirectUri: callbackUrl(provider.id),
+      state: attempt.state,
+      nonce: attempt.nonce,
+      codeVerifier: attempt.codeVerifier,
+    })
+    .catch((err: unknown) => {
+      log.warning({ providerId: provider.id, err }, 'the provider could not be reached')
+      return null
+    })
+  if (to === null) return refusedTo(c, 'provider_unreachable')
   return c.redirect(to.toString(), 302)
 }
 
