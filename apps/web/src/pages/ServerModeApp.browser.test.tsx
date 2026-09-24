@@ -207,6 +207,25 @@ describe('server mode inside a workspace', () => {
     renderAt('/w/ws-1/d/plan', { signedIn: 'Ada' })
     await screen.findByText(/signed in as ada/i)
     setShellConnection({ state: { keeper: 'daemon', session: 'reconnecting' } })
-    expect((await screen.findByRole('status')).textContent).toMatch(/reconnecting/i)
+    expect(await screen.findByText(/^reconnecting$/i)).toBeTruthy()
+  })
+
+  // Spoken only when sync goes off, as the daemon shell does: a reconnect
+  // blip read aloud mid-sentence is noise, a session that stopped is news.
+  it('announces sync going off, and not an ordinary reconnect', async () => {
+    renderAt('/w/ws-1/d/plan', { signedIn: 'Ada' })
+    await screen.findByText(/signed in as ada/i)
+    setShellConnection({ state: { keeper: 'daemon', session: 'reconnecting' } })
+    await screen.findByText(/^reconnecting$/i)
+    expect(screen.getByRole('status').textContent).toBe('')
+    setShellConnection({ state: { keeper: 'daemon', session: 'sync-off' } })
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/sync off/i))
+  })
+
+  it('puts the workspace in the main landmark, under the banner', async () => {
+    renderAt('/w/ws-1', { signedIn: 'Ada' })
+    await screen.findByText('workspace index')
+    expect(screen.getByRole('banner')).toBeTruthy()
+    expect(screen.getByRole('main').textContent).toContain('workspace index')
   })
 })

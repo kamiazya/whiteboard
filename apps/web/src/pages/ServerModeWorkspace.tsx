@@ -28,7 +28,7 @@ export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       {shell}
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <main className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Opening workspace…" />}>
           {view.kind === 'index' ? (
             <DaemonIndexPage
@@ -49,7 +49,7 @@ export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
             />
           )}
         </Suspense>
-      </div>
+      </main>
     </div>
   )
 }

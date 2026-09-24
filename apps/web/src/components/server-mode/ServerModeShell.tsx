@@ -8,6 +8,7 @@
  */
 import { useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { isSyncOff } from '../../lib/connection-state.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
 import { connectionLabel } from '../connection/ConnectionStatus.js'
 import { Button } from '../ui/button.js'
@@ -23,8 +24,10 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
     if (res?.ok) navigate('/sign-in', { replace: true })
     else setFailed(true)
   }
+  // Stacked, so the refusal reads as a line under the button wherever the
+  // control sits rather than as one more item in its row.
   return (
-    <>
+    <div className="flex flex-col items-end gap-1">
       <Button variant="outline" size="sm" onClick={() => void signOut()}>
         Sign out
       </Button>
@@ -33,22 +36,26 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
           Could not sign out. Try again.
         </p>
       )}
-    </>
+    </div>
   )
 }
 
 export function ServerModeShell({ displayName, fetchFn }: { displayName: string; fetchFn: Fetch }) {
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
+  // Spoken only when sync goes off, as the daemon shell's ConnectionStatus
+  // does: a reconnect blip read aloud mid-sentence is noise.
+  const announcement = connection !== null && isSyncOff(connection.state) ? 'Live sync off' : ''
   return (
     <header className="flex h-10 shrink-0 items-center gap-3 border-b bg-background px-chrome text-sm pointer-coarse:h-12">
       <Link to="/" className="text-muted-foreground hover:text-foreground">
         All workspaces
       </Link>
+      <span className="text-muted-foreground">{label ?? ''}</span>
       {/* Mounted even when empty: a live region inserted with its text
           already in it is not announced. */}
-      <span role="status" className="text-muted-foreground">
-        {label ?? ''}
+      <span role="status" className="sr-only">
+        {announcement}
       </span>
       <span className="min-w-0 flex-1" />
       <span className="truncate text-muted-foreground">Signed in as {displayName}</span>
