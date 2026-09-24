@@ -62,3 +62,23 @@ describe('a shared worker that fails to load', () => {
     expect(FakeSharedWorker.instances).toHaveLength(2)
   })
 })
+
+describe("the worker's word on a document's writes", () => {
+  // A tab's push returns before the keeper answers, so this event is the only
+  // way a page learns its edit did not land — and that it later did.
+  it('reaches the listener for that document, and no other', () => {
+    const source = createSharedSseStreamSource('http://write-state.test', 't')
+    const mine = vi.fn()
+    const other = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteState: mine })
+    source?.subscribe('w/other', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteState: other })
+    const deliver = (data: unknown) =>
+      FakeSharedWorker.instances[0]?.port.onmessage?.({ data } as MessageEvent)
+
+    deliver({ type: 'write-state', doc: 'w/doc', landed: false })
+    deliver({ type: 'write-state', doc: 'w/doc', landed: true })
+
+    expect(mine.mock.calls).toEqual([[false], [true]])
+    expect(other).not.toHaveBeenCalled()
+  })
+})

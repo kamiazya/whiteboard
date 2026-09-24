@@ -46,6 +46,10 @@ function deliverToListeners(
     for (const l of set) l.onConnectionChange?.(evt.connected)
     return
   }
+  if (evt.type === 'write-state') {
+    for (const l of set) l.onWriteState?.(evt.landed)
+    return
+  }
   for (const l of set) l.onMessage(evt.raw)
 }
 

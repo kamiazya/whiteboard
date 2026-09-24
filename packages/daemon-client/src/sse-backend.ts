@@ -21,7 +21,7 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from './document-backend-contract.js'
-import type { SseStreamSource } from './sse-stream-hub.js'
+import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
 import { uploadFiles } from './upload-files.js'
 import { parseServerTextMessage } from './ws-text-message.js'
@@ -106,19 +106,7 @@ export class SseBackend implements DocumentBackend {
     if (this.cancelled) return
 
     const source = this.resolveSource()
-    this.unsubscribe = source.subscribe(this.binaryKey, {
-      onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
-      // Nothing addresses text to the workspace key; per-document text
-      // arrives on the subscription below.
-      onMessage: () => {},
-      // The stream belongs to the source, so its liveness is the only signal
-      // this backend has that updates are still arriving.
-      onConnectionChange: (connected) => {
-        if (this.cancelled) return
-        if (connected) handlers.onConnected()
-        else handlers.onDisconnected?.()
-      },
-    })
+    this.unsubscribe = source.subscribe(this.binaryKey, this.binaryListener(handlers))
     // Text messages stay per document — and ONLY text: no binary frame
     // travels on a per-document key any more.
     this.unsubscribeText = source.subscribe(this.docKey, {
@@ -129,6 +117,32 @@ export class SseBackend implements DocumentBackend {
     // subscribe time and on every change, so anything added on top would
     // either overwrite an accurate "not connected yet" or double-report a
     // connection — and the session sends client_ready per report.
+  }
+
+  /** What the workspace key's subscription does with each thing the source says. */
+  private binaryListener(handlers: DocumentBackendHandlers): DocListener {
+    return {
+      onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
+      // Nothing addresses text to the workspace key; per-document text
+      // arrives on the per-document subscription `run` makes.
+      onMessage: () => {},
+      // The stream belongs to the source, so its liveness is the only signal
+      // this backend has that updates are still arriving.
+      onConnectionChange: (connected) => {
+        if (this.cancelled) return
+        if (connected) handlers.onConnected()
+        else handlers.onDisconnected?.()
+      },
+      // A worker-backed source's push returns before the keeper answers, so
+      // this is the only word this page gets that a write failed. Its landing
+      // is reported as a connection: the keeper is taking writes again, and
+      // the session answers that by sending its state and clearing the error.
+      onWriteState: (landed) => {
+        if (this.cancelled) return
+        if (landed) handlers.onConnected()
+        else handlers.onError?.('storage-failure')
+      },
+    }
   }
 
   /**

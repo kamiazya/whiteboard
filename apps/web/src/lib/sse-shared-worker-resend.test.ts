@@ -105,8 +105,14 @@ beforeAll(() => {
   })
   port = worker.port
   port.start()
+  port.onmessage = (e: MessageEvent) => events.push(e.data as (typeof events)[number])
   port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
 })
+
+/** What the worker told this port, in order. */
+const events: { type: string; doc?: string; landed?: boolean }[] = []
+const writeStatesFor = (doc: string, landed: boolean) =>
+  events.filter((e) => e.doc === doc && e.type === 'write-state' && e.landed === landed).length
 
 /** An edit from a tab, as one push. */
 function pushEdit(doc: string, key: string, value: string): void {
@@ -166,5 +172,42 @@ describe('a write the daemon refused', { timeout: 25_000 }, () => {
     const received = new LoroDoc()
     for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
     expect(received.getMap('m').get('stranded')).toBe('only-edit')
+  })
+
+  it('is retried on its own, with no further edit and no reconnect to carry it', async () => {
+    // The person stops typing and the stream stays up: neither trigger above
+    // fires, and the edit would wait for as long as the tab stays open —
+    // then vanish with the worker when the last one closes.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseWrites = true
+    pushEdit(doc, 'quiet', 'last-edit')
+    await settle()
+    expect(daemonWrites.filter((w) => w.doc === doc)).toEqual([])
+
+    refuseWrites = false
+    await until(() => daemonWrites.some((w) => w.doc === doc))
+    const received = new LoroDoc()
+    for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
+    expect(received.getMap('m').get('quiet')).toBe('last-edit')
+  })
+
+  it('is told to the tab while it is outstanding, and its landing is told too', async () => {
+    // The tab has no other way to know: its push went to the worker and
+    // returned at once, so without this the editor reads saved over an edit
+    // the keeper never took.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseWrites = true
+    pushEdit(doc, 'told', 'edit')
+    await until(() => writeStatesFor(doc, false) > 0)
+    expect(writeStatesFor(doc, true)).toBe(0)
+
+    refuseWrites = false
+    await until(() => writeStatesFor(doc, true) > 0)
   })
 })
