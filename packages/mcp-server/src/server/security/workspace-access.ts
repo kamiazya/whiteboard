@@ -40,7 +40,7 @@ export const OPERATOR_ISSUED_KINDS = [
 ] as const satisfies readonly ResolvedGrant['kind'][]
 
 export type WorkspaceAccessDecision = 'admitted' | 'requires_person_session' | 'not_a_member'
-type MembershipDenial = Exclude<WorkspaceAccessDecision, 'admitted'>
+export type MembershipDenial = Exclude<WorkspaceAccessDecision, 'admitted'>
 
 export interface WorkspaceAccessOptions {
   /** ADR-0046 decision 10: on a keeper many people sign in to, a workspace

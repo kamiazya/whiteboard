@@ -8,6 +8,7 @@ import {
   provisionBearerPerson,
 } from './bearer-provisioning.js'
 import type { ResolvedGrant } from './credential-resolver.js'
+import { runAsMcpCaller } from './mcp-caller.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { membershipRefusalFor, rememberGrant } from './membership-gate.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
@@ -155,6 +156,23 @@ export function createServerModeApiAuthMiddleware(
       membersOnlyByDefault: true,
     })
     return refused ?? next()
+  }
+}
+
+/**
+ * Server mode's `/mcp` with people wired: the bearer decides, as before, and
+ * the tool calls it carries run as that caller, so `gatedByMembership` can
+ * refuse a workspace the caller is not in. MCP clients carry bearers; a
+ * browser session is not an MCP credential.
+ */
+export function createServerModeMcpAuthMiddleware(
+  authStrategy: AsyncAuthStrategy,
+  people: ServerModePeople,
+): MiddlewareHandler {
+  return async (c, next) => {
+    const resolved = await bearerGrant(c, authStrategy, ['mcp:call'], people)
+    if ('refusal' in resolved) return buildServerModeAuthFailResponse(resolved.refusal)
+    await runAsMcpCaller({ grant: resolved.grant, members: people.members }, next)
   }
 }
 

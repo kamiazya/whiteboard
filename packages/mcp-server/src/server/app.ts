@@ -68,6 +68,7 @@ import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   createServerModeApiAuthMiddleware,
   createServerModeAsyncAuthMiddleware,
+  createServerModeMcpAuthMiddleware,
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
@@ -318,7 +319,12 @@ function mountMcpMiddleware(
     if (plan.ok && plan.kind === 'server-mode') {
       app.use('/mcp', createServerModeOriginMiddleware(plan.allowedOrigins))
     }
-    app.use('/mcp', createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call']))
+    app.use(
+      '/mcp',
+      options.people === undefined
+        ? createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call'])
+        : createServerModeMcpAuthMiddleware(options.authStrategy, options.people),
+    )
   } else {
     app.use('/mcp', createMcpHttpOriginMiddleware(options.allowedWebOrigins ?? []))
     app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
