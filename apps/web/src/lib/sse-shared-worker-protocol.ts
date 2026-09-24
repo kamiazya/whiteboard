@@ -60,6 +60,10 @@ export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   // daemon frame relayed verbatim): this one has been through the replica, so
   // it is ordered and deduplicated against everything else the worker knows.
   z.object({ type: z.literal('authority-update'), doc: z.string(), update: z.string() }),
+  // Whether the keeper has taken every edit a tab handed the worker for this
+  // document. A tab's push returns at once, so this is the only way it can
+  // learn that a write failed — or that the worker's retry has since landed.
+  z.object({ type: z.literal('write-state'), doc: z.string(), landed: z.boolean() }),
 ])
 
 export type SseWorkerRequest = z.infer<typeof sseWorkerRequestSchema>

@@ -139,6 +139,13 @@ export interface DocListener {
    * Optional because a caller that only applies updates has no use for it.
    */
   onConnectionChange?: (connected: boolean) => void
+  /**
+   * Whether the authority has taken every edit handed to `push` for this
+   * document. Only a source whose `push` resolves before the write lands —
+   * the SharedWorker-backed one — has anything to say here; the hub's push
+   * rejects instead, which already tells its caller.
+   */
+  onWriteState?: (landed: boolean) => void
 }
 
 /**

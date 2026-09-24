@@ -312,6 +312,51 @@ describe('SseBackend', () => {
   })
 })
 
+describe('SseBackend through a source whose push returns before the write lands', () => {
+  // The SharedWorker-backed source resolves a push at once and writes onward
+  // itself, so the only way this page hears that the keeper refused the write
+  // is the source telling it. Without passing that on, the editor reads saved
+  // over an edit that exists nowhere but this tab.
+  it('reports a write that did not land, and its landing once the retry succeeds', async () => {
+    const fake = createFakeTransport([])
+    const { handlers } = createHandlers()
+    const errors: string[] = []
+    let landed = 0
+    const listeners: { onWriteState?: (landed: boolean) => void }[] = []
+    const source = {
+      subscribe: (_doc: string, listener: { onWriteState?: (landed: boolean) => void }) => {
+        listeners.push(listener)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () => Promise.resolve(null),
+    }
+    const backend = new SseBackend(
+      'ws-1',
+      'canvas-a',
+      'http://127.0.0.1:3099',
+      fake.transport,
+      source,
+    )
+    backend.connect({
+      ...handlers,
+      onError: (reason) => errors.push(reason),
+      onWritesLanded: () => {
+        landed += 1
+      },
+    })
+    await flush()
+
+    for (const l of listeners) l.onWriteState?.(false)
+    expect(errors).toEqual(['storage-failure'])
+
+    for (const l of listeners) l.onWriteState?.(true)
+    expect(landed).toBe(1)
+    backend.disconnect()
+  })
+})
+
 describe('SseBackend workspace granularity', () => {
   it('seeds from the workspace-document snapshot, takes binary only at workspace granularity, and keeps per-document text', async () => {
     const fake = createFakeTransport([])

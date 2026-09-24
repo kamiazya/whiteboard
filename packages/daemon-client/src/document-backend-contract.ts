@@ -94,6 +94,13 @@ export interface DocumentBackendHandlers {
    */
   onDisconnected?: () => void
   /**
+   * Every write this backend had outstanding has now reached the keeper,
+   * after an `onError('storage-failure')`. Optional because only a backend
+   * that retries on its own — the SharedWorker-backed SSE one — can say it;
+   * elsewhere a later push resolving is what clears the failure.
+   */
+  onWritesLanded?: () => void
+  /**
    * Optional: called when the server closes the WebSocket with code 1008
    * (Policy Violation / auth failure). The backend will NOT retry — the caller
    * should surface an error state so the user can re-authenticate.
