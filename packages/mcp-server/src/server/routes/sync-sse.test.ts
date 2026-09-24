@@ -7,10 +7,19 @@
 // The initial snapshot is NOT carried here: GET /api/w/:ws/document/:path/snapshot
 // already serves it as binary, and routing the largest payload through SSE
 // would only add base64 inflation. This stream carries incremental updates.
-import { afterEach, describe, expect, it } from 'vitest'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createApp } from '../app.js'
 import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-sse.js'
 import { sendHeadChanged, sendViewportRequest, setResolveViewportFn } from './ws.js'
+
+// Its own data dir: opening a stream opens the store, and a store shared with
+// another file running in parallel waits on that file's lock until timeout.
+setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-transport-')))
+afterAll(() => resetDataDirForTests())
 
 // Both registries are module-level and outlive a single app instance, so a
 // stream opened here would otherwise stay subscribed for the rest of the run

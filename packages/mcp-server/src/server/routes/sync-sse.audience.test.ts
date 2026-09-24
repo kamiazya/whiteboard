@@ -8,23 +8,18 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { createApp } from '../app.js'
+import { captureLogsForTests } from '../log.js'
+import { resetSyncStreamsForTests } from './sync-sse.js'
+import { subscribedWorkspaceIds } from './ws.js'
 
-// Its own data dir: the app opens the store, and sharing the default one with
-// another file running in parallel is a locked database.
-const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-audience-'))
-vi.mock('../config.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../config.js')>()),
-  get DATA_DIR() {
-    return dataDir
-  },
-  getDataDir: () => dataDir,
-}))
-
-const { createApp } = await import('../app.js')
-const { captureLogsForTests } = await import('../log.js')
-const { resetSyncStreamsForTests } = await import('./sync-sse.js')
-const { subscribedWorkspaceIds } = await import('./ws.js')
+// Its own data dir, through the seam every reader goes through: opening a
+// stream opens the store, and a store shared with another file running in
+// parallel waits on that file's lock until the test times out.
+setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-audience-')))
+afterAll(() => resetDataDirForTests())
 
 afterEach(() => resetSyncStreamsForTests())
 
