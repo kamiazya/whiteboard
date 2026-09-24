@@ -6,9 +6,11 @@
  * back to the workspace list, the open document's sync state, and who is
  * signed in.
  */
-import { useState, useSyncExternalStore } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
 import { notKeepingAnnouncement } from '../../lib/connection-state.js'
+import { listMemberWorkspaces, type MemberWorkspace } from '../../lib/member-workspaces.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
 import { connectionLabel } from '../connection/ConnectionStatus.js'
 import { Button } from '../ui/button.js'
@@ -40,6 +42,48 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
   )
 }
 
+/**
+ * The person's other workspaces, one step away. A native select: it is a
+ * list of names with one current, which is exactly what the element is, and
+ * it brings keyboard and screen-reader behaviour with it. Absent until the
+ * list arrives, and when there is nothing to switch to.
+ */
+function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
+  const navigate = useNavigate()
+  const current = parseWorkspaceRoute(useLocation().pathname)?.workspace
+  const [workspaces, setWorkspaces] = useState<MemberWorkspace[]>([])
+  useEffect(() => {
+    let live = true
+    void listMemberWorkspaces(fetchFn).then((list) => {
+      if (live && list !== 'unavailable') setWorkspaces(list)
+    })
+    return () => {
+      live = false
+    }
+  }, [fetchFn])
+  if (workspaces.length < 2) return null
+  // The address may name a workspace by its segment rather than its id.
+  const selected =
+    workspaces.find((w) => w.workspaceId === current || w.segment === current)?.workspaceId ?? ''
+  return (
+    <label className="flex min-w-0 items-center">
+      <span className="sr-only">Workspace</span>
+      <select
+        value={selected}
+        onChange={(e) => navigate(workspacePath(e.target.value))}
+        className="max-w-48 truncate rounded-md border bg-background px-2 py-1 text-sm"
+      >
+        {selected === '' && <option value="" disabled />}
+        {workspaces.map((w) => (
+          <option key={w.workspaceId} value={w.workspaceId}>
+            {w.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 export function ServerModeShell({ displayName, fetchFn }: { displayName: string; fetchFn: Fetch }) {
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
@@ -49,6 +93,7 @@ export function ServerModeShell({ displayName, fetchFn }: { displayName: string;
       <Link to="/" className="text-muted-foreground hover:text-foreground">
         All workspaces
       </Link>
+      <WorkspacePicker fetchFn={fetchFn} />
       <span className="text-muted-foreground">{label ?? ''}</span>
       {/* Mounted even when empty: a live region inserted with its text
           already in it is not announced. */}

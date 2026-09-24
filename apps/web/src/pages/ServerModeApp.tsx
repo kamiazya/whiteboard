@@ -6,7 +6,6 @@
  * Sign in, accept an invitation, see the workspaces you are a member of, and
  * open one in the editor (`ServerModeWorkspace`), or sign out.
  */
-import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   type SignInProvidersResponse,
   signInProvidersResponseSchema,
@@ -18,6 +17,7 @@ import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ServerModeShell, SignOutControl } from '../components/server-mode/ServerModeShell.js'
 import { buttonVariants } from '../components/ui/button.js'
 import { workspacePath } from '../lib/app-routes.js'
+import { listMemberWorkspaces, type MemberWorkspace } from '../lib/member-workspaces.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
 import { ServerModeWorkspace } from './ServerModeWorkspace.js'
 
@@ -112,23 +112,13 @@ interface Signed {
   displayName: string
   // 'unavailable': the session is real and the list failed — a person who is
   // signed in must not be sent to sign in again, or they loop.
-  workspaces: { workspaceId: string; name: string }[] | 'unavailable'
+  workspaces: MemberWorkspace[] | 'unavailable'
 }
 
 async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
   const session = signInSessionResponseSchema.parse(await (await fetchFn('/auth/session')).json())
   if (!session.signedIn) return null
-  const res = await fetchFn('/api/workspaces').catch(() => null)
-  // An error answer fails the schema like any malformed one.
-  const parsed = res && listWorkspacesResponseSchema.safeParse(await res.json().catch(() => null))
-  if (!parsed?.success) return { displayName: session.user.displayName, workspaces: 'unavailable' }
-  return {
-    displayName: session.user.displayName,
-    workspaces: parsed.data.workspaces.map((w) => ({
-      workspaceId: w.workspaceId,
-      name: w.displayName ?? w.segment ?? w.workspaceId,
-    })),
-  }
+  return { displayName: session.user.displayName, workspaces: await listMemberWorkspaces(fetchFn) }
 }
 
 function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {

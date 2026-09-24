@@ -182,6 +182,24 @@ describe('server mode opens a workspace', () => {
 })
 
 describe('server mode inside a workspace', () => {
+  it("switches to another of the person's workspaces from the shell", async () => {
+    renderAt('/w/ws-1', {
+      signedIn: 'Ada',
+      workspaces: [
+        { workspaceId: 'ws-1', displayName: 'Plans' },
+        { workspaceId: 'ws-2', displayName: 'Roadmap' },
+      ],
+    })
+    const picker = (await screen.findByRole('combobox', {
+      name: /workspace/i,
+    })) as HTMLSelectElement
+    await waitFor(() => expect(picker.value).toBe('ws-1'))
+    expect([...picker.options].map((o) => o.textContent)).toEqual(['Plans', 'Roadmap'])
+
+    fireEvent.change(picker, { target: { value: 'ws-2' } })
+    await waitFor(() => expect(opened.at(-1)?.props).toMatchObject({ workspace: 'ws-2' }))
+  })
+
   it('leads back to the workspace list', async () => {
     renderAt('/w/ws-1', { signedIn: 'Ada' })
     const back = await screen.findByRole('link', { name: /all workspaces/i })
