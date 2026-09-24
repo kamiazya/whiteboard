@@ -136,10 +136,15 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
     'a frame a CLIENT sends, so this package is the reader alone. The frames the daemon emits are ' +
       "round-tripped by server/routes/ws-emitters.property.test.ts against the browser's own parser",
   ),
+  'server/security/sign-in-config-file.ts': notModelled(
+    'the sign-in configuration an OPERATOR writes; this package reads it and never writes it, so ' +
+      'there is no writer to round-trip against. sign-in-config.test.ts refuses each malformed ' +
+      'shape the schema must, and sign-in-config-file.test.ts reads JSON and YAML files through it',
+  ),
   'server/security/member-profile-store.ts': notModelled(
     "a passkey binding's subject, the [origin, credentialId] pair the same store writes with " +
       'JSON.stringify and reads back: member-profile-store.test.ts round-trips ensureProfile ' +
-      'through profileForCredential and listMembers, and 0032-accounts.test.ts pins the encoding ' +
+      'through profileForBinding and listMembers, and 0032-accounts.test.ts pins the encoding ' +
       'the migration wrote for existing credentials',
   ),
   'server/store/version-store.ts': notModelled(

@@ -55,17 +55,28 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 // chip and the shell mark, 23 -> 19 with four of its own scripts, 19 -> 14
 // with the build and smoke leftovers, 14 -> 13 with the markdown block
 // layout, 13 -> 12 with the storage report card, 12 -> 10 with the version
-// layout, 13 -> 12 with the storage report card, 12 -> 10 with the version
 // timeline and the comments panel, 10 -> 7 with the boundary scanner, the
 // cycle check and the mkdir lock, 7 -> 6 with the spatial editor, 6 -> 5
-// with the app root, and 5 -> 2 with the three MCP smoke scripts: the comment
-// asks for the ceiling to follow an obvious gap, and a paydown that leaves
-// slack is exactly one.
+// with the app root, 5 -> 2 with the three MCP smoke scripts, and 2 -> 0
+// with the shell and the markdown editor.
 //
-// Two is where this programme ENDS rather than pauses. Both files left were
-// measured and deliberately kept (see the floor's note below), so the next
-// move on either is a judgement about that file, not another sweep.
-const EXEMPT_CEILING = 2
+// ZERO, so the list's meaning inverts: it stopped being a debt to shrink and
+// became a state to hold. Every `.ts`/`.tsx`/`.mjs` file outside tests is
+// under the threshold, and adding a path here now fails until someone raises
+// this number deliberately — which is what the ceiling was always for, at
+// the one value where it has teeth on every file rather than on the ones
+// nobody listed.
+//
+// The last two were the interesting ones, and how they fell is worth the
+// three lines. `AppShell.tsx` had resisted FOUR slot extractions (21 -> 18
+// -> 16 -> 16 -> 16) because lifting a slot leaves behind the condition that
+// decides whether to render it; what moved it was noticing the component has
+// two MODES — the chrome row and fullscreen's floating way back — and that
+// "the switcher's rows and what the address says about them" was one concern
+// spread over a state, an effect, two derivations and two callbacks.
+// `MarkdownEditor.tsx` was 25, of which a `return null` probe put 15 in the
+// JSX; its two COLUMNS carried that, and they are components now.
+const EXEMPT_CEILING = 0
 
 function exemptions(): string[] {
   const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8')) as {
@@ -94,21 +105,20 @@ describe('the cognitive-complexity exemption list', () => {
 
   it('names only files that still exceed the threshold — a paid-down file leaves the list', () => {
     const paths = exemptions().map((glob) => glob.slice(1))
-    // The list is the subject: an empty one would pass every assertion below
-    // while measuring nothing. The floor was 50 while the list was in the
-    // hundreds, then 20 as the paydown passed 48, then 5, then 3. It moves
-    // again for the same reason and by the same rule — to a number that
-    // still means "not vacuous" rather than one the programme has to stop
-    // at. Lower it again when it is in the way; never delete it, or the
-    // guard stops measuring the moment the list empties.
+    // No floor any more, and DELETED rather than lowered to zero, which is
+    // what this comment said to do when the day came.
     //
-    // One is the end of the road for lowering: the two files left were each
-    // MEASURED and deliberately kept — `AppShell.tsx` (21 -> 16 over four
-    // extractions, issues/app-shell-complexity-resists-slot-extraction) and
-    // `MarkdownEditor.tsx` (issues/markdown-editor-complexity-is-its-jsx).
-    // If either is ever paid down, delete this guard's floor along with the
-    // list rather than lowering it to zero.
-    expect(paths.length).toBeGreaterThan(1)
+    // A floor answered "did the list quietly empty while nobody was
+    // looking?" — the failure mode of a guard whose subject can vanish. The
+    // ceiling at 0 above answers that now, and answers it better: the list
+    // is not merely non-vacuous, it is EMPTY, and the next entry has to
+    // raise a number to get in. Keeping a floor beside a ceiling of zero
+    // would be asserting that the list must not be in the state the file
+    // one screen up declares it to be in.
+    //
+    // What stays is the check itself, vacuous today by construction: the
+    // first entry anyone adds is measured, so an exemption cannot be
+    // written for a file that does not need one.
     const over = filesOverThreshold(paths)
     expect(paths.filter((path) => !over.has(path))).toEqual([])
   })

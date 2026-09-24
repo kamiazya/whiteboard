@@ -10,18 +10,25 @@
 
 import { resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { getLogger } from '../server/log.js'
 import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
 import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
 import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
+import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
 import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
-import { ENV_KEYS, parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
+import {
+  ENV_KEYS,
+  parseServerModeEnvConfig,
+  type ServerModeEnvConfigResult,
+} from '../server/security/server-mode-env-config.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import {
   deleteServerModeRecord,
   SERVER_MODE_RECORD_SCHEMA_VERSION,
   writeServerModeRecord,
 } from '../server/security/server-mode-record.js'
+import { loadSignInProviders, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
@@ -53,6 +60,21 @@ interface StartServerOptions {
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy
+  signInProviders?: readonly ConfiguredProvider[]
+}
+
+const log = getLogger('server-run')
+
+function signInProvidersFrom(env: NodeJS.ProcessEnv): ConfiguredProvider[] | null {
+  const path = env[SIGN_IN_CONFIG_ENV]
+  if (path === undefined || path === '') return []
+  try {
+    return loadSignInProviders(path, env)
+  } catch (err) {
+    // The loader's message names the setting at fault, never a secret value.
+    log.error({ err }, 'the sign-in configuration cannot be used')
+    return null
+  }
 }
 
 interface ServerModeRunning {
@@ -105,6 +127,22 @@ function mergeCliFlagsIntoEnv(
   return env
 }
 
+// The bearer path MCP clients and API callers use: an access token from the
+// one configured issuer, validated against its JWKS.
+function bearerAuthStrategy(
+  config: Extract<ServerModeEnvConfigResult, { ok: true }>['config'],
+): AsyncAuthStrategy {
+  const validator = createOAuthJwtValidator({
+    issuer: config.jwtIssuer,
+    audience: [...config.jwtAudience],
+    clockSkewSeconds: config.jwtClockSkewSeconds,
+    scopeClaim: config.jwtScopeClaim,
+    allowUntypedAccessTokens: config.jwtAllowUntypedAccessTokens,
+    keyResolver: createJwksKeyResolver(config.jwksUri),
+  })
+  return createOAuthResourceServerAuthStrategy({ validator })
+}
+
 export async function runServerRun(options: RunServerRunOptions): Promise<ServerRunOutcome> {
   const env = mergeCliFlagsIntoEnv(options.env ?? process.env, options.flags)
   const writeFn = options.writeRecord ?? writeServerModeRecord
@@ -145,6 +183,11 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     return { kind: 'plan-error', code: plan.code }
   }
 
+  const signInProviders = signInProvidersFrom(env)
+  if (signInProviders === null) {
+    return { kind: 'config-error', code: 'sign_in_config.invalid', field: SIGN_IN_CONFIG_ENV }
+  }
+
   if (options.flags.dryRun) {
     return {
       kind: 'dry-run-ok',
@@ -165,16 +208,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     process.env.WHITEBOARD_DATA_DIR = parsed.config.dataDir
   }
 
-  const keyResolver = createJwksKeyResolver(parsed.config.jwksUri)
-  const validator = createOAuthJwtValidator({
-    issuer: parsed.config.jwtIssuer,
-    audience: [...parsed.config.jwtAudience],
-    clockSkewSeconds: parsed.config.jwtClockSkewSeconds,
-    scopeClaim: parsed.config.jwtScopeClaim,
-    allowUntypedAccessTokens: parsed.config.jwtAllowUntypedAccessTokens,
-    keyResolver,
-  })
-  const authStrategy = createOAuthResourceServerAuthStrategy({ validator })
+  const authStrategy = bearerAuthStrategy(parsed.config)
 
   // Use the injected factory (tests) or the real HTTP server (production).
   // Dynamic import defers loading server/config.js (which has mkdirSync at
@@ -190,6 +224,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
       publicBaseUrl: plan.publicBaseUrl,
       allowedOrigins: [...plan.allowedOrigins],
       authStrategy,
+      signInProviders,
     })
   } catch {
     // Startup failure (EADDRINUSE, permission, etc.). Discard the error

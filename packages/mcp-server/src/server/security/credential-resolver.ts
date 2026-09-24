@@ -35,12 +35,22 @@
 import { ALL_AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
 import { isAuthorized } from './bearer-token.js'
 import { verifyMacaroon } from './macaroon.js'
+import { type AuthenticatorBinding, passkeyBinding } from './member-profile-store.js'
 import type { OAuthTransactionStore } from './oauth-authz-transactions.js'
-import type { PairingTokenStore, PasskeyBinding } from './pairing-session.js'
+import type { PairingTokenStore } from './pairing-session.js'
 
 type GrantKind =
   /** No daemon token is configured, so every caller holds everything. */
-  'anonymous' | 'daemon-token' | 'oauth-grant' | 'pairing' | 'ws-ticket' | 'macaroon'
+  | 'anonymous'
+  | 'daemon-token'
+  | 'oauth-grant'
+  | 'pairing'
+  | 'ws-ticket'
+  | 'macaroon'
+  /** Server mode (ADR-0046): a session opened by signing in at this host. */
+  | 'signed-in'
+  /** Server mode: an access token from the configured issuer, naming a person. */
+  | 'external-bearer'
 
 export interface ResolvedGrant {
   readonly kind: GrantKind
@@ -52,11 +62,11 @@ export interface ResolvedGrant {
   readonly scopes: readonly AuthScope[]
   /** Who the credential names, where it names anyone (an OAuth client). */
   readonly subject?: string
-  /** Set only for a pairing token bound to a passkey (ADR-0041 S0-2) — a
-   *  session becomes a PERSON's session this way, never through `subject`,
-   *  which names an OAuth client rather than a person. Mapping this to a
-   *  MemberProfile is a later slice's job. */
-  readonly passkey?: PasskeyBinding
+  /** Who an authenticator vouched for, when the credential names a PERSON —
+   *  today a pairing token bound to a passkey (ADR-0041 S0-2). A session
+   *  becomes a person's session this way, never through `subject`, which
+   *  names an OAuth client rather than a person. */
+  readonly person?: AuthenticatorBinding
 }
 
 /**
@@ -132,7 +142,11 @@ const pairingAttempt: CredentialAttempt = (secret, { config, origin }) => {
   const passkey = config.pairingTokens.bindingOf(secret, normalized)
   return passkey === null
     ? { kind: 'pairing', scopes: ALL_AUTH_SCOPES }
-    : { kind: 'pairing', scopes: ALL_AUTH_SCOPES, passkey }
+    : {
+        kind: 'pairing',
+        scopes: ALL_AUTH_SCOPES,
+        person: passkeyBinding(passkey.origin, passkey.credentialId),
+      }
 }
 
 const macaroonAttempt: CredentialAttempt = async (secret, { config, now }) => {

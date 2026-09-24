@@ -345,6 +345,16 @@ describe('createOAuthJwtValidator — access token type discrimination', () => {
       requiredScopes: [],
     })
     expect(result.ok).toBe(true)
+    // Accepted for requests, but never mistaken for a typed token: creating a
+    // user from a bearer requires one (bearer-provisioning.ts).
+    expect(result.ok && result.typed).toBe(false)
+  })
+
+  it('reports a typed token as typed, with its verified claims', async () => {
+    const token = await buildToken({ scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+    expect(result.ok && result.typed).toBe(true)
+    expect(result.ok && typeof result.claims?.sub).toBe('string')
   })
 })
 

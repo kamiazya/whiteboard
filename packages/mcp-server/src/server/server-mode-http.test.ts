@@ -132,6 +132,65 @@ describe('startServerModeHttp', () => {
     })
   })
 
+  // ADR-0046 decision 10: membership is enforced for every request with a
+  // person behind it, bearer included, so the stores reach the app even when
+  // no sign-in provider is configured.
+  it('hands the app its member and session stores with no sign-in provider', async () => {
+    const startPromise = startServerModeHttp(makeOptions())
+    const server = await serverOnceServing()
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    const passedOptions = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+    expect(passedOptions?.people?.members).toBeDefined()
+    expect(passedOptions?.people?.sessions).toBeDefined()
+    expect(passedOptions).not.toHaveProperty('signIn')
+    expect(passedOptions?.people).not.toHaveProperty('bearerProvisioning')
+  })
+
+  // A provider with no client admits bearers and signs nobody in with a browser.
+  it('mounts no sign-in route for a bearer-only provider, but provisions its bearers', async () => {
+    const bearerOnly = {
+      id: 'corp-mcp',
+      kind: 'oidc' as const,
+      issuer: 'https://idp.test',
+      scopes: ['openid'],
+      admission: {
+        createAccounts: true,
+        honourEmailInvitations: false,
+        bearerClients: ['claude-code'],
+      },
+    }
+    const startPromise = startServerModeHttp({ ...makeOptions(), signInProviders: [bearerOnly] })
+    const server = await serverOnceServing()
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    const passedOptions = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+    expect(passedOptions).not.toHaveProperty('signIn')
+    expect(passedOptions?.people?.bearerProvisioning?.providers).toEqual([bearerOnly])
+  })
+
+  it('lets bearers from a declared provider become users through its rules', async () => {
+    const provider = {
+      id: 'corp',
+      kind: 'oidc' as const,
+      issuer: 'https://idp.test',
+      clientId: 'wb',
+      clientSecret: { env: 'CORP_SECRET' },
+      scopes: ['openid'],
+      admission: { createAccounts: true, honourEmailInvitations: false },
+      clientSecretValue: 's3cret',
+    }
+    const startPromise = startServerModeHttp({ ...makeOptions(), signInProviders: [provider] })
+    const server = await serverOnceServing()
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    const passedOptions = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+    expect(passedOptions?.people?.bearerProvisioning?.providers).toEqual([provider])
+  })
+
   /**
    * Server mode is the MULTI-INSTANCE deployment, and until this it was the
    * one taking no garbage collection at all — uploads that no document

@@ -226,7 +226,12 @@ async function verifiedPayload(
   token: string,
   settings: ValidatorSettings,
 ): Promise<
-  | { readonly kind: 'payload'; readonly payload: Record<string, unknown> }
+  | {
+      readonly kind: 'payload'
+      readonly payload: Record<string, unknown>
+      /** Whether the token declared itself an access token, whatever the setting. */
+      readonly typed: boolean
+    }
   | { readonly kind: 'refusal'; readonly result: OAuthResourceTokenValidationResult }
 > {
   let resolverFailed = false
@@ -251,10 +256,9 @@ async function verifiedPayload(
       requiredClaims: ['exp'],
     })
     const payload = verified.payload as Record<string, unknown>
-    if (settings.allowUntypedAccessTokens) return { kind: 'payload', payload }
     const typed = isAccessTokenTyped(verified.protectedHeader.typ) || payload.token_use === 'access'
-    return typed
-      ? { kind: 'payload', payload }
+    return typed || settings.allowUntypedAccessTokens
+      ? { kind: 'payload', payload, typed }
       : { kind: 'refusal', result: { ok: false, reason: 'not_access_token' } }
   } catch (err) {
     return { kind: 'refusal', result: refusalFor(err, resolverFailed) }
@@ -267,7 +271,7 @@ async function validateToken(
 ): Promise<OAuthResourceTokenValidationResult> {
   const verified = await verifiedPayload(input.token, settings)
   if (verified.kind === 'refusal') return verified.result
-  const { payload } = verified
+  const { payload, typed } = verified
 
   if (typeof payload.sub !== 'string' || payload.sub === '') {
     return { ok: false, reason: 'malformed' }
@@ -286,5 +290,7 @@ async function validateToken(
     audience: audienceList(settings.audience),
     scopes,
     expiresAt: typeof payload.exp === 'number' ? payload.exp : undefined,
+    claims: payload,
+    typed,
   }
 }

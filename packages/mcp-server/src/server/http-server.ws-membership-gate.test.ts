@@ -22,7 +22,7 @@ import {
   WEBAUTHN_FLAG_UV,
 } from '../shared/test-utils/webauthn-fixtures.js'
 import { type RunningServer, startHttpServer } from './http-server.js'
-import { createMemberProfileStore } from './security/member-profile-store.js'
+import { createMemberProfileStore, passkeyBinding } from './security/member-profile-store.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { getDb } from './store/db/index.js'
 import { tenantRoot } from './tenant/data-layout.js'
@@ -114,8 +114,7 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
     // handle in the URL directly.
     const members = createMemberProfileStore(await getDb(dir))
     const profile = await members.ensureProfile({
-      origin: HOSTED,
-      credentialId: 'gating-member-cred',
+      binding: passkeyBinding(HOSTED, 'gating-member-cred'),
       displayName: 'Gating Member',
     })
     await members.addMember('ws-member-gated', profile.id)
@@ -157,8 +156,7 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
     // A gating member distinct from the bound session below, so the
     // workspace stays member-gated rather than reverting to origin trust.
     const gatingProfile = await members.ensureProfile({
-      origin: HOSTED,
-      credentialId: 'gating-member-cred',
+      binding: passkeyBinding(HOSTED, 'gating-member-cred'),
       displayName: 'Gating Member',
     })
     await members.addMember('ws-member-gated', gatingProfile.id)
@@ -182,8 +180,7 @@ describe('startHttpServer WS upgrade membership gate (S8 slice 2)', () => {
     const members = createMemberProfileStore(await getDb(dir))
     const session = await bindSession(port, HOSTED)
     const profile = await members.ensureProfile({
-      origin: HOSTED,
-      credentialId: session.credentialId,
+      binding: passkeyBinding(HOSTED, session.credentialId),
       displayName: 'Ada',
     })
     await members.addMember('ws-member-gated', profile.id)

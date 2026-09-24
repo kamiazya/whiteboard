@@ -27,14 +27,15 @@ import {
 import { captureLogsForTests } from '../log.js'
 import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
-import { createMemberProfileStore } from '../security/member-profile-store.js'
+import { createMemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
+import { membershipAdmit } from '../security/membership-gate.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
 import { tenantRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { createDaemonAuthMiddleware, membershipAdmit } from './auth.js'
+import { createDaemonAuthMiddleware } from './auth.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
@@ -199,8 +200,7 @@ async function bindSession(fixture: Fixture) {
  *  without this, a workspace with zero members admits everyone (S8). */
 async function addGatingMember(fixture: Fixture, workspaceId = WS) {
   const profile = await fixture.members.ensureProfile({
-    origin: HOSTED,
-    credentialId: 'gating-member-cred',
+    binding: passkeyBinding(HOSTED, 'gating-member-cred'),
     displayName: 'Gating Member',
   })
   await fixture.members.addMember(workspaceId, profile.id)
@@ -251,8 +251,7 @@ describe.for(Object.entries(GATED_CLAIMS))('gated row %s', ([name, [method, path
     const fixture = await makeApp()
     const session = await bindSession(fixture)
     const profile = await fixture.members.ensureProfile({
-      origin: HOSTED,
-      credentialId: session.credentialId,
+      binding: passkeyBinding(HOSTED, session.credentialId),
       displayName: 'Ada',
     })
     await fixture.members.addMember(WS, profile.id)
@@ -287,8 +286,7 @@ describe('an undecodable workspace handle segment fails closed', () => {
     const fixture = await makeApp()
     const session = await bindSession(fixture)
     const profile = await fixture.members.ensureProfile({
-      origin: HOSTED,
-      credentialId: session.credentialId,
+      binding: passkeyBinding(HOSTED, session.credentialId),
       displayName: 'Ada',
     })
     await fixture.members.addMember(WS, profile.id)
@@ -317,7 +315,7 @@ describe('the middleware logs a refusal with fields, and nothing on admission', 
       const res = await fixture.app.request(`/api/workspaces/${WS}`, { headers: bearer(token) })
       expect(res.status).toBe(403)
       const refusal = capture.records.find(
-        (r) => r.msg === 'membership refused' && r.scope === 'daemon-auth',
+        (r) => r.msg === 'membership refused' && r.scope === 'membership-gate',
       )
       expect(refusal?.data).toMatchObject({
         workspaceId: WS,
@@ -368,8 +366,7 @@ describe('SSE transport membership gate', () => {
     const fixture = await makeApp()
     const session = await bindSession(fixture)
     const profile = await fixture.members.ensureProfile({
-      origin: HOSTED,
-      credentialId: session.credentialId,
+      binding: passkeyBinding(HOSTED, session.credentialId),
       displayName: 'Ada',
     })
     await fixture.members.addMember(WS, profile.id)
@@ -387,8 +384,7 @@ describe('SSE transport membership gate', () => {
     const fixture = await makeApp()
     const session = await bindSession(fixture)
     const profile = await fixture.members.ensureProfile({
-      origin: HOSTED,
-      credentialId: session.credentialId,
+      binding: passkeyBinding(HOSTED, session.credentialId),
       displayName: 'Ada',
     })
     await fixture.members.addMember(WS, profile.id)
@@ -447,8 +443,7 @@ describe('the online revoke: L1 removal refuses the next live request (smoke che
 
     const session = await bindSession(fixture)
     const adaProfile = await fixture.members.ensureProfile({
-      origin: HOSTED,
-      credentialId: session.credentialId,
+      binding: passkeyBinding(HOSTED, session.credentialId),
       displayName: 'Ada',
     })
     await fixture.members.addMember(WS, adaProfile.id)
@@ -504,8 +499,7 @@ describe('removing a workspace’s SOLE member stays person-gated (S12, user dec
   it('an origin-only session is refused after the last member is removed, and the workspace is absent from the list', async () => {
     const fixture = await makeApp()
     const profile = await fixture.members.ensureProfile({
-      origin: HOSTED,
-      credentialId: 'sole-member-cred',
+      binding: passkeyBinding(HOSTED, 'sole-member-cred'),
       displayName: 'Ada',
     })
     await fixture.members.addMember(WS, profile.id)

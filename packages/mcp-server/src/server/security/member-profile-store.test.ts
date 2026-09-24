@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
+import {
+  createMemberProfileStore,
+  type MemberProfileStore,
+  passkeyBinding,
+} from './member-profile-store.js'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -21,18 +25,17 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-describe('profileForCredential', () => {
+describe('profileForBinding', () => {
   it('is null for an unknown (origin, credentialId)', async () => {
-    expect(await store.profileForCredential('https://a.example', 'cred-1')).toBeNull()
+    expect(await store.profileForBinding(passkeyBinding('https://a.example', 'cred-1'))).toBeNull()
   })
 
   it('returns the profile once ensureProfile has claimed the credential', async () => {
     const minted = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
-    const found = await store.profileForCredential('https://a.example', 'cred-1')
+    const found = await store.profileForBinding(passkeyBinding('https://a.example', 'cred-1'))
     expect(found).toEqual(minted)
   })
 })
@@ -40,13 +43,11 @@ describe('profileForCredential', () => {
 describe('ensureProfile', () => {
   it('mints once and reuses on a second call for the same credential', async () => {
     const first = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     const second = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'someone else entirely',
     })
     expect(second.id).toBe(first.id)
@@ -55,13 +56,11 @@ describe('ensureProfile', () => {
 
   it('treats the same credentialId under two different origins as independent claims', async () => {
     const a = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     const b = await store.ensureProfile({
-      origin: 'https://b.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://b.example', 'cred-1'),
       displayName: 'Bea',
     })
     expect(b.id).not.toBe(a.id)
@@ -71,8 +70,7 @@ describe('ensureProfile', () => {
 describe('addMember / listMembers', () => {
   it('is idempotent and listMembers returns the profile with its credentials', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -90,14 +88,12 @@ describe('addMember / listMembers', () => {
     try {
       vi.setSystemTime(1_000)
       const ada = await store.ensureProfile({
-        origin: 'https://a.example',
-        credentialId: 'cred-1',
+        binding: passkeyBinding('https://a.example', 'cred-1'),
         displayName: 'Ada',
       })
       vi.setSystemTime(2_000)
       const bea = await store.ensureProfile({
-        origin: 'https://b.example',
-        credentialId: 'cred-2',
+        binding: passkeyBinding('https://b.example', 'cred-2'),
         displayName: 'Bea',
       })
 
@@ -119,8 +115,7 @@ describe('addMember / listMembers', () => {
 describe('revokeL1Membership', () => {
   it('deletes the membership and returns the credentials it affected', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -138,8 +133,7 @@ describe('revokeL1Membership', () => {
 
   it('has no tombstone — a following addMember re-admits the profile', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -166,8 +160,7 @@ describe('reopenToOriginTrust', () => {
 
   it('clears the gate a revoke deliberately leaves standing', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -183,8 +176,7 @@ describe('reopenToOriginTrust', () => {
 
   it('leaves the memberships themselves alone', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -200,8 +192,7 @@ describe('reopenToOriginTrust', () => {
 
   it('re-closes on the next addMember, rather than staying open', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -215,8 +206,7 @@ describe('reopenToOriginTrust', () => {
 
   it('does not reopen an unrelated workspace', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-a', profile.id)
@@ -236,8 +226,7 @@ describe('membersOnly', () => {
 
   it('is true after addMember, and stays true after revoking the only member', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -249,8 +238,7 @@ describe('membersOnly', () => {
 
   it('does not mark an unrelated workspace', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-a', profile.id)
@@ -261,8 +249,7 @@ describe('membersOnly', () => {
     vi.useFakeTimers()
     try {
       const profile = await store.ensureProfile({
-        origin: 'https://a.example',
-        credentialId: 'cred-1',
+        binding: passkeyBinding('https://a.example', 'cred-1'),
         displayName: 'Ada',
       })
       vi.setSystemTime(1_000)
@@ -288,8 +275,7 @@ describe('isWorkspaceMember', () => {
 
   it('is member after addMember and not-a-member after revokeL1Membership', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
@@ -301,8 +287,7 @@ describe('isWorkspaceMember', () => {
 
   it('scopes membership per workspace: a member of A is not-a-member of B', async () => {
     const profile = await store.ensureProfile({
-      origin: 'https://a.example',
-      credentialId: 'cred-1',
+      binding: passkeyBinding('https://a.example', 'cred-1'),
       displayName: 'Ada',
     })
     await store.addMember('ws-a', profile.id)
@@ -326,24 +311,36 @@ describe('accounts and users', () => {
 
   it('one credential in two tenants is one account and a separate user in each', async () => {
     const [home, other] = [storeFor(SELF_HOST_TENANT_ID), storeFor('tenant-two')]
-    const inHome = await home.ensureProfile({ ...claim, displayName: 'Ada at home' })
-    const inOther = await other.ensureProfile({ ...claim, displayName: 'Ada at work' })
+    const inHome = await home.ensureProfile({
+      binding: passkeyBinding(claim.origin, claim.credentialId),
+      displayName: 'Ada at home',
+    })
+    const inOther = await other.ensureProfile({
+      binding: passkeyBinding(claim.origin, claim.credentialId),
+      displayName: 'Ada at work',
+    })
 
     expect(inOther.id).not.toBe(inHome.id)
-    expect((await home.profileForCredential(claim.origin, claim.credentialId))?.displayName).toBe(
-      'Ada at home',
-    )
-    expect((await other.profileForCredential(claim.origin, claim.credentialId))?.displayName).toBe(
-      'Ada at work',
-    )
+    expect(
+      (await home.profileForBinding(passkeyBinding(claim.origin, claim.credentialId)))?.displayName,
+    ).toBe('Ada at home')
+    expect(
+      (await other.profileForBinding(passkeyBinding(claim.origin, claim.credentialId)))
+        ?.displayName,
+    ).toBe('Ada at work')
     expect(await count('accounts')).toBe(1)
     expect(await count('accountBindings')).toBe(1)
   })
 
   it('an account with no user in a tenant is nobody there', async () => {
-    await storeFor(SELF_HOST_TENANT_ID).ensureProfile({ ...claim, displayName: 'Ada' })
+    await storeFor(SELF_HOST_TENANT_ID).ensureProfile({
+      binding: passkeyBinding(claim.origin, claim.credentialId),
+      displayName: 'Ada',
+    })
     expect(
-      await storeFor('tenant-two').profileForCredential(claim.origin, claim.credentialId),
+      await storeFor('tenant-two').profileForBinding(
+        passkeyBinding(claim.origin, claim.credentialId),
+      ),
     ).toBeNull()
   })
 })

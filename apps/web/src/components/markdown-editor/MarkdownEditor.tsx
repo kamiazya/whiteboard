@@ -10,11 +10,8 @@ import {
   type Proposal,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { MessageSquare } from 'lucide-react'
 import {
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -43,21 +40,16 @@ import {
   completionPopupTheme,
   completionTouchAccept,
 } from './completion-popup.js'
-import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
+import { PreviewColumn, SourceColumn } from './editor-columns.js'
+import { editorLayout } from './editor-layout.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PassageProposalCard } from './PassageProposalCard.js'
-import { PreviewPane } from './PreviewPane.js'
-import {
-  previewWidth as computePreviewWidth,
-  previewColumnMaxWidth,
-  RAIL_WIDTH_PX,
-  railFits,
-  railScrollable,
-} from './preview-width.js'
-import { SourcePane, type SourcePaneApi } from './SourcePane.js'
+import { railScrollable } from './preview-width.js'
+import type { SourcePaneApi } from './SourcePane.js'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
+import { SplitDivider, useSplitDrag } from './split-divider.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
@@ -230,10 +222,6 @@ const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
  * synchronously re-parse and re-layout the whole document — the debounce
  * always settles on the latest value, never a stale intermediate one.
  */
-const MIN_SPLIT_RATIO = 0.2
-const MAX_SPLIT_RATIO = 0.8
-const KEYBOARD_SPLIT_STEP = 0.05
-const SPLIT_MIN_WIDTH = 640
 
 /**
  * Below this container width the catalog opens as a bottom sheet instead of
@@ -565,41 +553,15 @@ export function MarkdownEditor({
     return () => observer.disconnect()
   }, [])
 
-  const splitAvailable = containerWidth === null || containerWidth >= SPLIT_MIN_WIDTH
-  const effectiveMode: MarkdownViewMode = mode === 'split' && !splitAvailable ? 'write' : mode
+  const { splitAvailable, effectiveMode, railAffordable, previewWidth } = editorLayout({
+    containerWidth,
+    mode,
+    maxWidth,
+    splitRatio,
+    hasContent: debouncedValue.trim() !== '',
+  })
 
-  const clampRatio = (ratio: number) => Math.min(MAX_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, ratio))
-
-  const draggingRef = useRef(false)
-  const onDividerPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
-    draggingRef.current = true
-    // Capture keeps the drag alive when the pointer outruns the divider;
-    // a synthetic test event has no active pointer to capture, so a
-    // capture failure must not abort the drag itself.
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      // draggingRef alone still tracks the gesture
-    }
-  }
-  const onDividerPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return
-    const root = rootRef.current
-    if (!root) return
-    const bounds = root.getBoundingClientRect()
-    if (bounds.width <= 0) return
-    setSplitRatio(clampRatio((event.clientX - bounds.left) / bounds.width))
-  }
-  const onDividerPointerUp = () => {
-    draggingRef.current = false
-  }
-  const onDividerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-    event.preventDefault()
-    const delta = event.key === 'ArrowLeft' ? -KEYBOARD_SPLIT_STEP : KEYBOARD_SPLIT_STEP
-    setSplitRatio((current) => clampRatio(current + delta))
-  }
+  const divider = useSplitDrag(rootRef, setSplitRatio)
 
   // Scroll sync, source -> preview. Line-accurate: the preview render
   // reports each top-level block's source start line and laid-out Y (see
@@ -671,16 +633,6 @@ export function MarkdownEditor({
   // the preview does not get. Typesetting against the container's full width
   // instead overflows by exactly the rail — the document is then clipped at
   // the very edge the rail is drawn on.
-  const railAffordable = railFits(containerWidth)
-  const railWidth =
-    railAffordable && effectiveMode !== 'write' && debouncedValue.trim() !== '' ? RAIL_WIDTH_PX : 0
-  const previewWidth = computePreviewWidth({
-    containerWidth,
-    maxWidth,
-    railWidth,
-    splitRatio,
-    mode: effectiveMode,
-  })
 
   /**
    * Keeps the rail in step with the preview it maps.
@@ -937,130 +889,48 @@ export function MarkdownEditor({
             })}
       />
       <div className="flex min-h-0 flex-1">
-        <div
-          ref={sourceWrapRef}
-          data-testid="markdown-source-wrap"
-          style={{
-            display: effectiveMode === 'read' ? 'none' : 'flex',
-            flexBasis: effectiveMode === 'split' ? `${splitRatio * 100}%` : '100%',
-            minWidth: 0,
+        <SourceColumn
+          value={value}
+          onChange={onChange}
+          autoFocus={autoFocus}
+          mode={effectiveMode}
+          splitRatio={splitRatio}
+          linkTargets={linkTargets}
+          apiRef={sourceApiRef}
+          wrapRef={sourceWrapRef}
+          extensions={paneExtensions}
+          // A CRDT binding owns editor<->document sync; the controlled
+          // reconcile path would race it (see SourcePane).
+          reconcileExternalValue={sourceExtensions === undefined}
+          onRequestLinkPicker={() => {
+            const scope = sourceApiRef.current?.pinScope()
+            if (scope === undefined) return false
+            setLinkPicker({ query: scope.text, text: scope.text })
+            return true
           }}
-        >
-          <SourcePane
-            value={value}
-            onChange={onChange}
-            autoFocus={autoFocus}
-            onRequestLinkPicker={
-              linkTargets !== undefined && linkTargets.length > 0
-                ? () => {
-                    const scope = sourceApiRef.current?.pinScope()
-                    if (scope === undefined) return false
-                    setLinkPicker({ query: scope.text, text: scope.text })
-                    return true
-                  }
-                : undefined
-            }
-            apiRef={sourceApiRef}
-            placeholderText="Write in Markdown…"
-            className="markdown-editor-source"
-            extensions={paneExtensions}
-            // A CRDT binding owns editor<->document sync; the controlled
-            // reconcile path would race it (see SourcePane).
-            reconcileExternalValue={sourceExtensions === undefined}
-          />
-        </div>
-        {effectiveMode === 'split' && (
-          // biome-ignore lint/a11y/useSemanticElements: this is the ARIA window-splitter pattern (focusable, arrow-key operable separator); an <hr> cannot take focus or a value
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize editor and preview"
-            aria-valuenow={Math.round(splitRatio * 100)}
-            aria-valuemin={MIN_SPLIT_RATIO * 100}
-            aria-valuemax={MAX_SPLIT_RATIO * 100}
-            tabIndex={0}
-            data-testid="markdown-split-divider"
-            onPointerDown={onDividerPointerDown}
-            onPointerMove={onDividerPointerMove}
-            onPointerUp={onDividerPointerUp}
-            onKeyDown={onDividerKeyDown}
-            className="bg-border hover:bg-ring focus-visible:bg-ring w-1 shrink-0 cursor-col-resize touch-none transition-colors duration-(--motion-duration-fast) focus-visible:outline-none"
-          />
-        )}
+        />
+        {effectiveMode === 'split' && <SplitDivider ratio={splitRatio} {...divider} />}
         {effectiveMode !== 'write' && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: delegation for the SVG's native <a> elements — a focused anchor's Enter already dispatches the click this handler receives, so the keyboard path lives on the anchor, not this container
-          // biome-ignore lint/a11y/useKeyWithClickEvents: same rationale — the interactive element is the anchor inside, which is natively keyboard-activatable
-          <div
-            ref={previewScrollRef}
-            data-testid="markdown-preview-scroll"
-            className="min-w-0 flex-1 overflow-auto"
-            onClick={onPreviewClick}
-          >
-            <div
-              ref={previewInnerRef}
-              className="relative mx-auto px-6 py-8"
-              style={{ maxWidth: previewColumnMaxWidth(previewWidth) }}
-            >
-              {previewMarkers.map((marker) => (
-                <button
-                  key={marker.threadId}
-                  type="button"
-                  data-testid="comment-preview-marker"
-                  data-thread-id={marker.threadId}
-                  data-status={marker.status}
-                  aria-label={
-                    marker.messages > 1
-                      ? `Open comment, ${marker.messages} messages`
-                      : 'Open comment'
-                  }
-                  onClick={() => onSelectThread?.(marker.threadId)}
-                  // In the column's own left padding, on the block's top edge.
-                  style={{ top: marker.top }}
-                  className={cn(
-                    'comment-preview-marker absolute left-0 flex size-6 items-center justify-center rounded text-(--annotation) hover:bg-accent',
-                    marker.selected && 'bg-accent',
-                  )}
-                >
-                  <MessageSquare
-                    aria-hidden="true"
-                    className="size-3.5"
-                    fill={marker.selected ? 'currentColor' : 'none'}
-                    fillOpacity={0.35}
-                  />
-                  {/* Only past one. Read mode never shows the source, so this
-                      marker is all a reader has to judge a conversation by —
-                      but a digit beside every lone remark is noise, and the
-                      badge only says something once there is more than one.
-                      Corner-set rather than beside the icon: the column's
-                      left padding is exactly this button's width, so growing
-                      it sideways would run under the prose. */}
-                  {marker.messages > 1 ? (
-                    <span className="pointer-events-none absolute -top-0.5 -right-0.5 rounded-full bg-(--annotation) px-1 text-[9px] leading-[12px] text-background">
-                      {marker.messages}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-              {effectiveMode === 'read' && meta !== undefined && (
-                <DocumentHeader title={title} meta={meta} />
-              )}
-              {previewEmpty ? (
-                <p className="text-muted-foreground text-sm">Nothing to preview yet.</p>
-              ) : (
-                <PreviewPane
-                  value={debouncedValue}
-                  maxWidth={previewWidth}
-                  measure={resolvedMeasure}
-                  theme={theme}
-                  references={references}
-                  renderMath={renderMath}
-                  renderDiagram={renderDiagram}
-                  anchorsRef={anchorsRef}
-                  blocksRef={blocksRef}
-                />
-              )}
-            </div>
-          </div>
+          <PreviewColumn
+            value={debouncedValue}
+            mode={effectiveMode}
+            meta={meta}
+            title={title}
+            previewEmpty={previewEmpty}
+            previewWidth={previewWidth}
+            previewMarkers={previewMarkers}
+            onSelectThread={onSelectThread}
+            onPreviewClick={onPreviewClick}
+            scrollRef={previewScrollRef}
+            innerRef={previewInnerRef}
+            anchorsRef={anchorsRef}
+            blocksRef={blocksRef}
+            measure={resolvedMeasure}
+            theme={theme}
+            references={references}
+            renderMath={renderMath}
+            renderDiagram={renderDiagram}
+          />
         )}
         {!previewEmpty && railAffordable && railHasScroll && railBlocks.length > 0 && (
           // The bars are the same in every mode — they describe the document,

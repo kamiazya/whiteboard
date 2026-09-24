@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { StartServerFn } from './server-run.js'
 import { runServerRun } from './server-run.js'
@@ -405,5 +408,59 @@ describe('runServerRun — actual run (no --dry-run)', () => {
     if (outcome.kind !== 'running') return
     await outcome.close()
     expect(deleteRecord).toHaveBeenCalledOnce()
+  })
+})
+
+// ADR-0046 decision 3: the sign-in configuration is read at startup, so a
+// provider the keeper cannot use stops it rather than failing a person later.
+describe('runServerRun — sign-in configuration', () => {
+  it('refuses to start on a sign-in configuration it cannot read, naming the variable', async () => {
+    const outcome = await runServerRun({
+      flags: dryRunFlags(),
+      env: { ...VALID_ENV, WHITEBOARD_SIGN_IN_CONFIG: '/nonexistent/sign-in.yaml' },
+    })
+    expect(outcome).toEqual({
+      kind: 'config-error',
+      code: 'sign_in_config.invalid',
+      field: 'WHITEBOARD_SIGN_IN_CONFIG',
+    })
+  })
+
+  it('hands the configured providers, secrets resolved, to the server', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'wb-server-run-sign-in-'))
+    const path = join(dir, 'sign-in.json')
+    await writeFile(
+      path,
+      JSON.stringify({
+        providers: [
+          {
+            id: 'corp',
+            kind: 'oidc',
+            issuer: 'https://sso.corp.example',
+            clientId: 'wb',
+            clientSecret: { env: 'CORP_SECRET' },
+          },
+        ],
+      }),
+    )
+    let captured: readonly { id: string; clientSecretValue: string }[] | undefined
+    const startServer: StartServerFn = async (opts) => {
+      captured = opts.signInProviders
+      return {
+        port: opts.port,
+        host: opts.host,
+        startedAt: new Date().toISOString(),
+        resolvedDataDir: '/tmp/mock',
+        instanceId: 'mock-instance-id',
+        close: async () => {},
+      }
+    }
+    await runServerRun({
+      flags: dryRunFlags({ dryRun: false }),
+      env: { ...VALID_ENV, WHITEBOARD_SIGN_IN_CONFIG: path, CORP_SECRET: 'abc' },
+      startServer,
+    })
+    await rm(dir, { recursive: true, force: true })
+    expect(captured?.map((p) => [p.id, p.clientSecretValue])).toEqual([['corp', 'abc']])
   })
 })

@@ -36,6 +36,9 @@
 // vocabulary (Zod schemas, OAuth scope-request parsing) needs a value to
 // check membership against, not only a compile-time union. `AuthScope`
 // is derived from this array so the two can never drift apart.
+import type { BearerToken } from './bearer-provisioning.js'
+import type { AuthenticatorBinding } from './member-profile-store.js'
+
 export const AUTH_SCOPES = [
   'canvas:read',
   'canvas:write',
@@ -95,7 +98,18 @@ export interface AuthAuthorizeInput {
 // (and any future server-mode strategy) cannot accidentally drift
 // from the contract.
 export type AuthDecision =
-  | { ok: true; context: AuthContext }
+  | {
+      ok: true
+      context: AuthContext
+      /** Who the credential names, as an account binding (ADR-0045 d15) —
+       *  absent for one that names no person. Kept BESIDE the context, not in
+       *  it: it spells the issuer, and the context is what downstream code
+       *  may log or serialise. It exists to resolve a person, nothing else. */
+      person?: AuthenticatorBinding
+      /** The verified bearer token behind `person`, read only when that
+       *  person has no user yet (ADR-0046 decision 5). */
+      bearer?: () => BearerToken
+    }
   | {
       ok: false
       status: 401

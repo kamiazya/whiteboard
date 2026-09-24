@@ -22,7 +22,7 @@ import type { PairingUnavailableReason } from './mcp/pairing-link.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
-import { createDaemonAuthMiddleware, membershipAdmit } from './routes/auth.js'
+import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
@@ -38,6 +38,7 @@ import {
 import { createPairingRouter } from './routes/pairing.js'
 import { createReplicaKeyRouter } from './routes/replica-key.js'
 import { createRuntimeRouter } from './routes/runtime.js'
+import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
@@ -56,11 +57,18 @@ import {
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
+import {
+  creatorAsFirstMember,
+  type FirstMember,
+  membershipAdmit,
+  type WorkspaceAdmit,
+} from './security/membership-gate.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   createServerModeApiAuthMiddleware,
   createServerModeAsyncAuthMiddleware,
+  createServerModeMcpAuthMiddleware,
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
@@ -103,19 +111,46 @@ setResolveViewportFn(resolveViewportRequest)
  */
 function membershipWiring(options: AppOptions): {
   gate: { members: MemberProfileStore } | undefined
-  admit: ReturnType<typeof membershipAdmit> | undefined
+  admit: WorkspaceAdmit | undefined
+  firstMember: FirstMember | undefined
 } {
-  if (options.authMode !== 'local-daemon' || options.members === undefined) {
-    return { gate: undefined, admit: undefined }
+  // Server mode (ADR-0046 decision 10): its own middleware gates the routes,
+  // and every workspace is members-only from the start.
+  if (options.authMode === 'server-mode') {
+    const members = options.people?.members
+    return members === undefined
+      ? { gate: undefined, admit: undefined, firstMember: undefined }
+      : {
+          gate: undefined,
+          admit: membershipAdmit(members, { membersOnlyByDefault: true }),
+          firstMember: creatorAsFirstMember(members),
+        }
   }
-  return { gate: { members: options.members }, admit: membershipAdmit(options.members) }
+  if (options.members === undefined)
+    return { gate: undefined, admit: undefined, firstMember: undefined }
+  return {
+    gate: { members: options.members },
+    admit: membershipAdmit(options.members),
+    firstMember: undefined,
+  }
+}
+
+// Only the membership pieces that are wired, so a router given none behaves
+// exactly as it did before membership existed.
+function membershipRouterOptions(membership: ReturnType<typeof membershipWiring>) {
+  return {
+    ...(membership.admit === undefined ? {} : { admit: membership.admit }),
+    ...(membership.firstMember === undefined ? {} : { firstMember: membership.firstMember }),
+  }
 }
 
 /**
  * Server-mode serves only a static placeholder: no build artifact, no
  * runtime-config or token injection, no static asset roots.
  */
-function mountServerModeUi(app: Hono): void {
+function mountServerModeUi(app: Hono, signIn: SignInRoutesDeps | undefined): void {
+  // Before the UI catch-all, which would otherwise answer every /auth path.
+  if (signIn !== undefined) app.route('/', createSignInRoutes(signIn))
   app.get('*', (c) => {
     if (isReservedUiPath(c.req.path)) return c.notFound()
     return c.html(SERVER_MODE_PLACEHOLDER_HTML)
@@ -207,7 +242,7 @@ function mountApiAuth(
 ): void {
   app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
   if (options.authMode === 'server-mode') {
-    app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
+    app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy, options.people))
     return
   }
   // Cross-origin loopback requests (the apps/web dev server on
@@ -284,7 +319,12 @@ function mountMcpMiddleware(
     if (plan.ok && plan.kind === 'server-mode') {
       app.use('/mcp', createServerModeOriginMiddleware(plan.allowedOrigins))
     }
-    app.use('/mcp', createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call']))
+    app.use(
+      '/mcp',
+      options.people === undefined
+        ? createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call'])
+        : createServerModeMcpAuthMiddleware(options.authStrategy, options.people),
+    )
   } else {
     app.use('/mcp', createMcpHttpOriginMiddleware(options.allowedWebOrigins ?? []))
     app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
@@ -608,7 +648,7 @@ export function createApp(options: AppOptions) {
       ...(options.authMode === 'local-daemon' && options.replicaKeys !== undefined
         ? { replicaTier: options.replicaKeys.effectiveTier.bind(options.replicaKeys) }
         : {}),
-      ...(admit === undefined ? {} : { admit }),
+      ...membershipRouterOptions(membership),
     }),
   )
   // Shared versionStore so the files router can do version-aware purge
@@ -633,7 +673,7 @@ export function createApp(options: AppOptions) {
     }),
   )
   if (options.authMode === 'server-mode') {
-    mountServerModeUi(app)
+    mountServerModeUi(app, options.signIn)
     // Same shape as the local-daemon return below, so callers see one type
     // rather than a union. Server-mode does not consult this resolver — its
     // `/api/*` goes through `createServerModeApiAuthMiddleware` over the
