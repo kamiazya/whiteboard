@@ -57,26 +57,39 @@ export function gatedByMembership<T extends Record<string, WorkspaceScopedTool>>
   for (const [key, tool] of Object.entries(tools)) {
     wrapped[key] = {
       ...tool,
-      async execute(input: never) {
+      execute: (input: never) => {
         const caller = callers.getStore()
-        const { workspaceId: handle, createWorkspace } = (input ?? {}) as WorkspaceScopedInput
+        const { workspaceId: handle } = (input ?? {}) as WorkspaceScopedInput
         if (caller === undefined || typeof handle !== 'string') return tool.execute(input)
-        const existing = await index.resolveWorkspace(handle)
-        if (existing === null && createWorkspace === true) {
-          return createAsFirstMember(caller, index, handle, () => tool.execute(input))
-        }
-        const access = await workspaceAccess(
-          caller.grant,
-          existing?.workspaceId ?? handle,
-          caller.members,
-          { membersOnlyByDefault: true },
-        )
-        if (access !== 'admitted') throw refused(access)
-        return tool.execute(input)
+        return gatedCall(caller, index, handle, tool, input)
       },
     }
   }
   return wrapped as T
+}
+
+async function gatedCall(
+  caller: McpCaller,
+  index: Pick<DocumentIndex, 'resolveWorkspace'>,
+  handle: string,
+  tool: WorkspaceScopedTool,
+  input: never,
+): Promise<unknown> {
+  const existing = await index.resolveWorkspace(handle)
+  if (existing === null && (input as WorkspaceScopedInput).createWorkspace === true) {
+    return createAsFirstMember(caller, index, handle, () => tool.execute(input))
+  }
+  const access = await workspaceAccess(
+    caller.grant,
+    existing?.workspaceId ?? handle,
+    caller.members,
+    { membersOnlyByDefault: true },
+  )
+  if (access !== 'admitted') throw refused(access)
+  // The id just authorized, not the handle: the tool would resolve it again,
+  // and a rename in between could point that at another workspace.
+  if (existing === null) return tool.execute(input)
+  return tool.execute({ ...(input as object), workspaceId: existing.workspaceId } as never)
 }
 
 // ponytail: two people creating the same new segment at the same instant both
@@ -92,10 +105,14 @@ async function createAsFirstMember(
   const person = caller.grant.person
   const profile = person === undefined ? null : await caller.members.profileForBinding(person)
   if (profile === null) throw refused('requires_person_session')
-  const result = await run()
-  const created = await index.resolveWorkspace(handle)
-  if (created !== null && !(await caller.members.membersOnly(created.workspaceId))) {
-    await caller.members.addMember(created.workspaceId, profile.id)
+  try {
+    return await run()
+  } finally {
+    // Also when the batch failed after minting: otherwise the creator's retry
+    // is refused from a workspace that exists and has no member.
+    const created = await index.resolveWorkspace(handle)
+    if (created !== null && !(await caller.members.membersOnly(created.workspaceId))) {
+      await caller.members.addMember(created.workspaceId, profile.id)
+    }
   }
-  return result
 }

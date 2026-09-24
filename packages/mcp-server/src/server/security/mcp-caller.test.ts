@@ -37,7 +37,7 @@ function tools() {
   return gatedByMembership(
     {
       edit: {
-        async execute(input: { workspaceId?: string; createWorkspace?: boolean }) {
+        async execute(input: { workspaceId?: string; createWorkspace?: boolean; fail?: boolean }) {
           executed.push(input)
           if (input.createWorkspace && input.workspaceId && !workspaces.has(input.workspaceId)) {
             workspaces.set(input.workspaceId, {
@@ -45,6 +45,8 @@ function tools() {
               segment: input.workspaceId,
             })
           }
+          // A batch whose later op fails after the workspace was minted.
+          if (input.fail) throw new Error('op 2 failed')
           return { ok: true }
         },
       },
@@ -121,6 +123,25 @@ describe('gatedByMembership', () => {
       asAda(() => tools().execute({ workspaceId: 'plans', createWorkspace: true })),
     ).rejects.toThrow(/not_a_member/)
     expect(executed).toEqual([])
+  })
+
+  // The tool runs against the workspace that was authorized, not a second
+  // resolution of the handle that a rename in between could point elsewhere.
+  it('runs the tool against the canonical id it authorized', async () => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await members.addMember('ws-plans', profile.id)
+    await asAda(() => tools().execute({ workspaceId: 'plans' }))
+    expect(executed).toEqual([{ workspaceId: 'ws-plans' }])
+  })
+
+  // A batch that minted the workspace and then failed leaves the creator a
+  // member, or their retry would be refused from their own workspace.
+  it('keeps the creator a member of a workspace a failing batch minted', async () => {
+    const profile = await members.ensureProfile({ binding: ada, displayName: 'Ada' })
+    await expect(
+      asAda(() => tools().execute({ workspaceId: 'fresh', createWorkspace: true, fail: true })),
+    ).rejects.toThrow(/op 2 failed/)
+    expect(await members.isWorkspaceMember('ws-fresh', profile.id)).toBe('member')
   })
 
   it('passes a call that names no workspace through', async () => {
