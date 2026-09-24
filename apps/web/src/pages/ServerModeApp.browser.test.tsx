@@ -6,6 +6,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resetShellStatusForTests, setShellConnection } from '../lib/shell-status-store.js'
 import { ServerModeApp } from './ServerModeApp.js'
 
 // The editor pages are the daemon's, exercised on their own; here only what
@@ -27,6 +28,7 @@ vi.mock('./DaemonDocumentPage.js', () => ({
 afterEach(() => {
   cleanup()
   opened.length = 0
+  resetShellStatusForTests()
 })
 
 interface Keeper {
@@ -176,5 +178,54 @@ describe('server mode opens a workspace', () => {
     renderAt('/w/ws-1', { providers: [corp] })
     expect(await screen.findByRole('link', { name: /continue with corp sso/i })).toBeTruthy()
     expect(opened).toEqual([])
+  })
+})
+
+describe('server mode inside a workspace', () => {
+  it('leads back to the workspace list', async () => {
+    renderAt('/w/ws-1', { signedIn: 'Ada' })
+    const back = await screen.findByRole('link', { name: /all workspaces/i })
+    expect(back.getAttribute('href')).toBe('/')
+  })
+
+  it('names who is signed in, and signs them out', async () => {
+    const fetchFn = renderAt('/w/ws-1/d/plan', { signedIn: 'Ada', providers: [corp] })
+    expect(await screen.findByText(/signed in as ada/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
+    await waitFor(() =>
+      expect(fetchFn).toHaveBeenCalledWith(
+        '/auth/sign-out',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    )
+    expect(await screen.findByRole('link', { name: /continue with corp sso/i })).toBeTruthy()
+  })
+
+  // A write the keeper has not taken is shown the way the editor publishes
+  // it; without this, server mode has nowhere to say so at all.
+  it('shows the state the open document publishes', async () => {
+    renderAt('/w/ws-1/d/plan', { signedIn: 'Ada' })
+    await screen.findByText(/signed in as ada/i)
+    setShellConnection({ state: { keeper: 'daemon', session: 'reconnecting' } })
+    expect(await screen.findByText(/^reconnecting$/i)).toBeTruthy()
+  })
+
+  // Spoken only when sync goes off, as the daemon shell does: a reconnect
+  // blip read aloud mid-sentence is noise, a session that stopped is news.
+  it('announces sync going off, and not an ordinary reconnect', async () => {
+    renderAt('/w/ws-1/d/plan', { signedIn: 'Ada' })
+    await screen.findByText(/signed in as ada/i)
+    setShellConnection({ state: { keeper: 'daemon', session: 'reconnecting' } })
+    await screen.findByText(/^reconnecting$/i)
+    expect(screen.getByRole('status').textContent).toBe('')
+    setShellConnection({ state: { keeper: 'daemon', session: 'sync-off' } })
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/sync off/i))
+  })
+
+  it('puts the workspace in the main landmark, under the banner', async () => {
+    renderAt('/w/ws-1', { signedIn: 'Ada' })
+    await screen.findByText('workspace index')
+    expect(screen.getByRole('banner')).toBeTruthy()
+    expect(screen.getByRole('main').textContent).toContain('workspace index')
   })
 })

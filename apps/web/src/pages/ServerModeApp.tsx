@@ -14,8 +14,9 @@ import {
   signInSessionResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { type ReactNode, useEffect, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Button, buttonVariants } from '../components/ui/button.js'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { ServerModeShell, SignOutControl } from '../components/server-mode/ServerModeShell.js'
+import { buttonVariants } from '../components/ui/button.js'
 import { workspacePath } from '../lib/app-routes.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
 import { ServerModeWorkspace } from './ServerModeWorkspace.js'
@@ -154,9 +155,7 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
 }
 
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
-  const navigate = useNavigate()
   const [signed, setSigned] = useState<Signed | null | 'loading'>('loading')
-  const [signOutFailed, setSignOutFailed] = useState(false)
   useEffect(() => {
     let live = true
     void loadSigned(fetchFn)
@@ -172,24 +171,12 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   if (signed === 'loading') return null
   if (signed === null) return <Navigate to="/sign-in" replace />
 
-  const signOut = async () => {
-    const res = await fetchFn('/auth/sign-out', { method: 'POST' }).catch(() => null)
-    if (res?.ok) navigate('/sign-in', { replace: true })
-    else setSignOutFailed(true)
-  }
   return (
     <Page>
-      <header className="flex w-full max-w-md items-center justify-between gap-4">
+      <header className="flex w-full max-w-md flex-wrap items-center justify-between gap-4">
         <span className="text-sm text-muted-foreground">Signed in as {signed.displayName}</span>
-        <Button variant="outline" size="sm" onClick={() => void signOut()}>
-          Sign out
-        </Button>
+        <SignOutControl fetchFn={fetchFn} />
       </header>
-      {signOutFailed && (
-        <p role="alert" className="text-sm text-destructive">
-          Could not sign out. Try again.
-        </p>
-      )}
       <h1 className="text-xl font-semibold">Your workspaces</h1>
       <WorkspaceList workspaces={signed.workspaces} />
     </Page>
@@ -198,22 +185,32 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
 
 // A workspace's routes answer 401 to a browser with no session; asking first
 // sends it to the sign-in screen instead of an editor that cannot load.
-function SignedInOnly({ fetchFn, children }: { fetchFn: Fetch; children: ReactNode }) {
-  const [signedIn, setSignedIn] = useState<boolean | null>(null)
+function SignedInOnly({
+  fetchFn,
+  children,
+}: {
+  fetchFn: Fetch
+  children: (displayName: string) => ReactNode
+}) {
+  // undefined while asking, null for no session, the person's name otherwise.
+  const [who, setWho] = useState<string | null | undefined>(undefined)
   useEffect(() => {
     let live = true
     void fetchFn('/auth/session')
-      .then(async (res) => signInSessionResponseSchema.parse(await res.json()).signedIn)
-      .catch(() => false)
+      .then(async (res) => {
+        const session = signInSessionResponseSchema.parse(await res.json())
+        return session.signedIn ? session.user.displayName : null
+      })
+      .catch(() => null)
       .then((value) => {
-        if (live) setSignedIn(value)
+        if (live) setWho(value)
       })
     return () => {
       live = false
     }
   }, [fetchFn])
-  if (signedIn === null) return null
-  return signedIn ? children : <Navigate to="/sign-in" replace />
+  if (who === undefined) return null
+  return who === null ? <Navigate to="/sign-in" replace /> : children(who)
 }
 
 // One function for the app's lifetime: the pages key their effects on it, so a
@@ -229,7 +226,11 @@ export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps)
         path="/w/*"
         element={
           <SignedInOnly fetchFn={fetchFn}>
-            <ServerModeWorkspace />
+            {(displayName) => (
+              <ServerModeWorkspace
+                shell={<ServerModeShell displayName={displayName} fetchFn={fetchFn} />}
+              />
+            )}
           </SignedInOnly>
         }
       />
