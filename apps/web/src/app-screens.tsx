@@ -1,8 +1,8 @@
 import { lazy, Suspense } from 'react'
 import type { AppShellProps } from './components/AppShell.js'
 import { AppShellLazy } from './components/AppShellLazy.js'
-import { DocumentPageSkeleton } from './components/DocumentPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
+import { LazyPageFallback } from './components/LazyPageFallback.js'
 import type { WorkspaceRoute } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-auth-fetch.js'
 import type { ReplicaMatch } from './lib/replicas.js'
@@ -62,28 +62,6 @@ const NotFoundPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage.js').then((m) => ({ default: m.SettingsPage })),
 )
-
-// Suspense fallback shared by every lazy page chunk (DaemonDocumentPage and
-// BrowserDocumentPage). Reuses the structural DocumentPageSkeleton so the
-// chunk-load state and the page's own connecting state are one continuous
-// pulse instead of a text line snapping to a skeleton. The height class
-// differs by mount site (root fills the viewport; the in-banner branches
-// fill the flex row under it), so it's a prop; message becomes the
-// accessible label so daemon-specific and backend-agnostic mount sites
-// announce accurate copy.
-export function LazyPageFallback({
-  heightClass,
-  message,
-}: {
-  heightClass: string
-  message: string
-}) {
-  return (
-    <div className={heightClass}>
-      <DocumentPageSkeleton label={message} />
-    </div>
-  )
-}
 
 /**
  * The frame every full-window screen below shares: the shell chrome over a

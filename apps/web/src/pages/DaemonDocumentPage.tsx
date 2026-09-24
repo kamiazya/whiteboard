@@ -64,6 +64,10 @@ export interface DaemonDocumentPageProps {
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
   onNavigateBack?: () => void
+  // Served by a server-mode keeper from its own origin (ADR-0047): it has no
+  // WebSocket and no replica routes, and its data is not this browser's to
+  // keep — the session cookie authenticates, so there is no token either.
+  serverMode?: boolean
 }
 
 /**
@@ -81,6 +85,7 @@ function useDaemonDocument(
     token,
     createBackend,
     onNavigateBack,
+    serverMode = false,
   }: DaemonDocumentPageProps,
   events: DocumentKeeperEvents,
 ): DocumentKeeperAnswer {
@@ -105,7 +110,7 @@ function useDaemonDocument(
   // merge-back cannot read as an offline edit vanishing between the two.
   // Both modules dedupe internally, so the effect can fire on every resolve.
   useEffect(() => {
-    if (controller.workspaceId === null) return
+    if (controller.workspaceId === null || serverMode) return
     const cancelPush = scheduleReplicaPush({
       fetch: daemonFetch,
       daemonBaseUrl,
@@ -125,7 +130,7 @@ function useDaemonDocument(
       cancelPush()
       cancelRefresh()
     }
-  }, [daemonFetch, daemonBaseUrl, controller.workspaceId])
+  }, [daemonFetch, daemonBaseUrl, controller.workspaceId, serverMode])
 
   // Stable across the page's lifetime — read fresh (not cached in state)
   // wherever the current settings are needed.
@@ -157,6 +162,7 @@ function useDaemonDocument(
     path: controller.path,
     loading: controller.loading,
     documents: controller.documents,
+    serverMode,
   })
 
   // Holds the mounted SpatialEditor's imperative handle so a daemon-driven
