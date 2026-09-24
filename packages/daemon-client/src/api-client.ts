@@ -64,6 +64,10 @@ export const runtimeConfigSchema = z
     // Base URL of the local whiteboard daemon for daemon-pairing mode.
     // e.g. 'http://127.0.0.1:3099'
     daemonBaseUrl: bareOriginSchema.optional(),
+    // Set by a server-mode keeper that serves this app from its own origin
+    // (ADR-0047): sign-in and the API are same-origin, and the session is
+    // the keeper's host-only cookie.
+    keeper: z.literal('server').optional(),
   })
   .strict()
 

@@ -117,8 +117,7 @@ describe('sign-in through an OIDC provider', () => {
     const { app } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' })
     const res = await signInThrough(app, '', '__Host-wb_signin=someone-else')
-    expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'sign_in_attempt_unknown' })
+    expect(res.headers.get('location')).toBe('/sign-in?error=sign_in_attempt_unknown')
     expect(cookieFrom(res, SESSION_COOKIE)).toBeUndefined()
   })
 
@@ -128,16 +127,15 @@ describe('sign-in through an OIDC provider', () => {
     const { app } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' }, { nonce: 'not-this-one' })
     const res = await signInThrough(app)
-    expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'provider_refused' })
+    expect(res.headers.get('location')).toBe('/sign-in?error=provider_refused')
   })
 
   it('refuses an uninvited person on an invitation-only provider, by reason', async () => {
     const { app } = appFor({})
     idp.next({ sub: 'ada-1', email: 'ada@corp.example', email_verified: true })
     const res = await signInThrough(app)
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'not_invited' })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/sign-in?error=not_invited')
   })
 
   it('lets an invited person in through the link they arrived with', async () => {
@@ -162,6 +160,25 @@ describe('sign-in through an OIDC provider', () => {
     idp.next({ sub: 'ada-1' })
     const res = await signInThrough(app, `?return=${encodeURIComponent(target as string)}`)
     expect(res.headers.get('location')).toBe('/')
+  })
+
+  // The web app's sign-in screen lists these; it never learns an issuer or
+  // a client id.
+  it('lists the browser providers by id and display name', async () => {
+    const { app } = appFor({})
+    const res = await app.request(`${BASE}/auth/providers`)
+    expect(await res.json()).toEqual({ providers: [{ id: 'corp', displayName: 'corp' }] })
+  })
+
+  it('answers the session this browser holds, and none without one', async () => {
+    const { app } = appFor({ createAccounts: true })
+    expect(await (await app.request(`${BASE}/auth/session`)).json()).toEqual({ signedIn: false })
+    idp.next({ sub: 'ada-1', name: 'Ada' })
+    const session = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    const res = await app.request(`${BASE}/auth/session`, {
+      headers: { cookie: `${SESSION_COOKIE}=${session}` },
+    })
+    expect(await res.json()).toEqual({ signedIn: true, user: { displayName: 'Ada' } })
   })
 
   it('answers an unknown provider with a JSON 404', async () => {
