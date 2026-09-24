@@ -123,7 +123,7 @@ describe('whiteboard server grant-member', () => {
   it('exits 1 and names the fix when nobody matches', async () => {
     const res = await run(['--json', `--workspace=${WS}`, '--user=Grace', `--data-dir=${root}`])
     expect(res.code).toBe(1)
-    expect(res.stderr).toMatch(/sign in once/)
+    expect(res.stderr).toContain('whiteboard server add-user')
   })
 
   it('exits 64 without --workspace', async () => {

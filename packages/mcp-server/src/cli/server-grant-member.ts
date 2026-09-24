@@ -57,7 +57,7 @@ const USAGE =
 const REFUSAL: Record<Exclude<GrantMemberOutcome['kind'], 'ok'>, string> = {
   'unknown-workspace': 'grant refused: this data directory holds no workspace with that id.',
   'unknown-user':
-    'grant refused: no user by that id or name. The person has to sign in once to become a user here; those who have are listed on stdout.',
+    'grant refused: no user by that id or name. The person has to become a user here first — by signing in, by a bearer, or with `whiteboard server add-user`; the users there are listed on stdout.',
   'ambiguous-user':
     'grant refused: more than one user has that name. Re-run with --user=<id>; the candidates are listed on stdout.',
 }
