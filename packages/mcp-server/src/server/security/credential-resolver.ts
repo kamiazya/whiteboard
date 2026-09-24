@@ -41,7 +41,16 @@ import type { PairingTokenStore } from './pairing-session.js'
 
 type GrantKind =
   /** No daemon token is configured, so every caller holds everything. */
-  'anonymous' | 'daemon-token' | 'oauth-grant' | 'pairing' | 'ws-ticket' | 'macaroon'
+  | 'anonymous'
+  | 'daemon-token'
+  | 'oauth-grant'
+  | 'pairing'
+  | 'ws-ticket'
+  | 'macaroon'
+  /** Server mode (ADR-0046): a session opened by signing in at this host. */
+  | 'signed-in'
+  /** Server mode: an access token from the configured issuer, naming a person. */
+  | 'external-bearer'
 
 export interface ResolvedGrant {
   readonly kind: GrantKind

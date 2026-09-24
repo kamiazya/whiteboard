@@ -9,6 +9,9 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { TenantDatabase } from '../store/db/tenant-database.js'
 import type { AuthenticatorBinding } from './member-profile-store.js'
 
+/** Host-only (`__Host-`): the browser sends it back to exactly this origin. */
+export const SESSION_COOKIE = '__Host-wb_session'
+
 export interface SignInSessionStore {
   create(person: AuthenticatorBinding, now: number, ttlMs: number): Promise<string>
   resolve(token: string, now: number): Promise<AuthenticatorBinding | null>

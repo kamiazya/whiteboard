@@ -26,13 +26,14 @@ import {
   wbDocumentDelete,
   wbDocumentList,
 } from '@kamiazya/whiteboard-server-core'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import type { z } from 'zod'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { getLogger } from '../../log.js'
+import type { FirstMember, WorkspaceAdmit } from '../../security/membership-gate.js'
+import { membershipRefusal } from '../../security/workspace-access.js'
 import { validateDocumentPath, validateWorkspaceId } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
-import type { WorkspaceAdmit } from '../auth.js'
 import {
   corruptStored,
   firstOwned,
@@ -130,6 +131,9 @@ export interface WorkspacesRouterOptions {
    *  non-member the way its content is. Absent means no filtering (server-
    *  mode, and any composition that has not wired members). */
   admit?: WorkspaceAdmit
+  /** ADR-0046 decision 10: who becomes a new workspace's first member. Absent
+   *  on the local daemon, where an unclaimed workspace is open by design. */
+  firstMember?: FirstMember
 }
 
 // GET /api/workspaces
@@ -200,6 +204,31 @@ async function summarizeWorkspace(
   }
 }
 
+// The creating person's profile, `null` when this keeper makes no first
+// member (the local daemon), or `refused` when it must and cannot.
+async function creatorOf(
+  c: Context,
+  firstMember: FirstMember | undefined,
+): Promise<string | null | 'refused'> {
+  if (firstMember === undefined) return null
+  return (await firstMember.profileFor(c)) ?? 'refused'
+}
+
+async function createWorkspaceRow(
+  deps: ServerDeps,
+  displayName: string,
+): Promise<WorkspaceSummary> {
+  const workspaceId = generateDocumentId()
+  const base = deriveWorkspaceSegment(displayName)
+  const segment = base === undefined ? undefined : await firstFreeSegment(deps.documentIndex, base)
+  await deps.documentIndex.createWorkspace({
+    workspaceId,
+    ...(segment === undefined ? {} : { segment }),
+    displayName,
+  })
+  return { workspaceId, ...(segment === undefined ? {} : { segment }), displayName }
+}
+
 export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   const app = new Hono()
 
@@ -262,25 +291,16 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       return c.json({ title: 'displayName is required' } satisfies ApiErrorBody, 400)
     }
     const { displayName } = parsed.data
+    // Decided before anything is created: a workspace nobody can be the
+    // first member of is one nobody could open.
+    const creator = await creatorOf(c, options.firstMember)
+    if (creator === 'refused') return c.json(membershipRefusal('requires_person_session'), 403)
 
     try {
       const deps = options.serverDeps ?? (await getDefaultServerDeps())
-      const workspaceId = generateDocumentId()
-      const base = deriveWorkspaceSegment(displayName)
-      const segment =
-        base === undefined ? undefined : await firstFreeSegment(deps.documentIndex, base)
-
-      await deps.documentIndex.createWorkspace({
-        workspaceId,
-        ...(segment === undefined ? {} : { segment }),
-        displayName,
-      })
-      const response: WorkspaceSummary = {
-        workspaceId,
-        ...(segment === undefined ? {} : { segment }),
-        displayName,
-      }
-      return c.json(response, 201)
+      const summary = await createWorkspaceRow(deps, displayName)
+      if (creator !== null) await options.firstMember?.add(summary.workspaceId, creator)
+      return c.json(summary, 201)
     } catch (err) {
       // A segment the suffix loop believed free can still be taken by the
       // time the insert lands. The registry's own unique index is what

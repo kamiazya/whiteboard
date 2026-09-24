@@ -537,9 +537,12 @@ const REQUIRED_FLAGS = [
     const authResp = await fetch(`${baseUrl}/api/w/test-ws/document/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${validJwt}` },
     })
-    if (authResp.status === 401 || authResp.status === 403)
-      fail(`scenario 8: valid JWT should pass auth, got ${authResp.status}`)
+    // Authentication passes; the workspace then answers by membership, and it
+    // has none (ADR-0046 decision 10: members-only from the start).
+    if (authResp.status !== 403)
+      fail(`scenario 8: expected a membership 403, got ${authResp.status}`)
     const authBody = await authResp.text()
+    if (!authBody.includes('not_a_member')) fail('scenario 8: 403 was not the membership refusal')
     assertNoLeak('scenario 8 auth response body', authBody)
     if (authBody.includes(validJwt)) fail('scenario 8: JWT leaked to response body')
 

@@ -106,7 +106,8 @@ async function arrivedWith(
   return { kind: 'none' }
 }
 
-function displayNameFrom(claims: VerifiedClaims, fallback: string): string {
+/** The name a new user starts with: the provider's display claims, else `fallback`. */
+export function displayNameFrom(claims: VerifiedClaims, fallback: string): string {
   for (const key of ['name', 'preferred_username', 'email'] as const) {
     const value = claims[key]
     if (typeof value === 'string' && value.trim() !== '') return value.trim()

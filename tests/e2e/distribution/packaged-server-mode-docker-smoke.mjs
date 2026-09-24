@@ -383,12 +383,17 @@ try {
     const resp = await fetch(`${serverBaseUrl}/api/w/test-ws/document/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${jwt}` },
     })
-    if (resp.status === 401 || resp.status === 403)
-      fail(`scenario 6: valid JWT should pass auth, got ${resp.status}`)
+    // Authentication passes; the workspace then answers by membership. It has
+    // none (ADR-0046 decision 10: members-only from the start), so the
+    // expected answer is the membership refusal, not an auth one.
+    if (resp.status !== 403) fail(`scenario 6: expected a membership 403, got ${resp.status}`)
     const body = await resp.text()
+    if (!body.includes('not_a_member')) fail('scenario 6: 403 was not the membership refusal')
     if (body.includes(jwt)) fail('scenario 6: raw JWT leaked to response body')
     assertNoLeak('scenario 6 body', body)
-    console.log('[docker-smoke] scenario 6 PASS: valid JWT → auth passes')
+    console.log(
+      '[docker-smoke] scenario 6 PASS: valid JWT authenticates; workspace refuses a non-member',
+    )
   }
 
   // Scenario 7: wrong scope → 403

@@ -217,3 +217,31 @@ describe('workspaceAccess — any authenticator', () => {
     ).toBe('not_a_member')
   })
 })
+
+// ADR-0046 decision 10: a keeper many people sign in to treats every
+// workspace as members-only from the start, not only once it has a member.
+describe('workspaceAccess — members-only by default', () => {
+  const person = { authenticator: 'oidc:https://sso.corp.example', subject: 'ada-1' }
+
+  it('refuses a workspace that has never had a member', async () => {
+    const grant: ResolvedGrant = { kind: 'signed-in', scopes: [], person }
+    expect(await workspaceAccess(grant, WS, members, { membersOnlyByDefault: true })).toBe(
+      'not_a_member',
+    )
+    // The local daemon's rule, for contrast: an unclaimed workspace is open.
+    expect(await workspaceAccess(grant, WS, members)).toBe('admitted')
+  })
+
+  it('admits a member, and still asks for a person when there is none', async () => {
+    const profile = await members.ensureProfile({ binding: person, displayName: 'Ada' })
+    await members.addMember(WS, profile.id)
+    const signedIn: ResolvedGrant = { kind: 'signed-in', scopes: [], person }
+    expect(await workspaceAccess(signedIn, WS, members, { membersOnlyByDefault: true })).toBe(
+      'admitted',
+    )
+    const nobody: ResolvedGrant = { kind: 'external-bearer', scopes: [] }
+    expect(await workspaceAccess(nobody, 'ws-2', members, { membersOnlyByDefault: true })).toBe(
+      'requires_person_session',
+    )
+  })
+})

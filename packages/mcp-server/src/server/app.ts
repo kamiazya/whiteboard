@@ -22,7 +22,7 @@ import type { PairingUnavailableReason } from './mcp/pairing-link.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
-import { createDaemonAuthMiddleware, membershipAdmit } from './routes/auth.js'
+import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
@@ -57,6 +57,12 @@ import {
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
+import {
+  creatorAsFirstMember,
+  type FirstMember,
+  membershipAdmit,
+  type WorkspaceAdmit,
+} from './security/membership-gate.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
@@ -104,12 +110,37 @@ setResolveViewportFn(resolveViewportRequest)
  */
 function membershipWiring(options: AppOptions): {
   gate: { members: MemberProfileStore } | undefined
-  admit: ReturnType<typeof membershipAdmit> | undefined
+  admit: WorkspaceAdmit | undefined
+  firstMember: FirstMember | undefined
 } {
-  if (options.authMode !== 'local-daemon' || options.members === undefined) {
-    return { gate: undefined, admit: undefined }
+  // Server mode (ADR-0046 decision 10): its own middleware gates the routes,
+  // and every workspace is members-only from the start.
+  if (options.authMode === 'server-mode') {
+    const members = options.people?.members
+    return members === undefined
+      ? { gate: undefined, admit: undefined, firstMember: undefined }
+      : {
+          gate: undefined,
+          admit: membershipAdmit(members, { membersOnlyByDefault: true }),
+          firstMember: creatorAsFirstMember(members),
+        }
   }
-  return { gate: { members: options.members }, admit: membershipAdmit(options.members) }
+  if (options.members === undefined)
+    return { gate: undefined, admit: undefined, firstMember: undefined }
+  return {
+    gate: { members: options.members },
+    admit: membershipAdmit(options.members),
+    firstMember: undefined,
+  }
+}
+
+// Only the membership pieces that are wired, so a router given none behaves
+// exactly as it did before membership existed.
+function membershipRouterOptions(membership: ReturnType<typeof membershipWiring>) {
+  return {
+    ...(membership.admit === undefined ? {} : { admit: membership.admit }),
+    ...(membership.firstMember === undefined ? {} : { firstMember: membership.firstMember }),
+  }
 }
 
 /**
@@ -210,7 +241,7 @@ function mountApiAuth(
 ): void {
   app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
   if (options.authMode === 'server-mode') {
-    app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
+    app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy, options.people))
     return
   }
   // Cross-origin loopback requests (the apps/web dev server on
@@ -611,7 +642,7 @@ export function createApp(options: AppOptions) {
       ...(options.authMode === 'local-daemon' && options.replicaKeys !== undefined
         ? { replicaTier: options.replicaKeys.effectiveTier.bind(options.replicaKeys) }
         : {}),
-      ...(admit === undefined ? {} : { admit }),
+      ...membershipRouterOptions(membership),
     }),
   )
   // Shared versionStore so the files router can do version-aware purge

@@ -86,15 +86,52 @@ What the `admission` block can say:
 | `allowedEmailDomains` | Only addresses in these domains, matched exactly (a subdomain is not the domain). |
 | `googleHostedDomains` | Only Google Workspace accounts of these domains (Google's `hd` claim). |
 | `requiredClaims` | Each named claim must carry one of the listed values, e.g. `groups: [whiteboard]`. |
+| `bearerClients` | The OAuth clients (`azp`, else `client_id`) whose bearer tokens may create a user by these same rules — for an MCP client used before anyone signed in with a browser. Absent: a bearer never creates a user. |
 
 Every rule that reads an email or a domain requires the provider to assert the
 email verified. The rules are checked at every sign-in, not only the first.
 The server refuses to start if the file is invalid or a secret it names is
 empty.
 
-The session this opens is not yet what `/api` and `/mcp` authorize with:
-those still take the provider's bearer tokens. Using the session for them is
-the next step.
+The session this opens authorizes `/api` for everything a person does with
+their workspaces. The keeper's administrative routes (those needing the
+`runtime:admin` scope) are not among them: they stay with bearer tokens you
+scope for them. `/mcp` still takes bearer tokens only.
+
+## Who can reach a workspace
+
+On a server-mode keeper every workspace is **members-only from the start**.
+The person who creates a workspace is its first member; everyone else needs
+a membership. This applies to the HTTP API; `/mcp` does not check membership
+yet.
+
+A person must be a **user** of this keeper before they can be a member. A
+browser sign-in makes one. A bearer token makes one only when its issuer is a
+declared provider's `issuer`, the token comes from a client listed in that
+provider's `bearerClients`, it declares itself an access token (`typ: at+jwt`
+or `token_use: access`), and the provider's `admission` rules admit it
+(`createAccounts: true` — a bearer cannot carry an invitation). A refused
+bearer gets `403` with the rule's reason, such as `client_not_allowed`.
+Access tokens often carry no `email` or `email_verified`, so a provider with
+email or domain rules usually needs a browser sign-in first.
+
+A workspace that existed before this — data moved in, or a keeper that ran
+before sign-in was configured — has no member, so nobody can open it until
+the operator grants one from the machine that holds the data directory:
+
+```sh
+whiteboard server grant-member --json --workspace=<workspace segment or id> --user=<user id or display name>
+```
+
+The person must have become a user first (by signing in, or by a bearer as
+above). A name that matches nobody, or more than one user, is refused and the
+candidates are printed.
+
+> **Upgrading a bearer-only deployment.** Before this, a valid bearer reached
+> every workspace. Now a bearer whose person is no user reaches none. Declare
+> your JWT issuer as a provider with `createAccounts: true` and your MCP
+> client in `bearerClients`, then grant each existing workspace its first
+> member with `grant-member`.
 
 ## Reverse proxy and TLS
 

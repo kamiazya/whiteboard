@@ -707,8 +707,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // would put the `membersOnly` insert and its clear in different files.
   'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 117,
   'packages/mcp-server/src/server/security/oauth-authz-transactions.ts#createOAuthTransactionStore': 299,
-  'packages/mcp-server/src/server/security/oauth-resource-strategy.ts#createOAuthResourceServerAuthStrategy': 68,
-  'packages/mcp-server/src/server/security/oauth-resource-strategy.ts#createOAuthResourceServerAuthStrategy.authorize': 62,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   'packages/mcp-server/src/server/security/pairing-grant-store.ts#createPairingGrantStore': 67,
   'packages/mcp-server/src/server/security/pairing-session.ts#createPairingTokenStore': 55,

@@ -23,6 +23,7 @@ import type { SignInRoutesDeps } from './routes/sign-in.js'
 import { createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { createRelyingParty, type ResolvedProvider } from './security/oidc-relying-party.js'
+import type { ServerModePeople } from './security/server-mode-middleware.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
@@ -142,7 +143,7 @@ export async function startServerModeHttp(
     publicBaseUrl: options.publicBaseUrl,
     allowedOrigins: options.allowedOrigins,
     authStrategy: options.authStrategy,
-    ...(await signInOption(options, dataDir)),
+    ...(await peopleOptions(options, dataDir)),
     instanceId,
     touch: () => {},
     getStatus: () => ({
@@ -288,19 +289,32 @@ function closeListener(server: { close(done: (err?: Error) => void): unknown }):
   })
 }
 
-// No providers configured means no `/auth/*` route at all, not an empty one.
-async function signInOption(
+// Who is signed in, and what they may reach, is read on every request
+// whether or not any provider is configured: a bearer's person is gated by
+// membership too. No providers means no `/auth/*` route, not an empty one.
+async function peopleOptions(
   { signInProviders, publicBaseUrl }: StartServerModeHttpOptions,
   dataDir: string,
-): Promise<{ signIn?: SignInRoutesDeps }> {
-  if (signInProviders === undefined || signInProviders.length === 0) return {}
+): Promise<{ people: ServerModePeople; signIn?: SignInRoutesDeps }> {
   const db = await getDb(dataDir)
-  const signIn: SignInRoutesDeps = {
-    providers: signInProviders,
-    rp: createRelyingParty(),
-    attempts: createSignInAttemptStore(db),
-    signIn: createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS),
-    publicBaseUrl,
+  const deps = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS)
+  if (signInProviders === undefined || signInProviders.length === 0) {
+    return { people: { members: deps.members, sessions: deps.sessions } }
   }
-  return { signIn }
+  return {
+    // A bearer from a declared provider's issuer may become a user by that
+    // provider's rules (ADR-0046 decision 5); see bearer-provisioning.ts.
+    people: {
+      members: deps.members,
+      sessions: deps.sessions,
+      bearerProvisioning: { providers: signInProviders, members: deps.members },
+    },
+    signIn: {
+      providers: signInProviders,
+      rp: createRelyingParty(),
+      attempts: createSignInAttemptStore(db),
+      signIn: deps,
+      publicBaseUrl,
+    },
+  }
 }
