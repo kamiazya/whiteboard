@@ -108,6 +108,9 @@ describe('SSE sync transport', () => {
     expect(res.headers.get('content-type')).toMatch(/text\/event-stream/)
     // A proxy or the browser buffering this stream would defeat its purpose.
     expect(res.headers.get('cache-control')).toMatch(/no-cache/)
+    // nginx buffers a proxied response unless told not to, which holds every
+    // live update until a buffer fills; this header is how a response opts out.
+    expect(res.headers.get('x-accel-buffering')).toBe('no')
     await res.body?.cancel().catch(() => {})
   })
 

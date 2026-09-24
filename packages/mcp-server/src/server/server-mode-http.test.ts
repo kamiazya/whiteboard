@@ -222,6 +222,37 @@ describe('startServerModeHttp', () => {
     expect(sweeper.stop).toHaveBeenCalledWith({ timeoutMs: 5_000 })
   })
 
+  // Several instances share one record (ADR-0020); the tail is how a browser
+  // on this one learns what another wrote. Off unless the operator sets the
+  // interval, since one instance hears all its own writes.
+  it.for([
+    ['creates no tail when the interval is unset', undefined, 0],
+    ['arms the workspace tail when the interval is set, and stops it on close', '250', 1],
+  ] as const)('%s', async ([, interval, expected]) => {
+    const previous = process.env.WHITEBOARD_WORKSPACE_TAIL_MS
+    if (interval === undefined) delete process.env.WHITEBOARD_WORKSPACE_TAIL_MS
+    else process.env.WHITEBOARD_WORKSPACE_TAIL_MS = interval
+    try {
+      const tail = { pollOnce: vi.fn(async () => {}), start: vi.fn(), stop: vi.fn(async () => {}) }
+      const factory = vi.fn(() => tail)
+      const startPromise = startServerModeHttp({ ...makeOptions(), workspaceTailFactory: factory })
+      const server = await serverOnceServing()
+      setImmediate(() => server.emit('listening'))
+      const { close } = await startPromise
+
+      expect(factory).toHaveBeenCalledTimes(expected)
+      expect(tail.start).toHaveBeenCalledTimes(expected)
+      if (expected === 1) {
+        expect(factory.mock.calls[0]?.[0]).toMatchObject({ intervalMs: 250 })
+      }
+      await close()
+      expect(tail.stop).toHaveBeenCalledTimes(expected)
+    } finally {
+      if (previous === undefined) delete process.env.WHITEBOARD_WORKSPACE_TAIL_MS
+      else process.env.WHITEBOARD_WORKSPACE_TAIL_MS = previous
+    }
+  })
+
   it('rejects when the server emits an error before listening', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
