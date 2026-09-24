@@ -182,6 +182,45 @@ describe('server mode opens a workspace', () => {
 })
 
 describe('server mode inside a workspace', () => {
+  const twoWorkspaces = [
+    { workspaceId: 'ws-1', displayName: 'Plans', segment: 'plans' },
+    { workspaceId: 'ws-2', displayName: 'Roadmap', segment: 'roadmap' },
+  ]
+
+  // Links behind a disclosure rather than a select: a closed select changes
+  // on every arrow key in some browsers, which would open each workspace a
+  // keyboard user merely passed through.
+  it("opens another of the person's workspaces from the shell", async () => {
+    renderAt('/w/ws-1', { signedIn: 'Ada', workspaces: twoWorkspaces })
+    const toggle = await screen.findByText('Plans', { selector: 'summary' })
+    fireEvent.click(toggle)
+    const other = await screen.findByRole('link', { name: 'Roadmap' })
+    expect(other.getAttribute('href')).toBe('/w/ws-2')
+    fireEvent.click(other)
+    await waitFor(() => expect(opened.at(-1)?.props).toMatchObject({ workspace: 'ws-2' }))
+  })
+
+  // The index rewrites /w/<id> to /w/<segment> once it resolves.
+  it('names the current workspace when the address uses its segment', async () => {
+    renderAt('/w/roadmap', { signedIn: 'Ada', workspaces: twoWorkspaces })
+    expect(await screen.findByText('Roadmap', { selector: 'summary' })).toBeTruthy()
+  })
+
+  it('reads the list again when opened, so a newer workspace is there', async () => {
+    const workspaces = [...twoWorkspaces]
+    renderAt('/w/ws-1', { signedIn: 'Ada', workspaces })
+    await screen.findByText('Plans', { selector: 'summary' })
+    workspaces.push({ workspaceId: 'ws-3', displayName: 'Launch', segment: 'launch' })
+    fireEvent.click(screen.getByText('Plans', { selector: 'summary' }))
+    expect(await screen.findByRole('link', { name: 'Launch' })).toBeTruthy()
+  })
+
+  it('offers no switcher when there is nothing to switch to', async () => {
+    renderAt('/w/ws-1', { signedIn: 'Ada', workspaces: [twoWorkspaces[0]!] })
+    await screen.findByText(/signed in as ada/i)
+    expect(document.querySelector('header details')).toBeNull()
+  })
+
   it('leads back to the workspace list', async () => {
     renderAt('/w/ws-1', { signedIn: 'Ada' })
     const back = await screen.findByRole('link', { name: /all workspaces/i })

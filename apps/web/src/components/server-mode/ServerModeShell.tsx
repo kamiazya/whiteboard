@@ -6,9 +6,11 @@
  * back to the workspace list, the open document's sync state, and who is
  * signed in.
  */
-import { useState, useSyncExternalStore } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
 import { notKeepingAnnouncement } from '../../lib/connection-state.js'
+import { listMemberWorkspaces, type MemberWorkspace } from '../../lib/member-workspaces.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
 import { connectionLabel } from '../connection/ConnectionStatus.js'
 import { Button } from '../ui/button.js'
@@ -40,6 +42,63 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
   )
 }
 
+/**
+ * The person's other workspaces, one step away: links behind a native
+ * disclosure. Not a select — a closed select changes on every arrow key in
+ * some browsers, and navigating on change would open each workspace a
+ * keyboard user merely passed through. The list is read again each time it
+ * opens, so a workspace made or renamed elsewhere is there when it is used.
+ * Absent when there is nothing to switch to.
+ */
+function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
+  const current = parseWorkspaceRoute(useLocation().pathname)?.workspace
+  const [workspaces, setWorkspaces] = useState<MemberWorkspace[]>([])
+  const [open, setOpen] = useState(false)
+  const load = useCallback(() => {
+    void listMemberWorkspaces(fetchFn).then((list) => {
+      if (list !== 'unavailable') setWorkspaces(list)
+    })
+  }, [fetchFn])
+  useEffect(load, [load])
+  if (workspaces.length < 2) return null
+  // The address may name a workspace by its segment rather than its id.
+  const here = workspaces.find((w) => w.workspaceId === current || w.segment === current)
+  const label = here?.name ?? 'Workspaces'
+  return (
+    <details
+      open={open}
+      onToggle={(e) => {
+        const next = e.currentTarget.open
+        setOpen(next)
+        if (next) load()
+      }}
+      className="relative min-w-0"
+    >
+      <summary
+        title={label}
+        className="max-w-48 cursor-pointer truncate rounded-md border px-2 py-1 text-foreground"
+      >
+        {label}
+      </summary>
+      <ul className="absolute left-0 top-full z-50 mt-1 flex min-w-48 flex-col rounded-md border bg-background p-1 shadow-md">
+        {workspaces.map((w) => (
+          <li key={w.workspaceId}>
+            <Link
+              to={workspacePath(w.workspaceId)}
+              title={w.name}
+              aria-current={w === here ? 'page' : undefined}
+              onClick={() => setOpen(false)}
+              className="block truncate rounded px-2 py-1 hover:bg-muted aria-[current=page]:font-medium"
+            >
+              {w.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 export function ServerModeShell({ displayName, fetchFn }: { displayName: string; fetchFn: Fetch }) {
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
@@ -49,6 +108,7 @@ export function ServerModeShell({ displayName, fetchFn }: { displayName: string;
       <Link to="/" className="text-muted-foreground hover:text-foreground">
         All workspaces
       </Link>
+      <WorkspacePicker fetchFn={fetchFn} />
       <span className="text-muted-foreground">{label ?? ''}</span>
       {/* Mounted even when empty: a live region inserted with its text
           already in it is not announced. */}
