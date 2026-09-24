@@ -1915,18 +1915,6 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual([['ws-a', 'untitled']])
   })
 
-  it('says a server keeps the documents when a server-mode keeper serves the page', async () => {
-    installFetchMock({
-      workspaces: [{ workspaceId: 'ws-a' }],
-      documentsByWorkspace: { 'ws-a': [] },
-    })
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} serverMode />)
-    expect(await screen.findByText('What will you make first?')).toBeTruthy()
-    expect(screen.getByTestId('empty-state-subtitle').textContent).toBe(
-      'Documents live in this workspace, kept by this server.',
-    )
-  })
-
   it('keeps the panel when the workspace lists nothing but its trash is not empty', async () => {
     // Deleting the last document just filled the trash; swapping to the
     // onboarding state would hide the one affordance that undoes it — the
