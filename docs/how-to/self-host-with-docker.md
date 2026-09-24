@@ -7,11 +7,13 @@ Provider (OAuth/JWT resource-server validation with external IdP). It is a
 separate deployment path from the local daemon mode — do not mix local-daemon
 tokens with server JWT authentication.
 
-> **Server mode serves no browser UI.** The web app is not part of this
-> deployment: the container's root URL answers with a small placeholder
-> page, because the web app has no server-mode-aware sign-in yet. What this
-> deployment serves is the HTTP API under `/api/...` and the MCP endpoint at
-> `/mcp` — point API clients and MCP agents at those.
+> **The browser UI is the sign-in entrance only, for now.** The image carries
+> the web app and serves it from the server's own address. People sign in
+> there, see the workspaces they are members of, and sign out. Opening and
+> editing a workspace in the browser is not available yet: use an MCP client
+> against `/mcp`, or the HTTP API under `/api`. A server run without the web
+> build (from source, say) answers the root URL with a placeholder page
+> instead.
 
 ## Prerequisites
 

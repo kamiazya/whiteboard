@@ -249,13 +249,14 @@ describe('docs/ contract', () => {
   })
 
   // The operator guide reads as complete (Dockerfile, compose, TLS, backup)
-  // but server mode serves only a static placeholder page — apps/web has no
-  // server-mode-aware auth flow yet (see SERVER_MODE_PLACEHOLDER_HTML's
-  // rationale in app-helpers.ts). An operator who follows Quick start and
-  // opens the root URL must learn that from the guide, not from a dead page.
-  it('tells self-hosting operators that server mode serves no browser UI', () => {
+  // but the browser UI server mode serves is the sign-in entrance only
+  // (ADR-0047): opening a workspace in the browser is not there yet. An
+  // operator who opens the root URL must learn that from the guide, not by
+  // looking for an editor that is not there.
+  it('tells self-hosting operators the browser UI is the sign-in entrance only', () => {
     const guide = readFileSync(join(DOCS_ROOT, 'how-to/self-host-with-docker.md'), 'utf8')
-    expect(guide).toContain('no browser UI')
+    expect(guide).toContain('sign-in entrance only')
+    expect(guide).toContain('not available yet')
     // The two surfaces this deployment actually serves.
     expect(guide).toContain('/api')
     expect(guide).toContain('/mcp')

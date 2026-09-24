@@ -99,6 +99,9 @@ RUN pnpm install --offline --frozen-lockfile \
 
 RUN pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 RUN pnpm --filter @kamiazya/whiteboard-mcp build
+# The web app the keeper serves from its own origin (ADR-0047). After the
+# server build, because the web build copies itself into the server's dist/.
+RUN pnpm --filter @kamiazya/whiteboard-web build
 
 # Self-contained production bundle (no devDependencies, no workspace
 # symlinks). --legacy is required by pnpm v10+ without

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mountServerModeWebApp } from './server-mode-web-app.js'
+import { mountServerModeWebApp, serverModeUiStatus } from './server-mode-web-app.js'
 
 let dir: string
 
@@ -67,6 +67,12 @@ describe('mountServerModeWebApp', () => {
     await withBuild()
     expect((await app().request('/api/workspaces')).status).toBe(404)
     expect((await app().request('/mcp')).status).toBe(404)
+  })
+
+  it('reports the UI it serves, by whether the build is there', async () => {
+    expect(serverModeUiStatus(dir)).toEqual({ buildPresent: false, ui: 'server-placeholder' })
+    await withBuild()
+    expect(serverModeUiStatus(dir)).toEqual({ buildPresent: true, ui: 'web-app' })
   })
 
   // A keeper run from source, with no web build, still answers a browser.

@@ -23,6 +23,9 @@ const { mockServe, getLastServer } = vi.hoisted(() => {
 
 vi.mock('@hono/node-server', () => ({ serve: mockServe }))
 vi.mock('./app.js', () => ({ createApp: vi.fn(() => ({ fetch: vi.fn() })) }))
+vi.mock('./server-mode-web-app.js', () => ({
+  serverModeUiStatus: vi.fn(() => ({ buildPresent: true, ui: 'web-app' })),
+}))
 // The root now builds real ServerDeps before createApp (the /api/v1 mount
 // fix); this unit harness is about listen/close mechanics, so the store
 // layer is stubbed — unmocked, ensureWorkspaceId/getDb would open the
@@ -111,7 +114,7 @@ describe('startServerModeHttp', () => {
     expect(server.close).toHaveBeenCalledTimes(1)
   })
 
-  it('wires getStatus() to report the always-available server-placeholder UI', async () => {
+  it('wires getStatus() to report the UI the web-app module says it serves', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
     const server = await serverOnceServing()
@@ -122,14 +125,9 @@ describe('startServerModeHttp', () => {
     const passedOptions = createAppMock.mock.calls.at(-1)?.[0]
     const status = passedOptions?.getStatus()
 
-    // Server-mode ships the placeholder page inline in app.ts (not a build
-    // artifact), so these fields are fixed rather than derived from a
-    // filesystem check.
-    expect(status?.app).toEqual({
-      served: true,
-      buildPresent: true,
-      ui: 'server-placeholder',
-    })
+    // Whether the image carries a web build is the module's answer, not a
+    // fixed claim; the stub stands for "it does".
+    expect(status?.app).toEqual({ served: true, buildPresent: true, ui: 'web-app' })
   })
 
   // ADR-0046 decision 10: membership is enforced for every request with a

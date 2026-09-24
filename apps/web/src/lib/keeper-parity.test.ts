@@ -62,6 +62,10 @@ const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
+  'src/pages/ServerModeApp.tsx': {
+    reach: 'daemon-itself',
+    why: 'signs a person in to a server-mode keeper and lists the workspaces they are a member of — it is rendered only in the shell a server keeper serves from its own origin (ADR-0047), and a browser keeper has one person, no sign-in and no membership, so there is nothing to mirror',
+  },
   'src/lib/accept-transferred-record.ts': {
     reach: 'daemon-itself',
     why: 'merges a workspace record arriving from ANOTHER origin into a workspace this keeper holds — it runs on the page a keeper serves at its own address, and a browser keeper serves no address anyone could send a transfer to, so there is no receiving side to mirror',

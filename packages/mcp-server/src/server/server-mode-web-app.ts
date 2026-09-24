@@ -9,6 +9,7 @@
  * local daemon. A keeper run without a build — from source, say — keeps the
  * placeholder, so a browser always gets an answer.
  */
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
@@ -47,6 +48,16 @@ function shellWithConfig(html: string): { html: string; csp: string } {
     ? html.replace('</head>', `${script}</head>`)
     : `${script}${html}`
   return { html: withConfig, csp: serverModeCsp(nonce) }
+}
+
+/** What `runtime/status` reports of the UI: the web app when the image
+ *  carries its build, the placeholder when it does not. */
+export function serverModeUiStatus(webAppDir: string): {
+  buildPresent: boolean
+  ui: 'web-app' | 'server-placeholder'
+} {
+  const buildPresent = existsSync(join(webAppDir, 'index.html'))
+  return { buildPresent, ui: buildPresent ? 'web-app' : 'server-placeholder' }
 }
 
 export function mountServerModeWebApp(app: Hono, webAppDir: string): void {
