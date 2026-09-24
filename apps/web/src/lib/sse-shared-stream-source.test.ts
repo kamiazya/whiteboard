@@ -33,6 +33,9 @@ beforeEach(() => {
   globalThis.SharedWorker = FakeSharedWorker as unknown as typeof SharedWorker
 })
 afterEach(() => {
+  // Sources are cached per origin for the module's lifetime; failing every
+  // worker a case made evicts them, so a repeated run starts from nothing.
+  for (const worker of FakeSharedWorker.instances) worker.fail()
   globalThis.SharedWorker = original
 })
 
