@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { signsInWithBrowser } from './oidc-relying-party.js'
 import { loadSignInProviders } from './sign-in-config-file.js'
 
 let dir: string
@@ -58,6 +59,25 @@ describe('loadSignInProviders', () => {
     const path = join(dir, 'sign-in.yaml')
     await writeFile(path, yaml('{ env: GOOGLE_SECRET }'))
     expect(() => loadSignInProviders(path, {})).toThrow(/GOOGLE_SECRET/)
+  })
+
+  // No client means no secret to resolve, and no browser sign-in.
+  it('loads a bearer-only provider without a secret', async () => {
+    const path = join(dir, 'sign-in.yaml')
+    await writeFile(
+      path,
+      `providers:
+  - id: corp-mcp
+    kind: oidc
+    issuer: https://sso.corp.example
+    admission:
+      createAccounts: true
+      bearerClients: [claude-code]
+`,
+    )
+    const [provider] = loadSignInProviders(path, {})
+    expect(provider?.id).toBe('corp-mcp')
+    expect(provider !== undefined && signsInWithBrowser(provider)).toBe(false)
   })
 
   it('refuses a file that does not match the schema', async () => {

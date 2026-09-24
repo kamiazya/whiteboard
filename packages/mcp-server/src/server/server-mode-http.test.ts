@@ -148,6 +148,29 @@ describe('startServerModeHttp', () => {
     expect(passedOptions?.people).not.toHaveProperty('bearerProvisioning')
   })
 
+  // A provider with no client admits bearers and signs nobody in with a browser.
+  it('mounts no sign-in route for a bearer-only provider, but provisions its bearers', async () => {
+    const bearerOnly = {
+      id: 'corp-mcp',
+      kind: 'oidc' as const,
+      issuer: 'https://idp.test',
+      scopes: ['openid'],
+      admission: {
+        createAccounts: true,
+        honourEmailInvitations: false,
+        bearerClients: ['claude-code'],
+      },
+    }
+    const startPromise = startServerModeHttp({ ...makeOptions(), signInProviders: [bearerOnly] })
+    const server = await serverOnceServing()
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    const passedOptions = vi.mocked(createApp).mock.calls.at(-1)?.[0]
+    expect(passedOptions).not.toHaveProperty('signIn')
+    expect(passedOptions?.people?.bearerProvisioning?.providers).toEqual([bearerOnly])
+  })
+
   it('lets bearers from a declared provider become users through its rules', async () => {
     const provider = {
       id: 'corp',

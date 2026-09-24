@@ -7,8 +7,11 @@
 import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import { defaultLoadersSync } from 'cosmiconfig'
-import type { ResolvedProvider } from './oidc-relying-party.js'
+import type { ConfiguredProvider } from './oidc-relying-party.js'
 import { type OidcProvider, signInConfigSchema } from './sign-in-config.js'
+
+/** Where the sign-in configuration file is. Unset means no external sign-in. */
+export const SIGN_IN_CONFIG_ENV = 'WHITEBOARD_SIGN_IN_CONFIG'
 
 function parseFile(path: string): unknown {
   const content = readFileSync(path, 'utf8')
@@ -19,8 +22,11 @@ function parseFile(path: string): unknown {
     : defaultLoadersSync['.yaml'](path, content)
 }
 
-function secretOf(provider: OidcProvider, env: NodeJS.ProcessEnv): string {
-  const ref = provider.clientSecret
+function secretOf(
+  provider: OidcProvider,
+  ref: NonNullable<OidcProvider['clientSecret']>,
+  env: NodeJS.ProcessEnv,
+): string {
   const value = 'env' in ref ? env[ref.env] : readFileSync(ref.file, 'utf8').trim()
   if (value === undefined || value === '') {
     const where = 'env' in ref ? `environment variable ${ref.env}` : `file ${ref.file}`
@@ -29,7 +35,9 @@ function secretOf(provider: OidcProvider, env: NodeJS.ProcessEnv): string {
   return value
 }
 
-export function loadSignInProviders(path: string, env: NodeJS.ProcessEnv): ResolvedProvider[] {
+/** The declared providers, validated, with no secret read: what an operator
+ *  command needs to name a provider, on a host that may not hold its secrets. */
+export function readSignInProviders(path: string): OidcProvider[] {
   const parsed = signInConfigSchema.safeParse(parseFile(path))
   if (!parsed.success) {
     const issue = parsed.error.issues[0]
@@ -37,8 +45,13 @@ export function loadSignInProviders(path: string, env: NodeJS.ProcessEnv): Resol
       `sign-in configuration ${path}: ${issue?.path.join('.') ?? '(root)'} — ${issue?.message ?? 'invalid'}`,
     )
   }
-  return parsed.data.providers.map((provider) => ({
-    ...provider,
-    clientSecretValue: secretOf(provider, env),
-  }))
+  return parsed.data.providers
+}
+
+export function loadSignInProviders(path: string, env: NodeJS.ProcessEnv): ConfiguredProvider[] {
+  return readSignInProviders(path).map((provider): ConfiguredProvider => {
+    const { clientId, clientSecret } = provider
+    if (clientId === undefined || clientSecret === undefined) return provider
+    return { ...provider, clientId, clientSecretValue: secretOf(provider, clientSecret, env) }
+  })
 }

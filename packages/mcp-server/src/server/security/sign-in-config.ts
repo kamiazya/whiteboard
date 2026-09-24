@@ -54,8 +54,12 @@ const oidcProviderSchema = z
       .string()
       .url()
       .refine((value) => new URL(value).protocol === 'https:', 'an https:// issuer'),
-    clientId: z.string().min(1),
-    clientSecret: secretReferenceSchema,
+    // The keeper's own client at the provider, for browser sign-in. Both or
+    // neither: a provider without one signs nobody in through a browser and
+    // exists to admit bearers, so it must name `admission.bearerClients`.
+    // Bearer verification never uses these (see bearer-provisioning.ts).
+    clientId: z.string().min(1).optional(),
+    clientSecret: secretReferenceSchema.optional(),
     displayName: z.string().min(1).optional(),
     scopes: z.array(z.string().min(1)).default(['openid', 'email', 'profile']),
     // `prefault`, not `default`: zod 4's default is the OUTPUT value and skips
@@ -63,6 +67,23 @@ const oidcProviderSchema = z
     admission: providerAdmissionSchema.prefault({}),
   })
   .strict()
+  .superRefine((provider, ctx) => {
+    if ((provider.clientId === undefined) !== (provider.clientSecret === undefined)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [provider.clientId === undefined ? 'clientId' : 'clientSecret'],
+        message: 'clientId and clientSecret are declared together, or neither is',
+      })
+    }
+    if (provider.clientId === undefined && provider.admission.bearerClients === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['admission', 'bearerClients'],
+        message:
+          'a provider with no client signs nobody in through a browser; name the bearerClients it admits',
+      })
+    }
+  })
 
 export const signInConfigSchema = z
   .object({ providers: z.array(oidcProviderSchema).default([]) })

@@ -50,6 +50,7 @@ whiteboard server run            --json --dry-run [--external-url=<url>] [--auth
 whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
 whiteboard server grant-member   --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]
+whiteboard server add-user       --json --provider=<id> --subject=<sub> [--name=<display name>] [--data-dir=<path>]
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
 `
@@ -278,6 +279,10 @@ async function dispatchServer(
   }
   if (subcommand === 'support-bundle') {
     return await dispatchServerSupportBundle(rest)
+  }
+  if (subcommand === 'add-user') {
+    const { runServerAddUser } = await import('./server-add-user.js')
+    return await runServerAddUser(rest)
   }
   if (subcommand === 'grant-member') {
     // Dynamic import keeps the store out of the read-only command path.
