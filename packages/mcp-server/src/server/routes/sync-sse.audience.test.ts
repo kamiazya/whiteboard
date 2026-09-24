@@ -82,4 +82,26 @@ describe('the SSE transport and several instances', () => {
       logs.restore()
     }
   })
+
+  // Bounded, because every key is checked for membership and every workspace
+  // key is followed by the tail on each pass. A real client holds one
+  // workspace key plus the documents it has open.
+  it('refuses a subscribe that names more keys than a stream may hold', async () => {
+    const a = app()
+    const streamId = await openStream(a)
+    const subscribe = (keys: string[]) =>
+      a.request('/api/sync/subscribe', {
+        method: 'POST',
+        headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streamId, subscribe: keys }),
+      })
+    const keys = (from: number, n: number) =>
+      Array.from({ length: n }, (_, i) => `ws-1/doc-${from + i}`)
+
+    expect((await subscribe(keys(0, 257))).status).toBe(400)
+    expect((await subscribe(keys(0, 256))).status).toBe(200)
+    const over = await subscribe(keys(256, 1))
+    expect(over.status).toBe(400)
+    expect(await over.json()).toEqual({ error: 'too_many_subscriptions' })
+  })
 })

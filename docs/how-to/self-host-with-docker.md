@@ -220,9 +220,11 @@ needs buffering turned off for that path, or edits arrive in bursts.
 ## Running several instances
 
 Instances need no clustering and no coordination between themselves. They
-share one record — point every instance at the same `WHITEBOARD_DATABASE_URL`
-(a libSQL server, say), or at the same data volume — and edits from any of
-them merge there without conflict (the design is
+share one record, which takes two things, both required: every instance
+points at the same libSQL server through `WHITEBOARD_DATABASE_URL` (the rows
+— a SQLite file cannot be shared between instances), and mounts the same
+data volume (the uploaded images, which stay in the data directory). Edits
+from any of them merge there without conflict (the design is
 [ADR-0020](../contributing/adr/0020-coordination-boundary.md)). Two settings
 make that visible to the people using them:
 

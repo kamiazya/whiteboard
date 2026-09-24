@@ -33,12 +33,19 @@ import { membershipRefusal } from '../security/workspace-access.js'
 
 const log = getLogger('sync-sse')
 
+/**
+ * How many documents one stream may follow. A real client holds one workspace
+ * key plus the documents it has open; the bound is what keeps a caller from
+ * making every membership check and every tail pass as long as it likes.
+ */
+const MAX_DOCS_PER_STREAM = 256
+
 export const syncSubscribeRequestSchema = z
   .object({
     streamId: z.string().min(1),
     // Doc keys are `${workspaceId}/${path}`, matching the WS connection registry.
-    subscribe: z.array(z.string().min(1)).optional(),
-    unsubscribe: z.array(z.string().min(1)).optional(),
+    subscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
+    unsubscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
   })
   .strict()
 
@@ -242,6 +249,15 @@ async function firstMembershipRefusal(
   return null
 }
 
+function exceedsStreamCap(
+  docs: Map<string, unknown>,
+  subscribe: readonly string[],
+  unsubscribe: readonly string[],
+): boolean {
+  const adding = subscribe.filter((key) => !docs.has(key) && !unsubscribe.includes(key))
+  return docs.size + adding.length > MAX_DOCS_PER_STREAM
+}
+
 /**
  * Apply one subscribe/unsubscribe batch to a stream's document set, and
  * answer with what it now holds, sorted.
@@ -257,6 +273,16 @@ function applySubscriptions(
   for (const key of subscribe) if (!docs.has(key)) docs.set(key, { ready: false })
   for (const key of unsubscribe) docs.delete(key)
   return [...docs.keys()].sort()
+}
+
+function markReady(stream: SyncStream, doc: string): void {
+  const entry = stream.docs.get(doc) ?? { ready: false }
+  entry.ready = true
+  stream.docs.set(doc, entry)
+  // Replay the latest viewport request so a stream that connected after
+  // the request was issued still inherits the same fit/scroll/zoom intent.
+  const cached = getCachedViewportRequest(doc)
+  if (cached !== undefined) stream.send('message', JSON.stringify({ doc, raw: cached }))
 }
 
 export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
@@ -314,6 +340,9 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     // believing it is subscribed and waiting forever for updates.
     if (!stream) return unknownStream(c, parsed.data.streamId)
 
+    if (exceedsStreamCap(stream.docs, subscribe, unsubscribe)) {
+      return c.json({ error: 'too_many_subscriptions' }, 400)
+    }
     const docs = applySubscriptions(stream.docs, subscribe, unsubscribe)
     // A stream that reaches zero documents is the state worth seeing: the
     // client stops reconnecting there, so a gap between "the last tab
@@ -352,13 +381,7 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
       // them, and dropping readiness that arrived first would withhold the
       // viewport request for good. Declaring readiness is a statement of
       // interest in the document either way.
-      const entry = stream.docs.get(doc) ?? { ready: false }
-      entry.ready = true
-      stream.docs.set(doc, entry)
-      // Replay the latest viewport request so a stream that connected after
-      // the request was issued still inherits the same fit/scroll/zoom intent.
-      const cached = getCachedViewportRequest(doc)
-      if (cached !== undefined) stream.send('message', JSON.stringify({ doc, raw: cached }))
+      markReady(stream, doc)
       return c.json({ ok: true })
     }
     if (message.type === 'viewport_response') {

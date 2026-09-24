@@ -257,6 +257,10 @@ describe('docs/ contract', () => {
     expect(guide).toContain('## Running several instances')
     expect(guide).toContain('WHITEBOARD_WORKSPACE_TAIL_MS')
     expect(guide).toContain('sticky')
+    // Both halves of the shared record: rows in one libSQL server, and the
+    // images in one volume. Either alone leaves instances diverging.
+    expect(guide).toContain('both required')
+    expect(guide).toContain('WHITEBOARD_DATABASE_URL')
     // The two surfaces this deployment actually serves.
     expect(guide).toContain('/api')
     expect(guide).toContain('/mcp')
