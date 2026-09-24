@@ -20,13 +20,19 @@ import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRoutesDeps } from './routes/sign-in.js'
-import { createCompleteSignInDeps } from './security/complete-sign-in.js'
+import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
-import { createRelyingParty, type ResolvedProvider } from './security/oidc-relying-party.js'
+import {
+  type ConfiguredProvider,
+  createRelyingParty,
+  type ResolvedProvider,
+  signsInWithBrowser,
+} from './security/oidc-relying-party.js'
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
+import type { TenantDatabase } from './store/db/tenant-database.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 
@@ -50,7 +56,7 @@ export interface StartServerModeHttpOptions {
   fileGcSweeperFactory?: typeof createFileGcSweeper
   /** ADR-0046: the external providers this keeper signs people in through,
    *  secrets already resolved. None, and no sign-in route is mounted. */
-  signInProviders?: readonly ResolvedProvider[]
+  signInProviders?: readonly ConfiguredProvider[]
 }
 
 // How long a sign-in lasts before the person signs in again. Admission is
@@ -291,7 +297,8 @@ function closeListener(server: { close(done: (err?: Error) => void): unknown }):
 
 // Who is signed in, and what they may reach, is read on every request
 // whether or not any provider is configured: a bearer's person is gated by
-// membership too. No providers means no `/auth/*` route, not an empty one.
+// membership too. `/auth/*` exists only for providers with a browser client —
+// none means no route, not an empty one.
 async function peopleOptions(
   { signInProviders, publicBaseUrl }: StartServerModeHttpOptions,
   dataDir: string,
@@ -309,12 +316,17 @@ async function peopleOptions(
       sessions: deps.sessions,
       bearerProvisioning: { providers: signInProviders, members: deps.members },
     },
-    signIn: {
-      providers: signInProviders,
-      rp: createRelyingParty(),
-      attempts: createSignInAttemptStore(db),
-      signIn: deps,
-      publicBaseUrl,
-    },
+    ...signInRoutes(signInProviders.filter(signsInWithBrowser), db, deps, publicBaseUrl),
   }
+}
+
+function signInRoutes(
+  providers: readonly ResolvedProvider[],
+  db: TenantDatabase,
+  signIn: CompleteSignInDeps,
+  publicBaseUrl: string,
+): { signIn?: SignInRoutesDeps } {
+  if (providers.length === 0) return {}
+  const attempts = createSignInAttemptStore(db)
+  return { signIn: { providers, rp: createRelyingParty(), attempts, signIn, publicBaseUrl } }
 }

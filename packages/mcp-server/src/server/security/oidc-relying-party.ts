@@ -10,7 +10,20 @@ import type { VerifiedClaims } from './sign-in-admission.js'
 import type { OidcProvider } from './sign-in-config.js'
 
 /** A provider with its client secret read from wherever the config named. */
-export type ResolvedProvider = OidcProvider & { readonly clientSecretValue: string }
+/** A provider the keeper signs people in through with a browser: its client,
+ *  and the secret it resolved at startup. */
+export type ResolvedProvider = OidcProvider & {
+  readonly clientId: string
+  readonly clientSecretValue: string
+}
+
+/** What the configuration declares: browser-capable providers, and bearer-only
+ *  ones that carry no client. */
+export type ConfiguredProvider = OidcProvider | ResolvedProvider
+
+export function signsInWithBrowser(provider: ConfiguredProvider): provider is ResolvedProvider {
+  return 'clientSecretValue' in provider
+}
 
 interface AuthorizationRequest {
   readonly redirectUri: string

@@ -78,6 +78,10 @@ vi.mock('./server-restore.js', () => ({
   })),
 }))
 
+vi.mock('./server-add-user.js', () => ({
+  runServerAddUser: vi.fn(async () => 0),
+}))
+
 vi.mock('./server-grant-member.js', () => ({
   runServerGrantMember: vi.fn(async () => 0),
 }))
@@ -102,6 +106,7 @@ const serverBackupModule = await import('./server-backup.js')
 const serverRestoreModule = await import('./server-restore.js')
 const serverSupportBundleModule = await import('./server-support-bundle.js')
 const serverGrantMemberModule = await import('./server-grant-member.js')
+const serverAddUserModule = await import('./server-add-user.js')
 const { main, USAGE } = await import('./dispatcher.js')
 
 function captureStdio<T>(
@@ -446,6 +451,19 @@ describe('dispatcher routing: whiteboard server restore', () => {
 
   it('USAGE includes `whiteboard server restore`', () => {
     expect(USAGE).toMatch(/whiteboard server restore/)
+  })
+})
+
+describe('dispatcher routing: whiteboard server add-user', () => {
+  it('hands its arguments to runServerAddUser and returns its exit code', async () => {
+    const args = ['--json', '--provider=corp', '--subject=ada']
+    const { result: exitCode } = await captureStdio(() => main(['server', 'add-user', ...args]))
+    expect(exitCode).toBe(0)
+    expect(vi.mocked(serverAddUserModule.runServerAddUser)).toHaveBeenCalledWith(args)
+  })
+
+  it('USAGE includes `whiteboard server add-user`', () => {
+    expect(USAGE).toMatch(/whiteboard server add-user/)
   })
 })
 

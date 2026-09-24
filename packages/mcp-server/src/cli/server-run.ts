@@ -15,7 +15,7 @@ import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
 import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
 import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
-import type { ResolvedProvider } from '../server/security/oidc-relying-party.js'
+import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
 import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
 import {
   ENV_KEYS,
@@ -28,7 +28,7 @@ import {
   SERVER_MODE_RECORD_SCHEMA_VERSION,
   writeServerModeRecord,
 } from '../server/security/server-mode-record.js'
-import { loadSignInProviders } from '../server/security/sign-in-config-file.js'
+import { loadSignInProviders, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
@@ -60,16 +60,12 @@ interface StartServerOptions {
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy
-  signInProviders?: readonly ResolvedProvider[]
+  signInProviders?: readonly ConfiguredProvider[]
 }
 
 const log = getLogger('server-run')
 
-// ADR-0046 decision 3: where the sign-in configuration file is. Unset means
-// no external sign-in at all.
-const SIGN_IN_CONFIG_ENV = 'WHITEBOARD_SIGN_IN_CONFIG'
-
-function signInProvidersFrom(env: NodeJS.ProcessEnv): ResolvedProvider[] | null {
+function signInProvidersFrom(env: NodeJS.ProcessEnv): ConfiguredProvider[] | null {
   const path = env[SIGN_IN_CONFIG_ENV]
   if (path === undefined || path === '') return []
   try {

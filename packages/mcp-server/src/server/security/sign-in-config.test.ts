@@ -67,6 +67,40 @@ describe('signInConfigSchema', () => {
   })
 })
 
+// A provider only there to admit bearers: no browser sign-in, so no client.
+describe('a bearer-only provider', () => {
+  const bearerOnly = {
+    id: 'corp-mcp',
+    kind: 'oidc',
+    issuer: 'https://sso.corp.example',
+    admission: { createAccounts: true, bearerClients: ['claude-code'] },
+  }
+
+  it('is accepted without a client', () => {
+    const [provider] = signInConfigSchema.parse({ providers: [bearerOnly] }).providers
+    expect(provider?.clientId).toBeUndefined()
+  })
+
+  // With no client and no bearer clients it could admit nobody, which is a
+  // mistake to name at startup rather than a provider that silently does nothing.
+  it('is refused when it names no bearer client', () => {
+    const result = signInConfigSchema.safeParse({
+      providers: [{ ...bearerOnly, admission: { createAccounts: true } }],
+    })
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result.error?.issues)).toContain('bearerClients')
+  })
+
+  it.for([
+    ['a client id without its secret', { clientId: 'wb' }],
+    ['a secret without its client id', { clientSecret: { env: 'SECRET' } }],
+  ] as const)('refuses %s', ([, half]) => {
+    expect(signInConfigSchema.safeParse({ providers: [{ ...bearerOnly, ...half }] }).success).toBe(
+      false,
+    )
+  })
+})
+
 describe('providerAuthenticator', () => {
   // OIDC Core 1.0 section 2: `sub` is unique only within its issuer. Keying on
   // the operator's id instead would let an id re-pointed at another provider

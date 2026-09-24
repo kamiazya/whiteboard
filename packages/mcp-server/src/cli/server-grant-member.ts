@@ -1,11 +1,8 @@
-import { resolve } from 'node:path'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
-import { getDb } from '../server/store/db/index.js'
-import { prepareDataDir } from '../server/store/db/prepare.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
+import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
 
 interface NamedUser {
   id: string
@@ -60,19 +57,9 @@ const USAGE =
 const REFUSAL: Record<Exclude<GrantMemberOutcome['kind'], 'ok'>, string> = {
   'unknown-workspace': 'grant refused: this data directory holds no workspace with that id.',
   'unknown-user':
-    'grant refused: no user by that id or name. The person has to sign in once to become a user here; those who have are listed on stdout.',
+    'grant refused: no user by that id or name. The person has to become a user here first — by signing in, by a bearer, or with `whiteboard server add-user`; the users there are listed on stdout.',
   'ambiguous-user':
     'grant refused: more than one user has that name. Re-run with --user=<id>; the candidates are listed on stdout.',
-}
-
-interface Io {
-  stdout(text: string): void
-  stderr(text: string): void
-}
-
-const processIo: Io = {
-  stdout: (text) => process.stdout.write(text),
-  stderr: (text) => process.stderr.write(text),
 }
 
 /** `whiteboard server grant-member`: stdout is the outcome as one JSON line. */
@@ -92,16 +79,9 @@ export async function runServerGrantMember(
     return usageError(io, `--workspace=<id|segment> is required. ${USAGE}`)
   if (user === undefined) return usageError(io, `--user=<id|name> is required. ${USAGE}`)
 
-  const dir = resolve(dataDir ?? resolveDefaultDataDir(env))
-  await prepareDataDir(dir)
-  const outcome = await grantMember(await getDb(dir), { workspaceId, user })
+  const outcome = await grantMember(await openKeeperDb(dataDir, env), { workspaceId, user })
   io.stdout(`${JSON.stringify(outcome)}\n`)
   if (outcome.kind === 'ok') return 0
   io.stderr(`${REFUSAL[outcome.kind]}\n`)
   return 1
-}
-
-function usageError(io: Io, message: string): number {
-  io.stderr(`${message}\n`)
-  return 64
 }

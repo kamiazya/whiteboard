@@ -445,10 +445,11 @@ try {
 
   // ── Scenario 5: restored server-mode can boot and serve seeded canvas ──────
   //
-  // Also the upgrade path the self-host guide gives a bearer-only deployment:
-  // the JWT issuer declared as a provider whose `bearerClients` names this
-  // client, so the bearer becomes a user; then the restored workspace, which
-  // has no member, granted one from the CLI.
+  // Also the upgrade path the self-host guide gives a bearer-only deployment,
+  // kept invitation-only: the JWT issuer declared as a provider with no browser
+  // client, whose `bearerClients` names this client. The bearer is refused
+  // until the operator adds its subject as a user, and the restored workspace
+  // has no member until the operator grants one.
 
   {
     const signInConfig = join(tmpRoot, 'sign-in.json')
@@ -460,9 +461,7 @@ try {
             id: 'smoke',
             kind: 'oidc',
             issuer: SMOKE_ISSUER,
-            clientId: 'wb-smoke',
-            clientSecret: { env: 'SMOKE_CLIENT_SECRET' },
-            admission: { createAccounts: true, bearerClients: ['cli-smoke-client'] },
+            admission: { bearerClients: ['cli-smoke-client'] },
           },
         ],
       }),
@@ -489,7 +488,6 @@ try {
           WHITEBOARD_SERVER_PORT: String(SERVER_PORT),
           NODE_EXTRA_CA_CERTS: tlsCertFile,
           WHITEBOARD_SIGN_IN_CONFIG: signInConfig,
-          SMOKE_CLIENT_SECRET: 'smoke-client-secret',
         },
       },
     )
@@ -508,26 +506,24 @@ try {
       fetch(`http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/documents`, {
         headers: { Authorization: `Bearer ${jwt}` },
       })
-    const beforeGrant = await listDocuments()
-    if (beforeGrant.status !== 403) {
-      fail(`scenario 5: expected 403 before a member is granted, got ${beforeGrant.status}`)
+    const refusedAs = async (step, expected) => {
+      const res = await listDocuments()
+      if (res.status !== 403) fail(`scenario 5: expected 403 ${step}, got ${res.status}`)
+      const { error } = await res.json()
+      if (error !== expected) fail(`scenario 5: the refusal ${step} is not ${expected}`, { error })
     }
-    const refusal = await beforeGrant.json()
-    if (refusal?.error !== 'not_a_member') {
-      fail('scenario 5: the refusal before a grant is not not_a_member', { error: refusal?.error })
+    const operator = (args) => {
+      const r = cli([...args, '--json', `--data-dir=${restoredDir}`], {
+        WHITEBOARD_SIGN_IN_CONFIG: signInConfig,
+      })
+      if (r.status !== 0) fail(`scenario 5: ${args[1]} failed`, { stdout: r.stdout.trim() })
+      assertNoLeak(`scenario 5 ${args[1]} stdout`, r.stdout, SMOKE_LITERALS)
     }
-    const grant = cli([
-      'server',
-      'grant-member',
-      '--json',
-      `--workspace=${WORKSPACE_ID}`,
-      '--user=cli-smoke-user',
-      `--data-dir=${restoredDir}`,
-    ])
-    if (grant.status !== 0) {
-      fail('scenario 5: grant-member failed', { stdout: grant.stdout.trim() })
-    }
-    assertNoLeak('scenario 5 grant-member stdout', grant.stdout, SMOKE_LITERALS)
+
+    await refusedAs('before the operator adds the user', 'not_invited')
+    operator(['server', 'add-user', '--provider=smoke', '--subject=cli-smoke-user'])
+    await refusedAs('before a member is granted', 'not_a_member')
+    operator(['server', 'grant-member', `--workspace=${WORKSPACE_ID}`, '--user=cli-smoke-user'])
     const listRes = await listDocuments()
     if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status}`)
     const list = await listRes.json()
