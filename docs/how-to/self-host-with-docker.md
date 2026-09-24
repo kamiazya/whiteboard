@@ -118,8 +118,13 @@ scope for them. `/mcp` still takes bearer tokens only.
 
 On a server-mode keeper every workspace is **members-only from the start**.
 The person who creates a workspace is its first member; everyone else needs
-a membership. This applies to the HTTP API; `/mcp` does not check membership
-yet.
+a membership. This applies to the HTTP API and to `/mcp` alike. An MCP tool
+call that names a workspace the caller is not a member of fails with
+`not_a_member`, whether or not that workspace exists, so the answer does not
+reveal which workspaces exist. A call that creates a workspace
+(`wb_workspace_edit` with `createWorkspace: true`) makes the caller its first
+member; on a workspace that already exists it is an ordinary write, and a
+non-member is refused.
 
 A person must be a **user** of this keeper before they can be a member. A
 browser sign-in makes one. A bearer token makes one only when its issuer is a

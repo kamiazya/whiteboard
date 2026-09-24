@@ -5,6 +5,7 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { getLogger } from '../log.js'
+import { gatedByMembership } from '../security/mcp-caller.js'
 import { withDocumentWriteLock, withDocumentWriteLocks } from '../store/workspace-lock.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
@@ -28,7 +29,7 @@ setServerCoreLogSink((record) => {
 })
 
 export function registerDocumentTools(server: McpServer, deps: ServerDeps): void {
-  const { tools } = createServer(deps)
+  const tools = gatedByMembership(createServer(deps).tools, deps.documentIndex)
 
   // Every MUTATING tool below runs inside withDocumentWriteLock, keyed on
   // the canvas it targets. Each is a load-modify-save against
