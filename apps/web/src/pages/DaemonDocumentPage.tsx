@@ -12,6 +12,7 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { sessionHealthOf } from '../lib/connection-state.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
@@ -362,17 +363,14 @@ function useDaemonDocument(
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this
-  // page only reports what it knows. Synced is claimed only while the session
-  // is actually connected: an auth rejection outranks everything else because
-  // re-pairing is the only way out of it, and `idle` (not started yet) and
-  // `error` fold in with `reconnecting`, whose copy makes no claim about
-  // recovery timing. Cleared on unmount — an index page has no live session,
-  // and a latched chip would keep claiming one.
+  // page only reports what it knows (`sessionHealthOf` says how). Cleared on
+  // unmount — an index page has no live session, and a latched chip would
+  // keep claiming one.
   useEffect(() => {
     setShellConnection({
       state: {
         keeper: 'daemon',
-        session: authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting',
+        session: sessionHealthOf(authError, syncStatus),
       },
       daemonBaseUrl,
     })

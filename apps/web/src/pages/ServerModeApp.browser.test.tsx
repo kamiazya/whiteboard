@@ -220,6 +220,10 @@ describe('server mode inside a workspace', () => {
     expect(screen.getByRole('status').textContent).toBe('')
     setShellConnection({ state: { keeper: 'daemon', session: 'sync-off' } })
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/sync off/i))
+    setShellConnection({ state: { keeper: 'daemon', session: 'write-failed' } })
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toMatch(/changes not saved yet/i),
+    )
   })
 
   it('puts the workspace in the main landmark, under the banner', async () => {

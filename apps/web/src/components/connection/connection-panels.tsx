@@ -80,6 +80,20 @@ export function DaemonReconnectingPanel({ state }: { state: ConnectionState | nu
   )
 }
 
+/** The daemon is keeping it, and a write it did not take is outstanding. */
+export function DaemonWriteFailedPanel({ state }: { state: ConnectionState | null }) {
+  if (state?.keeper !== 'daemon' || state.session !== 'write-failed') return null
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <p className="font-medium">Changes not saved yet</p>
+      <p className="text-muted-foreground">
+        Your latest changes have not reached the daemon. They are kept in this tab and sent again;
+        keep it open until this clears.
+      </p>
+    </div>
+  )
+}
+
 /**
  * The browser is keeping it, in whichever of its three storage healths.
  *

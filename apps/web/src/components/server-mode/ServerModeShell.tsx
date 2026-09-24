@@ -8,7 +8,7 @@
  */
 import { useState, useSyncExternalStore } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { isSyncOff } from '../../lib/connection-state.js'
+import { notKeepingAnnouncement } from '../../lib/connection-state.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
 import { connectionLabel } from '../connection/ConnectionStatus.js'
 import { Button } from '../ui/button.js'
@@ -43,9 +43,7 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
 export function ServerModeShell({ displayName, fetchFn }: { displayName: string; fetchFn: Fetch }) {
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
-  // Spoken only when sync goes off, as the daemon shell's ConnectionStatus
-  // does: a reconnect blip read aloud mid-sentence is noise.
-  const announcement = connection !== null && isSyncOff(connection.state) ? 'Live sync off' : ''
+  const announcement = notKeepingAnnouncement(connection?.state ?? null)
   return (
     <header className="flex h-10 shrink-0 items-center gap-3 border-b bg-background px-chrome text-sm pointer-coarse:h-12">
       <Link to="/" className="text-muted-foreground hover:text-foreground">

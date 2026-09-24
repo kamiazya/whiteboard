@@ -69,6 +69,7 @@ function capOf(state: ConnectionState): CapShape | undefined {
     synced: undefined,
     reconnecting: 'filled',
     'sync-off': 'filled',
+    'write-failed': 'ring',
   }
   return by[state.session]
 }
@@ -124,7 +125,7 @@ function useRecoveryGesture(session: SessionHealth | undefined): boolean {
       setRecovered(false)
       return
     }
-    if (before !== 'reconnecting' && before !== 'sync-off') return
+    if (before !== 'reconnecting' && before !== 'sync-off' && before !== 'write-failed') return
     setRecovered(true)
     const timer = setTimeout(() => setRecovered(false), RECOVERED_MS)
     return () => clearTimeout(timer)
