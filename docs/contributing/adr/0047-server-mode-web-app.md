@@ -1,8 +1,9 @@
 # ADR-0047: A server-mode keeper serves the web app it was built with, and tells its operator when it is behind
 
-**Status:** Draft. The owner took the three decisions below on 2026-09-24,
-after a comparison of bundling, proxying and a signed update channel. Nothing
-is built.
+**Status:** Draft. The owner took the decisions below on 2026-09-24, after a
+comparison of bundling, proxying and a signed update channel. Decision 3 moved
+to [ADR-0048](0048-update-notice.md) on 2026-09-25, which decides how releases
+mark a vulnerability and defers the work until the first release past 0.0.x.
 
 ## Context
 
@@ -59,16 +60,10 @@ proxy.
    permanently on different versions.
 
 3. **The keeper tells its operator when it is behind, and does so by
-   default.** It reads the project's public release information on a
-   schedule and places its own version in one of three states: up to date,
-   update available, or vulnerable — update now. The state appears where the
-   operator looks: the status and doctor commands, and the web app for a
-   signed-in administrator.
-
-   The check sends a request for release information and nothing about the
-   deployment. An operator can turn it off. It is on by default because the
-   failure it exists for — a keeper nobody knows is vulnerable — is exactly
-   the one an off-by-default setting leaves in place.
+   default** — now [ADR-0048](0048-update-notice.md), which carries this
+   decision forward with the one it was missing: how a release says which
+   versions it leaves vulnerable. The number stays so that references to
+   decision 4 still hold.
 
 4. **A signed update channel for the web app is recorded as a later option,
    not built.** On top of decision 1, a keeper could fetch a newer web build
@@ -95,11 +90,11 @@ proxy.
   origin. The daemon's live-socket transport does not exist in server mode, so
   the web app uses the stream-based one there.
 - **Web-side fixes reach a self-host only when its operator updates.**
-  Decision 3 is what shortens that interval. Decision 4 is how to remove it
+  ADR-0048 is what shortens that interval. Decision 4 is how to remove it
   later, if it proves too long.
 - **The release process has to say which releases fix vulnerabilities**, in a
-  form the keeper can read. Otherwise decision 3 can only say "behind", never
-  "vulnerable".
+  form the keeper can read. ADR-0048 decides that form: a published security
+  advisory.
 - **The keeper makes an outbound request by default.** An air-gapped or
   privacy-sensitive deployment turns it off. The self-hosting guide says so
   where it describes the setting.
