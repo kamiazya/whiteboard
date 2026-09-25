@@ -247,3 +247,34 @@ afterEach(clearCatalogRecents)
 // Mocking the module each time only moves the error to the next one in the
 // graph, so the file waits for all of them instead.
 afterAll(() => vi.dynamicImportSettled())
+
+// The same shape with a log instead of an import: a timer or a promise the
+// file started prints after its last test, and vitest sends every console
+// call to the main process as an RPC. Closing the environment with one in
+// flight is `Closing rpc while "onUserConsoleLog" was pending` — every test
+// passed, the file exits 1, and the file it names did nothing wrong at the
+// moment it is named. So the file also waits until nothing has logged for a
+// short window. Bounded, because a file that logs on an interval would
+// otherwise never close; that one fails as before, by name.
+const CONSOLE_QUIET_MS = 30
+const CONSOLE_SETTLE_CAP_MS = 1_000
+// Taken now, before any test can fake them: a file that leaves fake timers
+// installed would otherwise hold this wait on a clock that never moves.
+const realNow = performance.now.bind(performance)
+const realSetTimeout = globalThis.setTimeout
+let lastConsoleCall = 0
+for (const method of ['log', 'info', 'debug', 'warn', 'error'] as const) {
+  const original = console[method].bind(console)
+  console[method] = (...args: unknown[]): void => {
+    lastConsoleCall = realNow()
+    original(...args)
+  }
+}
+afterAll(async () => {
+  const giveUpAt = realNow() + CONSOLE_SETTLE_CAP_MS
+  while (realNow() < giveUpAt) {
+    const quietFor = realNow() - lastConsoleCall
+    if (quietFor >= CONSOLE_QUIET_MS) return
+    await new Promise((resolve) => realSetTimeout(resolve, CONSOLE_QUIET_MS - quietFor))
+  }
+})
