@@ -60,4 +60,16 @@ describe('selectDocumentTransport', () => {
       selectDocumentTransport({ pageOrigin: 'https://app.example', daemonBaseUrl: 'not a url' }),
     ).toBe('sse')
   })
+
+  it('picks sse for a keeper that serves no WebSocket, whatever the schemes', () => {
+    // A server-mode keeper (ADR-0047) has no WebSocket at all, so the scheme
+    // rule's websocket answer would be a connection that can never open.
+    expect(
+      selectDocumentTransport({
+        pageOrigin: 'https://board.example.com',
+        daemonBaseUrl: 'https://board.example.com',
+        keeperServesWebSocket: false,
+      }),
+    ).toBe('sse')
+  })
 })

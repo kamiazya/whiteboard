@@ -17,6 +17,9 @@ export interface SelectDocumentTransportInput {
   pageOrigin: string
   /** Base URL of the daemon being connected to. */
   daemonBaseUrl: string
+  /** False for a keeper with no WebSocket endpoint — a server-mode keeper
+   *  (ADR-0047). Absent means it has one, as a local daemon does. */
+  keeperServesWebSocket?: boolean
 }
 
 function isSecure(url: string): boolean | null {
@@ -28,6 +31,7 @@ function isSecure(url: string): boolean | null {
 }
 
 export function selectDocumentTransport(input: SelectDocumentTransportInput): DocumentTransport {
+  if (input.keeperServesWebSocket === false) return 'sse'
   const pageSecure = isSecure(input.pageOrigin)
   const daemonSecure = isSecure(input.daemonBaseUrl)
   // An unparseable origin gets the transport that works in strictly more

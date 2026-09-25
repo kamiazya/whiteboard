@@ -27,6 +27,8 @@ const endByStream = new Map<string, () => void>()
 const daemonWrites: { doc: string; body: Uint8Array }[] = []
 /** Flipped per case to make the daemon refuse the write. */
 let refuseWrites = false
+/** Set per case to hold the next accepted write's answer until released. */
+let holdNextWrite: Promise<void> | null = null
 
 const server = setupServer(
   http.get(`${BASE}/api/sync/stream`, () => {
@@ -63,6 +65,9 @@ const server = setupServer(
     // `fetch().catch()` cannot see — fetch resolves, so a writer that only
     // catches rejections counts this as a success.
     if (refuseWrites) return new HttpResponse('nope', { status: 503 })
+    const hold = holdNextWrite
+    holdNextWrite = null
+    if (hold) await hold
     daemonWrites.push({
       doc: `${String(params.workspaceId)}/${String(params.path)}`,
       body: new Uint8Array(await request.arrayBuffer()),
@@ -105,8 +110,14 @@ beforeAll(() => {
   })
   port = worker.port
   port.start()
+  port.onmessage = (e: MessageEvent) => events.push(e.data as (typeof events)[number])
   port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
 })
+
+/** What the worker told this port, in order. */
+const events: { type: string; doc?: string; landed?: boolean }[] = []
+const writeStatesFor = (doc: string, landed: boolean) =>
+  events.filter((e) => e.doc === doc && e.type === 'write-state' && e.landed === landed).length
 
 /** An edit from a tab, as one push. */
 function pushEdit(doc: string, key: string, value: string): void {
@@ -166,5 +177,96 @@ describe('a write the daemon refused', { timeout: 25_000 }, () => {
     const received = new LoroDoc()
     for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
     expect(received.getMap('m').get('stranded')).toBe('only-edit')
+  })
+
+  it('is retried on its own, with no further edit and no reconnect to carry it', async () => {
+    // The person stops typing and the stream stays up: neither trigger above
+    // fires, and the edit would wait for as long as the tab stays open —
+    // then vanish with the worker when the last one closes.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseWrites = true
+    pushEdit(doc, 'quiet', 'last-edit')
+    await settle()
+    expect(daemonWrites.filter((w) => w.doc === doc)).toEqual([])
+
+    refuseWrites = false
+    await until(() => daemonWrites.some((w) => w.doc === doc))
+    const received = new LoroDoc()
+    for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
+    expect(received.getMap('m').get('quiet')).toBe('last-edit')
+  })
+
+  it('is told to the tab while it is outstanding, and its landing is told too', async () => {
+    // The tab has no other way to know: its push went to the worker and
+    // returned at once, so without this the editor reads saved over an edit
+    // the keeper never took.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseWrites = true
+    pushEdit(doc, 'told', 'edit')
+    await until(() => writeStatesFor(doc, false) > 0)
+    expect(writeStatesFor(doc, true)).toBe(0)
+
+    refuseWrites = false
+    await until(() => writeStatesFor(doc, true) > 0)
+  })
+
+  it('is told to a tab that subscribes while the write is still failing', async () => {
+    // That tab was not there when the failure was announced; without this it
+    // would read as saved over an edit still being retried.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseWrites = true
+    pushEdit(doc, 'late', 'edit')
+    await until(() => writeStatesFor(doc, false) === 1)
+
+    port.postMessage({ type: 'unsubscribe', doc })
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => writeStatesFor(doc, false) === 2)
+    refuseWrites = false
+    await until(() => writeStatesFor(doc, true) > 0)
+  })
+
+  it('says it landed only once nothing newer is still outstanding', async () => {
+    // A retry carries what the replica held when it started. An edit that
+    // arrives while it is in flight is the NEXT write's, so the retry landing
+    // is not the failure being over — here that next write is refused too,
+    // and announcing a landing in between would read as saved over it.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseWrites = true
+    pushEdit(doc, 'first', 'refused')
+    await until(() => writeStatesFor(doc, false) === 1)
+
+    let release: () => void = () => {}
+    holdNextWrite = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    refuseWrites = false
+    await until(() => holdNextWrite === null)
+    // The retry is in flight and held; a newer edit reaches the replica, and
+    // from here on the daemon refuses again.
+    pushEdit(doc, 'second', 'while-in-flight')
+    await settle()
+    refuseWrites = true
+    release()
+    await until(() => daemonWrites.some((w) => w.doc === doc))
+    await settle()
+    expect(writeStatesFor(doc, true)).toBe(0)
+
+    refuseWrites = false
+    await until(() => writeStatesFor(doc, true) > 0)
+    const received = new LoroDoc()
+    for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
+    expect(received.getMap('m').get('second')).toBe('while-in-flight')
   })
 })

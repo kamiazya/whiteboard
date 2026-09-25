@@ -122,4 +122,11 @@ describe('ConnectionStatus chip', () => {
     // A polite live region replaces the old role="alert" banner.
     expect(screen.getByRole('status', { name: /live sync off/i })).toBeTruthy()
   })
+
+  it('says a write has not landed, in its own words, and explains it', async () => {
+    render(<ConnectionStatus state={{ keeper: 'daemon', session: 'write-failed' }} />)
+    expect(screen.getByRole('status', { name: /changes not saved yet/i })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button'))
+    expect(await screen.findByText(/have not reached/i)).toBeTruthy()
+  })
 })

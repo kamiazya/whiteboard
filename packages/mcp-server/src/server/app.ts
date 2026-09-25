@@ -9,7 +9,6 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import {
   isReservedUiPath,
-  SERVER_MODE_PLACEHOLDER_HTML,
   setBaselineSecurityHeaders,
   shouldLogMcpHttpDebug,
   toInlineScriptJson,
@@ -75,6 +74,7 @@ import {
 import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
 import { OFFICIAL_HOSTED_APP_URL } from './security/web-origin-allowlist.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
+import { mountServerModeWebApp } from './server-mode-web-app.js'
 import { FileVersionStore } from './store/version-store.js'
 
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
@@ -145,16 +145,13 @@ function membershipRouterOptions(membership: ReturnType<typeof membershipWiring>
 }
 
 /**
- * Server-mode serves only a static placeholder: no build artifact, no
- * runtime-config or token injection, no static asset roots.
+ * Server mode serves the web build in its image (ADR-0047), or the
+ * placeholder when there is none.
  */
 function mountServerModeUi(app: Hono, signIn: SignInRoutesDeps | undefined): void {
   // Before the UI catch-all, which would otherwise answer every /auth path.
   if (signIn !== undefined) app.route('/', createSignInRoutes(signIn))
-  app.get('*', (c) => {
-    if (isReservedUiPath(c.req.path)) return c.notFound()
-    return c.html(SERVER_MODE_PLACEHOLDER_HTML)
-  })
+  mountServerModeWebApp(app, DIST_WEB_APP_DIR)
 }
 
 /**

@@ -286,16 +286,65 @@ function scheduleWrite(baseUrl: string, doc: string): void {
       // write worth making and POSTs an empty body on every reconnect. `0` is
       // "the same state"; anything else, including the `undefined` Loro
       // returns for versions it cannot order, means send.
-      if (at.compare(acked) === 0) return
-      const pending = replica.export({ mode: 'update', from: acked })
-      await hubFor(baseUrl).push(doc, pending)
-      ackedVersions.set(key, at)
+      if (at.compare(acked) !== 0) {
+        const pending = replica.export({ mode: 'update', from: acked })
+        await hubFor(baseUrl).push(doc, pending)
+        ackedVersions.set(key, at)
+      }
+      // Only what the replica held at `at` has landed. An edit that arrived
+      // during the request is the next write's, and until that one lands the
+      // failure is not over.
+      if (replica.version().compare(at) === 0) writeLanded(baseUrl, doc)
     })
-    // Swallowed on purpose — there is no caller to tell. A refused write
-    // leaves `ackedVersions` where it was, which IS the retry: the next write,
-    // or the reconnect flush, recomputes the same outstanding bytes.
-    .catch(() => undefined)
+    // A refused write leaves `ackedVersions` where it was, so whatever writes
+    // next — a later edit, the reconnect flush, or the retry scheduled here —
+    // recomputes the same outstanding bytes.
+    .catch(() => writeFailed(baseUrl, doc))
   writeChains.set(key, next)
+}
+
+/**
+ * Consecutive failed writes per document, and the retry waiting on each.
+ *
+ * The retry is what covers the person who stops typing on a stream that stays
+ * up: neither a later edit nor a reconnect comes to carry the outstanding
+ * bytes, and they would wait until the last tab closed and took the worker —
+ * and the edit — with it.
+ */
+const failedWrites = new Map<string, number>()
+const writeRetries = new Map<string, ReturnType<typeof setTimeout>>()
+const WRITE_RETRY_BASE_MS = 1000
+const WRITE_RETRY_MAX_MS = 30_000
+
+function writeFailed(baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  const failures = (failedWrites.get(key) ?? 0) + 1
+  failedWrites.set(key, failures)
+  if (failures === 1) tellWriteState(baseUrl, doc, false)
+  if (writeRetries.has(key)) return
+  const delay = Math.min(WRITE_RETRY_BASE_MS * 2 ** (failures - 1), WRITE_RETRY_MAX_MS)
+  writeRetries.set(
+    key,
+    setTimeout(() => {
+      writeRetries.delete(key)
+      scheduleWrite(baseUrl, doc)
+    }, delay),
+  )
+}
+
+function writeLanded(baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  if (!failedWrites.delete(key)) return
+  clearTimeout(writeRetries.get(key))
+  writeRetries.delete(key)
+  tellWriteState(baseUrl, doc, true)
+}
+
+function tellWriteState(baseUrl: string, doc: string, landed: boolean): void {
+  for (const [target, state] of ports) {
+    if (state.baseUrl !== baseUrl || !state.subscriptions.has(doc)) continue
+    postWorkerEvent(target, { type: 'write-state', doc, landed })
+  }
 }
 
 function hubFor(baseUrl: string): SseStreamHub {
@@ -450,6 +499,11 @@ function handleSubscribe(
     },
   })
   state.subscriptions.set(msg.doc, off)
+  // A tab arriving while a write is still being retried was not there when
+  // the failure was announced, so it is told now.
+  if (failedWrites.has(replicaKey(state.baseUrl, msg.doc))) {
+    postWorkerEvent(port, { type: 'write-state', doc: msg.doc, landed: false })
+  }
 }
 
 function handleUnsubscribe(msg: RequestOf<'unsubscribe'>, state: PortState): void {

@@ -38,6 +38,8 @@ export interface DaemonDocumentBackendOptions {
   /** While the list is still loading, no backend — see the memo's own note. */
   readonly loading: boolean
   readonly documents: readonly DocumentSummary[]
+  /** Served by a server-mode keeper, which has no WebSocket (ADR-0047). */
+  readonly serverMode?: boolean
 }
 
 export interface DaemonDocumentBackendState {
@@ -46,6 +48,65 @@ export interface DaemonDocumentBackendState {
   /** Whether the daemon refused THIS connection's session. */
   readonly authError: boolean
   readonly reportAuthError: () => void
+}
+
+interface DaemonConnection {
+  readonly workspaceId: string
+  readonly path: string
+  readonly daemonBaseUrl: string
+  readonly daemonFetch: typeof globalThis.fetch
+  readonly token: string | undefined
+  readonly serverMode: boolean
+  readonly contentDocumentId: string
+}
+
+function connectDaemonDocument({
+  workspaceId,
+  path,
+  daemonBaseUrl,
+  daemonFetch,
+  token,
+  serverMode,
+  contentDocumentId,
+}: DaemonConnection): { backend: DocumentBackend; contentDocumentId: string } {
+  // A secure page cannot open a ws:// socket to an http daemon at all, so
+  // the transport is decided up front rather than attempted and retried.
+  //
+  // The override in front is development-only and compiles away entirely
+  // in a production build. It exists because the rule below is correct AND
+  // makes the SSE path — and the SharedWorker behind it — unreachable from
+  // `pnpm dev`, which serves plain http.
+  // A keeper with no WebSocket cannot honour a pinned 'websocket', so the pin
+  // is for a paired daemon only.
+  const transport =
+    (serverMode ? null : devTransportOverride()) ??
+    selectDocumentTransport({
+      pageOrigin: window.location.origin,
+      daemonBaseUrl,
+      keeperServesWebSocket: !serverMode,
+    })
+  if (transport !== 'sse') {
+    // wsToken carries the pairing session token into the WS upgrade —
+    // without it a pairing-grant session authenticates HTTP but opens
+    // the socket credential-less and is rejected 401 (edits then stay
+    // browser-only while the page looks connected).
+    return {
+      backend: new DaemonBackend(workspaceId, path, daemonBaseUrl, {
+        fetch: daemonFetch,
+        wsToken: () => token,
+      }),
+      contentDocumentId: contentDocumentId,
+    }
+  }
+  // Null where SharedWorker is unavailable; SseBackend then opens its own
+  // stream, which is correct but not shared across tabs. Same granularity
+  // as the WebSocket branch: every document syncs at workspace-document
+  // granularity.
+  const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
+  return {
+    backend: new SseBackend(workspaceId, path, daemonBaseUrl, { fetch: daemonFetch }, shared),
+    contentDocumentId: contentDocumentId,
+  }
 }
 
 export function useDaemonDocumentBackend({
@@ -57,6 +118,7 @@ export function useDaemonDocumentBackend({
   path,
   loading,
   documents,
+  serverMode = false,
 }: DaemonDocumentBackendOptions): DaemonDocumentBackendState {
   const [authError, setAuthError] = useState(false)
 
@@ -107,42 +169,25 @@ export function useDaemonDocumentBackend({
     // canvas at the old path on the first edit; creating a document is an
     // explicit act now (see the not-found state below).
     if (workspaceSyncDocumentId === undefined) return null
-    // A secure page cannot open a ws:// socket to an http daemon at all, so
-    // the transport is decided up front rather than attempted and retried.
-    //
-    // The override in front is development-only and compiles away entirely
-    // in a production build. It exists because the rule below is correct AND
-    // makes the SSE path — and the SharedWorker behind it — unreachable from
-    // `pnpm dev`, which serves plain http.
-    const transport =
-      devTransportOverride() ??
-      selectDocumentTransport({
-        pageOrigin: window.location.origin,
-        daemonBaseUrl,
-      })
-    if (transport !== 'sse') {
-      // wsToken carries the pairing session token into the WS upgrade —
-      // without it a pairing-grant session authenticates HTTP but opens
-      // the socket credential-less and is rejected 401 (edits then stay
-      // browser-only while the page looks connected).
-      return {
-        backend: new DaemonBackend(workspaceId, path, daemonBaseUrl, {
-          fetch: daemonFetch,
-          wsToken: () => token,
-        }),
-        contentDocumentId: workspaceSyncDocumentId,
-      }
-    }
-    // Null where SharedWorker is unavailable; SseBackend then opens its own
-    // stream, which is correct but not shared across tabs. Same granularity
-    // as the WebSocket branch: every document syncs at workspace-document
-    // granularity.
-    const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
-    return {
-      backend: new SseBackend(workspaceId, path, daemonBaseUrl, { fetch: daemonFetch }, shared),
+    return connectDaemonDocument({
+      workspaceId,
+      path,
+      daemonBaseUrl,
+      daemonFetch,
+      token,
+      serverMode,
       contentDocumentId: workspaceSyncDocumentId,
-    }
-  }, [workspaceId, path, loading, daemonFetch, daemonBaseUrl, token, workspaceSyncDocumentId])
+    })
+  }, [
+    workspaceId,
+    path,
+    loading,
+    daemonFetch,
+    daemonBaseUrl,
+    token,
+    workspaceSyncDocumentId,
+    serverMode,
+  ])
   const backend = backendState?.backend ?? null
 
   // A rejected session belongs to one backend identity — switching to a new

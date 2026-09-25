@@ -7,11 +7,17 @@ Provider (OAuth/JWT resource-server validation with external IdP). It is a
 separate deployment path from the local daemon mode — do not mix local-daemon
 tokens with server JWT authentication.
 
-> **Server mode serves no browser UI.** The web app is not part of this
-> deployment: the container's root URL answers with a small placeholder
-> page, because the web app has no server-mode-aware sign-in yet. What this
-> deployment serves is the HTTP API under `/api/...` and the MCP endpoint at
-> `/mcp` — point API clients and MCP agents at those.
+> **The browser UI signs people in and opens their workspaces.** The image
+> carries the web app and serves it from the server's own address. People sign
+> in there, see the workspaces they are members of, and open one to read and
+> edit its documents; the browser keeps no copy of them. MCP clients use
+> `/mcp`, and the HTTP API is under `/api`. A server run without the web build
+> (from source, say) answers the root URL with a placeholder page instead.
+>
+> Two people editing the same document see each other's changes live. To run
+> more than one instance behind a load balancer, see
+> [Running several instances](#running-several-instances): it takes one
+> setting on each instance and sticky sessions at the load balancer.
 
 ## Prerequisites
 
@@ -59,7 +65,8 @@ See `.env.server.example` for a filled-in template.
 ## Signing people in through your identity provider
 
 Set `WHITEBOARD_SIGN_IN_CONFIG` to the path of a YAML or JSON file listing the
-OpenID Connect providers people may sign in with. When it is unset, there is
+OpenID Connect providers people may sign in with, and any reverse proxy that
+signs them in for you (below). When it is unset, there is
 no sign-in route at all.
 
 ```yaml
@@ -75,7 +82,15 @@ providers:
 ```
 
 Register `https://<your host>/auth/callback/<id>` as the redirect URI with the
-provider. A person signs in at `/auth/sign-in/<id>`.
+provider. A person opens `https://<your host>/`, which offers a button per
+provider; each leads to `/auth/sign-in/<id>`.
+
+People must open the server at `WHITEBOARD_SERVER_EXTERNAL_URL`. A signed-in
+browser can only change anything from that origin: a request that changes
+something is refused its session unless its `Origin` matches the URL's origin
+(scheme, host and port). This
+is what stops a page on another host under the same site, which the browser
+would otherwise hand the session cookie to, from acting as the person.
 
 What the `admission` block can say:
 
@@ -108,6 +123,67 @@ providers:
     admission:
       bearerClients: [claude-code]        # the MCP client's OAuth client id
 ```
+
+**Signing in through your reverse proxy.** If a proxy in front of the server
+already signs people in (Cloudflare Access, Pomerium, oauth2-proxy,
+Authelia), declare it as a `trusted-header` provider. Its button leads to
+`/auth/sign-in/<id>` like any other. The server reads who the proxy says it
+is, runs the same `admission` rules, and opens its own session. The proxy's
+header is read only at that sign-in, never on other requests. So signing out
+at the proxy does not end a whiteboard session that is already open.
+
+Prefer a proxy that **signs** what it forwards. The server checks the
+signature against the proxy's keys:
+
+```yaml
+providers:
+  - id: access
+    kind: trusted-header
+    displayName: Company SSO
+    trustedAddresses: [127.0.0.1]           # where the proxy connects from
+    assertion:
+      header: Cf-Access-Jwt-Assertion
+      issuer: https://<team>.cloudflareaccess.com
+      audience: <the application's AUD tag>
+      jwksUri: https://<team>.cloudflareaccess.com/cdn-cgi/access/certs
+```
+
+A proxy that forwards a plain header works too:
+
+```yaml
+providers:
+  - id: corp-proxy
+    kind: trusted-header
+    trustedAddresses: [10.0.0.5]
+    identity:
+      subjectHeader: X-Forwarded-User        # required
+      emailHeader: X-Forwarded-Email         # optional
+      nameHeader: X-Forwarded-Preferred-Username   # optional
+      emailVerified: true                    # only if the proxy verified the address
+    admission:
+      createAccounts: true
+      allowedEmailDomains: [corp.example]    # reads the email, so needs the line above
+```
+
+The server honours the provider only on a connection whose own address is in
+`trustedAddresses`: the proxy's address, or a narrow range that holds it. It
+never reads `X-Forwarded-For` for this check. A plain header is only as
+trustworthy as the proxy's habit of **overwriting** it: a proxy that passes a
+client's own `X-Forwarded-User` through lets anyone sign in as anyone. So
+configure the proxy to set the header on every request and to strip it from
+incoming ones, and keep every other host out of `trustedAddresses`. The
+server trusts an address, not a program. When the proxy runs on the same host
+and connects from `127.0.0.1`, anything else on that host that can reach the
+server can sign in as anyone too. A signed assertion does not have that
+weakness. The
+server refuses a range covering every address, a credential or forwarding
+header (`Authorization`, `Cookie`, `X-Forwarded-For`, …) as the identity,
+and two providers that would resolve one person to one account.
+
+A person keeps the same user only while the provider stays the same. A
+signed provider is keyed by its `issuer`. A plain-header provider is keyed by
+its `id`, so renaming the `id` starts everyone over. `add-user` takes a proxy
+provider like any other, with the subject the proxy forwards.
 
 The session this opens authorizes `/api` for everything a person does with
 their workspaces. The keeper's administrative routes (those needing the
@@ -197,6 +273,60 @@ server {
 If you place a proxy that sets `X-Forwarded-For`, also set
 `WHITEBOARD_SERVER_TRUSTED_PROXY=true` so the server uses the forwarded IP for
 access decisions.
+
+The browser's live sync is a long-lived event stream (`/api/sync/stream`). The
+server marks it `X-Accel-Buffering: no`, so nginx passes it through as it is
+written rather than holding it in a buffer; a proxy that ignores that header
+needs buffering turned off for that path, or edits arrive in bursts.
+
+## Running several instances
+
+Instances need no clustering and no coordination between themselves. They
+share one record, which takes two things, both required: every instance
+points at the same libSQL server through `WHITEBOARD_DATABASE_URL` (the rows
+— a SQLite file cannot be shared between instances), and mounts the same
+data volume (the uploaded images, which stay in the data directory). Edits
+from any of them merge there without conflict (the design is
+[ADR-0020](../contributing/adr/0020-coordination-boundary.md)). Two settings
+make that visible to the people using them:
+
+1. **Set `WHITEBOARD_WORKSPACE_TAIL_MS` on every instance** — `1000` is a
+   reasonable start. Each instance keeps the documents its visitors have open
+   in memory, and this is how often it catches them up with what the other
+   instances wrote. It is also the delay: an edit made through one instance
+   reaches a browser on another within about one interval. Unset, an instance
+   shows a document as it last loaded it until it restarts. What a pass costs
+   is in the [configuration reference](../reference/configuration.md).
+
+2. **Make the load balancer sticky**, so one browser keeps reaching one
+   instance. A browser's live sync is one event stream plus requests that say
+   what it follows, and the stream lives on the instance that opened it — a
+   request that lands on another instance is refused (`404 unknown_stream`,
+   logged as a warning naming sticky sessions), and that browser stops
+   receiving edits. Any affinity your load balancer offers will do:
+
+   ```caddyfile
+   reverse_proxy whiteboard-1:3099 whiteboard-2:3099 {
+       lb_policy cookie
+   }
+   ```
+
+   ```yaml
+   # Traefik (Docker labels)
+   - traefik.http.services.whiteboard.loadbalancer.sticky.cookie=true
+   ```
+
+   ```nginx
+   upstream whiteboard {
+       ip_hash;
+       server whiteboard-1:3099;
+       server whiteboard-2:3099;
+   }
+   ```
+
+   A browser reopens its stream whenever it drops, so if an instance goes
+   away its browsers reconnect wherever the load balancer sends them next. MCP
+   clients need no affinity: `/mcp` keeps no per-connection state.
 
 ## Persistent data volume
 

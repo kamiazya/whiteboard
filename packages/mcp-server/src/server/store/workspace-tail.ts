@@ -79,6 +79,37 @@ export function resolveWorkspaceTailIntervalMs(
   return parsed.ok ? parsed.value : null
 }
 
+/** "Where this document stands is not known" — `catchUp` re-reads the record. */
+const COLD_CURSOR: WorkspaceDocCursor = { generation: null, afterSeq: null }
+
+async function follow(
+  options: WorkspaceTailOptions,
+  cursors: Map<string, WorkspaceDocCursor>,
+  workspaceId: string,
+): Promise<void> {
+  const cursor = cursors.get(workspaceId)
+  const doc = await options.liveDoc(workspaceId)
+  if (cursor === undefined) {
+    // First sight. A client is sent the live document when it subscribes,
+    // and that document can be OLDER than the record — loaded before another
+    // instance wrote. Baselining at the record's cursor would skip that gap
+    // for good, so the live document is reconciled from the record (a cold
+    // cursor, which `catchUp` answers by re-reading it) and only what it
+    // GAINED goes out: the client already holds the rest. One instance's own
+    // cache is level with the record, so this sends nothing there.
+    const before = doc.version()
+    const reconciled = await options.docs.catchUp(workspaceId, doc, COLD_CURSOR)
+    cursors.set(workspaceId, reconciled.cursor)
+    if (doc.version().compare(before) !== 0) {
+      options.emit(workspaceId, doc.export({ mode: 'update', from: before }))
+    }
+    return
+  }
+  const caughtUp = await options.docs.catchUp(workspaceId, doc, cursor)
+  cursors.set(workspaceId, caughtUp.cursor)
+  for (const update of caughtUp.updates) options.emit(workspaceId, update)
+}
+
 export function createWorkspaceTail(options: WorkspaceTailOptions): WorkspaceTail {
   // Where this instance has followed each workspace to. Absent means "not
   // baselined yet", which is a different thing from "at the start of the log"
@@ -87,21 +118,6 @@ export function createWorkspaceTail(options: WorkspaceTailOptions): WorkspaceTai
   let timer: NodeJS.Timeout | undefined
   let stopped = false
   let inFlight: Promise<void> | undefined
-
-  async function follow(workspaceId: string): Promise<void> {
-    const cursor = cursors.get(workspaceId)
-    if (cursor === undefined) {
-      // First sight. Every socket is sent the workspace snapshot when it
-      // connects, so the record as it stands has already been delivered;
-      // emitting the log here would re-send all of it.
-      cursors.set(workspaceId, await options.docs.readCursor(workspaceId))
-      return
-    }
-    const doc = await options.liveDoc(workspaceId)
-    const caughtUp = await options.docs.catchUp(workspaceId, doc, cursor)
-    cursors.set(workspaceId, caughtUp.cursor)
-    for (const update of caughtUp.updates) options.emit(workspaceId, update)
-  }
 
   async function pollOnce(): Promise<void> {
     const subscribed = [...options.subscribedWorkspaces()]
@@ -128,7 +144,7 @@ export function createWorkspaceTail(options: WorkspaceTailOptions): WorkspaceTai
       // trap: the blocking is invisible in the source.
       await yieldToLoop()
       try {
-        await follow(workspaceId)
+        await follow(options, cursors, workspaceId)
       } catch (err) {
         // One unreachable workspace must not stop the others: they are
         // independent records and a failure here is transient by nature

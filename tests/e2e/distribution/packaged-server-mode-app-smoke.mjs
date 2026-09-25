@@ -376,9 +376,11 @@ try {
   }
   console.log('[server-mode-smoke] scenario 6 (local-daemon daemon-token auth): PASS')
 
-  // --- Scenario 7: server-mode root serves the static placeholder, not apps/web ---
-  // R5 of the MCP-UI retirement (ADR 0001): server-mode has no apps/web-compatible
-  // auth flow, so its root must never inject a token or runtime-config.
+  // --- Scenario 7: server-mode root serves the web app as a server keeper ---
+  // ADR-0047: the keeper serves the web build it ships, marked keeper:'server'
+  // so the app signs in rather than pairing. It must never hand a browser a
+  // daemon token, and the runtime config may carry nothing but that marker.
+  // Without a build it falls back to the placeholder, which names /mcp.
   {
     const app = makeApp([])
     const res = await app.request('/')
@@ -387,14 +389,21 @@ try {
     if (body.includes('__WHITEBOARD_DAEMON_TOKEN__')) {
       fail('7: server-mode root must not inject a daemon token')
     }
-    if (body.includes('__WHITEBOARD_RUNTIME_CONFIG__')) {
-      fail('7: server-mode root must not inject apps/web runtime-config')
+    const configs = body.match(/__WHITEBOARD_RUNTIME_CONFIG__ = [^<]*/g) ?? []
+    if (configs.length === 0) {
+      if (!body.includes('/mcp')) fail('7: server-mode placeholder must point operators at /mcp')
+    } else if (
+      configs.length !== 1 ||
+      configs[0] !== '__WHITEBOARD_RUNTIME_CONFIG__ = {"keeper":"server"}'
+    ) {
+      fail('7: server-mode runtime-config must carry only the server-keeper marker', { configs })
+    } else if (!res.headers.get('content-security-policy')?.includes("'nonce-")) {
+      fail('7: the served shell must carry a nonce CSP')
     }
-    if (!body.includes('/mcp')) {
-      fail('7: server-mode placeholder must point operators at /mcp')
-    }
+    console.log(
+      `[server-mode-smoke] scenario 7 (root serves ${configs.length ? 'the web app' : 'the placeholder'}): PASS`,
+    )
   }
-  console.log('[server-mode-smoke] scenario 7 (root serves static placeholder): PASS')
 
   console.log('[server-mode-smoke] all scenarios passed')
 } finally {

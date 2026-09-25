@@ -5,7 +5,9 @@ import { ShellMark } from './ShellMark.js'
 
 afterEach(cleanup)
 
-const DAEMON = (session: 'synced' | 'reconnecting' | 'sync-off'): ConnectionState => ({
+const DAEMON = (
+  session: 'synced' | 'reconnecting' | 'sync-off' | 'write-failed',
+): ConnectionState => ({
   keeper: 'daemon',
   session,
 })
@@ -127,6 +129,20 @@ describe('ShellMark', () => {
     rerender(<ShellMark state={DAEMON('reconnecting')} />)
     expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBeNull()
 
+    rerender(<ShellMark state={DAEMON('synced')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
+  })
+
+  // The same thing to the person typing as a failed browser write: what they
+  // type now is in this tab and nowhere else.
+  it('paints a daemon write that has not landed as a broken stroke with a hollow cap', () => {
+    render(<ShellMark state={DAEMON('write-failed')} />)
+    expect(screen.getByTestId('shell-mark-stroke').getAttribute('class')).toMatch(/wb-mark-broken/)
+    expect(screen.getByTestId('shell-mark-cap').getAttribute('data-shape')).toBe('ring')
+  })
+
+  it('celebrates the write finally landing', () => {
+    const { rerender } = render(<ShellMark state={DAEMON('write-failed')} />)
     rerender(<ShellMark state={DAEMON('synced')} />)
     expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
   })

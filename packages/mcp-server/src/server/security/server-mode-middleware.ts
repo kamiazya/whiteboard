@@ -39,6 +39,9 @@ function buildServerModeAuthFailResponse(decision: {
 export interface ServerModePeople {
   readonly members: MemberProfileStore
   readonly sessions: SignInSessionStore
+  /** This host's own origin. A session is honoured on a request that changes
+   *  something only when the request came from it. */
+  readonly origin: string
   readonly now?: () => number
   /** How a bearer's person with no user here may become one (ADR-0046
    *  decision 5). Absent: a bearer never creates a user. */
@@ -75,13 +78,26 @@ async function sessionGrant(
   requiredScopes: readonly AuthScope[],
 ): Promise<GrantOutcome | undefined> {
   const session = getCookie(c, SESSION_COOKIE)
-  if (session === undefined) return undefined
+  if (session === undefined || !fromThisHost(c, people.origin)) return undefined
   const person = await people.sessions.resolve(session, (people.now ?? Date.now)())
   if (person === null) return undefined
   if (requiredScopes.some((scope) => !SESSION_SCOPES.includes(scope))) {
     return { refusal: { status: 403, code: 'auth.forbidden' } }
   }
   return { grant: { kind: 'signed-in', scopes: SESSION_SCOPES, person } }
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+// The browser attaches the cookie to a request any page makes to this host —
+// a sibling subdomain's page included, which SameSite=Lax does not stop — so
+// a write carries the session only from this host's own pages. Browsers send
+// `Origin` on every non-GET request, same-origin ones too; one without it is
+// not a page of ours.
+function fromThisHost(c: Context, origin: string): boolean {
+  if (SAFE_METHODS.has(c.req.method.toUpperCase())) return true
+  const from = c.req.header('origin')
+  return from !== undefined && from === origin
 }
 
 async function bearerGrant(

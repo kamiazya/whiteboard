@@ -12,6 +12,7 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { sessionHealthOf } from '../lib/connection-state.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
@@ -64,6 +65,10 @@ export interface DaemonDocumentPageProps {
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
   onNavigateBack?: () => void
+  // Served by a server-mode keeper from its own origin (ADR-0047): it has no
+  // WebSocket and no replica routes, and its data is not this browser's to
+  // keep — the session cookie authenticates, so there is no token either.
+  serverMode?: boolean
 }
 
 /**
@@ -81,6 +86,7 @@ function useDaemonDocument(
     token,
     createBackend,
     onNavigateBack,
+    serverMode = false,
   }: DaemonDocumentPageProps,
   events: DocumentKeeperEvents,
 ): DocumentKeeperAnswer {
@@ -105,7 +111,7 @@ function useDaemonDocument(
   // merge-back cannot read as an offline edit vanishing between the two.
   // Both modules dedupe internally, so the effect can fire on every resolve.
   useEffect(() => {
-    if (controller.workspaceId === null) return
+    if (controller.workspaceId === null || serverMode) return
     const cancelPush = scheduleReplicaPush({
       fetch: daemonFetch,
       daemonBaseUrl,
@@ -125,7 +131,7 @@ function useDaemonDocument(
       cancelPush()
       cancelRefresh()
     }
-  }, [daemonFetch, daemonBaseUrl, controller.workspaceId])
+  }, [daemonFetch, daemonBaseUrl, controller.workspaceId, serverMode])
 
   // Stable across the page's lifetime — read fresh (not cached in state)
   // wherever the current settings are needed.
@@ -157,6 +163,7 @@ function useDaemonDocument(
     path: controller.path,
     loading: controller.loading,
     documents: controller.documents,
+    serverMode,
   })
 
   // Holds the mounted SpatialEditor's imperative handle so a daemon-driven
@@ -186,6 +193,7 @@ function useDaemonDocument(
     coreFacets,
     setCoreFacets,
     syncStatus,
+    persistence,
     readOutlineSource,
     annotations,
     threadMarks,
@@ -356,22 +364,19 @@ function useDaemonDocument(
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this
-  // page only reports what it knows. Synced is claimed only while the session
-  // is actually connected: an auth rejection outranks everything else because
-  // re-pairing is the only way out of it, and `idle` (not started yet) and
-  // `error` fold in with `reconnecting`, whose copy makes no claim about
-  // recovery timing. Cleared on unmount — an index page has no live session,
-  // and a latched chip would keep claiming one.
+  // page only reports what it knows (`sessionHealthOf` says how). Cleared on
+  // unmount — an index page has no live session, and a latched chip would
+  // keep claiming one.
   useEffect(() => {
     setShellConnection({
       state: {
         keeper: 'daemon',
-        session: authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting',
+        session: sessionHealthOf(authError, syncStatus, persistence),
       },
       daemonBaseUrl,
     })
     return () => setShellConnection(null)
-  }, [authError, syncStatus, daemonBaseUrl])
+  }, [authError, syncStatus, persistence, daemonBaseUrl])
 
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one

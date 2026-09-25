@@ -54,6 +54,10 @@
       "types": "./src/api-contracts/roundtrip.test-helper.ts",
       "import": "./src/api-contracts/roundtrip.test-helper.ts"
     },
+    "./api-contracts/sign-in": {
+      "types": "./src/api-contracts/sign-in.ts",
+      "import": "./src/api-contracts/sign-in.ts"
+    },
     "./api-contracts/runtime": {
       "types": "./src/api-contracts/runtime.ts",
       "import": "./src/api-contracts/runtime.ts"

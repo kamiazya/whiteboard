@@ -23,6 +23,9 @@ const { mockServe, getLastServer } = vi.hoisted(() => {
 
 vi.mock('@hono/node-server', () => ({ serve: mockServe }))
 vi.mock('./app.js', () => ({ createApp: vi.fn(() => ({ fetch: vi.fn() })) }))
+vi.mock('./server-mode-web-app.js', () => ({
+  serverModeUiStatus: vi.fn(() => ({ buildPresent: true, ui: 'web-app' })),
+}))
 // The root now builds real ServerDeps before createApp (the /api/v1 mount
 // fix); this unit harness is about listen/close mechanics, so the store
 // layer is stubbed — unmocked, ensureWorkspaceId/getDb would open the
@@ -111,7 +114,7 @@ describe('startServerModeHttp', () => {
     expect(server.close).toHaveBeenCalledTimes(1)
   })
 
-  it('wires getStatus() to report the always-available server-placeholder UI', async () => {
+  it('wires getStatus() to report the UI the web-app module says it serves', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
     const server = await serverOnceServing()
@@ -122,14 +125,9 @@ describe('startServerModeHttp', () => {
     const passedOptions = createAppMock.mock.calls.at(-1)?.[0]
     const status = passedOptions?.getStatus()
 
-    // Server-mode ships the placeholder page inline in app.ts (not a build
-    // artifact), so these fields are fixed rather than derived from a
-    // filesystem check.
-    expect(status?.app).toEqual({
-      served: true,
-      buildPresent: true,
-      ui: 'server-placeholder',
-    })
+    // Whether the image carries a web build is the module's answer, not a
+    // fixed claim; the stub stands for "it does".
+    expect(status?.app).toEqual({ served: true, buildPresent: true, ui: 'web-app' })
   })
 
   // ADR-0046 decision 10: membership is enforced for every request with a
@@ -222,6 +220,37 @@ describe('startServerModeHttp', () => {
     // With a cap, not bare: a full pass can be expensive and shutdown must
     // not wait out the whole of one.
     expect(sweeper.stop).toHaveBeenCalledWith({ timeoutMs: 5_000 })
+  })
+
+  // Several instances share one record (ADR-0020); the tail is how a browser
+  // on this one learns what another wrote. Off unless the operator sets the
+  // interval, since one instance hears all its own writes.
+  it.for([
+    ['creates no tail when the interval is unset', undefined, 0],
+    ['arms the workspace tail when the interval is set, and stops it on close', '250', 1],
+  ] as const)('%s', async ([, interval, expected]) => {
+    const previous = process.env.WHITEBOARD_WORKSPACE_TAIL_MS
+    if (interval === undefined) delete process.env.WHITEBOARD_WORKSPACE_TAIL_MS
+    else process.env.WHITEBOARD_WORKSPACE_TAIL_MS = interval
+    try {
+      const tail = { pollOnce: vi.fn(async () => {}), start: vi.fn(), stop: vi.fn(async () => {}) }
+      const factory = vi.fn(() => tail)
+      const startPromise = startServerModeHttp({ ...makeOptions(), workspaceTailFactory: factory })
+      const server = await serverOnceServing()
+      setImmediate(() => server.emit('listening'))
+      const { close } = await startPromise
+
+      expect(factory).toHaveBeenCalledTimes(expected)
+      expect(tail.start).toHaveBeenCalledTimes(expected)
+      if (expected === 1) {
+        expect(factory.mock.calls[0]?.[0]).toMatchObject({ intervalMs: 250 })
+      }
+      await close()
+      expect(tail.stop).toHaveBeenCalledTimes(expected)
+    } finally {
+      if (previous === undefined) delete process.env.WHITEBOARD_WORKSPACE_TAIL_MS
+      else process.env.WHITEBOARD_WORKSPACE_TAIL_MS = previous
+    }
   })
 
   it('rejects when the server emits an error before listening', async () => {

@@ -20,7 +20,7 @@
 // codec's remark pipeline onto the critical path for a module that only needs
 // the font loader. The bundle-size gate fails if this regresses.
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
-import { createElement, StrictMode } from 'react'
+import { createElement, lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.js'
@@ -47,12 +47,30 @@ export interface BootSequenceOptions {
   render?: (root: HTMLElement) => void
 }
 
+// Lazy: a server-mode keeper's entrance reads the sign-in contracts, whose
+// zod chain stays off the entry chunk like every other daemon contract.
+const ServerModeApp = lazy(() =>
+  import('./pages/ServerModeApp.js').then((m) => ({ default: m.ServerModeApp })),
+)
+
+/** A server-mode keeper marks the shell it serves (ADR-0047). A plain read,
+ *  not the runtime-config schema, for the same entry-chunk reason. */
+export function servedByServerKeeper(): boolean {
+  const raw = (window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__
+  return (
+    typeof raw === 'object' && raw !== null && (raw as { keeper?: unknown }).keeper === 'server'
+  )
+}
+
 function renderApp(root: HTMLElement): void {
+  const app = servedByServerKeeper()
+    ? createElement(Suspense, { fallback: null }, createElement(ServerModeApp))
+    : createElement(App)
   createRoot(root).render(
     createElement(
       StrictMode,
       null,
-      createElement(BrowserRouter, null, createElement(App)),
+      createElement(BrowserRouter, null, app),
       // Once, beside the app: it follows the focused markdown editor through
       // the active-editor registry and renders nothing until a phone's
       // keyboard is up.

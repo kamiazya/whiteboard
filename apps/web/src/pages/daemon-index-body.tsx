@@ -193,6 +193,7 @@ interface DaemonIndexBodyProps {
   onDuplicate: (path: string) => void | Promise<void>
   onRequestDelete: (pending: PendingDelete) => void
   onRetryWorkspaces: () => void | Promise<void>
+  serverMode: boolean
 }
 
 export function DaemonIndexBody(props: DaemonIndexBodyProps) {
@@ -222,7 +223,7 @@ export function DaemonIndexBody(props: DaemonIndexBodyProps) {
       <EmptyWorkspaceState
         onCreate={(kind) => void props.onCreate(kind)}
         disabled={props.creating}
-        subtitle="Documents live in this workspace, kept by your local daemon."
+        subtitle={`Documents live in this workspace, kept by ${props.serverMode ? 'this server' : 'your local daemon'}.`}
       />
     )
   }

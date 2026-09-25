@@ -7,7 +7,7 @@
  */
 import * as client from 'openid-client'
 import type { VerifiedClaims } from './sign-in-admission.js'
-import type { OidcProvider } from './sign-in-config.js'
+import type { OidcProvider, TrustedHeaderProvider } from './sign-in-config.js'
 
 /** A provider with its client secret read from wherever the config named. */
 /** A provider the keeper signs people in through with a browser: its client,
@@ -17,9 +17,9 @@ export type ResolvedProvider = OidcProvider & {
   readonly clientSecretValue: string
 }
 
-/** What the configuration declares: browser-capable providers, and bearer-only
- *  ones that carry no client. */
-export type ConfiguredProvider = OidcProvider | ResolvedProvider
+/** What the configuration declares: browser-capable providers, bearer-only
+ *  ones that carry no client, and reverse proxies that sign people in. */
+export type ConfiguredProvider = OidcProvider | ResolvedProvider | TrustedHeaderProvider
 
 export function signsInWithBrowser(provider: ConfiguredProvider): provider is ResolvedProvider {
   return 'clientSecretValue' in provider
