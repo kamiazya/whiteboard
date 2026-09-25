@@ -19,18 +19,18 @@ import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
-import type { SignInRoutesDeps } from './routes/sign-in.js'
+import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
 import { subscribedWorkspaceIds } from './routes/ws.js'
 import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import {
   type ConfiguredProvider,
   createRelyingParty,
-  type ResolvedProvider,
   signsInWithBrowser,
 } from './security/oidc-relying-party.js'
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
+import type { OidcProvider } from './security/sign-in-config.js'
 import { serverModeUiStatus } from './server-mode-web-app.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
@@ -345,14 +345,24 @@ async function peopleOptions(
       members: deps.members,
       sessions: deps.sessions,
       origin,
-      bearerProvisioning: { providers: signInProviders, members: deps.members },
+      bearerProvisioning: {
+        providers: signInProviders.filter((p): p is OidcProvider => p.kind === 'oidc'),
+        members: deps.members,
+      },
     },
-    ...signInRoutes(signInProviders.filter(signsInWithBrowser), db, deps, publicBaseUrl),
+    ...signInRoutes(
+      signInProviders.filter(
+        (p): p is SignInRouteProvider => p.kind === 'trusted-header' || signsInWithBrowser(p),
+      ),
+      db,
+      deps,
+      publicBaseUrl,
+    ),
   }
 }
 
 function signInRoutes(
-  providers: readonly ResolvedProvider[],
+  providers: readonly SignInRouteProvider[],
   db: TenantDatabase,
   signIn: CompleteSignInDeps,
   publicBaseUrl: string,

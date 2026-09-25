@@ -65,7 +65,8 @@ See `.env.server.example` for a filled-in template.
 ## Signing people in through your identity provider
 
 Set `WHITEBOARD_SIGN_IN_CONFIG` to the path of a YAML or JSON file listing the
-OpenID Connect providers people may sign in with. When it is unset, there is
+OpenID Connect providers people may sign in with, and any reverse proxy that
+signs them in for you (below). When it is unset, there is
 no sign-in route at all.
 
 ```yaml
@@ -122,6 +123,67 @@ providers:
     admission:
       bearerClients: [claude-code]        # the MCP client's OAuth client id
 ```
+
+**Signing in through your reverse proxy.** If a proxy in front of the server
+already signs people in (Cloudflare Access, Pomerium, oauth2-proxy,
+Authelia), declare it as a `trusted-header` provider. Its button leads to
+`/auth/sign-in/<id>` like any other. The server reads who the proxy says it
+is, runs the same `admission` rules, and opens its own session. The proxy's
+header is read only at that sign-in, never on other requests. So signing out
+at the proxy does not end a whiteboard session that is already open.
+
+Prefer a proxy that **signs** what it forwards. The server checks the
+signature against the proxy's keys:
+
+```yaml
+providers:
+  - id: access
+    kind: trusted-header
+    displayName: Company SSO
+    trustedAddresses: [127.0.0.1]           # where the proxy connects from
+    assertion:
+      header: Cf-Access-Jwt-Assertion
+      issuer: https://<team>.cloudflareaccess.com
+      audience: <the application's AUD tag>
+      jwksUri: https://<team>.cloudflareaccess.com/cdn-cgi/access/certs
+```
+
+A proxy that forwards a plain header works too:
+
+```yaml
+providers:
+  - id: corp-proxy
+    kind: trusted-header
+    trustedAddresses: [10.0.0.5]
+    identity:
+      subjectHeader: X-Forwarded-User        # required
+      emailHeader: X-Forwarded-Email         # optional
+      nameHeader: X-Forwarded-Preferred-Username   # optional
+      emailVerified: false                   # true only if the proxy verified it
+    admission:
+      createAccounts: true
+      allowedEmailDomains: [corp.example]    # needs emailVerified: true
+```
+
+The server honours the provider only on a connection whose own address is in
+`trustedAddresses`: the proxy's address, or a narrow range that holds it. It
+never reads `X-Forwarded-For` for this check. A plain header is only as
+trustworthy as the proxy's habit of **overwriting** it: a proxy that passes a
+client's own `X-Forwarded-User` through lets anyone sign in as anyone. So
+configure the proxy to set the header on every request and to strip it from
+incoming ones, and keep every other host out of `trustedAddresses`. The
+server trusts an address, not a program. When the proxy runs on the same host
+and connects from `127.0.0.1`, anything else on that host that can reach the
+server can sign in as anyone too. A signed assertion does not have that
+weakness. The
+server refuses a range covering every address, a credential or forwarding
+header (`Authorization`, `Cookie`, `X-Forwarded-For`, …) as the identity,
+and two providers that would resolve one person to one account.
+
+A person keeps the same user only while the provider stays the same. A
+signed provider is keyed by its `issuer`. A plain-header provider is keyed by
+its `id`, so renaming the `id` starts everyone over. `add-user` takes a proxy
+provider like any other, with the subject the proxy forwards.
 
 The session this opens authorizes `/api` for everything a person does with
 their workspaces. The keeper's administrative routes (those needing the
