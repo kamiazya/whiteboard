@@ -1,20 +1,25 @@
 # ADR-0045: An account is who logs in; a user is who a tenant knows
 
-**Status:** Draft — the shape and its open forks were recorded on 2026-09-23
-while the conversation was fresh, and the owner answered all of them the same
-day (see **Decisions taken** below). A second round, forced by what the
-first round's implementation exposed, added decisions 11-14 the same day,
-and a third added decision 15, which makes authentication a seam. Built so far:
-decision 8's tenant partitioning (the origin-keyed stores live under their
-tenant), and decisions 1-5's account/user split with the migration that
-turned each profile into one account plus one user. What plugs into the
-seam decision 15 opened is [ADR-0046](0046-external-sign-in.md); the
-external-token validation seam it cites still resolves nothing to an
-account; and
-[ADR-0041](0041-profile-and-authority.md)'s Member/profile remains what ships;
-the draft stays a draft until the first increment is built, so that increment
-can correct it rather than inherit a record nobody tested. This exists so the
-tenant work does not foreclose the split.
+**Status:** Accepted for a keeper with one tenant, in effect since
+2026-09-24. The owner answered every fork on 2026-09-23 in three rounds (see
+**Decisions taken** below; decisions 11-14 and 15 came from what building the
+first round exposed).
+
+Built:
+- decisions 1-5, the account/user split, with the migration that turned each
+  profile into one account plus one user;
+- decision 8's tenant partitioning of the origin-keyed stores, and backups
+  that mirror every tenant;
+- decision 12, sign-in at the tenant's own host;
+- decision 15, the authentication seam, which [ADR-0046](0046-external-sign-in.md)
+  fills: a bearer and a browser session both resolve through it to an account.
+
+Waiting for a keeper with more than one tenant:
+- decision 7's routing by subdomain;
+- decision 11's passkeys registered against the parent domain;
+- decision 14's account switcher.
+
+Decision 9's invitations can be redeemed, but nothing creates one yet.
 
 ## Context
 

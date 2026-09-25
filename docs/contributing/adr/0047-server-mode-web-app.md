@@ -1,9 +1,12 @@
 # ADR-0047: A server-mode keeper serves the web app it was built with, and tells its operator when it is behind
 
-**Status:** Draft. The owner took the decisions below on 2026-09-24, after a
-comparison of bundling, proxying and a signed update channel. Decision 3 moved
-to [ADR-0048](0048-update-notice.md) on 2026-09-25, which decides how releases
-mark a vulnerability and defers the work until the first release past 0.0.x.
+**Status:** Accepted, in effect since 2026-09-24. The owner took the
+decisions below that day, after a comparison of bundling, proxying and a
+signed update channel. Decision 1 is built: the server image carries the web
+build, and server mode serves it with a sign-in screen, the workspace list,
+and the editor over the stream transport. Decision 2 holds by construction.
+Decision 3 moved to [ADR-0048](0048-update-notice.md) on 2026-09-25. Decision
+4 remains a recorded option, not built.
 
 ## Context
 

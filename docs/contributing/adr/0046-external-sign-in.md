@@ -1,9 +1,23 @@
 # ADR-0046: External sign-in is an authenticator an operator configures, admitted by rules checked at every sign-in
 
-**Status:** Draft — the owner took the decisions below on 2026-09-23, after a
-survey of how established self-hosted products do this. Nothing here is built.
-It builds on [ADR-0045](0045-account-and-user.md), whose decision 15 made
-authentication a seam and left what plugs into it open. This ADR fills that in.
+**Status:** Accepted, in effect since 2026-09-25. The owner took the
+decisions below on 2026-09-23, after a survey of how established self-hosted
+products do this. It builds on [ADR-0045](0045-account-and-user.md), whose
+decision 15 made authentication a seam and left what plugs into it open. This
+ADR fills that in.
+
+Built:
+- decision 1, the OIDC relying party, with the bearer path resolving through
+  the same authenticator;
+- decision 2, the reverse-proxy authenticator. The proxy's header is read
+  only at sign-in, and a signed assertion and a bare header are both
+  accepted, each only from a declared address;
+- decisions 3-5 and 8, one configuration schema and one admission function
+  on every path, with its code-rule seam;
+- decision 6, both invitation kinds, for redemption. Nothing creates an
+  invitation yet;
+- decision 10, members-only workspaces in server mode, on the HTTP API and on
+  `/mcp` alike.
 
 ## Context
 

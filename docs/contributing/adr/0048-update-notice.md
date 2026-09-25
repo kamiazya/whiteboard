@@ -1,9 +1,9 @@
 # ADR-0048: A keeper tells its operator when it is behind, from the project's published security advisories
 
-**Status:** Draft — takes effect when the project prepares its first release
-past 0.0.x. The owner decided the form on 2026-09-25 and deferred the work:
-while every release is 0.0.x, there is no operator besides the owner to
-tell. Nothing is built.
+**Status:** Proposed — decided by the owner on 2026-09-25 and deferred. It
+takes effect when the project prepares its first release past 0.0.x: while
+every release is 0.0.x, there is no operator besides the owner to tell.
+Nothing is built.
 
 ## Context
 
