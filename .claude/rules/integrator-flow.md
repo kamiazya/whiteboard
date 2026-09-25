@@ -195,12 +195,7 @@ imports. Start the run, then leave the working tree alone.
   file ended with DYNAMIC imports in flight (App's mount effect, lazy
   pages), whose chains are static, so hoisting fixes nothing. The owner is the log's `originated in "<file>"`, not the module
   named; mocking that module moves the error. Fixed in `web-jsdom` by
-  `vitest.setup.ts` awaiting `vi.dynamicImportSettled()`. Its twin is a LOG
-  in flight rather than an import — `Closing rpc while "onUserConsoleLog" was
-  pending`, a timer the file started printing after its last test — and the
-  same setup waits until the console has been quiet for 30ms (on the real
-  clock, since a file may leave fake timers installed). Measured on a probe:
-  10/20 failing without the wait, 0/20 with it.
+  `vitest.setup.ts` awaiting `vi.dynamicImportSettled()`.
 
 - **An eleventh: a `vi.mock` factory that outlives its own test.**
   `VITEST_BROWSER_CONNECTION_CLOSED`, `[birpc] rpc is closed, cannot call
