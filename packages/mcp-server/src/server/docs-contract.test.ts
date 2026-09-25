@@ -260,6 +260,9 @@ describe('docs/ contract', () => {
     // Both halves of the shared record: rows in one libSQL server, and the
     // images in one volume. Either alone leaves instances diverging.
     expect(guide).toContain('both required')
+    // A reverse proxy as a sign-in provider, and the one thing it must do.
+    expect(guide).toContain('kind: trusted-header')
+    expect(guide).toContain('trustedAddresses')
     expect(guide).toContain('WHITEBOARD_DATABASE_URL')
     // The two surfaces this deployment actually serves.
     expect(guide).toContain('/api')

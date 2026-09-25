@@ -30,7 +30,7 @@ import {
   admit,
   type VerifiedClaims,
 } from './sign-in-admission.js'
-import { type OidcProvider, providerAuthenticator } from './sign-in-config.js'
+import { providerAuthenticator, type SignInProvider } from './sign-in-config.js'
 import { createSignInSessionStore, type SignInSessionStore } from './sign-in-session-store.js'
 
 interface NewcomerStores {
@@ -66,7 +66,7 @@ export function createCompleteSignInDeps(
 }
 
 interface CompleteSignInInput {
-  readonly provider: OidcProvider
+  readonly provider: SignInProvider
   /** Claims the relying party has already verified (signature, iss, aud, nonce). */
   readonly claims: VerifiedClaims
   /** The link token a newcomer arrived with, if any. */

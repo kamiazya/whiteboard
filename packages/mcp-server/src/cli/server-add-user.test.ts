@@ -13,6 +13,7 @@ import {
   type MemberProfileStore,
 } from '../server/security/member-profile-store.js'
 import { providerAuthenticator } from '../server/security/sign-in-config.js'
+import { readSignInProviders } from '../server/security/sign-in-config-file.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
 import { runServerAddUser } from './server-add-user.js'
 
@@ -46,6 +47,12 @@ beforeEach(async () => {
           issuer: 'https://accounts.google.com',
           clientId: 'wb',
           clientSecret: { env: 'NOT_SET_HERE' },
+        },
+        {
+          id: 'corp-proxy',
+          kind: 'trusted-header',
+          trustedAddresses: ['10.0.0.5'],
+          identity: { subjectHeader: 'X-Forwarded-User' },
         },
       ],
     }),
@@ -99,12 +106,21 @@ describe('whiteboard server add-user', () => {
     expect((await members.profileForBinding(binding))?.displayName).toBe('ada-1')
   })
 
+  // The same user a sign-in through that proxy resolves to.
+  it('keys a reverse-proxy provider the way its sign-in does', async () => {
+    await run(['--json', '--provider=corp-proxy', '--subject=ada'])
+    const [proxy] = readSignInProviders(configPath).filter((p) => p.id === 'corp-proxy')
+    const proxyBinding = { authenticator: proxy && providerAuthenticator(proxy), subject: 'ada' }
+    expect(proxyBinding.authenticator?.startsWith('proxy:')).toBe(true)
+    expect(await members.profileForBinding(proxyBinding as never)).not.toBeNull()
+  })
+
   it('refuses a provider the configuration does not declare, listing those it does', async () => {
     const res = await run(['--json', '--provider=nobody', '--subject=ada-1'])
     expect(res.code).toBe(1)
     expect(JSON.parse(res.stdout)).toEqual({
       kind: 'unknown-provider',
-      providers: ['corp-mcp', 'google'],
+      providers: ['corp-mcp', 'google', 'corp-proxy'],
     })
     expect(await members.listUsers()).toEqual([])
   })
