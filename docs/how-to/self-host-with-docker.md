@@ -159,10 +159,10 @@ providers:
       subjectHeader: X-Forwarded-User        # required
       emailHeader: X-Forwarded-Email         # optional
       nameHeader: X-Forwarded-Preferred-Username   # optional
-      emailVerified: false                   # true only if the proxy verified it
+      emailVerified: true                    # only if the proxy verified the address
     admission:
       createAccounts: true
-      allowedEmailDomains: [corp.example]    # needs emailVerified: true
+      allowedEmailDomains: [corp.example]    # reads the email, so needs the line above
 ```
 
 The server honours the provider only on a connection whose own address is in
