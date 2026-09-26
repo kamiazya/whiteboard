@@ -117,7 +117,17 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   if (command === 'daemon' && isDaemonSubcommand(subcommand)) {
-    return await dispatchDaemon(subcommand, rest)
+    // A refusal thrown from below — a daemon record this build cannot read or
+    // interpret while its process may be running — is an answer for a person:
+    // one stderr line and exit 1, never a stack trace, and stdout stays clean
+    // for callers parsing its JSON.
+    try {
+      return await dispatchDaemon(subcommand, rest)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`whiteboard daemon ${subcommand}: ${message}\n`)
+      return 1
+    }
   }
 
   process.stderr.write(`Unknown command. Currently supported:\n  ${USAGE}`)
