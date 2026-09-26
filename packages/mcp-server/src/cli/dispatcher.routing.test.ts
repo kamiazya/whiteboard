@@ -86,6 +86,10 @@ vi.mock('./server-grant-member.js', () => ({
   runServerGrantMember: vi.fn(async () => 0),
 }))
 
+vi.mock('./server-grant-admin.js', () => ({
+  runServerGrantAdmin: vi.fn(async () => 0),
+}))
+
 vi.mock('./server-support-bundle.js', () => ({
   runServerSupportBundle: vi.fn(async () => ({ stdout: '{"ok":true}\n', stderr: '', exitCode: 0 })),
 }))
@@ -107,6 +111,7 @@ const serverRestoreModule = await import('./server-restore.js')
 const serverSupportBundleModule = await import('./server-support-bundle.js')
 const serverGrantMemberModule = await import('./server-grant-member.js')
 const serverAddUserModule = await import('./server-add-user.js')
+const serverGrantAdminModule = await import('./server-grant-admin.js')
 const { main, USAGE } = await import('./dispatcher.js')
 
 function captureStdio<T>(
@@ -477,6 +482,19 @@ describe('dispatcher routing: whiteboard server grant-member', () => {
 
   it('USAGE includes `whiteboard server grant-member`', () => {
     expect(USAGE).toMatch(/whiteboard server grant-member/)
+  })
+})
+
+describe('dispatcher routing: whiteboard server grant-admin', () => {
+  it('hands its arguments to runServerGrantAdmin and returns its exit code', async () => {
+    const args = ['--json', '--user=Ada', '--remove']
+    const { result: exitCode } = await captureStdio(() => main(['server', 'grant-admin', ...args]))
+    expect(exitCode).toBe(0)
+    expect(vi.mocked(serverGrantAdminModule.runServerGrantAdmin)).toHaveBeenCalledWith(args)
+  })
+
+  it('USAGE includes `whiteboard server grant-admin`', () => {
+    expect(USAGE).toMatch(/whiteboard server grant-admin/)
   })
 })
 

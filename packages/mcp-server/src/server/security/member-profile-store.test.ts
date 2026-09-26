@@ -344,3 +344,53 @@ describe('accounts and users', () => {
     ).toBeNull()
   })
 })
+
+// ADR-0049 decision 1: a workspace's first member is its owner, so whoever
+// creates a workspace — or the operator granting its first member — can
+// manage it; everyone admitted after is a member.
+describe('membershipRole', () => {
+  const user = (name: string) =>
+    store.ensureProfile({ binding: passkeyBinding('https://a.example', name), displayName: name })
+
+  it('makes the first member of a workspace its owner, and later ones members', async () => {
+    const ada = await user('ada')
+    const bob = await user('bob')
+    await store.addMember('ws-1', ada.id)
+    await store.addMember('ws-1', bob.id)
+    expect(await store.membershipRole('ws-1', ada.id)).toBe('owner')
+    expect(await store.membershipRole('ws-1', bob.id)).toBe('member')
+  })
+
+  it('decides "first" per workspace, not across the tenant', async () => {
+    const ada = await user('ada')
+    const bob = await user('bob')
+    await store.addMember('ws-1', ada.id)
+    await store.addMember('ws-2', bob.id)
+    expect(await store.membershipRole('ws-2', bob.id)).toBe('owner')
+  })
+
+  it('is null for someone who is not a member', async () => {
+    const ada = await user('ada')
+    expect(await store.membershipRole('ws-1', ada.id)).toBeNull()
+  })
+
+  // Reopening clears the members-only marker but keeps the members, so the
+  // marker cannot be what decides "first".
+  it('does not make a later member an owner after the workspace was reopened', async () => {
+    const ada = await user('ada')
+    const bob = await user('bob')
+    await store.addMember('ws-1', ada.id)
+    await store.reopenToOriginTrust('ws-1')
+    await store.addMember('ws-1', bob.id)
+    expect(await store.membershipRole('ws-1', bob.id)).toBe('member')
+  })
+
+  it('keeps an owner an owner when they are added again', async () => {
+    const ada = await user('ada')
+    const bob = await user('bob')
+    await store.addMember('ws-1', ada.id)
+    await store.addMember('ws-1', bob.id)
+    await store.addMember('ws-1', ada.id)
+    expect(await store.membershipRole('ws-1', ada.id)).toBe('owner')
+  })
+})

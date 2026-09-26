@@ -24,6 +24,7 @@ const TENANT_SCOPE = {
   signInSessions: 'tenant',
   signInAttempts: 'tenant',
   workspaceMemberships: 'tenant',
+  tenantAdministrators: 'tenant',
   workspaceReplicaKeys: 'tenant',
   workspaceMembersOnly: 'tenant',
   leases: 'keeper-wide: leader election between instances of one keeper, about the process',

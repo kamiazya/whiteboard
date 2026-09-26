@@ -2,12 +2,8 @@ import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { createMemberProfileStore } from '../server/security/member-profile-store.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import { scanFlags } from './flag-table.js'
+import { findNamedUser, type NamedUser } from './named-user.js'
 import { type Io, openKeeperDb, processIo, usageError } from './operator-command.js'
-
-interface NamedUser {
-  id: string
-  displayName: string
-}
 
 export type GrantMemberOutcome =
   | { kind: 'ok'; workspaceId: string; user: NamedUser }
@@ -40,15 +36,11 @@ export async function grantMember(
   const { workspaceId } = workspace
 
   const members = createMemberProfileStore(db)
-  const users = await members.listUsers()
-  const byId = users.filter((u) => u.id === user)
-  const matches = byId.length > 0 ? byId : users.filter((u) => u.displayName === user)
-  const [only] = matches
-  if (only === undefined) return { kind: 'unknown-user', users }
-  if (matches.length > 1) return { kind: 'ambiguous-user', users: matches }
+  const found = await findNamedUser(members, user)
+  if (found.kind !== 'found') return found
 
-  await members.addMember(workspaceId, only.id)
-  return { kind: 'ok', workspaceId, user: only }
+  await members.addMember(workspaceId, found.user.id)
+  return { kind: 'ok', workspaceId, user: found.user }
 }
 
 const USAGE =

@@ -154,6 +154,15 @@ interface WorkspaceMembershipsTable {
   workspaceId: string
   profileId: string
   createdAt: Timestamp
+  // ADR-0049 decision 1. Written on every insert; nullable only at the column.
+  role: 'owner' | 'member'
+}
+
+// ADR-0049 decision 2: administrators a tenant has appointed.
+interface TenantAdministratorsTable {
+  profileId: string
+  appointedBy: string | null
+  appointedAt: Timestamp
 }
 
 // The read plane's per-workspace content key (ADR-0042 decisions 1/3/5,
@@ -235,6 +244,7 @@ export interface DatabaseSchema {
   signInSessions: SignInSessionsTable
   signInAttempts: SignInAttemptsTable
   workspaceMemberships: WorkspaceMembershipsTable
+  tenantAdministrators: TenantAdministratorsTable
   workspaceReplicaKeys: WorkspaceReplicaKeysTable
   workspaceMembersOnly: WorkspaceMembersOnlyTable
   tenants: TenantsTable

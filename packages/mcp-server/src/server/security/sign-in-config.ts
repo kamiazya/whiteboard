@@ -207,10 +207,30 @@ function uniqueBy(
   })
 }
 
-export const signInConfigSchema = z
-  .object({ providers: z.array(providerSchema).default([]) })
+// ADR-0049 decision 2: administrators named by provider and subject, for a
+// keeper with no command line to appoint one. Never by email: an address can
+// be claimed by whoever registers it at a provider first, a subject cannot.
+const configuredAdministratorSchema = z
+  .object({ provider: z.string().min(1), subject: z.string().min(1) })
   .strict()
-  .superRefine(({ providers }, ctx) => {
+
+export const signInConfigSchema = z
+  .object({
+    providers: z.array(providerSchema).default([]),
+    administrators: z.array(configuredAdministratorSchema).default([]),
+  })
+  .strict()
+  .superRefine(({ providers, administrators }, ctx) => {
+    const ids = new Set(providers.map((provider) => provider.id))
+    administrators.forEach((admin, index) => {
+      if (!ids.has(admin.provider)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['administrators', index, 'provider'],
+          message: `no provider is declared with the id ${admin.provider}`,
+        })
+      }
+    })
     uniqueBy(providers, 'id', ctx)
     uniqueBy(providers, 'issuer', ctx)
     // Two providers resolving one subject to one account would let the looser
@@ -225,7 +245,7 @@ export const signInConfigSchema = z
     )
   })
 
-type SignInConfig = z.infer<typeof signInConfigSchema>
+export type SignInConfig = z.infer<typeof signInConfigSchema>
 export type SignInProvider = SignInConfig['providers'][number]
 export type OidcProvider = Extract<SignInProvider, { kind: 'oidc' }>
 export type TrustedHeaderProvider = Extract<SignInProvider, { kind: 'trusted-header' }>
@@ -257,4 +277,17 @@ export function providerAuthenticator(
 
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('base64url')
+}
+
+/** The configured administrators as the bindings a request is resolved by. */
+export function configuredAdministrators(
+  config: SignInConfig,
+): { authenticator: string; subject: string }[] {
+  const byId = new Map(config.providers.map((provider) => [provider.id, provider]))
+  return config.administrators.flatMap((admin) => {
+    const provider = byId.get(admin.provider)
+    return provider === undefined
+      ? []
+      : [{ authenticator: providerAuthenticator(provider), subject: admin.subject }]
+  })
 }
