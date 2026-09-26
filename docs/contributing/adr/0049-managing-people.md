@@ -1,8 +1,25 @@
 # ADR-0049: People are managed at two levels — a tenant's administrators and a workspace's owners
 
-**Status:** Proposed — the owner took the four decisions below on 2026-09-26,
-after a survey of how ten self-hosted products manage people. Nothing is
-built.
+**Status:** Accepted, in effect since 2026-09-26. The owner took the
+decisions below on 2026-09-26, after a survey of how ten self-hosted products
+manage people.
+
+- Decisions 1 to 4 are built for server mode, by increment. That covers
+  - workspace roles, with the last owner kept;
+  - owners managing their workspace's people and inviting into it;
+  - a configured administrator list, re-checked at every sign-in, beside a
+    command to appoint one;
+  - administrators deactivating, reactivating and appointing, with the
+    invitation into the tenant alone;
+  - the web app's people screens.
+- Decision 5 is built as far as it does not depend on how a person is
+  identified. The local daemon serves the same people API and the same list.
+  The machine's owner (a credential carrying the daemon's administrative
+  scope) manages every workspace there, so no workspace there has a last
+  owner to keep. Adding a person there is still choosing a pinned passkey.
+  How the local daemon identifies a person is
+  [ADR-0050](0050-local-daemon-trust.md)'s to change.
+- Decision 6 builds nothing.
 
 ## Context
 

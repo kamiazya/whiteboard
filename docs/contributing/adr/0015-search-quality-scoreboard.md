@@ -343,7 +343,6 @@ The spike stays in the tree rather than being deleted with its result: it
 is the instrument that answers this question again once the corpus is big
 enough to answer it.
 
-||||||| 348c53a4
 
 ### 3f. The check the judged corpus structurally cannot perform (2026-08-23)
 
@@ -423,7 +422,6 @@ documents. The direction should carry; the magnitude on our own content is
 unmeasurable here, because our corpus resolves about 0.10 and this effect
 is half that.
 
-||||||| 7bd42e9c
 ### 3g. Mining the repository for queries — measured, and abandoned
 
 The corpus's weakest joint is that its questions are AUTHORED: written by
