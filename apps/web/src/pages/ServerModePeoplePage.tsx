@@ -62,22 +62,49 @@ function useChange(reload: () => void) {
  * Creates a single-use invitation link and shows it once, to copy. The link
  * is the secret, so it lives only in this page's state.
  */
+/** A created link, shown once with a way to copy it. */
+function InvitationLinkField({ link }: { link: InvitationLink }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    await navigator.clipboard?.writeText(link.url).catch(() => undefined)
+    setCopied(true)
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-sm text-muted-foreground" htmlFor="invitation-link">
+        Anyone who opens this link can use it once, until{' '}
+        {/* time-format-is-deliberate: an expiry is ahead, and formatRelative words only the past */}
+        {new Date(link.expiresAt).toLocaleString()}. It is shown only now.
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="invitation-link"
+          readOnly
+          value={link.url}
+          onFocus={(e) => e.currentTarget.select()}
+          className="min-w-0 flex-1 rounded-md border px-2 py-1 text-sm"
+        />
+        <Button variant="outline" size="sm" onClick={() => void copy()}>
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Creates a single-use invitation link and shows it once, to copy. The link
+ * is the secret, so it lives only in this page's state.
+ */
 function InvitationControl({ create }: { create: () => Promise<Outcome<InvitationLink>> }) {
   const [link, setLink] = useState<InvitationLink | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
   const make = async () => {
     const outcome = await create()
-    setCopied(false)
     if (outcome.ok) {
       setLink(outcome.value)
       setRefusal(null)
     } else setRefusal(outcome.message)
-  }
-  const copy = async () => {
-    if (link === null) return
-    await navigator.clipboard?.writeText(link.url).catch(() => undefined)
-    setCopied(true)
   }
   return (
     <section className="flex flex-col gap-2">
@@ -89,27 +116,8 @@ function InvitationControl({ create }: { create: () => Promise<Outcome<Invitatio
           {refusal}
         </p>
       )}
-      {link !== null && (
-        <div className="flex flex-col gap-1">
-          <label className="text-sm text-muted-foreground" htmlFor="invitation-link">
-            Anyone who opens this link can use it once, until{' '}
-            {/* time-format-is-deliberate: an expiry is ahead, and formatRelative words only the past */}
-            {new Date(link.expiresAt).toLocaleString()}. It is shown only now.
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="invitation-link"
-              readOnly
-              value={link.url}
-              onFocus={(e) => e.currentTarget.select()}
-              className="min-w-0 flex-1 rounded-md border px-2 py-1 text-sm"
-            />
-            <Button variant="outline" size="sm" onClick={() => void copy()}>
-              {copied ? 'Copied' : 'Copy'}
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Keyed on the link, so a new one starts uncopied. */}
+      {link !== null && <InvitationLinkField key={link.url} link={link} />}
     </section>
   )
 }

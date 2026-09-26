@@ -20,24 +20,65 @@ interface User {
   administrator: boolean
 }
 
+const refuse = (error: string, message: string, status: number) =>
+  Response.json({ error, message }, { status })
+const LINK = { url: 'https://wb.test/invite#token=t-1', expiresAt: '2026-10-03T00:00:00.000Z' }
+
+// `/api/people` and `/api/invitations`, as the keeper answers an administrator.
+function tenantRoute(users: User[], me: User, url: string, method: string): Response {
+  if (!me.administrator) {
+    return refuse('not_an_administrator', 'only an administrator of this server can do that', 403)
+  }
+  if (url === '/api/invitations') return Response.json(LINK, { status: 201 })
+  if (url === '/api/people') return Response.json({ people: users })
+  const [, , , id, what] = url.split('/')
+  const user = users.find((u) => u.userId === id) as User
+  if (what === 'deactivation') user.deactivated = method === 'POST'
+  if (what === 'administrator') user.administrator = method === 'PUT'
+  return Response.json(
+    what === 'deactivation'
+      ? { userId: user.userId, deactivated: user.deactivated }
+      : { userId: user.userId, administrator: user.administrator },
+  )
+}
+
+interface Member {
+  userId: string
+  displayName: string
+  role: string
+  deactivated: boolean
+}
+
+// `/api/workspaces/ws-1/...`, as the keeper answers its members and owners.
+function workspaceRoute(members: Member[], me: User, url: string, init?: RequestInit) {
+  if (url === '/api/workspaces/ws-1/people') return Response.json({ people: members })
+  if (url === '/api/workspaces/ws-1/invitations') {
+    const owner = members.some((m) => m.userId === me.userId && m.role === 'owner')
+    return owner
+      ? Response.json(LINK, { status: 201 })
+      : refuse('not_an_owner', 'only an owner of this workspace can change its people', 403)
+  }
+  const member = members.find((m) => m.userId === url.split('/').at(-1)) as Member
+  const { role } = JSON.parse(String(init?.body)) as { role: string }
+  if (role === 'member' && members.filter((m) => m.role === 'owner').length === 1) {
+    return refuse('last_owner', 'a workspace keeps at least one owner', 409)
+  }
+  member.role = role
+  return Response.json(member)
+}
+
 function fakeKeeper(self: 'ada' | 'bob') {
   const users: User[] = [
     { userId: 'u-ada', displayName: 'Ada', deactivated: false, administrator: true },
     { userId: 'u-bob', displayName: 'Bob', deactivated: false, administrator: false },
   ]
-  const members = [
+  const members: Member[] = [
     { userId: 'u-ada', displayName: 'Ada', role: 'owner', deactivated: false },
     { userId: 'u-bob', displayName: 'Bob', role: 'member', deactivated: false },
   ]
   const me = users.find((u) => u.userId === `u-${self}`) as User
-  const refuse = (error: string, message: string, status: number) =>
-    Response.json({ error, message }, { status })
-  const link = { url: 'https://wb.test/invite#token=t-1', expiresAt: '2026-10-03T00:00:00.000Z' }
-  const isOwner = () => members.some((m) => m.userId === me.userId && m.role === 'owner')
-
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
-    const method = init?.method ?? 'GET'
     if (url === '/auth/session') {
       return Response.json({
         signedIn: true,
@@ -48,41 +89,9 @@ function fakeKeeper(self: 'ada' | 'bob') {
       return Response.json({ workspaces: [{ workspaceId: 'ws-1', displayName: 'Plans' }] })
     }
     if (url.startsWith('/api/people') || url === '/api/invitations') {
-      if (!me.administrator) {
-        return refuse(
-          'not_an_administrator',
-          'only an administrator of this server can do that',
-          403,
-        )
-      }
-      if (url === '/api/invitations') return Response.json(link, { status: 201 })
-      if (url === '/api/people') return Response.json({ people: users })
-      const [, , , id, what] = url.split('/')
-      const user = users.find((u) => u.userId === id) as User
-      if (what === 'deactivation') user.deactivated = method === 'POST'
-      if (what === 'administrator') user.administrator = method === 'PUT'
-      return Response.json(
-        what === 'deactivation'
-          ? { userId: user.userId, deactivated: user.deactivated }
-          : { userId: user.userId, administrator: user.administrator },
-      )
+      return tenantRoute(users, me, url, init?.method ?? 'GET')
     }
-    if (url === '/api/workspaces/ws-1/people') return Response.json({ people: members })
-    if (url === '/api/workspaces/ws-1/invitations') {
-      return isOwner()
-        ? Response.json(link, { status: 201 })
-        : refuse('not_an_owner', 'only an owner of this workspace can change its people', 403)
-    }
-    if (url.startsWith('/api/workspaces/ws-1/people/') && method === 'PATCH') {
-      const id = url.split('/').at(-1)
-      const member = members.find((m) => m.userId === id) as (typeof members)[number]
-      const { role } = JSON.parse(String(init?.body)) as { role: string }
-      if (role === 'member' && members.filter((m) => m.role === 'owner').length === 1) {
-        return refuse('last_owner', 'a workspace keeps at least one owner', 409)
-      }
-      member.role = role
-      return Response.json(member)
-    }
+    if (url.startsWith('/api/workspaces/ws-1/')) return workspaceRoute(members, me, url, init)
     return Response.json({ error: 'not_found', message: 'no such route' }, { status: 404 })
   })
 }
