@@ -15,6 +15,7 @@ import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
 import { resolveApiRouteScope } from './route-scope-registry.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './sign-in-session-store.js'
+import type { WorkspaceRoles } from './workspace-roles.js'
 
 function buildServerModeAuthFailResponse(decision: {
   status: 401 | 403
@@ -39,6 +40,8 @@ function buildServerModeAuthFailResponse(decision: {
 export interface ServerModePeople {
   readonly members: MemberProfileStore
   readonly sessions: SignInSessionStore
+  /** What a workspace's owners change about its people (ADR-0049). */
+  readonly roles: WorkspaceRoles
   /** This host's own origin. A session is honoured on a request that changes
    *  something only when the request came from it. */
   readonly origin: string

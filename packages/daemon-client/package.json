@@ -34,6 +34,10 @@
       "types": "./src/api-contracts/membership.ts",
       "import": "./src/api-contracts/membership.ts"
     },
+    "./api-contracts/workspace-people": {
+      "types": "./src/api-contracts/workspace-people.ts",
+      "import": "./src/api-contracts/workspace-people.ts"
+    },
     "./api-contracts/pairing": {
       "types": "./src/api-contracts/pairing.ts",
       "import": "./src/api-contracts/pairing.ts"

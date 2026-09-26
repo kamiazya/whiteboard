@@ -93,13 +93,20 @@ export interface FirstMember {
   add(workspaceId: string, profileId: string): Promise<void>
 }
 
+/** This tenant's user behind the request the middleware authenticated, or
+ *  null when the grant names no person with a user here. */
+export async function callerUserId(
+  c: Context,
+  members: MemberProfileStore,
+): Promise<string | null> {
+  const person = grantOf(c)?.person
+  if (person === undefined) return null
+  return (await members.profileForBinding(person))?.id ?? null
+}
+
 export function creatorAsFirstMember(members: MemberProfileStore): FirstMember {
   return {
-    async profileFor(c) {
-      const person = grantOf(c)?.person
-      if (person === undefined) return null
-      return (await members.profileForBinding(person))?.id ?? null
-    },
+    profileFor: (c) => callerUserId(c, members),
     add: (workspaceId, profileId) => members.addMember(workspaceId, profileId),
   }
 }

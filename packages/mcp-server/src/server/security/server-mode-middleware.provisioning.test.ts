@@ -16,6 +16,7 @@ import { createServerModeApiAuthMiddleware } from './server-mode-middleware.js'
 import { providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
 import { createSignInSessionStore, SESSION_COOKIE } from './sign-in-session-store.js'
 import { createUserDeactivation } from './user-deactivation.js'
+import { createWorkspaceRoles } from './workspace-roles.js'
 
 const ISSUER = 'https://idp.test'
 
@@ -62,6 +63,8 @@ function appFor(issuer: string) {
     createServerModeApiAuthMiddleware(strategyFor(issuer), {
       members,
       sessions,
+      roles: createWorkspaceRoles(handle.db),
+      origin: 'https://wb.test',
       bearerProvisioning: { providers, members },
     }),
   )
