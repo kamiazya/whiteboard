@@ -8,7 +8,6 @@
  */
 import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
-import { readStoredRecord } from './stored-record.js'
 
 const PINS_KEY = 'whiteboard:daemon-identity-pins'
 
@@ -22,36 +21,73 @@ const pinSchema = z
 
 export type DaemonIdentityPin = z.infer<typeof pinSchema>
 
+/**
+ * What this browser knows about one daemon's identity. `unreadable` is a pin
+ * that is THERE but that this build cannot parse — a newer build's field
+ * under `.strict()`, or a damaged store. It is kept apart from `none` because
+ * `none` is what sends renewal down the unverified path: reading one as the
+ * other would accept a token from whatever answers on the pinned port. So it
+ * fails closed like a key mismatch, and the user's next consent re-pins it.
+ */
+export type PinLookup =
+  | { kind: 'none' }
+  | { kind: 'pinned'; pin: DaemonIdentityPin }
+  | { kind: 'unreadable' }
+
 interface StorageLike {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
 }
 
-function loadPins(storage: StorageLike): Record<string, DaemonIdentityPin> {
-  // A pin this build cannot read costs that pin alone: a corrupt store must
-  // not brick pairing (the next consent re-pins what was lost), and it must
-  // not take every OTHER daemon's pin with it either.
-  return readStoredRecord(storage.getItem(PINS_KEY), pinSchema)
+function normalize(daemonBaseUrl: string): string {
+  return daemonBaseUrl.replace(/\/+$/, '')
 }
 
-export function getPinnedIdentity(
+/** The stored entries, unparsed, or `unreadable` when the store is not a JSON object. */
+function rawPins(storage: StorageLike): Record<string, unknown> | 'unreadable' {
+  const raw = storage.getItem(PINS_KEY)
+  if (raw === null) return {}
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return 'unreadable'
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return 'unreadable'
+  return parsed as Record<string, unknown>
+}
+
+export function readPinnedIdentity(
   daemonBaseUrl: string,
   storage: StorageLike = globalThis.localStorage,
-): DaemonIdentityPin | null {
-  return loadPins(storage)[daemonBaseUrl.replace(/\/+$/, '')] ?? null
+): PinLookup {
+  const pins = rawPins(storage)
+  if (pins === 'unreadable') return { kind: 'unreadable' }
+  const key = normalize(daemonBaseUrl)
+  if (!Object.hasOwn(pins, key)) return { kind: 'none' }
+  const pin = pinSchema.safeParse(pins[key])
+  return pin.success ? { kind: 'pinned', pin: pin.data } : { kind: 'unreadable' }
 }
 
+/**
+ * Entries this build cannot read are written back as they were: dropping
+ * one would turn that daemon's pin into no pin. A store that is not a JSON
+ * object has no entries to keep and is replaced.
+ */
+// ponytail: replacing a non-object store forgets which OTHER daemons were
+// pinned, so they renew unverified until re-paired; only this app writes the
+// key, so the store being garbage at all is already a damaged profile.
 export function pinIdentity(
   daemonBaseUrl: string,
   identity: { alg: 'Ed25519'; publicKey: string },
   storage: StorageLike = globalThis.localStorage,
 ): void {
-  const pins = loadPins(storage)
+  const pins = rawPins(storage)
   storage.setItem(
     PINS_KEY,
     JSON.stringify({
-      ...pins,
-      [daemonBaseUrl.replace(/\/+$/, '')]: { ...identity, pinnedAt: new Date().toISOString() },
+      ...(pins === 'unreadable' ? {} : pins),
+      [normalize(daemonBaseUrl)]: { ...identity, pinnedAt: new Date().toISOString() },
     }),
   )
 }
@@ -150,7 +186,7 @@ export type IdentityChallengeResult = 'verified' | 'failed' | 'unpinned'
  * private key (POST /api/runtime/verify with a fresh nonce, signature over
  * ["wb-verify-v1", nonce, origin]). 'unpinned' when this browser never
  * pinned that baseUrl (nothing to verify against — the caller keeps its
- * cautious copy). Any non-verifying answer from a pinned responder —
+ * cautious copy); a pin it cannot read is 'failed', not 'unpinned'. Any non-verifying answer from a pinned responder —
  * wrong key, bad signature, missing route, network failure — is 'failed':
  * a daemon we once pinned MUST be able to answer its own challenge, so
  * the absence of proof is treated as no proof.
@@ -166,8 +202,10 @@ export async function challengeDaemonIdentity({
   hostedOrigin?: string
   storage?: StorageLike
 }): Promise<IdentityChallengeResult> {
-  const pinned = getPinnedIdentity(daemonBaseUrl, storage)
-  if (pinned === null) return 'unpinned'
+  const lookup = readPinnedIdentity(daemonBaseUrl, storage)
+  if (lookup.kind === 'none') return 'unpinned'
+  if (lookup.kind === 'unreadable') return 'failed'
+  const pinned = lookup.pin
   const nonce = createChallengeNonce()
   try {
     const response = await fetch(`${daemonBaseUrl.replace(/\/+$/, '')}/api/runtime/verify`, {

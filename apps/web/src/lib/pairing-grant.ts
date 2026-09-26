@@ -26,7 +26,7 @@ import { z } from 'zod'
 import { bareOriginSchema } from '../runtime-config.js'
 import {
   createChallengeNonce,
-  getPinnedIdentity,
+  readPinnedIdentity,
   pinIdentity,
   sha256Base64Url,
   verifyIdentitySignature,
@@ -264,7 +264,12 @@ export async function renewPairingToken({
   pinStorage?: StorageLike
 }): Promise<GrantConsumeResult> {
   const base = daemonBaseUrl.replace(/\/+$/, '')
-  const pinned = getPinnedIdentity(base, pinStorage)
+  const lookup = readPinnedIdentity(base, pinStorage)
+  // A pin that is there but unreadable cannot verify anything, and renewing
+  // unverified is what a squatter on the port would want: refuse, as for a
+  // mismatch, and let the user's consent on /pair re-pin.
+  if (lookup.kind === 'unreadable') return { status: 'identity-mismatch', daemonBaseUrl: base }
+  const pinned = lookup.kind === 'pinned' ? lookup.pin : null
   const nonce = pinned !== null ? createChallengeNonce() : undefined
   try {
     const response = await fetch(`${base}/api/pairing/token`, {
