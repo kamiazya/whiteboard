@@ -13,6 +13,7 @@ import {
   createMemberProfileStore,
   type MemberProfileStore,
 } from '../server/security/member-profile-store.js'
+import { createUserDeactivation } from '../server/security/user-deactivation.js'
 import { createIsolatedDb } from '../server/store/db/test-helpers.js'
 import { upsertWorkspaceRow } from '../server/store/db/upsert-workspace.js'
 import { grantMember, runServerGrantMember } from './server-grant-member.js'
@@ -88,6 +89,36 @@ describe('grantMember', () => {
       kind: 'unknown-user',
       users: [{ id: ada.id, displayName: 'Ada' }],
     })
+  })
+
+  // ADR-0049: a workspace whose owners are all deactivated is recovered
+  // with this command, so the person it names comes out an OWNER — a member
+  // could not manage the people of the workspace it was meant to recover.
+  it('recovers a workspace whose every owner is deactivated, naming a newcomer', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    const bob = await userNamed('Bob', 'bob-1')
+    await members.addMember(WS, ada.id)
+    await createUserDeactivation(handle.db).deactivate(ada.id, Date.now())
+    await grantMember(handle.db, { workspaceId: WS, user: bob.id })
+    expect(await members.membershipRole(WS, bob.id)).toBe('owner')
+  })
+
+  it('recovers it by promoting someone who is already a member', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    const bob = await userNamed('Bob', 'bob-1')
+    await members.addMember(WS, ada.id)
+    await members.addMember(WS, bob.id)
+    await createUserDeactivation(handle.db).deactivate(ada.id, Date.now())
+    await grantMember(handle.db, { workspaceId: WS, user: bob.id })
+    expect(await members.membershipRole(WS, bob.id)).toBe('owner')
+  })
+
+  it('adds a plain member while an active owner remains', async () => {
+    const ada = await userNamed('Ada', 'ada-1')
+    const bob = await userNamed('Bob', 'bob-1')
+    await members.addMember(WS, ada.id)
+    await grantMember(handle.db, { workspaceId: WS, user: bob.id })
+    expect(await members.membershipRole(WS, bob.id)).toBe('member')
   })
 
   it('refuses a workspace this keeper does not hold', async () => {

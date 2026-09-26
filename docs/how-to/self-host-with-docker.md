@@ -262,6 +262,11 @@ The person must have become a user first (by signing in, by a bearer as
 above, or by `add-user`). A name that matches nobody, or more than one user, is refused and the
 candidates are printed.
 
+The same command recovers a workspace whose owners are all deactivated.
+When the workspace has no active owner, the person it names becomes an
+owner, and someone who is already a member is promoted. While an active
+owner remains, it adds an ordinary member.
+
 > **Upgrading a bearer-only deployment.** Before this, a valid bearer reached
 > every workspace. Now a bearer whose person is no user reaches none. Declare
 > your JWT issuer as a provider with no client and your MCP client in
