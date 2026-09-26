@@ -63,22 +63,25 @@ async function readBody<S extends z.ZodTypeAny>(c: Context, schema: S) {
   return { data: parsed.data as z.infer<S> }
 }
 
+const workspaceOf = (c: Context) => workspaceIdFromHandle(c, c.req.param('workspace') ?? '')
+
+// The workspace this request addresses, when its caller owns it.
+async function ownedBy(c: Context, members: MemberProfileStore): Promise<string | null> {
+  const workspaceId = await workspaceOf(c)
+  const caller = await callerUserId(c, members)
+  if (caller === null) return null
+  return (await members.membershipRole(workspaceId, caller)) === 'owner' ? workspaceId : null
+}
+
+async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: string) {
+  const found = (await roles.list(workspaceId)).find((m) => m.profile.id === userId)
+  return found === undefined ? null : toPerson(found)
+}
+
 export function createWorkspacePeopleRouter({ members, roles }: WorkspacePeopleRouterOptions) {
   const app = new Hono()
-  const workspaceOf = (c: Context) => workspaceIdFromHandle(c, c.req.param('workspace') ?? '')
-
-  // The workspace this request addresses, when its caller owns it.
-  async function ownedWorkspace(c: Context): Promise<string | null> {
-    const workspaceId = await workspaceOf(c)
-    const caller = await callerUserId(c, members)
-    if (caller === null) return null
-    return (await members.membershipRole(workspaceId, caller)) === 'owner' ? workspaceId : null
-  }
-
-  async function personIn(workspaceId: string, userId: string) {
-    const found = (await roles.list(workspaceId)).find((m) => m.profile.id === userId)
-    return found === undefined ? null : toPerson(found)
-  }
+  const ownedWorkspace = (c: Context) => ownedBy(c, members)
+  const personIn = (workspaceId: string, userId: string) => findPerson(roles, workspaceId, userId)
 
   app.get('/api/workspaces/:workspace/people', async (c) => {
     const people = (await roles.list(await workspaceOf(c))).map(toPerson)

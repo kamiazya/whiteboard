@@ -47,28 +47,30 @@ async function standing(db: TenantScoped, workspaceId: string, profileId: string
   return role.role === 'owner' && others.length === 0 ? ('last-owner' as const) : ('ok' as const)
 }
 
+async function membersOf(db: TenantScoped, workspaceId: string): Promise<WorkspaceMember[]> {
+  const rows = await db
+    .selectFrom('workspaceMemberships')
+    .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
+    .select([
+      'memberProfiles.id',
+      'memberProfiles.displayName',
+      'memberProfiles.deactivatedAt',
+      'workspaceMemberships.role',
+    ])
+    .where('workspaceMemberships.workspaceId', '=', workspaceId)
+    .orderBy('workspaceMemberships.createdAt', 'asc')
+    .orderBy('memberProfiles.id', 'asc')
+    .execute()
+  return rows.map((row) => ({
+    profile: { id: row.id, displayName: row.displayName },
+    role: row.role,
+    deactivated: row.deactivatedAt !== null,
+  }))
+}
+
 export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
   return {
-    async list(workspaceId) {
-      const rows = await db
-        .selectFrom('workspaceMemberships')
-        .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
-        .select([
-          'memberProfiles.id',
-          'memberProfiles.displayName',
-          'memberProfiles.deactivatedAt',
-          'workspaceMemberships.role',
-        ])
-        .where('workspaceMemberships.workspaceId', '=', workspaceId)
-        .orderBy('workspaceMemberships.createdAt', 'asc')
-        .orderBy('memberProfiles.id', 'asc')
-        .execute()
-      return rows.map((row) => ({
-        profile: { id: row.id, displayName: row.displayName },
-        role: row.role,
-        deactivated: row.deactivatedAt !== null,
-      }))
-    },
+    list: (workspaceId) => membersOf(db, workspaceId),
 
     async isUser(profileId) {
       const row = await db
