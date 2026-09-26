@@ -48,10 +48,15 @@ describe('createTenantAdministratorStore', () => {
     await admins.appoint(ada.id, null)
     await admins.appoint(bob.id, ada.id)
     expect(await admins.isAppointed(bob.id)).toBe(true)
-    expect((await admins.list()).map((a) => [a.profileId, a.appointedBy])).toEqual([
-      [ada.id, null],
-      [bob.id, ada.id],
-    ])
+    // Two appointments can share a millisecond, so the order between them is
+    // not asserted here, only who appointed whom.
+    const byUser = new Map((await admins.list()).map((a) => [a.profileId, a.appointedBy]))
+    expect(byUser).toEqual(
+      new Map<string, string | null>([
+        [ada.id, null],
+        [bob.id, ada.id],
+      ]),
+    )
   })
 
   it('is idempotent, keeping the first appointment', async () => {
