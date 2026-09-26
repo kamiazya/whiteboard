@@ -84,15 +84,14 @@ afterEach(async () => {
 
 describe('workspace people', () => {
   it('lists the people and their roles to any member', async () => {
-    expect(await call('bob', 'GET', '')).toEqual({
-      status: 200,
-      body: {
-        people: [
-          { userId: ids.ada, displayName: 'ada', role: 'owner', deactivated: false },
-          { userId: ids.bob, displayName: 'bob', role: 'member', deactivated: false },
-        ],
-      },
-    })
+    const listed = await call('bob', 'GET', '')
+    expect(listed.status).toBe(200)
+    // Two memberships made in one millisecond have no defined order.
+    const people = listed.body.people as { displayName: string }[]
+    expect([...people].sort((a, b) => a.displayName.localeCompare(b.displayName))).toEqual([
+      { userId: ids.ada, displayName: 'ada', role: 'owner', deactivated: false },
+      { userId: ids.bob, displayName: 'bob', role: 'member', deactivated: false },
+    ])
   })
 
   it('shows nothing to someone who is not a member', async () => {
