@@ -4,8 +4,8 @@ import {
   challengeDaemonIdentity,
   createChallengeNonce,
   fingerprintPublicKey,
-  readPinnedIdentity,
   pinIdentity,
+  readPinnedIdentity,
   sha256Base64Url,
   verifyIdentitySignature,
 } from './daemon-identity-pin.js'

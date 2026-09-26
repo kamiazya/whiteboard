@@ -26,11 +26,40 @@ import { z } from 'zod'
 import { bareOriginSchema } from '../runtime-config.js'
 import {
   createChallengeNonce,
-  readPinnedIdentity,
   pinIdentity,
+  readPinnedIdentity,
   sha256Base64Url,
   verifyIdentitySignature,
 } from './daemon-identity-pin.js'
+
+/**
+ * Whether a token response is signed by `publicKey` — the key the user
+ * approved, or the one pinned then — and not merely by the key it advertises.
+ */
+async function tokenSignedBy(
+  publicKey: string,
+  {
+    nonce,
+    hostedOrigin,
+    body,
+  }: { nonce: string; hostedOrigin: string; body: z.infer<typeof pairingTokenResponseSchema> },
+): Promise<boolean> {
+  return (
+    body.identity?.publicKey === publicKey &&
+    typeof body.identity?.signature === 'string' &&
+    verifyIdentitySignature({
+      publicKey,
+      parts: [
+        'wb-token-v1',
+        nonce,
+        hostedOrigin,
+        await sha256Base64Url(body.token),
+        body.expiresAt,
+      ],
+      signature: body.identity.signature,
+    })
+  )
+}
 
 const TRANSACTION_KEY = 'whiteboard:pairing-transaction'
 const GRANT_FRAGMENT_PREFIX = '#wb-grant='
@@ -207,21 +236,7 @@ export async function consumeGrantFragment({
     if (fragment.identity !== null) {
       // The key the user just approved (fragment) must be the key that
       // signs the credential handed over — anything else is refused.
-      const verified =
-        body.identity?.publicKey === fragment.identity &&
-        typeof body.identity?.signature === 'string' &&
-        (await verifyIdentitySignature({
-          publicKey: fragment.identity,
-          parts: [
-            'wb-token-v1',
-            nonce,
-            hostedOrigin,
-            await sha256Base64Url(body.token),
-            body.expiresAt,
-          ],
-          signature: body.identity.signature,
-        }))
-      if (!verified) {
+      if (!(await tokenSignedBy(fragment.identity, { nonce, hostedOrigin, body }))) {
         return { status: 'error', detail: 'daemon identity verification failed' }
       }
       pinIdentity(
@@ -286,21 +301,9 @@ export async function renewPairingToken({
       // Verified against the PIN, never the advertised key: a squatter (or
       // a rotated daemon) fails closed here and the user re-approves on
       // /pair, which re-pins.
-      const verified =
-        body.identity?.publicKey === pinned.publicKey &&
-        typeof body.identity?.signature === 'string' &&
-        (await verifyIdentitySignature({
-          publicKey: pinned.publicKey,
-          parts: [
-            'wb-token-v1',
-            nonce,
-            hostedOrigin,
-            await sha256Base64Url(body.token),
-            body.expiresAt,
-          ],
-          signature: body.identity.signature,
-        }))
-      if (!verified) return { status: 'identity-mismatch', daemonBaseUrl: base }
+      if (!(await tokenSignedBy(pinned.publicKey, { nonce, hostedOrigin, body }))) {
+        return { status: 'identity-mismatch', daemonBaseUrl: base }
+      }
     }
     return { status: 'paired', daemonBaseUrl: base, token: body.token }
   } catch {
