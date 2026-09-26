@@ -21,6 +21,7 @@ describe('serverStatusResultSchema', () => {
 
   it.each([
     'missing',
+    'unreadable',
     'stale',
     'malformed',
     'unverifiable',

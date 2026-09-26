@@ -61,6 +61,24 @@ describe('runServerStop', () => {
     expect(noKill).not.toHaveBeenCalled()
   })
 
+  it('unreadable record → refused, exit 2, and the record is kept', async () => {
+    mockRead.mockReturnValueOnce({ kind: 'unreadable' })
+    const removeRecord = vi.fn(async () => {})
+    const { result, exitCode } = await runServerStop({
+      dataDir: '/tmp/test',
+      isPidAlive: alivePid,
+      killFn: noKill,
+      removeRecord,
+    })
+    expect(exitCode).toBe(2)
+    expect(result.action).toBe('refused')
+    expect(result.reason).toBe('server-record-unreadable')
+    expect(result.recordFound).toBe(true)
+    expect(noKill).not.toHaveBeenCalled()
+    // Nothing is known about what it says, so it is not ours to delete.
+    expect(removeRecord).not.toHaveBeenCalled()
+  })
+
   it('stale pid → ok:true, action:not-running, exit 0, no signal sent', async () => {
     mockRead.mockReturnValueOnce({ kind: 'ok', record: VALID_RECORD })
     const { result, exitCode } = await runServerStop({

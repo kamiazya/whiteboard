@@ -333,6 +333,14 @@ function checkRecord(result: ReturnType<typeof readServerModeRecord>): Check {
       summary: 'Server record not found — server may not be running',
     }
   }
+  if (result.kind === 'unreadable') {
+    return {
+      id: 'server.record',
+      status: 'warning',
+      summary: 'Server record exists but cannot be read',
+      remediation: 'Check the ownership and permissions of server-mode.json in the data directory.',
+    }
+  }
   if (result.kind === 'malformed') {
     return {
       id: 'server.record',

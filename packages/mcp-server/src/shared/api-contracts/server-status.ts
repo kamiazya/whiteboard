@@ -36,7 +36,7 @@ const serverStatusNotRunningSchema = z
   .object({
     schemaVersion: z.literal(1),
     ok: z.literal(false),
-    state: z.enum(['missing', 'stale', 'malformed', 'unverifiable']),
+    state: z.enum(['missing', 'unreadable', 'stale', 'malformed', 'unverifiable']),
     recordFresh: z.literal(false),
   })
   .strict()

@@ -168,6 +168,17 @@ async function stopRefusal(
     }
   }
 
+  if (readResult.kind === 'unreadable') {
+    return {
+      outcome: outcome(2, {
+        action: 'refused',
+        reason: 'server-record-unreadable',
+        recordFound: true,
+        recordFresh: false,
+      }),
+    }
+  }
+
   if (readResult.kind === 'malformed') {
     // Refuse to kill an unknown process. Clean up the corrupt file.
     await forgetRecord(removeRecord, dataDir)
