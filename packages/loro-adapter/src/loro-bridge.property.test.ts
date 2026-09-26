@@ -52,8 +52,14 @@ import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 // The remedy is never a pinned seed.
 vi.setConfig({ testTimeout: 60_000 })
 
+// By code unit, never `localeCompare`: a locale may collate two different ids
+// as equal (U+1B52 BALINESE DIGIT TWO and "2" compare 0), and a comparator
+// that calls unequal ids equal leaves each side in its own input order.
+const byCodeUnit = (a: { id: string }, b: { id: string }): number =>
+  a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+
 function byId<T extends { id: string }>(items: readonly T[]): T[] {
-  return [...items].sort((a, b) => a.id.localeCompare(b.id))
+  return [...items].sort(byCodeUnit)
 }
 
 /**
@@ -94,6 +100,24 @@ const linePointsNormalised = (line: CanvasLine): CanvasLine => ({
   ...line,
   from: endNormalised(line.from),
   to: endNormalised(line.to),
+})
+
+describe('loro-bridge', () => {
+  // The counterexample that found the comparator above, pinned: two ids a
+  // locale collates as equal still round-trip as two distinct nodes.
+  it('round-trips nodes whose ids a locale collates as equal', () => {
+    const node = { x: 0, y: 0, width: 0, height: 0 }
+    const canvas = {
+      nodes: [
+        { ...node, id: '\u1b52' },
+        { ...node, id: '2' },
+      ],
+      edges: [],
+    }
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, canvas as never)
+    expect(byId(readSpatialCanvas(doc).nodes)).toEqual(byId(canvas.nodes))
+  })
 })
 
 describe('loro-bridge properties', () => {
@@ -381,9 +405,9 @@ describe('withSpatialBatch equivalence property', () => {
       const stateOf = (doc: LoroDoc) => {
         const value = readSpatialCanvas(doc)
         return {
-          nodes: [...value.nodes].sort((a, b) => a.id.localeCompare(b.id)),
-          edges: [...value.edges].sort((a, b) => a.id.localeCompare(b.id)),
-          comments: [...(value.comments ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
+          nodes: [...value.nodes].sort(byCodeUnit),
+          edges: [...value.edges].sort(byCodeUnit),
+          comments: [...(value.comments ?? [])].sort(byCodeUnit),
         }
       }
       expect(stateOf(batched)).toEqual(stateOf(sequential))
