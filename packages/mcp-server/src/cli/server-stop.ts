@@ -12,7 +12,10 @@
 
 import { rm } from 'node:fs/promises'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
-import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import type {
+  ServerModeRecord,
+  ServerModeRecordReadResult,
+} from '../server/security/server-mode-record.js'
 import {
   getServerModeRecordPath,
   readServerModeRecord,
@@ -129,15 +132,6 @@ async function waitForExit(
   return !isPidAlive(pid)
 }
 
-/**
- * Every reason NOT to signal anything, asked before a signal is sent. Each
- * one also forgets the record it just judged, because in every case the
- * record no longer describes a process this CLI manages.
- *
- * The two identity checks are the point: a PID-reuse race could have put an
- * unrelated process at `record.pid`, and killing it would be the worst thing
- * this command could do.
- */
 /** The answer for a record that no longer describes a process we manage. */
 function notRunning(reason: ServerStopResult['reason'], pid?: number): RunServerStopOutcome {
   return outcome(0, {
@@ -149,6 +143,51 @@ function notRunning(reason: ServerStopResult['reason'], pid?: number): RunServer
   })
 }
 
+/**
+ * The answer for each record this command cannot act on. Only a malformed
+ * one is forgotten: a missing record has nothing to remove, and an
+ * unreadable one may describe a live server — nothing is known about it, so
+ * it is refused and left for its owner.
+ */
+const UNUSABLE_RECORD = {
+  missing: {
+    exitCode: 0,
+    action: 'not-running',
+    reason: 'server-record-not-found',
+    recordFound: false,
+    forget: false,
+  },
+  unreadable: {
+    exitCode: 2,
+    action: 'refused',
+    reason: 'server-record-unreadable',
+    recordFound: true,
+    forget: false,
+  },
+  malformed: {
+    exitCode: 2,
+    action: 'refused',
+    reason: 'server-record-malformed',
+    recordFound: true,
+    forget: true,
+  },
+} as const satisfies Record<
+  Exclude<ServerModeRecordReadResult['kind'], 'ok'>,
+  Pick<ServerStopResult, 'action' | 'reason' | 'recordFound'> & {
+    exitCode: RunServerStopOutcome['exitCode']
+    forget: boolean
+  }
+>
+
+/**
+ * Every reason NOT to signal anything, asked before a signal is sent. Each
+ * one also forgets the record it just judged, because in every case the
+ * record no longer describes a process this CLI manages.
+ *
+ * The two identity checks are the point: a PID-reuse race could have put an
+ * unrelated process at `record.pid`, and killing it would be the worst thing
+ * this command could do.
+ */
 async function stopRefusal(
   dataDir: string,
   removeRecord: NonNullable<RunServerStopOptions['removeRecord']>,
@@ -157,39 +196,10 @@ async function stopRefusal(
 ): Promise<{ record: ServerModeRecord } | { outcome: RunServerStopOutcome }> {
   const readResult = readServerModeRecord(dataDir)
 
-  if (readResult.kind === 'missing') {
-    return {
-      outcome: outcome(0, {
-        action: 'not-running',
-        reason: 'server-record-not-found',
-        recordFound: false,
-        recordFresh: false,
-      }),
-    }
-  }
-
-  if (readResult.kind === 'unreadable') {
-    return {
-      outcome: outcome(2, {
-        action: 'refused',
-        reason: 'server-record-unreadable',
-        recordFound: true,
-        recordFresh: false,
-      }),
-    }
-  }
-
-  if (readResult.kind === 'malformed') {
-    // Refuse to kill an unknown process. Clean up the corrupt file.
-    await forgetRecord(removeRecord, dataDir)
-    return {
-      outcome: outcome(2, {
-        action: 'refused',
-        reason: 'server-record-malformed',
-        recordFound: true,
-        recordFresh: false,
-      }),
-    }
+  if (readResult.kind !== 'ok') {
+    const { exitCode, forget, ...result } = UNUSABLE_RECORD[readResult.kind]
+    if (forget) await forgetRecord(removeRecord, dataDir)
+    return { outcome: outcome(exitCode, { ...result, recordFresh: false }) }
   }
 
   const { record } = readResult
