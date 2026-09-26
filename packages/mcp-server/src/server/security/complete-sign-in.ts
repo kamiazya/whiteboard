@@ -7,7 +7,8 @@
  *      refuse a user an administrator has deactivated;
  *   2. for a newcomer, find the invitation they arrived with;
  *   3. admit — the provider's rules, then code rules, then the route in;
- *   4. only then spend the invitation and create the user;
+ *   4. only then spend the invitation, create the user, and add them to the
+ *      workspace it invites into (ADR-0049 decision 3);
  *   5. open the session.
  *
  * Spending comes BEFORE creating: redemption is one conditional update, so a
@@ -82,7 +83,7 @@ type CompleteSignInResult =
   | { readonly ok: false; readonly reason: SignInRefusal }
 
 type ArrivedWith =
-  | { readonly kind: 'link' | 'email'; readonly id: string }
+  | { readonly kind: 'link' | 'email'; readonly id: string; readonly workspaceId: string | null }
   | { readonly kind: 'none' }
   | { readonly kind: 'unusable' }
 
@@ -92,7 +93,8 @@ async function arrivedWith(
 ): Promise<ArrivedWith> {
   if (invitationToken !== undefined) {
     const opened = await deps.invitations.openLink(invitationToken, now)
-    return opened.ok ? { kind: 'link', id: opened.invitation.id } : { kind: 'unusable' }
+    if (!opened.ok) return { kind: 'unusable' }
+    return { kind: 'link', id: opened.invitation.id, workspaceId: opened.invitation.workspaceId }
   }
   // Looked up only where the operator opted in, and only for an address the
   // provider verified; `admit` checks the verification again, on purpose.
@@ -102,9 +104,23 @@ async function arrivedWith(
     typeof claims.email === 'string'
   ) {
     const invitation = await deps.invitations.openForEmail(claims.email, now)
-    if (invitation !== null) return { kind: 'email', id: invitation.id }
+    if (invitation !== null) {
+      return { kind: 'email', id: invitation.id, workspaceId: invitation.workspaceId }
+    }
   }
   return { kind: 'none' }
+}
+
+// An existing user has no use for an invitation to the tenant, which stays
+// for whoever it was meant for; one into a workspace is theirs to accept.
+async function joiningWith(
+  deps: CompleteSignInDeps,
+  { invitationToken, now }: CompleteSignInInput,
+): Promise<ArrivedWith> {
+  if (invitationToken === undefined) return { kind: 'none' }
+  const opened = await deps.invitations.openLink(invitationToken, now)
+  if (!opened.ok || opened.invitation.workspaceId === null) return { kind: 'none' }
+  return { kind: 'link', id: opened.invitation.id, workspaceId: opened.invitation.workspaceId }
 }
 
 /** The name a new user starts with: the provider's display claims, else `fallback`. */
@@ -136,8 +152,8 @@ export async function completeSignIn(
   // would be taken for a newcomer — and handed back their own user.
   if (await deps.members.isDeactivated(binding)) return refuse('deactivated')
   const existing = await deps.members.profileForBinding(binding)
-  // An existing user's invitation is left unspent: it was meant for somebody.
-  const arrived: ArrivedWith = existing === null ? await arrivedWith(deps, input) : { kind: 'none' }
+  const arrived =
+    existing === null ? await arrivedWith(deps, input) : await joiningWith(deps, input)
   if (arrived.kind === 'unusable') return refuse('invitation_unusable')
 
   const decision = admit({
@@ -150,17 +166,20 @@ export async function completeSignIn(
   })
   if (!decision.admitted) return refuse(decision.reason)
 
-  let profile = existing
-  if (profile === null) {
-    profile = await deps.atomically(async ({ members, invitations }) => {
-      const spent =
-        arrived.kind === 'none' ||
-        (await invitations.redeem(arrived.id, JSON.stringify(binding), now))
-      if (!spent) return null
-      return members.ensureProfile({ binding, displayName: displayNameFrom(claims, sub) })
-    })
-    if (profile === null) return refuse('invitation_unusable')
-  }
+  const profile = await deps.atomically(async ({ members, invitations }) => {
+    const spent =
+      arrived.kind === 'none' ||
+      (await invitations.redeem(arrived.id, JSON.stringify(binding), now))
+    if (!spent) return null
+    const user =
+      existing ??
+      (await members.ensureProfile({ binding, displayName: displayNameFrom(claims, sub) }))
+    if (arrived.kind !== 'none' && arrived.workspaceId !== null) {
+      await members.addMember(arrived.workspaceId, user.id)
+    }
+    return user
+  })
+  if (profile === null) return refuse('invitation_unusable')
 
   const sessionToken = await deps.sessions.create(binding, now, deps.sessionTtlMs)
   return { ok: true, sessionToken, profile }

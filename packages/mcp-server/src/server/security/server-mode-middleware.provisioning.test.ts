@@ -10,6 +10,7 @@ import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { ALL_AUTH_SCOPES } from './auth-strategy.js'
+import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { createServerModeApiAuthMiddleware } from './server-mode-middleware.js'
@@ -64,6 +65,7 @@ function appFor(issuer: string) {
       members,
       sessions,
       roles: createWorkspaceRoles(handle.db),
+      invitations: createInvitationStore(handle.db),
       origin: 'https://wb.test',
       bearerProvisioning: { providers, members },
     }),

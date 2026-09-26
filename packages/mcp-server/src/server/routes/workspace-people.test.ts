@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
+import { createInvitationStore, type InvitationStore } from '../security/invitation-store.js'
 import {
   createMemberProfileStore,
   type MemberProfileStore,
@@ -38,11 +39,12 @@ const strategy: AsyncAuthStrategy = {
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
+let invitations: InvitationStore
 let app: Hono
 const ids: Record<string, string> = {}
 
 async function call(as: string, method: string, path: string, body?: object) {
-  const res = await app.request(`/api/workspaces/ws-1/people${path}`, {
+  const res = await app.request(`/api/workspaces/ws-1${path}`, {
     method,
     headers: { authorization: `Bearer ${as}`, 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -55,6 +57,7 @@ beforeEach(async () => {
   handle = await createIsolatedDb({ dataDir: root })
   members = createMemberProfileStore(handle.db)
   const roles = createWorkspaceRoles(handle.db)
+  invitations = createInvitationStore(handle.db)
   for (const name of ['ada', 'bob', 'eve']) {
     const user = await members.ensureProfile({
       binding: { authenticator: AUTHENTICATOR, subject: name },
@@ -72,10 +75,14 @@ beforeEach(async () => {
       members,
       sessions: createSignInSessionStore(handle.db),
       roles,
+      invitations,
       origin: 'https://wb.test',
     }),
   )
-  app.route('/', createWorkspacePeopleRouter({ members, roles }))
+  app.route(
+    '/',
+    createWorkspacePeopleRouter({ members, roles, invitations, origin: 'https://wb.test' }),
+  )
 })
 afterEach(async () => {
   await handle.dispose()
@@ -84,7 +91,7 @@ afterEach(async () => {
 
 describe('workspace people', () => {
   it('lists the people and their roles to any member', async () => {
-    expect(await call('bob', 'GET', '')).toEqual({
+    expect(await call('bob', 'GET', '/people')).toEqual({
       status: 200,
       body: {
         people: [
@@ -96,57 +103,74 @@ describe('workspace people', () => {
   })
 
   it('shows nothing to someone who is not a member', async () => {
-    expect((await call('eve', 'GET', '')).status).toBe(403)
+    expect((await call('eve', 'GET', '/people')).status).toBe(403)
   })
 
   it('lets an owner add a user, and refuses a member who tries', async () => {
-    expect((await call('bob', 'POST', '', { userId: ids.eve })).body).toMatchObject({
+    expect((await call('bob', 'POST', '/people', { userId: ids.eve })).body).toMatchObject({
       error: 'not_an_owner',
     })
-    const added = await call('ada', 'POST', '', { userId: ids.eve })
+    const added = await call('ada', 'POST', '/people', { userId: ids.eve })
     expect(added.status).toBe(201)
     expect(added.body).toMatchObject({ userId: ids.eve, role: 'member' })
     expect(await members.membershipRole('ws-1', ids.eve as string)).toBe('member')
   })
 
   it('refuses to add a user this keeper does not have', async () => {
-    expect(await call('ada', 'POST', '', { userId: 'nobody' })).toMatchObject({
+    expect(await call('ada', 'POST', '/people', { userId: 'nobody' })).toMatchObject({
       status: 404,
       body: { error: 'unknown_user' },
     })
   })
 
   it('refuses a malformed body', async () => {
-    expect((await call('ada', 'POST', '', { user: ids.eve })).status).toBe(400)
-    expect((await call('ada', 'PATCH', `/${ids.bob}`, { role: 'admin' })).status).toBe(400)
+    expect((await call('ada', 'POST', '/people', { user: ids.eve })).status).toBe(400)
+    expect((await call('ada', 'PATCH', `/people/${ids.bob}`, { role: 'admin' })).status).toBe(400)
   })
 
   it('lets an owner make another member an owner, and keeps the last owner', async () => {
-    expect(await call('ada', 'PATCH', `/${ids.ada}`, { role: 'member' })).toMatchObject({
+    expect(await call('ada', 'PATCH', `/people/${ids.ada}`, { role: 'member' })).toMatchObject({
       status: 409,
       body: { error: 'last_owner' },
     })
-    expect(await call('ada', 'PATCH', `/${ids.bob}`, { role: 'owner' })).toMatchObject({
+    expect(await call('ada', 'PATCH', `/people/${ids.bob}`, { role: 'owner' })).toMatchObject({
       status: 200,
       body: { userId: ids.bob, role: 'owner' },
     })
-    expect((await call('ada', 'PATCH', `/${ids.ada}`, { role: 'member' })).status).toBe(200)
+    expect((await call('ada', 'PATCH', `/people/${ids.ada}`, { role: 'member' })).status).toBe(200)
   })
 
   it('lets an owner remove a member, and not the last owner', async () => {
-    expect((await call('bob', 'DELETE', `/${ids.ada}`)).body).toMatchObject({
+    expect((await call('bob', 'DELETE', `/people/${ids.ada}`)).body).toMatchObject({
       error: 'not_an_owner',
     })
-    expect((await call('ada', 'DELETE', `/${ids.ada}`)).body).toMatchObject({
+    expect((await call('ada', 'DELETE', `/people/${ids.ada}`)).body).toMatchObject({
       error: 'last_owner',
     })
-    expect(await call('ada', 'DELETE', `/${ids.bob}`)).toEqual({
+    expect(await call('ada', 'DELETE', `/people/${ids.bob}`)).toEqual({
       status: 200,
       body: { removed: true },
     })
-    expect(await call('ada', 'DELETE', `/${ids.bob}`)).toMatchObject({
+    expect(await call('ada', 'DELETE', `/people/${ids.bob}`)).toMatchObject({
       status: 404,
       body: { error: 'not_a_member' },
+    })
+  })
+
+  // ADR-0049 decision 3: an owner invites into the workspace by a link whose
+  // token rides the fragment of the web app's invite page.
+  it('lets an owner create an invitation link into the workspace, and nobody else', async () => {
+    expect((await call('bob', 'POST', '/invitations', {})).body).toMatchObject({
+      error: 'not_an_owner',
+    })
+    const made = await call('ada', 'POST', '/invitations', {})
+    expect(made.status).toBe(201)
+    const url = new URL(String(made.body.url))
+    expect(`${url.origin}${url.pathname}`).toBe('https://wb.test/invite')
+    const token = new URLSearchParams(url.hash.slice(1)).get('token') ?? ''
+    expect(await invitations.openLink(token, Date.now())).toMatchObject({
+      ok: true,
+      invitation: { workspaceId: 'ws-1', invitedBy: ids.ada },
     })
   })
 })

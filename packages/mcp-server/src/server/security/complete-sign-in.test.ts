@@ -275,6 +275,63 @@ describe('completeSignIn — a user that cannot be created', () => {
   })
 })
 
+// ADR-0049 decision 3: an invitation invites a person into a workspace, and
+// accepting it makes them a user if they are not one, and a member, in one step.
+describe('completeSignIn — an invitation into a workspace', () => {
+  const binding = () => ({ authenticator: providerAuthenticator(provider()), subject: 'ada-1' })
+  const workspaceLink = () =>
+    deps.invitations.createLink({ invitedBy: 'p-bob', workspaceId: 'ws-1', now: T0, ttlMs: HOUR })
+
+  it('makes a newcomer a user and a member of that workspace', async () => {
+    const { token } = await workspaceLink()
+    const done = await completeSignIn(deps, {
+      provider: provider(),
+      claims: ada,
+      invitationToken: token,
+      now: T0 + 1,
+    })
+    expect(done.ok).toBe(true)
+    if (!done.ok) return
+    expect(await deps.members.isWorkspaceMember('ws-1', done.profile.id)).toBe('member')
+    expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(false)
+  })
+
+  it('makes an existing user a member, and spends the link', async () => {
+    const user = await deps.members.ensureProfile({ binding: binding(), displayName: 'Ada' })
+    const { token } = await workspaceLink()
+    const done = await completeSignIn(deps, {
+      provider: provider(),
+      claims: ada,
+      invitationToken: token,
+      now: T0 + 1,
+    })
+    expect(done.ok).toBe(true)
+    expect(await deps.members.isWorkspaceMember('ws-1', user.id)).toBe('member')
+    expect(await deps.invitations.openLink(token, T0 + 2)).toEqual({
+      ok: false,
+      reason: 'redeemed',
+    })
+  })
+
+  // An invitation to the tenant alone makes a user; an existing one has no
+  // use for it, so it stays for whoever it was meant for.
+  it('leaves an invitation that names no workspace unspent for an existing user', async () => {
+    await deps.members.ensureProfile({ binding: binding(), displayName: 'Ada' })
+    const { token } = await deps.invitations.createLink({
+      invitedBy: 'p-bob',
+      now: T0,
+      ttlMs: HOUR,
+    })
+    await completeSignIn(deps, {
+      provider: provider(),
+      claims: ada,
+      invitationToken: token,
+      now: T0 + 1,
+    })
+    expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(true)
+  })
+})
+
 describe('completeSignIn — two people racing for one link', () => {
   // Spending before creating is what makes this hold: exactly one redemption
   // succeeds, and the loser is refused before any user exists for them.
