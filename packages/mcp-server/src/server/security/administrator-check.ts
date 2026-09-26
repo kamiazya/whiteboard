@@ -16,7 +16,7 @@ export interface AdministratorCheck {
 
 export function createAdministratorCheck(deps: {
   readonly admins: TenantAdministratorStore
-  readonly members: Pick<MemberProfileStore, 'profileForBinding'>
+  readonly members: Pick<MemberProfileStore, 'profileForBinding' | 'isDeactivated'>
   readonly configured: readonly AuthenticatorBinding[]
 }): AdministratorCheck {
   return {
@@ -24,7 +24,7 @@ export function createAdministratorCheck(deps: {
       const named = deps.configured.some(
         (admin) => admin.authenticator === person.authenticator && admin.subject === person.subject,
       )
-      if (named) return true
+      if (named) return !(await deps.members.isDeactivated(person))
       const user = await deps.members.profileForBinding(person)
       return user !== null && (await deps.admins.isAppointed(user.id))
     },
