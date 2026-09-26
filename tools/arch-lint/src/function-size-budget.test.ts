@@ -701,11 +701,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // out of the closure, which needs a context object this change does not
   // introduce.
   'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 311,
-  // 108 -> 117: `reopenToOriginTrust`, the membership gate's only exit
-  // (user decision 2026-09-21). A factory gains a method; there is nothing
-  // to extract, and splitting the store by which table a method touches
-  // would put the `membersOnly` insert and its clear in different files.
-  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 117,
+  // 117 -> 79: the methods that start from a binding (`profileForBinding`,
+  // `isDeactivated`, `ensureProfile`) moved to `bindingLookups` in the same
+  // file, so the membership insert and its clear still sit together here.
+  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 79,
   'packages/mcp-server/src/server/security/oauth-authz-transactions.ts#createOAuthTransactionStore': 299,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   'packages/mcp-server/src/server/security/pairing-grant-store.ts#createPairingGrantStore': 67,
