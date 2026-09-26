@@ -1,8 +1,15 @@
 # ADR-0051: Deleting a person, and re-authenticating for administration
 
-**Status:** Proposed. The owner took the decisions below on 2026-09-26, after a
-survey of how ten products delete people and guard administrative actions.
-Nothing is built. It decides the two things
+**Status:** Accepted, in effect since 2026-09-27. The owner took the decisions
+below on 2026-09-26, after a survey of how ten products delete people and guard
+administrative actions.
+
+- Decisions 1 to 4 are built on server mode: an administrator's deletion,
+  over the API and from the web app's people page.
+- Decision 5 is built as written, including the 15-minute window.
+- Decision 6 leaves the local daemon as it was.
+
+It decides the two things
 [ADR-0049](0049-managing-people.md) left open: deleting a person (its decision
 4) and step-up re-authentication (its decision 6), whose named trigger was
 deletion.
