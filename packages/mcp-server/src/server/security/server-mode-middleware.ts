@@ -19,6 +19,7 @@ import { resolveApiRouteScope } from './route-scope-registry.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './sign-in-session-store.js'
 import type { TenantAdministratorStore } from './tenant-administrator-store.js'
 import type { UserDeactivation } from './user-deactivation.js'
+import type { UserDeletion } from './user-deletion.js'
 import type { WorkspaceRoles } from './workspace-roles.js'
 
 function buildServerModeAuthFailResponse(decision: {
@@ -53,6 +54,7 @@ export interface ServerModePeople {
     readonly check: AdministratorCheck
     readonly appointments: TenantAdministratorStore
     readonly deactivation: UserDeactivation
+    readonly deletion: UserDeletion
   }
   /** This host's own origin. A session is honoured on a request that changes
    *  something only when the request came from it. */

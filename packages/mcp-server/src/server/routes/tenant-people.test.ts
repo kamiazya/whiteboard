@@ -20,6 +20,7 @@ import { createServerModeApiAuthMiddleware } from '../security/server-mode-middl
 import { createSignInSessionStore } from '../security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import { createUserDeactivation } from '../security/user-deactivation.js'
+import { createUserDeletion } from '../security/user-deletion.js'
 import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { createTenantPeopleRouter } from './tenant-people.js'
@@ -82,6 +83,7 @@ beforeEach(async () => {
       check: administrators,
       appointments: admins,
       deactivation: createUserDeactivation(handle.db),
+      deletion: createUserDeletion(handle.db, async () => true),
     },
     origin: 'https://wb.test',
   }
@@ -174,6 +176,34 @@ describe('tenant people', () => {
       body: { error: 'unknown_user' },
     })
     expect((await call('ada', 'PUT', '/people/nobody/administrator')).status).toBe(404)
+  })
+
+  // ADR-0051: only a deactivated person is deleted, and never the only owner
+  // of a workspace; the refusal names the workspaces so an owner can be found.
+  it('deletes a deactivated person, and refuses one still active or a sole owner', async () => {
+    expect((await call('bob', 'DELETE', `/people/${ids.cy}`)).status).toBe(403)
+    expect(await call('ada', 'DELETE', '/people/nobody')).toMatchObject({
+      status: 404,
+      body: { error: 'unknown_user' },
+    })
+    expect(await call('ada', 'DELETE', `/people/${ids.bob}`)).toMatchObject({
+      status: 409,
+      body: { error: 'not_deactivated' },
+    })
+    await members.addMember('ws-bob', ids.bob as string)
+    await call('ada', 'POST', `/people/${ids.bob}/deactivation`)
+    expect(await call('ada', 'DELETE', `/people/${ids.bob}`)).toMatchObject({
+      status: 409,
+      body: { error: 'sole_owner', workspaceIds: ['ws-bob'] },
+    })
+    await members.addMember('ws-bob', ids.ada as string)
+    await createWorkspaceRoles(handle.db).setRole('ws-bob', ids.ada as string, 'owner')
+    expect(await call('ada', 'DELETE', `/people/${ids.bob}`)).toEqual({
+      status: 200,
+      body: { userId: ids.bob, deleted: true },
+    })
+    const people = (await call('ada', 'GET', '/people')).body.people as { userId: string }[]
+    expect(people.map((p) => p.userId)).not.toContain(ids.bob)
   })
 
   // ADR-0049 decision 3: an administrator's invitation names no workspace and

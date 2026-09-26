@@ -16,6 +16,8 @@ const RAW_DATABASE_CALLERS: Record<string, string> = {
   'server/store/db/index.ts': 'defines getRawDb, and binds getDb on top of it',
   'server/store/db/prepare.ts':
     'runs the migrations, which move rows between tables across every tenant',
+  'server/store/db/account-retirement.ts':
+    'retires a deleted person’s keeper-wide account only when no tenant’s user still names it, which only every tenant together can answer (ADR-0051)',
 }
 
 const SRC = join(import.meta.dirname, '../../..')

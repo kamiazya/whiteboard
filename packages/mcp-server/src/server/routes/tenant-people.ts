@@ -1,14 +1,15 @@
 /**
  * ADR-0049 decisions 1, 2 and 4 on server mode: what a tenant's
- * administrators do to its people — see every user, deactivate and
- * reactivate them, appoint and dismiss administrators, and invite to the
- * tenant alone. An administrator is not thereby an owner: nothing here reads
+ * administrators do to its people — see every user, deactivate, reactivate
+ * and delete them (ADR-0051), appoint and dismiss administrators, and invite
+ * to the tenant alone. An administrator is not thereby an owner: nothing here reads
  * or changes a workspace. Every route answers only an administrator, and the
  * check is the person's role, not the credential's scope.
  */
 import {
   administratorResponseSchema,
   deactivationResponseSchema,
+  deletionResponseSchema,
   type TenantPeopleRefusal,
   tenantPeopleResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
@@ -20,6 +21,7 @@ import type { MemberProfileStore } from '../security/member-profile-store.js'
 import { callerPerson, callerUserId } from '../security/membership-gate.js'
 import type { TenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import type { UserDeactivation } from '../security/user-deactivation.js'
+import type { UserDeletion } from '../security/user-deletion.js'
 import { issueInvitationLink } from './invitation-link.js'
 
 const log = getLogger('tenant-people')
@@ -31,6 +33,7 @@ interface TenantPeopleRouterOptions {
     readonly check: AdministratorCheck
     readonly appointments: TenantAdministratorStore
     readonly deactivation: UserDeactivation
+    readonly deletion: UserDeletion
   }
   /** This host's origin, where the web app's invite page is. */
   readonly origin: string
@@ -42,12 +45,18 @@ const REFUSALS = {
   cannot_deactivate_self: [409, 'an administrator cannot deactivate themselves'],
   // Dismissing oneself could leave nobody to manage people but the operator.
   cannot_dismiss_self: [409, 'an administrator cannot dismiss themselves; another one can'],
+  not_deactivated: [409, 'deactivate a person before deleting them'],
+  sole_owner: [409, 'they are the only owner of these workspaces; appoint another owner first'],
 } as const satisfies Record<TenantPeopleRefusal['error'], readonly [number, string]>
 
-function refuse(c: Context, error: TenantPeopleRefusal['error']) {
+function refuse(
+  c: Context,
+  error: TenantPeopleRefusal['error'],
+  detail: Pick<TenantPeopleRefusal, 'workspaceIds'> = {},
+) {
   const [status, message] = REFUSALS[error]
   log.warning({ path: c.req.path, reason: error }, 'tenant people change refused')
-  return c.json({ error, message } satisfies TenantPeopleRefusal, status)
+  return c.json({ error, message, ...detail } satisfies TenantPeopleRefusal, status)
 }
 
 // The acting administrator's own user id, or null when the caller is not one.
@@ -83,6 +92,24 @@ function mountDeactivation(app: Hono, options: TenantPeopleRouterOptions): void 
     await administration.deactivation.reactivate(userId)
     log.notice({ userId, by: acting }, 'user reactivated')
     return c.json(deactivationResponseSchema.parse({ userId, deactivated: false }), 200)
+  })
+}
+
+// ADR-0051: final, so it asks for deactivation first, and never leaves a
+// workspace without an owner.
+function mountDeletion(app: Hono, options: TenantPeopleRouterOptions): void {
+  app.delete('/api/people/:userId', async (c) => {
+    const acting = await administrator(c, options)
+    if (acting === null) return refuse(c, 'not_an_administrator')
+    const userId = c.req.param('userId')
+    const outcome = await options.administration.deletion.delete(userId)
+    if (outcome.kind === 'unknown-user') return refuse(c, 'unknown_user')
+    if (outcome.kind === 'not-deactivated') return refuse(c, 'not_deactivated')
+    if (outcome.kind === 'sole-owner') {
+      return refuse(c, 'sole_owner', { workspaceIds: [...outcome.workspaceIds] })
+    }
+    log.notice({ userId, by: acting }, 'user deleted')
+    return c.json(deletionResponseSchema.parse({ userId, deleted: true }), 200)
   })
 }
 
@@ -126,6 +153,7 @@ export function createTenantPeopleRouter(options: TenantPeopleRouterOptions) {
   })
 
   mountDeactivation(app, options)
+  mountDeletion(app, options)
   mountAppointments(app, options)
 
   // ADR-0049 decision 3: an administrator's invitation names no workspace.
