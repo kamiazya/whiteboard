@@ -135,7 +135,7 @@ Immich, Vaultwarden, Discourse, Plane.
    - Only an administrator can reactivate. Signing in again does not.
 
    Deleting a person, and what becomes of what they wrote, is not decided
-   here.
+   here. *(Decided by [ADR-0051](0051-deleting-a-person.md).)*
 
 5. **One members surface for both keepers.** The local daemon uses the same
    members screen and API as server mode. The keeper decides only how a
@@ -148,7 +148,8 @@ Immich, Vaultwarden, Discourse, Plane.
    administrator's session is an ordinary session. This is recorded as a
    decision, not an omission. The trigger for revisiting it is an
    administrative action that cannot be undone, and deletion (decision 4) is
-   the first candidate.
+   the first candidate. *(Revisited by [ADR-0051](0051-deleting-a-person.md),
+   which requires a recent sign-in for every tenant administrator's action.)*
 
 ## Consequences
 
