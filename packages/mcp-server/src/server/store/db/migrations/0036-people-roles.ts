@@ -5,7 +5,8 @@ import type { Migration } from 'kysely/migration'
 // the administrators it has appointed.
 //
 // The role is `owner` or `member`. Each existing workspace's EARLIEST
-// membership becomes its owner, which is what the store does from here on for
+// membership becomes its owner, the lowest user id breaking a tie since
+// `createdAt` is milliseconds, which is what the store does from here on for
 // a workspace's first member: the one who created it, or the one the operator
 // granted it to. Everyone after is a member.
 //
@@ -23,10 +24,12 @@ export const migration: Migration = {
     await db.schema.alterTable('workspaceMemberships').addColumn('role', 'text').execute()
     await sql`
       update workspaceMemberships set role = case
-        when createdAt = (
-          select min(m2.createdAt) from workspaceMemberships m2
+        when profileId = (
+          select m2.profileId from workspaceMemberships m2
           where m2.tenantId = workspaceMemberships.tenantId
             and m2.workspaceId = workspaceMemberships.workspaceId
+          order by m2.createdAt asc, m2.profileId asc
+          limit 1
         ) then 'owner' else 'member' end
     `.execute(db)
     await db.schema

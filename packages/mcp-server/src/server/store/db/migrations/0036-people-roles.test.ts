@@ -77,3 +77,28 @@ it("makes each workspace's earliest member its owner, per tenant", async () => {
   ])
   await db.destroy()
 })
+
+// createdAt is milliseconds, so two memberships can share it; the store makes
+// exactly one owner per workspace, and so must the backfill.
+it('makes exactly one owner when the earliest memberships share a timestamp', async () => {
+  const { db, migrateTo } = await openDb()
+  await migrateTo(PRE_0036)
+  await db
+    .insertInto('workspaceMemberships')
+    .values([
+      { workspaceId: 'ws-1', profileId: 'p-bob', createdAt: 10, tenantId: 't1' },
+      { workspaceId: 'ws-1', profileId: 'p-ada', createdAt: 10, tenantId: 't1' },
+    ])
+    .execute()
+  await migrateTo('head')
+  const rows = await db
+    .selectFrom('workspaceMemberships')
+    .select(['profileId', 'role'])
+    .orderBy('profileId')
+    .execute()
+  expect(rows).toEqual([
+    { profileId: 'p-ada', role: 'owner' },
+    { profileId: 'p-bob', role: 'member' },
+  ])
+  await db.destroy()
+})
