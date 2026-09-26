@@ -1,185 +1,209 @@
-# ADR-0050: The local daemon proves itself to its clients, and pairing is approved by whoever controls its data
+# ADR-0050: A hosted page reaches the local daemon through a browser extension, never over loopback HTTP
 
-**Status:** Proposed — the owner took decisions 2 and 6 on 2026-09-26, after
-an audit of how the local daemon's clients find and trust it. Decision 2
-was revised the same day, after a security review showed that a cookie or a
-URL cannot carry the approval (see its alternatives). Nothing is built.
+**Status:** Proposed. The owner chose the extension route on 2026-09-26,
+after three steps: an audit, a survey of how comparable products are built,
+and a measured spike. Nothing is built.
+
+This ADR supersedes three earlier decisions:
+- [ADR-0002](0002-browser-to-daemon-transport.md)'s choice of loopback HTTP
+  and WebSocket as the browser-to-daemon transport;
+- [ADR-0005](0005-hosted-origin-authorization.md) decision 2, the daemon as
+  an authorization server for the hosted origin;
+- ADR-0005 decision 3, the pairing link.
+
 Numbered 0050 because ADR-0049 is open alongside it.
 
 ## Context
 
-The local daemon listens on a loopback port. A browser pairs with it, an MCP
-proxy talks to it, and the CLI manages it. All of them find it by port
-number. Asked whether that survives a **port-swapping** attack — another
-process taking the port and posing as the daemon — the audit found that
-problem and a worse one.
+ADR-0005 made one premise non-negotiable: open the familiar hosted URL, and
+keep the data on your own machine. It built that on the most obvious
+transport, a hosted page calling the daemon's loopback port. An audit asked
+whether that survives a **port-swapping** attack, where another process takes
+the port and poses as the daemon. It found that problem and a worse one.
 
-### Measured: the pairing page hands out the daemon's token
+### What the audit found
 
-The daemon serves its own pairing consent page at `/pair` to anyone, and
-writes its full-authority token into that page, so that pressing Approve can
-persist a grant.
+**Measured on a production build:** the pairing page served the daemon's
+full-authority token to any caller.
+- A plain request for `/pair` returned the token that the owner-only (0600)
+  record file protects.
+- That token then authorised the API.
+- So any process on the machine, under any OS user, could read the token
+  without taking over anything.
 
-Tested on 2026-09-26 against a production build with a fresh data directory:
-- A plain request for `/pair` returned the 32-character token, identical to
-  the one in the daemon's owner-only (0600) record file.
-- The token then authorised the API: 200 with it, 401 without.
-- `/pair` also answered a forged `Host` header, so a DNS-rebinding page can
-  read the token. The API and `/mcp` refuse a foreign `Host` even with the
-  token, so such a page cannot use it through the browser.
+**Found by reading the code:**
+- **Renewal trusts an `Origin` header.** A browser cannot forge one, but
+  any other process can. So a session token could be minted for any origin
+  that holds a grant.
+- **A relay defeats the pinned daemon key.** When its port is taken, the
+  daemon silently moves to the next free port, while browsers keep the old
+  one. A squatter on the old port can then forward the browser's renewal to
+  the real daemon and sit in the middle.
+- **Identity is checked only at renewal.** A reconnect after a restart can
+  reach whoever holds the port.
+- **The first-use pin can be replaced** through the re-approval the app
+  itself recommends.
 
-So the file permission that guards the token is undone by the port. Any
-process on the machine, under any OS user, can read the token without taking
-over anything.
+### What comparable products do
 
-### Found by reading the code, not yet reproduced
+The failures in this area belong to one shape: a web page reaching an HTTP
+service on loopback, trusted by an `Origin` header, a port, or nothing.
+- Zoom's 2019 local web server (CVE-2019-13450, CVE-2019-13567).
+- Ollama's unauthenticated API (CVE-2024-37032).
+- Figma's font helper.
+- Node's inspector DNS-rebinding bypass (CVE-2021-22884).
 
-- **A relay defeats the pinned key.**
-  - The daemon exits after 15 minutes idle.
-  - When its port is taken on the next start, it silently moves to the next
-    free one, while browsers keep using the stored port.
-  - A squatter on the old port can relay the browser's renewal to the real
-    daemon, forging the `Origin` header, which only a browser cannot forge. It
-    receives a real session token and a valid signature over the renewal.
-    The pinned-key check then passes, and the squatter sits in the middle of
-    all traffic.
-- **Renewal trusts an `Origin` header.** A session token is minted for any
-  caller naming an origin that holds a grant. A browser cannot forge
-  `Origin`, but any other process can. So another OS user can mint a
-  session token without taking over the port at all, and then use it on the
-  API, WebSocket and SSE.
-- **The pin can be replaced.** When the key does not match, the app sends
-  the person to approve pairing again. That page belongs to whoever holds the
-  port, and approving overwrites the pinned key. A browser with no pin is
-  taken over without any warning.
-- **Identity is checked only at renewal.** WebSocket and SSE connections
-  reconnect to whatever holds the port, so after a restart an open tab can
-  receive forged document updates and sync them to the real daemon.
-- **The development lane trusts any responder.** The dev hook takes anything
-  that answers on the derived port with JSON as the daemon, and the proxy
-  sends the public dev token. A squatter's forged tool results become prompt
-  injection for the agent.
-- **The temporary-directory fallback** for the data directory checks
-  permission bits, not the owner. Another user who creates that directory
-  first controls the daemon's record.
+Browser vendors treat the shape itself as a hazard. Chrome now asks
+permission before a public page reaches loopback (Local Network Access).
+Safari blocks it outright as mixed content, which is why ADR-0002 already
+left Safari at browser storage only.
 
-### Already holding
+Products that hold up avoid the shape:
+- **The UI is served from the daemon's own origin** (Jupyter, Syncthing,
+  code-server). This gives up the hosted URL, which ADR-0005 and the owner
+  both rejected.
+- **Local IPC, where the OS identifies the caller** (Tailscale's LocalAPI,
+  Docker's socket). A peer's user is checked by the kernel, not claimed in a
+  header.
+- **A browser extension bridging to a native process** (1Password,
+  Bitwarden). The OS decides which extension may start which program, so
+  there is nothing for a page or another process to forge.
 
-- A second process cannot bind a port the daemon holds.
-- The record and identity key files are owner-only, and the daemon refuses to
-  start on a readable secret.
-- Pairing session tokens live only in memory, so they die with the daemon.
-- A passkey challenge is minted by the daemon and single-use.
-- The packaged stdio MCP server opens no socket at all.
+### What the spike measured
+
+Setup: a page, an extension, a native messaging host and a mock daemon over a
+Unix socket, compared with today's loopback WebSocket.
+
+| | round trip p50 / p95 | 1 MB | 5 MB |
+|---|---|---|---|
+| Chrome 153, WebSocket (today) | 0.2 / 0.3 ms | 15 ms | 78 ms |
+| Chrome 153, extension | 0.3 / 0.5 ms | 38 ms | 199 ms |
+| Firefox 156, WebSocket | 0 / 2 ms | 14 ms | 74 ms |
+| Firefox 156, extension | 1 / 2 ms | 41 ms | 219 ms |
+
+- **Edits are indistinguishable** from WebSocket. Bulk transfer is about three
+  times slower, because of JSON, base64 and chunking, and that affects only
+  a workspace's first load.
+- **A busy workspace is small.** The development daemon holding this
+  project's whole issue backlog is 2.9 MB of database, so first load costs
+  roughly a fifth of a second more.
+- **Chrome caps a message from the native program at 1 MB.** Chunking held
+  up to 20 MB with no loss.
+- **Firefox cannot message an extension from a page directly.** A content
+  script relays, and costs little.
+- **Ubuntu's snap Firefox works through the desktop portal after a one-time
+  consent.** The portal asks whether Firefox may start the program and
+  remembers the answer, including a refusal.
+- **A Unix socket path is limited to 108 bytes,** so the socket cannot live
+  under an arbitrary data directory.
 
 ## Decision
 
-1. **The threat model is other OS users, whoever holds the port, and web
-   pages. It is not code running as the daemon's own user.** Code running as
-   the owning user can read the daemon's owner-only files and needs no
-   network trick. Nothing here claims to stop it. Every other party must be
-   unable to obtain a credential, pose as the daemon, or sit between the
-   daemon and its clients.
+1. **The hosted page reaches the daemon only through the whiteboard
+   browser extension.**
+   - The page messages the extension: directly where the browser allows it
+     (Chrome, Edge), and through a content script where it does not
+     (Firefox).
+   - The extension starts a small native messaging host, which relays to the
+     daemon.
+   - The browser starts that host only for the extension its manifest names,
+     so no web page and no other process can take its place.
+   - The page never calls the daemon over HTTP.
 
-2. **Pairing is approved in the CLI, by whoever controls the daemon's
-   data.**
-   - The pairing page carries no secret. It files a pending request with the
-     daemon (the origin asking, and a short matching phrase) and shows the
-     phrase.
-   - `whiteboard daemon pair` lists pending requests with their origin and
-     phrase. When the person confirms the one they see in the browser, the
-     CLI approves it, authenticating with the token in the owner-only
-     record. The page then completes the pairing.
-   - The CLI checks the daemon's key against the owner-only record before it
-     sends that token, so it never hands the token to whoever holds the port.
+2. **The daemon listens on a local socket, not a browser-facing port.**
+   - It listens on a Unix domain socket on Linux and macOS, and a named pipe
+     on Windows, in the per-user runtime directory, owner-only.
+   - Where the platform allows it, the daemon checks the peer's user through
+     the kernel.
+   - The native host, the CLI and the stdio MCP entry point all reach it
+     there.
+   - The socket path is short by construction, which avoids the 108-byte
+     limit.
 
-   What follows:
-   - No secret ever travels in a URL, a cookie, a command's arguments, or a
-     page. The token stays between the record and the CLI.
-   - Pending requests expire quickly and are capped, because anyone can file
-     one. Filing one grants nothing; only the CLI's approval does.
-   - It works unchanged for a daemon running as a service. The approver only
-     has to be able to read the daemon's record: the same user for a
-     per-user service, an administrator for a system one. That is the
-     intended boundary.
-   - The receive-transfer page, which also reads the injected token today,
-     moves to the same approval.
+3. **Loopback HTTP is not served to browsers.**
+   - The pairing page is removed, along with its token injection, pairing
+     grants, the hosted-origin authorization server, `Origin`-based renewal
+     and the pairing link.
+   - A request carrying a browser `Origin` is refused outright on any
+     loopback listener that remains.
+   - A loopback HTTP listener may exist only for an MCP client that can
+     speak nothing else. It is off by default, requires the owner-only token,
+     and is documented as reachable by any process that holds its port.
 
-3. **Every page and route the daemon serves checks `Host`.** The `/api` and
-   `/mcp` guard is extended to the pairing page and its assets, so a
-   rebinding page reads nothing.
+4. **Without the extension, the hosted app keeps its data in the browser.**
+   - Safari is in that position already (ADR-0002), and so is any browser
+     without the extension installed.
+   - The app says plainly that the extension connects it to a local daemon,
+     rather than offering a connection that fails.
 
-4. **Renewal proves the browser, not an `Origin` header.**
-   - At pairing, the browser makes a key that cannot be exported and
-     registers its public half with the grant.
-   - Renewing a session token means signing a nonce from the daemon with
-     that key. A process that is not that browser profile cannot sign, so it
-     cannot mint a token, whatever `Origin` it sends.
+5. **Distribution:**
+   - **Chrome and Edge:** each browser's store, as an unlisted item. The item
+     is reviewed but not listed, and the store delivers updates. Chrome on
+     Windows and macOS will not update an extension from anywhere else.
+   - **Firefox:** Mozilla signs the extension as unlisted, and the project
+     hosts the file and its update manifest.
+   - **The native host's manifest** is written by `whiteboard` itself at
+     user level, needing no administrator rights. The OS then allows only the
+     extension's own id to start it.
+   - **Safari** stays out of scope.
 
-5. **The daemon proves itself on the connection it is reached over.**
-   - The signature a client checks covers the daemon's own origin (scheme,
-     host and bound port) as well as the client's nonce and origin. A client
-     refuses a proof for any origin other than the one it connected to, which
-     defeats a relay to a daemon on another port.
-   - Clients check the proof before every WebSocket or SSE reconnect and
-     whenever the configured address changes, not only at renewal.
-   - A pinned key is never replaced silently. A different key is only
-     accepted through the approval in decision 2, which a squatter cannot
-     complete.
-   - `whiteboard daemon status` prints the key's fingerprint, so the pairing
-     page's fingerprint can be checked against something the squatter does
-     not control.
-
-6. **The daemon does not start on a port it did not ask for.** If the default
-   port is taken, it exits with an error naming the port and, where it can,
-   the holder. Another port is used only when it is given explicitly. Moving
-   silently is what sends browsers to a squatter.
-
-7. **The development lane gets a secret and a check.**
-   - Each worktree's owner-only marker holds a random token, which replaces
-     the public dev token.
-   - The hook and the proxy verify the daemon's key before trusting a
-     responder. A responder without a marker is not treated as healthy.
-
-8. **The data directory must be owned by the user running the daemon.** The
-   secret-file check compares the owner as well as the permission bits, and a
-   directory someone else created is refused rather than adopted.
+6. **Snap Firefox's consent is the person's to give.** Setup never
+   pre-grants the portal's permission. The guide explains that Firefox will
+   ask once, and how to undo a refusal: remove the portal's stored answer,
+   or reset the app's permissions.
 
 ## Consequences
 
-- **Pairing gains a step in the terminal.** A person who starts from the web
-  app is told to run `whiteboard daemon pair` and confirm the phrase. The
-  page waits and completes on its own.
-- **Pairing needs the CLI**, which is always installed where the daemon
-  runs.
-- **Clients do one more exchange** per reconnect. It is one signature check,
-  and reconnects are rare.
-- **Starting the daemon can fail where it used to move.** The error says what
-  holds the port, so the fix is visible.
-- **The token exposure and `Origin`-only renewal are live today.** Decisions
-  2, 3 and 4 close them and should land first, ahead of the rest.
+- **The audit's findings stop existing rather than being mitigated.**
+  - The token leak goes with the pairing page.
+  - `Origin` trust goes with renewal.
+  - The relay and the reconnect gap go with the browser-facing port.
+  - Another OS user cannot open an owner-only socket.
+- **A large security surface is deleted.** That is the pairing and consent
+  page, the authorization server, CORS and Local Network Access handling,
+  and the identity-pinning ceremony, all of which ADR-0005 accepted as the
+  price of its premise.
+- **Using a local daemon now needs the extension,** one per browser, and the
+  project ships and maintains three builds through two stores and one
+  self-hosted channel.
+- **The extension and native host become security-critical code.**
+  - The host must accept messages only from its extension. The OS enforces
+    this.
+  - The extension must accept messages only from the hosted app's origins:
+    Chrome's `externally_connectable` list, and the content script's own
+    match list in Firefox.
+  - Firefox's Manifest V3 makes a content script's host access something the
+    person grants, and the extension has to ask for it.
+- **First load of a workspace costs more:** about three times the WebSocket's
+  bulk time, and a fraction of a second at today's sizes. Live editing is
+  unchanged.
+- **Live sync gains a hop.** The page talks to the extension, which talks to
+  the host, which talks to the daemon. The daemon's live fan-out,
+  subscriptions and reconnection move from WebSocket and SSE handling to the
+  socket protocol.
+- **Unmeasured, and needed before building:**
+  - Edge;
+  - Windows (named pipe, registry-registered host) and macOS;
+  - an MV3 service worker suspended with a native port open;
+  - a real Loro snapshot;
+  - store review of an extension that uses native messaging.
 
 ## Alternatives considered
 
-- **A one-time code the CLI opens in the browser, exchanged for a cookie.**
-  The owner's first choice, withdrawn after review. A cookie for `127.0.0.1`
-  is sent to every port on that host, so a squatter on another port receives
-  it. A code in the URL passes through the browser-opening command's
-  arguments, which other users can read, as well as history and `Referer`.
-- **A long code the CLI prints, pasted into the page.** No secret in a URL,
-  but the page it is pasted into may be the squatter's, which then holds a
-  working code. Approving in the CLI means the secret never meets a page.
-- **A code shown by the daemon, typed into the page.** Close to today's flow,
-  but a short code needs attempt limits to resist guessing, and a daemon
-  running as a service has no terminal to show it on. The CLI obtaining the
-  code covers both: the code can be long, and any user who can read the
-  record can ask for one.
-- **Keep the token in the page and rely on `Host` and CORS.** That closes the
-  web-page path only. Any local process still reads it, which is the finding.
-- **Move to the next free port and announce it loudly.** Keeps starts working,
-  but browsers that saved the old address keep reaching the squatter, and
-  only decision 5's origin binding would stand between them.
-- **Loopback TLS with the pinned key as the certificate.** Binds identity to
-  the connection most completely, but a browser will not accept a
-  self-signed loopback certificate without the person installing it. Decision
-  5 gets the same binding at the application layer.
+- **Serve the web app from the daemon's own origin** (ADR-0047's server-mode
+  shape, applied locally). It is the simplest secure option, and every
+  daemon-to-browser feature keeps working unchanged. Rejected by the owner: it
+  gives up the hosted app as the place people work, which is ADR-0005's
+  premise and the product's.
+- **Keep loopback HTTP and harden it.** The first draft of this ADR did that:
+  CLI-approved pairing, a browser-held renewal key, and a daemon proof that
+  covers its own port. It stays inside the shape the survey found failing,
+  depends on each browser's loopback policy continuing to allow it, and keeps
+  every piece of the surface this ADR deletes.
+- **Carry the approval in a cookie or a URL.** A cookie for `127.0.0.1` is
+  sent to every port on that host, so a squatter on another port receives
+  it. A URL passes through the browser-opening command's arguments, which
+  other users can read.
+- **Safari through an extension in a Developer ID-signed app** (Safari
+  18.4+). It is technically possible, but Safari was put out of scope for
+  other reasons as well: SharedWorker, and passkeys (ADR-0039). Not this ADR.
