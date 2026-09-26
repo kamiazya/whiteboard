@@ -102,7 +102,7 @@ Unix socket, compared with today's loopback WebSocket.
 1. **The hosted page reaches the daemon only through the whiteboard
    browser extension.**
    - The page messages the extension: directly where the browser allows it
-     (Chrome, Edge), and through a content script where it does not
+     (Chrome, Edge, Safari), and through a content script where it does not
      (Firefox).
    - The extension starts a small native messaging host, which relays to the
      daemon.
@@ -131,23 +131,44 @@ Unix socket, compared with today's loopback WebSocket.
      and is documented as reachable by any process that holds its port.
 
 4. **Without the extension, the hosted app keeps its data in the browser.**
-   - Safari is in that position already (ADR-0002), and so is any browser
-     without the extension installed.
+   - Any browser without the extension installed is in that position.
    - The app says plainly that the extension connects it to a local daemon,
      rather than offering a connection that fails.
 
-5. **Distribution:**
-   - **Chrome and Edge:** each browser's store, as an unlisted item. The item
-     is reviewed but not listed, and the store delivers updates. Chrome on
-     Windows and macOS will not update an extension from anywhere else.
-   - **Firefox:** Mozilla signs the extension as unlisted, and the project
-     hosts the file and its update manifest.
-   - **The native host's manifest** is written by `whiteboard` itself at
-     user level, needing no administrator rights. The OS then allows only the
-     extension's own id to start it.
-   - **Safari** stays out of scope.
+5. **Every major engine is a target: Chromium (Chrome, Edge), Firefox and
+   Safari.**
+   - This reverses ADR-0002's decision to leave Safari at browser storage
+     only for the daemon connection. That decision followed from WebKit
+     blocking a hosted page's loopback request, and the extension removes
+     that request.
+   - Safari's other gaps are separate decisions and stay where they are:
+     passkeys are out of scope (ADR-0039), and SharedWorker is absent.
+   - Holding the daemon connection in the extension should remove the
+     page's need for a SharedWorker for that connection. That is to be
+     verified, not assumed.
 
-6. **Snap Firefox's consent is the person's to give.** Setup never
+6. **How each engine is shipped:**
+   - **Chrome and Edge:** through each browser's store. Chrome on Windows
+     and macOS will not install or update an extension from anywhere else,
+     outside enterprise policy.
+   - **Firefox:** signed by Mozilla. It can be listed in Mozilla's store or
+     self-hosted with its own update manifest, and both update
+     automatically.
+   - **Safari:** inside a macOS app. That app can go through the Mac App
+     Store, or be Developer ID-signed and notarised and distributed directly
+     (Safari 18.4 and later), in which case it updates through the app's own
+     updater.
+     - In Safari the extension does not start a stdio program. It messages
+       the app extension it ships with, so that is where the relay to the
+       daemon's socket lives: a second host implementation.
+   - **Whether an item is listed publicly or not** is decided per product
+     phase, not here. An unlisted item is still reviewed and still
+     auto-updates, so the choice is about discoverability, not security.
+   - **The native host's manifest** (Chromium, Firefox) is written by
+     `whiteboard` itself at user level, needing no administrator rights. The
+     OS then allows only the extension's own id to start it.
+
+7. **Snap Firefox's consent is the person's to give.** Setup never
    pre-grants the portal's permission. The guide explains that Firefox will
    ask once, and how to undo a refusal: remove the portal's stored answer,
    or reset the app's permissions.
@@ -163,9 +184,9 @@ Unix socket, compared with today's loopback WebSocket.
   page, the authorization server, CORS and Local Network Access handling,
   and the identity-pinning ceremony, all of which ADR-0005 accepted as the
   price of its premise.
-- **Using a local daemon now needs the extension,** one per browser, and the
-  project ships and maintains three builds through two stores and one
-  self-hosted channel.
+- **Using a local daemon now needs the extension,** one per engine. The
+  project ships and maintains a Chromium build, a Firefox build and a Safari
+  build, the last inside a macOS app with its own relay to the daemon.
 - **The extension and native host become security-critical code.**
   - The host must accept messages only from its extension. The OS enforces
     this.
@@ -182,6 +203,8 @@ Unix socket, compared with today's loopback WebSocket.
   subscriptions and reconnection move from WebSocket and SSE handling to the
   socket protocol.
 - **Unmeasured, and needed before building:**
+  - Safari: page to extension to the containing app to the socket, and
+    whether the daemon connection then needs no SharedWorker;
   - Edge;
   - Windows (named pipe, registry-registered host) and macOS;
   - an MV3 service worker suspended with a native port open;
@@ -204,6 +227,3 @@ Unix socket, compared with today's loopback WebSocket.
   sent to every port on that host, so a squatter on another port receives
   it. A URL passes through the browser-opening command's arguments, which
   other users can read.
-- **Safari through an extension in a Developer ID-signed app** (Safari
-  18.4+). It is technically possible, but Safari was put out of scope for
-  other reasons as well: SharedWorker, and passkeys (ADR-0039). Not this ADR.
