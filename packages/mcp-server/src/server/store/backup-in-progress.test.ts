@@ -1,7 +1,8 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { backupIsInProgress, withBackupMarker } from './backup-in-progress.js'
 
@@ -186,11 +187,11 @@ describe('the backup-in-progress marker', () => {
   /**
    * A refresh must never make the marker read as "no backup running".
    *
-   * `backupIsInProgress` fails OPEN by design — an unreadable marker is not
-   * one — so a reader that catches the marker mid-rewrite gets the same
-   * answer as no backup at all, and GC resumes underneath a running one.
-   * That is precisely the window `withBackupMarker` exists to close, and a
-   * non-atomic rewrite reopened it once per refresh.
+   * A reader that caught the marker mid-rewrite once got the same answer as
+   * no backup at all, and GC resumed underneath a running one — a non-atomic
+   * rewrite reopened that window once per refresh. Two things hold it shut
+   * now: the atomic write, and the reader judging a marker it cannot parse
+   * by its mtime. This asserts the outcome, which either one keeps.
    *
    * The TTL here is a minute, so a `false` cannot mean expiry; it can only
    * mean the read failed. Measured against the plain `writeFile` this
@@ -246,10 +247,45 @@ describe('the backup-in-progress marker', () => {
     expect(absent).toBe(0)
   })
 
-  /** Fail OPEN: an unreadable marker must not wedge GC permanently. */
-  it('is ignored when it cannot be read as a marker', async () => {
-    await writeFile(join(dir, 'backup-in-progress.json'), 'not json')
-    expect(await backupIsInProgress(dir)).toBe(false)
+  /**
+   * A marker that is THERE but cannot be read as one is judged by when it was
+   * last written. A running backup rewrites it every refresh, so a fresh file
+   * is a live backup whatever its content — a newer build's schema, or bytes
+   * this build cannot parse — and GC stands down. A stale one is ignored, so
+   * an unreadable marker nobody maintains still cannot wedge GC for good.
+   */
+  describe('when it cannot be read as a marker', () => {
+    const marker = () => join(dir, 'backup-in-progress.json')
+
+    it('is honoured while freshly written', async () => {
+      await writeFile(marker(), 'not json')
+      expect(await backupIsInProgress(dir)).toBe(true)
+    })
+
+    it('is honoured when a newer build wrote it', async () => {
+      await writeFile(
+        marker(),
+        JSON.stringify({ schemaVersion: 3, expiresAt: Date.now() + 60_000 }),
+      )
+      expect(await backupIsInProgress(dir)).toBe(true)
+    })
+
+    it('is ignored once it has gone unrefreshed', async () => {
+      await writeFile(marker(), 'not json')
+      const stale = new Date(Date.now() - 10 * 60_000)
+      await utimes(marker(), stale, stale)
+      expect(await backupIsInProgress(dir)).toBe(false)
+    })
+
+    it.skipIf(!CAN_DENY_FILE_READ)('is honoured when this process may not read it', async () => {
+      await writeFile(marker(), JSON.stringify({ schemaVersion: 2 }))
+      await chmod(marker(), 0o000)
+      try {
+        expect(await backupIsInProgress(dir)).toBe(true)
+      } finally {
+        await chmod(marker(), 0o600)
+      }
+    })
   })
 
   /**

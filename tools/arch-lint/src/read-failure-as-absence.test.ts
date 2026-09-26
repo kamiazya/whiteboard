@@ -45,8 +45,6 @@ const LEDGER: Readonly<Record<string, string>> = {
     'deliberate: backup falls back to the environment and restore to its file-presence check, and restore refuses a mismatch either way',
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#importOneBlob':
     'deliberate: logs a warning and skips the one blob, leaving its source file in place, and nothing deletes it afterwards',
-  'packages/mcp-server/src/server/store/backup-in-progress.ts#backupIsInProgress':
-    'deliberate: fails open so a stale marker cannot stop GC for ever, at the cost the file-gc stand-down comment names for a backup running meanwhile',
 }
 
 function scan(): {

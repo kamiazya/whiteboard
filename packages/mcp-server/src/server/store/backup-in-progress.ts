@@ -1,4 +1,4 @@
-import { readFile, rm } from 'node:fs/promises'
+import { readFile, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { writeFileAtomic } from '../atomic-write.js'
@@ -59,12 +59,17 @@ function markerPath(dataDir: string): string {
  * ended hours ago), with no way to tell which. A deadline the live backup
  * keeps pushing out means the same thing to every reader.
  *
- * **Fails OPEN**, which is the opposite of every other guard in this area and
- * deliberate. The cost of wrongly believing a backup is running is that GC
- * never collects again — an unbounded disk leak, from a file nobody is
- * maintaining. The cost of wrongly believing none is running is one skipped
- * stand-down in a window measured in seconds. So an unreadable marker, or an
- * expired one, is treated as no marker at all.
+ * **An expired marker is ignored**, because the cost of wrongly believing a
+ * backup is running is that GC never collects again — an unbounded disk leak,
+ * from a file nobody is maintaining.
+ *
+ * **A marker that cannot be read as one is judged by its mtime** rather than
+ * ignored. It is there, and a live backup rewrites it every refresh, so a
+ * fresh one means a backup whatever its content: a newer build's schema, or
+ * bytes this build cannot parse or may not read. Ignoring it would let GC
+ * unlink underneath that backup — the silent loss this marker exists to
+ * prevent. The mtime still expires, so an unreadable marker nobody maintains
+ * costs one TTL of stand-down, the same as a hard kill does.
  */
 export async function backupIsInProgress(
   dataDir: string,
@@ -73,18 +78,35 @@ export async function backupIsInProgress(
   let raw: string
   try {
     raw = await readFile(markerPath(dataDir), 'utf8')
-  } catch {
-    return false
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false
+    return writtenWithinTtl(dataDir, nowMs)
   }
-  let parsed: z.infer<typeof markerSchema>
+  const marker = markerSchema.safeParse(parseJson(raw))
+  if (!marker.success) return writtenWithinTtl(dataDir, nowMs)
+  return marker.data.expiresAt > nowMs
+}
+
+function parseJson(raw: string): unknown {
   try {
-    const result = markerSchema.safeParse(JSON.parse(raw))
-    if (!result.success) return false
-    parsed = result.data
+    return JSON.parse(raw)
   } catch {
-    return false
+    return undefined
   }
-  return parsed.expiresAt > nowMs
+}
+
+/**
+ * Whether the marker was written within one TTL. A marker that cannot even
+ * be stat'd — but is not gone — is held to be live: this process cannot see
+ * into its own data directory, and a GC that deletes blind there is the
+ * outcome this guard refuses.
+ */
+async function writtenWithinTtl(dataDir: string, nowMs: number): Promise<boolean> {
+  try {
+    return (await stat(markerPath(dataDir))).mtimeMs + DEFAULT_TTL_MS > nowMs
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== 'ENOENT'
+  }
 }
 
 export interface BackupMarkerOptions {
@@ -125,17 +147,15 @@ export async function withBackupMarker<T>(
       schemaVersion: 2,
       holder,
       startedAt,
-      // Whole milliseconds, because the reader says `.int()` and fails OPEN:
-      // a fractional lifetime would otherwise write a marker that reads as
-      // no backup at all, for the whole pass.
+      // Whole milliseconds, because the reader says `.int()`: a fractional
+      // lifetime would write a marker it can only judge by mtime.
       expiresAt: Math.ceil(Date.now() + ttlMs),
     } satisfies z.infer<typeof markerSchema>
-    // Atomic, because `backupIsInProgress` fails OPEN: a plain `writeFile`
-    // leaves the target truncated for the whole duration of the write, and a
-    // reader landing there gets the same answer as no backup at all — so GC
-    // resumes underneath a running backup, once per refresh. That is the
-    // window this marker exists to close. Same defect, same remedy, as the
-    // blob re-put and the backup copy `writeFileAtomic` already covers.
+    // Atomic, so a reader never lands on a half-written marker. When the
+    // reader ignored what it could not parse, a plain `writeFile` left the
+    // target truncated for the whole write and GC resumed underneath a
+    // running backup once per refresh; it now falls back to the mtime, and
+    // the atomic write keeps it from having to.
     await writeFileAtomic(
       dataDir,
       markerPath(dataDir),
