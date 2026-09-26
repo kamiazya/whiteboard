@@ -49,4 +49,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0036-people-roles',
   '0037-user-deactivation',
   '0038-workspace-invitations',
+  '0039-sign-in-authenticated-at',
 ] as const satisfies readonly string[]

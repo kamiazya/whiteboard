@@ -121,6 +121,43 @@ describe('sign-in through an OIDC provider', () => {
     })
   })
 
+  // ADR-0051 decision 5: administration asks for a recent sign-in at the
+  // provider, so a signed-in person can be sent back to sign in again —
+  // interactively, whatever session the provider still holds.
+  it('re-authenticates a signed-in person at their provider and records when', async () => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    idp.next({ sub: 'ada-1' })
+    const first = cookieFrom(await signInThrough(app), SESSION_COOKIE) as string
+    const plain = new URL(
+      (await app.request(`${BASE}/auth/sign-in/corp`)).headers.get('location') as string,
+    )
+    expect(plain.searchParams.get('prompt')).toBeNull()
+
+    const started = await app.request(`${BASE}/auth/reauthenticate?return=%2Fpeople`, {
+      headers: { cookie: `${SESSION_COOKIE}=${first}` },
+    })
+    const to = new URL(started.headers.get('location') as string)
+    expect(to.origin + to.pathname).toBe(`${ISSUER}/authorize`)
+    expect(to.searchParams.get('prompt')).toBe('login')
+    expect(to.searchParams.get('max_age')).toBe('0')
+
+    const now = Math.floor(Date.now() / 1000)
+    idp.next({ sub: 'ada-1', auth_time: now })
+    const binding = cookieFrom(started, '__Host-wb_signin')
+    const done = await app.request(idp.authorize(to.toString()), {
+      headers: { cookie: `__Host-wb_signin=${binding}` },
+    })
+    expect(done.headers.get('location')).toBe('/people')
+    const session = cookieFrom(done, SESSION_COOKIE) as string
+    expect((await signIn.sessions.open(session, Date.now()))?.authenticatedAt).toBe(now * 1000)
+  })
+
+  it('sends someone with no session to the sign-in screen rather than a provider', async () => {
+    const { app } = appFor({ createAccounts: true })
+    const res = await app.request(`${BASE}/auth/reauthenticate`)
+    expect(res.headers.get('location')).toBe('/sign-in?error=reauthentication_unavailable')
+  })
+
   it('refuses a callback from a browser that did not begin the attempt', async () => {
     const { app } = appFor({ createAccounts: true })
     idp.next({ sub: 'ada-1' })

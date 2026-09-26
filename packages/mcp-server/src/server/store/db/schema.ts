@@ -199,6 +199,8 @@ interface SignInSessionsTable {
   subject: string
   createdAt: Timestamp
   expiresAt: Timestamp
+  /** When the provider last authenticated the person (ADR-0051); null when it did not say. */
+  authenticatedAt: number | null
 }
 
 // ADR-0046 decision 1: an authorization-code flow between its redirect and

@@ -44,6 +44,10 @@ export const tenantPeopleRefusalSchema = z
       'cannot_dismiss_self',
       'not_deactivated',
       'sole_owner',
+      // ADR-0051 decision 5: an action needs a recent sign-in at the provider,
+      // which a bearer cannot give and an older session no longer does.
+      'sign_in_required',
+      'reauthentication_required',
     ]),
     message: z.string().min(1),
     // `sole_owner` only: the workspaces that would be left without an owner.

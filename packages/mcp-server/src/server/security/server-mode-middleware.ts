@@ -109,12 +109,13 @@ async function sessionGrant(
 ): Promise<GrantOutcome | undefined> {
   const session = getCookie(c, SESSION_COOKIE)
   if (session === undefined || !fromThisHost(c, people.origin)) return undefined
-  const person = await people.sessions.resolve(session, (people.now ?? Date.now)())
-  if (person === null) return undefined
+  const open = await people.sessions.open(session, (people.now ?? Date.now)())
+  if (open === null) return undefined
   if (requiredScopes.some((scope) => !SESSION_SCOPES.includes(scope))) {
     return { refusal: { status: 403, code: 'auth.forbidden' } }
   }
-  return { grant: { kind: 'signed-in', scopes: SESSION_SCOPES, person } }
+  const { person, authenticatedAt } = open
+  return { grant: { kind: 'signed-in', scopes: SESSION_SCOPES, person, authenticatedAt } }
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])

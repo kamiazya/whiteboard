@@ -107,11 +107,12 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
-/** A person signed in at this host: a user in the tenant, and a session. */
+/** A person signed in at this host just now: a user in the tenant, and a
+ *  session recent enough to administer with (ADR-0051). */
 async function signedIn(subject: string): Promise<Record<string, string>> {
   const binding = { authenticator: ISSUER, subject }
   await members.ensureProfile({ binding, displayName: subject })
-  const token = await sessions.create(binding, Date.now(), 60_000)
+  const token = await sessions.create(binding, Date.now(), 60_000, Date.now())
   return { cookie: `${SESSION_COOKIE}=${token}`, origin: PUBLIC_URL }
 }
 

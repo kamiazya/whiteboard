@@ -25,9 +25,19 @@ const refuse = (error: string, message: string, status: number) =>
 const LINK = { url: 'https://wb.test/invite#token=t-1', expiresAt: '2026-10-03T00:00:00.000Z' }
 
 // `/api/people` and `/api/invitations`, as the keeper answers an administrator.
-function tenantRoute(users: User[], me: User, url: string, method: string): Response {
+function tenantRoute(
+  users: User[],
+  me: User,
+  url: string,
+  method: string,
+  stale: boolean,
+): Response {
   if (!me.administrator) {
     return refuse('not_an_administrator', 'only an administrator of this server can do that', 403)
+  }
+  // ADR-0051: every action, never the list, needs a recent sign-in.
+  if (stale && method !== 'GET') {
+    return refuse('reauthentication_required', 'sign in again to confirm it is you', 403)
   }
   if (url === '/api/invitations') return Response.json(LINK, { status: 201 })
   if (url === '/api/people') return Response.json({ people: users })
@@ -69,7 +79,7 @@ function workspaceRoute(members: Member[], me: User, url: string, init?: Request
   return Response.json(member)
 }
 
-function fakeKeeper(self: 'ada' | 'bob') {
+function fakeKeeper(self: 'ada' | 'bob', { stale = false } = {}) {
   const users: User[] = [
     { userId: 'u-ada', displayName: 'Ada', deactivated: false, administrator: true },
     { userId: 'u-bob', displayName: 'Bob', deactivated: false, administrator: false },
@@ -91,7 +101,7 @@ function fakeKeeper(self: 'ada' | 'bob') {
       return Response.json({ workspaces: [{ workspaceId: 'ws-1', displayName: 'Plans' }] })
     }
     if (url.startsWith('/api/people') || url === '/api/invitations') {
-      return tenantRoute(users, me, url, init?.method ?? 'GET')
+      return tenantRoute(users, me, url, init?.method ?? 'GET', stale)
     }
     if (url.startsWith('/api/workspaces/ws-1/')) return workspaceRoute(members, me, url, init)
     return Response.json({ error: 'not_found', message: 'no such route' }, { status: 404 })
@@ -136,6 +146,16 @@ describe('the server people screen', () => {
     fireEvent.click(await screen.findByRole('button', { name: /create invitation link/i }))
     const field = await screen.findByLabelText(/can use it once/i)
     expect((field as HTMLInputElement).value).toBe('https://wb.test/invite#token=t-1')
+  })
+
+  // ADR-0051: the keeper asks for a recent sign-in, and the page offers one
+  // that comes back here, rather than leaving the refusal as a dead end.
+  it('offers to sign in again when an action needs a recent sign-in', async () => {
+    renderAt('/people', fakeKeeper('ada', { stale: true }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Deactivate Bob' }))
+    const again = await screen.findByRole('link', { name: 'Sign in again' })
+    expect(again.getAttribute('href')).toBe('/auth/reauthenticate?return=%2Fpeople')
+    expect(screen.getByRole('button', { name: 'Deactivate Bob' })).toBeTruthy()
   })
 
   it("shows the keeper's refusal to someone who is not an administrator", async () => {

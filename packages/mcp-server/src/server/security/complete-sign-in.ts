@@ -181,6 +181,20 @@ export async function completeSignIn(
   })
   if (profile === null) return refuse('invitation_unusable')
 
-  const sessionToken = await deps.sessions.create(binding, now, deps.sessionTtlMs)
+  const sessionToken = await openSession(deps, binding, claims, now)
   return { ok: true, sessionToken, profile }
+}
+
+// OpenID Connect Core 1.0 section 2: `auth_time` is when the End-User
+// authenticated, in seconds. ADR-0051 decision 5 reads it for administration;
+// a provider that does not send it leaves the session unable to administer.
+function openSession(
+  deps: CompleteSignInDeps,
+  binding: AuthenticatorBinding,
+  claims: VerifiedClaims,
+  now: number,
+): Promise<string> {
+  const at = claims.auth_time
+  const authenticatedAt = typeof at === 'number' && Number.isFinite(at) ? at * 1000 : null
+  return deps.sessions.create(binding, now, deps.sessionTtlMs, authenticatedAt)
 }

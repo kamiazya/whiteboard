@@ -30,6 +30,10 @@ interface AuthorizationRequest {
   readonly state: string
   readonly nonce: string
   readonly codeVerifier: string
+  /** ADR-0051: the person signs in again interactively, whatever session the
+   *  provider still holds (OIDC Core 1.0 section 3.1.2.1, `prompt=login` and
+   *  `max_age=0`), so the ID token's `auth_time` is now. */
+  readonly fresh?: boolean
 }
 
 export interface RelyingParty {
@@ -64,7 +68,7 @@ export function createRelyingParty(options: { fetch?: client.CustomFetch } = {})
   }
 
   return {
-    async authorizationUrl(provider, { redirectUri, state, nonce, codeVerifier }) {
+    async authorizationUrl(provider, { redirectUri, state, nonce, codeVerifier, fresh }) {
       return client.buildAuthorizationUrl(await configurationFor(provider), {
         redirect_uri: redirectUri,
         scope: provider.scopes.join(' '),
@@ -72,6 +76,7 @@ export function createRelyingParty(options: { fetch?: client.CustomFetch } = {})
         nonce,
         code_challenge: await client.calculatePKCECodeChallenge(codeVerifier),
         code_challenge_method: 'S256',
+        ...(fresh === true ? { prompt: 'login', max_age: '0' } : {}),
       })
     },
 

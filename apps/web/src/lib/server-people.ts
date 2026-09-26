@@ -19,9 +19,15 @@ import type { z } from 'zod'
 
 type Fetch = typeof globalThis.fetch
 
-export type Outcome<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly message: string }
+/** A refusal in the keeper's words; `reauthenticate` when it asked for a
+ *  recent sign-in at the provider before an administrator acts (ADR-0051). */
+export type Refused = {
+  readonly ok: false
+  readonly message: string
+  readonly reauthenticate?: true
+}
+
+export type Outcome<T> = { readonly ok: true; readonly value: T } | Refused
 
 export type TenantPerson = z.infer<typeof tenantPeopleResponseSchema>['people'][number]
 export type WorkspacePerson = z.infer<typeof workspacePersonSchema>
@@ -30,9 +36,13 @@ export type InvitationLink = z.infer<typeof invitationLinkResponseSchema>
 const UNREACHABLE = 'Could not reach the server. Try again.'
 const UNEXPECTED = 'The server answered in a way this page does not understand.'
 
-function refusalMessage(body: unknown): string {
-  const message = (body as { message?: unknown } | null)?.message
-  return typeof message === 'string' && message !== '' ? message : 'That was refused.'
+function refusal(body: unknown): Refused {
+  const { message, error } = (body ?? {}) as { message?: unknown; error?: unknown }
+  return {
+    ok: false,
+    message: typeof message === 'string' && message !== '' ? message : 'That was refused.',
+    ...(error === 'reauthentication_required' ? { reauthenticate: true } : {}),
+  }
 }
 
 async function call<S extends z.ZodTypeAny>(
@@ -44,7 +54,7 @@ async function call<S extends z.ZodTypeAny>(
   const res = await fetchFn(url, init).catch(() => null)
   if (res === null) return { ok: false, message: UNREACHABLE }
   const body: unknown = await res.json().catch(() => null)
-  if (!res.ok) return { ok: false, message: refusalMessage(body) }
+  if (!res.ok) return refusal(body)
   const parsed = schema.safeParse(body)
   return parsed.success ? { ok: true, value: parsed.data } : { ok: false, message: UNEXPECTED }
 }

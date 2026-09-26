@@ -18,7 +18,7 @@ import { getLogger } from '../log.js'
 import type { AdministratorCheck } from '../security/administrator-check.js'
 import type { InvitationStore } from '../security/invitation-store.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
-import { callerPerson, callerUserId } from '../security/membership-gate.js'
+import { administrationFreshness, callerPerson, callerUserId } from '../security/membership-gate.js'
 import type { TenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import type { UserDeactivation } from '../security/user-deactivation.js'
 import type { UserDeletion } from '../security/user-deletion.js'
@@ -37,6 +37,7 @@ interface TenantPeopleRouterOptions {
   }
   /** This host's origin, where the web app's invite page is. */
   readonly origin: string
+  readonly now?: () => number
 }
 
 const REFUSALS = {
@@ -47,6 +48,8 @@ const REFUSALS = {
   cannot_dismiss_self: [409, 'an administrator cannot dismiss themselves; another one can'],
   not_deactivated: [409, 'deactivate a person before deleting them'],
   sole_owner: [409, 'they are the only owner of these workspaces; appoint another owner first'],
+  sign_in_required: [403, 'administering this server needs a browser sign-in, not a bearer'],
+  reauthentication_required: [403, 'sign in again to confirm it is you, then retry'],
 } as const satisfies Record<TenantPeopleRefusal['error'], readonly [number, string]>
 
 function refuse(
@@ -68,6 +71,24 @@ async function administrator(c: Context, options: TenantPeopleRouterOptions) {
   return callerUserId(c, options.members)
 }
 
+// ADR-0051 decision 5: how old a sign-in at the provider may be for an
+// administrator's action. Listing people is not an action and is not gated.
+const ADMINISTRATION_WINDOW_MS = 15 * 60 * 1000
+
+// The acting administrator's user id for an ACTION, or the refusal to send.
+async function administering(
+  c: Context,
+  options: TenantPeopleRouterOptions,
+): Promise<string | Response> {
+  const acting = await administrator(c, options)
+  if (acting === null) return refuse(c, 'not_an_administrator')
+  const now = (options.now ?? Date.now)()
+  const freshness = administrationFreshness(c, now, ADMINISTRATION_WINDOW_MS)
+  if (freshness === 'not-signed-in') return refuse(c, 'sign_in_required')
+  if (freshness === 'stale') return refuse(c, 'reauthentication_required')
+  return acting
+}
+
 async function isUser(members: MemberProfileStore, userId: string) {
   return (await members.listUsers()).some((u) => u.id === userId)
 }
@@ -75,8 +96,8 @@ async function isUser(members: MemberProfileStore, userId: string) {
 function mountDeactivation(app: Hono, options: TenantPeopleRouterOptions): void {
   const { members, administration } = options
   app.post('/api/people/:userId/deactivation', async (c) => {
-    const acting = await administrator(c, options)
-    if (acting === null) return refuse(c, 'not_an_administrator')
+    const acting = await administering(c, options)
+    if (acting instanceof Response) return acting
     const userId = c.req.param('userId')
     if (!(await isUser(members, userId))) return refuse(c, 'unknown_user')
     if (userId === acting) return refuse(c, 'cannot_deactivate_self')
@@ -85,8 +106,8 @@ function mountDeactivation(app: Hono, options: TenantPeopleRouterOptions): void 
     return c.json(deactivationResponseSchema.parse({ userId, deactivated: true }), 200)
   })
   app.delete('/api/people/:userId/deactivation', async (c) => {
-    const acting = await administrator(c, options)
-    if (acting === null) return refuse(c, 'not_an_administrator')
+    const acting = await administering(c, options)
+    if (acting instanceof Response) return acting
     const userId = c.req.param('userId')
     if (!(await isUser(members, userId))) return refuse(c, 'unknown_user')
     await administration.deactivation.reactivate(userId)
@@ -99,8 +120,8 @@ function mountDeactivation(app: Hono, options: TenantPeopleRouterOptions): void 
 // workspace without an owner.
 function mountDeletion(app: Hono, options: TenantPeopleRouterOptions): void {
   app.delete('/api/people/:userId', async (c) => {
-    const acting = await administrator(c, options)
-    if (acting === null) return refuse(c, 'not_an_administrator')
+    const acting = await administering(c, options)
+    if (acting instanceof Response) return acting
     const userId = c.req.param('userId')
     const outcome = await options.administration.deletion.delete(userId)
     if (outcome.kind === 'unknown-user') return refuse(c, 'unknown_user')
@@ -116,8 +137,8 @@ function mountDeletion(app: Hono, options: TenantPeopleRouterOptions): void {
 function mountAppointments(app: Hono, options: TenantPeopleRouterOptions): void {
   const { members, administration } = options
   app.put('/api/people/:userId/administrator', async (c) => {
-    const acting = await administrator(c, options)
-    if (acting === null) return refuse(c, 'not_an_administrator')
+    const acting = await administering(c, options)
+    if (acting instanceof Response) return acting
     const userId = c.req.param('userId')
     if (!(await isUser(members, userId))) return refuse(c, 'unknown_user')
     await administration.appointments.appoint(userId, acting)
@@ -125,8 +146,8 @@ function mountAppointments(app: Hono, options: TenantPeopleRouterOptions): void 
     return c.json(administratorResponseSchema.parse({ userId, administrator: true }), 200)
   })
   app.delete('/api/people/:userId/administrator', async (c) => {
-    const acting = await administrator(c, options)
-    if (acting === null) return refuse(c, 'not_an_administrator')
+    const acting = await administering(c, options)
+    if (acting instanceof Response) return acting
     const userId = c.req.param('userId')
     if (!(await isUser(members, userId))) return refuse(c, 'unknown_user')
     if (userId === acting) return refuse(c, 'cannot_dismiss_self')
@@ -158,8 +179,8 @@ export function createTenantPeopleRouter(options: TenantPeopleRouterOptions) {
 
   // ADR-0049 decision 3: an administrator's invitation names no workspace.
   app.post('/api/invitations', async (c) => {
-    const invitedBy = await administrator(c, options)
-    if (invitedBy === null) return refuse(c, 'not_an_administrator')
+    const invitedBy = await administering(c, options)
+    if (invitedBy instanceof Response) return invitedBy
     return c.json(
       await issueInvitationLink(options.invitations, options.origin, { invitedBy }),
       201,
