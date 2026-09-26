@@ -117,7 +117,9 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   if (command === 'daemon' && isDaemonSubcommand(subcommand)) {
-    return await dispatchDaemon(subcommand, rest)
+    return await dispatchDaemon(subcommand, rest).catch((err: unknown) =>
+      reportDaemonRefusal(subcommand, err),
+    )
   }
 
   process.stderr.write(`Unknown command. Currently supported:\n  ${USAGE}`)
@@ -130,6 +132,20 @@ export async function main(argv: readonly string[]): Promise<number> {
  * because mkdir and write probes belong to the daemon's startup path, not to
  * a command an operator runs to ask a question.
  */
+/**
+ * A refusal thrown from below — a daemon record this build cannot read or
+ * interpret while its process may be running — is an answer for a person:
+ * one stderr line and exit 1, never a stack trace, and stdout stays clean for
+ * callers parsing its JSON. Line breaks are folded to a space because the
+ * message names a path, which may hold one, and a second line would read as
+ * a second report.
+ */
+function reportDaemonRefusal(subcommand: DaemonSubcommand, err: unknown): number {
+  const message = (err instanceof Error ? err.message : String(err)).replace(/[\r\n]+/g, ' ')
+  process.stderr.write(`whiteboard daemon ${subcommand}: ${message}\n`)
+  return 1
+}
+
 async function dispatchDaemon(subcommand: DaemonSubcommand, rest: readonly string[]) {
   if (subcommand === 'run') {
     return await dispatchRun(rest)

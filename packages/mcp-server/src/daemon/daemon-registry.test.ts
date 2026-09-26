@@ -11,6 +11,9 @@ import {
   saveDaemonRecord,
 } from './daemon-registry.js'
 
+// ESRCH on every platform: no pid is this large.
+const DEAD_PID = 999_999_999
+
 describe('daemon-registry', () => {
   let dataDir: string
 
@@ -82,7 +85,7 @@ describe('daemon-registry', () => {
     await writeFile(
       getDaemonRecordPath(dataDir),
       JSON.stringify({
-        pid: 123,
+        pid: DEAD_PID,
         port: 3099,
         token: '',
         version: '0.1.0',
@@ -96,13 +99,33 @@ describe('daemon-registry', () => {
     await writeFile(
       getDaemonRecordPath(dataDir),
       JSON.stringify({
-        pid: 123,
+        pid: DEAD_PID,
         port: 3099,
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
       }),
     )
     await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
+  })
+
+  it('returns null for a record it cannot interpret whose process is gone', async () => {
+    await writeFile(
+      getDaemonRecordPath(dataDir),
+      JSON.stringify({ pid: DEAD_PID, port: 3099, token: 7, version: '9.0.0' }),
+    )
+    await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
+  })
+
+  it('throws for a record it cannot interpret whose process is still running', async () => {
+    // Likeliest from ANOTHER version's daemon. Read as none, ensure-daemon
+    // deleted it and started a second daemon beside the one still serving.
+    await writeFile(
+      getDaemonRecordPath(dataDir),
+      JSON.stringify({ pid: process.pid, port: 3099, token: 7, version: '9.0.0' }),
+    )
+    await expect(loadDaemonRecord(dataDir)).rejects.toThrow(
+      new RegExp(`daemon record .* pid ${process.pid}`),
+    )
   })
 
   it('writes atomically via a temp file that does not remain afterwards', async () => {
