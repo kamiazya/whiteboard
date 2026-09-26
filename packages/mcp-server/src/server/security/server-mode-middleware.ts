@@ -133,8 +133,15 @@ async function bearerGrant(
   })
   if (!decision.ok) return { refusal: decision }
   const { context, person, bearer } = decision
-  if (person !== undefined && bearer !== undefined && people !== undefined) {
-    const refused = await bearerBecomesUser(people, person, bearer)
+  if (person !== undefined && people !== undefined) {
+    // ADR-0049 decision 4, before anything else: a deactivated user is nobody
+    // to `profileForBinding`, so past here they would be taken for a
+    // newcomer. Every bearer — `/mcp`'s as well as `/api`'s — comes through.
+    if (await people.members.isDeactivated(person)) {
+      return { refusal: { status: 403, code: 'deactivated' } }
+    }
+    const refused =
+      bearer === undefined ? undefined : await bearerBecomesUser(people, person, bearer)
     if (refused !== undefined) return { refusal: refused }
   }
   const scopes = 'scopes' in context ? context.scopes : ALL_AUTH_SCOPES
