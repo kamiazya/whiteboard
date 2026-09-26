@@ -234,3 +234,20 @@ left to a reader, because the redundancy was invisible in the source and
 visible only as a timeout somewhere else. Directory WALKS are still repeated
 per word and deliberately so: deduping them saves 9ms of the 255, which does
 not buy a second thing to keep true.
+
+## `read-failure-as-absence.test.ts`
+
+A file read (`readFile`/`readFileSync`) whose `catch` answers `null`,
+`undefined`, `false`, `[]`, `{}` or a missing-ish `kind` — or nothing — without
+mentioning `ENOENT` must be classified in its `LEDGER`, in one of five words
+(`probe` / `fails-safe` / `degrades-visibly` / `deliberate` / `debt`) plus a
+reason. Only ENOENT means "nothing is here"; any other failure says nothing,
+and a caller that acts on the `null` can destroy what it could not read. That
+is not hypothetical: the daemon identity and the macaroon root key were both
+REPLACED on any read failure, which a secret at mode 0o000 reaches.
+
+Narrow on purpose. The wider family — any failure answered as an absence —
+was 328 production sites when measured, most of them right (platform probes,
+user input), and a scan that cries wolf gets deleted. Mutation-checked four
+ways, the fourth being the one that matters: reverting
+`readSecretFileIfPresentSync` to answer `null` for any error fails it.
