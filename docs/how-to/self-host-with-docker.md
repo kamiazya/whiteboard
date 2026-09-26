@@ -315,6 +315,8 @@ available through `/api/people`:
   `administrator`.
 - `POST` and `DELETE /api/people/<userId>/deactivation` deactivate and
   reactivate a user. An administrator cannot deactivate themselves.
+- `DELETE /api/people/<userId>` deletes a user who is already deactivated.
+  See [Deleting a user](#deleting-a-user).
 - `PUT` and `DELETE /api/people/<userId>/administrator` appoint and dismiss
   an administrator. Only appointments can be dismissed here; someone named in
   the configuration stays an administrator until the list changes.
@@ -338,6 +340,37 @@ Their sessions end at once. After that, a sign-in is refused with
 with the same reason. Their workspaces, memberships and documents are kept.
 `--reactivate` lets them back in with the access they had before, but they
 have to sign in again because their old sessions do not come back.
+
+### Deleting a user
+
+Deleting is for someone who should be forgotten, not only shut out. It is
+final and cannot be undone, so it takes two steps. Deactivate them first,
+and delete them when you are sure:
+
+```sh
+curl -X DELETE -H "Authorization: Bearer <an administrator's token>" \
+  https://whiteboard.example.com/api/people/<userId>
+```
+
+- It refuses someone who is not deactivated, with `409 not_deactivated`.
+- It refuses someone who is the only owner of a workspace, with
+  `409 sole_owner` and the ids of those workspaces in `workspaceIds`. Make
+  another member an owner of each, or grant one with `grant-member`, and try
+  again.
+
+Deleting removes the user, their memberships and any administrator
+appointment. Invitations they created and nobody has accepted stop working.
+If no other part of this keeper holds their sign-in account, that goes too.
+What they wrote stays: documents, comments and proposals are kept as they
+are.
+
+**The server keeps nothing to recognise them by.** If the same person signs
+in again, they arrive as a newcomer, and the usual rules for new people
+decide whether they get in. Under the default (invitation only) they are
+refused. To keep someone out for good, deactivate them and leave them
+deactivated rather than deleting them.
+
+The web app does not offer deletion yet.
 
 ## Reverse proxy and TLS
 

@@ -35,9 +35,11 @@ import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import type { OidcProvider } from './security/sign-in-config.js'
 import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
 import { createUserDeactivation } from './security/user-deactivation.js'
+import { createUserDeletion } from './security/user-deletion.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { serverModeUiStatus } from './server-mode-web-app.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
+import { accountRetirementFor } from './store/db/account-retirement.js'
 import { getDb } from './store/db/index.js'
 import type { TenantDatabase } from './store/db/tenant-database.js'
 import {
@@ -356,6 +358,7 @@ async function peopleOptions(
       }),
       appointments,
       deactivation: createUserDeactivation(db),
+      deletion: createUserDeletion(db, accountRetirementFor(dataDir)),
     },
     origin: new URL(publicBaseUrl).origin,
   }

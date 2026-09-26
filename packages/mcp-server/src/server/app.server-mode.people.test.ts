@@ -24,7 +24,9 @@ import {
 } from './security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
 import { createUserDeactivation } from './security/user-deactivation.js'
+import { createUserDeletion } from './security/user-deletion.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
+import { accountRetirementFor } from './store/db/account-retirement.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
 let tempDir: string
@@ -89,6 +91,7 @@ beforeEach(async () => {
         }),
         appointments: createTenantAdministratorStore(handle.db),
         deactivation: createUserDeactivation(handle.db),
+        deletion: createUserDeletion(handle.db, accountRetirementFor(tempDir)),
       },
       origin: PUBLIC_URL,
     },
@@ -203,6 +206,31 @@ describe('server mode — a workspace belongs to the people in it', () => {
     })
     expect(deactivated.status).toBe(200)
     expect((await app.request(`${PUBLIC_URL}/api/workspaces`, { headers: bob })).status).toBe(401)
+  })
+
+  // ADR-0051 decision 4: deleting forgets the person, so the same bearer
+  // afterwards is a stranger — refused, and not a user again by coming back.
+  it('deletes a deactivated person, who comes back as a stranger', async () => {
+    const ada = await signedIn('ada')
+    await signedIn('bob')
+    const adaId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'ada' }))?.id
+    const bobId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'bob' }))?.id
+    await createTenantAdministratorStore(handle.db).appoint(adaId as string, null)
+    const as = (method: string, path: string) =>
+      app.request(`${PUBLIC_URL}/api/people/${bobId}${path}`, { method, headers: ada })
+
+    expect((await as('POST', '/deactivation')).status).toBe(200)
+    expect((await as('DELETE', '')).status).toBe(200)
+
+    const binding = await handle.rawDb
+      .selectFrom('accountBindings')
+      .select('accountId')
+      .where('subject', '=', 'bob')
+      .executeTakeFirst()
+    expect(binding).toBeUndefined()
+    const res = await create({ authorization: 'Bearer bob' }, 'Back again')
+    expect(res.status).toBe(403)
+    expect((await members.listUsers()).map((u) => u.id)).toEqual([adaId])
   })
 
   // Without a user here there is nobody to make the first member, and a
