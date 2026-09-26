@@ -29,6 +29,15 @@ export const addWorkspacePersonRequestSchema = z.object({ userId: z.string().min
 export const changeWorkspaceRoleRequestSchema = z.object({ role: workspaceRoleSchema }).strict()
 
 /**
+ * ADR-0049 decision 3: a single-use, expiring link into this workspace. The
+ * token rides the URL's fragment, which a browser never sends to a server or
+ * puts in a Referer; the link itself is the secret, so it is shown once.
+ */
+export const workspaceInvitationResponseSchema = z
+  .object({ url: z.string().url(), expiresAt: z.string() })
+  .strict()
+
+/**
  * Why a change was refused. `last_owner`: the product never leaves a
  * workspace without an owner, so its last owner can be neither demoted nor
  * removed. A narrowing of `apiErrorBodySchema`'s `{ error, message }` arm.

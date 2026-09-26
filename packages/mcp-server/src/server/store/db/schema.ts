@@ -188,6 +188,8 @@ interface InvitationsTable {
   expiresAt: Timestamp
   redeemedAt: Timestamp | null
   redeemedBy: string | null
+  /** The workspace it invites into; null invites to the tenant alone. */
+  workspaceId: string | null
 }
 
 // ADR-0046 decision 1: a signed-in session, by the hash of its token.

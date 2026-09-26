@@ -351,8 +351,8 @@ function mountMcpMiddleware(
  */
 function mountServerModeRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'server-mode' || options.people === undefined) return
-  const { members, roles } = options.people
-  app.route('/', createWorkspacePeopleRouter({ members, roles }))
+  const { members, roles, invitations, origin } = options.people
+  app.route('/', createWorkspacePeopleRouter({ members, roles, invitations, origin }))
 }
 
 /**

@@ -12,6 +12,7 @@ import { type CryptoKey, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import type { ServerModeAppOptions } from './app.js'
+import { createInvitationStore } from './security/invitation-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import { createOAuthJwtValidator } from './security/oauth-jwt-validator.js'
 import { createOAuthResourceServerAuthStrategy } from './security/oauth-resource-strategy.js'
@@ -76,6 +77,7 @@ beforeEach(async () => {
       members,
       sessions: createSignInSessionStore(handle.db),
       roles: createWorkspaceRoles(handle.db),
+      invitations: createInvitationStore(handle.db),
       origin: PUBLIC_URL,
       bearerProvisioning: { providers, members },
     },
