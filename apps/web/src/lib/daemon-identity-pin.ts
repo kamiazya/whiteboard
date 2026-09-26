@@ -8,6 +8,7 @@
  */
 import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
+import { readStoredRecord } from './stored-record.js'
 
 const PINS_KEY = 'whiteboard:daemon-identity-pins'
 
@@ -19,8 +20,6 @@ const pinSchema = z
   })
   .strict()
 
-const pinsFileSchema = z.record(z.string(), pinSchema)
-
 export type DaemonIdentityPin = z.infer<typeof pinSchema>
 
 interface StorageLike {
@@ -29,15 +28,10 @@ interface StorageLike {
 }
 
 function loadPins(storage: StorageLike): Record<string, DaemonIdentityPin> {
-  const raw = storage.getItem(PINS_KEY)
-  if (raw === null) return {}
-  try {
-    return pinsFileSchema.parse(JSON.parse(raw))
-  } catch {
-    // A corrupt pin store must not brick pairing: treated as no pins, and
-    // the next successful consent re-pins.
-    return {}
-  }
+  // A pin this build cannot read costs that pin alone: a corrupt store must
+  // not brick pairing (the next consent re-pins what was lost), and it must
+  // not take every OTHER daemon's pin with it either.
+  return readStoredRecord(storage.getItem(PINS_KEY), pinSchema)
 }
 
 export function getPinnedIdentity(

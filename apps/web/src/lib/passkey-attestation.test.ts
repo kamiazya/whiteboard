@@ -332,3 +332,22 @@ describe('passkeySupported', () => {
     ).toBe(true)
   })
 })
+
+describe('a passkey store holding an entry this build cannot read', () => {
+  it('still answers the entries it can read', () => {
+    const storage = memoryStorage()
+    const credentialId = b64u(RAW_ID)
+    storage.setItem(
+      'whiteboard:daemon-passkeys',
+      JSON.stringify({
+        'http://127.0.0.1:3099': { credentialId, registeredAt: '2026-09-01T00:00:00.000Z' },
+        'http://127.0.0.1:4000': {
+          credentialId,
+          registeredAt: '2026-09-01T00:00:00.000Z',
+          addedByANewerBuild: true,
+        },
+      }),
+    )
+    expect(getRegisteredPasskey('http://127.0.0.1:3099', storage)?.credentialId).toBe(credentialId)
+  })
+})

@@ -249,3 +249,35 @@ describe('challengeDaemonIdentity', () => {
     ).resolves.toBe('failed')
   })
 })
+
+describe('a pin store holding an entry this build cannot read', () => {
+  // A NEWER build may add a field to a pin; `.strict()` in an OLDER tab still
+  // open reads that one entry as unreadable. It must cost that entry, not
+  // every daemon's pin — and pinning another daemon must not write the rest
+  // away.
+  const A = 'http://127.0.0.1:3099'
+  const C = 'http://127.0.0.1:5000'
+  const good = { alg: 'Ed25519', publicKey: 'A-KEY', pinnedAt: '2026-09-01T00:00:00.000Z' }
+  const seeded = () => {
+    const storage = fakeStorage()
+    storage.setItem(
+      'whiteboard:daemon-identity-pins',
+      JSON.stringify({
+        [A]: good,
+        'http://127.0.0.1:4000': { ...good, publicKey: 'B-KEY', addedByANewerBuild: true },
+      }),
+    )
+    return storage
+  }
+
+  it('still answers the entries it can read', () => {
+    expect(getPinnedIdentity(A, seeded())?.publicKey).toBe('A-KEY')
+  })
+
+  it('keeps them when another daemon is pinned', () => {
+    const storage = seeded()
+    pinIdentity(C, { alg: 'Ed25519', publicKey: 'C-KEY' }, storage)
+    expect(getPinnedIdentity(A, storage)?.publicKey).toBe('A-KEY')
+    expect(getPinnedIdentity(C, storage)?.publicKey).toBe('C-KEY')
+  })
+})

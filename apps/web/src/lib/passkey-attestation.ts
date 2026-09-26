@@ -23,6 +23,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
 import { prfOutputOf } from './passkey-prf.js'
+import { readStoredRecord } from './stored-record.js'
 
 const PASSKEYS_KEY = 'whiteboard:daemon-passkeys'
 
@@ -35,7 +36,6 @@ const registeredPasskeySchema = z
     registeredAt: z.string(),
   })
   .strict()
-const passkeysFileSchema = z.record(z.string(), registeredPasskeySchema)
 
 export type RegisteredPasskey = z.infer<typeof registeredPasskeySchema>
 
@@ -73,15 +73,9 @@ function prfExtension(prfInput: Uint8Array | undefined) {
 }
 
 function loadPasskeys(storage: StorageLike): Record<string, RegisteredPasskey> {
-  const raw = storage.getItem(PASSKEYS_KEY)
-  if (raw === null) return {}
-  try {
-    return passkeysFileSchema.parse(JSON.parse(raw))
-  } catch {
-    // A corrupt record must not break promotion: treated as no passkey, and
-    // the next registration writes a fresh one.
-    return {}
-  }
+  // A record this build cannot read reads as no passkey for THAT daemon, and
+  // the next registration writes a fresh one; the others stay.
+  return readStoredRecord(storage.getItem(PASSKEYS_KEY), registeredPasskeySchema)
 }
 
 export function getRegisteredPasskey(
