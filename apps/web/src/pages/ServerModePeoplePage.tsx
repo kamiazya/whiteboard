@@ -5,10 +5,21 @@
  * Every change goes to the keeper, which decides; this page shows what it
  * answered, including a refusal in the keeper's own words.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { WorkspacePeopleList } from '../components/people/WorkspacePeopleList.js'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
+import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import {
   type InvitationLink,
   type Outcome,
@@ -139,49 +150,95 @@ function Refusal({ refusal }: { refusal: Refused | null }) {
   )
 }
 
-function TenantPersonRow({
-  person,
-  isSelf,
-  run,
-  fetchFn,
-}: {
+interface PersonActionsProps {
   person: TenantPerson
-  isSelf: boolean
   run: (change: () => Promise<Outcome<unknown>>) => Promise<void>
   fetchFn: Fetch
-}) {
+  onDelete: () => void
+}
+
+/** What an administrator can do to someone else on the server. */
+function PersonActions({ person, run, fetchFn, onDelete }: PersonActionsProps) {
   const { userId, displayName, deactivated, administrator } = person
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          void run(() => tenantPeople.setAdministrator(fetchFn, userId, !administrator))
+        }
+      >
+        {administrator
+          ? `Remove ${displayName} as administrator`
+          : `Make ${displayName} an administrator`}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void run(() => tenantPeople.setDeactivated(fetchFn, userId, !deactivated))}
+      >
+        {deactivated ? `Reactivate ${displayName}` : `Deactivate ${displayName}`}
+      </Button>
+      {/* ADR-0051: deleting follows deactivation, never replaces it. */}
+      {deactivated && (
+        <Button variant="outline" size="sm" className="text-destructive" onClick={onDelete}>
+          {`Delete ${displayName}`}
+        </Button>
+      )}
+    </>
+  )
+}
+
+function TenantPersonRow({ isSelf, ...actions }: PersonActionsProps & { isSelf: boolean }) {
+  const { displayName, deactivated, administrator } = actions.person
   const notes = [administrator && 'Administrator', deactivated && 'Deactivated', isSelf && 'You']
   return (
     <li className="flex flex-wrap items-center gap-2 border-b py-2">
       <span className="font-medium">{displayName}</span>
       <span className="text-sm text-muted-foreground">{notes.filter(Boolean).join(' · ')}</span>
       <span className="flex-1" />
-      {!isSelf && (
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void run(() => tenantPeople.setAdministrator(fetchFn, userId, !administrator))
-            }
-          >
-            {administrator
-              ? `Remove ${displayName} as administrator`
-              : `Make ${displayName} an administrator`}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void run(() => tenantPeople.setDeactivated(fetchFn, userId, !deactivated))
-            }
-          >
-            {deactivated ? `Reactivate ${displayName}` : `Deactivate ${displayName}`}
-          </Button>
-        </>
-      )}
+      {!isSelf && <PersonActions {...actions} />}
     </li>
+  )
+}
+
+/**
+ * The one confirmation for deleting a person (ADR-0051). Focus goes to the
+ * list afterwards, since the row whose button opened it may be gone.
+ */
+function DeletePersonDialog({
+  person,
+  onClose,
+  onConfirm,
+  focusAfter,
+}: {
+  person: TenantPerson | null
+  onClose: () => void
+  onConfirm: (person: TenantPerson) => void
+  focusAfter: () => HTMLElement | null
+}) {
+  const name = person?.displayName ?? ''
+  return (
+    <AlertDialog open={person !== null} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          focusAfter()?.focus()
+        }}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>{`Delete ${name}`}</AlertDialogTitle>
+          <AlertDialogDescription>{DESTRUCTIVE_COPY['delete-person'](name)}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={() => person !== null && onConfirm(person)}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -191,12 +248,14 @@ export function TenantPeoplePage({ fetchFn, selfId }: { fetchFn: Fetch; selfId: 
   const [list, reload] = useKeeperList(read)
   const [refusal, run] = useChange(reload)
   const invite = useCallback(() => tenantPeople.invite(fetchFn), [fetchFn])
+  const [deleting, setDeleting] = useState<TenantPerson | null>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   return (
     <Layout title="People on this server">
       <InvitationControl create={invite} />
       <Refusal refusal={refusal ?? (list !== null && !list.ok ? list : null)} />
       {list?.ok && (
-        <ul className="flex flex-col">
+        <ul ref={listRef} tabIndex={-1} aria-label="People" className="flex flex-col">
           {list.value.people.map((person) => (
             <TenantPersonRow
               key={person.userId}
@@ -204,10 +263,17 @@ export function TenantPeoplePage({ fetchFn, selfId }: { fetchFn: Fetch; selfId: 
               isSelf={person.userId === selfId}
               run={run}
               fetchFn={fetchFn}
+              onDelete={() => setDeleting(person)}
             />
           ))}
         </ul>
       )}
+      <DeletePersonDialog
+        person={deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={(person) => void run(() => tenantPeople.delete(fetchFn, person.userId))}
+        focusAfter={() => listRef.current}
+      />
     </Layout>
   )
 }
