@@ -43,7 +43,9 @@ describe('SettingsPage — Members card wiring', () => {
         if (url.includes('/api/runtime/storage')) {
           return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
         }
-        if (url.includes('/api/workspaces/ws-1/members')) return jsonResponse({ members: [] })
+        if (url.includes('/api/workspaces/ws-1/people')) {
+          return jsonResponse({ people: [], canManage: true })
+        }
         if (url.includes('/api/pairing/credentials')) return jsonResponse({ credentials: [] })
         return jsonResponse({}, 404)
       }),
@@ -52,7 +54,9 @@ describe('SettingsPage — Members card wiring', () => {
     renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' }, 'ws-1')
     const section = screen.getByTestId('settings-section')
     const members = await within(section).findByLabelText('Members')
-    expect(within(members).getByText('No one has been added to this workspace yet.')).toBeTruthy()
+    expect(
+      await within(members).findByText('No one has been added to this workspace yet.'),
+    ).toBeTruthy()
   })
 
   it('has no Members card without a known workspace id, even while connected to a daemon', async () => {
@@ -89,7 +93,9 @@ describe('SettingsPage — Members card wiring', () => {
         if (url.includes('/api/runtime/storage')) {
           return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
         }
-        if (url.includes('/api/workspaces/ws-1/members')) return jsonResponse({ members: [] })
+        if (url.includes('/api/workspaces/ws-1/people')) {
+          return jsonResponse({ people: [], canManage: true })
+        }
         if (url.includes('/api/pairing/credentials')) return jsonResponse({ credentials: [] })
         if (url.endsWith('/api/workspaces')) {
           return jsonResponse({ workspaces: [{ workspaceId: 'ws-1', tier: 'offline' }] })

@@ -233,17 +233,11 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     }
   })
 
-  it('membership routes sit at the same admin bar as grants and credential pins', () => {
-    for (const [method, path] of [
-      ['GET', '/api/workspaces/w1/members'],
-      ['POST', '/api/workspaces/w1/members'],
-      ['DELETE', '/api/workspaces/w1/members/01ARZ3NDEKTSV4RRFFQ69G5FAV'],
-    ] as const) {
-      expect(resolveApiRouteScope(method, path)).toEqual({
-        kind: 'scoped',
-        scopes: ['runtime:admin'],
-      })
-    }
+  it('adding a passkey member sits at the same admin bar as grants and credential pins', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/members')).toEqual({
+      kind: 'scoped',
+      scopes: ['runtime:admin'],
+    })
   })
 
   it('the replica-key route sits at workspace:read, not the catch-all write default', () => {
@@ -353,7 +347,7 @@ const CLAIMED_BY = {
   'versions/prune-sandwiched': ['POST', '/api/workspaces/ws1/versions/prune-sandwiched'],
   'files/purge-dangling': ['POST', '/api/workspaces/ws1/files/purge-dangling'],
   'documents/optimize-all': ['POST', '/api/workspaces/ws1/documents/optimize-all'],
-  'workspace members': ['GET', '/api/workspaces/ws1/members'],
+  'workspace members': ['POST', '/api/workspaces/ws1/members'],
   // DELETE specifically: the rule claims that verb alone, so a GET of the
   // same path falls through to 'workspaces (rest)' and is a different
   // decision entirely.

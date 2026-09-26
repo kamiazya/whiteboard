@@ -276,14 +276,16 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     decide: () => ({ kind: 'daemon-token-only' }) as const,
   },
 
-  // Membership (ADR-0041/0042): who has L1 access to a workspace. Same bar
-  // as pairing-grant and credential-pin management — a paired browser
-  // session that can manage grants and passkey pins can manage members too
-  // (accepted v1 posture; narrowing what a pairing session may do is its
-  // own future increment, per routes/membership.ts's header).
+  // Membership (ADR-0041/0042): adding a pinned passkey as a person with L1
+  // access, the one local-daemon way in. Same bar as pairing-grant and
+  // credential-pin management — a paired browser session that can manage
+  // grants and passkey pins can add members too (accepted v1 posture;
+  // narrowing what a pairing session may do is its own future increment,
+  // per routes/membership.ts's header). Listing, role changes and removal
+  // are the shared people surface (ADR-0049 decision 5).
   {
     name: 'workspace members',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/members(\/[^/]+)?$/),
+    claims: matching(/^\/api\/workspaces\/[^/]+\/members$/, 'POST'),
     decide: always('runtime:admin'),
   },
 

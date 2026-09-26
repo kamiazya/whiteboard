@@ -65,6 +65,7 @@ import {
   type WorkspaceAdmit,
 } from './security/membership-gate.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
+import { localDaemonPeopleKeeper, serverModePeopleKeeper } from './security/people-keepers.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   createServerModeApiAuthMiddleware,
@@ -353,7 +354,8 @@ function mountMcpMiddleware(
 function mountServerModeRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'server-mode' || options.people === undefined) return
   const { members, roles, invitations, origin, administration } = options.people
-  app.route('/', createWorkspacePeopleRouter({ members, roles, invitations, origin }))
+  const keeper = serverModePeopleKeeper({ members, invitations, origin })
+  app.route('/', createWorkspacePeopleRouter({ members, roles, keeper }))
   app.route('/', createTenantPeopleRouter({ members, invitations, administration, origin }))
 }
 
@@ -384,13 +386,16 @@ function mountLocalDaemonRouters(
   if (options.pairing !== undefined) {
     app.route('/', createPairingRouter({ ...options.pairing, identity, members: options.members }))
   }
-  const { members, pairing, serverDeps, replicaKeys } = options
+  const { members, pairing, serverDeps, replicaKeys, workspaceRoles } = options
   if (pairing !== undefined && members !== undefined && serverDeps !== undefined) {
+    if (workspaceRoles !== undefined) {
+      const keeper = localDaemonPeopleKeeper({ members, tokens: pairing.tokens })
+      app.route('/', createWorkspacePeopleRouter({ members, roles: workspaceRoles, keeper }))
+    }
     app.route(
       '/',
       createMembershipRouter({
         members,
-        tokens: pairing.tokens,
         credentials: pairing.credentials,
         workspaceExists: (workspaceId) => serverDeps.workspaceDocuments.exists(workspaceId),
       }),

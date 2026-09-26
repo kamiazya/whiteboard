@@ -215,7 +215,7 @@ describe('POST /api/workspaces/:workspaceId/replica-key', () => {
     })
     expect(before.status).toBe(200)
 
-    const delRes = await fixture.app.request(`/api/workspaces/${WS}/members/${member.profileId}`, {
+    const delRes = await fixture.app.request(`/api/workspaces/${WS}/people/${member.profileId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${DAEMON_TOKEN}` },
     })

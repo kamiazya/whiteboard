@@ -14,7 +14,7 @@ import { MembersCard } from './MembersCard.js'
 afterEach(cleanup)
 
 const WORKSPACE_ID = 'ws-1'
-const MEMBERS_URL = `/api/workspaces/${WORKSPACE_ID}/members`
+const PEOPLE_URL = `/api/workspaces/${WORKSPACE_ID}/people`
 const CREDENTIALS_URL = '/api/pairing/credentials'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -28,22 +28,16 @@ function renderCard() {
   let removed = false
   const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
-    if (method === 'DELETE' && url === `${MEMBERS_URL}/profile-ada`) {
+    if (method === 'DELETE' && url === `${PEOPLE_URL}/profile-ada`) {
       removed = true
-      return jsonResponse({ removed: true, sessionsEnded: 1 })
+      return jsonResponse({ removed: true })
     }
-    if (method === 'GET' && url === MEMBERS_URL) {
+    if (method === 'GET' && url === PEOPLE_URL) {
       return jsonResponse({
-        members: removed
+        people: removed
           ? []
-          : [
-              {
-                profileId: 'profile-ada',
-                displayName: 'Ada',
-                credentials: [{ credentialId: 'c1', origin: 'https://a.example' }],
-                createdAt: '2026-09-01T00:00:00.000Z',
-              },
-            ],
+          : [{ userId: 'profile-ada', displayName: 'Ada', role: 'owner', deactivated: false }],
+        canManage: true,
       })
     }
     if (method === 'GET' && url === CREDENTIALS_URL) {
@@ -76,7 +70,7 @@ async function tabUntil(matches: (el: Element | null) => boolean, limit = 20): P
 }
 
 describe('MembersCard (browser)', () => {
-  it('removes a member from the keyboard: Tab, Enter opens confirm, Tab+Enter confirms, focus lands on the heading', async () => {
+  it('removes a member from the keyboard: Tab, Enter opens confirm, Tab+Enter confirms, focus lands on the outcome', async () => {
     renderCard()
     await screen.findByText('Ada')
 
@@ -84,7 +78,7 @@ describe('MembersCard (browser)', () => {
       path: '../../../../../tmp/screenshots/s0-5-members-card.png',
     })
 
-    await tabUntil((el) => el?.getAttribute('aria-label') === 'Remove Ada from this workspace')
+    await tabUntil((el) => el?.textContent === 'Remove Ada')
     await userEvent.keyboard('{Enter}')
 
     const dialog = await screen.findByRole('alertdialog')
@@ -101,22 +95,21 @@ describe('MembersCard (browser)', () => {
     await userEvent.keyboard('{Enter}')
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    await waitFor(() => expect(screen.queryAllByTestId(/^member-/).length).toBe(0))
-    expect(screen.getByRole('heading', { name: 'Members' })).toBe(document.activeElement)
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Ada' })).toBeNull())
+    // The row's button is gone, so focus lands on the line that says what happened.
+    expect(document.activeElement?.textContent).toBe('Ada was removed.')
   })
 
   it("Escape closes the confirm and returns focus to the row's Remove button", async () => {
     renderCard()
     await screen.findByText('Ada')
 
-    await tabUntil((el) => el?.getAttribute('aria-label') === 'Remove Ada from this workspace')
+    await tabUntil((el) => el?.textContent === 'Remove Ada')
     await userEvent.keyboard('{Enter}')
     await screen.findByRole('alertdialog')
 
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(document.activeElement?.getAttribute('aria-label')).toBe(
-      'Remove Ada from this workspace',
-    )
+    expect(document.activeElement?.textContent).toBe('Remove Ada')
   })
 })

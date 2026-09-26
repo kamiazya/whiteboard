@@ -142,3 +142,19 @@ describe('createWorkspaceRoles — two connections at once', () => {
     }
   })
 })
+
+// ADR-0049 decision 5: on the local daemon the machine's owner owns every
+// workspace, so a workspace is never ownerless there and its last recorded
+// owner may leave.
+describe('createWorkspaceRoles — a keeper whose machine owner owns everything', () => {
+  it('lets the last recorded owner be demoted or removed', async () => {
+    const machine = createWorkspaceRoles(handle.db, { ownedByTheMachine: true })
+    const ada = await user('ada')
+    const bob = await user('bob')
+    await members.addMember('ws-1', ada.id)
+    await members.addMember('ws-2', bob.id)
+    expect(await machine.setRole('ws-1', ada.id, 'member')).toBe('ok')
+    expect(await machine.remove('ws-2', bob.id)).toBe('ok')
+    expect(await machine.remove('ws-2', bob.id)).toBe('not-a-member')
+  })
+})

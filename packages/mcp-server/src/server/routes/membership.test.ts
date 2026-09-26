@@ -1,17 +1,17 @@
 /**
- * GET/POST/DELETE /api/workspaces/:workspaceId/members (ADR-0041 S0-4): list,
- * add, and L1-remove a workspace member, with the synchronous session kill
- * (ADR-0042 decision 3).
+ * The local daemon's members (ADR-0041 S0-4, ADR-0049 decision 5): a pinned
+ * passkey is added through POST /api/workspaces/:workspaceId/members, and the
+ * workspace's people are then listed, re-roled and L1-removed through the
+ * people API server mode shares, with the synchronous session kill
+ * (ADR-0042 decision 3) as the local keeper's own step.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   type AddMemberRequest,
-  listMembersResponseSchema,
   memberProfileSummarySchema,
   membershipRefusalSchema,
-  removeMemberResponseSchema,
   reopenOriginTrustResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
@@ -19,6 +19,10 @@ import {
   sessionAssertChallengeResponseSchema,
   sessionAssertResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
+import {
+  removeWorkspacePersonResponseSchema,
+  workspacePeopleResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -29,19 +33,24 @@ import {
   WEBAUTHN_FLAG_UP,
   WEBAUTHN_FLAG_UV,
 } from '../../shared/test-utils/webauthn-fixtures.js'
+import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import { createCredentialResolver } from '../security/credential-resolver.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
 import { mintMacaroon } from '../security/macaroon.js'
 import { createMemberProfileStore } from '../security/member-profile-store.js'
+import { rememberGrant } from '../security/membership-gate.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
+import { localDaemonPeopleKeeper } from '../security/people-keepers.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
 import { tenantRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createDaemonAuthMiddleware } from './auth.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
+import { createWorkspacePeopleRouter } from './workspace-people.js'
 
 const WS = 'ws-1'
 const HOSTED = 'https://latest.kamiazya-whiteboard.pages.dev'
@@ -50,6 +59,18 @@ const FLAGS = WEBAUTHN_FLAG_UP | WEBAUTHN_FLAG_UV | WEBAUTHN_FLAG_BE
 
 let dir: string
 let dbHandle: IsolatedDbHandle
+
+// The grant the daemon's own middleware resolves for the daemon token, which
+// `makeAuthedApp` below runs for real; here the routers are mounted bare, as
+// the machine's owner would reach them.
+function asTheMachineOwner(app: Hono) {
+  app.use('/api/workspaces/*', async (c, next) => {
+    if (c.req.header('Authorization') === undefined) {
+      rememberGrant(c, { kind: 'daemon-token', scopes: ALL_AUTH_SCOPES })
+    }
+    await next()
+  })
+}
 
 async function makeApp(known: readonly string[] = [WS]) {
   dir = mkdtempSync(join(tmpdir(), 'membership-routes-'))
@@ -63,7 +84,11 @@ async function makeApp(known: readonly string[] = [WS]) {
   const workspaceExists = async (id: string) => known.includes(id)
 
   const app = createPairingRouter({ grants, codes, tokens, credentials, identity, members })
-  app.route('/', createMembershipRouter({ members, tokens, credentials, workspaceExists }))
+  asTheMachineOwner(app)
+  app.route('/', createMembershipRouter({ members, credentials, workspaceExists }))
+  const roles = createWorkspaceRoles(dbHandle.db, { ownedByTheMachine: true })
+  const keeper = localDaemonPeopleKeeper({ members, tokens })
+  app.route('/', createWorkspacePeopleRouter({ members, roles, keeper }))
 
   return { app, grants, tokens, credentials, members }
 }
@@ -143,35 +168,15 @@ function pinPasskey(fixture: Awaited<ReturnType<typeof makeApp>>, origin = HOSTE
   return { credentialId: registration.credentialId, keypair, origin }
 }
 
-describe('GET /api/workspaces/:workspaceId/members', () => {
-  it('answers an empty list for a workspace with no members', async () => {
+describe('GET /api/workspaces/:workspace/people on the local daemon', () => {
+  it('answers an empty list, and that the machine owner may change it', async () => {
     const { app } = await makeApp()
-    const res = await get(app, `/api/workspaces/${WS}/members`)
+    const res = await get(app, `/api/workspaces/${WS}/people`)
     expect(res.status).toBe(200)
-    expect(listMembersResponseSchema.parse(await res.json())).toEqual({ members: [] })
-  })
-
-  // Same refusal as POST/DELETE (which already check workspaceExists) —
-  // otherwise an unregistered workspace id reads as "real, but empty" rather
-  // than "never heard of it".
-  it('refuses an unknown workspace, matching POST/DELETE', async () => {
-    const { app } = await makeApp([])
-    const res = await get(app, `/api/workspaces/${WS}/members`)
-    expect(res.status).toBe(404)
-    const body = membershipRefusalSchema.parse(await res.json())
-    expect(body.error).toBe('unknown_workspace')
-  })
-
-  // workspaceExists (serverDeps.workspaceDocuments.exists in production)
-  // throws a ValidationError for a workspaceId shaped like path traversal —
-  // the route must turn that into a 400, not let it fall through to Hono's
-  // plain-text default handler.
-  it('answers 400 for a workspaceId validateWorkspaceId rejects', async () => {
-    const { app } = await makeApp()
-    const res = await get(app, '/api/workspaces/not*safe/members')
-    expect(res.status).toBe(400)
-    const body = membershipRefusalSchema.parse(await res.json())
-    expect(body.error).toBe('invalid_workspace_id')
+    expect(workspacePeopleResponseSchema.parse(await res.json())).toEqual({
+      people: [],
+      canManage: true,
+    })
   })
 })
 
@@ -255,9 +260,11 @@ describe('POST /api/workspaces/:workspaceId/members', () => {
     expect(summary.credentials).toEqual([{ credentialId: pin.credentialId, origin: pin.origin }])
     expect(new Date(summary.createdAt).toISOString()).toBe(summary.createdAt)
 
-    const listRes = await get(fixture.app, `/api/workspaces/${WS}/members`)
-    const list = listMembersResponseSchema.parse(await listRes.json())
-    expect(list.members).toEqual([summary])
+    const listRes = await get(fixture.app, `/api/workspaces/${WS}/people`)
+    const list = workspacePeopleResponseSchema.parse(await listRes.json())
+    expect(list.people).toEqual([
+      { userId: summary.profileId, displayName: 'Ada Lovelace', role: 'owner', deactivated: false },
+    ])
   })
 
   it('is idempotent: adding the same credential twice keeps one profile and ignores the later name', async () => {
@@ -284,33 +291,23 @@ describe('POST /api/workspaces/:workspaceId/members', () => {
     expect(second.profileId).toBe(first.profileId)
     expect(second.displayName).toBe('Ada Lovelace')
 
-    const listRes = await get(fixture.app, `/api/workspaces/${WS}/members`)
-    const list = listMembersResponseSchema.parse(await listRes.json())
-    expect(list.members).toHaveLength(1)
+    const listRes = await get(fixture.app, `/api/workspaces/${WS}/people`)
+    const list = workspacePeopleResponseSchema.parse(await listRes.json())
+    expect(list.people).toHaveLength(1)
   })
 })
 
-describe('DELETE /api/workspaces/:workspaceId/members/:profileId', () => {
-  // Parity with GET/POST: an unregistered workspace answers unknown_workspace,
-  // not unknown_profile — the same profileId lookup would otherwise find
-  // nothing and misreport "no such member" for a workspace never registered.
-  it('refuses an unknown workspace, matching GET/POST', async () => {
-    const { app } = await makeApp([])
-    const res = await del(app, `/api/workspaces/${WS}/members/some-profile`)
-    expect(res.status).toBe(404)
-    const body = membershipRefusalSchema.parse(await res.json())
-    expect(body.error).toBe('unknown_workspace')
-  })
-
-  it('refuses an unknown profileId', async () => {
+describe('DELETE /api/workspaces/:workspace/people/:userId on the local daemon', () => {
+  it('refuses a person who is not a member', async () => {
     const fixture = await makeApp()
-    const res = await del(fixture.app, `/api/workspaces/${WS}/members/no-such-profile`)
+    const res = await del(fixture.app, `/api/workspaces/${WS}/people/no-such-profile`)
     expect(res.status).toBe(404)
-    const body = membershipRefusalSchema.parse(await res.json())
-    expect(body.error).toBe('unknown_profile')
+    expect(((await res.json()) as { error: string }).error).toBe('not_a_member')
   })
 
-  it('removing the same member twice answers unknown_profile the second time', async () => {
+  // The machine's owner owns every workspace, so its last recorded member
+  // may leave — unlike server mode, where the last owner stays.
+  it('removes the last member, and answers not_a_member the second time', async () => {
     const fixture = await makeApp()
     const pin = pinPasskey(fixture)
     const added = memberProfileSummarySchema.parse(
@@ -322,9 +319,9 @@ describe('DELETE /api/workspaces/:workspaceId/members/:profileId', () => {
         } satisfies AddMemberRequest)
       ).json(),
     )
-    const first = await del(fixture.app, `/api/workspaces/${WS}/members/${added.profileId}`)
+    const first = await del(fixture.app, `/api/workspaces/${WS}/people/${added.profileId}`)
     expect(first.status).toBe(200)
-    const second = await del(fixture.app, `/api/workspaces/${WS}/members/${added.profileId}`)
+    const second = await del(fixture.app, `/api/workspaces/${WS}/people/${added.profileId}`)
     expect(second.status).toBe(404)
   })
 })
@@ -415,10 +412,11 @@ describe('the full pairing chain: pin -> unbound assertion -> add member -> boun
     const { token: unboundToken } = pairingTokenResponseSchema.parse(await otherTokenRes.json())
 
     // L1-remove the member: the bound session dies synchronously.
-    const delRes = await del(fixture.app, `/api/workspaces/${WS}/members/${member.profileId}`)
+    const delRes = await del(fixture.app, `/api/workspaces/${WS}/people/${member.profileId}`)
     expect(delRes.status).toBe(200)
-    const removed = removeMemberResponseSchema.parse(await delRes.json())
-    expect(removed).toEqual({ removed: true, sessionsEnded: 1 })
+    expect(removeWorkspacePersonResponseSchema.parse(await delRes.json())).toEqual({
+      removed: true,
+    })
 
     expect(fixture.tokens.validate(token, HOSTED)).toBe(false)
     expect(fixture.tokens.validate(unboundToken, HOSTED)).toBe(true)
@@ -428,15 +426,23 @@ describe('the full pairing chain: pin -> unbound assertion -> add member -> boun
   })
 })
 
-// route-scope-registry.test.ts only proves these three paths are CLASSIFIED
-// as runtime:admin; it never runs a request through the daemon's real auth
-// middleware. This does, through the same createDaemonAuthMiddleware app.ts
-// mounts in front of every /api/* route.
-describe('membership routes enforce the runtime:admin scope through the real auth middleware', () => {
+// route-scope-registry.test.ts only CLASSIFIES these paths; this runs requests
+// through the same createDaemonAuthMiddleware app.ts mounts in front of every
+// /api/* route. Adding a passkey is runtime:admin by its route; changing a
+// workspace's people asks the local keeper, which wants runtime:admin too —
+// the bar these routes had before they were shared with server mode.
+describe('the local members surface through the real auth middleware', () => {
+  const macaroon = (scopes: string[]) =>
+    mintMacaroon({
+      rootKey: MACAROON_ROOT_KEY,
+      tokenId: 'agent-1',
+      caveats: [{ kind: 'scope', scopes: scopes as never }],
+    })
+
   it('refuses every verb with no Authorization header once a daemon token is configured', async () => {
     const { app } = await makeAuthedApp()
 
-    expect((await get(app, `/api/workspaces/${WS}/members`)).status).toBe(401)
+    expect((await get(app, `/api/workspaces/${WS}/people`)).status).toBe(401)
     expect(
       (
         await post(app, `/api/workspaces/${WS}/members`, {
@@ -446,36 +452,57 @@ describe('membership routes enforce the runtime:admin scope through the real aut
         } satisfies AddMemberRequest)
       ).status,
     ).toBe(401)
-    expect((await del(app, `/api/workspaces/${WS}/members/some-profile`)).status).toBe(401)
+    expect((await del(app, `/api/workspaces/${WS}/people/some-profile`)).status).toBe(401)
   })
 
-  it('refuses a macaroon caveated below runtime:admin', async () => {
+  it('refuses adding a passkey to a macaroon caveated below runtime:admin', async () => {
     const { app } = await makeAuthedApp()
-    const underScoped = await mintMacaroon({
-      rootKey: MACAROON_ROOT_KEY,
-      tokenId: 'agent-1',
-      caveats: [{ kind: 'scope', scopes: ['canvas:read'] }],
-    })
-
-    const res = await get(app, `/api/workspaces/${WS}/members`, {
-      Authorization: `Bearer ${underScoped}`,
-    })
+    const res = await post(
+      app,
+      `/api/workspaces/${WS}/members`,
+      { credentialId: 'x', origin: HOSTED, displayName: 'Ada Lovelace' },
+      { Authorization: `Bearer ${await macaroon(['workspace:read', 'workspace:write'])}` },
+    )
     expect(res.status).toBe(401)
   })
 
-  it('admits a macaroon caveated with runtime:admin, through the real middleware', async () => {
-    const { app } = await makeAuthedApp()
-    const scoped = await mintMacaroon({
-      rootKey: MACAROON_ROOT_KEY,
-      tokenId: 'agent-1',
-      caveats: [{ kind: 'scope', scopes: ['runtime:admin'] }],
-    })
+  it('lets a credential without runtime:admin read the people and change none of them', async () => {
+    const fixture = await makeAuthedApp()
+    const pin = pinPasskey(fixture)
+    const added = memberProfileSummarySchema.parse(
+      await (
+        await post(
+          fixture.app,
+          `/api/workspaces/${WS}/members`,
+          { credentialId: pin.credentialId, origin: pin.origin, displayName: 'Ada Lovelace' },
+          { Authorization: `Bearer ${DAEMON_TOKEN}` },
+        )
+      ).json(),
+    )
+    const reader = {
+      Authorization: `Bearer ${await macaroon(['workspace:read', 'workspace:write'])}`,
+    }
+    const listed = await get(fixture.app, `/api/workspaces/${WS}/people`, reader)
+    expect(workspacePeopleResponseSchema.parse(await listed.json()).canManage).toBe(false)
+    const removed = await del(
+      fixture.app,
+      `/api/workspaces/${WS}/people/${added.profileId}`,
+      reader,
+    )
+    expect(removed.status).toBe(403)
+    expect(((await removed.json()) as { error: string }).error).toBe('not_an_owner')
+  })
 
-    const res = await get(app, `/api/workspaces/${WS}/members`, {
-      Authorization: `Bearer ${scoped}`,
+  it('lets a credential with runtime:admin change them', async () => {
+    const { app } = await makeAuthedApp()
+    const admin = {
+      Authorization: `Bearer ${await macaroon(['runtime:admin', 'workspace:read', 'workspace:write'])}`,
+    }
+    const res = await get(app, `/api/workspaces/${WS}/people`, admin)
+    expect(workspacePeopleResponseSchema.parse(await res.json())).toEqual({
+      people: [],
+      canManage: true,
     })
-    expect(res.status).toBe(200)
-    expect(listMembersResponseSchema.parse(await res.json())).toEqual({ members: [] })
   })
 
   it('the daemon token itself authorizes POST through the real middleware', async () => {
@@ -538,8 +565,8 @@ describe('reopening a member-gated workspace to origin trust', () => {
     await del(fixture.app, `/api/workspaces/${WS}/members-only`)
 
     // Reopening widens who may read; it does not remove who already could.
-    const list = await get(fixture.app, `/api/workspaces/${WS}/members`)
-    expect(listMembersResponseSchema.parse(await list.json()).members).toHaveLength(1)
+    const list = await get(fixture.app, `/api/workspaces/${WS}/people`)
+    expect(workspacePeopleResponseSchema.parse(await list.json()).people).toHaveLength(1)
   })
 
   it('refuses an unknown workspace rather than reporting a clear', async () => {

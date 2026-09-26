@@ -282,17 +282,23 @@ anywhere, and the way to let go of it is to move it to a daemon first.
 ## Manage who can use a workspace
 
 Once a workspace is kept by a daemon, **Settings → Connections → Members**
-lists everyone the daemon has let in — their name, and the address of the
-passkey (or passkeys) that recognise them. It only appears once the app
-knows which workspace you are looking at.
+lists everyone the daemon has let in — their name, and whether they are an
+owner or a member. It only appears once the app knows which workspace you
+are looking at. It is the same list, over the same
+`/api/workspaces/<workspace>/people` API, that a self-hosted server shows
+under **People**; what differs is who may change it. On a daemon that is the
+machine's owner: a credential carrying `runtime:admin`, as the daemon's own
+token does. Anyone else sees the list without the controls.
 
 To add someone, first register their passkey under **Settings → Connections
-→ Passkeys**, then pick it from the list here and give them a name. To
-remove someone, click **Remove** on their row and confirm — this ends their
-access immediately, and anything they changed offline after that point is
-not kept. The next time a removed person's browser tries to reach the
-workspace, it is told plainly that they were removed, rather than reading
-as an ordinary connection problem.
+→ Passkeys**, then pick it from the list here and give them a name. **Make …
+an owner** and **Make … a member** record a role. Because the machine's owner
+owns every workspace on it, a daemon never refuses to demote or remove the
+last recorded owner, as a server does. To remove someone, click **Remove** on
+their row and confirm — this ends their access immediately, and anything they
+changed offline after that point is not kept. The next time a removed
+person's browser tries to reach the workspace, it is told plainly that they
+were removed, rather than reading as an ordinary connection problem.
 
 **Adding the first member changes how the workspace is protected.** A
 workspace with no members added yet trusts anyone whose browser is paired

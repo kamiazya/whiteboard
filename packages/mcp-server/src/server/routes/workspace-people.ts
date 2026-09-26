@@ -1,10 +1,9 @@
 /**
- * ADR-0049 decision 1 on server mode: a workspace's owners manage its
- * people. The `/api` middleware has already admitted only members (every
- * workspace there is members-only), so reading needs nothing more; each
- * change checks that the caller is an owner. Mounted on server mode alone:
- * the local daemon's members are still passkeys (`membership.ts`) until the
- * two keepers share this surface (decision 5).
+ * ADR-0049 decisions 1 and 5: a workspace's people, managed by its owners,
+ * on both keepers. The `/api` middleware has already admitted the caller to
+ * the workspace, so reading needs nothing more; each change asks the keeper
+ * whether this caller may make it (`../security/people-keepers.ts`, where the
+ * two keepers differ).
  */
 import {
   addWorkspacePersonRequestSchema,
@@ -18,9 +17,8 @@ import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
-import type { InvitationStore } from '../security/invitation-store.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
-import { callerUserId } from '../security/membership-gate.js'
+import type { WorkspacePeopleKeeper } from '../security/people-keepers.js'
 import type { WorkspaceMember, WorkspaceRoles } from '../security/workspace-roles.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
 import { issueInvitationLink } from './invitation-link.js'
@@ -30,9 +28,7 @@ const log = getLogger('workspace-people')
 interface WorkspacePeopleRouterOptions {
   readonly members: MemberProfileStore
   readonly roles: WorkspaceRoles
-  readonly invitations: InvitationStore
-  /** This host's origin, where the web app's invite page is. */
-  readonly origin: string
+  readonly keeper: WorkspacePeopleKeeper
 }
 
 const REFUSALS = {
@@ -46,6 +42,11 @@ function refuse(c: Context, error: WorkspacePeopleRefusal['error']) {
   const [status, message] = REFUSALS[error]
   log.warning({ path: c.req.path, reason: error }, 'workspace people change refused')
   return c.json({ error, message } satisfies WorkspacePeopleRefusal, status)
+}
+
+// Why the roles store turned a change down, as this API says it.
+function refuseChange(c: Context, why: 'not-a-member' | 'last-owner') {
+  return refuse(c, why === 'not-a-member' ? 'not_a_member' : 'last_owner')
 }
 
 function toPerson(member: WorkspaceMember) {
@@ -71,12 +72,10 @@ async function readBody<S extends z.ZodTypeAny>(c: Context, schema: S) {
 
 const workspaceOf = (c: Context) => workspaceIdFromHandle(c, c.req.param('workspace') ?? '')
 
-// The workspace this request addresses, when its caller owns it.
-async function ownedBy(c: Context, members: MemberProfileStore): Promise<string | null> {
+// The workspace this request addresses, when its caller may change its people.
+async function ownedBy(c: Context, keeper: WorkspacePeopleKeeper): Promise<string | null> {
   const workspaceId = await workspaceOf(c)
-  const caller = await callerUserId(c, members)
-  if (caller === null) return null
-  return (await members.membershipRole(workspaceId, caller)) === 'owner' ? workspaceId : null
+  return (await keeper.canManage(c, workspaceId)) ? workspaceId : null
 }
 
 async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: string) {
@@ -85,28 +84,30 @@ async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: st
 }
 
 // ADR-0049 decision 3: an owner invites a person into the workspace.
-function mountInvitations(
-  app: Hono,
-  { members, invitations, origin }: WorkspacePeopleRouterOptions,
-): void {
+function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
+  const { invitations } = keeper
+  if (invitations === undefined) return
+  const { store, origin } = invitations
   app.post('/api/workspaces/:workspace/invitations', async (c) => {
-    const workspaceId = await ownedBy(c, members)
-    const invitedBy = await callerUserId(c, members)
+    const workspaceId = await ownedBy(c, keeper)
+    const invitedBy = await keeper.actingUserId(c)
     if (workspaceId === null || invitedBy === null) return refuse(c, 'not_an_owner')
-    const body = await issueInvitationLink(invitations, origin, { invitedBy, workspaceId })
+    const body = await issueInvitationLink(store, origin, { invitedBy, workspaceId })
     return c.json(body, 201)
   })
 }
 
 export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOptions) {
-  const { members, roles } = options
+  const { members, roles, keeper } = options
   const app = new Hono()
-  const ownedWorkspace = (c: Context) => ownedBy(c, members)
+  const ownedWorkspace = (c: Context) => ownedBy(c, keeper)
   const personIn = (workspaceId: string, userId: string) => findPerson(roles, workspaceId, userId)
 
   app.get('/api/workspaces/:workspace/people', async (c) => {
-    const people = (await roles.list(await workspaceOf(c))).map(toPerson)
-    return c.json(workspacePeopleResponseSchema.parse({ people }), 200)
+    const workspaceId = await workspaceOf(c)
+    const people = (await roles.list(workspaceId)).map(toPerson)
+    const canManage = await keeper.canManage(c, workspaceId)
+    return c.json(workspacePeopleResponseSchema.parse({ people, canManage }), 200)
   })
 
   app.post('/api/workspaces/:workspace/people', async (c) => {
@@ -127,21 +128,21 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
     if (workspaceId === null) return refuse(c, 'not_an_owner')
     const userId = c.req.param('userId')
     const changed = await roles.setRole(workspaceId, userId, body.data.role)
-    if (changed === 'not-a-member') return refuse(c, 'not_a_member')
-    if (changed === 'last-owner') return refuse(c, 'last_owner')
+    if (changed !== 'ok') return refuseChange(c, changed)
     return c.json(await personIn(workspaceId, userId), 200)
   })
 
   app.delete('/api/workspaces/:workspace/people/:userId', async (c) => {
     const workspaceId = await ownedWorkspace(c)
     if (workspaceId === null) return refuse(c, 'not_an_owner')
-    const removed = await roles.remove(workspaceId, c.req.param('userId'))
-    if (removed === 'not-a-member') return refuse(c, 'not_a_member')
-    if (removed === 'last-owner') return refuse(c, 'last_owner')
+    const userId = c.req.param('userId')
+    const removed = await roles.remove(workspaceId, userId)
+    if (removed !== 'ok') return refuseChange(c, removed)
+    await keeper.afterRemove?.(userId)
     return c.json(removeWorkspacePersonResponseSchema.parse({ removed: true }), 200)
   })
 
-  mountInvitations(app, options)
+  mountInvitations(app, keeper)
 
   return app
 }

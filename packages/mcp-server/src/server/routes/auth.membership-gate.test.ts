@@ -31,7 +31,9 @@ import { createMemberProfileStore, passkeyBinding } from '../security/member-pro
 import { membershipAdmit } from '../security/membership-gate.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
+import { localDaemonPeopleKeeper } from '../security/people-keepers.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
 import { tenantRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
@@ -40,6 +42,7 @@ import { createWorkspacesRouter } from './document/workspaces.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
 import { createSyncSseRouter } from './sync-sse.js'
+import { createWorkspacePeopleRouter } from './workspace-people.js'
 
 const WS = 'ws1'
 const MEMBER_LESS_WS = 'ws2'
@@ -72,7 +75,6 @@ async function makeApp() {
   const pairing = createPairingRouter({ grants, codes, tokens, credentials, identity, members })
   const membership = createMembershipRouter({
     members,
-    tokens,
     credentials,
     workspaceExists: (id) => Promise.resolve(id === WS || id === MEMBER_LESS_WS),
   })
@@ -83,6 +85,14 @@ async function makeApp() {
   authed.use('/api/*', createDaemonAuthMiddleware(credentialResolver, { members }))
   authed.route('/', pairing)
   authed.route('/', membership)
+  authed.route(
+    '/',
+    createWorkspacePeopleRouter({
+      members,
+      roles: createWorkspaceRoles(dbHandle.db, { ownedByTheMachine: true }),
+      keeper: localDaemonPeopleKeeper({ members, tokens }),
+    }),
+  )
   authed.route('/', workspaces)
   authed.route('/', sync)
   // Stub for the GATED probe paths this fixture has no real router for
@@ -454,7 +464,7 @@ describe('the online revoke: L1 removal refuses the next live request (smoke che
     })
     expect(before.status).not.toBe(403)
 
-    const removeRes = await fixture.app.request(`/api/workspaces/${WS}/members/${adaProfile.id}`, {
+    const removeRes = await fixture.app.request(`/api/workspaces/${WS}/people/${adaProfile.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${DAEMON_TOKEN}` },
     })
@@ -504,11 +514,14 @@ describe('removing a workspace’s SOLE member stays person-gated (S12, user dec
     })
     await fixture.members.addMember(WS, profile.id)
 
-    const removeRes = await fixture.app.request(`/api/workspaces/${WS}/members/${profile.id}`, {
+    const removeRes = await fixture.app.request(`/api/workspaces/${WS}/people/${profile.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${DAEMON_TOKEN}` },
     })
-    expect(removeRes.status).toBe(200)
+    // Parsed, not only its status: the fixture's catch-all stub also answers
+    // 200, so a path no router serves would pass for a removal.
+    expect(await removeRes.json()).toEqual({ removed: true })
+    expect(await fixture.members.isWorkspaceMember(WS, profile.id)).toBe('not-a-member')
 
     const originToken = await mintUnboundToken(fixture)
     const documentsRes = await fixture.app.request(`/api/workspaces/${WS}/documents`, {

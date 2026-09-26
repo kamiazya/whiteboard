@@ -247,7 +247,7 @@ export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps)
         path="/people/w/:workspace"
         element={
           <SignedInOnly fetchFn={fetchFn}>
-            {(user) => <WorkspacePeoplePage fetchFn={fetchFn} selfId={user.userId} />}
+            {() => <WorkspacePeoplePage fetchFn={fetchFn} />}
           </SignedInOnly>
         }
       />

@@ -9,12 +9,9 @@ import { describe, expect, it } from 'vitest'
 import {
   type AddMemberRequest,
   addMemberRequestSchema,
-  type ListMembersResponse,
-  listMembersResponseSchema,
   type MemberProfileSummary,
   memberProfileSummarySchema,
   membershipRefusalSchema,
-  removeMemberResponseSchema,
 } from './membership.js'
 import { roundtrip } from './roundtrip.test-helper.js'
 
@@ -67,29 +64,6 @@ describe('memberProfileSummarySchema', () => {
   })
 })
 
-describe('listMembersResponseSchema', () => {
-  const member: MemberProfileSummary = {
-    profileId: '01J9Z8QK2N3X4Y5Z6A7B8C9D0E',
-    displayName: 'Ada Lovelace',
-    credentials: [{ credentialId: 'Y3JlZC0x', origin: 'https://a.example' }],
-    createdAt: '2026-09-20T00:00:00.000Z',
-  }
-  const valid: ListMembersResponse = { members: [member, { ...member, profileId: 'x2' }] }
-
-  it('roundtrips a list of members', () => {
-    expect(roundtrip(listMembersResponseSchema, valid)).toEqual(valid)
-  })
-
-  it('roundtrips an empty list', () => {
-    const empty: ListMembersResponse = { members: [] }
-    expect(roundtrip(listMembersResponseSchema, empty)).toEqual(empty)
-  })
-
-  it('rejects an extra top-level field', () => {
-    expect(listMembersResponseSchema.safeParse({ ...valid, total: 2 }).success).toBe(false)
-  })
-})
-
 describe('addMemberRequestSchema', () => {
   const valid: AddMemberRequest = {
     credentialId: 'Y3JlZC0x',
@@ -121,44 +95,6 @@ describe('addMemberRequestSchema', () => {
 
   it('rejects an extra publicKey field', () => {
     expect(addMemberRequestSchema.safeParse({ ...valid, publicKey: 'MFkw...' }).success).toBe(false)
-  })
-})
-
-describe('removeMemberResponseSchema', () => {
-  it('roundtrips sessionsEnded 0 and 3', () => {
-    expect(roundtrip(removeMemberResponseSchema, { removed: true, sessionsEnded: 0 })).toEqual({
-      removed: true,
-      sessionsEnded: 0,
-    })
-    expect(roundtrip(removeMemberResponseSchema, { removed: true, sessionsEnded: 3 })).toEqual({
-      removed: true,
-      sessionsEnded: 3,
-    })
-  })
-
-  it('rejects a negative sessionsEnded', () => {
-    expect(removeMemberResponseSchema.safeParse({ removed: true, sessionsEnded: -1 }).success).toBe(
-      false,
-    )
-  })
-
-  it('rejects a fractional sessionsEnded', () => {
-    expect(
-      removeMemberResponseSchema.safeParse({ removed: true, sessionsEnded: 1.5 }).success,
-    ).toBe(false)
-  })
-
-  it('rejects removed: false', () => {
-    expect(removeMemberResponseSchema.safeParse({ removed: false, sessionsEnded: 0 }).success).toBe(
-      false,
-    )
-  })
-
-  it('rejects an extra profileId field', () => {
-    expect(
-      removeMemberResponseSchema.safeParse({ removed: true, sessionsEnded: 0, profileId: 'x' })
-        .success,
-    ).toBe(false)
   })
 })
 

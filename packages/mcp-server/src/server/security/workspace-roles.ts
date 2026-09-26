@@ -5,6 +5,10 @@
  * deactivated owner still counts: deactivating a person must not quietly
  * hand their workspaces to nobody, and the operator's `grant-member`
  * recovers a workspace whose owners are all deactivated.
+ *
+ * On the local daemon the machine's owner owns every workspace (decision 5),
+ * so no workspace there is ever ownerless and the rule does not apply:
+ * `ownedByTheMachine` lets its last recorded owner go.
  */
 import type { ExpressionBuilder } from 'kysely'
 import type { DatabaseSchema } from '../store/db/schema.js'
@@ -81,7 +85,10 @@ async function membersOf(db: TenantScoped, workspaceId: string): Promise<Workspa
   }))
 }
 
-export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
+export function createWorkspaceRoles(
+  db: TenantScoped,
+  { ownedByTheMachine = false }: { readonly ownedByTheMachine?: boolean } = {},
+): WorkspaceRoles {
   return {
     list: (workspaceId) => membersOf(db, workspaceId),
 
@@ -100,19 +107,20 @@ export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
         .set({ role })
         .where('workspaceId', '=', workspaceId)
         .where('profileId', '=', profileId)
-      if (role === 'member') update = update.where(keepsAnOwner(workspaceId, profileId))
+      if (role === 'member' && !ownedByTheMachine) {
+        update = update.where(keepsAnOwner(workspaceId, profileId))
+      }
       const changed = await update.returning('profileId').execute()
       return changed.length > 0 ? 'ok' : refusal(db, workspaceId, profileId)
     },
 
     async remove(workspaceId, profileId) {
-      const removed = await db
+      let remove = db
         .deleteFrom('workspaceMemberships')
         .where('workspaceId', '=', workspaceId)
         .where('profileId', '=', profileId)
-        .where(keepsAnOwner(workspaceId, profileId))
-        .returning('profileId')
-        .execute()
+      if (!ownedByTheMachine) remove = remove.where(keepsAnOwner(workspaceId, profileId))
+      const removed = await remove.returning('profileId').execute()
       return removed.length > 0 ? 'ok' : refusal(db, workspaceId, profileId)
     },
   }

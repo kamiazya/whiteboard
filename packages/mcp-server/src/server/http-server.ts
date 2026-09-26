@@ -45,6 +45,7 @@ import { createSelfHostOriginTrustStores } from './security/origin-trust-stores.
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { membershipRefusal, workspaceAccess } from './security/workspace-access.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
+import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
@@ -425,6 +426,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // post-migration handle the container above gets — migrations already ran
   // via prepareDataDir before this point.
   const members = createMemberProfileStore(db)
+  // ADR-0049 decision 5: the same people API as server mode, over roles where
+  // the machine's owner owns every workspace.
+  const workspaceRoles = createWorkspaceRoles(db, { ownedByTheMachine: true })
   // The read plane's workspace-key store (ADR-0042 decisions 1/3/5), built
   // from the same post-migration handle as `members` above.
   const replicaKeys = createWorkspaceReplicaKeyStore(db, {
@@ -461,6 +465,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     wsTicketStore,
     pairing,
     members,
+    workspaceRoles,
     replicaKeys,
     replicaLeaseTtlMs: options.replicaLeaseTtlMs,
     macaroonRootKey,
