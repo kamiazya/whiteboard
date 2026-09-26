@@ -110,8 +110,9 @@ export interface MemberProfileStore {
   isDeactivated(binding: AuthenticatorBinding): Promise<boolean>
   ensureProfile(input: EnsureProfileInput): Promise<MemberProfile>
   listMembers(workspaceId: string): Promise<MemberProfile[]>
-  /** Every user this tenant has, oldest first — what an operator picks from. */
-  listUsers(): Promise<{ id: string; displayName: string }[]>
+  /** Every user this tenant has, oldest first — what an operator or an
+   *  administrator picks from. */
+  listUsers(): Promise<{ id: string; displayName: string; deactivated: boolean }[]>
   addMember(workspaceId: string, profileId: string): Promise<void>
   revokeL1Membership(
     workspaceId: string,
@@ -302,6 +303,20 @@ function bindingLookups(
   }
 }
 
+async function usersOf(db: TenantScoped) {
+  const rows = await db
+    .selectFrom('memberProfiles')
+    .select(['id', 'displayName', 'deactivatedAt'])
+    .orderBy('createdAt', 'asc')
+    .orderBy('id', 'asc')
+    .execute()
+  return rows.map(({ id, displayName, deactivatedAt }) => ({
+    id,
+    displayName,
+    deactivated: deactivatedAt !== null,
+  }))
+}
+
 export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     ...bindingLookups(db),
@@ -323,14 +338,7 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
       return profiles
     },
 
-    async listUsers() {
-      return db
-        .selectFrom('memberProfiles')
-        .select(['id', 'displayName'])
-        .orderBy('createdAt', 'asc')
-        .orderBy('id', 'asc')
-        .execute()
-    },
+    listUsers: () => usersOf(db),
 
     async addMember(workspaceId, profileId) {
       await insertMembership(db, workspaceId, profileId)

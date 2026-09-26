@@ -12,6 +12,7 @@ import { resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { getLogger } from '../server/log.js'
 import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
+import type { AuthenticatorBinding } from '../server/security/member-profile-store.js'
 import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
 import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
@@ -28,7 +29,7 @@ import {
   SERVER_MODE_RECORD_SCHEMA_VERSION,
   writeServerModeRecord,
 } from '../server/security/server-mode-record.js'
-import { loadSignInProviders, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
+import { loadSignInConfig, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
@@ -61,15 +62,16 @@ interface StartServerOptions {
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy
   signInProviders?: readonly ConfiguredProvider[]
+  configuredAdministrators?: readonly AuthenticatorBinding[]
 }
 
 const log = getLogger('server-run')
 
-function signInProvidersFrom(env: NodeJS.ProcessEnv): ConfiguredProvider[] | null {
+function signInConfigFrom(env: NodeJS.ProcessEnv): ReturnType<typeof loadSignInConfig> | null {
   const path = env[SIGN_IN_CONFIG_ENV]
-  if (path === undefined || path === '') return []
+  if (path === undefined || path === '') return { providers: [], administrators: [] }
   try {
-    return loadSignInProviders(path, env)
+    return loadSignInConfig(path, env)
   } catch (err) {
     // The loader's message names the setting at fault, never a secret value.
     log.error({ err }, 'the sign-in configuration cannot be used')
@@ -183,8 +185,8 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     return { kind: 'plan-error', code: plan.code }
   }
 
-  const signInProviders = signInProvidersFrom(env)
-  if (signInProviders === null) {
+  const signIn = signInConfigFrom(env)
+  if (signIn === null) {
     return { kind: 'config-error', code: 'sign_in_config.invalid', field: SIGN_IN_CONFIG_ENV }
   }
 
@@ -224,7 +226,8 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
       publicBaseUrl: plan.publicBaseUrl,
       allowedOrigins: [...plan.allowedOrigins],
       authStrategy,
-      signInProviders,
+      signInProviders: signIn.providers,
+      configuredAdministrators: signIn.administrators,
     })
   } catch {
     // Startup failure (EADDRINUSE, permission, etc.). Discard the error

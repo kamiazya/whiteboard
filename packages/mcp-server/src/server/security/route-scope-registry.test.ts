@@ -362,6 +362,7 @@ const CLAIMED_BY = {
   'workspace replica-key rotate': ['POST', '/api/workspaces/ws1/replica-key/rotate'],
   'workspace replica-tier': ['PUT', '/api/workspaces/ws1/replica-tier'],
   'workspaces (rest)': ['GET', '/api/workspaces/ws1'],
+  'tenant people': ['PUT', '/api/people/u1/administrator'],
   'runtime/logs/prune': ['POST', '/api/runtime/logs/prune'],
   'runtime (rest)': ['GET', '/api/runtime/status'],
   debug: ['GET', '/api/debug'],
@@ -429,6 +430,9 @@ const ORIGIN_TRUSTED = [
   'workspace replica-key',
   'workspace replica-key rotate',
   'workspace replica-tier',
+  // It addresses no workspace: the router answers administrators alone, a
+  // role checked per request rather than a gate over a workspace handle.
+  'tenant people',
   'runtime/logs/prune',
   'runtime (rest)',
   'debug',

@@ -62,6 +62,16 @@ describe('createAdministratorCheck', () => {
     expect(await check.isAdministrator(bob!)).toBe(true)
   })
 
+  it('lists the users who administer, appointed or configured', async () => {
+    const admins = createTenantAdministratorStore(handle.db)
+    const configuredUser = await members.ensureProfile({ binding: ada!, displayName: 'Ada' })
+    const appointed = await members.ensureProfile({ binding: bob!, displayName: 'Bob' })
+    await members.ensureProfile({ binding: { ...ada!, subject: 'cy-1' }, displayName: 'Cy' })
+    await admins.appoint(appointed.id, null)
+    const check = createAdministratorCheck({ admins, members, configured })
+    expect(await check.administratorIds()).toEqual(new Set([configuredUser.id, appointed.id]))
+  })
+
   it('reads the configured list at every check', async () => {
     const list = [...configured]
     const check = createAdministratorCheck({

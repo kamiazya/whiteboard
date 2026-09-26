@@ -99,16 +99,15 @@ describe('tenant people', () => {
     expect((await call('bob', 'GET', '/people')).body).toMatchObject({
       error: 'not_an_administrator',
     })
-    expect(await call('ada', 'GET', '/people')).toEqual({
-      status: 200,
-      body: {
-        people: [
-          { userId: ids.ada, displayName: 'ada', deactivated: false, administrator: true },
-          { userId: ids.bob, displayName: 'bob', deactivated: false, administrator: false },
-          { userId: ids.cy, displayName: 'cy', deactivated: false, administrator: true },
-        ],
-      },
-    })
+    const listed = await call('ada', 'GET', '/people')
+    expect(listed.status).toBe(200)
+    // Users made in one millisecond have no defined order between them.
+    const people = listed.body.people as { displayName: string }[]
+    expect([...people].sort((a, b) => a.displayName.localeCompare(b.displayName))).toEqual([
+      { userId: ids.ada, displayName: 'ada', deactivated: false, administrator: true },
+      { userId: ids.bob, displayName: 'bob', deactivated: false, administrator: false },
+      { userId: ids.cy, displayName: 'cy', deactivated: false, administrator: true },
+    ])
   })
 
   it('lets a configured administrator act too', async () => {

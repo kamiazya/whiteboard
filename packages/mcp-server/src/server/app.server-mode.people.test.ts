@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import type { ServerModeAppOptions } from './app.js'
+import { createAdministratorCheck } from './security/administrator-check.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
 import { createInvitationStore } from './security/invitation-store.js'
 import {
@@ -21,6 +22,8 @@ import {
   SESSION_COOKIE,
   type SignInSessionStore,
 } from './security/sign-in-session-store.js'
+import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
+import { createUserDeactivation } from './security/user-deactivation.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
@@ -78,6 +81,15 @@ beforeEach(async () => {
       sessions,
       roles: createWorkspaceRoles(handle.db),
       invitations: createInvitationStore(handle.db),
+      administration: {
+        check: createAdministratorCheck({
+          admins: createTenantAdministratorStore(handle.db),
+          members: createMemberProfileStore(handle.db),
+          configured: [],
+        }),
+        appointments: createTenantAdministratorStore(handle.db),
+        deactivation: createUserDeactivation(handle.db),
+      },
       origin: PUBLIC_URL,
     },
     touch: () => {},
@@ -162,6 +174,35 @@ describe('server mode — a workspace belongs to the people in it', () => {
     })
     expect(byMember.status).toBe(403)
     expect(await listed(eve)).toEqual([])
+  })
+
+  // ADR-0049 decisions 2 and 4: an administrator sees the tenant's users and
+  // deactivates one, who is then refused everywhere; nobody else sees them.
+  it('lets an appointed administrator list users and deactivate one', async () => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    const adaId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'ada' }))?.id
+    const bobId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'bob' }))?.id
+    await createTenantAdministratorStore(handle.db).appoint(adaId as string, null)
+
+    expect((await app.request(`${PUBLIC_URL}/api/people`, { headers: bob })).status).toBe(403)
+    const listed = await app.request(`${PUBLIC_URL}/api/people`, { headers: ada })
+    const { people } = (await listed.json()) as {
+      people: { displayName: string; administrator: boolean }[]
+    }
+    // Users made in one millisecond have no defined order between them.
+    expect(new Map(people.map((p) => [p.displayName, p.administrator]))).toEqual(
+      new Map([
+        ['ada', true],
+        ['bob', false],
+      ]),
+    )
+    const deactivated = await app.request(`${PUBLIC_URL}/api/people/${bobId}/deactivation`, {
+      method: 'POST',
+      headers: ada,
+    })
+    expect(deactivated.status).toBe(200)
+    expect((await app.request(`${PUBLIC_URL}/api/workspaces`, { headers: bob })).status).toBe(401)
   })
 
   // Without a user here there is nobody to make the first member, and a

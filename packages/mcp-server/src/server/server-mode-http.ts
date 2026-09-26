@@ -21,7 +21,9 @@ import { daemonDeviceActor } from './daemon-actor.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { SignInRouteProvider, SignInRoutesDeps } from './routes/sign-in.js'
 import { subscribedWorkspaceIds } from './routes/ws.js'
+import { createAdministratorCheck } from './security/administrator-check.js'
 import { type CompleteSignInDeps, createCompleteSignInDeps } from './security/complete-sign-in.js'
+import type { AuthenticatorBinding } from './security/member-profile-store.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import {
   type ConfiguredProvider,
@@ -31,6 +33,8 @@ import {
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import type { OidcProvider } from './security/sign-in-config.js'
+import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
+import { createUserDeactivation } from './security/user-deactivation.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { serverModeUiStatus } from './server-mode-web-app.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
@@ -68,6 +72,9 @@ export interface StartServerModeHttpOptions {
   /** ADR-0046: the external providers this keeper signs people in through,
    *  secrets already resolved. None, and no sign-in route is mounted. */
   signInProviders?: readonly ConfiguredProvider[]
+  /** ADR-0049 decision 2: the administrators the sign-in configuration names,
+   *  as the bindings a request resolves to. */
+  configuredAdministrators?: readonly AuthenticatorBinding[]
 }
 
 // How long a sign-in lasts before the person signs in again. Admission is
@@ -330,33 +337,34 @@ function closeListener(server: { close(done: (err?: Error) => void): unknown }):
 // membership too. `/auth/*` exists only for providers with a browser client —
 // none means no route, not an empty one.
 async function peopleOptions(
-  { signInProviders, publicBaseUrl }: StartServerModeHttpOptions,
+  { signInProviders, configuredAdministrators, publicBaseUrl }: StartServerModeHttpOptions,
   dataDir: string,
 ): Promise<{ people: ServerModePeople; signIn?: SignInRoutesDeps }> {
   const db = await getDb(dataDir)
   const deps = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS)
-  const origin = new URL(publicBaseUrl).origin
-  const roles = createWorkspaceRoles(db)
-  if (signInProviders === undefined || signInProviders.length === 0) {
-    return {
-      people: {
+  const appointments = createTenantAdministratorStore(db)
+  const people: ServerModePeople = {
+    members: deps.members,
+    sessions: deps.sessions,
+    roles: createWorkspaceRoles(db),
+    invitations: deps.invitations,
+    administration: {
+      check: createAdministratorCheck({
+        admins: appointments,
         members: deps.members,
-        sessions: deps.sessions,
-        roles,
-        invitations: deps.invitations,
-        origin,
-      },
-    }
+        configured: configuredAdministrators ?? [],
+      }),
+      appointments,
+      deactivation: createUserDeactivation(db),
+    },
+    origin: new URL(publicBaseUrl).origin,
   }
+  if (signInProviders === undefined || signInProviders.length === 0) return { people }
   return {
     // A bearer from a declared provider's issuer may become a user by that
     // provider's rules (ADR-0046 decision 5); see bearer-provisioning.ts.
     people: {
-      members: deps.members,
-      sessions: deps.sessions,
-      roles,
-      invitations: deps.invitations,
-      origin,
+      ...people,
       bearerProvisioning: {
         providers: signInProviders.filter((p): p is OidcProvider => p.kind === 'oidc'),
         members: deps.members,

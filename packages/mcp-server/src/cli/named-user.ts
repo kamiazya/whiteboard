@@ -18,7 +18,7 @@ export async function findNamedUser(
   members: Pick<MemberProfileStore, 'listUsers'>,
   user: string,
 ): Promise<NamedUserLookup> {
-  const users = await members.listUsers()
+  const users = (await members.listUsers()).map(({ id, displayName }) => ({ id, displayName }))
   const byId = users.filter((u) => u.id === user)
   const matches = byId.length > 0 ? byId : users.filter((u) => u.displayName === user)
   const [only] = matches

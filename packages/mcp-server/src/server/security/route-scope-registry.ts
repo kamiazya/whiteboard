@@ -349,6 +349,19 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: workspacesHandle,
   },
 
+  // A tenant's people and its invitations to the tenant alone (ADR-0049),
+  // mounted on server mode only. The router answers only an ADMINISTRATOR,
+  // a role a person holds rather than a scope a credential carries, so the
+  // scope here says no more than that the credential acts for a person: the
+  // same bar a person's own workspaces sit at. No workspace is addressed, so
+  // there is nothing for the membership gate to judge.
+  {
+    name: 'tenant people',
+    claims: (path) =>
+      path === '/api/people' || path.startsWith('/api/people/') || path === '/api/invitations',
+    decide: byAccess('workspace:write', 'workspace:read'),
+  },
+
   // Deleting the daemon's own log files mutates state no other runtime route
   // touches, so it requires the admin tier even though its HTTP verb is POST
   // like any other write route. Stopping the process is deliberately NOT here:

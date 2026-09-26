@@ -30,15 +30,19 @@ afterEach(async () => {
 })
 
 describe('createWorkspaceRoles', () => {
-  it('lists a workspace’s members with their roles, oldest first', async () => {
+  it('lists a workspace’s members with their roles', async () => {
     const ada = await user('ada')
     const bob = await user('bob')
     await members.addMember('ws-1', ada.id)
     await members.addMember('ws-1', bob.id)
     await members.addMember('ws-2', bob.id)
-    expect(
-      (await roles.list('ws-1')).map((m) => [m.profile.displayName, m.role, m.deactivated]),
-    ).toEqual([
+    // Two memberships made in one millisecond have no defined order.
+    const listed = (await roles.list('ws-1')).map((m) => [
+      m.profile.displayName,
+      m.role,
+      m.deactivated,
+    ])
+    expect(listed.sort()).toEqual([
       ['ada', 'owner', false],
       ['bob', 'member', false],
     ])
