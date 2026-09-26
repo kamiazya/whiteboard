@@ -13,6 +13,7 @@ import type { ServerModePeople } from './security/server-mode-middleware.js'
 import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
 import type { WebAuthnCredentialStore } from './security/webauthn-credential-store.js'
 import type { WorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
+import type { WorkspaceRoles } from './security/workspace-roles.js'
 import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
@@ -73,6 +74,11 @@ interface LocalDaemonAppOptions {
    *  membership surface and a session-assert `profileId` of null — the same
    *  answer S0-2 always gave. */
   members?: MemberProfileStore
+  /** A workspace's roles as the local daemon keeps them, where the machine's
+   *  owner owns every workspace (ADR-0049 decision 5). With `members`,
+   *  `pairing` and `serverDeps`, /api/workspaces/:workspace/people mounts —
+   *  the same people API server mode serves. */
+  workspaceRoles?: WorkspaceRoles
   /** The read plane's workspace-key store (ADR-0042 decisions 1/3/5). When
    *  present alongside `pairing`, `members` and `serverDeps`,
    *  POST /api/workspaces/:workspaceId/replica-key mounts — same mount

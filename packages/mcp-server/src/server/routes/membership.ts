@@ -1,11 +1,11 @@
-// Membership routes (ADR-0041 S0-4): list, add, and L1-remove a workspace's
-// members. A MEMBER is a PERSON, identified by a pinned passkey credential
-// (webauthn-credential-store.ts) never by a paired browser origin — adding
-// one is an explicit administrator action (an administrator names a pinned
-// passkey by origin + credentialId and a display name), not an invite flow.
-// Removal is L1 revocation (ADR-0042 decision 3): it ends that person's live
-// passkey-bound sessions SYNCHRONOUSLY (tokens.revokeBoundTo), not at their
-// next TTL check, and it leaves the passkey PIN itself alone — L1 is not L2.
+// The local daemon's own half of membership (ADR-0041 S0-4): how a PERSON
+// becomes a member there. A member is identified by a pinned passkey
+// credential (webauthn-credential-store.ts), never by a paired browser
+// origin, so adding one names a pinned passkey by origin + credentialId and
+// a display name — not an invite flow. Listing, re-roling and removing a
+// workspace's people are the API server mode shares (routes/workspace-
+// people.ts, ADR-0049 decision 5); removal there is still L1 revocation,
+// ending the person's passkey-bound sessions at once (people-keepers.ts).
 //
 // ACCEPTED V1 POSTURE: a paired browser session carries ALL_AUTH_SCOPES
 // today (credential-resolver.ts), so any paired browser can manage members —
@@ -36,14 +36,10 @@
 import {
   type AddMemberRequest,
   addMemberRequestSchema,
-  type ListMembersResponse,
-  listMembersResponseSchema,
   type MemberProfileSummary,
   type MembershipRefusal,
   memberProfileSummarySchema,
-  type RemoveMemberResponse,
   type ReopenOriginTrustResponse,
-  removeMemberResponseSchema,
   reopenOriginTrustResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
@@ -54,7 +50,6 @@ import {
   type MemberProfileStore,
   passkeyBinding,
 } from '../security/member-profile-store.js'
-import type { PairingTokenStore } from '../security/pairing-session.js'
 import type { WebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { validateWorkspaceId, validationErrorBody } from '../validators.js'
 
@@ -93,7 +88,6 @@ export function unknownWorkspaceRefusal(workspaceId: string): MembershipRefusal 
 
 export interface MembershipRouterOptions {
   members: MemberProfileStore
-  tokens: PairingTokenStore
   /** The passkeys paired origins have pinned (ADR-0039) — adding a member
    *  requires the named credential to already be pinned there. */
   credentials: WebAuthnCredentialStore
@@ -104,26 +98,10 @@ export interface MembershipRouterOptions {
 
 export function createMembershipRouter({
   members,
-  tokens,
   credentials,
   workspaceExists,
 }: MembershipRouterOptions) {
   const app = new Hono()
-
-  app.get('/api/workspaces/:workspaceId/members', async (c) => {
-    const workspaceId = c.req.param('workspaceId')
-    const invalidId = badWorkspaceIdBody(workspaceId)
-    if (invalidId) return c.json(invalidId, 400)
-    if (!(await workspaceExists(workspaceId))) {
-      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'membership refused')
-      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
-    }
-    const list = await members.listMembers(workspaceId)
-    const response: ListMembersResponse = listMembersResponseSchema.parse({
-      members: list.map(toSummary),
-    })
-    return c.json(response, 200)
-  })
 
   app.post('/api/workspaces/:workspaceId/members', async (c) => {
     const workspaceId = c.req.param('workspaceId')
@@ -175,40 +153,6 @@ export function createMembershipRouter({
     })
     await members.addMember(workspaceId, profile.id)
     return c.json(toSummary(profile), 201)
-  })
-
-  app.delete('/api/workspaces/:workspaceId/members/:profileId', async (c) => {
-    const workspaceId = c.req.param('workspaceId')
-    const profileId = c.req.param('profileId')
-    const invalidId = badWorkspaceIdBody(workspaceId)
-    if (invalidId) return c.json(invalidId, 400)
-    if (!(await workspaceExists(workspaceId))) {
-      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'membership refused')
-      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
-    }
-
-    const { removed, credentials: boundCredentials } = await members.revokeL1Membership(
-      workspaceId,
-      profileId,
-    )
-    if (!removed) {
-      log.warning({ workspaceId, profileId, reason: 'unknown_profile' }, 'membership refused')
-      return c.json(
-        {
-          error: 'unknown_profile',
-          message: 'no such member in this workspace',
-        } satisfies MembershipRefusal,
-        404,
-      )
-    }
-
-    const sessionsEnded = tokens.revokeBoundTo(boundCredentials)
-    log.notice({ workspaceId, profileId, sessionsEnded }, 'membership.l1-revoked')
-    const response: RemoveMemberResponse = removeMemberResponseSchema.parse({
-      removed: true,
-      sessionsEnded,
-    })
-    return c.json(response, 200)
   })
 
   // DELETE, because that is literally what it does: it removes the

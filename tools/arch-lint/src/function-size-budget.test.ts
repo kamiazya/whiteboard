@@ -231,10 +231,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // IndexedDB has to leave the card listing what it CAN read rather than
   // rejecting, and that branch is where the explanation lives.
   'apps/web/src/components/settings/LocalCopiesCard.tsx#LocalCopiesCard': 147,
-  // 334 -> 310: one generation-checked read (`readCurrent`) replaces eight
-  // copies of the same staleness test, and the add's request and POST are
-  // their own functions.
-  'apps/web/src/components/settings/MembersCard.tsx#MembersCard': 310,
   // 522 -> 399: the passkey states became a component, and the cache-then-
   // maybe-demote step its own function (below) — which is where the reason
   // its read-back has a try/catch of its own now lives.
@@ -701,11 +697,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // out of the closure, which needs a context object this change does not
   // introduce.
   'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 311,
-  // 117 -> 72: the methods that start from a binding (`profileForBinding`,
-  // `isDeactivated`, `ensureProfile`) moved to `bindingLookups`, and the user
-  // listing to `usersOf`, in the same file, so the membership insert and its
-  // clear still sit together here.
-  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 72,
+  // 117 -> 59: the methods that start from a binding (`profileForBinding`,
+  // `isDeactivated`, `ensureProfile`) moved to `bindingLookups`, the user
+  // listing to `usersOf` and the role lookup to `roleIn`, in the same file,
+  // so the membership insert and its clear still sit together here.
+  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 59,
   'packages/mcp-server/src/server/security/oauth-authz-transactions.ts#createOAuthTransactionStore': 299,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   'packages/mcp-server/src/server/security/pairing-grant-store.ts#createPairingGrantStore': 67,

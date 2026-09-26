@@ -20,11 +20,6 @@ export const memberProfileSummarySchema = z
   .strict()
 export type MemberProfileSummary = z.infer<typeof memberProfileSummarySchema>
 
-export const listMembersResponseSchema = z
-  .object({ members: z.array(memberProfileSummarySchema) })
-  .strict()
-export type ListMembersResponse = z.infer<typeof listMembersResponseSchema>
-
 /**
  * An administrator names a pinned passkey credential by (origin,
  * credentialId) — the pin store's own key (webauthn-credential-store.ts) —
@@ -41,16 +36,6 @@ export const addMemberRequestSchema = z
   })
   .strict()
 export type AddMemberRequest = z.infer<typeof addMemberRequestSchema>
-
-export const removeMemberResponseSchema = z
-  .object({
-    removed: z.literal(true),
-    // The synchronous kill of that person's live passkey-bound sessions —
-    // removal is L1 revocation (ADR-0041 decision 3), not a lazy expiry.
-    sessionsEnded: z.number().int().nonnegative(),
-  })
-  .strict()
-export type RemoveMemberResponse = z.infer<typeof removeMemberResponseSchema>
 
 export const reopenOriginTrustResponseSchema = z
   .object({

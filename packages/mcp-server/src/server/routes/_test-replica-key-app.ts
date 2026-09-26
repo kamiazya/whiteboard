@@ -40,14 +40,17 @@ import { createDaemonIdentity } from '../security/daemon-identity.js'
 import { createMemberProfileStore, passkeyBinding } from '../security/member-profile-store.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
+import { localDaemonPeopleKeeper } from '../security/people-keepers.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
 import { createWorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
+import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { tenantRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createDaemonAuthMiddleware } from './auth.js'
 import { createMembershipRouter } from './membership.js'
 import { createPairingRouter } from './pairing.js'
 import { createReplicaKeyRouter } from './replica-key.js'
+import { createWorkspacePeopleRouter } from './workspace-people.js'
 
 // Type-only: `import type(...)`'s target module has no `from`, so it does
 // not match the mechanic scan's pattern the way a value import would.
@@ -103,7 +106,12 @@ export async function makeApp(options: MakeAppOptions = {}) {
   })
 
   const pairing = createPairingRouter({ grants, codes, tokens, credentials, identity, members })
-  const membership = createMembershipRouter({ members, tokens, credentials, workspaceExists })
+  const membership = createMembershipRouter({ members, credentials, workspaceExists })
+  const people = createWorkspacePeopleRouter({
+    members,
+    roles: createWorkspaceRoles(dbHandle.db, { ownedByTheMachine: true }),
+    keeper: localDaemonPeopleKeeper({ members, tokens }),
+  })
   const replicaKey = createReplicaKeyRouter({
     keys,
     members,
@@ -116,6 +124,7 @@ export async function makeApp(options: MakeAppOptions = {}) {
   authed.use('/api/*', createDaemonAuthMiddleware(credentialResolver))
   authed.route('/', pairing)
   authed.route('/', membership)
+  authed.route('/', people)
   authed.route('/', replicaKey)
 
   return { app: authed, grants, tokens, credentials, members, keys, db: dbHandle.db }

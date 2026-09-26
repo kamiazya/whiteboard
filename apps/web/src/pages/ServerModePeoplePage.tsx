@@ -7,13 +7,13 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { WorkspacePeopleList } from '../components/people/WorkspacePeopleList.js'
 import { Button } from '../components/ui/button.js'
 import {
   type InvitationLink,
   type Outcome,
   type TenantPerson,
   tenantPeople,
-  type WorkspacePerson,
   workspacePeople,
 } from '../lib/server-people.js'
 
@@ -205,85 +205,20 @@ export function TenantPeoplePage({ fetchFn, selfId }: { fetchFn: Fetch; selfId: 
   )
 }
 
-function WorkspacePersonRow({
-  person,
-  canManage,
-  run,
-  fetchFn,
-  workspaceId,
-}: {
-  person: WorkspacePerson
-  canManage: boolean
-  run: (change: () => Promise<Outcome<unknown>>) => Promise<void>
-  fetchFn: Fetch
-  workspaceId: string
-}) {
-  const { userId, displayName, role, deactivated } = person
-  const notes = [role === 'owner' ? 'Owner' : 'Member', deactivated && 'Deactivated']
-  return (
-    <li className="flex flex-wrap items-center gap-2 border-b py-2">
-      <span className="font-medium">{displayName}</span>
-      <span className="text-sm text-muted-foreground">{notes.filter(Boolean).join(' · ')}</span>
-      <span className="flex-1" />
-      {canManage && (
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void run(() =>
-                workspacePeople.setRole(
-                  fetchFn,
-                  workspaceId,
-                  userId,
-                  role === 'owner' ? 'member' : 'owner',
-                ),
-              )
-            }
-          >
-            {role === 'owner' ? `Make ${displayName} a member` : `Make ${displayName} an owner`}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void run(() => workspacePeople.remove(fetchFn, workspaceId, userId))}
-          >
-            {`Remove ${displayName}`}
-          </Button>
-        </>
-      )}
-    </li>
-  )
-}
-
-/** A workspace's people: any member reads them, its owners change them. */
-export function WorkspacePeoplePage({ fetchFn, selfId }: { fetchFn: Fetch; selfId: string }) {
+/** A workspace's people: any member reads them, those the keeper allows change them. */
+export function WorkspacePeoplePage({ fetchFn }: { fetchFn: Fetch }) {
   const workspaceId = useParams().workspace ?? ''
-  const read = useCallback(() => workspacePeople.list(fetchFn, workspaceId), [fetchFn, workspaceId])
-  const [list, reload] = useKeeperList(read)
-  const [refusal, run] = useChange(reload)
   const invite = useCallback(
     () => workspacePeople.invite(fetchFn, workspaceId),
     [fetchFn, workspaceId],
   )
-  const people = list?.ok ? list.value.people : []
-  const isOwner = people.some((p) => p.userId === selfId && p.role === 'owner')
   return (
     <Layout title="People in this workspace">
-      {isOwner && <InvitationControl create={invite} />}
-      <Refusal message={refusal ?? (list !== null && !list.ok ? list.message : null)} />
-      <ul className="flex flex-col">
-        {people.map((person) => (
-          <WorkspacePersonRow
-            key={person.userId}
-            person={person}
-            canManage={isOwner}
-            run={run}
-            fetchFn={fetchFn}
-            workspaceId={workspaceId}
-          />
-        ))}
-      </ul>
+      <WorkspacePeopleList
+        fetchFn={fetchFn}
+        workspaceId={workspaceId}
+        adding={<InvitationControl create={invite} />}
+      />
     </Layout>
   )
 }

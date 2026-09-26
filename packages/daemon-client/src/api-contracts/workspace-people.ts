@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
 /**
- * ADR-0049 decision 1: a workspace's people as its owners manage them, on a
- * keeper that knows people as users (server mode). Any member may read the
- * list; only an owner changes it. Deliberately free of any node:* import —
+ * ADR-0049 decisions 1 and 5: a workspace's people as its owners manage
+ * them, on either keeper. Any member may read the list; only an owner
+ * changes it, and the keeper decides who that is — a member with the owner
+ * role on server mode, the machine's owner on the local daemon. Deliberately free of any node:* import —
  * the browser consumes these schemas directly.
  */
 
@@ -21,7 +22,12 @@ export const workspacePersonSchema = z
   .strict()
 
 export const workspacePeopleResponseSchema = z
-  .object({ people: z.array(workspacePersonSchema) })
+  .object({
+    people: z.array(workspacePersonSchema),
+    // Whether the caller may change these people — the keeper decides who
+    // that is (ADR-0049 decision 5), so a screen asks rather than guessing.
+    canManage: z.boolean(),
+  })
   .strict()
 
 export const addWorkspacePersonRequestSchema = z.object({ userId: z.string().min(1) }).strict()

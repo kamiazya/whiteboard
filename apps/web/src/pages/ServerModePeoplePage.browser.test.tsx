@@ -51,9 +51,11 @@ interface Member {
 
 // `/api/workspaces/ws-1/...`, as the keeper answers its members and owners.
 function workspaceRoute(members: Member[], me: User, url: string, init?: RequestInit) {
-  if (url === '/api/workspaces/ws-1/people') return Response.json({ people: members })
+  const owner = members.some((m) => m.userId === me.userId && m.role === 'owner')
+  if (url === '/api/workspaces/ws-1/people') {
+    return Response.json({ people: members, canManage: owner })
+  }
   if (url === '/api/workspaces/ws-1/invitations') {
-    const owner = members.some((m) => m.userId === me.userId && m.role === 'owner')
     return owner
       ? Response.json(LINK, { status: 201 })
       : refuse('not_an_owner', 'only an owner of this workspace can change its people', 403)
@@ -161,7 +163,7 @@ describe('the workspace people screen', () => {
     renderAt('/people/w/ws-1', fakeKeeper('ada'))
     fireEvent.click(await screen.findByRole('button', { name: 'Make Ada a member' }))
     await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toMatch(/at least one owner/i),
+      expect(screen.getByRole('status').textContent).toMatch(/at least one owner/i),
     )
   })
 

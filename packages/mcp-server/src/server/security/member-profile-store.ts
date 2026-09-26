@@ -114,6 +114,8 @@ export interface MemberProfileStore {
    *  administrator picks from. */
   listUsers(): Promise<{ id: string; displayName: string; deactivated: boolean }[]>
   addMember(workspaceId: string, profileId: string): Promise<void>
+  /** The passkeys a user holds, which a local daemon's sessions are bound to. */
+  passkeysOf(profileId: string): Promise<{ origin: string; credentialId: string }[]>
   revokeL1Membership(
     workspaceId: string,
     profileId: string,
@@ -317,6 +319,19 @@ async function usersOf(db: TenantScoped) {
   }))
 }
 
+// A user's role in a workspace, or null when they are not a member of it.
+async function roleIn(db: TenantScoped, workspaceId: string, profileId: string) {
+  const row = await db
+    .selectFrom('workspaceMemberships')
+    .select('role')
+    .where('workspaceId', '=', workspaceId)
+    .where('profileId', '=', profileId)
+    .executeTakeFirst()
+  return row?.role ?? null
+}
+
+const userById = (db: TenantScoped, profileId: string) => loadProfileWhere(db, 'id', profileId)
+
 export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     ...bindingLookups(db),
@@ -340,6 +355,8 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
 
     listUsers: () => usersOf(db),
 
+    passkeysOf: async (profileId) => (await userById(db, profileId))?.credentials ?? [],
+
     async addMember(workspaceId, profileId) {
       await insertMembership(db, workspaceId, profileId)
     },
@@ -350,25 +367,10 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
       return { removed: deleted.length > 0, credentials }
     },
 
-    async isWorkspaceMember(workspaceId, profileId) {
-      const row = await db
-        .selectFrom('workspaceMemberships')
-        .select('profileId')
-        .where('workspaceId', '=', workspaceId)
-        .where('profileId', '=', profileId)
-        .executeTakeFirst()
-      return row === undefined ? 'not-a-member' : 'member'
-    },
+    isWorkspaceMember: async (workspaceId, profileId) =>
+      (await roleIn(db, workspaceId, profileId)) === null ? 'not-a-member' : 'member',
 
-    async membershipRole(workspaceId, profileId) {
-      const row = await db
-        .selectFrom('workspaceMemberships')
-        .select('role')
-        .where('workspaceId', '=', workspaceId)
-        .where('profileId', '=', profileId)
-        .executeTakeFirst()
-      return row?.role ?? null
-    },
+    membershipRole: (workspaceId, profileId) => roleIn(db, workspaceId, profileId),
 
     async reopenToOriginTrust(workspaceId) {
       const deleted = await db

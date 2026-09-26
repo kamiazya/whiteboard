@@ -8,6 +8,7 @@
 import type { Context } from 'hono'
 import { getLogger } from '../log.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
+import type { AuthScope } from './auth-strategy.js'
 import type { ResolvedGrant } from './credential-resolver.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { gatedWorkspaceHandle, ruleClaiming } from './route-scope-registry.js'
@@ -91,6 +92,11 @@ export interface FirstMember {
   /** This tenant's user behind the request, or null when there is none to make a member. */
   profileFor(c: Context): Promise<string | null>
   add(workspaceId: string, profileId: string): Promise<void>
+}
+
+/** What the credential behind this request may do; none when none was resolved. */
+export function callerScopes(c: Context): readonly AuthScope[] {
+  return grantOf(c)?.scopes ?? []
 }
 
 /** The person the middleware authenticated this request as, if any. */

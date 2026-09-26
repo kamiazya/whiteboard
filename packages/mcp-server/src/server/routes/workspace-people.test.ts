@@ -16,6 +16,7 @@ import {
   type MemberProfileStore,
 } from '../security/member-profile-store.js'
 import type { AsyncAuthStrategy } from '../security/oauth-resource-strategy.js'
+import { serverModePeopleKeeper } from '../security/people-keepers.js'
 import { createServerModeApiAuthMiddleware } from '../security/server-mode-middleware.js'
 import { createSignInSessionStore } from '../security/sign-in-session-store.js'
 import { createWorkspaceRoles } from '../security/workspace-roles.js'
@@ -79,10 +80,8 @@ beforeEach(async () => {
       origin: 'https://wb.test',
     }),
   )
-  app.route(
-    '/',
-    createWorkspacePeopleRouter({ members, roles, invitations, origin: 'https://wb.test' }),
-  )
+  const keeper = serverModePeopleKeeper({ members, invitations, origin: 'https://wb.test' })
+  app.route('/', createWorkspacePeopleRouter({ members, roles, keeper }))
 })
 afterEach(async () => {
   await handle.dispose()
@@ -93,6 +92,8 @@ describe('workspace people', () => {
   it('lists the people and their roles to any member', async () => {
     const listed = await call('bob', 'GET', '/people')
     expect(listed.status).toBe(200)
+    expect(listed.body.canManage).toBe(false)
+    expect((await call('ada', 'GET', '/people')).body.canManage).toBe(true)
     // Two memberships made in one millisecond have no defined order.
     const people = listed.body.people as { displayName: string }[]
     expect([...people].sort((a, b) => a.displayName.localeCompare(b.displayName))).toEqual([
