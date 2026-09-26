@@ -196,7 +196,9 @@ On a server-mode keeper every workspace is **members-only from the start**.
 The person who creates a workspace is its first member and its first
 **owner**; everyone else needs a membership.
 
-An owner manages the workspace's people through
+In the web app, **People** in a workspace's header lists its members. An owner
+can make a member an owner, remove a member, and create an invitation link
+from there. The same is available through
 `/api/workspaces/<workspace>/people`, signed in or with a bearer token:
 
 - `GET` lists every member with their role. Any member can call it.
@@ -299,7 +301,10 @@ The first administrator is named by you, the operator, in one of two ways:
   makes the wrong person one. Take the subject from the provider (the `sub`
   claim), never from what a person says about themselves.
 
-An administrator works through `/api/people`:
+In the web app, an administrator sees **People on this server** on the
+workspace list. It lists every user and deactivates, reactivates, appoints and
+dismisses from there, and creates invitation links to the server. The same is
+available through `/api/people`:
 
 - `GET /api/people` lists every user, marked `deactivated` and
   `administrator`.
