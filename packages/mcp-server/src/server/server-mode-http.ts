@@ -31,6 +31,7 @@ import {
 import type { ServerModePeople } from './security/server-mode-middleware.js'
 import { createSignInAttemptStore } from './security/sign-in-attempt-store.js'
 import type { OidcProvider } from './security/sign-in-config.js'
+import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { serverModeUiStatus } from './server-mode-web-app.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
@@ -335,8 +336,9 @@ async function peopleOptions(
   const db = await getDb(dataDir)
   const deps = createCompleteSignInDeps(db, SIGN_IN_SESSION_TTL_MS)
   const origin = new URL(publicBaseUrl).origin
+  const roles = createWorkspaceRoles(db)
   if (signInProviders === undefined || signInProviders.length === 0) {
-    return { people: { members: deps.members, sessions: deps.sessions, origin } }
+    return { people: { members: deps.members, sessions: deps.sessions, roles, origin } }
   }
   return {
     // A bearer from a declared provider's issuer may become a user by that
@@ -344,6 +346,7 @@ async function peopleOptions(
     people: {
       members: deps.members,
       sessions: deps.sessions,
+      roles,
       origin,
       bearerProvisioning: {
         providers: signInProviders.filter((p): p is OidcProvider => p.kind === 'oidc'),

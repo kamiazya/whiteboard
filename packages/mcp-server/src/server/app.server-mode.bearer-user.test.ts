@@ -16,6 +16,7 @@ import { createOAuthJwtValidator } from './security/oauth-jwt-validator.js'
 import { createOAuthResourceServerAuthStrategy } from './security/oauth-resource-strategy.js'
 import { signInConfigSchema } from './security/sign-in-config.js'
 import { createSignInSessionStore } from './security/sign-in-session-store.js'
+import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
 let tempDir: string
@@ -88,6 +89,7 @@ beforeEach(async () => {
     people: {
       members,
       sessions: createSignInSessionStore(handle.db),
+      roles: createWorkspaceRoles(handle.db),
       origin: PUBLIC_URL,
       bearerProvisioning: { providers, members },
     },

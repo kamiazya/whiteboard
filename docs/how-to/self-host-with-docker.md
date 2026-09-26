@@ -193,8 +193,20 @@ scope for them. `/mcp` still takes bearer tokens only.
 ## Who can reach a workspace
 
 On a server-mode keeper every workspace is **members-only from the start**.
-The person who creates a workspace is its first member; everyone else needs
-a membership. This applies to the HTTP API and to `/mcp` alike. An MCP tool
+The person who creates a workspace is its first member and its first
+**owner**; everyone else needs a membership.
+
+An owner manages the workspace's people through
+`/api/workspaces/<workspace>/people`, signed in or with a bearer token:
+
+- `GET` lists every member with their role. Any member can call it.
+- `POST {"userId": …}` adds a user of this keeper.
+- `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
+- `DELETE /<userId>` removes a member.
+
+Only an owner can change anything. A workspace always keeps at least one
+owner, so demoting or removing the last owner is refused with `last_owner`.
+Being an administrator does not make someone an owner. This applies to the HTTP API and to `/mcp` alike. An MCP tool
 call that names a workspace the caller is not a member of fails with
 `not_a_member`, whether or not that workspace exists, so the answer does not
 reveal which workspaces exist. A call that creates a workspace

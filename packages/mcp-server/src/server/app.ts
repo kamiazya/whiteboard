@@ -41,6 +41,7 @@ import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
+import { createWorkspacePeopleRouter } from './routes/workspace-people.js'
 import { setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
@@ -344,6 +345,17 @@ function mountMcpMiddleware(
 }
 
 /**
+ * The routers only server mode mounts: a workspace's people as its owners
+ * manage them (ADR-0049). The local daemon's members are still passkeys,
+ * mounted by `mountLocalDaemonRouters`.
+ */
+function mountServerModeRouters(app: Hono, options: AppOptions): void {
+  if (options.authMode !== 'server-mode' || options.people === undefined) return
+  const { members, roles } = options.people
+  app.route('/', createWorkspacePeopleRouter({ members, roles }))
+}
+
+/**
  * The routers that exist only in local-daemon mode, each with the condition
  * that decides whether it can answer at all.
  *
@@ -620,6 +632,7 @@ export function createApp(options: AppOptions) {
   // attestation as naming an unknown credential.
   const credentials = options.authMode === 'local-daemon' ? options.pairing?.credentials : undefined
   mountLocalDaemonRouters(app, options, identity, credentialResolver)
+  mountServerModeRouters(app, options)
 
   // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*

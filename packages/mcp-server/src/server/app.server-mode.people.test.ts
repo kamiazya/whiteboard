@@ -20,6 +20,7 @@ import {
   SESSION_COOKIE,
   type SignInSessionStore,
 } from './security/sign-in-session-store.js'
+import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
 let tempDir: string
@@ -71,7 +72,7 @@ beforeEach(async () => {
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
     serverDeps: resolveServerDeps(createContainer()),
-    people: { members, sessions, origin: PUBLIC_URL },
+    people: { members, sessions, roles: createWorkspaceRoles(handle.db), origin: PUBLIC_URL },
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')
@@ -121,6 +122,39 @@ describe('server mode — a workspace belongs to the people in it', () => {
       app.request(`${PUBLIC_URL}/api/workspaces/${workspaceId}/documents`, { headers })
     expect((await read(ada)).status).toBe(200)
     expect((await read(eve)).status).toBe(403)
+  })
+
+  // ADR-0049 decision 1: the creator is the first OWNER, and an owner lets
+  // somebody else in by their user id.
+  it('lets the creator, as its owner, add a person who can then open it', async () => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    const eve = await signedIn('eve')
+    const { workspaceId } = (await (await create(ada, 'Plans')).json()) as { workspaceId: string }
+    const people = `${PUBLIC_URL}/api/workspaces/${workspaceId}/people`
+    const bobId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'bob' }))?.id
+    const eveId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'eve' }))?.id
+
+    const listedPeople = await app.request(people, { headers: ada })
+    expect(await listedPeople.json()).toMatchObject({
+      people: [{ displayName: 'ada', role: 'owner' }],
+    })
+    const json = { 'content-type': 'application/json' }
+    const added = await app.request(people, {
+      method: 'POST',
+      headers: { ...ada, ...json },
+      body: JSON.stringify({ userId: bobId }),
+    })
+    expect(added.status).toBe(201)
+    expect(await listed(bob)).toEqual(['Plans'])
+
+    const byMember = await app.request(people, {
+      method: 'POST',
+      headers: { ...bob, ...json },
+      body: JSON.stringify({ userId: eveId }),
+    })
+    expect(byMember.status).toBe(403)
+    expect(await listed(eve)).toEqual([])
   })
 
   // Without a user here there is nobody to make the first member, and a
