@@ -25,7 +25,7 @@ import {
   type WrappedWorkspaceKey,
   wrappedWorkspaceKeySchema,
 } from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
-import { z } from 'zod'
+import { readStoredRecord } from './stored-record.js'
 
 const STORE_KEY = 'whiteboard:replica-sealed-keys'
 
@@ -36,8 +36,6 @@ const STORE_KEY = 'whiteboard:replica-sealed-keys'
  */
 const SEPARATOR = '\u0000'
 
-const storeSchema = z.record(z.string(), wrappedWorkspaceKeySchema)
-
 /** Same normalisation the passkey pin store uses, so one daemon is one key. */
 const daemonKey = (daemonBaseUrl: string): string => daemonBaseUrl.replace(/\/+$/, '')
 
@@ -45,13 +43,14 @@ const entryKey = (daemonBaseUrl: string, workspaceId: string): string =>
   `${daemonKey(daemonBaseUrl)}${SEPARATOR}${workspaceId}`
 
 function load(): Record<string, WrappedWorkspaceKey> {
+  let raw: string | null
   try {
-    const raw = localStorage.getItem(STORE_KEY)
-    if (raw === null) return {}
-    return storeSchema.parse(JSON.parse(raw))
+    raw = localStorage.getItem(STORE_KEY)
   } catch {
+    // A browser refusing storage: nothing cached, the same as a cold start.
     return {}
   }
+  return readStoredRecord(raw, wrappedWorkspaceKeySchema)
 }
 
 function save(records: Record<string, WrappedWorkspaceKey>): void {

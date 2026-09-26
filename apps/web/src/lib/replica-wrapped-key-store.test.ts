@@ -101,3 +101,25 @@ describe('dropWrappedKeysForDaemon', () => {
     expect(loadWrappedKey(OTHER, 'ws-1')).toEqual(BLOB)
   })
 })
+
+describe('a store holding an entry this build cannot read', () => {
+  // The same newer-build case as the pin store: one unreadable entry must
+  // cost that entry, and saving another must not write every other away.
+  const seedWithUnreadable = () => {
+    saveWrappedKey(DAEMON, 'ws-1', BLOB)
+    const raw = JSON.parse(localStorage.getItem('whiteboard:replica-sealed-keys') ?? '{}')
+    raw['from-a-newer-build'] = { ...BLOB, addedByANewerBuild: true }
+    localStorage.setItem('whiteboard:replica-sealed-keys', JSON.stringify(raw))
+  }
+
+  it('still answers the entries it can read', () => {
+    seedWithUnreadable()
+    expect(loadWrappedKey(DAEMON, 'ws-1')).toEqual(BLOB)
+  })
+
+  it('keeps them when another key is saved', () => {
+    seedWithUnreadable()
+    saveWrappedKey(OTHER, 'ws-2', BLOB)
+    expect(loadWrappedKey(DAEMON, 'ws-1')).toEqual(BLOB)
+  })
+})
