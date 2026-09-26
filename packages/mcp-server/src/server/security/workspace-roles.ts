@@ -6,7 +6,9 @@
  * hand their workspaces to nobody, and the operator's `grant-member`
  * recovers a workspace whose owners are all deactivated.
  */
-import { inTenantTransaction, type TenantScoped } from '../store/db/tenant-database.js'
+import type { ExpressionBuilder } from 'kysely'
+import type { DatabaseSchema } from '../store/db/schema.js'
+import type { TenantScoped } from '../store/db/tenant-database.js'
 
 type WorkspaceRole = 'owner' | 'member'
 
@@ -26,25 +28,36 @@ export interface WorkspaceRoles {
   remove(workspaceId: string, profileId: string): Promise<RoleChange>
 }
 
-// Whether taking `profileId` out of the owners would leave none, and whether
-// they are a member at all. Read inside the caller's transaction, so two
-// owners demoting each other at once cannot both pass.
-async function standing(db: TenantScoped, workspaceId: string, profileId: string) {
-  const owners = await db
+// The guard every write carries: the row may change unless it is an owner's
+// and no other owner of the same workspace remains. It rides in the write's
+// own WHERE clause, so the check and the change are one statement — two
+// owners demoting each other at once cannot both pass, and the loser is
+// refused by the rule instead of failing on a lock a read-then-write
+// transaction would have to upgrade.
+function keepsAnOwner(workspaceId: string, profileId: string) {
+  return (eb: ExpressionBuilder<DatabaseSchema, 'workspaceMemberships'>) =>
+    eb.or([
+      eb('workspaceMemberships.role', '=', 'member'),
+      eb.exists(
+        eb
+          .selectFrom('workspaceMemberships as other')
+          .select('other.profileId')
+          .where('other.workspaceId', '=', workspaceId)
+          .where('other.role', '=', 'owner')
+          .where('other.profileId', '!=', profileId),
+      ),
+    ])
+}
+
+// Why a guarded write changed nothing: no such member, or its last owner.
+async function refusal(db: TenantScoped, workspaceId: string, profileId: string) {
+  const row = await db
     .selectFrom('workspaceMemberships')
     .select('profileId')
     .where('workspaceId', '=', workspaceId)
-    .where('role', '=', 'owner')
-    .execute()
-  const role = await db
-    .selectFrom('workspaceMemberships')
-    .select('role')
-    .where('workspaceId', '=', workspaceId)
     .where('profileId', '=', profileId)
     .executeTakeFirst()
-  if (role === undefined) return 'not-a-member' as const
-  const others = owners.filter((row) => row.profileId !== profileId)
-  return role.role === 'owner' && others.length === 0 ? ('last-owner' as const) : ('ok' as const)
+  return row === undefined ? ('not-a-member' as const) : ('last-owner' as const)
 }
 
 async function membersOf(db: TenantScoped, workspaceId: string): Promise<WorkspaceMember[]> {
@@ -81,29 +94,26 @@ export function createWorkspaceRoles(db: TenantScoped): WorkspaceRoles {
       return row !== undefined
     },
 
-    setRole: (workspaceId, profileId, role) =>
-      inTenantTransaction(db, async (trx) => {
-        const now = await standing(trx, workspaceId, profileId)
-        if (now === 'not-a-member' || (now === 'last-owner' && role === 'member')) return now
-        await trx
-          .updateTable('workspaceMemberships')
-          .set({ role })
-          .where('workspaceId', '=', workspaceId)
-          .where('profileId', '=', profileId)
-          .execute()
-        return 'ok'
-      }),
+    async setRole(workspaceId, profileId, role) {
+      let update = db
+        .updateTable('workspaceMemberships')
+        .set({ role })
+        .where('workspaceId', '=', workspaceId)
+        .where('profileId', '=', profileId)
+      if (role === 'member') update = update.where(keepsAnOwner(workspaceId, profileId))
+      const changed = await update.returning('profileId').execute()
+      return changed.length > 0 ? 'ok' : refusal(db, workspaceId, profileId)
+    },
 
-    remove: (workspaceId, profileId) =>
-      inTenantTransaction(db, async (trx) => {
-        const now = await standing(trx, workspaceId, profileId)
-        if (now !== 'ok') return now
-        await trx
-          .deleteFrom('workspaceMemberships')
-          .where('workspaceId', '=', workspaceId)
-          .where('profileId', '=', profileId)
-          .execute()
-        return 'ok'
-      }),
+    async remove(workspaceId, profileId) {
+      const removed = await db
+        .deleteFrom('workspaceMemberships')
+        .where('workspaceId', '=', workspaceId)
+        .where('profileId', '=', profileId)
+        .where(keepsAnOwner(workspaceId, profileId))
+        .returning('profileId')
+        .execute()
+      return removed.length > 0 ? 'ok' : refusal(db, workspaceId, profileId)
+    },
   }
 }

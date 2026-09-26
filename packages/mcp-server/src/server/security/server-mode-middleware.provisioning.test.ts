@@ -13,7 +13,10 @@ import { ALL_AUTH_SCOPES } from './auth-strategy.js'
 import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
-import { createServerModeApiAuthMiddleware } from './server-mode-middleware.js'
+import {
+  createServerModeApiAuthMiddleware,
+  createServerModeMcpAuthMiddleware,
+} from './server-mode-middleware.js'
 import { providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
 import { createSignInSessionStore, SESSION_COOKIE } from './sign-in-session-store.js'
 import { createUserDeactivation } from './user-deactivation.js'
@@ -142,6 +145,31 @@ describe('server mode — a deactivated user', () => {
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'deactivated' })
     expect(await members.isDeactivated(binding)).toBe(true)
+  })
+
+  // `/mcp` takes bearers only, and a deactivated person's IdP token stays
+  // valid after their sessions here end.
+  it('refuses their bearer at /mcp too, before any tool runs', async () => {
+    const user = await members.ensureProfile({ binding, displayName: 'Ada' })
+    await createUserDeactivation(handle.db).deactivate(user.id, 1)
+    const app = new Hono()
+    app.use(
+      '/mcp',
+      createServerModeMcpAuthMiddleware(strategyFor(ISSUER), {
+        members,
+        sessions: createSignInSessionStore(handle.db),
+        roles: createWorkspaceRoles(handle.db),
+        origin: 'https://wb.test',
+        bearerProvisioning: { providers, members },
+      }),
+    )
+    app.post('/mcp', (c) => c.json({ reached: true }))
+    const res = await app.request('/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer claude-code:ada' },
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'deactivated' })
   })
 
   it('refuses a session that outlived the deactivation', async () => {
