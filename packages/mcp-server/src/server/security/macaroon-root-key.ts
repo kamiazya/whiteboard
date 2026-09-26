@@ -25,11 +25,14 @@
  * the OS user boundary.
  */
 import { randomBytes } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
-import { assertSecretFileIsOwnerOnly, writeSecretFileAtomicSync } from './secret-file-mode.js'
+import {
+  assertSecretFileIsOwnerOnly,
+  readSecretFileIfPresentSync,
+  writeSecretFileAtomicSync,
+} from './secret-file-mode.js'
 
 const log = getLogger('macaroon-root-key')
 
@@ -54,12 +57,8 @@ export interface MacaroonRootKey {
 }
 
 function tryLoad(filepath: string): Uint8Array | null {
-  let raw: string
-  try {
-    raw = readFileSync(filepath, 'utf8')
-  } catch {
-    return null
-  }
+  const raw = readSecretFileIfPresentSync(filepath)
+  if (raw === null) return null
   let reason: 'invalid-json' | 'invalid-shape' | 'wrong-length'
   try {
     const parsed = rootKeyFileSchema.parse(JSON.parse(raw))

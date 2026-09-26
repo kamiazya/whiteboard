@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
 import { captureLogsForTests } from '../log.js'
 import { buildSignedPayload, createDaemonIdentity } from './daemon-identity.js'
 
@@ -34,6 +35,25 @@ describe('createDaemonIdentity', () => {
     const stat = statSync(join(dir, 'daemon-identity.json'))
     expect(stat.mode & 0o777).toBe(0o600)
   })
+
+  it.skipIf(!CAN_DENY_FILE_READ)(
+    'refuses to start on an identity it cannot READ, rather than replacing it',
+    () => {
+      // Replacing is what `tryLoad` answered for ANY read error, and a
+      // replaced identity is indistinguishable, to every paired client that
+      // pinned it, from someone else answering on this port.
+      createDaemonIdentity({ dataDir: dir })
+      const file = join(dir, 'daemon-identity.json')
+      const before = readFileSync(file, 'utf8')
+      chmodSync(file, 0o000)
+      try {
+        expect(() => createDaemonIdentity({ dataDir: dir })).toThrow()
+      } finally {
+        chmodSync(file, 0o600)
+      }
+      expect(readFileSync(file, 'utf8')).toBe(before)
+    },
+  )
 
   it('reloads the SAME identity across restarts', () => {
     const first = createDaemonIdentity({ dataDir: dir })

@@ -14,7 +14,7 @@
  * JUDGEMENT — "is this secret owner-only, and if not, stop" — not merely
  * because both touch the filesystem.
  */
-import { chmodSync, mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 const OWNER_ONLY_FILE = 0o600
@@ -56,6 +56,32 @@ export function assertSecretFileIsOwnerOnly(filepath: string): void {
     `${filepath} is readable by group or other (mode ${(mode & 0o777).toString(8)}). ` +
       `A daemon secret must be owner-only. Run \`chmod 600 ${filepath}\` and restart.`,
   )
+}
+
+/**
+ * A secret's contents, or `null` when the file does not EXIST — and only then.
+ *
+ * Every caller answers `null` by minting a fresh secret and writing it over
+ * the path, so `null` must mean "there is nothing here to lose". A read that
+ * fails for any other reason (the file is unreadable, the disk errored) says
+ * nothing about whether a secret is there, and minting over it replaces one
+ * that may be perfectly good: a new daemon identity is indistinguishable, to
+ * every client that pinned the old one, from someone else answering on this
+ * port, and a new root key invalidates every token issued under the old. So
+ * that failure propagates, and the process refuses to start rather than
+ * quietly becoming someone else.
+ *
+ * It is reachable, not theoretical: a secret whose mode is `0o000` passes
+ * `assertSecretFileIsOwnerOnly` (it grants nobody else anything), cannot be
+ * read, and sits in a directory the atomic rename can still write.
+ */
+export function readSecretFileIfPresentSync(filepath: string): string | null {
+  try {
+    return readFileSync(filepath, 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw err
+  }
 }
 
 /**

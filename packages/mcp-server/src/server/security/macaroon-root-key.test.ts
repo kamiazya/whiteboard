@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
 import { captureLogsForTests, getLogger } from '../log.js'
 import { mintMacaroon, verifyMacaroon } from './macaroon.js'
 import { createMacaroonRootKey } from './macaroon-root-key.js'
@@ -25,6 +26,23 @@ describe('createMacaroonRootKey', () => {
     expect(rootKey).toHaveLength(32)
     expect(statSync(filepath()).mode & 0o777).toBe(0o600)
   })
+
+  it.skipIf(!CAN_DENY_FILE_READ)(
+    'refuses to start on a root key it cannot READ, rather than replacing it',
+    () => {
+      // A replaced root key silently invalidates every macaroon issued
+      // under the old one; only a key that is truly absent may be minted.
+      createMacaroonRootKey({ dataDir: dir })
+      const before = readFileSync(filepath(), 'utf8')
+      chmodSync(filepath(), 0o000)
+      try {
+        expect(() => createMacaroonRootKey({ dataDir: dir })).toThrow()
+      } finally {
+        chmodSync(filepath(), 0o600)
+      }
+      expect(readFileSync(filepath(), 'utf8')).toBe(before)
+    },
+  )
 
   it('reloads the SAME key across restarts', () => {
     const first = createMacaroonRootKey({ dataDir: dir })
