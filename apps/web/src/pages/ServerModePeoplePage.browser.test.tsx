@@ -114,12 +114,13 @@ describe('the server people screen', () => {
     expect(screen.queryByRole('link', { name: /people on this server/i })).toBeNull()
   })
 
-  it('deactivates a person, and offers no deactivation of oneself', async () => {
+  it('deactivates a person, and offers no change to oneself', async () => {
     renderAt('/people', fakeKeeper('ada'))
     fireEvent.click(await screen.findByRole('button', { name: 'Deactivate Bob' }))
     expect(await screen.findByRole('button', { name: 'Reactivate Bob' })).toBeTruthy()
     expect(screen.getByText(/deactivated/i)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Deactivate Ada' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remove Ada as administrator' })).toBeNull()
   })
 
   it('makes a person an administrator', async () => {

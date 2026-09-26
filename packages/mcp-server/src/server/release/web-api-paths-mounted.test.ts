@@ -25,11 +25,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createApp } from '../app.js'
 import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-route.js'
+import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createDaemonIdentity } from '../security/daemon-identity.js'
+import { createInvitationStore } from '../security/invitation-store.js'
 import { createMemberProfileStore } from '../security/member-profile-store.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from '../security/pairing-session.js'
+import { createSignInSessionStore } from '../security/sign-in-session-store.js'
+import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
+import { createUserDeactivation } from '../security/user-deactivation.js'
 import { createWebAuthnCredentialStore } from '../security/webauthn-credential-store.js'
+import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
 import { tenantRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
@@ -119,17 +125,14 @@ function webApiPaths(): WebPath[] {
   return [...seen.values()]
 }
 
-/**
- * Every /api route the daemon can mount, across BOTH supported modes.
- *
- * Neither mode alone is the surface: `/api/v1` mounts only when ServerDeps are
- * supplied (server-mode), and `/api/pairing` only under local-daemon with
- * pairing stores. A guard built on one mode would report the other's routes as
- * missing — which is the same failure as not checking at all, only louder and
- * wrong. The reach assertions below pin that both halves are present.
- */
-async function mountedApiRoutes(): Promise<string[]> {
-  const serverMode = createApp({
+// Server mode mounts its people routes (ADR-0049) only when it has people to
+// manage, as server-mode-http composes it.
+function serverModeApp(
+  db: IsolatedDbHandle['db'],
+  members: ReturnType<typeof createMemberProfileStore>,
+) {
+  const appointments = createTenantAdministratorStore(db)
+  return createApp({
     authMode: 'server-mode',
     publicBaseUrl: 'https://example.com',
     allowedOrigins: ['https://example.com'],
@@ -138,15 +141,28 @@ async function mountedApiRoutes(): Promise<string[]> {
     getStatus: () => ({}) as never,
     shutdown: () => Promise.resolve(),
     serverDeps: resolveServerDeps(createContainer()),
+    people: {
+      members,
+      sessions: createSignInSessionStore(db),
+      roles: createWorkspaceRoles(db),
+      invitations: createInvitationStore(db),
+      administration: {
+        check: createAdministratorCheck({ admins: appointments, members, configured: [] }),
+        appointments,
+        deactivation: createUserDeactivation(db),
+      },
+      origin: 'https://example.com',
+    },
   })
+}
 
+function localDaemonApp(members: ReturnType<typeof createMemberProfileStore>) {
   const pairingDir = tempDir()
   // The membership routes mount only when the daemon also has a member
   // store and server deps (app.ts), the way http-server.ts composes it; a
   // fixture without them would report apps/web's members requests as
   // unmounted while production serves them.
-  dbHandle = await createIsolatedDb({ dataDir: tempDir() })
-  const localDaemon = createApp({
+  return createApp({
     authMode: 'local-daemon',
     token: 'test-token',
     publicBaseUrl: 'http://127.0.0.1:3099',
@@ -161,9 +177,25 @@ async function mountedApiRoutes(): Promise<string[]> {
       tokens: createPairingTokenStore(),
       credentials: createWebAuthnCredentialStore(tenantRoot(pairingDir, SELF_HOST_TENANT_ID)),
     },
-    members: createMemberProfileStore(dbHandle.db),
+    members,
     serverDeps: resolveServerDeps(createContainer()),
   })
+}
+
+/**
+ * Every /api route the daemon can mount, across BOTH supported modes.
+ *
+ * Neither mode alone is the surface: `/api/v1` mounts only when ServerDeps are
+ * supplied (server-mode), and `/api/pairing` only under local-daemon with
+ * pairing stores. A guard built on one mode would report the other's routes as
+ * missing — which is the same failure as not checking at all, only louder and
+ * wrong. The reach assertions below pin that both halves are present.
+ */
+async function mountedApiRoutes(): Promise<string[]> {
+  dbHandle = await createIsolatedDb({ dataDir: tempDir() })
+  const members = createMemberProfileStore(dbHandle.db)
+  const serverMode = serverModeApp(dbHandle.db, members)
+  const localDaemon = localDaemonApp(members)
 
   return [
     ...new Set(

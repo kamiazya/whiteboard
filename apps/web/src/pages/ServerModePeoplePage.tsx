@@ -150,25 +150,29 @@ function TenantPersonRow({
       <span className="font-medium">{displayName}</span>
       <span className="text-sm text-muted-foreground">{notes.filter(Boolean).join(' · ')}</span>
       <span className="flex-1" />
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() =>
-          void run(() => tenantPeople.setAdministrator(fetchFn, userId, !administrator))
-        }
-      >
-        {administrator
-          ? `Remove ${displayName} as administrator`
-          : `Make ${displayName} an administrator`}
-      </Button>
       {!isSelf && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void run(() => tenantPeople.setDeactivated(fetchFn, userId, !deactivated))}
-        >
-          {deactivated ? `Reactivate ${displayName}` : `Deactivate ${displayName}`}
-        </Button>
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              void run(() => tenantPeople.setAdministrator(fetchFn, userId, !administrator))
+            }
+          >
+            {administrator
+              ? `Remove ${displayName} as administrator`
+              : `Make ${displayName} an administrator`}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              void run(() => tenantPeople.setDeactivated(fetchFn, userId, !deactivated))
+            }
+          >
+            {deactivated ? `Reactivate ${displayName}` : `Deactivate ${displayName}`}
+          </Button>
+        </>
       )}
     </li>
   )

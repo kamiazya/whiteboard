@@ -148,6 +148,26 @@ describe('tenant people', () => {
     expect((await call('bob', 'GET', '/people')).status).toBe(403)
   })
 
+  // Dismissing oneself could leave the server with no administrator, and
+  // only the operator's command could appoint one again.
+  it('refuses an administrator dismissing themselves', async () => {
+    expect(await call('ada', 'DELETE', `/people/${ids.ada}/administrator`)).toMatchObject({
+      status: 409,
+      body: { error: 'cannot_dismiss_self' },
+    })
+  })
+
+  // A deactivated administrator cannot act, so the list does not call them one.
+  it('lists a deactivated appointed administrator as not administering', async () => {
+    await call('ada', 'PUT', `/people/${ids.bob}/administrator`)
+    await call('ada', 'POST', `/people/${ids.bob}/deactivation`)
+    const people = (await call('ada', 'GET', '/people')).body.people as {
+      userId: string
+      administrator: boolean
+    }[]
+    expect(people.find((p) => p.userId === ids.bob)?.administrator).toBe(false)
+  })
+
   it('refuses a user this keeper does not have', async () => {
     expect(await call('ada', 'POST', '/people/nobody/deactivation')).toMatchObject({
       status: 404,

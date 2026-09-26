@@ -55,19 +55,28 @@ const json = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 })
 
-const person = (userId: string) => `/api/people/${encodeURIComponent(userId)}`
 const workspace = (workspaceId: string) => `/api/workspaces/${encodeURIComponent(workspaceId)}`
 
 export const tenantPeople = {
   list: (fetchFn: Fetch) => call(fetchFn, '/api/people', tenantPeopleResponseSchema),
   setDeactivated: (fetchFn: Fetch, userId: string, deactivated: boolean) =>
-    call(fetchFn, `${person(userId)}/deactivation`, deactivationResponseSchema, {
-      method: deactivated ? 'POST' : 'DELETE',
-    }),
+    call(
+      fetchFn,
+      `/api/people/${encodeURIComponent(userId)}/deactivation`,
+      deactivationResponseSchema,
+      {
+        method: deactivated ? 'POST' : 'DELETE',
+      },
+    ),
   setAdministrator: (fetchFn: Fetch, userId: string, administrator: boolean) =>
-    call(fetchFn, `${person(userId)}/administrator`, administratorResponseSchema, {
-      method: administrator ? 'PUT' : 'DELETE',
-    }),
+    call(
+      fetchFn,
+      `/api/people/${encodeURIComponent(userId)}/administrator`,
+      administratorResponseSchema,
+      {
+        method: administrator ? 'PUT' : 'DELETE',
+      },
+    ),
   invite: (fetchFn: Fetch) =>
     call(fetchFn, '/api/invitations', invitationLinkResponseSchema, json('POST', {})),
 }
