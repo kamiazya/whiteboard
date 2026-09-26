@@ -51,7 +51,10 @@ function keeperFetch(keeper: Keeper) {
       return Response.json(
         keeper.signedIn === undefined
           ? { signedIn: false }
-          : { signedIn: true, user: { displayName: keeper.signedIn } },
+          : {
+              signedIn: true,
+              user: { userId: 'u-1', displayName: keeper.signedIn, administrator: false },
+            },
       )
     }
     if (url === '/auth/sign-out' && init?.method === 'POST')

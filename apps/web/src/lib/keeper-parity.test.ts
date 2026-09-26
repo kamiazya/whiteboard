@@ -66,6 +66,10 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "lists the workspaces a server-mode keeper lets the signed-in person reach, for its entrance and its shell (ADR-0047); membership is a server keeper's idea, and a browser keeper has one person and every workspace, so there is nothing to mirror",
   },
+  'src/lib/server-people.ts': {
+    reach: 'daemon-itself',
+    why: "manages a server-mode keeper's people — its users, administrators, workspace owners and invitations (ADR-0049); a browser keeper has one person, who is every workspace's owner, so there is nobody to manage and nothing to mirror",
+  },
   'src/lib/accept-transferred-record.ts': {
     reach: 'daemon-itself',
     why: 'merges a workspace record arriving from ANOTHER origin into a workspace this keeper holds — it runs on the page a keeper serves at its own address, and a browser keeper serves no address anyone could send a transfer to, so there is no receiving side to mirror',

@@ -93,6 +93,7 @@ function InvitationControl({ create }: { create: () => Promise<Outcome<Invitatio
         <div className="flex flex-col gap-1">
           <label className="text-sm text-muted-foreground" htmlFor="invitation-link">
             Anyone who opens this link can use it once, until{' '}
+            {/* time-format-is-deliberate: an expiry is ahead, and formatRelative words only the past */}
             {new Date(link.expiresAt).toLocaleString()}. It is shown only now.
           </label>
           <div className="flex gap-2">
