@@ -1,5 +1,6 @@
 /**
- * ADR-0046 decision 6: invitations to a tenant. A LINK carries a random
+ * ADR-0046 decision 6: invitations to a tenant, and (ADR-0049 decision 3)
+ * into one of its workspaces. A LINK carries a random
  * token the store hands back exactly once and keeps only the hash of; an
  * EMAIL invitation names an address a provider must later assert verified.
  * Either one, redeemed, is what lets a new account become this tenant's user
@@ -20,6 +21,7 @@ const invitationSchema = z
     id: z.string().min(1),
     email: z.string().nullable(),
     invitedBy: z.string().min(1),
+    workspaceId: z.string().nullable(),
     createdAt: z.number(),
     expiresAt: z.number(),
   })
@@ -31,6 +33,8 @@ type LinkRefusal = 'unknown' | 'expired' | 'redeemed'
 
 interface IssueInput {
   readonly invitedBy: string
+  /** ADR-0049 decision 3: the workspace accepting it joins; absent, the tenant alone. */
+  readonly workspaceId?: string
   readonly now: number
   readonly ttlMs: number
 }
@@ -65,6 +69,7 @@ async function insert(
     id: generateDocumentId(),
     email: 'email' in kind ? kind.email : null,
     invitedBy: input.invitedBy,
+    workspaceId: input.workspaceId ?? null,
     createdAt: input.now,
     expiresAt: input.now + input.ttlMs,
   }

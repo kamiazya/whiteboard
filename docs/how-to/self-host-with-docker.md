@@ -204,6 +204,14 @@ An owner manages the workspace's people through
 - `PATCH /<userId> {"role": "owner" | "member"}` changes a member's role.
 - `DELETE /<userId>` removes a member.
 
+To bring in someone who is not a user yet, an owner creates an invitation
+with `POST /api/workspaces/<workspace>/invitations`. The response carries a
+link to this keeper's `/invite` page, valid for seven days and usable once.
+Whoever signs in through it becomes a user, if they are not one already, and
+a member of that workspace. The token is in the link's fragment, so the
+browser never sends it to a server and it does not appear in a `Referer`.
+The link is the secret, and it is shown only in that response.
+
 Only an owner can change anything. A workspace always keeps at least one
 owner, so demoting or removing the last owner is refused with `last_owner`.
 Being an administrator does not make someone an owner. This applies to the HTTP API and to `/mcp` alike. An MCP tool

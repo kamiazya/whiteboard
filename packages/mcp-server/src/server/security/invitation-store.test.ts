@@ -29,6 +29,27 @@ afterEach(async () => {
 })
 
 describe('invitation links', () => {
+  // ADR-0049 decision 3: a link may invite into a workspace; one that names
+  // none invites to the tenant alone.
+  it('carries the workspace it invites into, or none', async () => {
+    const into = await store.createLink({
+      invitedBy: 'p-ada',
+      workspaceId: 'ws-1',
+      now: T0,
+      ttlMs: HOUR,
+    })
+    const bare = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
+    expect(into.invitation.workspaceId).toBe('ws-1')
+    expect(await store.openLink(into.token, T0 + 1)).toMatchObject({
+      ok: true,
+      invitation: { workspaceId: 'ws-1' },
+    })
+    expect(await store.openLink(bare.token, T0 + 1)).toMatchObject({
+      ok: true,
+      invitation: { workspaceId: null },
+    })
+  })
+
   it('hands the token back once and stores only its hash', async () => {
     const { token } = await store.createLink({ invitedBy: 'p-ada', now: T0, ttlMs: HOUR })
     const rows = await handle.rawDb.selectFrom('invitations').selectAll().execute()

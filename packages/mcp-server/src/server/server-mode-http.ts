@@ -338,7 +338,15 @@ async function peopleOptions(
   const origin = new URL(publicBaseUrl).origin
   const roles = createWorkspaceRoles(db)
   if (signInProviders === undefined || signInProviders.length === 0) {
-    return { people: { members: deps.members, sessions: deps.sessions, roles, origin } }
+    return {
+      people: {
+        members: deps.members,
+        sessions: deps.sessions,
+        roles,
+        invitations: deps.invitations,
+        origin,
+      },
+    }
   }
   return {
     // A bearer from a declared provider's issuer may become a user by that
@@ -347,6 +355,7 @@ async function peopleOptions(
       members: deps.members,
       sessions: deps.sessions,
       roles,
+      invitations: deps.invitations,
       origin,
       bearerProvisioning: {
         providers: signInProviders.filter((p): p is OidcProvider => p.kind === 'oidc'),

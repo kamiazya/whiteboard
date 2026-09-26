@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import type { ServerModeAppOptions } from './app.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
+import { createInvitationStore } from './security/invitation-store.js'
 import {
   createMemberProfileStore,
   type MemberProfileStore,
@@ -72,7 +73,13 @@ beforeEach(async () => {
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
     serverDeps: resolveServerDeps(createContainer()),
-    people: { members, sessions, roles: createWorkspaceRoles(handle.db), origin: PUBLIC_URL },
+    people: {
+      members,
+      sessions,
+      roles: createWorkspaceRoles(handle.db),
+      invitations: createInvitationStore(handle.db),
+      origin: PUBLIC_URL,
+    },
     touch: () => {},
     getStatus: () => {
       throw new Error('not read by these routes')

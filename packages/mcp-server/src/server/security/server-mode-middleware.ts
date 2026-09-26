@@ -8,6 +8,7 @@ import {
   provisionBearerPerson,
 } from './bearer-provisioning.js'
 import type { ResolvedGrant } from './credential-resolver.js'
+import type { InvitationStore } from './invitation-store.js'
 import { runAsMcpCaller } from './mcp-caller.js'
 import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { membershipRefusalFor, rememberGrant } from './membership-gate.js'
@@ -42,6 +43,8 @@ export interface ServerModePeople {
   readonly sessions: SignInSessionStore
   /** What a workspace's owners change about its people (ADR-0049). */
   readonly roles: WorkspaceRoles
+  /** The invitations owners create into their workspaces (ADR-0049 decision 3). */
+  readonly invitations: InvitationStore
   /** This host's own origin. A session is honoured on a request that changes
    *  something only when the request came from it. */
   readonly origin: string

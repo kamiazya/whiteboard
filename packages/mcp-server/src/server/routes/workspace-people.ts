@@ -10,6 +10,7 @@ import {
   addWorkspacePersonRequestSchema,
   changeWorkspaceRoleRequestSchema,
   type WorkspacePeopleRefusal,
+  workspaceInvitationResponseSchema,
   workspacePeopleResponseSchema,
   workspacePersonSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
@@ -17,6 +18,7 @@ import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
+import type { InvitationStore } from '../security/invitation-store.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
 import { callerUserId } from '../security/membership-gate.js'
 import type { WorkspaceMember, WorkspaceRoles } from '../security/workspace-roles.js'
@@ -27,7 +29,13 @@ const log = getLogger('workspace-people')
 interface WorkspacePeopleRouterOptions {
   readonly members: MemberProfileStore
   readonly roles: WorkspaceRoles
+  readonly invitations: InvitationStore
+  /** This host's origin, where the web app's invite page is. */
+  readonly origin: string
 }
+
+// ponytail: one fixed lifetime; a body field when someone needs another.
+const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 const REFUSALS = {
   not_an_owner: [403, 'only an owner of this workspace can change its people'],
@@ -78,7 +86,33 @@ async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: st
   return found === undefined ? null : toPerson(found)
 }
 
-export function createWorkspacePeopleRouter({ members, roles }: WorkspacePeopleRouterOptions) {
+// ADR-0049 decision 3: an owner invites a person into the workspace.
+function mountInvitations(
+  app: Hono,
+  { members, invitations, origin }: WorkspacePeopleRouterOptions,
+): void {
+  app.post('/api/workspaces/:workspace/invitations', async (c) => {
+    const workspaceId = await ownedBy(c, members)
+    const invitedBy = await callerUserId(c, members)
+    if (workspaceId === null || invitedBy === null) return refuse(c, 'not_an_owner')
+    const { token, invitation } = await invitations.createLink({
+      invitedBy,
+      workspaceId,
+      now: Date.now(),
+      ttlMs: INVITATION_TTL_MS,
+    })
+    const url = new URL('/invite', origin)
+    url.hash = new URLSearchParams({ token }).toString()
+    const body = workspaceInvitationResponseSchema.parse({
+      url: url.toString(),
+      expiresAt: new Date(invitation.expiresAt).toISOString(),
+    })
+    return c.json(body, 201)
+  })
+}
+
+export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOptions) {
+  const { members, roles } = options
   const app = new Hono()
   const ownedWorkspace = (c: Context) => ownedBy(c, members)
   const personIn = (workspaceId: string, userId: string) => findPerson(roles, workspaceId, userId)
@@ -119,6 +153,8 @@ export function createWorkspacePeopleRouter({ members, roles }: WorkspacePeopleR
     if (removed === 'last-owner') return refuse(c, 'last_owner')
     return c.json({ removed: true }, 200)
   })
+
+  mountInvitations(app, options)
 
   return app
 }
