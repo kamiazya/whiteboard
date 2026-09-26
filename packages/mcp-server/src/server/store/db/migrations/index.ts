@@ -35,6 +35,7 @@ import { migration as invitations } from './0033-invitations.js'
 import { migration as signInSessions } from './0034-sign-in-sessions.js'
 import { migration as signInAttempts } from './0035-sign-in-attempts.js'
 import { migration as peopleRoles } from './0036-people-roles.js'
+import { migration as userDeactivation } from './0037-user-deactivation.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0003 still says `canvas-doc-store` after the port it creates was renamed to
@@ -81,4 +82,5 @@ export const migrations: Record<string, Migration> = {
   '0034-sign-in-sessions': signInSessions,
   '0035-sign-in-attempts': signInAttempts,
   '0036-people-roles': peopleRoles,
+  '0037-user-deactivation': userDeactivation,
 }

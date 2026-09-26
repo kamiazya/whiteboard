@@ -58,6 +58,7 @@ const memberProfileRowSchema = z
     accountId: z.string().min(1),
     createdAt: z.number(),
     updatedAt: z.number(),
+    deactivatedAt: z.number().nullable(),
   })
   .strict()
 
@@ -101,8 +102,12 @@ type MembershipRole = 'owner' | 'member'
 
 export interface MemberProfileStore {
   /** This tenant's user for whoever `binding` resolves to; null when the
-   *  binding names no account, or an account with no user here. */
+   *  binding names no account, an account with no user here, or a user an
+   *  administrator has deactivated — so every gate refuses them unasked. */
   profileForBinding(binding: AuthenticatorBinding): Promise<MemberProfile | null>
+  /** True when `binding` resolves to a user here who is deactivated: what
+   *  sign-in asks so it can say so instead of treating them as a newcomer. */
+  isDeactivated(binding: AuthenticatorBinding): Promise<boolean>
   ensureProfile(input: EnsureProfileInput): Promise<MemberProfile>
   listMembers(workspaceId: string): Promise<MemberProfile[]>
   /** Every user this tenant has, oldest first — what an operator picks from. */
@@ -208,6 +213,12 @@ async function accountFor(db: TenantScoped, { authenticator, subject }: Authenti
   return row?.accountId ?? null
 }
 
+// Whoever `binding` names here, deactivated or not.
+async function userForBinding(db: TenantScoped, binding: AuthenticatorBinding) {
+  const accountId = await accountFor(db, binding)
+  return accountId === null ? null : loadProfileWhere(db, 'accountId', accountId)
+}
+
 function toProfile(
   row: z.infer<typeof memberProfileRowSchema>,
   credentials: z.infer<typeof profileCredentialSchema>[],
@@ -246,8 +257,13 @@ async function insertUser(db: TenantScoped, accountId: string, displayName: stri
 export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     async profileForBinding(binding) {
-      const accountId = await accountFor(db, binding)
-      return accountId === null ? null : loadProfileWhere(db, 'accountId', accountId)
+      const user = await userForBinding(db, binding)
+      return user !== null && user.deactivatedAt === null ? user : null
+    },
+
+    async isDeactivated(binding) {
+      const user = await userForBinding(db, binding)
+      return user !== null && user.deactivatedAt !== null
     },
 
     async ensureProfile({ binding, displayName }) {
@@ -263,7 +279,14 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
           if (user !== null) return user
           const { id, now } = await insertUser(trx, known, displayName)
           return toProfile(
-            { id, displayName, accountId: known, createdAt: now, updatedAt: now },
+            {
+              id,
+              displayName,
+              accountId: known,
+              createdAt: now,
+              updatedAt: now,
+              deactivatedAt: null,
+            },
             await passkeysOf(trx, known),
           )
         }
@@ -276,7 +299,7 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
           .values({ ...binding, accountId, createdAt: now })
           .execute()
         return toProfile(
-          { id, displayName, accountId, createdAt: now, updatedAt: now },
+          { id, displayName, accountId, createdAt: now, updatedAt: now, deactivatedAt: null },
           await passkeysOf(trx, accountId),
         )
       })

@@ -129,6 +129,8 @@ interface MemberProfilesTable {
   accountId: string
   createdAt: Timestamp
   updatedAt: Timestamp
+  /** Set while an administrator has deactivated the user (ADR-0049). */
+  deactivatedAt: number | null
 }
 
 // ADR-0045's ACCOUNT: the keeper-wide login identity. Belongs to no tenant
