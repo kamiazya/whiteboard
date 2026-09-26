@@ -5,7 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { createServer as createDocumentServer } from '@kamiazya/whiteboard-server-core'
 import { createMcpHandler } from '@modelcontextprotocol/server'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import {
   isReservedUiPath,
@@ -59,6 +59,7 @@ import {
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import {
+  callerUserId,
   creatorAsFirstMember,
   type FirstMember,
   membershipAdmit,
@@ -351,6 +352,16 @@ function mountMcpMiddleware(
  * manage them (ADR-0049). The local daemon's members are still passkeys,
  * mounted by `mountLocalDaemonRouters`.
  */
+// The people store a composition keeps, where it keeps one: what lets a
+// stream remember whose it is, so losing access ends it (ADR-0049).
+function syncSseOptions(options: AppOptions, admit: WorkspaceAdmit | undefined) {
+  const members = options.authMode === 'server-mode' ? options.people?.members : options.members
+  return {
+    ...(admit === undefined ? {} : { admit }),
+    ...(members === undefined ? {} : { userOf: (c: Context) => callerUserId(c, members) }),
+  }
+}
+
 function mountServerModeRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'server-mode' || options.people === undefined) return
   const { members, roles, invitations, origin, administration } = options.people
@@ -676,7 +687,7 @@ export function createApp(options: AppOptions) {
   app.route('/', createExportRouter())
   app.route('/', createFontsRouter())
   app.route('/', createViewportRouter())
-  app.route('/', createSyncSseRouter(admit === undefined ? {} : { admit }))
+  app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ credentialResolver }))
   app.route('/', createStatusRouter())
   app.route(

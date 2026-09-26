@@ -23,6 +23,7 @@ import type { TenantAdministratorStore } from '../security/tenant-administrator-
 import type { UserDeactivation } from '../security/user-deactivation.js'
 import type { UserDeletion } from '../security/user-deletion.js'
 import { issueInvitationLink } from './invitation-link.js'
+import { endSyncStreamsOf } from './sync-sse.js'
 
 const log = getLogger('tenant-people')
 
@@ -102,6 +103,7 @@ function mountDeactivation(app: Hono, options: TenantPeopleRouterOptions): void 
     if (!(await isUser(members, userId))) return refuse(c, 'unknown_user')
     if (userId === acting) return refuse(c, 'cannot_deactivate_self')
     await administration.deactivation.deactivate(userId, Date.now())
+    endSyncStreamsOf(userId)
     log.notice({ userId, by: acting }, 'user deactivated')
     return c.json(deactivationResponseSchema.parse({ userId, deactivated: true }), 200)
   })
