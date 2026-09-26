@@ -85,6 +85,21 @@ async function findPerson(roles: WorkspaceRoles, workspaceId: string, userId: st
 }
 
 // ADR-0049 decision 3: an owner invites a person into the workspace.
+function mountRemoval(app: Hono, roles: WorkspaceRoles, keeper: WorkspacePeopleKeeper): void {
+  app.delete('/api/workspaces/:workspace/people/:userId', async (c) => {
+    const workspaceId = await ownedBy(c, keeper)
+    if (workspaceId === null) return refuse(c, 'not_an_owner')
+    const userId = c.req.param('userId')
+    const removed = await roles.remove(workspaceId, userId)
+    if (removed !== 'ok') return refuseChange(c, removed)
+    // First, before anything that can fail: a stream they already hold would
+    // otherwise keep delivering the workspace (ADR-0042).
+    endSyncStreamsOf(userId)
+    await keeper.afterRemove?.(userId)
+    return c.json(removeWorkspacePersonResponseSchema.parse({ removed: true }), 200)
+  })
+}
+
 function mountInvitations(app: Hono, keeper: WorkspacePeopleKeeper): void {
   const { invitations } = keeper
   if (invitations === undefined) return
@@ -133,17 +148,7 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
     return c.json(await personIn(workspaceId, userId), 200)
   })
 
-  app.delete('/api/workspaces/:workspace/people/:userId', async (c) => {
-    const workspaceId = await ownedWorkspace(c)
-    if (workspaceId === null) return refuse(c, 'not_an_owner')
-    const userId = c.req.param('userId')
-    const removed = await roles.remove(workspaceId, userId)
-    if (removed !== 'ok') return refuseChange(c, removed)
-    await keeper.afterRemove?.(userId)
-    endSyncStreamsOf(userId)
-    return c.json(removeWorkspacePersonResponseSchema.parse({ removed: true }), 200)
-  })
-
+  mountRemoval(app, roles, keeper)
   mountInvitations(app, keeper)
 
   return app

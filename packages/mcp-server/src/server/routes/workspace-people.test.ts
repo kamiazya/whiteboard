@@ -8,7 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import { createInvitationStore, type InvitationStore } from '../security/invitation-store.js'
 import {
@@ -21,7 +21,10 @@ import { createServerModeApiAuthMiddleware } from '../security/server-mode-middl
 import { createSignInSessionStore } from '../security/sign-in-session-store.js'
 import { createWorkspaceRoles } from '../security/workspace-roles.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
+import { endSyncStreamsOf } from './sync-sse.js'
 import { createWorkspacePeopleRouter } from './workspace-people.js'
+
+vi.mock('./sync-sse.js', () => ({ endSyncStreamsOf: vi.fn() }))
 
 const AUTHENTICATOR = 'oidc:https://idp.test'
 
@@ -54,6 +57,7 @@ async function call(as: string, method: string, path: string, body?: object) {
 }
 
 beforeEach(async () => {
+  afterRemove = async () => {}
   root = await mkdtemp(join(tmpdir(), 'wb-workspace-people-'))
   handle = await createIsolatedDb({ dataDir: root })
   members = createMemberProfileStore(handle.db)
@@ -81,14 +85,36 @@ beforeEach(async () => {
     }),
   )
   const keeper = serverModePeopleKeeper({ members, invitations, origin: 'https://wb.test' })
-  app.route('/', createWorkspacePeopleRouter({ members, roles, keeper }))
+  app.route(
+    '/',
+    createWorkspacePeopleRouter({
+      members,
+      roles,
+      keeper: { ...keeper, afterRemove: (id) => afterRemove(id) },
+    }),
+  )
 })
+
+// What a keeper does after a removal (the local daemon revokes tokens there);
+// one test makes it fail.
+let afterRemove: (profileId: string) => Promise<void> = async () => {}
 afterEach(async () => {
   await handle.dispose()
   await rm(root, { recursive: true, force: true })
 })
 
 describe('workspace people', () => {
+  // The removed person's open streams end before anything else can fail: a
+  // keeper hook that throws must not leave them delivering the workspace.
+  it('ends the removed person’s streams even when the keeper’s hook fails', async () => {
+    afterRemove = async () => {
+      throw new Error('token revocation failed')
+    }
+    vi.mocked(endSyncStreamsOf).mockClear()
+    await call('ada', 'DELETE', `/people/${ids.bob}`).catch(() => undefined)
+    expect(vi.mocked(endSyncStreamsOf)).toHaveBeenCalledWith(ids.bob)
+  })
+
   it('lists the people and their roles to any member', async () => {
     const listed = await call('bob', 'GET', '/people')
     expect(listed.status).toBe(200)
