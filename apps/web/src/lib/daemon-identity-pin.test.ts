@@ -61,6 +61,11 @@ describe('daemon identity pin store', () => {
     // Re-pinning (the user's own consent on /pair) still works over it.
     pinIdentity('http://127.0.0.1:3099', { alg: 'Ed25519', publicKey: 'key-b' }, storage)
     expect(pinnedKey('http://127.0.0.1:3099', storage)).toBe('key-b')
+    // Which OTHER daemons the lost store pinned cannot be known, so they stay
+    // unreadable rather than turning into never-pinned ones renewed unverified.
+    expect(pinnedKey('http://127.0.0.1:3100', storage)).toBe('unreadable')
+    pinIdentity('http://127.0.0.1:3100', { alg: 'Ed25519', publicKey: 'key-c' }, storage)
+    expect(pinnedKey('http://127.0.0.1:3100', storage)).toBe('key-c')
   })
 })
 

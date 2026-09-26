@@ -10,6 +10,10 @@ import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-daemon-client/
 import { z } from 'zod'
 
 const PINS_KEY = 'whiteboard:daemon-identity-pins'
+// A pin store that was replaced because it was not a JSON object, kept as it
+// was. Its presence means some daemons' pins are lost and unknowable, so a
+// daemon with no pin of its own reads as unreadable rather than as none.
+const LOST_PINS_KEY = 'whiteboard:daemon-identity-pins:lost'
 
 const pinSchema = z
   .object({
@@ -64,7 +68,9 @@ export function readPinnedIdentity(
   const pins = rawPins(storage)
   if (pins === 'unreadable') return { kind: 'unreadable' }
   const key = normalize(daemonBaseUrl)
-  if (!Object.hasOwn(pins, key)) return { kind: 'none' }
+  if (!Object.hasOwn(pins, key)) {
+    return storage.getItem(LOST_PINS_KEY) === null ? { kind: 'none' } : { kind: 'unreadable' }
+  }
   const pin = pinSchema.safeParse(pins[key])
   return pin.success ? { kind: 'pinned', pin: pin.data } : { kind: 'unreadable' }
 }
@@ -72,17 +78,18 @@ export function readPinnedIdentity(
 /**
  * Entries this build cannot read are written back as they were: dropping
  * one would turn that daemon's pin into no pin. A store that is not a JSON
- * object has no entries to keep and is replaced.
+ * object has no entries to keep, so it is set aside under `LOST_PINS_KEY`
+ * and replaced — every daemon without a fresh pin then reads unreadable
+ * until its own consent re-pins it, including one that was never pinned,
+ * since the lost store cannot say which were.
  */
-// ponytail: replacing a non-object store forgets which OTHER daemons were
-// pinned, so they renew unverified until re-paired; only this app writes the
-// key, so the store being garbage at all is already a damaged profile.
 export function pinIdentity(
   daemonBaseUrl: string,
   identity: { alg: 'Ed25519'; publicKey: string },
   storage: StorageLike = globalThis.localStorage,
 ): void {
   const pins = rawPins(storage)
+  if (pins === 'unreadable') storage.setItem(LOST_PINS_KEY, storage.getItem(PINS_KEY) ?? '')
   storage.setItem(
     PINS_KEY,
     JSON.stringify({
