@@ -89,6 +89,8 @@ describe('the server-mode record', () => {
 })
 
 describe('the daemon record', () => {
+  // ESRCH on every platform: no pid is this large.
+  const DEAD_PID = 999_999_999
   const recordArb = arbitraryForSchema(daemonRecordSchema)
 
   fcTest.prop([recordArb], withDefaults({ numRuns: 100 }))(
@@ -105,7 +107,11 @@ describe('the daemon record', () => {
     'is reported token-missing, with the rest intact, when the token is empty or absent',
     async (record, token) => {
       const dataDir = await freshDir('daemon-tokenless')
-      const { token: _dropped, ...base } = record
+      // A pid no process holds: a record the loader cannot use that names a
+      // LIVE pid is refused rather than read as none (daemon-registry.test.ts
+      // holds that case), and a generated pid can be a live one — pid 1.
+      const { token: _dropped, ...rest } = record
+      const base = { ...rest, pid: DEAD_PID }
       await saveDaemonRecord({ ...base, token: token as string }, dataDir)
       expect(await loadDaemonRecord(dataDir)).toBeNull()
       expect(await parseDaemonRecord(dataDir)).toEqual({

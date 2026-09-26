@@ -2,7 +2,11 @@ import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { platform } from 'node:os'
 import { join } from 'node:path'
 import { DATA_DIR } from '../shared/data-dir-secure.js'
-import { type DaemonRecord, daemonRecordSchema } from './daemon-record-schema.js'
+import {
+  type DaemonRecord,
+  daemonRecordBaseSchema,
+  daemonRecordSchema,
+} from './daemon-record-schema.js'
 
 export type { DaemonRecord } from './daemon-record-schema.js'
 
@@ -20,12 +24,19 @@ export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
 /**
  * The running daemon's record, or `null` when there is none.
  *
- * "None" is ENOENT, and a record that does not parse (its writes are atomic,
- * so that is a foreign or damaged file, not a half-written one). A record
- * that exists but cannot be READ is neither: `ensure-daemon` answers `null`
- * by deleting the record and spawning a new daemon with a new token, which
- * for an unreadable record orphans the daemon still running under it. So
- * that failure throws, naming the file.
+ * `null` is what `ensure-daemon` answers by deleting the record and spawning
+ * a new daemon with a new token, so it is only returned where that is safe:
+ * ENOENT; text that is not a JSON object (writes are atomic, so that is a
+ * damaged file, not a half-written one, and it names no process); and a
+ * record this build cannot interpret whose `pid` is not running.
+ *
+ * Two cases throw instead, each naming the file, because answering `null`
+ * would start a second daemon beside one still serving:
+ * - the record exists but cannot be READ;
+ * - the record cannot be interpreted but names a pid that is ALIVE — likeliest
+ *   a daemon of another version, whose record this schema refuses.
+ * A live pid can also be an unrelated process that reused it; the message
+ * says to remove the file then, since only a person can tell the two apart.
  */
 export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<DaemonRecord | null> {
   const path = getDaemonRecordPath(dataDir)
@@ -43,7 +54,15 @@ export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<Daem
     return null
   }
   const result = daemonRecordSchema.safeParse(raw)
-  return result.success ? result.data : null
+  if (result.success) return result.data
+  const named = daemonRecordBaseSchema.pick({ pid: true }).safeParse(raw)
+  if (named.success && isPidAlive(named.data.pid)) {
+    throw new Error(
+      `the daemon record ${path} cannot be interpreted by this version, but names pid ${named.data.pid}, which is running. ` +
+        'If that is a whiteboard daemon of another version, stop it with that version; if it is not a daemon, remove the file.',
+    )
+  }
+  return null
 }
 
 export async function saveDaemonRecord(

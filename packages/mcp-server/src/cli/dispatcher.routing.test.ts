@@ -216,6 +216,36 @@ describe('dispatcher routing: whiteboard daemon stop', () => {
     expect(vi.mocked(daemonStopModule.runDaemonStop)).toHaveBeenCalledOnce()
   })
 
+  it('reports a thrown error as one stderr line and exit 1, with stdout empty', async () => {
+    // A daemon record this build cannot interpret but that names a live pid
+    // throws rather than reading as "none running"; that refusal is an answer
+    // for a person, not a stack trace, and stdout stays JSON-clean.
+    vi.mocked(daemonStopModule.runDaemonStop).mockRejectedValueOnce(
+      new Error('the daemon record x cannot be interpreted by this version'),
+    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'stop', '--json']))
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe('')
+    expect(stderr).toBe(
+      'whiteboard daemon stop: the daemon record x cannot be interpreted by this version\n',
+    )
+  })
+
+  it('keeps a message that carries line breaks to that one line', async () => {
+    // The message names a path, and a path may hold a newline.
+    vi.mocked(daemonStopModule.runDaemonStop).mockRejectedValueOnce(
+      new Error('the daemon record /tmp/a\r\nb/daemon.json cannot be read'),
+    )
+    const { stderr } = await captureStdio(() => main(['daemon', 'stop', '--json']))
+    expect(stderr).toBe(
+      'whiteboard daemon stop: the daemon record /tmp/a b/daemon.json cannot be read\n',
+    )
+  })
+
   it('USAGE includes `whiteboard daemon stop`', () => {
     expect(USAGE).toMatch(/whiteboard daemon stop/)
   })
