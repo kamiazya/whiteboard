@@ -15,7 +15,7 @@
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { getLogger } from '../log.js'
-import { readBackupBlobManifest } from './backup-blob-mirror.js'
+import { BackupManifestUnusableError, readBackupBlobManifest } from './backup-blob-mirror.js'
 import { collectableFromBackup } from './backup-retention.js'
 
 const log = getLogger('backup-mirror-retention')
@@ -73,7 +73,14 @@ export async function collectMirroredBlobs(backupRoot: string): Promise<number> 
 
   const retained = entries.filter((name) => BACKUP_DIR_NAME.test(name))
   const manifests = await Promise.all(
-    retained.map((name) => readBackupBlobManifest(join(backupRoot, name))),
+    retained.map((name) =>
+      // A manifest that is there but unusable says nothing about what its
+      // backup needs, the same as no manifest: this pass stands down.
+      readBackupBlobManifest(join(backupRoot, name)).catch((err: unknown) => {
+        if (err instanceof BackupManifestUnusableError) return null
+        throw err
+      }),
+    ),
   )
   const silent = retained.filter((_name, index) => manifests[index] === null)
   if (silent.length > 0) {

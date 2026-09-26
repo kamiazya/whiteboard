@@ -154,6 +154,19 @@ describe('collecting from the blob mirror', () => {
     expect(await mirroredDigests('blobs')).toEqual([blob])
   })
 
+  it('refuses to collect anything when a backup manifest is there but damaged', async () => {
+    const blob = await mirrorBlob('would be collected by a careless pass')
+    await backupReferencing('2026-03-04T00-00-00.000Z', [])
+    const damaged = join(backupRoot, '2026-03-05T00-00-00.000Z')
+    await mkdir(damaged, { recursive: true })
+    await writeFile(join(damaged, 'blobs.json'), '{ damaged')
+
+    const collected = await collectMirroredBlobs(backupRoot)
+
+    expect(collected).toBe(0)
+    expect(await mirroredDigests('blobs')).toEqual([blob])
+  })
+
   /**
    * Retention counts BACKUPS, and so must this: an operator's own directory
    * sitting in the backup root is not a backup and must not be read as one

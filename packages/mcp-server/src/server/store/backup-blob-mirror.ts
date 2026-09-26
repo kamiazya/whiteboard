@@ -282,8 +282,14 @@ async function walkFiles(
  * inside itself, and reading it as "references nothing" would let retention
  * collect every blob a mirrored backup beside it still needs.
  *
- * Fails to `null` rather than throwing, for the same reason: an unreadable
- * manifest must not be read as an empty one.
+ * `null` means the backup has NO manifest, and only that. A manifest that is
+ * there but cannot be read or parsed throws `BackupManifestUnusableError`:
+ * the file's presence says the backup DID use the mirror, so reading it as
+ * "pre-mirror" is as wrong as reading it as empty. Restore read it that way
+ * once, copied the mirror's own stores into the data directory as if they
+ * were the backup's blobs, and reported success over documents pointing at
+ * nothing. Each caller decides what an unusable manifest costs it —
+ * retention collects nothing, restore refuses.
  */
 export async function readBackupBlobManifest(
   backupDir: string,
@@ -291,39 +297,51 @@ export async function readBackupBlobManifest(
   let raw: string
   try {
     raw = await readFile(join(backupDir, BLOB_MANIFEST_FILENAME), 'utf8')
-  } catch {
-    return null
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw new BackupManifestUnusableError(backupDir, 'cannot be read', err)
   }
+  let json: unknown
   try {
-    const json: unknown = JSON.parse(raw)
-    const parsed = manifestSchema.safeParse(json)
-    if (parsed.success) {
-      return {
-        tenants: Object.fromEntries(
-          Object.entries(parsed.data.tenants).map(([tenantId, refs]) => [
-            tenantId,
-            { blobs: new Set(refs.blobs), files: refs.files },
-          ]),
-        ),
-        mirror: parsed.data.mirror,
-      }
+    json = JSON.parse(raw)
+  } catch (err) {
+    throw new BackupManifestUnusableError(backupDir, 'is not JSON', err)
+  }
+  const parsed = manifestSchema.safeParse(json)
+  if (parsed.success) {
+    return {
+      tenants: Object.fromEntries(
+        Object.entries(parsed.data.tenants).map(([tenantId, refs]) => [
+          tenantId,
+          { blobs: new Set(refs.blobs), files: refs.files },
+        ]),
+      ),
+      mirror: parsed.data.mirror,
     }
-    // A backup taken before tenants existed: one keeper, one set, and the
-    // tenant it belongs to is the one that keeper had.
-    const legacy = legacyManifestSchema.safeParse(json)
-    if (legacy.success) {
-      return {
-        tenants: {
-          [SELF_HOST_TENANT_ID]: { blobs: new Set(legacy.data.blobs), files: legacy.data.files },
-        },
-        mirror: legacy.data.mirror,
-      }
+  }
+  // A backup taken before tenants existed: one keeper, one set, and the
+  // tenant it belongs to is the one that keeper had.
+  const legacy = legacyManifestSchema.safeParse(json)
+  if (legacy.success) {
+    return {
+      tenants: {
+        [SELF_HOST_TENANT_ID]: { blobs: new Set(legacy.data.blobs), files: legacy.data.files },
+      },
+      mirror: legacy.data.mirror,
     }
-    log.warning({ backupDir }, 'blob manifest does not parse; treating the backup as unmirrored')
-    return null
-  } catch {
-    log.warning({ backupDir }, 'blob manifest is not readable JSON; treating it as unmirrored')
-    return null
+  }
+  throw new BackupManifestUnusableError(backupDir, 'does not match any manifest version', undefined)
+}
+
+/** A backup's blob manifest is present but cannot be used; see `readBackupBlobManifest`. */
+export class BackupManifestUnusableError extends Error {
+  constructor(
+    readonly backupDir: string,
+    why: string,
+    cause: unknown,
+  ) {
+    super(`the blob manifest of backup ${backupDir} ${why}`, { cause })
+    this.name = 'BackupManifestUnusableError'
   }
 }
 
