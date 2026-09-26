@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import type { ServerModeAppOptions } from './app.js'
+import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './routes/sync-sse.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
 import { createInvitationStore } from './security/invitation-store.js'
@@ -103,6 +104,7 @@ beforeEach(async () => {
   app = createApp(options)
 })
 afterEach(async () => {
+  resetSyncStreamsForTests()
   await handle.dispose()
   await rm(tempDir, { recursive: true, force: true })
 })
@@ -130,6 +132,72 @@ async function listed(headers: Record<string, string>): Promise<string[]> {
   const body = (await res.json()) as { workspaces: { displayName?: string }[] }
   return body.workspaces.map((w) => w.displayName ?? '')
 }
+
+/** A sync stream opened as `headers`, subscribed to one workspace's record. */
+async function followed(headers: Record<string, string>, workspaceId: string) {
+  const res = await app.request(`${PUBLIC_URL}/api/sync/stream`, { headers })
+  const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+  const ready = new TextDecoder().decode((await reader.read()).value)
+  const { streamId } = JSON.parse(ready.split('data:')[1] ?? '{}') as { streamId: string }
+  const subscribed = await app.request(`${PUBLIC_URL}/api/sync/subscribe`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ streamId, subscribe: [`workspace:${workspaceId}`] }),
+  })
+  expect(subscribed.status).toBe(200)
+  return reader
+}
+
+/** What the stream delivers next: an update's text, or `closed`. */
+async function next(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  const read = await reader.read()
+  return read.done ? 'closed' : new TextDecoder().decode(read.value)
+}
+
+describe('server mode — a stream open before someone loses access ends with it', () => {
+  // ADR-0049 decision 4: deactivation ends a person's sessions at once — the
+  // stream they already hold included, not only the requests they make next.
+  it('ends a deactivated person’s open sync stream', async () => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    const adaId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'ada' }))?.id
+    const bobId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'bob' }))?.id
+    await createTenantAdministratorStore(handle.db).appoint(adaId as string, null)
+    const { workspaceId } = (await (await create(bob, 'Plans')).json()) as { workspaceId: string }
+    const stream = await followed(bob, workspaceId)
+
+    const res = await app.request(`${PUBLIC_URL}/api/people/${bobId}/deactivation`, {
+      method: 'POST',
+      headers: ada,
+    })
+    expect(res.status).toBe(200)
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1, 2, 3]))
+    expect(await next(stream)).toBe('closed')
+  })
+
+  it('ends the open sync stream of someone removed from a workspace', async () => {
+    const ada = await signedIn('ada')
+    const bob = await signedIn('bob')
+    const bobId = (await members.profileForBinding({ authenticator: ISSUER, subject: 'bob' }))?.id
+    const { workspaceId } = (await (await create(ada, 'Plans')).json()) as { workspaceId: string }
+    const people = `${PUBLIC_URL}/api/workspaces/${workspaceId}/people`
+    await app.request(people, {
+      method: 'POST',
+      headers: { ...ada, 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: bobId }),
+    })
+    const stream = await followed(bob, workspaceId)
+    const bystander = await followed(ada, workspaceId)
+
+    expect(
+      (await app.request(`${people}/${bobId}`, { method: 'DELETE', headers: ada })).status,
+    ).toBe(200)
+    sseBroadcastWorkspaceUpdate(workspaceId, new Uint8Array([1, 2, 3]))
+    expect(await next(stream)).toBe('closed')
+    // Only the person who lost access: the owner still following it is not.
+    expect(await next(bystander)).toMatch(/^event: update/)
+  })
+})
 
 describe('server mode — a workspace belongs to the people in it', () => {
   it('makes the creator its first member, and shows it to nobody else', async () => {

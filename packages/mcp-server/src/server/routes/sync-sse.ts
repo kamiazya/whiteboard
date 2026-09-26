@@ -95,6 +95,9 @@ interface SyncStreamDoc {
 interface SyncStream {
   docs: Map<string, SyncStreamDoc>
   send: (event: string, data: string) => void
+  /** The user who opened it, where the keeper knows people; null otherwise. */
+  userId: string | null
+  end: () => void
 }
 
 const streams = new Map<string, SyncStream>()
@@ -186,6 +189,22 @@ export function sseBroadcastTextToReady(workspaceId: string, path: string, raw: 
   }
 }
 
+/**
+ * Ends every stream a user holds (ADR-0049 decision 4, ADR-0042): losing access
+ * — deactivated, or removed from a workspace — takes effect on the stream they
+ * already have open, not only on the requests they make next. Membership is
+ * checked when a stream subscribes, so a closed stream is how the client
+ * learns to ask again, and asking again is refused where it no longer may.
+ */
+export function endSyncStreamsOf(userId: string): void {
+  for (const [streamId, stream] of streams) {
+    if (stream.userId !== userId) continue
+    streams.delete(streamId)
+    stream.end()
+    log.info({ streamId }, 'sync stream ended: its user lost access')
+  }
+}
+
 // Test-only: the module-level registry outlives a single app instance, so a
 // test that opens a stream would otherwise leak a subscriber into the next one.
 export function resetSyncStreamsForTests(): void {
@@ -220,6 +239,8 @@ export interface SyncSseRouterOptions {
   /** S8 slice 2: the membership gate. Absent means no gate at all
    *  (server-mode, and any composition that has not wired members). */
   admit?: WorkspaceAdmit
+  /** Whose stream this is, so losing access can end it. Absent: nobody's. */
+  userOf?: (c: Context) => Promise<string | null>
 }
 
 /**
@@ -296,6 +317,7 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
     // subscriptions behind its back. Delivered as the first frame, so holding
     // it is what proves the stream is yours.
     const streamId = globalThis.crypto.randomUUID()
+    const userId = (await options.userOf?.(c)) ?? null
     // nginx otherwise holds a proxied stream in a buffer, delaying every update.
     c.header('X-Accel-Buffering', 'no')
 
@@ -305,6 +327,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions = {}) {
         send: (event, data) => {
           void stream.writeSSE({ event, data })
         },
+        userId,
+        end: () => stream.abort(),
       }
       streams.set(streamId, entry)
       const ready: SyncReadyEvent = { streamId }
