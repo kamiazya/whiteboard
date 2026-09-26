@@ -656,7 +656,7 @@ try {
   // member's still-pinned passkey binds again, the bound retry is refused
   // `not_a_member`, and that refusal lands on `replica-state-removed`.
   // ==================================================================
-  const removed = await operator(`/api/workspaces/${workspaceId}/members/${profileId}`, {
+  const removed = await operator(`/api/workspaces/${workspaceId}/people/${profileId}`, {
     method: 'DELETE',
   })
   check(
