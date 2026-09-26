@@ -124,6 +124,19 @@ describe('sign-in through a trusted reverse proxy', () => {
     expect((await signIn.members.profileForBinding(person as never))?.displayName).toBe('Ada')
   })
 
+  // ADR-0051: a proxy cannot be asked to sign someone in again, so a proxy
+  // session is not sent anywhere to re-authenticate — and says no time.
+  it('refuses to re-authenticate a session the proxy opened', async () => {
+    const { app, signIn } = appFor({ createAccounts: true })
+    const res = await signInThrough(app, { 'X-Forwarded-User': 'ada' })
+    const session = cookieFrom(res, SESSION_COOKIE) as string
+    expect((await signIn.sessions.open(session, Date.now()))?.authenticatedAt).toBeNull()
+    const again = await app.request(`${BASE}/auth/reauthenticate`, {
+      headers: { cookie: `${SESSION_COOKIE}=${session}` },
+    })
+    expect(again.headers.get('location')).toBe('/sign-in?error=reauthentication_unavailable')
+  })
+
   // The header is whatever the caller typed unless the proxy set it.
   it('refuses the identity header from any other address', async () => {
     const { app } = appFor({ createAccounts: true })

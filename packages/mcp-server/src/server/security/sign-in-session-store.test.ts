@@ -48,6 +48,16 @@ describe('sign-in sessions', () => {
     expect(rows).toHaveLength(1)
   })
 
+  // ADR-0051 decision 5: administration asks how recently the provider
+  // authenticated the person, which the session carries from its sign-in.
+  it('opens to the person and when the provider authenticated them, or null when it did not say', async () => {
+    const said = await sessions.create(person, T0, 1000, T0 - 30)
+    const silent = await sessions.create(person, T0, 1000)
+    expect(await sessions.open(said, T0 + 1)).toEqual({ person, authenticatedAt: T0 - 30 })
+    expect(await sessions.open(silent, T0 + 1)).toEqual({ person, authenticatedAt: null })
+    expect(await sessions.open(said, T0 + 1000)).toBeNull()
+  })
+
   it('belongs to the tenant it was opened in', async () => {
     const token = await sessions.create(person, T0, 1000)
     const other = createSignInSessionStore(tenantDatabase(handle.rawDb, 'tenant-two'))

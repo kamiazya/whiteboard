@@ -17,7 +17,11 @@ import {
 } from '../security/member-profile-store.js'
 import type { AsyncAuthStrategy } from '../security/oauth-resource-strategy.js'
 import { createServerModeApiAuthMiddleware } from '../security/server-mode-middleware.js'
-import { createSignInSessionStore } from '../security/sign-in-session-store.js'
+import {
+  createSignInSessionStore,
+  SESSION_COOKIE,
+  type SignInSessionStore,
+} from '../security/sign-in-session-store.js'
 import { createTenantAdministratorStore } from '../security/tenant-administrator-store.js'
 import { createUserDeactivation } from '../security/user-deactivation.js'
 import { createUserDeletion } from '../security/user-deletion.js'
@@ -45,13 +49,35 @@ let invitations: InvitationStore
 let app: Hono
 const ids: Record<string, string> = {}
 
-async function call(as: string, method: string, path: string, body?: object) {
-  const res = await app.request(`/api${path}`, {
+let sessions: SignInSessionStore
+const ORIGIN = 'https://wb.test'
+const MINUTE = 60_000
+
+async function request(
+  method: string,
+  path: string,
+  headers: Record<string, string>,
+  body?: object,
+) {
+  const res = await app.request(`${ORIGIN}/api${path}`, {
     method,
-    headers: { authorization: `Bearer ${as}`, 'content-type': 'application/json' },
+    headers: { ...headers, 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   return { status: res.status, body: (await res.json()) as Record<string, unknown> }
+}
+
+/** As `as`, signed in at the provider `ageMs` ago — administration's case. */
+async function call(as: string, method: string, path: string, body?: object, ageMs = 0) {
+  const binding = { authenticator: AUTHENTICATOR, subject: as }
+  const now = Date.now()
+  const token = await sessions.create(binding, now, 60 * MINUTE, now - ageMs)
+  return request(method, path, { cookie: `${SESSION_COOKIE}=${token}`, origin: ORIGIN }, body)
+}
+
+/** As `as`, holding a bearer: no browser to send back to the provider. */
+function callWithBearer(as: string, method: string, path: string, body?: object) {
+  return request(method, path, { authorization: `Bearer ${as}` }, body)
 }
 
 beforeEach(async () => {
@@ -74,9 +100,10 @@ beforeEach(async () => {
     members,
     configured: [{ authenticator: AUTHENTICATOR, subject: 'cy' }],
   })
+  sessions = createSignInSessionStore(handle.db)
   const people = {
     members,
-    sessions: createSignInSessionStore(handle.db),
+    sessions,
     roles: createWorkspaceRoles(handle.db),
     invitations,
     administration: {
@@ -85,7 +112,7 @@ beforeEach(async () => {
       deactivation: createUserDeactivation(handle.db),
       deletion: createUserDeletion(handle.db, async () => true),
     },
-    origin: 'https://wb.test',
+    origin: ORIGIN,
   }
   app = new Hono()
   app.use('/api/*', createServerModeApiAuthMiddleware(strategy, people))
@@ -204,6 +231,60 @@ describe('tenant people', () => {
     })
     const people = (await call('ada', 'GET', '/people')).body.people as { userId: string }[]
     expect(people.map((p) => p.userId)).not.toContain(ids.bob)
+  })
+
+  // ADR-0051 decision 5: an administrator's action needs a sign-in at the
+  // provider no older than 15 minutes, and a bearer can never administer.
+  // Listing people is not an action.
+  it('asks for a recent sign-in before an administrator acts, and refuses a bearer', async () => {
+    expect((await callWithBearer('ada', 'GET', '/people')).status).toBe(200)
+    expect(await callWithBearer('ada', 'POST', `/people/${ids.bob}/deactivation`)).toMatchObject({
+      status: 403,
+      body: { error: 'sign_in_required' },
+    })
+    const stale = await call(
+      'ada',
+      'POST',
+      `/people/${ids.bob}/deactivation`,
+      undefined,
+      16 * MINUTE,
+    )
+    expect(stale).toMatchObject({ status: 403, body: { error: 'reauthentication_required' } })
+    expect((await call('ada', 'GET', '/people', undefined, 16 * MINUTE)).status).toBe(200)
+    const fresh = await call(
+      'ada',
+      'POST',
+      `/people/${ids.bob}/deactivation`,
+      undefined,
+      14 * MINUTE,
+    )
+    expect(fresh.status).toBe(200)
+    for (const [method, path] of [
+      ['DELETE', `/people/${ids.bob}/deactivation`],
+      ['DELETE', `/people/${ids.bob}`],
+      ['PUT', `/people/${ids.bob}/administrator`],
+      ['DELETE', `/people/${ids.cy}/administrator`],
+      ['POST', '/invitations'],
+    ] as const) {
+      expect((await call('ada', method, path, {}, 16 * MINUTE)).body.error).toBe(
+        'reauthentication_required',
+      )
+    }
+  })
+
+  // A provider that does not send `auth_time` leaves a session that cannot say
+  // how recent it is, which is not recent enough.
+  it('refuses a session whose provider did not say when it authenticated', async () => {
+    const token = await sessions.create(
+      { authenticator: AUTHENTICATOR, subject: 'ada' },
+      Date.now(),
+      MINUTE,
+    )
+    const res = await request('POST', `/people/${ids.bob}/deactivation`, {
+      cookie: `${SESSION_COOKIE}=${token}`,
+      origin: ORIGIN,
+    })
+    expect(res).toMatchObject({ status: 403, body: { error: 'reauthentication_required' } })
   })
 
   // ADR-0049 decision 3: an administrator's invitation names no workspace and

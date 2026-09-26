@@ -67,6 +67,9 @@ export interface ResolvedGrant {
    *  becomes a person's session this way, never through `subject`, which
    *  names an OAuth client rather than a person. */
   readonly person?: AuthenticatorBinding
+  /** A `signed-in` grant only: when the person's provider last authenticated
+   *  them (ADR-0051), null when it did not say. Administration reads it. */
+  readonly authenticatedAt?: number | null
 }
 
 /**

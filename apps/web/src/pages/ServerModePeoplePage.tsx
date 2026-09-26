@@ -6,12 +6,13 @@
  * answered, including a refusal in the keeper's own words.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { WorkspacePeopleList } from '../components/people/WorkspacePeopleList.js'
 import { Button } from '../components/ui/button.js'
 import {
   type InvitationLink,
   type Outcome,
+  type Refused,
   type TenantPerson,
   tenantPeople,
   workspacePeople,
@@ -49,10 +50,10 @@ function useKeeperList<T>(read: () => Promise<Outcome<T>>) {
 
 /** Runs one change and reloads, keeping the keeper's refusal to show. */
 function useChange(reload: () => void) {
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refused | null>(null)
   const run = async (change: () => Promise<Outcome<unknown>>) => {
     const outcome = await change()
-    setRefusal(outcome.ok ? null : outcome.message)
+    setRefusal(outcome.ok ? null : outcome)
     reload()
   }
   return [refusal, run] as const
@@ -98,37 +99,43 @@ function InvitationLinkField({ link }: { link: InvitationLink }) {
  */
 function InvitationControl({ create }: { create: () => Promise<Outcome<InvitationLink>> }) {
   const [link, setLink] = useState<InvitationLink | null>(null)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refused | null>(null)
   const make = async () => {
     const outcome = await create()
     if (outcome.ok) {
       setLink(outcome.value)
       setRefusal(null)
-    } else setRefusal(outcome.message)
+    } else setRefusal(outcome)
   }
   return (
     <section className="flex flex-col gap-2">
       <Button variant="outline" className="self-start" onClick={() => void make()}>
         Create invitation link
       </Button>
-      {refusal !== null && (
-        <p role="alert" className="text-sm text-destructive">
-          {refusal}
-        </p>
-      )}
+      {refusal !== null && <Refusal refusal={refusal} />}
       {/* Keyed on the link, so a new one starts uncopied. */}
       {link !== null && <InvitationLinkField key={link.url} link={link} />}
     </section>
   )
 }
 
-function Refusal({ message }: { message: string | null }) {
+function Refusal({ refusal }: { refusal: Refused | null }) {
+  const { pathname, search } = useLocation()
+  const back = `/auth/reauthenticate?return=${encodeURIComponent(pathname + search)}`
   // Mounted even when empty: a live region inserted with its text already
-  // in it is not announced.
+  // in it is not announced. The sign-in is a full navigation to the keeper,
+  // which returns here; the change is then made again by the person.
   return (
-    <p role="alert" className="text-sm text-destructive">
-      {message ?? ''}
-    </p>
+    <div className="flex flex-col gap-1">
+      <p role="alert" className="text-sm text-destructive">
+        {refusal?.message ?? ''}
+      </p>
+      {refusal?.reauthenticate === true && (
+        <a href={back} className="self-start text-sm underline">
+          Sign in again
+        </a>
+      )}
+    </div>
   )
 }
 
@@ -187,7 +194,7 @@ export function TenantPeoplePage({ fetchFn, selfId }: { fetchFn: Fetch; selfId: 
   return (
     <Layout title="People on this server">
       <InvitationControl create={invite} />
-      <Refusal message={refusal ?? (list !== null && !list.ok ? list.message : null)} />
+      <Refusal refusal={refusal ?? (list !== null && !list.ok ? list : null)} />
       {list?.ok && (
         <ul className="flex flex-col">
           {list.value.people.map((person) => (

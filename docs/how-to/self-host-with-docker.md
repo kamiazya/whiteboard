@@ -325,6 +325,26 @@ available through `/api/people`:
 
 Everyone else gets `403 not_an_administrator`.
 
+**Every change an administrator makes needs a recent sign-in.** That covers
+deactivating, reactivating, deleting, appointing, dismissing and inviting;
+reading the list does not need one. The administrator must have signed in at
+the provider within the last 15 minutes. Otherwise the change is refused
+with `403 reauthentication_required`. The web app then offers **Sign in
+again**, which sends them back to the provider to sign in anew (OpenID
+Connect `prompt=login`) and returns them to the page. From there they make
+the change again.
+
+- The time is the ID token's `auth_time`. A provider that does not send it
+  leaves every session unable to administer, and the refusal is the same.
+- A provider behind a reverse proxy (`kind: trusted-header`) cannot be asked
+  to sign someone in again, so its administrators cannot make changes from
+  the web app.
+- A bearer token cannot make these changes at all (`403 sign_in_required`):
+  there is no browser to send back to the provider.
+
+The operator's commands below need none of this. Their trust is the machine
+that holds the data.
+
 ### Deactivating a user
 
 An administrator deactivates someone through `/api/people`, above. To shut
@@ -347,10 +367,12 @@ Deleting is for someone who should be forgotten, not only shut out. It is
 final and cannot be undone, so it takes two steps. Deactivate them first,
 and delete them when you are sure:
 
-```sh
-curl -X DELETE -H "Authorization: Bearer <an administrator's token>" \
-  https://whiteboard.example.com/api/people/<userId>
+```http
+DELETE /api/people/<userId>
 ```
+
+It is a change like the others above, so it needs a browser session signed in
+within the last 15 minutes.
 
 - It refuses someone who is not deactivated, with `409 not_deactivated`.
 - It refuses someone who is the only owner of a workspace, with

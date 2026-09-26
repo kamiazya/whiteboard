@@ -76,6 +76,24 @@ describe('completeSignIn — a person already here', () => {
     expect(await accountCount()).toBe(1)
   })
 
+  // ADR-0051 decision 5: administration asks how recently the provider
+  // authenticated the person, which the ID token's `auth_time` (seconds) says.
+  it('records when the provider authenticated the person, and nothing when it did not say', async () => {
+    const binding = { authenticator: providerAuthenticator(provider()), subject: 'ada-1' }
+    await deps.members.ensureProfile({ binding, displayName: 'Ada' })
+    const said = await completeSignIn(deps, {
+      provider: provider(),
+      claims: { ...ada, auth_time: 1_700_000_000 },
+      now: T0,
+    })
+    const silent = await completeSignIn(deps, { provider: provider(), claims: ada, now: T0 })
+    if (!said.ok || !silent.ok) throw new Error('sign-in refused')
+    expect((await deps.sessions.open(said.sessionToken, T0 + 1))?.authenticatedAt).toBe(
+      1_700_000_000_000,
+    )
+    expect((await deps.sessions.open(silent.sessionToken, T0 + 1))?.authenticatedAt).toBeNull()
+  })
+
   // Decision 5: rules are re-checked at EVERY sign-in, so a person who left
   // the allowed domain is refused even though their user still exists.
   it('refuses an existing user who no longer satisfies the rules', async () => {

@@ -1,9 +1,10 @@
 /**
  * ADR-0046 decision 1: sign-in at the tenant's host through a configured
- * OpenID Connect provider. Three routes and no more:
+ * OpenID Connect provider:
  *
  *   GET  /auth/sign-in/:providerId  — begin: redirect to the provider
  *   GET  /auth/callback/:providerId — finish: exchange, admit, open a session
+ *   GET  /auth/reauthenticate       — begin again, asking to sign in anew (ADR-0051)
  *   POST /auth/sign-out             — end this browser's session
  *
  * Everything that DECIDES is elsewhere and shared: the protocol checks are
@@ -26,7 +27,7 @@ import { type CompleteSignInDeps, completeSignIn } from '../security/complete-si
 import type { RelyingParty, ResolvedProvider } from '../security/oidc-relying-party.js'
 import type { VerifiedClaims } from '../security/sign-in-admission.js'
 import type { SignInAttemptStore } from '../security/sign-in-attempt-store.js'
-import type { TrustedHeaderProvider } from '../security/sign-in-config.js'
+import { providerAuthenticator, type TrustedHeaderProvider } from '../security/sign-in-config.js'
 import { SESSION_COOKIE } from '../security/sign-in-session-store.js'
 import {
   createTrustedIdentityReader,
@@ -74,7 +75,7 @@ interface Routing {
   readonly proxied: (c: Context, provider: TrustedHeaderProvider) => Promise<TrustedIdentity>
 }
 
-async function begin(c: Context, routing: Routing, provider: SignInRouteProvider) {
+async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
   const { deps, now, callbackUrl } = routing
   const invitation = c.req.query('invitation')
   const attempt = await deps.attempts.begin({
@@ -104,6 +105,7 @@ async function begin(c: Context, routing: Routing, provider: SignInRouteProvider
       state: attempt.state,
       nonce: attempt.nonce,
       codeVerifier: attempt.codeVerifier,
+      fresh,
     })
     .catch((err: unknown) => {
       log.warning({ providerId: provider.id, err }, 'the provider could not be reached')
@@ -174,6 +176,23 @@ async function finish(c: Context, routing: Routing, provider: SignInRouteProvide
     maxAge: Math.floor(deps.signIn.sessionTtlMs / 1000),
   })
   return c.redirect(attempt.returnTo, 302)
+}
+
+// ADR-0051 decision 5: administration asks for a recent sign-in, so a
+// signed-in person is sent back to the provider they signed in with, which
+// asks them to sign in again. A reverse proxy cannot be asked, and nobody
+// without a session has a provider to be sent back to.
+async function reauthenticate(c: Context, routing: Routing) {
+  const token = getCookie(c, SESSION_COOKIE)
+  const open =
+    token === undefined ? null : await routing.deps.signIn.sessions.open(token, routing.now())
+  const provider = routing.deps.providers.find(
+    (p) => open !== null && providerAuthenticator(p) === open.person.authenticator,
+  )
+  if (provider === undefined || provider.kind === 'trusted-header') {
+    return refusedTo(c, 'reauthentication_unavailable')
+  }
+  return begin(c, routing, provider, true)
 }
 
 // A callback is a browser navigation, so a refusal goes back to the web app's
@@ -249,6 +268,7 @@ export function createSignInRoutes(deps: SignInRoutesDeps): Hono {
   app.get('/auth/providers', (c) => c.json(listed))
   app.get('/auth/session', (c) => session(c, deps, routing.now))
   app.get('/auth/sign-in/:providerId', withProvider(begin))
+  app.get('/auth/reauthenticate', (c) => reauthenticate(c, routing))
   app.get('/auth/callback/:providerId', withProvider(finish))
   app.post('/auth/sign-out', (c) => signOut(c, deps))
   return app

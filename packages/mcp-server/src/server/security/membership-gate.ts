@@ -99,6 +99,22 @@ export function callerScopes(c: Context): readonly AuthScope[] {
   return grantOf(c)?.scopes ?? []
 }
 
+/**
+ * ADR-0051 decision 5: whether this request may administer the tenant — a
+ * session from a sign-in at the provider no older than `windowMs`. A bearer
+ * has no browser to send back to the provider, so it never may.
+ */
+export function administrationFreshness(
+  c: Context,
+  now: number,
+  windowMs: number,
+): 'fresh' | 'stale' | 'not-signed-in' {
+  const grant = grantOf(c)
+  if (grant?.kind !== 'signed-in') return 'not-signed-in'
+  const at = grant.authenticatedAt ?? null
+  return at !== null && now - at <= windowMs ? 'fresh' : 'stale'
+}
+
 /** The person the middleware authenticated this request as, if any. */
 export function callerPerson(c: Context): AuthenticatorBinding | undefined {
   return grantOf(c)?.person
