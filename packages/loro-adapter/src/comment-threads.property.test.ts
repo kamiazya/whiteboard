@@ -14,7 +14,8 @@ import {
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 function byId<T extends { id: string }>(items: readonly T[]): T[] {
-  return [...items].sort((a, b) => a.id.localeCompare(b.id))
+  // By code unit: a locale may collate two different ids as equal.
+  return [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
 /** Two replicas of the same document, synced up to the write just made. */
