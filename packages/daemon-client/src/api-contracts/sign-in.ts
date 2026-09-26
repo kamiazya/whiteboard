@@ -38,6 +38,7 @@ export const signInRefusalSchema = z.enum([
   'unknown_provider',
   'invitation_unusable',
   'no_subject',
+  'deactivated',
   'email_unverified',
   'email_domain_not_allowed',
   'hosted_domain_not_allowed',

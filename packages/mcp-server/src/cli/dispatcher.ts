@@ -51,6 +51,7 @@ whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
 whiteboard server grant-member   --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]
 whiteboard server grant-admin    --json --user=<id|name> [--remove] [--data-dir=<path>]
+whiteboard server deactivate-user --json --user=<id|name> [--reactivate] [--data-dir=<path>]
 whiteboard server add-user       --json --provider=<id> --subject=<sub> [--name=<display name>] [--data-dir=<path>]
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
@@ -293,6 +294,10 @@ async function dispatchServer(
   if (subcommand === 'grant-admin') {
     const { runServerGrantAdmin } = await import('./server-grant-admin.js')
     return await runServerGrantAdmin(rest)
+  }
+  if (subcommand === 'deactivate-user') {
+    const { runServerDeactivateUser } = await import('./server-deactivate-user.js')
+    return await runServerDeactivateUser(rest)
   }
   process.stderr.write(`Unknown server subcommand. Currently supported:\n  ${USAGE}`)
   return 64

@@ -18,6 +18,7 @@ import {
 import { createInvitationStore } from './invitation-store.js'
 import { createMemberProfileStore } from './member-profile-store.js'
 import { type OidcProvider, providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
+import { createUserDeactivation } from './user-deactivation.js'
 
 const HOUR = 60 * 60 * 1000
 const T0 = 1_800_000_000_000
@@ -87,6 +88,28 @@ describe('completeSignIn — a person already here', () => {
       now: T0,
     })
     expect(done).toEqual({ ok: false, reason: 'email_domain_not_allowed' })
+  })
+
+  // ADR-0049 decision 4: a deactivated user is refused by name, not taken for
+  // a newcomer — and an invitation they arrive with is left for somebody else.
+  it('refuses a deactivated user, opens no session and spends no link', async () => {
+    const binding = { authenticator: providerAuthenticator(provider()), subject: 'ada-1' }
+    const user = await deps.members.ensureProfile({ binding, displayName: 'Ada' })
+    await createUserDeactivation(handle.db).deactivate(user.id, T0)
+    const { token } = await deps.invitations.createLink({
+      invitedBy: 'p-bob',
+      now: T0,
+      ttlMs: HOUR,
+    })
+    const done = await completeSignIn(deps, {
+      provider: provider(),
+      claims: ada,
+      invitationToken: token,
+      now: T0 + 1,
+    })
+    expect(done).toEqual({ ok: false, reason: 'deactivated' })
+    expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(true)
+    expect(await accountCount()).toBe(1)
   })
 })
 

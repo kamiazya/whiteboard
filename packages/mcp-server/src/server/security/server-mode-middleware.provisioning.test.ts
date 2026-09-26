@@ -14,7 +14,8 @@ import { createMemberProfileStore, type MemberProfileStore } from './member-prof
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { createServerModeApiAuthMiddleware } from './server-mode-middleware.js'
 import { providerAuthenticator, signInConfigSchema } from './sign-in-config.js'
-import { createSignInSessionStore } from './sign-in-session-store.js'
+import { createSignInSessionStore, SESSION_COOKIE } from './sign-in-session-store.js'
+import { createUserDeactivation } from './user-deactivation.js'
 
 const ISSUER = 'https://idp.test'
 
@@ -119,5 +120,35 @@ describe('server mode — a bearer becoming a user', () => {
       headers: { authorization: 'Bearer other-app:ada' },
     })
     expect(res.status).toBe(200)
+  })
+})
+
+// ADR-0049 decision 4: a deactivated user is refused before any route, by a
+// bearer and by a session alike.
+describe('server mode — a deactivated user', () => {
+  const binding = { authenticator: providerAuthenticator({ issuer: ISSUER }), subject: 'ada' }
+
+  it('refuses their bearer, and does not make them a new user', async () => {
+    const user = await members.ensureProfile({ binding, displayName: 'Ada' })
+    await createUserDeactivation(handle.db).deactivate(user.id, 1)
+    const res = await appFor(ISSUER).request('/api/workspaces', {
+      headers: { authorization: 'Bearer claude-code:ada' },
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'deactivated' })
+    expect(await members.isDeactivated(binding)).toBe(true)
+  })
+
+  it('refuses a session that outlived the deactivation', async () => {
+    const user = await members.ensureProfile({ binding, displayName: 'Ada' })
+    await createUserDeactivation(handle.db).deactivate(user.id, 1)
+    // Deactivating ends the sessions it can see; this one stands for a
+    // sign-in that completed in the same moment.
+    const token = await createSignInSessionStore(handle.db).create(binding, Date.now(), 60_000)
+    const res = await appFor(ISSUER).request('/api/workspaces', {
+      headers: { cookie: `${SESSION_COOKIE}=${token}` },
+    })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'deactivated' })
   })
 })

@@ -247,6 +247,21 @@ candidates are printed.
 > and narrow it with `requiredClaims`. Then grant each existing workspace its
 > first member with `grant-member`.
 
+### Deactivating a user
+
+To shut someone out without losing anything they made, deactivate them from
+the machine that holds the data directory:
+
+```sh
+whiteboard server deactivate-user --json --user=<user id or display name> [--reactivate]
+```
+
+Their sessions end at once. After that, a sign-in is refused with
+`deactivated`, and any request with a session or bearer token gets `403`
+with the same reason. Their workspaces, memberships and documents are kept.
+`--reactivate` lets them back in with the access they had before, but they
+have to sign in again because their old sessions do not come back.
+
 ## Reverse proxy and TLS
 
 The container binds plain HTTP on port 3099 (loopback only in the provided

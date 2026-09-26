@@ -58,6 +58,7 @@ const memberProfileRowSchema = z
     accountId: z.string().min(1),
     createdAt: z.number(),
     updatedAt: z.number(),
+    deactivatedAt: z.number().nullable(),
   })
   .strict()
 
@@ -101,8 +102,12 @@ type MembershipRole = 'owner' | 'member'
 
 export interface MemberProfileStore {
   /** This tenant's user for whoever `binding` resolves to; null when the
-   *  binding names no account, or an account with no user here. */
+   *  binding names no account, an account with no user here, or a user an
+   *  administrator has deactivated — so every gate refuses them unasked. */
   profileForBinding(binding: AuthenticatorBinding): Promise<MemberProfile | null>
+  /** True when `binding` resolves to a user here who is deactivated: what
+   *  sign-in asks so it can say so instead of treating them as a newcomer. */
+  isDeactivated(binding: AuthenticatorBinding): Promise<boolean>
   ensureProfile(input: EnsureProfileInput): Promise<MemberProfile>
   listMembers(workspaceId: string): Promise<MemberProfile[]>
   /** Every user this tenant has, oldest first — what an operator picks from. */
@@ -208,6 +213,12 @@ async function accountFor(db: TenantScoped, { authenticator, subject }: Authenti
   return row?.accountId ?? null
 }
 
+// Whoever `binding` names here, deactivated or not.
+async function userForBinding(db: TenantScoped, binding: AuthenticatorBinding) {
+  const accountId = await accountFor(db, binding)
+  return accountId === null ? null : loadProfileWhere(db, 'accountId', accountId)
+}
+
 function toProfile(
   row: z.infer<typeof memberProfileRowSchema>,
   credentials: z.infer<typeof profileCredentialSchema>[],
@@ -235,19 +246,32 @@ async function loadProfileWhere(
 // per account per tenant, which the unique index also holds).
 async function insertUser(db: TenantScoped, accountId: string, displayName: string) {
   const now = Date.now()
-  const id = generateDocumentId()
-  await db
-    .insertInto('memberProfiles')
-    .values({ id, displayName, accountId, createdAt: now, updatedAt: now })
-    .execute()
-  return { id, now }
+  const row = {
+    id: generateDocumentId(),
+    displayName,
+    accountId,
+    createdAt: now,
+    updatedAt: now,
+    deactivatedAt: null,
+  }
+  await db.insertInto('memberProfiles').values(row).execute()
+  return row
 }
 
-export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
+// The store's methods that start from a binding: who it names, and minting
+// that person's user here. Each goes binding -> account -> this tenant's user.
+function bindingLookups(
+  db: TenantScoped,
+): Pick<MemberProfileStore, 'profileForBinding' | 'isDeactivated' | 'ensureProfile'> {
   return {
     async profileForBinding(binding) {
-      const accountId = await accountFor(db, binding)
-      return accountId === null ? null : loadProfileWhere(db, 'accountId', accountId)
+      const user = await userForBinding(db, binding)
+      return user !== null && user.deactivatedAt === null ? user : null
+    },
+
+    async isDeactivated(binding) {
+      const user = await userForBinding(db, binding)
+      return user !== null && user.deactivatedAt !== null
     },
 
     async ensureProfile({ binding, displayName }) {
@@ -261,26 +285,26 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
         if (known !== null) {
           const user = await loadProfileWhere(trx, 'accountId', known)
           if (user !== null) return user
-          const { id, now } = await insertUser(trx, known, displayName)
-          return toProfile(
-            { id, displayName, accountId: known, createdAt: now, updatedAt: now },
-            await passkeysOf(trx, known),
-          )
+          return toProfile(await insertUser(trx, known, displayName), await passkeysOf(trx, known))
         }
 
         const accountId = generateDocumentId()
-        const { id, now } = await insertUser(trx, accountId, displayName)
-        await trx.insertInto('accounts').values({ id: accountId, createdAt: now }).execute()
+        const user = await insertUser(trx, accountId, displayName)
+        const createdAt = user.createdAt
+        await trx.insertInto('accounts').values({ id: accountId, createdAt }).execute()
         await trx
           .insertInto('accountBindings')
-          .values({ ...binding, accountId, createdAt: now })
+          .values({ ...binding, accountId, createdAt })
           .execute()
-        return toProfile(
-          { id, displayName, accountId, createdAt: now, updatedAt: now },
-          await passkeysOf(trx, accountId),
-        )
+        return toProfile(user, await passkeysOf(trx, accountId))
       })
     },
+  }
+}
+
+export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
+  return {
+    ...bindingLookups(db),
 
     async listMembers(workspaceId) {
       const rows = await db

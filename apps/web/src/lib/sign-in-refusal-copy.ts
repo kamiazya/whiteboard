@@ -13,6 +13,7 @@ export const SIGN_IN_REFUSAL_COPY = {
   unknown_provider: 'That sign-in provider is not configured on this server.',
   invitation_unusable: 'That invitation has been used or has expired. Ask for a new one.',
   no_subject: 'The sign-in provider did not say who you are.',
+  deactivated: 'Your account on this server has been deactivated. Ask an administrator.',
   email_unverified: 'Your email address is not verified with the sign-in provider.',
   email_domain_not_allowed: 'Your email domain is not allowed on this server.',
   hosted_domain_not_allowed: 'Your organisation is not allowed on this server.',

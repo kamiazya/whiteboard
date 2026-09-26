@@ -69,7 +69,20 @@ async function serverModeGrant(
   people: ServerModePeople | undefined,
 ): Promise<GrantOutcome> {
   const signedIn = people === undefined ? undefined : await sessionGrant(c, people, requiredScopes)
-  return signedIn ?? bearerGrant(c, authStrategy, requiredScopes, people)
+  const outcome = signedIn ?? (await bearerGrant(c, authStrategy, requiredScopes, people))
+  return people === undefined ? outcome : refuseDeactivated(people, outcome)
+}
+
+// ADR-0049 decision 4. Every later gate already answers nobody for a
+// deactivated user; refusing here says so by name, and before a route can
+// treat them as a person without a user.
+async function refuseDeactivated(
+  people: ServerModePeople,
+  outcome: GrantOutcome,
+): Promise<GrantOutcome> {
+  const person = 'grant' in outcome ? outcome.grant.person : undefined
+  if (person === undefined || !(await people.members.isDeactivated(person))) return outcome
+  return { refusal: { status: 403, code: 'deactivated' } }
 }
 
 async function sessionGrant(

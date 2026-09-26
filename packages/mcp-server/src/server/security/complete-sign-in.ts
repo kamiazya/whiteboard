@@ -3,7 +3,8 @@
  * for a subject. This is the ONE place verified claims become a session, so
  * the order below is the policy, and no route can reorder it:
  *
- *   1. resolve the binding to this tenant's user, if there is one;
+ *   1. resolve the binding to this tenant's user, if there is one, and
+ *      refuse a user an administrator has deactivated;
  *   2. for a newcomer, find the invitation they arrived with;
  *   3. admit — the provider's rules, then code rules, then the route in;
  *   4. only then spend the invitation and create the user;
@@ -74,7 +75,7 @@ interface CompleteSignInInput {
   readonly now: number
 }
 
-type SignInRefusal = AdmissionRefusal | 'invitation_unusable' | 'no_subject'
+type SignInRefusal = AdmissionRefusal | 'invitation_unusable' | 'no_subject' | 'deactivated'
 
 type CompleteSignInResult =
   | { readonly ok: true; readonly sessionToken: string; readonly profile: MemberProfile }
@@ -131,6 +132,9 @@ export async function completeSignIn(
     subject: sub,
   }
 
+  // A deactivated user is nobody to `profileForBinding`, so without this they
+  // would be taken for a newcomer — and handed back their own user.
+  if (await deps.members.isDeactivated(binding)) return refuse('deactivated')
   const existing = await deps.members.profileForBinding(binding)
   // An existing user's invitation is left unspent: it was meant for somebody.
   const arrived: ArrivedWith = existing === null ? await arrivedWith(deps, input) : { kind: 'none' }
