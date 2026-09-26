@@ -22,12 +22,15 @@ import {
   generateKeyPairSync,
   type KeyObject,
 } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ed25519PublicKeyToDidKey } from '@kamiazya/whiteboard-daemon-client/api-contracts/did-key'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
-import { assertSecretFileIsOwnerOnly, writeSecretFileAtomicSync } from './secret-file-mode.js'
+import {
+  assertSecretFileIsOwnerOnly,
+  readSecretFileIfPresentSync,
+  writeSecretFileAtomicSync,
+} from './secret-file-mode.js'
 
 const log = getLogger('daemon-identity')
 
@@ -74,12 +77,8 @@ interface LoadedKeys {
 }
 
 function tryLoad(filepath: string): LoadedKeys | null {
-  let raw: string
-  try {
-    raw = readFileSync(filepath, 'utf8')
-  } catch {
-    return null
-  }
+  const raw = readSecretFileIfPresentSync(filepath)
+  if (raw === null) return null
   try {
     const parsed = identityFileSchema.parse(JSON.parse(raw))
     return {
