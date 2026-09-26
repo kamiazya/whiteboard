@@ -17,14 +17,33 @@ export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
   return join(dataDir, DAEMON_RECORD_FILENAME)
 }
 
+/**
+ * The running daemon's record, or `null` when there is none.
+ *
+ * "None" is ENOENT, and a record that does not parse (its writes are atomic,
+ * so that is a foreign or damaged file, not a half-written one). A record
+ * that exists but cannot be READ is neither: `ensure-daemon` answers `null`
+ * by deleting the record and spawning a new daemon with a new token, which
+ * for an unreadable record orphans the daemon still running under it. So
+ * that failure throws, naming the file.
+ */
 export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<DaemonRecord | null> {
+  const path = getDaemonRecordPath(dataDir)
+  let text: string
   try {
-    const raw: unknown = JSON.parse(await readFile(getDaemonRecordPath(dataDir), 'utf-8'))
-    const result = daemonRecordSchema.safeParse(raw)
-    return result.success ? result.data : null
+    text = await readFile(path, 'utf-8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw new Error(`the daemon record ${path} exists but cannot be read`, { cause: err })
+  }
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
   } catch {
     return null
   }
+  const result = daemonRecordSchema.safeParse(raw)
+  return result.success ? result.data : null
 }
 
 export async function saveDaemonRecord(
