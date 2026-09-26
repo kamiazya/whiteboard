@@ -97,6 +97,8 @@ interface EnsureProfileInput {
   displayName: string
 }
 
+type MembershipRole = 'owner' | 'member'
+
 export interface MemberProfileStore {
   /** This tenant's user for whoever `binding` resolves to; null when the
    *  binding names no account, or an account with no user here. */
@@ -111,6 +113,8 @@ export interface MemberProfileStore {
     profileId: string,
   ): Promise<{ removed: boolean; credentials: { origin: string; credentialId: string }[] }>
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
+  /** This user's role in the workspace, or null when they are not a member. */
+  membershipRole(workspaceId: string, profileId: string): Promise<MembershipRole | null>
   /** True once this workspace has ever had a member — never reverts on revoke. */
   membersOnly(workspaceId: string): Promise<boolean>
   /**
@@ -139,12 +143,22 @@ export interface MemberProfileStore {
 // Inserts the membership row and, on a workspace's FIRST membership ever,
 // its `workspaceMembersOnly` marker — in one transaction so the two can
 // never disagree about whether a workspace has had a member.
+// A workspace's first member is its owner (ADR-0049 decision 1). "First" is
+// read from the memberships themselves, not the members-only marker: reopening
+// clears the marker and keeps the members.
 async function insertMembership(db: TenantScoped, workspaceId: string, profileId: string) {
   const now = Date.now()
   await inTenantTransaction(db, async (trx) => {
+    const existing = await trx
+      .selectFrom('workspaceMemberships')
+      .select('profileId')
+      .where('workspaceId', '=', workspaceId)
+      .limit(1)
+      .executeTakeFirst()
+    const role = existing === undefined ? 'owner' : 'member'
     await trx
       .insertInto('workspaceMemberships')
-      .values({ workspaceId, profileId, createdAt: now })
+      .values({ workspaceId, profileId, createdAt: now, role })
       .onConflict((oc) => oc.columns(['workspaceId', 'profileId']).doNothing())
       .execute()
     await trx
@@ -312,6 +326,16 @@ export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
         .where('profileId', '=', profileId)
         .executeTakeFirst()
       return row === undefined ? 'not-a-member' : 'member'
+    },
+
+    async membershipRole(workspaceId, profileId) {
+      const row = await db
+        .selectFrom('workspaceMemberships')
+        .select('role')
+        .where('workspaceId', '=', workspaceId)
+        .where('profileId', '=', profileId)
+        .executeTakeFirst()
+      return row?.role ?? null
     },
 
     async reopenToOriginTrust(workspaceId) {
