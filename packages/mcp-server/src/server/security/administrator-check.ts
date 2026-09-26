@@ -10,11 +10,13 @@ import type { TenantAdministratorStore } from './tenant-administrator-store.js'
 
 export interface AdministratorCheck {
   isAdministrator(person: AuthenticatorBinding): Promise<boolean>
+  /** Every user who administers this tenant, from either source. */
+  administratorIds(): Promise<ReadonlySet<string>>
 }
 
 export function createAdministratorCheck(deps: {
   readonly admins: TenantAdministratorStore
-  readonly members: Pick<MemberProfileStore, 'profileForBinding'>
+  readonly members: Pick<MemberProfileStore, 'profileForBinding' | 'isDeactivated'>
   readonly configured: readonly AuthenticatorBinding[]
 }): AdministratorCheck {
   return {
@@ -22,9 +24,18 @@ export function createAdministratorCheck(deps: {
       const named = deps.configured.some(
         (admin) => admin.authenticator === person.authenticator && admin.subject === person.subject,
       )
-      if (named) return true
+      if (named) return !(await deps.members.isDeactivated(person))
       const user = await deps.members.profileForBinding(person)
       return user !== null && (await deps.admins.isAppointed(user.id))
+    },
+
+    async administratorIds() {
+      const ids = new Set((await deps.admins.list()).map((a) => a.profileId))
+      for (const person of deps.configured) {
+        const user = await deps.members.profileForBinding(person)
+        if (user !== null) ids.add(user.id)
+      }
+      return ids
     },
   }
 }

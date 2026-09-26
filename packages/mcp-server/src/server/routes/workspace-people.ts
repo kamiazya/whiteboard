@@ -10,7 +10,6 @@ import {
   addWorkspacePersonRequestSchema,
   changeWorkspaceRoleRequestSchema,
   type WorkspacePeopleRefusal,
-  workspaceInvitationResponseSchema,
   workspacePeopleResponseSchema,
   workspacePersonSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
@@ -23,6 +22,7 @@ import type { MemberProfileStore } from '../security/member-profile-store.js'
 import { callerUserId } from '../security/membership-gate.js'
 import type { WorkspaceMember, WorkspaceRoles } from '../security/workspace-roles.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
+import { issueInvitationLink } from './invitation-link.js'
 
 const log = getLogger('workspace-people')
 
@@ -33,9 +33,6 @@ interface WorkspacePeopleRouterOptions {
   /** This host's origin, where the web app's invite page is. */
   readonly origin: string
 }
-
-// ponytail: one fixed lifetime; a body field when someone needs another.
-const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 const REFUSALS = {
   not_an_owner: [403, 'only an owner of this workspace can change its people'],
@@ -95,18 +92,7 @@ function mountInvitations(
     const workspaceId = await ownedBy(c, members)
     const invitedBy = await callerUserId(c, members)
     if (workspaceId === null || invitedBy === null) return refuse(c, 'not_an_owner')
-    const { token, invitation } = await invitations.createLink({
-      invitedBy,
-      workspaceId,
-      now: Date.now(),
-      ttlMs: INVITATION_TTL_MS,
-    })
-    const url = new URL('/invite', origin)
-    url.hash = new URLSearchParams({ token }).toString()
-    const body = workspaceInvitationResponseSchema.parse({
-      url: url.toString(),
-      expiresAt: new Date(invitation.expiresAt).toISOString(),
-    })
+    const body = await issueInvitationLink(invitations, origin, { invitedBy, workspaceId })
     return c.json(body, 201)
   })
 }

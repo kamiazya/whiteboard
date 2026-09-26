@@ -11,12 +11,15 @@ import { type CryptoKey, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import type { ServerModeAppOptions } from './app.js'
+import { createAdministratorCheck } from './security/administrator-check.js'
 import { createInvitationStore } from './security/invitation-store.js'
 import { createMemberProfileStore } from './security/member-profile-store.js'
 import { createOAuthJwtValidator } from './security/oauth-jwt-validator.js'
 import { createOAuthResourceServerAuthStrategy } from './security/oauth-resource-strategy.js'
 import { signInConfigSchema } from './security/sign-in-config.js'
 import { createSignInSessionStore } from './security/sign-in-session-store.js'
+import { createTenantAdministratorStore } from './security/tenant-administrator-store.js'
+import { createUserDeactivation } from './security/user-deactivation.js'
 import { createWorkspaceRoles } from './security/workspace-roles.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
 
@@ -92,6 +95,15 @@ beforeEach(async () => {
       sessions: createSignInSessionStore(handle.db),
       roles: createWorkspaceRoles(handle.db),
       invitations: createInvitationStore(handle.db),
+      administration: {
+        check: createAdministratorCheck({
+          admins: createTenantAdministratorStore(handle.db),
+          members: createMemberProfileStore(handle.db),
+          configured: [],
+        }),
+        appointments: createTenantAdministratorStore(handle.db),
+        deactivation: createUserDeactivation(handle.db),
+      },
       origin: PUBLIC_URL,
       bearerProvisioning: { providers, members },
     },

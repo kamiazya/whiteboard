@@ -40,6 +40,7 @@ import { createRuntimeRouter } from './routes/runtime.js'
 import { createSignInRoutes, type SignInRoutesDeps } from './routes/sign-in.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
+import { createTenantPeopleRouter } from './routes/tenant-people.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
 import { createWorkspacePeopleRouter } from './routes/workspace-people.js'
 import { setResolveViewportFn } from './routes/ws.js'
@@ -351,8 +352,9 @@ function mountMcpMiddleware(
  */
 function mountServerModeRouters(app: Hono, options: AppOptions): void {
   if (options.authMode !== 'server-mode' || options.people === undefined) return
-  const { members, roles, invitations, origin } = options.people
+  const { members, roles, invitations, origin, administration } = options.people
   app.route('/', createWorkspacePeopleRouter({ members, roles, invitations, origin }))
+  app.route('/', createTenantPeopleRouter({ members, invitations, administration, origin }))
 }
 
 /**

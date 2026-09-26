@@ -9,7 +9,7 @@ import type { Context } from 'hono'
 import { getLogger } from '../log.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
 import type { ResolvedGrant } from './credential-resolver.js'
-import type { MemberProfileStore } from './member-profile-store.js'
+import type { AuthenticatorBinding, MemberProfileStore } from './member-profile-store.js'
 import { gatedWorkspaceHandle, ruleClaiming } from './route-scope-registry.js'
 import {
   membershipRefusal,
@@ -93,13 +93,18 @@ export interface FirstMember {
   add(workspaceId: string, profileId: string): Promise<void>
 }
 
+/** The person the middleware authenticated this request as, if any. */
+export function callerPerson(c: Context): AuthenticatorBinding | undefined {
+  return grantOf(c)?.person
+}
+
 /** This tenant's user behind the request the middleware authenticated, or
  *  null when the grant names no person with a user here. */
 export async function callerUserId(
   c: Context,
   members: MemberProfileStore,
 ): Promise<string | null> {
-  const person = grantOf(c)?.person
+  const person = callerPerson(c)
   if (person === undefined) return null
   return (await members.profileForBinding(person))?.id ?? null
 }

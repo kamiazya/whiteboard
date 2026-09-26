@@ -7,8 +7,15 @@
 import { readFileSync } from 'node:fs'
 import { extname } from 'node:path'
 import { defaultLoadersSync } from 'cosmiconfig'
+import type { AuthenticatorBinding } from './member-profile-store.js'
 import type { ConfiguredProvider } from './oidc-relying-party.js'
-import { type OidcProvider, type SignInProvider, signInConfigSchema } from './sign-in-config.js'
+import {
+  configuredAdministrators,
+  type OidcProvider,
+  type SignInConfig,
+  type SignInProvider,
+  signInConfigSchema,
+} from './sign-in-config.js'
 
 /** Where the sign-in configuration file is. Unset means no external sign-in. */
 export const SIGN_IN_CONFIG_ENV = 'WHITEBOARD_SIGN_IN_CONFIG'
@@ -35,9 +42,7 @@ function secretOf(
   return value
 }
 
-/** The declared providers, validated, with no secret read: what an operator
- *  command needs to name a provider, on a host that may not hold its secrets. */
-export function readSignInProviders(path: string): SignInProvider[] {
+function readSignInConfig(path: string): SignInConfig {
   const parsed = signInConfigSchema.safeParse(parseFile(path))
   if (!parsed.success) {
     const issue = parsed.error.issues[0]
@@ -45,14 +50,27 @@ export function readSignInProviders(path: string): SignInProvider[] {
       `sign-in configuration ${path}: ${issue?.path.join('.') ?? '(root)'} — ${issue?.message ?? 'invalid'}`,
     )
   }
-  return parsed.data.providers
+  return parsed.data
 }
 
-export function loadSignInProviders(path: string, env: NodeJS.ProcessEnv): ConfiguredProvider[] {
-  return readSignInProviders(path).map((provider): ConfiguredProvider => {
+/** The declared providers, validated, with no secret read: what an operator
+ *  command needs to name a provider, on a host that may not hold its secrets. */
+export function readSignInProviders(path: string): SignInProvider[] {
+  return readSignInConfig(path).providers
+}
+
+/** What the keeper starts with: each provider with its secret resolved, and
+ *  the administrators the file names (ADR-0049 decision 2). */
+export function loadSignInConfig(
+  path: string,
+  env: NodeJS.ProcessEnv,
+): { providers: ConfiguredProvider[]; administrators: AuthenticatorBinding[] } {
+  const config = readSignInConfig(path)
+  const providers = config.providers.map((provider): ConfiguredProvider => {
     if (provider.kind === 'trusted-header') return provider
     const { clientId, clientSecret } = provider
     if (clientId === undefined || clientSecret === undefined) return provider
     return { ...provider, clientId, clientSecretValue: secretOf(provider, clientSecret, env) }
   })
+  return { providers, administrators: configuredAdministrators(config) }
 }

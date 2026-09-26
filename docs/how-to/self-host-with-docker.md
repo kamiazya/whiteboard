@@ -267,10 +267,57 @@ candidates are printed.
 > and narrow it with `requiredClaims`. Then grant each existing workspace its
 > first member with `grant-member`.
 
+### Administrators
+
+A server's **administrators** manage its people. They can list every user,
+deactivate and reactivate users, appoint and dismiss other administrators,
+and invite someone to the server without naming a workspace. Being an
+administrator does not make someone an owner of any workspace. They cannot
+open a workspace they are not a member of, or change its people.
+
+The first administrator is named by you, the operator, in one of two ways:
+
+- **From the machine that holds the data directory:**
+
+  ```sh
+  whiteboard server grant-admin --json --user=<user id or display name> [--remove]
+  ```
+
+- **In the sign-in configuration**, for a deployment with no shell. Name
+  each administrator by provider and subject:
+
+  ```yaml
+  administrators:
+    - { provider: corp, subject: "00u1abcd" }
+  ```
+
+  The keeper reads this list when it starts. Removing a name takes effect at
+  the next restart. An email address is not accepted as a name.
+
+  **The list is a credential in configuration.** Whoever the provider
+  vouches for as that subject is an administrator, so a wrong subject here
+  makes the wrong person one. Take the subject from the provider (the `sub`
+  claim), never from what a person says about themselves.
+
+An administrator works through `/api/people`:
+
+- `GET /api/people` lists every user, marked `deactivated` and
+  `administrator`.
+- `POST` and `DELETE /api/people/<userId>/deactivation` deactivate and
+  reactivate a user. An administrator cannot deactivate themselves.
+- `PUT` and `DELETE /api/people/<userId>/administrator` appoint and dismiss
+  an administrator. Only appointments can be dismissed here; someone named in
+  the configuration stays an administrator until the list changes.
+- `POST /api/invitations` creates an invitation link to the server alone.
+  Accepting it makes a user and nothing more.
+
+Everyone else gets `403 not_an_administrator`.
+
 ### Deactivating a user
 
-To shut someone out without losing anything they made, deactivate them from
-the machine that holds the data directory:
+An administrator deactivates someone through `/api/people`, above. To shut
+someone out without losing anything they made, you can also deactivate them
+from the machine that holds the data directory:
 
 ```sh
 whiteboard server deactivate-user --json --user=<user id or display name> [--reactivate]

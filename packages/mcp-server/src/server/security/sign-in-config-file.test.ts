@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { signsInWithBrowser } from './oidc-relying-party.js'
-import { loadSignInProviders } from './sign-in-config-file.js'
+import { loadSignInConfig } from './sign-in-config-file.js'
 
 let dir: string
 beforeEach(async () => {
@@ -23,11 +23,11 @@ const yaml = (secret: string) => `providers:
       googleHostedDomains: [corp.example]
 `
 
-describe('loadSignInProviders', () => {
+describe('loadSignInConfig', () => {
   it('reads a YAML file and resolves a secret from the environment', async () => {
     const path = join(dir, 'sign-in.yaml')
     await writeFile(path, yaml('{ env: GOOGLE_SECRET }'))
-    const [google] = loadSignInProviders(path, { GOOGLE_SECRET: 'abc' })
+    const [google] = loadSignInConfig(path, { GOOGLE_SECRET: 'abc' }).providers
     expect(google?.clientSecretValue).toBe('abc')
     expect(google?.admission.googleHostedDomains).toEqual(['corp.example'])
   })
@@ -50,7 +50,21 @@ describe('loadSignInProviders', () => {
         ],
       }),
     )
-    expect(loadSignInProviders(path, {})[0]?.clientSecretValue).toBe('from-file')
+    expect(loadSignInConfig(path, {}).providers[0]?.clientSecretValue).toBe('from-file')
+  })
+
+  // ADR-0049 decision 2: the keeper starts knowing who the file names as
+  // administrators, as the bindings a request resolves to.
+  it('reads the administrators the file names', async () => {
+    const path = join(dir, 'sign-in.yaml')
+    await writeFile(
+      path,
+      `${yaml('{ env: GOOGLE_SECRET }')}administrators:\n  - { provider: google, subject: ada-1 }\n`,
+    )
+    const { administrators } = loadSignInConfig(path, { GOOGLE_SECRET: 'abc' })
+    expect(administrators).toHaveLength(1)
+    expect(administrators[0]?.subject).toBe('ada-1')
+    expect(administrators[0]?.authenticator.startsWith('oidc:')).toBe(true)
   })
 
   // A keeper that starts with a provider it cannot use would fail at the
@@ -58,7 +72,7 @@ describe('loadSignInProviders', () => {
   it('refuses a secret whose environment variable is unset, naming it', async () => {
     const path = join(dir, 'sign-in.yaml')
     await writeFile(path, yaml('{ env: GOOGLE_SECRET }'))
-    expect(() => loadSignInProviders(path, {})).toThrow(/GOOGLE_SECRET/)
+    expect(() => loadSignInConfig(path, {})).toThrow(/GOOGLE_SECRET/)
   })
 
   // No client means no secret to resolve, and no browser sign-in.
@@ -75,7 +89,7 @@ describe('loadSignInProviders', () => {
       bearerClients: [claude-code]
 `,
     )
-    const [provider] = loadSignInProviders(path, {})
+    const [provider] = loadSignInConfig(path, {}).providers
     expect(provider?.id).toBe('corp-mcp')
     expect(provider !== undefined && signsInWithBrowser(provider)).toBe(false)
   })
@@ -83,6 +97,6 @@ describe('loadSignInProviders', () => {
   it('refuses a file that does not match the schema', async () => {
     const path = join(dir, 'sign-in.yaml')
     await writeFile(path, yaml('hunter2'))
-    expect(() => loadSignInProviders(path, {})).toThrow(/sign-in configuration/)
+    expect(() => loadSignInConfig(path, {})).toThrow(/sign-in configuration/)
   })
 })

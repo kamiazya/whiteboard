@@ -13,6 +13,7 @@ import { createAdministratorCheck } from './administrator-check.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
 import { configuredAdministrators, signInConfigSchema } from './sign-in-config.js'
 import { createTenantAdministratorStore } from './tenant-administrator-store.js'
+import { createUserDeactivation } from './user-deactivation.js'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -60,6 +61,29 @@ describe('createAdministratorCheck', () => {
     await admins.appoint(user.id, null)
     const check = createAdministratorCheck({ admins, members, configured: [] })
     expect(await check.isAdministrator(bob!)).toBe(true)
+  })
+
+  it('lists the users who administer, appointed or configured', async () => {
+    const admins = createTenantAdministratorStore(handle.db)
+    const configuredUser = await members.ensureProfile({ binding: ada!, displayName: 'Ada' })
+    const appointed = await members.ensureProfile({ binding: bob!, displayName: 'Bob' })
+    await members.ensureProfile({ binding: { ...ada!, subject: 'cy-1' }, displayName: 'Cy' })
+    await admins.appoint(appointed.id, null)
+    const check = createAdministratorCheck({ admins, members, configured })
+    expect(await check.administratorIds()).toEqual(new Set([configuredUser.id, appointed.id]))
+  })
+
+  // ADR-0049 decision 4: deactivation refuses a person everywhere, and a
+  // configured name does not outrank it.
+  it('does not count a configured administrator who is deactivated', async () => {
+    const user = await members.ensureProfile({ binding: ada!, displayName: 'Ada' })
+    await createUserDeactivation(handle.db).deactivate(user.id, 1)
+    const check = createAdministratorCheck({
+      admins: createTenantAdministratorStore(handle.db),
+      members,
+      configured,
+    })
+    expect(await check.isAdministrator(ada!)).toBe(false)
   })
 
   it('reads the configured list at every check', async () => {

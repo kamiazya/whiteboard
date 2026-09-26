@@ -701,10 +701,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // out of the closure, which needs a context object this change does not
   // introduce.
   'packages/mcp-server/src/server/routes/ws.ts#handleWsUpgrade': 311,
-  // 117 -> 79: the methods that start from a binding (`profileForBinding`,
-  // `isDeactivated`, `ensureProfile`) moved to `bindingLookups` in the same
-  // file, so the membership insert and its clear still sit together here.
-  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 79,
+  // 117 -> 72: the methods that start from a binding (`profileForBinding`,
+  // `isDeactivated`, `ensureProfile`) moved to `bindingLookups`, and the user
+  // listing to `usersOf`, in the same file, so the membership insert and its
+  // clear still sit together here.
+  'packages/mcp-server/src/server/security/member-profile-store.ts#createMemberProfileStore': 72,
   'packages/mcp-server/src/server/security/oauth-authz-transactions.ts#createOAuthTransactionStore': 299,
   'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   'packages/mcp-server/src/server/security/pairing-grant-store.ts#createPairingGrantStore': 67,

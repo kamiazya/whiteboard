@@ -1,6 +1,7 @@
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import type { Context, MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
+import type { AdministratorCheck } from './administrator-check.js'
 import { ALL_AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
 import {
   type BearerProvisioning,
@@ -16,6 +17,8 @@ import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'
 import { resolveApiRouteScope } from './route-scope-registry.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './sign-in-session-store.js'
+import type { TenantAdministratorStore } from './tenant-administrator-store.js'
+import type { UserDeactivation } from './user-deactivation.js'
 import type { WorkspaceRoles } from './workspace-roles.js'
 
 function buildServerModeAuthFailResponse(decision: {
@@ -45,6 +48,12 @@ export interface ServerModePeople {
   readonly roles: WorkspaceRoles
   /** The invitations owners create into their workspaces (ADR-0049 decision 3). */
   readonly invitations: InvitationStore
+  /** What a tenant's administrators do to its people (ADR-0049 decisions 2, 4). */
+  readonly administration: {
+    readonly check: AdministratorCheck
+    readonly appointments: TenantAdministratorStore
+    readonly deactivation: UserDeactivation
+  }
   /** This host's own origin. A session is honoured on a request that changes
    *  something only when the request came from it. */
   readonly origin: string
