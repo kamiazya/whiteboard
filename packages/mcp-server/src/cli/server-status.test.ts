@@ -57,6 +57,16 @@ describe('runServerStatus', () => {
     expect(result.recordFresh).toBe(false)
   })
 
+  it('unreadable record → state:unreadable, not missing', async () => {
+    mockRead.mockReturnValueOnce({ kind: 'unreadable' })
+    const { result, exitCode } = await runServerStatus({
+      dataDir: '/tmp/test',
+      isPidAlive: deadPid,
+    })
+    expect(exitCode).toBe(1)
+    expect(result.state).toBe('unreadable')
+  })
+
   it('valid record with dead pid → ok:false, state:stale, exit 1', async () => {
     mockRead.mockReturnValueOnce({ kind: 'ok', record: VALID_RECORD })
     const { result, exitCode } = await runServerStatus({

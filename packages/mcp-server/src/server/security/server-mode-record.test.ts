@@ -1,8 +1,9 @@
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
 import {
   deleteServerModeRecord,
   getServerModeRecordPath,
@@ -185,6 +186,22 @@ describe('readServerModeRecord', () => {
   it('returns missing when file does not exist', () => {
     expect(readServerModeRecord(tmpDir).kind).toBe('missing')
   })
+
+  it.skipIf(!CAN_DENY_FILE_READ)(
+    'returns unreadable, not missing, for a record it cannot read',
+    () => {
+      // `server stop` answers missing with "not running" and exit 0 — for a
+      // record that is there, that tells an operator a live server is gone.
+      writeServerModeRecord(tmpDir, VALID_RECORD)
+      const path = getServerModeRecordPath(tmpDir)
+      chmodSync(path, 0o000)
+      try {
+        expect(readServerModeRecord(tmpDir).kind).toBe('unreadable')
+      } finally {
+        chmodSync(path, 0o600)
+      }
+    },
+  )
 
   it('returns malformed when file is not JSON', () => {
     writeFileSync(getServerModeRecordPath(tmpDir), 'not json')

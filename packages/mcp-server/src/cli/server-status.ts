@@ -67,12 +67,12 @@ export async function runServerStatus(
     }
   }
 
-  if (readResult.kind === 'malformed') {
+  if (readResult.kind === 'unreadable' || readResult.kind === 'malformed') {
     return {
       result: serverStatusResultSchema.parse({
         schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
         ok: false,
-        state: 'malformed',
+        state: readResult.kind,
         recordFresh: false,
       }),
       exitCode: 1,

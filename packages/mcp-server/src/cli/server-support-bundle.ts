@@ -124,8 +124,8 @@ function buildRecordSection(
   if (readResult.kind === 'missing') {
     return { schemaVersion: 1, kind: 'missing' }
   }
-  if (readResult.kind === 'malformed') {
-    return { schemaVersion: 1, kind: 'malformed' }
+  if (readResult.kind === 'unreadable' || readResult.kind === 'malformed') {
+    return { schemaVersion: 1, kind: readResult.kind }
   }
   const r = readResult.record
   // Derive liveness from the identity-verified status outcome so PID reuse

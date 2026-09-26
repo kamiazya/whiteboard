@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
 import { blobsRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import {
   type BackupBlobReferences,
+  BackupManifestUnusableError,
   mirrorBlobsIntoBackup,
   readBackupBlobManifest,
 } from './backup-blob-mirror.js'
@@ -327,11 +329,35 @@ describe('the backup blob mirror', () => {
       expect(await readBackupBlobManifest(old)).toBeNull()
     })
 
-    it('answers null rather than throwing on a manifest it cannot read', async () => {
+    /**
+     * `null` is the answer for a backup that has NO manifest, and a damaged
+     * one is not that: the file is there, so the backup did use the mirror,
+     * and nothing about it may be read as "carries its blobs inside itself".
+     */
+    it.skipIf(!CAN_DENY_FILE_READ)(
+      'throws on a manifest this process is not allowed to read',
+      async () => {
+        const locked = join(backupRoot, '2026-01-03T00-00-00.000Z')
+        await mkdir(locked, { recursive: true })
+        await writeFile(join(locked, 'blobs.json'), '{}')
+        await chmod(join(locked, 'blobs.json'), 0o000)
+        try {
+          await expect(readBackupBlobManifest(locked)).rejects.toBeInstanceOf(
+            BackupManifestUnusableError,
+          )
+        } finally {
+          await chmod(join(locked, 'blobs.json'), 0o600)
+        }
+      },
+    )
+
+    it('throws on a manifest that is there but cannot be read', async () => {
       const broken = join(backupRoot, '2026-01-02T00-00-00.000Z')
       await mkdir(broken, { recursive: true })
       await writeFile(join(broken, 'blobs.json'), '{ not json')
-      expect(await readBackupBlobManifest(broken)).toBeNull()
+      await expect(readBackupBlobManifest(broken)).rejects.toBeInstanceOf(
+        BackupManifestUnusableError,
+      )
     })
   })
 })

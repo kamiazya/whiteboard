@@ -227,4 +227,19 @@ describe('a mirrored backup restores what it captured', () => {
 
     await expect(restoreInto(backupDir)).rejects.toThrow(/blob/i)
   })
+
+  it('refuses a mirrored backup whose manifest it cannot read, instead of copying the mirror in', async () => {
+    // The manifest is the only thing that says this backup's blobs live in
+    // the mirror. Reading a damaged one as "no manifest" made restore treat
+    // the backup as pre-mirror: the mirror's own stores were copied into the
+    // data directory as if they were its blobs, and the restore reported
+    // success over documents that point at nothing.
+    await putBlob('lives only in the mirror')
+    const backupRoot = join(root, 'backups')
+    const backupDir = join(backupRoot, '2026-03-04T00-00-00.000Z')
+    await performBackup({ dataDir, outputDir: backupDir, mirrorRoot: backupRoot })
+    await writeFile(join(backupDir, 'blobs.json'), '{ damaged')
+
+    await expect(restoreInto(backupDir)).rejects.toThrow(/manifest/i)
+  })
 })

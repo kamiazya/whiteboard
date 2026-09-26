@@ -46,6 +46,10 @@ export function getServerModeRecordPath(dataDir: string): string {
 export type ServerModeRecordReadResult =
   | { kind: 'ok'; record: ServerModeRecord }
   | { kind: 'missing' }
+  // There, but this process cannot read it — a permission, not an absence.
+  // Nothing is known about what it says, so no caller may read it as "no
+  // server" nor delete it as damaged.
+  | { kind: 'unreadable' }
   | { kind: 'malformed' }
 
 export function readServerModeRecord(dataDir: string): ServerModeRecordReadResult {
@@ -53,8 +57,10 @@ export function readServerModeRecord(dataDir: string): ServerModeRecordReadResul
   let raw: string
   try {
     raw = readFileSync(path, 'utf8')
-  } catch {
-    return { kind: 'missing' }
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ENOENT'
+      ? { kind: 'missing' }
+      : { kind: 'unreadable' }
   }
   let parsed: unknown
   try {

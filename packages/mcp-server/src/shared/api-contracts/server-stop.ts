@@ -24,6 +24,7 @@ export const serverStopResultSchema = z
       .enum([
         'server-record-not-found',
         'server-record-malformed',
+        'server-record-unreadable',
         'server-process-not-running',
         'server-stop-signal-failed',
         'server-stop-timeout',

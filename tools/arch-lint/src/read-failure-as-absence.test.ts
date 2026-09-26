@@ -47,12 +47,6 @@ const LEDGER: Readonly<Record<string, string>> = {
     'deliberate: logs a warning and skips the one blob, leaving its source file in place, and nothing deletes it afterwards',
   'packages/mcp-server/src/server/store/backup-in-progress.ts#backupIsInProgress':
     'deliberate: fails open so a stale marker cannot stop GC for ever, at the cost the file-gc stand-down comment names for a backup running meanwhile',
-  'packages/mcp-server/src/server/store/backup-blob-mirror.ts#readBackupBlobManifest':
-    'debt: retention fails safe on it, but restore reads an unreadable manifest as a pre-mirror backup and copies the mirror stores into the data directory — an unreadable manifest should refuse the restore',
-  'packages/mcp-server/src/daemon/daemon-registry.ts#loadDaemonRecord':
-    'debt: ensure-daemon reads an unreadable record as no daemon and starts a second one whose record overwrites the first — only ENOENT should mean none is running',
-  'packages/mcp-server/src/server/security/server-mode-record.ts#readServerModeRecord':
-    "debt: an unreadable record reads as missing, so `server stop` reports not-running and exits 0 while a server may run — it needs an 'unreadable' kind",
 }
 
 function scan(): {
