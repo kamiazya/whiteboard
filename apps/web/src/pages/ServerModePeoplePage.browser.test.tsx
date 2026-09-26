@@ -3,9 +3,10 @@
  * that keeps its own state: an administrator manages the server's people, an
  * owner a workspace's, and a refusal is shown in the keeper's words.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { ServerModeApp } from './ServerModeApp.js'
 
 vi.mock('./DaemonIndexPage.js', () => ({ DaemonIndexPage: () => <p>workspace index</p> }))
@@ -43,6 +44,7 @@ function tenantRoute(
   if (url === '/api/people') return Response.json({ people: users })
   const [, , , id, what] = url.split('/')
   const user = users.find((u) => u.userId === id) as User
+  if (what === undefined && method === 'DELETE') return deleteRoute(users, user)
   if (what === 'deactivation') user.deactivated = method === 'POST'
   if (what === 'administrator') user.administrator = method === 'PUT'
   return Response.json(
@@ -50,6 +52,24 @@ function tenantRoute(
       ? { userId: user.userId, deactivated: user.deactivated }
       : { userId: user.userId, administrator: user.administrator },
   )
+}
+
+// ADR-0051: only a deactivated person, and never a sole owner (Bob owns ws-2).
+function deleteRoute(users: User[], user: User): Response {
+  if (!user.deactivated)
+    return refuse('not_deactivated', 'deactivate a person before deleting them', 409)
+  if (user.userId === 'u-bob' && !users.some((u) => u.userId === 'u-cy')) {
+    return Response.json(
+      {
+        error: 'sole_owner',
+        message: 'they are the only owner of these workspaces; appoint another owner first',
+        workspaceIds: ['ws-2'],
+      },
+      { status: 409 },
+    )
+  }
+  users.splice(users.indexOf(user), 1)
+  return Response.json({ userId: user.userId, deleted: true })
 }
 
 interface Member {
@@ -79,10 +99,11 @@ function workspaceRoute(members: Member[], me: User, url: string, init?: Request
   return Response.json(member)
 }
 
-function fakeKeeper(self: 'ada' | 'bob', { stale = false } = {}) {
+function fakeKeeper(self: 'ada' | 'bob', { stale = false, cy = false } = {}) {
   const users: User[] = [
     { userId: 'u-ada', displayName: 'Ada', deactivated: false, administrator: true },
     { userId: 'u-bob', displayName: 'Bob', deactivated: false, administrator: false },
+    ...(cy ? [{ userId: 'u-cy', displayName: 'Cy', deactivated: true, administrator: false }] : []),
   ]
   const members: Member[] = [
     { userId: 'u-ada', displayName: 'Ada', role: 'owner', deactivated: false },
@@ -146,6 +167,35 @@ describe('the server people screen', () => {
     fireEvent.click(await screen.findByRole('button', { name: /create invitation link/i }))
     const field = await screen.findByLabelText(/can use it once/i)
     expect((field as HTMLInputElement).value).toBe('https://wb.test/invite#token=t-1')
+  })
+
+  // ADR-0051: deleting is final, so it is offered only for a deactivated
+  // person and asks first; the keeper's refusal names the workspaces.
+  it('deletes a deactivated person after asking, and offers it to nobody else', async () => {
+    renderAt('/people', fakeKeeper('ada', { cy: true }))
+    expect(await screen.findByRole('button', { name: 'Delete Cy' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Delete Bob' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Cy' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog.textContent).toContain(DESTRUCTIVE_COPY['delete-person']('Cy'))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByText('Cy')).toBeNull())
+  })
+
+  it('shows the workspaces a sole owner keeps when deletion is refused', async () => {
+    renderAt('/people', fakeKeeper('ada'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Deactivate Bob' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Bob' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('alert')
+          .map((a) => a.textContent)
+          .join(' '),
+      ).toMatch(/only owner.*ws-2/),
+    )
   })
 
   // ADR-0051: the keeper asks for a recent sign-in, and the page offers one

@@ -7,6 +7,7 @@
 import {
   administratorResponseSchema,
   deactivationResponseSchema,
+  deletionResponseSchema,
   tenantPeopleResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
 import {
@@ -37,10 +38,17 @@ const UNREACHABLE = 'Could not reach the server. Try again.'
 const UNEXPECTED = 'The server answered in a way this page does not understand.'
 
 function refusal(body: unknown): Refused {
-  const { message, error } = (body ?? {}) as { message?: unknown; error?: unknown }
+  const { message, error, workspaceIds } = (body ?? {}) as {
+    message?: unknown
+    error?: unknown
+    workspaceIds?: unknown
+  }
+  const said = typeof message === 'string' && message !== '' ? message : 'That was refused.'
+  // ADR-0051: a sole owner's deletion is refused naming the workspaces.
+  const named = Array.isArray(workspaceIds) ? `${said}: ${workspaceIds.join(', ')}` : said
   return {
     ok: false,
-    message: typeof message === 'string' && message !== '' ? message : 'That was refused.',
+    message: named,
     ...(error === 'reauthentication_required' ? { reauthenticate: true } : {}),
   }
 }
@@ -89,6 +97,10 @@ export const tenantPeople = {
     ),
   invite: (fetchFn: Fetch) =>
     call(fetchFn, '/api/invitations', invitationLinkResponseSchema, json('POST', {})),
+  delete: (fetchFn: Fetch, userId: string) =>
+    call(fetchFn, `/api/people/${encodeURIComponent(userId)}`, deletionResponseSchema, {
+      method: 'DELETE',
+    }),
 }
 
 export const workspacePeople = {

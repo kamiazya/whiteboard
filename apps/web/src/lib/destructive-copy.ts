@@ -36,6 +36,7 @@ export type DestructiveActionId =
   | 'delete-documents-browser'
   | 'delete-documents-daemon'
   | 'remove-member'
+  | 'delete-person'
   | 'delete-replica-copy'
 
 /**
@@ -79,6 +80,12 @@ export const DESTRUCTIVE_COPY = {
   // access now rather than at some later sync.
   'remove-member': (name) =>
     `Remove ${name} from this workspace? They lose access now, and anything they change offline after this point will not be kept.`,
+
+  // ADR-0051: final, unlike the deactivation it follows. What the person wrote
+  // stays; what the keeper knew of them does not, so coming back is arriving
+  // new. The subject is the person's name.
+  'delete-person': (name) =>
+    `Delete ${name}? This cannot be undone. What they wrote stays, but this server forgets them: if they sign in again, they arrive as someone new.`,
 
   // Deleting a CACHED copy is housekeeping, not revocation (ADR-0042
   // decision 3): the daemon still keeps the workspace, so the only thing at

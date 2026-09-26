@@ -307,8 +307,8 @@ The first administrator is named by you, the operator, in one of two ways:
   claim), never from what a person says about themselves.
 
 In the web app, an administrator sees **People on this server** on the
-workspace list. It lists every user and deactivates, reactivates, appoints and
-dismisses from there, and creates invitation links to the server. The same is
+workspace list. It lists every user and deactivates, reactivates, deletes,
+appoints and dismisses from there, and creates invitation links to the server. The same is
 available through `/api/people`:
 
 - `GET /api/people` lists every user, marked `deactivated` and
@@ -392,7 +392,10 @@ decide whether they get in. Under the default (invitation only) they are
 refused. To keep someone out for good, deactivate them and leave them
 deactivated rather than deleting them.
 
-The web app does not offer deletion yet.
+In the web app, **People on this server** offers **Delete** on a deactivated
+person's row. It asks for confirmation before anything is deleted, and it
+shows a refusal in the server's words, including the workspaces that would
+be left without an owner.
 
 ## Reverse proxy and TLS
 
