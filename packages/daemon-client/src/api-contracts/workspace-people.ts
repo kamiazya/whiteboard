@@ -28,6 +28,8 @@ export const addWorkspacePersonRequestSchema = z.object({ userId: z.string().min
 
 export const changeWorkspaceRoleRequestSchema = z.object({ role: workspaceRoleSchema }).strict()
 
+export const removeWorkspacePersonResponseSchema = z.object({ removed: z.literal(true) }).strict()
+
 /**
  * ADR-0049 decision 3: a single-use, expiring link into this workspace, or
  * (created by an administrator) into the tenant alone. The

@@ -9,6 +9,7 @@
 import {
   addWorkspacePersonRequestSchema,
   changeWorkspaceRoleRequestSchema,
+  removeWorkspacePersonResponseSchema,
   type WorkspacePeopleRefusal,
   workspacePeopleResponseSchema,
   workspacePersonSchema,
@@ -137,7 +138,7 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
     const removed = await roles.remove(workspaceId, c.req.param('userId'))
     if (removed === 'not-a-member') return refuse(c, 'not_a_member')
     if (removed === 'last-owner') return refuse(c, 'last_owner')
-    return c.json({ removed: true }, 200)
+    return c.json(removeWorkspacePersonResponseSchema.parse({ removed: true }), 200)
   })
 
   mountInvitations(app, options)

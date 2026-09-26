@@ -8,6 +8,7 @@
  */
 import {
   type SignInProvidersResponse,
+  type SignInSessionResponse,
   signInProvidersResponseSchema,
   signInRefusalSchema,
   signInSessionResponseSchema,
@@ -19,6 +20,7 @@ import { buttonVariants } from '../components/ui/button.js'
 import { workspacePath } from '../lib/app-routes.js'
 import { listMemberWorkspaces, type MemberWorkspace } from '../lib/member-workspaces.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
+import { TenantPeoplePage, WorkspacePeoplePage } from './ServerModePeoplePage.js'
 import { ServerModeWorkspace } from './ServerModeWorkspace.js'
 
 type Fetch = typeof globalThis.fetch
@@ -108,8 +110,10 @@ function InvitePage({ fetchFn }: { fetchFn: Fetch }) {
   return <SignInPage fetchFn={fetchFn} {...(token === undefined ? {} : { invitation: token })} />
 }
 
+type SessionUser = Extract<SignInSessionResponse, { signedIn: true }>['user']
+
 interface Signed {
-  displayName: string
+  user: SessionUser
   // 'unavailable': the session is real and the list failed — a person who is
   // signed in must not be sent to sign in again, or they loop.
   workspaces: MemberWorkspace[] | 'unavailable'
@@ -118,7 +122,7 @@ interface Signed {
 async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
   const session = signInSessionResponseSchema.parse(await (await fetchFn('/auth/session')).json())
   if (!session.signedIn) return null
-  return { displayName: session.user.displayName, workspaces: await listMemberWorkspaces(fetchFn) }
+  return { user: session.user, workspaces: await listMemberWorkspaces(fetchFn) }
 }
 
 function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
@@ -164,7 +168,14 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   return (
     <Page>
       <header className="flex w-full max-w-md flex-wrap items-center justify-between gap-4">
-        <span className="text-sm text-muted-foreground">Signed in as {signed.displayName}</span>
+        <span className="text-sm text-muted-foreground">
+          Signed in as {signed.user.displayName}
+        </span>
+        {signed.user.administrator && (
+          <Link to="/people" className="text-sm underline">
+            People on this server
+          </Link>
+        )}
         <SignOutControl fetchFn={fetchFn} />
       </header>
       <h1 className="text-xl font-semibold">Your workspaces</h1>
@@ -180,16 +191,16 @@ function SignedInOnly({
   children,
 }: {
   fetchFn: Fetch
-  children: (displayName: string) => ReactNode
+  children: (user: SessionUser) => ReactNode
 }) {
-  // undefined while asking, null for no session, the person's name otherwise.
-  const [who, setWho] = useState<string | null | undefined>(undefined)
+  // undefined while asking, null for no session, the person otherwise.
+  const [who, setWho] = useState<SessionUser | null | undefined>(undefined)
   useEffect(() => {
     let live = true
     void fetchFn('/auth/session')
       .then(async (res) => {
         const session = signInSessionResponseSchema.parse(await res.json())
-        return session.signedIn ? session.user.displayName : null
+        return session.signedIn ? session.user : null
       })
       .catch(() => null)
       .then((value) => {
@@ -216,11 +227,27 @@ export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps)
         path="/w/*"
         element={
           <SignedInOnly fetchFn={fetchFn}>
-            {(displayName) => (
+            {(user) => (
               <ServerModeWorkspace
-                shell={<ServerModeShell displayName={displayName} fetchFn={fetchFn} />}
+                shell={<ServerModeShell displayName={user.displayName} fetchFn={fetchFn} />}
               />
             )}
+          </SignedInOnly>
+        }
+      />
+      <Route
+        path="/people"
+        element={
+          <SignedInOnly fetchFn={fetchFn}>
+            {(user) => <TenantPeoplePage fetchFn={fetchFn} selfId={user.userId} />}
+          </SignedInOnly>
+        }
+      />
+      <Route
+        path="/people/w/:workspace"
+        element={
+          <SignedInOnly fetchFn={fetchFn}>
+            {(user) => <WorkspacePeoplePage fetchFn={fetchFn} selfId={user.userId} />}
           </SignedInOnly>
         }
       />
